@@ -586,18 +586,40 @@ def test_tool_use_enforces_the_staged_protocol():
         action="prepare", artifact_id="user:1", operation="execute"
     )
     S.AeToolUseArgs(action="grant", plan_hash="p", grant_scope="once")
-    S.AeToolUseArgs(action="execute", plan_hash="p", grant_id="g")
+    S.AeToolUseArgs(
+        action="execute",
+        plan_hash="p",
+        grant_id="g",
+        operation_id="operation-schema-execute",
+    )
+    S.AeToolUseArgs(
+        action="start",
+        plan_hash="p",
+        grant_id="g",
+        operation_id="operation-schema-0001",
+    )
 
     invalid = [
         {"action": "render"},
         {"action": "prepare", "artifact_id": "user:1"},
         {"action": "grant", "plan_hash": "p"},
         {"action": "execute", "plan_hash": "p"},
+        {"action": "execute", "plan_hash": "p", "grant_id": "g"},
+        {"action": "start", "plan_hash": "p", "grant_id": "g"},
         {"action": "execute", "plan_hash": "p", "grant_id": "g", "artifact_id": "user:1"},
     ]
     for value in invalid:
         with pytest.raises(ValidationError):
             S.AeToolUseArgs(**value)
+
+
+def test_public_tool_discovery_schema_cannot_unlock_developer_commands():
+    for schema in (S.AeToolIndexArgs, S.AeToolSearchArgs, S.AeToolInspectArgs):
+        assert "developer_mode" not in schema.model_json_schema()["properties"]
+    public_kinds = S.AeToolIndexArgs.model_json_schema()["properties"]["kinds"]["anyOf"][0]["items"]["enum"]
+    assert "system-command" not in public_kinds
+    panel_kinds = S.AePanelToolIndexArgs.model_json_schema()["properties"]["kinds"]["anyOf"][0]["items"]["enum"]
+    assert "system-command" in panel_kinds
 
 
 def test_tool_mutations_require_cas_and_import_export_are_bounded():

@@ -283,6 +283,61 @@ def saved_artifact() -> ToolArtifact:
 
 
 @pytest.mark.parametrize(
+    ("suffix", "platforms"),
+    [
+        (".ps1", ["windows"]),
+        (".psm1", ["windows"]),
+        (".bat", ["windows"]),
+        (".cmd", ["windows"]),
+        (".sh", ["macos", "linux"]),
+        (".command", ["macos", "linux"]),
+    ],
+)
+def test_system_command_import_is_classified_external_and_quarantined(
+    tmp_path: Path, suffix: str, platforms: list[str]
+) -> None:
+    store = FakeStore()
+    manager = make_manager(store, RegexSecretScanner(), tmp_path)
+    source = tmp_path / f"developer{suffix}"
+    source.write_text("echo blocked\n", encoding="utf-8")
+
+    preview = manager.preview_import(source)
+    item = preview.artifacts[0]
+    assert item.summary.kind == "system-command"
+    assert item.summary.declared_risk == "external"
+    assert item.calculated_risk == "external"
+    created = manager.commit_import(preview.import_id, {})
+    assert len(created) == 1
+    assert created[0].kind == "system-command"
+    assert created[0].status == "candidate"
+    assert created[0].declared_risk == "external"
+    assert created[0].compatibility == {
+        "platforms": platforms,
+        "runtime": "system-command",
+    }
+    assert created[0].source.ref == source.name
+    assert str(tmp_path) not in created[0].source.ref
+
+
+def test_system_command_import_remains_readable_after_persisting(tmp_path: Path) -> None:
+    root = tmp_path / "tools"
+    manager = make_manager(ToolArtifactStore(root), RegexSecretScanner(), tmp_path)
+    source = tmp_path / "developer.ps1"
+    source.write_bytes(b"Write-Output blocked\n")
+
+    preview = manager.preview_import(source)
+    [created] = manager.commit_import(preview.import_id, {})
+
+    reopened = ToolArtifactStore(root)
+    [summary] = reopened.list(statuses={"candidate"})
+    persisted = reopened.get(created.id)
+    assert summary.kind == "system-command"
+    assert persisted.kind == "system-command"
+    assert persisted.declared_risk == "external"
+    assert persisted.content == "Write-Output blocked\n"
+
+
+@pytest.mark.parametrize(
     "entry_name",
     [
         "../escape.json",

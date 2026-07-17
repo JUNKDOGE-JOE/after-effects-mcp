@@ -112,6 +112,31 @@ def test_index_search_and_content_hash_lookup_never_return_content(tmp_path: Pat
     assert "TOP SECRET BODY" not in (store.root / "index.json").read_text("utf-8")
 
 
+def test_record_use_updates_usage_without_changing_content_revision(tmp_path: Path) -> None:
+    store = ToolArtifactStore(root=tmp_path / "tools")
+    created = store.create(draft())
+    observed = []
+    unsubscribe = store.subscribe(observed.append)
+    used = store.record_use(
+        created.id,
+        expected_content_hash=created.content_hash,
+        used_at=1234,
+    )
+    unsubscribe()
+
+    assert used.last_used_at == 1234
+    assert used.revision == created.revision
+    assert used.content_hash == created.content_hash
+    assert store.list()[0].last_used_at == 1234
+    assert observed[-1].kind == "use"
+    with pytest.raises(ToolRevisionConflict):
+        store.record_use(
+            created.id,
+            expected_content_hash="f" * 64,
+            used_at=1235,
+        )
+
+
 def test_reads_fail_closed_for_secret_bearing_legacy_index_and_artifact(
     tmp_path: Path,
 ) -> None:

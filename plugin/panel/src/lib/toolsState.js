@@ -62,6 +62,7 @@ function toSummary(value) {
     updatedAt: value.updatedAt,
     lastUsedAt: value.lastUsedAt ?? null,
     sourceType: value.sourceType || value.source && value.source.type || '',
+    executionCapabilities: value.executionCapabilities || null,
   };
 }
 
@@ -81,11 +82,14 @@ export function reduceToolsState(state = INITIAL_TOOLS_STATE, event = {}) {
     case 'load-success': {
       const payload = event.payload || event;
       const summaries = (payload.artifacts || payload.summaries || []).map(toSummary);
+      const selectedVisible = summaries.some((row) => row.id === state.selectedId);
       return {
         ...state,
         phase: 'ready',
         summaries: sortSummaries(summaries),
         total: Number.isFinite(payload.total) ? payload.total : summaries.length,
+        selectedId: selectedVisible ? state.selectedId : null,
+        inspected: selectedVisible ? state.inspected : null,
         error: '',
         refreshRequired: false,
       };
@@ -204,6 +208,7 @@ export function searchArgsFromState(state, { offset = 0, limit = 100 } = {}) {
 export function canEditArtifact(artifact) {
   return Boolean(
     artifact
+    && artifact.kind !== 'system-command'
     && sourceType(artifact) !== 'bundled'
     && !['archived', 'deprecated'].includes(artifact.status),
   );
@@ -214,12 +219,19 @@ export function canExecuteArtifact(artifact) {
 }
 
 export function toolExecutionCapabilities(artifact) {
-  const enabled = canExecuteArtifact(artifact);
-  const kind = artifact && artifact.kind;
+  const contract = artifact && artifact.executionCapabilities;
+  const operations = Array.isArray(contract && contract.operations) ? contract.operations : [];
+  const direct = contract && contract.directRun && typeof contract.directRun === 'object'
+    ? contract.directRun : {};
   return {
-    render: enabled && ['expression', 'prompt-skill'].includes(kind),
-    execute: enabled && ['jsx', 'diagnostic', 'recipe'].includes(kind),
-    apply: enabled && kind === 'expression',
+    render: operations.includes('render'),
+    execute: operations.includes('execute'),
+    apply: operations.includes('apply'),
+    directRun: Boolean(direct.available),
+    operation: direct.operation || null,
+    requiresTarget: Boolean(direct.requiresTarget),
+    disabledReason: direct.disabledReason || null,
+    runtime: contract && contract.runtime || null,
   };
 }
 

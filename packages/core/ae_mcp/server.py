@@ -12,8 +12,10 @@ object surfaced via the request_context; it owns report_progress.
 from __future__ import annotations
 
 import asyncio
+import hmac
 import json
 import logging
+import os
 import re
 import time
 from typing import Any, List
@@ -25,7 +27,7 @@ from mcp.server.stdio import stdio_server
 from mcp.types import CallToolResult, TextContent, Tool
 from pydantic import ValidationError as PydanticValidationError
 
-from ae_mcp import approval_gate, client_identity
+from ae_mcp import approval_gate, client_identity, schemas
 from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.backends.native import NativeBackendError, NativeInvokeBackend
 from ae_mcp.error_hints import append_hint
@@ -41,6 +43,15 @@ from ae_mcp.tool_store import ToolStoreError
 
 log = logging.getLogger("ae_mcp.server")
 _history_scanner = RegexSecretScanner()
+_PANEL_CAPABILITY_ARGUMENT = "_ae_panel_capability"
+_PANEL_DEVELOPER_TOOLS = frozenset(
+    {"ae.toolIndex", "ae.toolSearch", "ae.toolInspect"}
+)
+_PANEL_DEVELOPER_SCHEMAS = {
+    "ae.toolIndex": schemas.AePanelToolIndexArgs,
+    "ae.toolSearch": schemas.AePanelToolSearchArgs,
+    "ae.toolInspect": schemas.AeToolInspectArgs,
+}
 
 # Matches a leading dotted verb token at the very start of a docstring, e.g.
 # "ae.init — bootstrap …". Only the leading token is rewritten so the rest of
@@ -52,6 +63,24 @@ def default_tool_service():
     from ae_mcp.tool_service import default_tool_service as resolve
 
     return resolve()
+
+
+def _panel_request(
+    canonical: str,
+    arguments: dict | None,
+) -> tuple[dict[str, Any], bool]:
+    """Consume the per-process panel capability without advertising it to models."""
+
+    values = dict(arguments or {})
+    supplied = values.pop(_PANEL_CAPABILITY_ARGUMENT, None)
+    expected = os.environ.get("AE_MCP_PANEL_CAPABILITY", "")
+    trusted = (
+        canonical in _PANEL_DEVELOPER_TOOLS
+        and isinstance(supplied, str)
+        and len(expected) >= 64
+        and hmac.compare_digest(supplied, expected)
+    )
+    return values, trusted
 
 
 def _filtered_tool_names() -> set:
@@ -752,14 +781,24 @@ def build_server() -> Server:
             )
         name = canonical
 
-        schema_cls, run_fn = HANDLERS[name]
+        arguments, panel_developer = _panel_request(canonical, arguments)
+        public_schema_cls, run_fn = HANDLERS[name]
+        schema_cls = (
+            _PANEL_DEVELOPER_SCHEMAS[canonical]
+            if panel_developer
+            else public_schema_cls
+        )
 
         # The SDK's default validation happens before this handler and reduces
         # every schema failure to unstructured text. Reapply the same
         # jsonschema validation here using the exact tools/list schema: the
         # native layer-property tool can then expose its structured recovery
         # contract, while established tools keep the SDK's original text error.
-        input_schema = advertised_input_schemas.get(expose_tool_name(name))
+        input_schema = (
+            schema_cls.model_json_schema()
+            if panel_developer
+            else advertised_input_schemas.get(expose_tool_name(name))
+        )
         if input_schema is not None:
             try:
                 validate_json_schema(
@@ -864,18 +903,22 @@ def build_server() -> Server:
                     isError=True,
                 )
 
+        developer_token = client_identity.set_panel_developer(panel_developer)
         try:
-            result = await run_fn(validated, ctx)
-        except NativeBackendError as e:
-            log.info("native handler %s failed with %s", name, e.code)
-            result = {"ok": False, "error": e.public_dict()}
-        except Exception as e:  # noqa: BLE001
-            log.exception("handler %s raised", name)
-            payload = _format_result({"ok": False, "error": append_hint(str(e))})
-            return CallToolResult(
-                content=[TextContent(type="text", text=payload)],
-                isError=True,
-            )
+            try:
+                result = await run_fn(validated, ctx)
+            except NativeBackendError as e:
+                log.info("native handler %s failed with %s", name, e.code)
+                result = {"ok": False, "error": e.public_dict()}
+            except Exception as e:  # noqa: BLE001
+                log.exception("handler %s raised", name)
+                payload = _format_result({"ok": False, "error": append_hint(str(e))})
+                return CallToolResult(
+                    content=[TextContent(type="text", text=payload)],
+                    isError=True,
+                )
+        finally:
+            client_identity.reset_panel_developer(developer_token)
 
         if isinstance(result, dict) and result.get("ok") is False and "error" in result:
             error = result["error"]

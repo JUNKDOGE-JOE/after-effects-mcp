@@ -28,7 +28,9 @@ from ae_mcp.tool_artifact import (
     ToolSource,
     ToolSummary,
     canonical_json_bytes,
+    compute_content_hash,
     max_risk,
+    new_user_artifact_id,
 )
 from ae_mcp.tool_secrets import SecretFinding, SecretScanner
 from ae_mcp.tool_store import ToolArtifactStore, ToolNotFound
@@ -82,6 +84,9 @@ _WINDOWS_RESERVED = frozenset(
 _LINK_BEARING_UNIX_EXTRAS = frozenset({0x000D, 0x5855, 0x756E, 0x7855, 0x7875})
 _NESTED_ARCHIVE_SUFFIXES = (".zip", ".aemcptools")
 _NESTED_ARCHIVE_MAGIC = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
+_SYSTEM_COMMAND_SUFFIXES = frozenset(
+    {".ps1", ".psm1", ".bat", ".cmd", ".sh", ".command"}
+)
 
 
 @dataclass(frozen=True)
@@ -727,7 +732,10 @@ class ToolPackageManager:
             os.close(fd)
 
     def preview_import(self, archive_path: Path) -> ImportPreview:
-        archive_bytes = self._read_archive(Path(archive_path))
+        archive_path = Path(archive_path)
+        archive_bytes = self._read_archive(archive_path)
+        if archive_path.suffix.casefold() in _SYSTEM_COMMAND_SUFFIXES:
+            return self._preview_system_command(archive_path, archive_bytes)
         _validate_raw_zip_names(archive_bytes)
         package_sha256 = hashlib.sha256(archive_bytes).hexdigest()
         stack = contextlib.ExitStack()
@@ -815,6 +823,99 @@ class ToolPackageManager:
         except BaseException:
             stack.close()
             raise
+
+    def _preview_system_command(
+        self, source_path: Path, source_bytes: bytes
+    ) -> ImportPreview:
+        if len(source_bytes) > MAX_FILE_BYTES:
+            raise _error(
+                "ARCHIVE_LIMIT_EXCEEDED", "system-command asset exceeds the file limit"
+            )
+        _scan_all(self.scanner, {source_path.name: source_bytes})
+        try:
+            if source_bytes.startswith((b"\xff\xfe", b"\xfe\xff")):
+                content = source_bytes.decode("utf-16")
+            else:
+                content = source_bytes.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            raise _error(
+                "INVALID_SYSTEM_COMMAND", "system-command asset must be UTF text"
+            ) from None
+        if "\x00" in content:
+            raise _error(
+                "INVALID_SYSTEM_COMMAND", "system-command asset contains invalid text"
+            )
+        package_sha256 = hashlib.sha256(source_bytes).hexdigest()
+        now_ms = int(self._clock() * 1000)
+        suffix = source_path.suffix.casefold()
+        platforms = (
+            ["windows"] if suffix in {".ps1", ".psm1", ".bat", ".cmd"}
+            else ["macos", "linux"]
+        )
+        artifact_id = new_user_artifact_id(uuid4())
+        content_hash = compute_content_hash("system-command", content, {})
+        artifact = ToolArtifact(
+            id=artifact_id,
+            name=source_path.name,
+            description=(
+                "Developer-only quarantined system command. It cannot be run by "
+                "Tool Library or an MCP agent."
+            ),
+            kind="system-command",
+            category="developer-tools",
+            tags=("quarantined", "system-command"),
+            compatibility={"platforms": platforms, "runtime": "system-command"},
+            declared_risk="external",
+            source=ToolSource(
+                type="imported",
+                ref=source_path.name,
+                client=None,
+                product_version=None,
+                provenance={
+                    "packageSha256": package_sha256,
+                    "extension": suffix,
+                },
+            ),
+            status="candidate",
+            verified=False,
+            verification=None,
+            content=content,
+            args_schema={},
+            content_hash=content_hash,
+            schema_version=1,
+            revision=1,
+            created_at=now_ms,
+            updated_at=now_ms,
+            last_used_at=None,
+        )
+        store_revision = self.store.store_revision()
+        import_id = uuid4().hex
+        preview = ImportPreview(
+            import_id=import_id,
+            package_sha256=package_sha256,
+            artifacts=(
+                ImportItemPreview(
+                    summary=_summary(artifact),
+                    existing_id=None,
+                    metadata_changes={},
+                    content_changed=False,
+                    calculated_risk="external",
+                ),
+            ),
+            conflicts=(),
+            highest_risk="external",
+            expires_at=int(self._clock()) + IMPORT_TTL_SECONDS,
+        )
+        cleanup = contextlib.ExitStack()
+        self._pending[import_id] = _PendingImport(
+            preview=preview,
+            artifacts=(artifact,),
+            conflict_by_artifact_id={},
+            store_revision=store_revision,
+            root=Path(),
+            cleanup=cleanup,
+        )
+        return preview
 
     def commit_import(
         self,

@@ -333,3 +333,20 @@ def test_export_safe_source_omits_client_paths_and_arbitrary_provenance():
         "do-not-export",
     ):
         assert forbidden not in rendered
+
+
+def test_system_command_kind_requires_external_risk_and_round_trips_as_text():
+    with pytest.raises(ValueError, match="external risk"):
+        ToolArtifact.from_dict(
+            _artifact_wire(kind="system-command", content="echo blocked")
+        )
+    command = ToolArtifact.from_dict(
+        _artifact_wire(
+            kind="system-command",
+            content="echo blocked",
+            declaredRisk="external",
+        )
+    )
+    assert command.kind == "system-command"
+    assert command.declared_risk == "external"
+    assert command.to_dict()["content"] == "echo blocked"

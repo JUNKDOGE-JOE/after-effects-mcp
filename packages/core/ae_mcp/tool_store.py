@@ -327,7 +327,9 @@ _ENTRY_KEYS = frozenset(
         "sourceType",
     }
 )
-_KINDS = frozenset({"jsx", "expression", "prompt-skill", "recipe", "diagnostic"})
+_KINDS = frozenset(
+    {"jsx", "expression", "prompt-skill", "recipe", "diagnostic", "system-command"}
+)
 _STATUSES = frozenset({"candidate", "saved", "pinned", "archived", "deprecated"})
 _RISKS = frozenset({"read", "write", "destructive", "external"})
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -742,6 +744,41 @@ class ToolArtifactStore:
 
     def store_revision(self) -> int:
         return cast(int, self._read_index()["revision"])
+
+    def record_use(
+        self,
+        artifact_id: str,
+        *,
+        expected_content_hash: str,
+        used_at: int,
+    ) -> ToolArtifact:
+        if isinstance(used_at, bool) or not isinstance(used_at, int) or used_at < 0:
+            raise ToolStoreValidationError()
+        with self._lock() as lock:
+            index = self._read_index()
+            position = self._entry_index(index, artifact_id)
+            current = self._load_artifact(artifact_id)
+            if current.content_hash != expected_content_hash:
+                raise ToolRevisionConflict()
+            value = current.to_dict()
+            value["lastUsedAt"] = max(current.last_used_at or 0, used_at)
+            updated = ToolArtifact.from_dict(value)
+            entries = list(self._entries(index))
+            entries[position] = _entry_from_artifact(updated)
+            next_revision = cast(int, index["revision"]) + 1
+            next_index: dict[str, JsonValue] = {
+                "schemaVersion": 1,
+                "revision": next_revision,
+                "artifacts": entries,
+            }
+            self._commit(
+                lock,
+                index_before=index,
+                index_after=next_index,
+                writes={self._artifact_path(artifact_id): self._scan_artifact(updated)},
+            )
+        self._publish(StoreMutation("use", (artifact_id,), next_revision))
+        return updated
 
     def create(
         self,

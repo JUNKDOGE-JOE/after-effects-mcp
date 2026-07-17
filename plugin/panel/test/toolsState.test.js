@@ -119,25 +119,36 @@ test('artifact capabilities enforce source and status boundaries', () => {
 });
 
 test('execution capabilities enforce kind operations and executable statuses', () => {
-  assert.deepEqual(toolExecutionCapabilities(summary({ kind: 'prompt-skill' })), {
-    render: true, execute: false, apply: false,
+  const unavailable = {
+    render: false, execute: false, apply: false, directRun: false,
+    operation: null, requiresTarget: false, disabledReason: null, runtime: null,
+  };
+  assert.deepEqual(toolExecutionCapabilities(summary({ kind: 'jsx' })), unavailable);
+
+  const disabledReason = { code: 'tool_platform_incompatible', message: 'Wrong platform' };
+  assert.deepEqual(toolExecutionCapabilities(summary({
+    kind: 'recipe',
+    executionCapabilities: {
+      runtime: 'native-aegp',
+      operations: ['render', 'execute'],
+      directRun: {
+        available: true, operation: 'execute', requiresTarget: false, disabledReason: null,
+      },
+    },
+  })), {
+    render: true, execute: true, apply: false, directRun: true,
+    operation: 'execute', requiresTarget: false, disabledReason: null, runtime: 'native-aegp',
   });
-  assert.deepEqual(toolExecutionCapabilities(summary({ kind: 'expression' })), {
-    render: true, execute: false, apply: true,
+  assert.deepEqual(toolExecutionCapabilities(summary({
+    kind: 'jsx',
+    executionCapabilities: {
+      runtime: 'jsx', operations: ['render', 'execute'],
+      directRun: { available: false, operation: 'execute', disabledReason },
+    },
+  })), {
+    render: true, execute: true, apply: false, directRun: false,
+    operation: 'execute', requiresTarget: false, disabledReason, runtime: 'jsx',
   });
-  for (const kind of ['jsx', 'diagnostic', 'recipe']) {
-    assert.deepEqual(toolExecutionCapabilities(summary({ kind })), {
-      render: false, execute: true, apply: false,
-    });
-  }
-  for (const status of ['candidate', 'archived', 'deprecated']) {
-    assert.deepEqual(toolExecutionCapabilities(summary({ kind: 'prompt-skill', status })), {
-      render: false, execute: false, apply: false,
-    });
-    assert.deepEqual(toolExecutionCapabilities(summary({ kind: 'jsx', status })), {
-      render: false, execute: false, apply: false,
-    });
-  }
 });
 
 test('stale revision errors retain the editor draft and request refresh', () => {

@@ -109,9 +109,32 @@ body { background: var(--bg-panel); color: var(--text-primary); font: var(--weig
   border: 0;
   border-bottom: 1px solid var(--border-subtle);
   text-align: left;
-  cursor: pointer;
   transition: background var(--dur-fast) var(--ease-out);
 }
+
+.tools-artifact-row__select {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-15);
+  padding: 0;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tools-artifact-row__run {
+  align-self: flex-end;
+  padding: 3px 9px;
+  color: var(--text-primary);
+  background: var(--bg-raised);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.tools-artifact-row__run:disabled { opacity: 0.45; cursor: default; }
 
 .tools-artifact-row:hover { background: var(--bg-hover); }
 .tools-artifact-row.is-selected { background: var(--bg-selected); }
@@ -192,6 +215,11 @@ body { background: var(--bg-panel); color: var(--text-primary); font: var(--weig
 }
 
 .tools-runner { display: flex; flex-direction: column; gap: var(--space-2); }
+.tools-runner__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--space-2);
+}
 .tools-runner__target {
   display: grid;
   grid-template-columns: minmax(80px, 1fr) minmax(80px, 1fr) minmax(140px, 2fr);

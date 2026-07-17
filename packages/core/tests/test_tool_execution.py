@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import dataclasses
 import re
 from pathlib import Path
@@ -9,6 +10,8 @@ import pytest
 from mcp.types import ToolAnnotations
 
 from ae_mcp import tool_execution as execution_module
+from ae_mcp.backends.native import NativeBackendError
+from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.tool_artifact import (
     ToolArtifact,
     ToolSource,
@@ -26,6 +29,7 @@ from ae_mcp.tool_execution import (
     analyze_artifact_risk,
     analyze_jsx,
     compute_plan_hash,
+    execution_capabilities,
     normalize_args,
     normalize_target,
 )
@@ -50,6 +54,7 @@ def _artifact(
     args_schema=None,
     declared_risk: str = "read",
     status: str = "saved",
+    compatibility=None,
 ) -> ToolArtifact:
     schema = {} if args_schema is None else args_schema
     return ToolArtifact(
@@ -59,7 +64,7 @@ def _artifact(
         kind=kind,
         category="workflow",
         tags=(),
-        compatibility={},
+        compatibility={} if compatibility is None else compatibility,
         declared_risk=declared_risk,
         source=_source(),
         status=status,
@@ -80,6 +85,7 @@ class _Store:
     def __init__(self, *artifacts: ToolArtifact) -> None:
         self.artifacts = {artifact.id: artifact for artifact in artifacts}
         self.callbacks = []
+        self.uses = []
 
     def get(self, artifact_id, *, include_content=True):
         return self.artifacts[artifact_id]
@@ -99,6 +105,16 @@ class _Store:
             event = StoreMutation("edit", (artifact.id,), 2)
             for callback in tuple(self.callbacks):
                 callback(event)
+
+    def record_use(self, artifact_id, *, expected_content_hash, used_at):
+        artifact = self.artifacts[artifact_id]
+        if artifact.content_hash != expected_content_hash:
+            raise RuntimeError("stale")
+        self.uses.append((artifact_id, expected_content_hash, used_at))
+        self.artifacts[artifact_id] = dataclasses.replace(
+            artifact, last_used_at=used_at
+        )
+        return self.artifacts[artifact_id]
 
 
 class _Backend:
@@ -266,6 +282,48 @@ def test_blocked_status_fails_before_backend_selection(status):
 
     assert caught.value.code == "tool_status_blocked"
     assert factory.calls == 0
+
+
+def test_server_execution_capabilities_identify_native_recipes_and_compatibility():
+    native = _artifact(
+        kind="recipe",
+        content={
+            "steps": [
+                {
+                    "refType": "tool",
+                    "ref": "ae.projectSummary",
+                    "operation": "call",
+                    "args": {},
+                    "target": {},
+                }
+            ]
+        },
+    )
+    described = execution_capabilities(native)
+    assert described["runtime"] == "native-aegp"
+    assert described["directRun"]["available"] is True
+    assert described["directRun"]["operation"] == "execute"
+    incompatible = dataclasses.replace(native, compatibility={"platforms": ["windows"]})
+    if execution_module.sys.platform == "darwin":
+        blocked = execution_capabilities(incompatible)
+        assert blocked["directRun"]["available"] is False
+        assert blocked["directRun"]["disabledReason"]["code"] == "tool_platform_incompatible"
+
+
+def test_system_commands_are_never_plannable_or_directly_executable():
+    command = _artifact(
+        kind="system-command",
+        content="Write-Output blocked",
+        declared_risk="external",
+    )
+    described = execution_capabilities(command)
+    assert described["operations"] == []
+    assert described["directRun"]["available"] is False
+    assert described["directRun"]["disabledReason"]["code"] == "tool_system_command_denied"
+    engine = ToolExecutionEngine(_Store(command), _Factory(_Backend()))
+    with pytest.raises(ToolExecutionError) as caught:
+        engine.prepare(command.id, operation="execute", args={}, target={})
+    assert caught.value.code == "tool_system_command_denied"
 
 
 def test_prompt_render_returns_untrusted_context_without_backend():
@@ -770,3 +828,225 @@ async def test_backend_failure_audit_keeps_backend_name_and_no_exception_text(
     assert record.engine == "maintained-jsx"
     assert record.outcome == "backend-error"
     assert private_error not in persisted
+
+
+@pytest.mark.asyncio
+async def test_execution_jobs_dedupe_report_history_audit_and_usage(tmp_path: Path):
+    artifact = _artifact()
+    store = _Store(artifact)
+    audit = ToolAuditLog(tmp_path)
+    engine = ToolExecutionEngine(store, _Backend(), audit_log=audit)
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+
+    first = await engine.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-dedupe-0001",
+        ctx=None,
+        initiator="panel-direct",
+    )
+    duplicate = await engine.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-dedupe-0001",
+        ctx=None,
+        initiator="panel-direct",
+    )
+    assert duplicate["executionId"] == first["executionId"]
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    status = engine.job_status(first["executionId"])
+    assert status["status"] == "succeeded"
+    assert status["terminal"] is True
+    assert status["audit"]["planHash"] == plan.plan_hash
+    assert status["audit"]["outcome"] == "success"
+    assert store.uses and store.uses[0][0] == artifact.id
+    replacement_grant = engine.grants.issue_once(plan)
+    late_duplicate = await engine.start_job(
+        plan.plan_hash,
+        replacement_grant.grant_id,
+        operation_id="operation-dedupe-0001",
+        ctx=None,
+        initiator="panel-direct",
+    )
+    assert late_duplicate["executionId"] == first["executionId"]
+    history = engine.job_history(artifact.id)
+    assert [row["executionId"] for row in history["executions"]] == [
+        first["executionId"]
+    ]
+
+
+class _BlockingBackend(_Backend):
+    def __init__(self) -> None:
+        super().__init__()
+        self.started = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def exec(self, code, **kwargs):
+        self.calls.append({"code": code, **kwargs})
+        self.started.set()
+        await self.release.wait()
+        return '{"ok":true}'
+
+
+@pytest.mark.asyncio
+async def test_running_cancel_never_claims_ae_stopped_and_late_success_wins():
+    artifact = _artifact()
+    backend = _BlockingBackend()
+    engine = ToolExecutionEngine(_Store(artifact), backend)
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+    started = await engine.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-cancel-running",
+        ctx=None,
+        initiator="panel-direct",
+    )
+    await backend.started.wait()
+
+    cancellation = engine.cancel_job(started["executionId"])
+    assert cancellation["cancelDisposition"] == "not-cancellable-after-dispatch"
+    assert cancellation["terminal"] is False
+    assert cancellation["cancelRequested"] is True
+    backend.release.set()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    completed = engine.job_status(started["executionId"])
+    assert completed["status"] == "succeeded"
+    assert completed["cancelRequested"] is True
+
+
+@pytest.mark.asyncio
+async def test_queued_cancel_prevents_dispatch_and_consumes_the_grant():
+    artifact = _artifact()
+    backend = _Backend()
+    engine = ToolExecutionEngine(_Store(artifact), backend)
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+    started = await engine.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-cancel-queued",
+        ctx=None,
+        initiator="panel-direct",
+    )
+    cancellation = engine.cancel_job(started["executionId"])
+    assert cancellation["cancelDisposition"] == "cancelled-before-dispatch"
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert engine.job_status(started["executionId"])["status"] == "cancelled"
+    assert backend.calls == []
+    with pytest.raises(ToolExecutionError) as caught:
+        engine.grants.peek(grant.grant_id, plan)
+    assert caught.value.code == "tool_grant_invalid"
+
+
+@pytest.mark.asyncio
+async def test_job_timeout_is_reported_as_outcome_unknown_not_stopped():
+    artifact = _artifact()
+    backend = _Backend(asyncio.TimeoutError())
+    engine = ToolExecutionEngine(_Store(artifact), backend)
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+    started = await engine.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-timeout-unknown",
+        ctx=None,
+        initiator="panel-direct",
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    status = engine.job_status(started["executionId"])
+    assert status["status"] == "outcome-unknown"
+    assert status["outcomeUnknown"] is True
+    assert status["error"]["code"] == "tool_backend_timeout"
+
+
+@pytest.mark.asyncio
+async def test_native_uncertain_write_keeps_recovery_and_is_never_blindly_retried(
+    tmp_path: Path,
+    monkeypatch,
+):
+    load_all()
+    schema, _original = HANDLERS["ae.ping"]
+    calls = 0
+
+    async def uncertain_native(_args, _ctx):
+        nonlocal calls
+        calls += 1
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "The native write may have completed.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery={
+                "action": "inspect-state",
+                "hint": "Inspect AE state and audit evidence before retrying.",
+            },
+        )
+
+    monkeypatch.setitem(HANDLERS, "ae.ping", (schema, uncertain_native))
+    artifact = _artifact(
+        kind="recipe",
+        content={
+            "steps": [
+                {
+                    "refType": "tool",
+                    "ref": "ae.ping",
+                    "operation": "call",
+                    "args": {},
+                    "target": {},
+                }
+            ]
+        },
+    )
+    engine = ToolExecutionEngine(
+        _Store(artifact),
+        _Backend(),
+        audit_log=ToolAuditLog(tmp_path),
+    )
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+    with pytest.raises(ToolExecutionError) as first:
+        await engine.execute_tracked(
+            plan.plan_hash,
+            grant.grant_id,
+            operation_id="operation-native-uncertain",
+            ctx=None,
+            initiator="agent",
+        )
+
+    public = first.value.public_dict()
+    assert public["error"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert public["operationId"] == "operation-native-uncertain"
+    assert public["outcomeUnknown"] is True
+    assert public["sideEffect"] == "may-have-occurred"
+    assert public["recovery"]["action"] == "inspect-state"
+    assert public["audit"]["outcome"] == "outcome-unknown"
+    assert public["audit"]["backend"] == "native-aegp"
+
+    status = engine.job_status(public["executionId"])
+    assert status["status"] == "outcome-unknown"
+    assert status["error"]["code"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert status["error"]["sideEffect"] == "may-have-occurred"
+    assert status["error"]["recovery"]["action"] == "inspect-state"
+    assert status["audit"]["outcome"] == "outcome-unknown"
+    assert status["audit"]["backend"] == "native-aegp"
+
+    # A lost agent response can be retried only with the same operation id.
+    # The server returns the existing terminal job and never dispatches again.
+    retry_grant = engine.grants.issue_once(plan)
+    with pytest.raises(ToolExecutionError) as second:
+        await engine.execute_tracked(
+            plan.plan_hash,
+            retry_grant.grant_id,
+            operation_id="operation-native-uncertain",
+            ctx=None,
+            initiator="agent",
+        )
+    assert second.value.public_dict()["executionId"] == public["executionId"]
+    assert calls == 1

@@ -574,6 +574,12 @@ class LegacySkillAdapter:
                 product_version=manifest.product_version,
                 provenance={"manifestSha256": digest},
             )
+            usage_metadata = self.metadata_store.get(
+                record.path,
+                content_hash,
+                default_risk=_default_risk(kind),
+                default_updated_at=file_updated_at,
+            )
             metadata = LegacyMetadata(
                 category="workflow",
                 tags=(),
@@ -584,7 +590,7 @@ class LegacySkillAdapter:
                 ),
                 compatibility={},
                 declared_risk=_default_risk(kind),
-                last_used_at=None,
+                last_used_at=usage_metadata.last_used_at,
                 revision=1,
                 updated_at=file_updated_at,
             )
@@ -655,6 +661,32 @@ class LegacySkillAdapter:
     def get(self, artifact_id: str) -> ToolArtifact:
         _record, artifact, _manifest = self._find(artifact_id)
         return artifact
+
+    def record_use(
+        self,
+        artifact_id: str,
+        *,
+        expected_content_hash: str,
+        used_at: int,
+    ) -> ToolArtifact:
+        from ae_mcp.tool_store import ToolRevisionConflict, ToolStoreValidationError
+
+        if isinstance(used_at, bool) or not isinstance(used_at, int) or used_at < 0:
+            raise ToolStoreValidationError()
+        record, artifact, _manifest = self._find(artifact_id)
+        if artifact.content_hash != expected_content_hash:
+            raise ToolRevisionConflict()
+        store_revision = self.metadata_store.store_revision()
+        _current_record, current, _current_manifest = self._find(artifact_id)
+        if current.content_hash != expected_content_hash:
+            raise ToolRevisionConflict()
+        self.metadata_store.compare_and_set(
+            record.path,
+            expected_content_hash,
+            {"lastUsedAt": max(current.last_used_at or 0, used_at)},
+            expected_revision=store_revision,
+        )
+        return self.get(artifact_id)
 
     def edit(
         self,

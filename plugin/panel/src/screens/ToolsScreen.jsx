@@ -9,8 +9,9 @@ import { Textarea } from '../components/forms/Textarea';
 import { ToolArtifactEditor } from '../components/tools/ToolArtifactEditor';
 import { ToolArtifactRow } from '../components/tools/ToolArtifactRow';
 import { chooseToolExportPath, chooseToolPackage } from '../cep/toolFileDialogs';
-import { executeToolPlan } from '../cep/toolsApi';
+import { startToolPlan, waitForToolExecution } from '../cep/toolsApi';
 import { copyText } from '../lib/clipboard';
+import { buildToolArgs, initialToolArgs, toolArgFields } from '../lib/toolRunForm';
 import {
   INITIAL_TOOLS_STATE,
   canEditArtifact,
@@ -32,8 +33,10 @@ const TEXT = {
     category: '分类', empty: '没有匹配的工具', emptyCap: '新建工具，或导入 .aemcptools 包。',
     select: '选择一个工具', selectCap: '先从列表选择摘要，再按需读取完整内容。',
     edit: '编辑', duplicate: '副本', archive: '归档', delete: '删除', pin: '置顶', unpin: '取消置顶',
-    verify: '标记已审阅', promote: '提升为已保存', copy: '复制', renderCopy: '渲染并复制', run: '准备并运行',
-    metadata: '元数据', content: '内容（不可信用户数据）', args: '参数（JSON）', result: '执行结果',
+    verify: '标记已审阅', promote: '提升为已保存', copy: '复制', renderCopy: '渲染并复制', run: '运行',
+    metadata: '元数据', content: '内容（不可信用户数据）', args: '参数', result: '执行结果',
+    advancedJson: '高级 JSON', formView: '表单', cancelRun: '取消运行', resumeRun: '恢复状态', history: '执行历史',
+    developerTools: '开发者工具', incompatible: '当前不可运行', progress: '进度',
     compId: 'Comp ID', layerId: 'Layer ID', propertyPath: '属性路径', refresh: '刷新',
     importTitle: '导入预览', importChanges: '扫描后差异', importConflict: '冲突', keep: '保留现有',
     duplicateIncoming: '导入副本', commit: '确认导入为候选', cancel: '取消', contentChanged: '内容 hash 已变化',
@@ -49,8 +52,10 @@ const TEXT = {
     category: 'Category', empty: 'No matching tools', emptyCap: 'Create a tool or import an .aemcptools package.',
     select: 'Select a tool', selectCap: 'Choose a summary first, then inspect full content on demand.',
     edit: 'Edit', duplicate: 'Duplicate', archive: 'Archive', delete: 'Delete', pin: 'Pin', unpin: 'Unpin',
-    verify: 'Mark reviewed', promote: 'Promote to saved', copy: 'Copy', renderCopy: 'Render & copy', run: 'Prepare & run',
-    metadata: 'Metadata', content: 'Content (untrusted user data)', args: 'Arguments (JSON)', result: 'Execution result',
+    verify: 'Mark reviewed', promote: 'Promote to saved', copy: 'Copy', renderCopy: 'Render & copy', run: 'Run',
+    metadata: 'Metadata', content: 'Content (untrusted user data)', args: 'Arguments', result: 'Execution result',
+    advancedJson: 'Advanced JSON', formView: 'Form', cancelRun: 'Cancel run', resumeRun: 'Resume status', history: 'Execution history',
+    developerTools: 'Developer Tools', incompatible: 'Unavailable', progress: 'Progress',
     compId: 'Comp ID', layerId: 'Layer ID', propertyPath: 'Property path', refresh: 'Refresh',
     importTitle: 'Import preview', importChanges: 'Post-scan changes', importConflict: 'Conflict', keep: 'Keep existing',
     duplicateIncoming: 'Import duplicate', commit: 'Import as candidates', cancel: 'Cancel', contentChanged: 'Content hash changed',
@@ -61,7 +66,7 @@ const TEXT = {
   },
 };
 
-const KIND_OPTIONS = ['', 'jsx', 'expression', 'prompt-skill', 'recipe', 'diagnostic'];
+const KIND_OPTIONS = ['', 'jsx', 'expression', 'prompt-skill', 'recipe', 'diagnostic', 'system-command'];
 const RISK_OPTIONS = ['', 'read', 'write', 'destructive', 'external'];
 const SOURCE_OPTIONS = ['', 'user', 'legacy', 'bundled', 'imported', 'chat-tool-call'];
 
@@ -151,12 +156,19 @@ export function ToolsScreen({
   const [busy, setBusy] = React.useState(false);
   const initialRunInputs = React.useMemo(() => emptyToolRunInputs(), []);
   const [runArgs, setRunArgs] = React.useState(initialRunInputs.args);
+  const [runForm, setRunForm] = React.useState({});
+  const [advancedJson, setAdvancedJson] = React.useState(false);
   const [target, setTarget] = React.useState(initialRunInputs.target);
   const [runResult, setRunResult] = React.useState(null);
+  const [runJob, setRunJob] = React.useState(null);
+  const [runHistory, setRunHistory] = React.useState([]);
+  const [developerMode, setDeveloperMode] = React.useState(false);
   const loadSequence = React.useRef(0);
   const inspectSequence = React.useRef(0);
+  const rowRunLock = React.useRef(false);
   const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
   const artifact = state.inspected && state.inspected.artifact || null;
+  const runPending = Boolean(runJob && !runJob.terminal);
 
   const load = React.useCallback(async () => {
     if (!api) return;
@@ -168,8 +180,8 @@ export function ToolsScreen({
         state.query || state.category || state.risk || (state.kinds && state.kinds.length),
       );
       const payload = needsSearch
-        ? await api.search(searchArgsFromState(state))
-        : await api.index({
+        ? await (developerMode ? api.developerSearch : api.search)(searchArgsFromState(state))
+        : await (developerMode ? api.developerIndex : api.index)({
           statuses: state.statuses,
           source_types: state.sourceType ? [state.sourceType] : undefined,
           include_candidates: state.statuses.includes('candidate'),
@@ -179,7 +191,7 @@ export function ToolsScreen({
     } catch (error) {
       if (sequence === loadSequence.current) dispatch({ type: 'load-error', error });
     }
-  }, [api, state.query, state.kinds, state.category, state.risk, state.statuses, state.sourceType]);
+  }, [api, state.query, state.kinds, state.category, state.risk, state.statuses, state.sourceType, developerMode]);
 
   React.useEffect(() => {
     const timer = setTimeout(load, 120);
@@ -191,12 +203,30 @@ export function ToolsScreen({
     inspectSequence.current = sequence;
     const freshInputs = emptyToolRunInputs();
     setRunArgs(freshInputs.args);
+    setRunForm({});
+    setAdvancedJson(false);
     setTarget(freshInputs.target);
     dispatch({ type: 'select', id });
     setRunResult(null);
     try {
-      const payload = await api.inspect(id);
-      if (sequence === inspectSequence.current) dispatch({ type: 'inspect-success', payload });
+      const payload = await (developerMode ? api.developerInspect(id) : api.inspect(id));
+      if (sequence === inspectSequence.current) {
+        dispatch({ type: 'inspect-success', payload });
+        const defaults = initialToolArgs(payload.artifact && payload.artifact.argsSchema);
+        setRunForm(defaults);
+        let initialJson = {};
+        try {
+          initialJson = buildToolArgs(payload.artifact && payload.artifact.argsSchema, defaults);
+        } catch {
+          initialJson = Object.fromEntries(
+            Object.entries(defaults).filter(([, value]) => value !== ''),
+          );
+        }
+        setRunArgs(JSON.stringify(initialJson, null, 2));
+        const history = await api.use({ action: 'history', artifact_id: id, limit: 20 });
+        setRunHistory(history.executions || []);
+      }
+      return payload;
     } catch (error) {
       if (sequence === inspectSequence.current) dispatch({ type: 'load-error', error });
     }
@@ -331,16 +361,49 @@ export function ToolsScreen({
     }
   };
 
+  const executeArtifact = async (artifactToRun, args, normalizedTarget = {}) => {
+    if (runPending) return;
+    const capability = toolExecutionCapabilities(artifactToRun);
+    const operation = capability.operation;
+    if (!capability.directRun || !operation) return;
+    setBusy(true);
+    setRunResult(null);
+    setRunJob(null);
+    try {
+      const started = await startToolPlan(api, {
+        artifactId: artifactToRun.id,
+        operation,
+        args,
+        target: normalizedTarget,
+      });
+      const completed = await waitForToolExecution(api, started, {
+        onProgress: setRunJob,
+      });
+      await refreshAndInspect(artifactToRun.id);
+      setRunJob(completed);
+      setRunResult(completed);
+    } catch (error) {
+      if (error && error.execution) setRunJob(error.execution);
+      dispatch({ type: 'load-error', error });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const execute = async () => {
-    if (!artifact) return;
+    if (!artifact || runPending) return;
     let args;
-    try { args = asObject(runArgs); } catch {
+    try {
+      args = advancedJson
+        ? asObject(runArgs)
+        : buildToolArgs(artifact.argsSchema, runForm);
+    } catch (error) {
       dispatch({ type: 'load-error', error: new Error(t.invalidArgs) });
       return;
     }
-    const operation = artifact.kind === 'expression' ? 'apply' : 'execute';
+    const capability = toolExecutionCapabilities(artifact);
     let normalizedTarget = {};
-    if (operation === 'apply') {
+    if (capability.operation === 'apply') {
       try {
         normalizedTarget = normalizeExpressionTarget(target);
       } catch {
@@ -348,17 +411,52 @@ export function ToolsScreen({
         return;
       }
     }
+    await executeArtifact(artifact, args, normalizedTarget);
+  };
+
+  const inspectForRun = async (row) => {
+    if (busy || runPending || rowRunLock.current || !row) return;
+    rowRunLock.current = true;
+    try {
+      const payload = await inspect(row.id);
+      const inspectedArtifact = payload && payload.artifact;
+      const capability = toolExecutionCapabilities(inspectedArtifact);
+      if (!capability.directRun || capability.requiresTarget) return;
+      const defaults = initialToolArgs(inspectedArtifact.argsSchema);
+      try {
+        const args = buildToolArgs(inspectedArtifact.argsSchema, defaults);
+        await executeArtifact(inspectedArtifact, args);
+      } catch {
+        // Required values without defaults belong in the detail form. Selecting
+        // the row above has already opened that deterministic input surface.
+      }
+    } finally {
+      rowRunLock.current = false;
+    }
+  };
+
+  const cancelExecution = async () => {
+    if (!runJob || runJob.terminal) return;
+    try {
+      const next = await api.use({ action: 'cancel', execution_id: runJob.executionId });
+      setRunJob(next);
+    } catch (error) {
+      dispatch({ type: 'load-error', error });
+    }
+  };
+
+  const resumeExecution = async () => {
+    if (!runJob || runJob.terminal) return;
     setBusy(true);
     try {
-      const result = await executeToolPlan(api, {
-        artifactId: artifact.id,
-        operation,
-        args,
-        target: normalizedTarget,
+      const completed = await waitForToolExecution(api, runJob, {
+        onProgress: setRunJob,
       });
-      setRunResult(result);
-      await refreshAndInspect(artifact.id);
+      await refreshAndInspect(completed.artifactId);
+      setRunJob(completed);
+      setRunResult(completed);
     } catch (error) {
+      if (error && error.execution) setRunJob(error.execution);
       dispatch({ type: 'load-error', error });
     } finally {
       setBusy(false);
@@ -400,8 +498,9 @@ export function ToolsScreen({
       await api.commitImport(state.importPreview.importId, state.conflictResolutions);
       dispatch({ type: 'import-finished' });
       dispatch({ type: 'set-filter', key: 'statuses', value: ['candidate', 'saved', 'pinned'] });
-      const payload = await api.index({
-        statuses: ['candidate', 'saved', 'pinned'], include_candidates: true, limit: 100,
+      const payload = await (developerMode ? api.developerIndex : api.index)({
+        statuses: ['candidate', 'saved', 'pinned'], include_candidates: true,
+        limit: 100,
       });
       dispatch({ type: 'load-success', payload });
     } catch (error) {
@@ -434,7 +533,8 @@ export function ToolsScreen({
   const source = artifactSource(artifact);
   const editable = canEditArtifact(artifact);
   const execution = toolExecutionCapabilities(artifact);
-  const executable = execution.render || execution.execute || execution.apply;
+  const executable = execution.render || execution.directRun;
+  const argFields = toolArgFields(artifact && artifact.argsSchema);
 
   return (
     <div className="tools-screen">
@@ -444,12 +544,15 @@ export function ToolsScreen({
           <Button size="sm" variant="primary" icon="plus" onClick={() => dispatch({ type: 'edit-start', editor: { mode: 'create', artifact: null } })}>{t.new}</Button>
           <Button size="sm" variant="secondary" icon="download" onClick={previewImport} disabled={busy}>{t.import}</Button>
           <Button size="sm" variant="secondary" icon="external-link" onClick={exportPackage} disabled={busy || !state.summaries.length}>{t.export}</Button>
+          {runPending ? <Button size="sm" variant="secondary" onClick={resumeExecution} disabled={busy}>{t.resumeRun}</Button> : null}
+          {runPending ? <Button size="sm" variant="danger" onClick={cancelExecution} disabled={busy}>{t.cancelRun}</Button> : null}
+          <Button size="sm" variant={developerMode ? 'danger' : 'ghost'} onClick={() => setDeveloperMode((value) => !value)} disabled={busy}>{t.developerTools}</Button>
         </div>
       </header>
 
       <div className="tools-filters">
         <Input value={state.query} onChange={(value) => dispatch({ type: 'set-query', value })} placeholder={t.search} />
-        <Select value={state.kinds[0] || ''} onChange={(value) => dispatch({ type: 'set-filter', key: 'kinds', value: value ? [value] : [] })} options={KIND_OPTIONS.map((value) => ({ value, label: value || t.allKinds }))} />
+        <Select value={state.kinds[0] || ''} onChange={(value) => dispatch({ type: 'set-filter', key: 'kinds', value: value ? [value] : [] })} options={KIND_OPTIONS.filter((value) => developerMode || value !== 'system-command').map((value) => ({ value, label: value || t.allKinds }))} />
         <Input value={state.category} onChange={(value) => dispatch({ type: 'set-filter', key: 'category', value })} placeholder={t.category} />
         <Select value={state.risk} onChange={(value) => dispatch({ type: 'set-filter', key: 'risk', value })} options={RISK_OPTIONS.map((value) => ({ value, label: value || t.allRisk }))} />
         <Select value={statusValue} onChange={(value) => dispatch({ type: 'set-filter', key: 'statuses', value: value.split(',').filter(Boolean) })} options={[
@@ -480,6 +583,8 @@ export function ToolsScreen({
               artifact={row}
               selected={row.id === state.selectedId}
               onSelect={inspect}
+              onRun={inspectForRun}
+              runDisabled={busy || runPending}
               lang={lang}
             />
           )) : (
@@ -525,6 +630,7 @@ export function ToolsScreen({
                   <dt>Risk</dt><dd>{artifact.declaredRisk}</dd>
                   <dt>Status</dt><dd>{artifact.status}</dd>
                   <dt>Source</dt><dd>{source}</dd>
+                  <dt>Runtime</dt><dd>{execution.runtime || '—'}</dd>
                   <dt>Hash</dt><dd>{artifact.contentHash}</dd>
                 </dl>
               </section>
@@ -535,7 +641,44 @@ export function ToolsScreen({
               {executable ? (
                 <section className="tools-detail__section tools-runner">
                   <h3>{t.args}</h3>
-                  <Textarea mono value={runArgs} onChange={setRunArgs} rows={4} />
+                  <div className="tools-runner__actions">
+                    <Button size="sm" variant="ghost" onClick={() => setAdvancedJson((value) => !value)} disabled={busy}>
+                      {advancedJson ? t.formView : t.advancedJson}
+                    </Button>
+                  </div>
+                  {advancedJson ? (
+                    <Textarea mono value={runArgs} onChange={setRunArgs} rows={4} />
+                  ) : (
+                    <div className="tools-runner__form">
+                      {argFields.length ? argFields.map((field) => (
+                        <Field key={field.name} label={`${field.name}${field.required ? ' *' : ''}`}>
+                          {field.type === 'boolean' ? (
+                            <Select
+                              value={String(Boolean(runForm[field.name]))}
+                              onChange={(value) => setRunForm((current) => ({ ...current, [field.name]: value === 'true' }))}
+                              options={[{ value: 'false', label: 'false' }, { value: 'true', label: 'true' }]}
+                            />
+                          ) : field.enum ? (
+                            <Select
+                              value={runForm[field.name] === '' ? '' : JSON.stringify(runForm[field.name])}
+                              onChange={(value) => setRunForm((current) => ({ ...current, [field.name]: JSON.parse(value) }))}
+                              options={[
+                                ...(!field.required ? [{ value: '', label: '—' }] : []),
+                                ...field.enum.map((value) => ({ value: JSON.stringify(value), label: String(value) })),
+                              ]}
+                            />
+                          ) : (
+                            <Input
+                              value={runForm[field.name] ?? ''}
+                              type={['number', 'integer'].includes(field.type) ? 'number' : 'text'}
+                              disabled={!field.supported}
+                              onChange={(value) => setRunForm((current) => ({ ...current, [field.name]: value }))}
+                            />
+                          )}
+                        </Field>
+                      )) : <span>{'{}'}</span>}
+                    </div>
+                  )}
                   {artifact.kind === 'expression' ? (
                     <div className="tools-runner__target">
                       <Field label={t.compId}><Input value={target.compId} onChange={(value) => setTarget((current) => ({ ...current, compId: value }))} /></Field>
@@ -545,14 +688,26 @@ export function ToolsScreen({
                   ) : null}
                   <div className="tools-runner__actions">
                     {execution.render ? <Button variant="secondary" onClick={renderAndCopy} disabled={busy}>{t.renderCopy}</Button> : null}
-                    {execution.execute || execution.apply ? <Button variant="primary" onClick={execute} disabled={busy}>{t.run}</Button> : null}
+                    {execution.directRun ? <Button variant="primary" onClick={execute} disabled={busy || runPending}>{t.run}</Button> : null}
                   </div>
+                  {runJob ? <div>{t.progress}: {runJob.progress}% · {runJob.status}</div> : null}
                   {runResult ? (
                     <React.Fragment>
                       <h3>{t.result}</h3>
                       <pre className="tools-content">{JSON.stringify(runResult, null, 2)}</pre>
                     </React.Fragment>
                   ) : null}
+                  {runHistory.length ? (
+                    <React.Fragment>
+                      <h3>{t.history}</h3>
+                      <pre className="tools-content">{JSON.stringify(runHistory, null, 2)}</pre>
+                    </React.Fragment>
+                  ) : null}
+                </section>
+              ) : execution.disabledReason ? (
+                <section className="tools-detail__section">
+                  <h3>{t.incompatible}</h3>
+                  <p>{execution.disabledReason.message}</p>
                 </section>
               ) : null}
             </React.Fragment>

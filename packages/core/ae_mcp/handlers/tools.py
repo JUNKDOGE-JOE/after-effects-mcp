@@ -17,7 +17,8 @@ from ae_mcp.tool_artifact import (
     ToolSummary,
 )
 from ae_mcp.tool_service import default_tool_service
-from ae_mcp.tool_store import ToolRevisionConflict, ToolStoreValidationError
+from ae_mcp.tool_execution import execution_capabilities
+from ae_mcp.tool_store import ToolNotFound, ToolRevisionConflict, ToolStoreValidationError
 
 
 def _error(exc: Exception) -> dict[str, Any]:
@@ -34,8 +35,11 @@ def _error(exc: Exception) -> dict[str, Any]:
     }
 
 
-def _summary(value: ToolSummary) -> dict[str, JsonValue]:
-    return {
+def _summary(
+    value: ToolSummary,
+    execution_capabilities: Mapping[str, JsonValue] | None = None,
+) -> dict[str, JsonValue]:
+    result: dict[str, JsonValue] = {
         "id": value.id,
         "name": value.name,
         "description": value.description,
@@ -51,9 +55,17 @@ def _summary(value: ToolSummary) -> dict[str, JsonValue]:
         "lastUsedAt": value.last_used_at,
         "sourceType": value.source_type,
     }
+    if execution_capabilities is not None:
+        result["executionCapabilities"] = cast(
+            JsonValue, dict(execution_capabilities)
+        )
+    return result
 
 
-def _artifact_summary(value: ToolArtifact) -> dict[str, JsonValue]:
+def _artifact_summary(
+    value: ToolArtifact,
+    execution_capabilities: Mapping[str, JsonValue] | None = None,
+) -> dict[str, JsonValue]:
     return _summary(
         ToolSummary(
             id=value.id,
@@ -70,8 +82,14 @@ def _artifact_summary(value: ToolArtifact) -> dict[str, JsonValue]:
             updated_at=value.updated_at,
             last_used_at=value.last_used_at,
             source_type=value.source.type,
-        )
+        ),
+        execution_capabilities,
     )
+
+
+def _summary_with_execution(service: Any, value: ToolSummary) -> dict[str, JsonValue]:
+    artifact = service.store.get(value.id, include_content=True)
+    return _summary(value, execution_capabilities(artifact))
 
 
 def _trusted_bundled(value: ToolArtifact) -> bool:
@@ -92,13 +110,24 @@ async def _run_tool_index(args: schemas.AeToolIndexArgs, ctx: Any) -> Any:
         statuses = set(args.statuses) if args.statuses is not None else {"saved", "pinned"}
         if args.include_candidates:
             statuses.add("candidate")
-        rows = default_tool_service().store.list(
-            kinds=None if args.kinds is None else set(args.kinds),
+        service = default_tool_service()
+        requested_kinds = None if args.kinds is None else set(args.kinds)
+        developer_mode = client_identity.panel_developer_enabled()
+        if not developer_mode:
+            allowed = {"jsx", "expression", "prompt-skill", "recipe", "diagnostic"}
+            requested_kinds = allowed if requested_kinds is None else requested_kinds & allowed
+        rows = service.store.list(
+            kinds=cast(Any, requested_kinds),
             statuses=cast(Any, statuses),
             source_types=None if args.source_types is None else set(args.source_types),
             limit=args.limit,
         )
-        return {"ok": True, "artifacts": [_summary(row) for row in rows]}
+        if not developer_mode:
+            rows = [row for row in rows if row.kind != "system-command"]
+        return {
+            "ok": True,
+            "artifacts": [_summary_with_execution(service, row) for row in rows],
+        }
     except Exception as exc:  # noqa: BLE001
         return _error(exc)
 
@@ -109,9 +138,15 @@ async def _run_tool_search(args: schemas.AeToolSearchArgs, ctx: Any) -> Any:
         statuses = (
             set(args.statuses) if args.statuses is not None else {"saved", "pinned"}
         )
-        rows, total = default_tool_service().store.search(
+        service = default_tool_service()
+        requested_kinds = None if args.kinds is None else set(args.kinds)
+        developer_mode = client_identity.panel_developer_enabled()
+        if not developer_mode:
+            allowed = {"jsx", "expression", "prompt-skill", "recipe", "diagnostic"}
+            requested_kinds = allowed if requested_kinds is None else requested_kinds & allowed
+        rows, total = service.store.search(
             args.query,
-            kinds=None if args.kinds is None else set(args.kinds),
+            kinds=cast(Any, requested_kinds),
             categories=None if args.categories is None else set(args.categories),
             tags=None if args.tags is None else set(args.tags),
             risks=None if args.risks is None else set(args.risks),
@@ -120,9 +155,13 @@ async def _run_tool_search(args: schemas.AeToolSearchArgs, ctx: Any) -> Any:
             offset=args.offset,
             limit=args.limit,
         )
+        if not developer_mode:
+            hidden_count = sum(row.kind == "system-command" for row in rows)
+            rows = [row for row in rows if row.kind != "system-command"]
+            total = max(0, total - hidden_count)
         return {
             "ok": True,
-            "artifacts": [_summary(row) for row in rows],
+            "artifacts": [_summary_with_execution(service, row) for row in rows],
             "total": total,
             "offset": args.offset,
             "limit": args.limit,
@@ -134,12 +173,20 @@ async def _run_tool_search(args: schemas.AeToolSearchArgs, ctx: Any) -> Any:
 async def _run_tool_inspect(args: schemas.AeToolInspectArgs, ctx: Any) -> Any:
     del ctx
     try:
-        artifact = default_tool_service().store.get(
+        service = default_tool_service()
+        artifact = service.store.get(
             args.artifact_id, include_content=True
         )
+        if (
+            artifact.kind == "system-command"
+            and not client_identity.panel_developer_enabled()
+        ):
+            raise ToolNotFound()
+        wire = artifact.to_dict()
+        wire["executionCapabilities"] = execution_capabilities(artifact)
         return {
             "ok": True,
-            "artifact": artifact.to_dict(),
+            "artifact": wire,
             "trust": "signed-bundled" if _trusted_bundled(artifact) else "user-untrusted",
         }
     except Exception as exc:  # noqa: BLE001
@@ -171,10 +218,28 @@ async def _run_tool_use(args: schemas.AeToolUseArgs, ctx: Any) -> Any:
                 "scope": grant.scope,
                 "expiresAt": grant.expires_at,
             }
-        return await service.execution.execute(
-            cast(str, args.plan_hash),
-            cast(str, args.grant_id),
-            ctx=ctx,
+        if args.action == "execute":
+            return await service.execution.execute_tracked(
+                cast(str, args.plan_hash),
+                cast(str, args.grant_id),
+                operation_id=cast(str, args.operation_id),
+                ctx=ctx,
+                initiator=client_identity.get_client() or "mcp-client",
+            )
+        if args.action == "start":
+            return await service.execution.start_job(
+                cast(str, args.plan_hash),
+                cast(str, args.grant_id),
+                operation_id=cast(str, args.operation_id),
+                ctx=ctx,
+                initiator=client_identity.get_client() or "panel-direct",
+            )
+        if args.action == "status":
+            return service.execution.job_status(cast(str, args.execution_id))
+        if args.action == "cancel":
+            return service.execution.cancel_job(cast(str, args.execution_id))
+        return service.execution.job_history(
+            cast(str, args.artifact_id), limit=cast(int, args.limit)
         )
     except Exception as exc:  # noqa: BLE001
         return _error(exc)

@@ -8,15 +8,18 @@ import hashlib
 import json
 import os
 import re
+import sys
 import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from string import Template
 from typing import Any, Callable, Literal, Mapping, Sequence, cast
+from uuid import uuid4
 
 from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.approval_gate import PlanAuthorizationDenied, authorize_plan, plan_decision
+from ae_mcp.backends.native import NativeBackendError
 from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.tool_artifact import (
     ArtifactKind,
@@ -61,24 +64,192 @@ _PLACEHOLDER = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 _BLOCKED_STATUSES = frozenset({"candidate", "archived", "deprecated"})
 _HEX_64 = re.compile(r"^[0-9a-f]{64}$")
 _TEMPLATES_DIR = Path(__file__).resolve().parent / "jsx_templates"
+_NATIVE_AEGP_HANDLERS = frozenset(
+    {
+        "ae.projectSummary",
+        "ae.getProjectBitDepth",
+        "ae.setProjectBitDepth",
+        "ae.listProjectItems",
+        "ae.listCompositionLayers",
+        "ae.listSelectedLayers",
+        "ae.getCompositionTime",
+        "ae.setCompositionTime",
+        "ae.createComposition",
+        "ae.createCompositionLayer",
+        "ae.applyLayerEffect",
+        "ae.listLayerProperties",
+        "ae.listLayerPropertyKeyframes",
+        "ae.setLayerPropertyValue",
+    }
+)
 
 
 def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def _current_platform() -> str:
+    if sys.platform == "darwin":
+        return "macos"
+    if sys.platform.startswith("win"):
+        return "windows"
+    return "linux"
+
+
+def _artifact_runtime(artifact: ToolArtifact) -> str:
+    if artifact.kind == "system-command":
+        return "system-command"
+    if artifact.kind in {"jsx", "expression"}:
+        return "jsx"
+    if artifact.kind == "prompt-skill":
+        return "render-only"
+    if artifact.kind == "diagnostic":
+        return "core-handler"
+    content = cast(Mapping[str, Any], artifact.content)
+    tool_steps = [
+        cast(str, step["ref"])
+        for step in content["steps"]
+        if step["refType"] == "tool"
+    ]
+    if tool_steps and all(name in _NATIVE_AEGP_HANDLERS for name in tool_steps):
+        return "native-aegp"
+    return "core-recipe"
+
+
+def _supported_operations(kind: ArtifactKind) -> tuple[ArtifactOperation, ...]:
+    if kind == "system-command":
+        return ()
+    if kind == "jsx":
+        return ("render", "execute")
+    if kind == "expression":
+        return ("render", "apply")
+    if kind == "prompt-skill":
+        return ("render",)
+    if kind in {"recipe", "diagnostic"}:
+        return ("render", "execute")
+    return ()
+
+
+def execution_capabilities(artifact: ToolArtifact) -> dict[str, JsonValue]:
+    """Return the authoritative, fail-closed direct-execution contract."""
+
+    runtime = _artifact_runtime(artifact)
+    operations = _supported_operations(artifact.kind)
+    platform = _current_platform()
+    compatible = True
+    disabled_code: str | None = None
+    disabled_message: str | None = None
+    constraints = artifact.compatibility
+    raw_platforms = constraints.get("platforms")
+    if raw_platforms is not None:
+        if (
+            not isinstance(raw_platforms, list)
+            or not raw_platforms
+            or not all(item in {"macos", "windows", "linux"} for item in raw_platforms)
+        ):
+            compatible = False
+            disabled_code = "tool_compatibility_invalid"
+            disabled_message = "Artifact platform compatibility metadata is invalid."
+        elif platform not in raw_platforms:
+            compatible = False
+            disabled_code = "tool_platform_incompatible"
+            disabled_message = f"Artifact is not compatible with {platform}."
+    required_runtime = constraints.get("runtime")
+    if compatible and required_runtime is not None:
+        if not isinstance(required_runtime, str) or required_runtime != runtime:
+            compatible = False
+            disabled_code = "tool_runtime_incompatible"
+            disabled_message = "Artifact runtime compatibility does not match the server route."
+    if compatible and any(
+        key in constraints for key in ("aeVersion", "aeMinVersion", "aeMaxVersion")
+    ):
+        compatible = False
+        disabled_code = "tool_ae_compatibility_unverified"
+        disabled_message = (
+            "After Effects version constraints require a verified live host identity."
+        )
+    if artifact.kind == "system-command":
+        disabled_code = "tool_system_command_denied"
+        disabled_message = "System-command assets are quarantined and cannot execute."
+    elif artifact.status in _BLOCKED_STATUSES:
+        disabled_code = "tool_status_blocked"
+        disabled_message = "This artifact status cannot be executed."
+    elif not compatible and disabled_code is None:
+        disabled_code = "tool_compatibility_failed"
+        disabled_message = "Artifact compatibility could not be verified."
+
+    default_operation: ArtifactOperation | None = None
+    if artifact.kind == "expression":
+        default_operation = "apply"
+    elif artifact.kind in {"jsx", "recipe", "diagnostic"}:
+        default_operation = "execute"
+    direct_available = (
+        default_operation is not None
+        and default_operation in operations
+        and compatible
+        and disabled_code is None
+    )
+    return {
+        "runtime": runtime,
+        "operations": list(operations),
+        "compatibility": {
+            "compatible": compatible,
+            "platform": platform,
+            "constraints": dict(constraints),
+        },
+        "directRun": {
+            "available": direct_available,
+            "operation": default_operation,
+            "requiresTarget": default_operation == "apply",
+            "approvalScopes": ["once"],
+            "warningPolicy": "external" if artifact.declared_risk == "external" else "standard",
+            "disabledReason": (
+                None
+                if disabled_code is None
+                else {"code": disabled_code, "message": disabled_message or disabled_code}
+            ),
+        },
+    }
+
+
 class ToolExecutionError(RuntimeError):
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        error_details: Mapping[str, JsonValue] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.error_details = dict(error_details or {})
+
+    def error_dict(self) -> dict[str, JsonValue]:
+        return {
+            "code": self.code,
+            "message": str(self),
+            **self.error_details,
+        }
 
     def public_dict(self) -> dict[str, object]:
-        return {"ok": False, "error": self.code, "message": str(self)}
+        return {
+            "ok": False,
+            "error": self.code,
+            "message": str(self),
+            **self.error_details,
+        }
 
 
 class _BackendExecutionError(ToolExecutionError):
-    def __init__(self, code: str, message: str, backend_name: str) -> None:
-        super().__init__(code, message)
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        backend_name: str,
+        *,
+        error_details: Mapping[str, JsonValue] | None = None,
+    ) -> None:
+        super().__init__(code, message, error_details=error_details)
         self.backend_name = backend_name
 
 
@@ -475,6 +646,24 @@ class GrantStore:
                 )
             return grant
 
+    def peek(self, grant_id: str, plan: ExecutionPlan | str) -> ExecutionGrant:
+        expected_hash = plan.plan_hash if isinstance(plan, ExecutionPlan) else plan
+        with self._lock:
+            state = self._grants.get(grant_id)
+            if state is None:
+                raise ToolExecutionError(
+                    "tool_grant_invalid", "Execution grant is missing or already consumed."
+                )
+            grant = state.grant
+            if grant.expires_at <= self._now():
+                self._grants.pop(grant_id, None)
+                raise ToolExecutionError("tool_grant_expired", "Execution grant has expired.")
+            if grant.plan_hash != expected_hash:
+                raise ToolExecutionError(
+                    "tool_grant_mismatch", "Execution grant does not match this plan."
+                )
+            return grant
+
     def revoke_artifact(self, artifact_id: str) -> int:
         with self._lock:
             grants = [
@@ -499,6 +688,52 @@ class _Analysis:
     dependency_hashes: tuple[tuple[str, str], ...]
     risk: ArtifactRisk
     rendered: str | None
+
+
+@dataclass
+class _ExecutionJob:
+    execution_id: str
+    operation_id: str
+    artifact_id: str
+    content_hash: str
+    artifact_revision: int
+    plan_hash: str
+    operation: ArtifactOperation
+    initiator: str
+    status: str
+    created_at: int
+    started_at: int | None = None
+    finished_at: int | None = None
+    cancel_requested: bool = False
+    result: Mapping[str, JsonValue] | None = None
+    error: Mapping[str, JsonValue] | None = None
+    audit: Mapping[str, JsonValue] | None = None
+
+    def public_dict(self) -> dict[str, JsonValue]:
+        terminal = self.status in {"succeeded", "failed", "cancelled", "outcome-unknown"}
+        progress = 100 if terminal else 25 if self.status == "running" else 0
+        return {
+            "ok": True,
+            "executionId": self.execution_id,
+            "operationId": self.operation_id,
+            "artifactId": self.artifact_id,
+            "contentHash": self.content_hash,
+            "artifactRevision": self.artifact_revision,
+            "planHash": self.plan_hash,
+            "operation": self.operation,
+            "initiator": self.initiator,
+            "status": self.status,
+            "progress": progress,
+            "terminal": terminal,
+            "cancelRequested": self.cancel_requested,
+            "outcomeUnknown": self.status == "outcome-unknown",
+            "createdAt": self.created_at,
+            "startedAt": self.started_at,
+            "finishedAt": self.finished_at,
+            "result": None if self.result is None else dict(self.result),
+            "error": None if self.error is None else dict(self.error),
+            "audit": None if self.audit is None else dict(self.audit),
+        }
 
 
 def _substitute_json(value: JsonValue, context: Mapping[str, JsonValue]) -> JsonValue:
@@ -612,6 +847,10 @@ class ToolExecutionEngine:
         self._now = now or _now_ms
         self.prepared_plans = prepared_plans or PreparedPlanStore(now=self._now)
         self.grants = grants or GrantStore(now=self._now)
+        self._jobs: dict[str, _ExecutionJob] = {}
+        self._job_operations: dict[str, str] = {}
+        self._job_tasks: dict[str, asyncio.Task[None]] = {}
+        self._job_lock = threading.RLock()
         self._unsubscribe: Callable[[], None] | None = None
         subscribe = getattr(store, "subscribe", None)
         if callable(subscribe):
@@ -621,6 +860,10 @@ class ToolExecutionEngine:
         if self._unsubscribe is not None:
             self._unsubscribe()
             self._unsubscribe = None
+
+    @staticmethod
+    def describe(artifact: ToolArtifact) -> dict[str, JsonValue]:
+        return execution_capabilities(artifact)
 
     def _on_store_mutation(self, mutation: Any) -> None:
         if isinstance(mutation, Mapping):
@@ -767,6 +1010,27 @@ class ToolExecutionEngine:
                 "tool_invalid_operation", "Tool operation is unsupported."
             )
         artifact = self._get_artifact(artifact_id)
+        capabilities = execution_capabilities(artifact)
+        if artifact.kind == "system-command":
+            raise ToolExecutionError(
+                "tool_system_command_denied",
+                "System-command assets are quarantined and cannot execute.",
+            )
+        operations = capabilities.get("operations", [])
+        if operation not in operations:
+            raise ToolExecutionError(
+                "tool_invalid_operation", "Tool operation is unsupported."
+            )
+        compatibility = capabilities.get("compatibility", {})
+        if not isinstance(compatibility, Mapping) or compatibility.get("compatible") is not True:
+            direct = capabilities.get("directRun", {})
+            reason = direct.get("disabledReason") if isinstance(direct, Mapping) else None
+            code = reason.get("code") if isinstance(reason, Mapping) else None
+            message = reason.get("message") if isinstance(reason, Mapping) else None
+            raise ToolExecutionError(
+                str(code or "tool_compatibility_failed"),
+                str(message or "Artifact compatibility could not be verified."),
+            )
         analysis = self._analyze(
             artifact,
             operation,
@@ -875,7 +1139,9 @@ class ToolExecutionEngine:
                 return existing
         started_at = self._now()
         try:
-            scope = await authorize_plan(plan, ctx)
+            scope = await authorize_plan(
+                plan, ctx, requested_scope=requested_scope
+            )
             if scope == "session":
                 if requested_scope != "session":
                     raise ToolExecutionError(
@@ -896,6 +1162,232 @@ class ToolExecutionEngine:
             if isinstance(exc, ToolExecutionError):
                 raise
             raise ToolExecutionError(exc.code, str(exc)) from exc
+
+    def _latest_audit(self, plan_hash: str, artifact_id: str) -> Mapping[str, JsonValue] | None:
+        if self.audit_log is None:
+            return None
+        for record in reversed(self.audit_log.list(limit=100, artifact_id=artifact_id)):
+            if record.plan_hash == plan_hash:
+                return record.public_dict()
+        return None
+
+    def _record_successful_use(self, plan: ExecutionPlan) -> None:
+        record_use = getattr(self.store, "record_use", None)
+        if not callable(record_use):
+            return
+        try:
+            record_use(
+                plan.artifact_id,
+                expected_content_hash=plan.content_hash,
+                used_at=self._now(),
+            )
+        except Exception:
+            # The AE action has already succeeded and was audited. A usage-metadata
+            # write failure must never invite a duplicate side-effecting retry.
+            return
+
+    async def start_job(
+        self,
+        plan_hash: str,
+        grant_id: str,
+        *,
+        operation_id: str,
+        ctx: Any,
+        initiator: str,
+    ) -> Mapping[str, JsonValue]:
+        if not 16 <= len(operation_id) <= 128:
+            raise ToolExecutionError(
+                "tool_operation_id_invalid", "Operation id is invalid."
+            )
+        with self._job_lock:
+            existing_id = self._job_operations.get(operation_id)
+            if existing_id is not None:
+                existing = self._jobs[existing_id]
+                if existing.plan_hash != plan_hash:
+                    raise ToolExecutionError(
+                        "tool_operation_conflict",
+                        "Operation id is already bound to a different execution plan.",
+                    )
+                return existing.public_dict()
+        plan = self.prepared_plans.get(plan_hash)
+        self.grants.peek(grant_id, plan)
+        artifact, _analysis = self._assert_current(plan)
+        with self._job_lock:
+            existing_id = self._job_operations.get(operation_id)
+            if existing_id is not None:
+                existing = self._jobs[existing_id]
+                if existing.plan_hash != plan_hash:
+                    raise ToolExecutionError(
+                        "tool_operation_conflict",
+                        "Operation id is already bound to a different execution plan.",
+                    )
+                return existing.public_dict()
+            execution_id = uuid4().hex
+            job = _ExecutionJob(
+                execution_id=execution_id,
+                operation_id=operation_id,
+                artifact_id=artifact.id,
+                content_hash=artifact.content_hash,
+                artifact_revision=artifact.revision,
+                plan_hash=plan_hash,
+                operation=plan.operation,
+                initiator=initiator or "unknown",
+                status="queued",
+                created_at=self._now(),
+            )
+            self._jobs[execution_id] = job
+            self._job_operations[operation_id] = execution_id
+            task = asyncio.create_task(
+                self._run_job(job, grant_id=grant_id, ctx=ctx),
+                name=f"ae-mcp-tool-{execution_id}",
+            )
+            self._job_tasks[execution_id] = task
+            return job.public_dict()
+
+    async def execute_tracked(
+        self,
+        plan_hash: str,
+        grant_id: str,
+        *,
+        operation_id: str,
+        ctx: Any,
+        initiator: str,
+    ) -> Mapping[str, JsonValue]:
+        started = await self.start_job(
+            plan_hash,
+            grant_id,
+            operation_id=operation_id,
+            ctx=ctx,
+            initiator=initiator,
+        )
+        execution_id = cast(str, started["executionId"])
+        with self._job_lock:
+            task = self._job_tasks.get(execution_id)
+        if task is not None:
+            await asyncio.shield(task)
+        status = self.job_status(execution_id)
+        if status["status"] == "succeeded":
+            result = status.get("result")
+            if isinstance(result, Mapping):
+                return cast(Mapping[str, JsonValue], result)
+            raise ToolExecutionError(
+                "tool_invalid_response", "Execution completed without a structured result."
+            )
+        error = status.get("error")
+        code = error.get("code") if isinstance(error, Mapping) else None
+        message = error.get("message") if isinstance(error, Mapping) else None
+        error_details: dict[str, JsonValue] = {
+            key: cast(JsonValue, value)
+            for key, value in error.items()
+            if key not in {"code", "message"}
+        } if isinstance(error, Mapping) else {}
+        error_details.update(
+            {
+                "executionId": execution_id,
+                "operationId": operation_id,
+                "status": cast(JsonValue, status["status"]),
+                "outcomeUnknown": cast(JsonValue, status["outcomeUnknown"]),
+                "audit": cast(JsonValue, status.get("audit")),
+            }
+        )
+        raise ToolExecutionError(
+            str(code or "tool_execution_failed"),
+            str(message or "Tool execution did not complete successfully."),
+            error_details=error_details,
+        )
+
+    async def _run_job(self, job: _ExecutionJob, *, grant_id: str, ctx: Any) -> None:
+        await asyncio.sleep(0)
+        with self._job_lock:
+            if job.cancel_requested:
+                try:
+                    plan = self.prepared_plans.get(job.plan_hash)
+                    self.grants.consume(grant_id, plan)
+                except ToolExecutionError:
+                    pass
+                job.status = "cancelled"
+                job.finished_at = self._now()
+                self._job_tasks.pop(job.execution_id, None)
+                return
+            job.status = "running"
+            job.started_at = self._now()
+        try:
+            result = await self.execute(job.plan_hash, grant_id, ctx=ctx)
+        except ToolExecutionError as exc:
+            with self._job_lock:
+                error = exc.error_dict()
+                job.error = error
+                job.status = (
+                    "outcome-unknown"
+                    if exc.code == "tool_backend_timeout"
+                    or error.get("sideEffect") == "may-have-occurred"
+                    else "failed"
+                )
+                job.finished_at = self._now()
+                job.audit = self._latest_audit(job.plan_hash, job.artifact_id)
+        except BaseException as exc:  # task shutdown must remain explicitly ambiguous
+            with self._job_lock:
+                job.error = {
+                    "code": "tool_execution_interrupted",
+                    "message": "Execution tracking was interrupted; inspect AE state before retrying.",
+                    "sideEffect": "may-have-occurred",
+                    "recovery": {
+                        "action": "inspect-state",
+                        "hint": "Inspect AE state and the audit record before retrying.",
+                    },
+                }
+                job.status = "outcome-unknown"
+                job.finished_at = self._now()
+                job.audit = self._latest_audit(job.plan_hash, job.artifact_id)
+            if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                raise
+        else:
+            with self._job_lock:
+                job.result = result
+                job.status = "succeeded"
+                job.finished_at = self._now()
+                job.audit = self._latest_audit(job.plan_hash, job.artifact_id)
+        finally:
+            with self._job_lock:
+                self._job_tasks.pop(job.execution_id, None)
+
+    def job_status(self, execution_id: str) -> Mapping[str, JsonValue]:
+        with self._job_lock:
+            job = self._jobs.get(execution_id)
+            if job is None:
+                raise ToolExecutionError("tool_execution_not_found", "Execution was not found.")
+            return job.public_dict()
+
+    def cancel_job(self, execution_id: str) -> Mapping[str, JsonValue]:
+        with self._job_lock:
+            job = self._jobs.get(execution_id)
+            if job is None:
+                raise ToolExecutionError("tool_execution_not_found", "Execution was not found.")
+            if job.status == "queued":
+                job.cancel_requested = True
+                disposition = "cancelled-before-dispatch"
+            elif job.status == "running":
+                job.cancel_requested = True
+                disposition = "not-cancellable-after-dispatch"
+            else:
+                disposition = "already-terminal"
+            result = job.public_dict()
+            result["cancelDisposition"] = disposition
+            return result
+
+    def job_history(
+        self, artifact_id: str, *, limit: int = 20
+    ) -> Mapping[str, JsonValue]:
+        if not 1 <= limit <= 100:
+            raise ToolExecutionError("tool_invalid_input", "History limit is invalid.")
+        with self._job_lock:
+            rows = [job for job in self._jobs.values() if job.artifact_id == artifact_id]
+            rows.sort(key=lambda job: (job.created_at, job.execution_id), reverse=True)
+            return {
+                "ok": True,
+                "artifactId": artifact_id,
+                "executions": [job.public_dict() for job in rows[:limit]],
+            }
 
     def _scan_json(self, name: str, value: Mapping[str, JsonValue]) -> None:
         try:
@@ -967,7 +1459,11 @@ class ToolExecutionEngine:
             started_at=started_at,
             finished_at=self._now(),
             error_code=error_code,
-            engine=("maintained-jsx" if backend is not None else None),
+            engine=(
+                "native-aegp"
+                if backend == "native-aegp"
+                else "maintained-jsx" if backend is not None else None
+            ),
         )
         self.audit_log.append(record)
 
@@ -1167,6 +1663,8 @@ class ToolExecutionEngine:
                 self._assert_current(root_plan)
                 result = await run(schema.model_validate(normalized), ctx)
                 results.append(cast(JsonValue, _canonical_value(result, label="recipe result")))
+                if name in _NATIVE_AEGP_HANDLERS:
+                    backend_name = "native-aegp"
         return {"ok": True, "results": results}, backend_name
 
     async def execute(
@@ -1198,6 +1696,32 @@ class ToolExecutionEngine:
             )
             raise ToolExecutionError(
                 "tool_backend_timeout", "Tool execution timed out."
+            ) from exc
+        except NativeBackendError as exc:
+            public = cast(dict[str, JsonValue], exc.public_dict())
+            error_details = {
+                key: value
+                for key, value in public.items()
+                if key not in {"code", "message"}
+            }
+            outcome = (
+                "outcome-unknown"
+                if public.get("sideEffect") == "may-have-occurred"
+                else "backend-error"
+            )
+            self._audit(
+                plan,
+                grant=grant,
+                backend="native-aegp",
+                outcome=outcome,
+                started_at=started_at,
+                error_code=exc.code,
+            )
+            raise _BackendExecutionError(
+                exc.code,
+                str(exc),
+                "native-aegp",
+                error_details=error_details,
             ) from exc
         except ToolExecutionError as exc:
             backend_name = cast(
@@ -1240,6 +1764,7 @@ class ToolExecutionEngine:
             outcome="success",
             started_at=started_at,
         )
+        self._record_successful_use(plan)
         return result
 
     async def execute_legacy_skill(
@@ -1388,6 +1913,7 @@ class ToolExecutionEngine:
             outcome="success",
             started_at=started_at,
         )
+        self._record_successful_use(plan)
         return {
             "ok": True,
             "name": record.skill.name,
@@ -1409,6 +1935,7 @@ __all__ = [
     "analyze_artifact_risk",
     "analyze_jsx",
     "compute_plan_hash",
+    "execution_capabilities",
     "normalize_args",
     "normalize_target",
 ]

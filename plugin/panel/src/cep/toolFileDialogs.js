@@ -1,4 +1,5 @@
 const TOOL_PACKAGE_SUFFIX = '.aemcptools';
+const SYSTEM_COMMAND_SUFFIXES = ['.ps1', '.psm1', '.bat', '.cmd', '.sh', '.command'];
 
 function selectedValue(result) {
   if (!result || Number(result.err || 0) !== 0) return null;
@@ -29,13 +30,15 @@ export function chooseToolPackage(cepFs, {
     false,
     title,
     initialPath,
-    ['aemcptools'],
+    ['aemcptools', 'ps1', 'psm1', 'bat', 'cmd', 'sh', 'command'],
   );
   const selected = selectedValue(result);
   if (!selected) return null;
   const path = normalizePath(normalizeFileUrl(selected));
-  if (!path.toLowerCase().endsWith(TOOL_PACKAGE_SUFFIX)) {
-    throw new Error('Select a .aemcptools package');
+  const lower = path.toLowerCase();
+  if (!lower.endsWith(TOOL_PACKAGE_SUFFIX)
+      && !SYSTEM_COMMAND_SUFFIXES.some((suffix) => lower.endsWith(suffix))) {
+    throw new Error('Select a .aemcptools package or a quarantined system-command file');
   }
   return path;
 }

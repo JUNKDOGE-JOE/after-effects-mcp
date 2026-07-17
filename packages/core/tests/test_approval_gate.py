@@ -92,6 +92,9 @@ def _plan(risk="write"):
 def test_plan_elicitation_schema_allows_session_only_for_write():
     write_schema = build_plan_elicitation_schema(_plan("write"))
     destructive_schema = build_plan_elicitation_schema(_plan("destructive"))
+    direct_schema = build_plan_elicitation_schema(
+        _plan("write"), requested_scope="once"
+    )
 
     assert write_schema["properties"]["decision"]["enum"] == [
         "once",
@@ -102,6 +105,7 @@ def test_plan_elicitation_schema_allows_session_only_for_write():
         "once",
         "deny",
     ]
+    assert direct_schema["properties"]["decision"]["enum"] == ["once", "deny"]
     assert write_schema["additionalProperties"] is False
     assert write_schema["x-ae-mcp-plan"] == _plan("write").public_dict()
 

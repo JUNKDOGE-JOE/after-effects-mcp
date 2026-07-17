@@ -12187,7 +12187,8 @@
       revision: value.revision,
       updatedAt: value.updatedAt,
       lastUsedAt: (_a = value.lastUsedAt) != null ? _a : null,
-      sourceType: value.sourceType || value.source && value.source.type || ""
+      sourceType: value.sourceType || value.source && value.source.type || "",
+      executionCapabilities: value.executionCapabilities || null
     };
   }
   function messageOf(error) {
@@ -12204,11 +12205,14 @@
       case "load-success": {
         const payload = event.payload || event;
         const summaries = (payload.artifacts || payload.summaries || []).map(toSummary);
+        const selectedVisible = summaries.some((row) => row.id === state.selectedId);
         return {
           ...state,
           phase: "ready",
           summaries: sortSummaries(summaries),
           total: Number.isFinite(payload.total) ? payload.total : summaries.length,
+          selectedId: selectedVisible ? state.selectedId : null,
+          inspected: selectedVisible ? state.inspected : null,
           error: "",
           refreshRequired: false
         };
@@ -12320,19 +12324,22 @@
   }
   function canEditArtifact(artifact) {
     return Boolean(
-      artifact && sourceType(artifact) !== "bundled" && !["archived", "deprecated"].includes(artifact.status)
+      artifact && artifact.kind !== "system-command" && sourceType(artifact) !== "bundled" && !["archived", "deprecated"].includes(artifact.status)
     );
   }
-  function canExecuteArtifact(artifact) {
-    return Boolean(artifact && ["saved", "pinned"].includes(artifact.status));
-  }
   function toolExecutionCapabilities(artifact) {
-    const enabled = canExecuteArtifact(artifact);
-    const kind = artifact && artifact.kind;
+    const contract = artifact && artifact.executionCapabilities;
+    const operations = Array.isArray(contract && contract.operations) ? contract.operations : [];
+    const direct = contract && contract.directRun && typeof contract.directRun === "object" ? contract.directRun : {};
     return {
-      render: enabled && ["expression", "prompt-skill"].includes(kind),
-      execute: enabled && ["jsx", "diagnostic", "recipe"].includes(kind),
-      apply: enabled && kind === "expression"
+      render: operations.includes("render"),
+      execute: operations.includes("execute"),
+      apply: operations.includes("apply"),
+      directRun: Boolean(direct.available),
+      operation: direct.operation || null,
+      requiresTarget: Boolean(direct.requiresTarget),
+      disabledReason: direct.disabledReason || null,
+      runtime: contract && contract.runtime || null
     };
   }
   function canPromoteArtifact(artifact) {
@@ -12569,8 +12576,8 @@
   var import_react39 = __toESM(require_react(), 1);
   var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
   var L2 = {
-    zh: { never: "\u672A\u4F7F\u7528", verified: "\u5DF2\u9A8C\u8BC1" },
-    en: { never: "Never used", verified: "Verified" }
+    zh: { never: "\u672A\u4F7F\u7528", verified: "\u5DF2\u9A8C\u8BC1", run: "\u8FD0\u884C" },
+    en: { never: "Never used", verified: "Verified", run: "Run" }
   };
   function riskStatus(risk) {
     if (risk === "external" || risk === "destructive") return "error";
@@ -12585,30 +12592,58 @@
       return t.never;
     }
   }
-  function ToolArtifactRow({ artifact, selected = false, onSelect, lang = "zh" }) {
+  function ToolArtifactRow({
+    artifact,
+    selected = false,
+    onSelect,
+    onRun,
+    runDisabled = false,
+    lang = "zh"
+  }) {
     const t = L2[lang] || L2.zh;
+    const directRun = Boolean(
+      artifact && artifact.executionCapabilities && artifact.executionCapabilities.directRun && artifact.executionCapabilities.directRun.available
+    );
     return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(
-      "button",
+      "div",
       {
-        type: "button",
         className: `tools-artifact-row ds-focusable${selected ? " is-selected" : ""}`,
-        "aria-current": selected || void 0,
-        onClick: () => onSelect && onSelect(artifact.id),
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__top", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { className: "tools-artifact-row__name", children: artifact.name }),
-            artifact.verified ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: "ok", icon: "check", children: t.verified }) : null
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__badges", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.kind }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.category }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: riskStatus(artifact.declaredRisk), children: artifact.declaredRisk }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: artifact.status === "candidate" ? "warn" : artifact.status === "pinned" ? "accent" : "neutral", children: artifact.status })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__meta", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: artifact.sourceType }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: lastUsed(artifact.lastUsedAt, t) })
-          ] })
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(
+            "button",
+            {
+              type: "button",
+              className: "tools-artifact-row__select",
+              "aria-current": selected || void 0,
+              onClick: () => onSelect && onSelect(artifact.id),
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__top", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { className: "tools-artifact-row__name", children: artifact.name }),
+                  artifact.verified ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: "ok", icon: "check", children: t.verified }) : null
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__badges", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.kind }),
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.category }),
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: riskStatus(artifact.declaredRisk), children: artifact.declaredRisk }),
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: artifact.status === "candidate" ? "warn" : artifact.status === "pinned" ? "accent" : "neutral", children: artifact.status })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__meta", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: artifact.sourceType }),
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: lastUsed(artifact.lastUsedAt, t) })
+                ] })
+              ]
+            }
+          ),
+          directRun ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "tools-artifact-row__run",
+              onClick: () => onRun && onRun(artifact),
+              disabled: runDisabled,
+              children: t.run
+            }
+          ) : null
         ]
       }
     );
@@ -12616,6 +12651,7 @@
 
   // src/cep/toolFileDialogs.js
   var TOOL_PACKAGE_SUFFIX = ".aemcptools";
+  var SYSTEM_COMMAND_SUFFIXES = [".ps1", ".psm1", ".bat", ".cmd", ".sh", ".command"];
   function selectedValue(result) {
     if (!result || Number(result.err || 0) !== 0) return null;
     const data = result.data;
@@ -12643,13 +12679,14 @@
       false,
       title,
       initialPath,
-      ["aemcptools"]
+      ["aemcptools", "ps1", "psm1", "bat", "cmd", "sh", "command"]
     );
     const selected = selectedValue(result);
     if (!selected) return null;
     const path = normalizePath2(normalizeFileUrl(selected));
-    if (!path.toLowerCase().endsWith(TOOL_PACKAGE_SUFFIX)) {
-      throw new Error("Select a .aemcptools package");
+    const lower = path.toLowerCase();
+    if (!lower.endsWith(TOOL_PACKAGE_SUFFIX) && !SYSTEM_COMMAND_SUFFIXES.some((suffix) => lower.endsWith(suffix))) {
+      throw new Error("Select a .aemcptools package or a quarantined system-command file");
     }
     return path;
   }
@@ -12706,10 +12743,24 @@
     const call = async (name, args) => parseMcpPayload(
       await mcp.callTool(name, args)
     );
+    const panelCall = async (name, args) => {
+      if (typeof mcp.callPanelTool !== "function") {
+        throw new Error("Trusted panel Tool Library channel is unavailable");
+      }
+      return parseMcpPayload(await mcp.callPanelTool(name, args));
+    };
     return {
       index: (args = {}) => call("ae_toolIndex", args),
       search: (args = {}) => call("ae_toolSearch", args),
-      inspect: (artifactId) => call("ae_toolInspect", { artifact_id: artifactId }),
+      inspect: (artifactId, options = {}) => call("ae_toolInspect", {
+        artifact_id: artifactId,
+        ...options
+      }),
+      developerIndex: (args = {}) => panelCall("ae_toolIndex", args),
+      developerSearch: (args = {}) => panelCall("ae_toolSearch", args),
+      developerInspect: (artifactId) => panelCall("ae_toolInspect", {
+        artifact_id: artifactId
+      }),
       create: (input) => call("ae_toolCreate", input),
       edit: (input) => call("ae_toolEdit", input),
       delete: (input) => call("ae_toolDelete", input),
@@ -12730,14 +12781,21 @@
       exportPackage: (artifactIds, outPath) => call("ae_toolExport", {
         artifact_ids: artifactIds,
         out_path: outPath
-      })
+      }),
+      newOperationId: () => {
+        if (typeof mcp.newOperationId !== "function") {
+          throw new Error("Secure operation id generation is unavailable");
+        }
+        return mcp.newOperationId();
+      }
     };
   }
-  async function executeToolPlan(api, {
+  async function startToolPlan(api, {
     artifactId,
     operation,
     args = {},
-    target = {}
+    target = {},
+    operationId = api.newOperationId()
   }) {
     const plan = await api.use({
       artifact_id: artifactId,
@@ -12751,11 +12809,125 @@
       plan_hash: plan.planHash,
       grant_scope: "once"
     });
-    return api.use({
-      action: "execute",
+    const startRequest = {
+      action: "start",
       plan_hash: plan.planHash,
-      grant_id: grant.grantId
+      grant_id: grant.grantId,
+      operation_id: operationId
+    };
+    try {
+      return await api.use(startRequest);
+    } catch (firstError) {
+      try {
+        return await api.use(startRequest);
+      } catch (secondError) {
+        secondError.startRetryCause = firstError;
+        throw secondError;
+      }
+    }
+  }
+  async function waitForToolExecution(api, execution, {
+    pollIntervalMs = 250,
+    statusRetryLimit = 2,
+    onProgress = () => {
+    },
+    wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+  } = {}) {
+    let current = execution;
+    onProgress(current);
+    while (!current.terminal) {
+      await wait(pollIntervalMs);
+      let lastError;
+      for (let attempt = 0; attempt <= statusRetryLimit; attempt += 1) {
+        try {
+          current = await api.use({ action: "status", execution_id: current.executionId });
+          lastError = null;
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt < statusRetryLimit) await wait(pollIntervalMs);
+        }
+      }
+      if (lastError) {
+        lastError.execution = current;
+        lastError.recoveryAction = "resume-status";
+        throw lastError;
+      }
+      onProgress(current);
+    }
+    return current;
+  }
+
+  // src/lib/toolRunForm.js
+  function schemaParts(schema) {
+    const value = schema && typeof schema === "object" && !Array.isArray(schema) ? schema : {};
+    const canonical = value.type === "object" || value.properties || value.required;
+    return {
+      properties: canonical ? value.properties || {} : value,
+      required: new Set(canonical && Array.isArray(value.required) ? value.required : [])
+    };
+  }
+  function initialToolArgs(schema) {
+    const { properties } = schemaParts(schema);
+    return Object.entries(properties).reduce((result, [name, rule]) => {
+      if (rule && Object.hasOwn(rule, "default")) result[name] = rule.default;
+      else if (rule && rule.type === "boolean") result[name] = false;
+      else result[name] = "";
+      return result;
+    }, {});
+  }
+  function toolArgFields(schema) {
+    const { properties, required } = schemaParts(schema);
+    return Object.entries(properties).map(([name, rawRule]) => {
+      const rule = rawRule && typeof rawRule === "object" ? rawRule : {};
+      return {
+        name,
+        type: rule.type || "string",
+        required: required.has(name),
+        enum: Array.isArray(rule.enum) ? rule.enum : null,
+        minimum: rule.minimum,
+        maximum: rule.maximum,
+        supported: ["string", "number", "integer", "boolean"].includes(rule.type || "string") || Array.isArray(rule.enum)
+      };
     });
+  }
+  function buildToolArgs(schema, values) {
+    const fields = toolArgFields(schema);
+    const result = {};
+    for (const field of fields) {
+      const value = values && values[field.name];
+      if ((value === "" || value === void 0) && !field.required) continue;
+      if ((value === "" || value === void 0) && field.required) {
+        throw new TypeError(`Missing required argument: ${field.name}`);
+      }
+      if (field.type === "integer") {
+        const parsed = Number(value);
+        if (!Number.isInteger(parsed)) throw new TypeError(`Invalid integer: ${field.name}`);
+        result[field.name] = parsed;
+      } else if (field.type === "number") {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) throw new TypeError(`Invalid number: ${field.name}`);
+        result[field.name] = parsed;
+      } else if (field.type === "boolean") {
+        result[field.name] = Boolean(value);
+      } else if (field.supported) {
+        result[field.name] = value;
+      } else {
+        throw new TypeError(`Use Advanced JSON for argument: ${field.name}`);
+      }
+      if (field.enum && !field.enum.some((item) => Object.is(item, result[field.name]))) {
+        throw new TypeError(`Invalid enum value: ${field.name}`);
+      }
+      if (typeof result[field.name] === "number") {
+        if (field.minimum !== void 0 && result[field.name] < field.minimum) {
+          throw new TypeError(`Value below minimum: ${field.name}`);
+        }
+        if (field.maximum !== void 0 && result[field.name] > field.maximum) {
+          throw new TypeError(`Value above maximum: ${field.name}`);
+        }
+      }
+    }
+    return result;
   }
 
   // src/screens/ToolsScreen.jsx
@@ -12792,11 +12964,19 @@
       promote: "\u63D0\u5347\u4E3A\u5DF2\u4FDD\u5B58",
       copy: "\u590D\u5236",
       renderCopy: "\u6E32\u67D3\u5E76\u590D\u5236",
-      run: "\u51C6\u5907\u5E76\u8FD0\u884C",
+      run: "\u8FD0\u884C",
       metadata: "\u5143\u6570\u636E",
       content: "\u5185\u5BB9\uFF08\u4E0D\u53EF\u4FE1\u7528\u6237\u6570\u636E\uFF09",
-      args: "\u53C2\u6570\uFF08JSON\uFF09",
+      args: "\u53C2\u6570",
       result: "\u6267\u884C\u7ED3\u679C",
+      advancedJson: "\u9AD8\u7EA7 JSON",
+      formView: "\u8868\u5355",
+      cancelRun: "\u53D6\u6D88\u8FD0\u884C",
+      resumeRun: "\u6062\u590D\u72B6\u6001",
+      history: "\u6267\u884C\u5386\u53F2",
+      developerTools: "\u5F00\u53D1\u8005\u5DE5\u5177",
+      incompatible: "\u5F53\u524D\u4E0D\u53EF\u8FD0\u884C",
+      progress: "\u8FDB\u5EA6",
       compId: "Comp ID",
       layerId: "Layer ID",
       propertyPath: "\u5C5E\u6027\u8DEF\u5F84",
@@ -12851,11 +13031,19 @@
       promote: "Promote to saved",
       copy: "Copy",
       renderCopy: "Render & copy",
-      run: "Prepare & run",
+      run: "Run",
       metadata: "Metadata",
       content: "Content (untrusted user data)",
-      args: "Arguments (JSON)",
+      args: "Arguments",
       result: "Execution result",
+      advancedJson: "Advanced JSON",
+      formView: "Form",
+      cancelRun: "Cancel run",
+      resumeRun: "Resume status",
+      history: "Execution history",
+      developerTools: "Developer Tools",
+      incompatible: "Unavailable",
+      progress: "Progress",
       compId: "Comp ID",
       layerId: "Layer ID",
       propertyPath: "Property path",
@@ -12880,7 +13068,7 @@
       untrusted: "User untrusted"
     }
   };
-  var KIND_OPTIONS2 = ["", "jsx", "expression", "prompt-skill", "recipe", "diagnostic"];
+  var KIND_OPTIONS2 = ["", "jsx", "expression", "prompt-skill", "recipe", "diagnostic", "system-command"];
   var RISK_OPTIONS2 = ["", "read", "write", "destructive", "external"];
   var SOURCE_OPTIONS = ["", "user", "legacy", "bundled", "imported", "chat-tool-call"];
   function artifactSource(artifact) {
@@ -12965,12 +13153,19 @@
     const [busy, setBusy] = import_react40.default.useState(false);
     const initialRunInputs = import_react40.default.useMemo(() => emptyToolRunInputs(), []);
     const [runArgs, setRunArgs] = import_react40.default.useState(initialRunInputs.args);
+    const [runForm, setRunForm] = import_react40.default.useState({});
+    const [advancedJson, setAdvancedJson] = import_react40.default.useState(false);
     const [target, setTarget] = import_react40.default.useState(initialRunInputs.target);
     const [runResult, setRunResult] = import_react40.default.useState(null);
+    const [runJob, setRunJob] = import_react40.default.useState(null);
+    const [runHistory, setRunHistory] = import_react40.default.useState([]);
+    const [developerMode, setDeveloperMode] = import_react40.default.useState(false);
     const loadSequence = import_react40.default.useRef(0);
     const inspectSequence = import_react40.default.useRef(0);
+    const rowRunLock = import_react40.default.useRef(false);
     const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
     const artifact = state.inspected && state.inspected.artifact || null;
+    const runPending = Boolean(runJob && !runJob.terminal);
     const load = import_react40.default.useCallback(async () => {
       if (!api) return;
       const sequence = loadSequence.current + 1;
@@ -12980,7 +13175,7 @@
         const needsSearch = Boolean(
           state.query || state.category || state.risk || state.kinds && state.kinds.length
         );
-        const payload = needsSearch ? await api.search(searchArgsFromState(state)) : await api.index({
+        const payload = needsSearch ? await (developerMode ? api.developerSearch : api.search)(searchArgsFromState(state)) : await (developerMode ? api.developerIndex : api.index)({
           statuses: state.statuses,
           source_types: state.sourceType ? [state.sourceType] : void 0,
           include_candidates: state.statuses.includes("candidate"),
@@ -12990,7 +13185,7 @@
       } catch (error) {
         if (sequence === loadSequence.current) dispatch({ type: "load-error", error });
       }
-    }, [api, state.query, state.kinds, state.category, state.risk, state.statuses, state.sourceType]);
+    }, [api, state.query, state.kinds, state.category, state.risk, state.statuses, state.sourceType, developerMode]);
     import_react40.default.useEffect(() => {
       const timer = setTimeout(load, 120);
       return () => clearTimeout(timer);
@@ -13000,12 +13195,30 @@
       inspectSequence.current = sequence;
       const freshInputs = emptyToolRunInputs();
       setRunArgs(freshInputs.args);
+      setRunForm({});
+      setAdvancedJson(false);
       setTarget(freshInputs.target);
       dispatch({ type: "select", id });
       setRunResult(null);
       try {
-        const payload = await api.inspect(id);
-        if (sequence === inspectSequence.current) dispatch({ type: "inspect-success", payload });
+        const payload = await (developerMode ? api.developerInspect(id) : api.inspect(id));
+        if (sequence === inspectSequence.current) {
+          dispatch({ type: "inspect-success", payload });
+          const defaults = initialToolArgs(payload.artifact && payload.artifact.argsSchema);
+          setRunForm(defaults);
+          let initialJson = {};
+          try {
+            initialJson = buildToolArgs(payload.artifact && payload.artifact.argsSchema, defaults);
+          } catch {
+            initialJson = Object.fromEntries(
+              Object.entries(defaults).filter(([, value]) => value !== "")
+            );
+          }
+          setRunArgs(JSON.stringify(initialJson, null, 2));
+          const history = await api.use({ action: "history", artifact_id: id, limit: 20 });
+          setRunHistory(history.executions || []);
+        }
+        return payload;
       } catch (error) {
         if (sequence === inspectSequence.current) dispatch({ type: "load-error", error });
       }
@@ -13120,18 +13333,46 @@
         setBusy(false);
       }
     };
+    const executeArtifact = async (artifactToRun, args, normalizedTarget = {}) => {
+      if (runPending) return;
+      const capability = toolExecutionCapabilities(artifactToRun);
+      const operation = capability.operation;
+      if (!capability.directRun || !operation) return;
+      setBusy(true);
+      setRunResult(null);
+      setRunJob(null);
+      try {
+        const started = await startToolPlan(api, {
+          artifactId: artifactToRun.id,
+          operation,
+          args,
+          target: normalizedTarget
+        });
+        const completed = await waitForToolExecution(api, started, {
+          onProgress: setRunJob
+        });
+        await refreshAndInspect(artifactToRun.id);
+        setRunJob(completed);
+        setRunResult(completed);
+      } catch (error) {
+        if (error && error.execution) setRunJob(error.execution);
+        dispatch({ type: "load-error", error });
+      } finally {
+        setBusy(false);
+      }
+    };
     const execute = async () => {
-      if (!artifact) return;
+      if (!artifact || runPending) return;
       let args;
       try {
-        args = asObject(runArgs);
-      } catch {
+        args = advancedJson ? asObject(runArgs) : buildToolArgs(artifact.argsSchema, runForm);
+      } catch (error) {
         dispatch({ type: "load-error", error: new Error(t.invalidArgs) });
         return;
       }
-      const operation = artifact.kind === "expression" ? "apply" : "execute";
+      const capability = toolExecutionCapabilities(artifact);
       let normalizedTarget = {};
-      if (operation === "apply") {
+      if (capability.operation === "apply") {
         try {
           normalizedTarget = normalizeExpressionTarget(target);
         } catch {
@@ -13139,17 +13380,47 @@
           return;
         }
       }
+      await executeArtifact(artifact, args, normalizedTarget);
+    };
+    const inspectForRun = async (row) => {
+      if (busy || runPending || rowRunLock.current || !row) return;
+      rowRunLock.current = true;
+      try {
+        const payload = await inspect(row.id);
+        const inspectedArtifact = payload && payload.artifact;
+        const capability = toolExecutionCapabilities(inspectedArtifact);
+        if (!capability.directRun || capability.requiresTarget) return;
+        const defaults = initialToolArgs(inspectedArtifact.argsSchema);
+        try {
+          const args = buildToolArgs(inspectedArtifact.argsSchema, defaults);
+          await executeArtifact(inspectedArtifact, args);
+        } catch {
+        }
+      } finally {
+        rowRunLock.current = false;
+      }
+    };
+    const cancelExecution = async () => {
+      if (!runJob || runJob.terminal) return;
+      try {
+        const next = await api.use({ action: "cancel", execution_id: runJob.executionId });
+        setRunJob(next);
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+      }
+    };
+    const resumeExecution = async () => {
+      if (!runJob || runJob.terminal) return;
       setBusy(true);
       try {
-        const result = await executeToolPlan(api, {
-          artifactId: artifact.id,
-          operation,
-          args,
-          target: normalizedTarget
+        const completed = await waitForToolExecution(api, runJob, {
+          onProgress: setRunJob
         });
-        setRunResult(result);
-        await refreshAndInspect(artifact.id);
+        await refreshAndInspect(completed.artifactId);
+        setRunJob(completed);
+        setRunResult(completed);
       } catch (error) {
+        if (error && error.execution) setRunJob(error.execution);
         dispatch({ type: "load-error", error });
       } finally {
         setBusy(false);
@@ -13188,7 +13459,7 @@
         await api.commitImport(state.importPreview.importId, state.conflictResolutions);
         dispatch({ type: "import-finished" });
         dispatch({ type: "set-filter", key: "statuses", value: ["candidate", "saved", "pinned"] });
-        const payload = await api.index({
+        const payload = await (developerMode ? api.developerIndex : api.index)({
           statuses: ["candidate", "saved", "pinned"],
           include_candidates: true,
           limit: 100
@@ -13222,19 +13493,23 @@
     const source = artifactSource(artifact);
     const editable = canEditArtifact(artifact);
     const execution = toolExecutionCapabilities(artifact);
-    const executable = execution.render || execution.execute || execution.apply;
+    const executable = execution.render || execution.directRun;
+    const argFields = toolArgFields(artifact && artifact.argsSchema);
     return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-screen", children: [
       /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("header", { className: "tools-header", children: [
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-header__title", children: t.library }),
         /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-header__actions", children: [
           /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "primary", icon: "plus", onClick: () => dispatch({ type: "edit-start", editor: { mode: "create", artifact: null } }), children: t.new }),
           /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "download", onClick: previewImport, disabled: busy, children: t.import }),
-          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "external-link", onClick: exportPackage, disabled: busy || !state.summaries.length, children: t.export })
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "external-link", onClick: exportPackage, disabled: busy || !state.summaries.length, children: t.export }),
+          runPending ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", onClick: resumeExecution, disabled: busy, children: t.resumeRun }) : null,
+          runPending ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "danger", onClick: cancelExecution, disabled: busy, children: t.cancelRun }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: developerMode ? "danger" : "ghost", onClick: () => setDeveloperMode((value) => !value), disabled: busy, children: t.developerTools })
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-filters", children: [
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: state.query, onChange: (value) => dispatch({ type: "set-query", value }), placeholder: t.search }),
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: state.kinds[0] || "", onChange: (value) => dispatch({ type: "set-filter", key: "kinds", value: value ? [value] : [] }), options: KIND_OPTIONS2.map((value) => ({ value, label: value || t.allKinds })) }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: state.kinds[0] || "", onChange: (value) => dispatch({ type: "set-filter", key: "kinds", value: value ? [value] : [] }), options: KIND_OPTIONS2.filter((value) => developerMode || value !== "system-command").map((value) => ({ value, label: value || t.allKinds })) }),
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: state.category, onChange: (value) => dispatch({ type: "set-filter", key: "category", value }), placeholder: t.category }),
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: state.risk, onChange: (value) => dispatch({ type: "set-filter", key: "risk", value }), options: RISK_OPTIONS2.map((value) => ({ value, label: value || t.allRisk })) }),
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: statusValue, onChange: (value) => dispatch({ type: "set-filter", key: "statuses", value: value.split(",").filter(Boolean) }), options: [
@@ -13260,6 +13535,8 @@
             artifact: row,
             selected: row.id === state.selectedId,
             onSelect: inspect,
+            onRun: inspectForRun,
+            runDisabled: busy || runPending,
             lang
           },
           row.id
@@ -13297,6 +13574,8 @@
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.status }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Source" }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: source }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Runtime" }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: execution.runtime || "\u2014" }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Hash" }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.contentHash })
             ] })
@@ -13307,7 +13586,36 @@
           ] }),
           executable ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
             /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.args }),
-            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { mono: true, value: runArgs, onChange: setRunArgs, rows: 4 }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-runner__actions", children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "ghost", onClick: () => setAdvancedJson((value) => !value), disabled: busy, children: advancedJson ? t.formView : t.advancedJson }) }),
+            advancedJson ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { mono: true, value: runArgs, onChange: setRunArgs, rows: 4 }) : /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-runner__form", children: argFields.length ? argFields.map((field) => {
+              var _a;
+              return /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: `${field.name}${field.required ? " *" : ""}`, children: field.type === "boolean" ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+                Select,
+                {
+                  value: String(Boolean(runForm[field.name])),
+                  onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: value === "true" })),
+                  options: [{ value: "false", label: "false" }, { value: "true", label: "true" }]
+                }
+              ) : field.enum ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+                Select,
+                {
+                  value: runForm[field.name] === "" ? "" : JSON.stringify(runForm[field.name]),
+                  onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: JSON.parse(value) })),
+                  options: [
+                    ...!field.required ? [{ value: "", label: "\u2014" }] : [],
+                    ...field.enum.map((value) => ({ value: JSON.stringify(value), label: String(value) }))
+                  ]
+                }
+              ) : /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+                Input,
+                {
+                  value: (_a = runForm[field.name]) != null ? _a : "",
+                  type: ["number", "integer"].includes(field.type) ? "number" : "text",
+                  disabled: !field.supported,
+                  onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: value }))
+                }
+              ) }, field.name);
+            }) : /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: "{}" }) }),
             artifact.kind === "expression" ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-runner__target", children: [
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.compId, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: target.compId, onChange: (value) => setTarget((current) => ({ ...current, compId: value })) }) }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.layerId, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: target.layerId, onChange: (value) => setTarget((current) => ({ ...current, layerId: value })) }) }),
@@ -13315,12 +13623,26 @@
             ] }) : null,
             /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-runner__actions", children: [
               execution.render ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "secondary", onClick: renderAndCopy, disabled: busy, children: t.renderCopy }) : null,
-              execution.execute || execution.apply ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy, children: t.run }) : null
+              execution.directRun ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy || runPending, children: t.run }) : null
             ] }),
+            runJob ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { children: [
+              t.progress,
+              ": ",
+              runJob.progress,
+              "% \xB7 ",
+              runJob.status
+            ] }) : null,
             runResult ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.result }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: JSON.stringify(runResult, null, 2) })
+            ] }) : null,
+            runHistory.length ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.history }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: JSON.stringify(runHistory, null, 2) })
             ] }) : null
+          ] }) : execution.disabledReason ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.incompatible }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("p", { children: execution.disabledReason.message })
           ] }) : null
         ] }) })
       ] }),
@@ -17081,8 +17403,23 @@
 
   // src/cep/mcpClient.js
   var DEFAULT_TIMEOUT_MS2 = 3e4;
+  var INITIALIZE_TIMEOUT_MS = 12e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
   var PANEL_VERSION = "0.9.2";
+  function defaultRandomBytes(size) {
+    const cryptoImpl = globalThis.crypto;
+    if (!cryptoImpl || typeof cryptoImpl.getRandomValues !== "function") {
+      throw new Error("Secure random generation is unavailable");
+    }
+    const value = new Uint8Array(size);
+    cryptoImpl.getRandomValues(value);
+    return value;
+  }
+  function secureHex(randomBytes, size) {
+    const value = randomBytes(size);
+    if (!value || value.length !== size) throw new Error("Secure random generation failed");
+    return Array.from(value, (byte) => Number(byte).toString(16).padStart(2, "0")).join("");
+  }
   function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
     const adapter = platform || createPlatformAdapter();
     if (repoRoot && fsImpl.existsSync(adapter.paths.join([repoRoot, "pyproject.toml"]))) return adapter.paths.resolve([repoRoot]);
@@ -17215,12 +17552,13 @@
     }
     const handleChunk = createNdjsonReader(handleMessage);
     if (onLine) onLine(handleChunk);
-    function request(method, params) {
+    function request(method, params, timeoutOverrideMs) {
       const id = nextId2++;
       const message = { jsonrpc: "2.0", id, method };
       if (params !== void 0) message.params = params;
+      const limit = Number.isFinite(timeoutOverrideMs) && timeoutOverrideMs > 0 ? timeoutOverrideMs : timeoutMs;
       const promise = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + timeoutMs + "ms")), timeoutMs);
+        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + limit + "ms")), limit);
         pending.set(id, { resolve, reject, timer });
       });
       writeMessage(message);
@@ -17248,7 +17586,9 @@
     repoRoot,
     getExpertGuidance = () => true,
     packageVersion = PANEL_VERSION,
-    retryDelays = [1e3, 2e3, 4e3]
+    retryDelays = [1e3, 2e3, 4e3],
+    initializeTimeoutMs = INITIALIZE_TIMEOUT_MS,
+    randomBytes = defaultRandomBytes
   } = {}) {
     let proc = null;
     let rpc = null;
@@ -17261,6 +17601,7 @@
     let lastError = null;
     let stopped = false;
     let restartTimer = null;
+    const panelCapability = secureHex(randomBytes, 32);
     function currentState() {
       return { status, retryCount, error: lastError, tools };
     }
@@ -17308,6 +17649,7 @@
         const commandSpec = await resolveCommand({ extRoot, repoRoot, platform: adapter || void 0 });
         const additions = {
           AE_MCP_BACKEND: "ae-mcp",
+          AE_MCP_PANEL_CAPABILITY: panelCapability,
           ...expertGuidanceEnv(getExpertGuidance())
         };
         const spawnEnv = adapter ? adapter.completeSpawnEnv(env || {}, additions) : Object.assign({}, env || {}, additions);
@@ -17322,20 +17664,25 @@
         } else {
           proc = spawnImpl(commandSpec.command, commandSpec.args || [], { ...options, shell: false });
         }
+        const spawnedProc = proc;
         rpc = _createRpc(
-          (line) => proc.stdin.write(line),
-          (handler) => proc.stdout.on("data", handler),
+          (line) => spawnedProc.stdin.write(line),
+          (handler) => spawnedProc.stdout.on("data", handler),
           { onRequest: handleServerRequest }
         );
-        proc.on("exit", (code, signal) => handleExit(code, signal));
-        proc.on("error", (err) => handleCrash(err));
+        proc.on("exit", (code, signal) => {
+          if (proc === spawnedProc) handleExit(code, signal);
+        });
+        proc.on("error", (err) => {
+          if (proc === spawnedProc) handleCrash(err);
+        });
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", () => {
         });
         const initResult = await rpc.request("initialize", {
           protocolVersion: MCP_PROTOCOL_VERSION,
           clientInfo: { name: "panel-chat", version: packageVersion },
           capabilities: { elicitation: {} }
-        });
+        }, initializeTimeoutMs);
         serverInstructions = initResult && initResult.instructions || "";
         serverInfo = initResult && initResult.serverInfo && typeof initResult.serverInfo === "object" ? { ...initResult.serverInfo } : null;
         rpc.notify("notifications/initialized");
@@ -17350,6 +17697,17 @@
       try {
         return await startPromise;
       } catch (e) {
+        const failedRpc = rpc;
+        const failedProc = proc;
+        rpc = null;
+        proc = null;
+        if (failedRpc) failedRpc.close(e instanceof Error ? e : new Error("MCP initialization failed"));
+        if (failedProc && failedProc.kill) {
+          try {
+            failedProc.kill();
+          } catch (killError) {
+          }
+        }
         status = "error";
         lastError = e;
         throw e;
@@ -17391,6 +17749,12 @@
       await start();
       return rpc.request("tools/call", { name, arguments: args });
     }
+    async function callPanelTool(name, args = {}) {
+      return callTool(name, { ...args, _ae_panel_capability: panelCapability });
+    }
+    function newOperationId() {
+      return secureHex(randomBytes, 16);
+    }
     function stop() {
       stopped = true;
       clearTimeout(restartTimer);
@@ -17408,7 +17772,16 @@
       serverInfo = null;
       startPromise = null;
     }
-    return { start, listTools, callTool, stop, state: currentState, getServerInstructions: () => serverInstructions };
+    return {
+      start,
+      listTools,
+      callTool,
+      callPanelTool,
+      newOperationId,
+      stop,
+      state: currentState,
+      getServerInstructions: () => serverInstructions
+    };
   }
 
   // src/cep/approvalTierFile.js
@@ -27468,7 +27841,7 @@ data: ${JSON.stringify(payload)}
       revision: valueRef.revision
     };
   }
-  function defaultRandomBytes(size) {
+  function defaultRandomBytes2(size) {
     if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
       const bytes = new Uint8Array(size);
       globalThis.crypto.getRandomValues(bytes);
@@ -27502,7 +27875,7 @@ data: ${JSON.stringify(payload)}
   function createProviderSecretService({
     getHost,
     createReference = createProviderSecretReference,
-    randomBytes = defaultRandomBytes
+    randomBytes = defaultRandomBytes2
   } = {}) {
     if (typeof getHost !== "function") throw new TypeError("getHost must be a function");
     if (typeof createReference !== "function") throw new TypeError("createReference must be a function");
@@ -34272,7 +34645,8 @@ ${baseUrl}`),
       resolveCommand: getMcpSpec,
       env: approvalTierFile.env(),
       onElicitation: elicitationCoordinator.handle,
-      getExpertGuidance: () => loadExpertGuidance(window.localStorage)
+      getExpertGuidance: () => loadExpertGuidance(window.localStorage),
+      randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
     }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
     const toolsApi = import_react45.default.useMemo(() => createToolsApi(mcp), [mcp]);
     import_react45.default.useEffect(() => () => mcp.stop(), [mcp]);

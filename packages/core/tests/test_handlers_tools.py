@@ -162,9 +162,33 @@ class _Execution:
             grant_id="g", plan_hash=plan_hash, scope="once", expires_at=123
         )
 
-    async def execute(self, plan_hash, grant_id, *, ctx):
-        self.calls.append(("execute", plan_hash, grant_id, ctx))
+    async def execute_tracked(
+        self, plan_hash, grant_id, *, operation_id, ctx, initiator
+    ):
+        self.calls.append(
+            ("execute", plan_hash, grant_id, operation_id, ctx, initiator)
+        )
         return {"ok": True, "result": 1}
+
+    async def start_job(
+        self, plan_hash, grant_id, *, operation_id, ctx, initiator
+    ):
+        self.calls.append(
+            ("start", plan_hash, grant_id, operation_id, ctx, initiator)
+        )
+        return {"ok": True, "executionId": "e", "status": "queued"}
+
+    def job_status(self, execution_id):
+        self.calls.append(("status", execution_id))
+        return {"ok": True, "executionId": execution_id, "status": "running"}
+
+    def cancel_job(self, execution_id):
+        self.calls.append(("cancel", execution_id))
+        return {"ok": True, "executionId": execution_id, "cancelRequested": True}
+
+    def job_history(self, artifact_id, *, limit):
+        self.calls.append(("history", artifact_id, limit))
+        return {"ok": True, "artifactId": artifact_id, "executions": []}
 
 
 class _Packages:
@@ -343,6 +367,8 @@ async def test_index_and_search_return_summaries_without_content(service):
     assert index["ok"] is True
     assert index["artifacts"][0]["id"] == service.store.summary.id
     assert "content" not in index["artifacts"][0]
+    assert index["artifacts"][0]["executionCapabilities"]["runtime"] == "jsx"
+    assert index["artifacts"][0]["executionCapabilities"]["directRun"]["available"] is True
     assert search["total"] == 1
     assert "content" not in search["artifacts"][0]
 
@@ -364,11 +390,64 @@ async def test_inspect_only_marks_manifest_verified_bundled_content_as_signed(se
 
     assert trusted["trust"] == "signed-bundled"
     assert trusted["artifact"]["content"] == "return 1;"
+    assert trusted["artifact"]["executionCapabilities"]["runtime"] == "jsx"
     assert untrusted["trust"] == "user-untrusted"
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("action", ["render", "prepare", "grant", "execute"])
+async def test_system_commands_are_hidden_by_default_and_visible_only_as_developer_metadata(service):
+    content = "Write-Output blocked"
+    digest = compute_content_hash("system-command", content, {})
+    service.store.artifact = replace(
+        service.store.artifact,
+        kind="system-command",
+        content=content,
+        declared_risk="external",
+        content_hash=digest,
+    )
+    service.store.summary = replace(
+        service.store.summary,
+        kind="system-command",
+        declared_risk="external",
+        content_hash=digest,
+    )
+
+    ordinary = await handlers._run_tool_index(S.AeToolIndexArgs(), None)
+    ordinary_search = await handlers._run_tool_search(
+        S.AeToolSearchArgs(query="blocked"), None
+    )
+    ordinary_inspect = await handlers._run_tool_inspect(
+        S.AeToolInspectArgs(artifact_id=service.store.artifact.id), None
+    )
+    token = handlers.client_identity.set_panel_developer(True)
+    try:
+        developer = await handlers._run_tool_index(
+            S.AePanelToolIndexArgs(), None
+        )
+        developer_inspect = await handlers._run_tool_inspect(
+            S.AeToolInspectArgs(artifact_id=service.store.artifact.id),
+            None,
+        )
+    finally:
+        handlers.client_identity.reset_panel_developer(token)
+
+    assert ordinary["artifacts"] == []
+    assert ordinary_search["artifacts"] == []
+    assert ordinary_inspect["ok"] is False
+    assert ordinary_inspect["error"] == "tool_not_found"
+    [row] = developer["artifacts"]
+    assert row["kind"] == "system-command"
+    assert row["executionCapabilities"]["directRun"]["available"] is False
+    assert developer_inspect["artifact"]["content"] == content
+    assert developer_inspect["artifact"]["executionCapabilities"]["directRun"][
+        "disabledReason"
+    ]["code"] == "tool_system_command_denied"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "action", ["render", "prepare", "grant", "execute", "start", "status", "cancel", "history"]
+)
 async def test_tool_use_dispatches_staged_protocol_exactly(service, action):
     ctx = object()
     values = {
@@ -381,7 +460,21 @@ async def test_tool_use_dispatches_staged_protocol_exactly(service, action):
             target={},
         ),
         "grant": dict(action="grant", plan_hash="p", grant_scope="once"),
-        "execute": dict(action="execute", plan_hash="p", grant_id="g"),
+        "execute": dict(
+            action="execute",
+            plan_hash="p",
+            grant_id="g",
+            operation_id="operation-handler-execute",
+        ),
+        "start": dict(
+            action="start",
+            plan_hash="p",
+            grant_id="g",
+            operation_id="operation-handler-0001",
+        ),
+        "status": dict(action="status", execution_id="e"),
+        "cancel": dict(action="cancel", execution_id="e"),
+        "history": dict(action="history", artifact_id="user:1", limit=10),
     }[action]
 
     result = await handlers._run_tool_use(S.AeToolUseArgs(**values), ctx)
