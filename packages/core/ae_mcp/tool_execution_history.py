@@ -567,7 +567,17 @@ class ExecutionJobStore:
                     raise ExecutionJobStoreError("Execution reservation was not found.")
                 reservations.remove(owned)
                 executions.append(normalized)
-                executions = self._prune(executions)
+                # The operation that just crossed from a reservation to durable
+                # history must survive this write even when newer records have
+                # already filled the retention window. Otherwise another Core
+                # can immediately reclaim the same operation id and dispatch a
+                # duplicate side effect.
+                executions = self._prune(
+                    executions,
+                    protected_operation_ids=frozenset(
+                        {cast(str, normalized["operationId"])}
+                    ),
+                )
                 self._write_state_unlocked(executions, reservations)
                 return _public(normalized)
         except (OSError, ToolStoreError) as exc:

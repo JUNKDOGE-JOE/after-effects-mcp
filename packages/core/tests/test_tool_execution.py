@@ -1627,6 +1627,77 @@ def test_orphan_recovery_tombstone_survives_full_history_pruning(
     assert duplicate.record["status"] == "outcome-unknown"
 
 
+def test_just_completed_reservation_survives_full_history_pruning(
+    tmp_path: Path,
+) -> None:
+    store = ExecutionJobStore(tmp_path, max_records=2)
+    queued = {
+        "executionId": "execution-old-completing",
+        "operationId": "operation-old-completing",
+        "artifactId": "user:one",
+        "contentHash": "a" * 64,
+        "artifactRevision": 1,
+        "planHash": "b" * 64,
+        "operation": "execute",
+        "initiator": "first-core",
+        "status": "queued",
+        "createdAt": 100,
+    }
+    claim = store.claim(queued)
+    assert claim.owner_token is not None
+    store.mark_running(
+        "execution-old-completing",
+        owner_token=claim.owner_token,
+        started_at=101,
+    )
+    for index in range(2):
+        store.upsert(
+            {
+                "executionId": f"execution-newer-complete-{index}",
+                "operationId": f"operation-newer-complete-{index}",
+                "artifactId": "user:one",
+                "contentHash": "a" * 64,
+                "artifactRevision": 1,
+                "planHash": chr(ord("c") + index) * 64,
+                "operation": "execute",
+                "initiator": "other-core",
+                "status": "succeeded",
+                "createdAt": 200 + index,
+                "startedAt": 200 + index,
+                "finishedAt": 200 + index,
+                "cancelRequested": False,
+                "result": {"ok": True},
+                "error": None,
+                "audit": None,
+            }
+        )
+
+    completed = {
+        **queued,
+        "status": "succeeded",
+        "startedAt": 101,
+        "finishedAt": 300,
+        "cancelRequested": False,
+        "result": {"ok": True},
+        "error": None,
+        "audit": None,
+    }
+    stored = store.complete(completed, owner_token=claim.owner_token)
+    assert stored["status"] == "succeeded"
+    assert len(store.snapshot()) == 2
+
+    duplicate = store.claim(
+        {
+            **queued,
+            "executionId": "execution-old-completing-retry",
+            "createdAt": 400,
+        }
+    )
+    assert duplicate.owned is False
+    assert duplicate.record["executionId"] == "execution-old-completing"
+    assert duplicate.record["status"] == "succeeded"
+
+
 @pytest.mark.asyncio
 async def test_running_job_renews_its_shared_reservation_lease(
     tmp_path: Path,
