@@ -166,8 +166,12 @@ class _Execution:
         self.calls.append(("execute", plan_hash, grant_id, ctx, initiator))
         return {"ok": True, "result": 1}
 
-    async def start_job(self, plan_hash, grant_id, *, ctx, initiator):
-        self.calls.append(("start", plan_hash, grant_id, ctx, initiator))
+    async def start_job(
+        self, plan_hash, grant_id, *, operation_id, ctx, initiator
+    ):
+        self.calls.append(
+            ("start", plan_hash, grant_id, operation_id, ctx, initiator)
+        )
         return {"ok": True, "executionId": "e", "status": "queued"}
 
     def job_status(self, execution_id):
@@ -411,15 +415,17 @@ async def test_system_commands_are_hidden_by_default_and_visible_only_as_develop
     ordinary_inspect = await handlers._run_tool_inspect(
         S.AeToolInspectArgs(artifact_id=service.store.artifact.id), None
     )
-    developer = await handlers._run_tool_index(
-        S.AeToolIndexArgs(developer_mode=True), None
-    )
-    developer_inspect = await handlers._run_tool_inspect(
-        S.AeToolInspectArgs(
-            artifact_id=service.store.artifact.id, developer_mode=True
-        ),
-        None,
-    )
+    token = handlers.client_identity.set_panel_developer(True)
+    try:
+        developer = await handlers._run_tool_index(
+            S.AePanelToolIndexArgs(), None
+        )
+        developer_inspect = await handlers._run_tool_inspect(
+            S.AeToolInspectArgs(artifact_id=service.store.artifact.id),
+            None,
+        )
+    finally:
+        handlers.client_identity.reset_panel_developer(token)
 
     assert ordinary["artifacts"] == []
     assert ordinary_search["artifacts"] == []
@@ -451,7 +457,12 @@ async def test_tool_use_dispatches_staged_protocol_exactly(service, action):
         ),
         "grant": dict(action="grant", plan_hash="p", grant_scope="once"),
         "execute": dict(action="execute", plan_hash="p", grant_id="g"),
-        "start": dict(action="start", plan_hash="p", grant_id="g"),
+        "start": dict(
+            action="start",
+            plan_hash="p",
+            grant_id="g",
+            operation_id="operation-handler-0001",
+        ),
         "status": dict(action="status", execution_id="e"),
         "cancel": dict(action="cancel", execution_id="e"),
         "history": dict(action="history", artifact_id="user:1", limit=10),

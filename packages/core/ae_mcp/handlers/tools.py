@@ -112,7 +112,8 @@ async def _run_tool_index(args: schemas.AeToolIndexArgs, ctx: Any) -> Any:
             statuses.add("candidate")
         service = default_tool_service()
         requested_kinds = None if args.kinds is None else set(args.kinds)
-        if not args.developer_mode:
+        developer_mode = client_identity.panel_developer_enabled()
+        if not developer_mode:
             allowed = {"jsx", "expression", "prompt-skill", "recipe", "diagnostic"}
             requested_kinds = allowed if requested_kinds is None else requested_kinds & allowed
         rows = service.store.list(
@@ -121,7 +122,7 @@ async def _run_tool_index(args: schemas.AeToolIndexArgs, ctx: Any) -> Any:
             source_types=None if args.source_types is None else set(args.source_types),
             limit=args.limit,
         )
-        if not args.developer_mode:
+        if not developer_mode:
             rows = [row for row in rows if row.kind != "system-command"]
         return {
             "ok": True,
@@ -139,7 +140,8 @@ async def _run_tool_search(args: schemas.AeToolSearchArgs, ctx: Any) -> Any:
         )
         service = default_tool_service()
         requested_kinds = None if args.kinds is None else set(args.kinds)
-        if not args.developer_mode:
+        developer_mode = client_identity.panel_developer_enabled()
+        if not developer_mode:
             allowed = {"jsx", "expression", "prompt-skill", "recipe", "diagnostic"}
             requested_kinds = allowed if requested_kinds is None else requested_kinds & allowed
         rows, total = service.store.search(
@@ -153,7 +155,7 @@ async def _run_tool_search(args: schemas.AeToolSearchArgs, ctx: Any) -> Any:
             offset=args.offset,
             limit=args.limit,
         )
-        if not args.developer_mode:
+        if not developer_mode:
             hidden_count = sum(row.kind == "system-command" for row in rows)
             rows = [row for row in rows if row.kind != "system-command"]
             total = max(0, total - hidden_count)
@@ -175,7 +177,10 @@ async def _run_tool_inspect(args: schemas.AeToolInspectArgs, ctx: Any) -> Any:
         artifact = service.store.get(
             args.artifact_id, include_content=True
         )
-        if artifact.kind == "system-command" and not args.developer_mode:
+        if (
+            artifact.kind == "system-command"
+            and not client_identity.panel_developer_enabled()
+        ):
             raise ToolNotFound()
         wire = artifact.to_dict()
         wire["executionCapabilities"] = execution_capabilities(artifact)
@@ -224,6 +229,7 @@ async def _run_tool_use(args: schemas.AeToolUseArgs, ctx: Any) -> Any:
             return await service.execution.start_job(
                 cast(str, args.plan_hash),
                 cast(str, args.grant_id),
+                operation_id=cast(str, args.operation_id),
                 ctx=ctx,
                 initiator=client_identity.get_client() or "panel-direct",
             )

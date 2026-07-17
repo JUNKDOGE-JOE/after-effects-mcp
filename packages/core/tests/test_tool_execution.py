@@ -10,6 +10,8 @@ import pytest
 from mcp.types import ToolAnnotations
 
 from ae_mcp import tool_execution as execution_module
+from ae_mcp.backends.native import NativeBackendError
+from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.tool_artifact import (
     ToolArtifact,
     ToolSource,
@@ -838,10 +840,18 @@ async def test_execution_jobs_dedupe_report_history_audit_and_usage(tmp_path: Pa
     grant = engine.grants.issue_once(plan)
 
     first = await engine.start_job(
-        plan.plan_hash, grant.grant_id, ctx=None, initiator="panel-direct"
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-dedupe-0001",
+        ctx=None,
+        initiator="panel-direct",
     )
     duplicate = await engine.start_job(
-        plan.plan_hash, grant.grant_id, ctx=None, initiator="panel-direct"
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-dedupe-0001",
+        ctx=None,
+        initiator="panel-direct",
     )
     assert duplicate["executionId"] == first["executionId"]
     await asyncio.sleep(0)
@@ -853,8 +863,13 @@ async def test_execution_jobs_dedupe_report_history_audit_and_usage(tmp_path: Pa
     assert status["audit"]["planHash"] == plan.plan_hash
     assert status["audit"]["outcome"] == "success"
     assert store.uses and store.uses[0][0] == artifact.id
+    replacement_grant = engine.grants.issue_once(plan)
     late_duplicate = await engine.start_job(
-        plan.plan_hash, grant.grant_id, ctx=None, initiator="panel-direct"
+        plan.plan_hash,
+        replacement_grant.grant_id,
+        operation_id="operation-dedupe-0001",
+        ctx=None,
+        initiator="panel-direct",
     )
     assert late_duplicate["executionId"] == first["executionId"]
     history = engine.job_history(artifact.id)
@@ -884,7 +899,11 @@ async def test_running_cancel_never_claims_ae_stopped_and_late_success_wins():
     plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
     grant = engine.grants.issue_once(plan)
     started = await engine.start_job(
-        plan.plan_hash, grant.grant_id, ctx=None, initiator="panel-direct"
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-cancel-running",
+        ctx=None,
+        initiator="panel-direct",
     )
     await backend.started.wait()
 
@@ -908,7 +927,11 @@ async def test_queued_cancel_prevents_dispatch_and_consumes_the_grant():
     plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
     grant = engine.grants.issue_once(plan)
     started = await engine.start_job(
-        plan.plan_hash, grant.grant_id, ctx=None, initiator="panel-direct"
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-cancel-queued",
+        ctx=None,
+        initiator="panel-direct",
     )
     cancellation = engine.cancel_job(started["executionId"])
     assert cancellation["cancelDisposition"] == "cancelled-before-dispatch"
@@ -929,7 +952,11 @@ async def test_job_timeout_is_reported_as_outcome_unknown_not_stopped():
     plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
     grant = engine.grants.issue_once(plan)
     started = await engine.start_job(
-        plan.plan_hash, grant.grant_id, ctx=None, initiator="panel-direct"
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-timeout-unknown",
+        ctx=None,
+        initiator="panel-direct",
     )
     await asyncio.sleep(0)
     await asyncio.sleep(0)
@@ -937,3 +964,68 @@ async def test_job_timeout_is_reported_as_outcome_unknown_not_stopped():
     assert status["status"] == "outcome-unknown"
     assert status["outcomeUnknown"] is True
     assert status["error"]["code"] == "tool_backend_timeout"
+
+
+@pytest.mark.asyncio
+async def test_native_uncertain_write_keeps_recovery_and_is_never_blindly_retried(
+    tmp_path: Path,
+    monkeypatch,
+):
+    load_all()
+    schema, _original = HANDLERS["ae.ping"]
+    calls = 0
+
+    async def uncertain_native(_args, _ctx):
+        nonlocal calls
+        calls += 1
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "The native write may have completed.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery={
+                "action": "inspect-state",
+                "hint": "Inspect AE state and audit evidence before retrying.",
+            },
+        )
+
+    monkeypatch.setitem(HANDLERS, "ae.ping", (schema, uncertain_native))
+    artifact = _artifact(
+        kind="recipe",
+        content={
+            "steps": [
+                {
+                    "refType": "tool",
+                    "ref": "ae.ping",
+                    "operation": "call",
+                    "args": {},
+                    "target": {},
+                }
+            ]
+        },
+    )
+    engine = ToolExecutionEngine(
+        _Store(artifact),
+        _Backend(),
+        audit_log=ToolAuditLog(tmp_path),
+    )
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+    started = await engine.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-native-uncertain",
+        ctx=None,
+        initiator="panel-direct",
+    )
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    status = engine.job_status(started["executionId"])
+    assert status["status"] == "outcome-unknown"
+    assert status["error"]["code"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert status["error"]["sideEffect"] == "may-have-occurred"
+    assert status["error"]["recovery"]["action"] == "inspect-state"
+    assert status["audit"]["outcome"] == "outcome-unknown"
+    assert status["audit"]["backend"] == "native-aegp"
+    assert calls == 1

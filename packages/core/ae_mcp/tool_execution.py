@@ -19,6 +19,7 @@ from uuid import uuid4
 
 from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.approval_gate import PlanAuthorizationDenied, authorize_plan, plan_decision
+from ae_mcp.backends.native import NativeBackendError
 from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.tool_artifact import (
     ArtifactKind,
@@ -212,17 +213,43 @@ def execution_capabilities(artifact: ToolArtifact) -> dict[str, JsonValue]:
 
 
 class ToolExecutionError(RuntimeError):
-    def __init__(self, code: str, message: str) -> None:
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        *,
+        error_details: Mapping[str, JsonValue] | None = None,
+    ) -> None:
         super().__init__(message)
         self.code = code
+        self.error_details = dict(error_details or {})
+
+    def error_dict(self) -> dict[str, JsonValue]:
+        return {
+            "code": self.code,
+            "message": str(self),
+            **self.error_details,
+        }
 
     def public_dict(self) -> dict[str, object]:
-        return {"ok": False, "error": self.code, "message": str(self)}
+        return {
+            "ok": False,
+            "error": self.code,
+            "message": str(self),
+            **self.error_details,
+        }
 
 
 class _BackendExecutionError(ToolExecutionError):
-    def __init__(self, code: str, message: str, backend_name: str) -> None:
-        super().__init__(code, message)
+    def __init__(
+        self,
+        code: str,
+        message: str,
+        backend_name: str,
+        *,
+        error_details: Mapping[str, JsonValue] | None = None,
+    ) -> None:
+        super().__init__(code, message, error_details=error_details)
         self.backend_name = backend_name
 
 
@@ -666,6 +693,7 @@ class _Analysis:
 @dataclass
 class _ExecutionJob:
     execution_id: str
+    operation_id: str
     artifact_id: str
     content_hash: str
     artifact_revision: int
@@ -678,8 +706,7 @@ class _ExecutionJob:
     finished_at: int | None = None
     cancel_requested: bool = False
     result: Mapping[str, JsonValue] | None = None
-    error_code: str | None = None
-    error_message: str | None = None
+    error: Mapping[str, JsonValue] | None = None
     audit: Mapping[str, JsonValue] | None = None
 
     def public_dict(self) -> dict[str, JsonValue]:
@@ -688,6 +715,7 @@ class _ExecutionJob:
         return {
             "ok": True,
             "executionId": self.execution_id,
+            "operationId": self.operation_id,
             "artifactId": self.artifact_id,
             "contentHash": self.content_hash,
             "artifactRevision": self.artifact_revision,
@@ -703,11 +731,7 @@ class _ExecutionJob:
             "startedAt": self.started_at,
             "finishedAt": self.finished_at,
             "result": None if self.result is None else dict(self.result),
-            "error": (
-                None
-                if self.error_code is None
-                else {"code": self.error_code, "message": self.error_message or self.error_code}
-            ),
+            "error": None if self.error is None else dict(self.error),
             "audit": None if self.audit is None else dict(self.audit),
         }
 
@@ -824,7 +848,7 @@ class ToolExecutionEngine:
         self.prepared_plans = prepared_plans or PreparedPlanStore(now=self._now)
         self.grants = grants or GrantStore(now=self._now)
         self._jobs: dict[str, _ExecutionJob] = {}
-        self._job_keys: dict[tuple[str, str], str] = {}
+        self._job_operations: dict[str, str] = {}
         self._job_tasks: dict[str, asyncio.Task[None]] = {}
         self._job_lock = threading.RLock()
         self._unsubscribe: Callable[[], None] | None = None
@@ -1167,24 +1191,41 @@ class ToolExecutionEngine:
         plan_hash: str,
         grant_id: str,
         *,
+        operation_id: str,
         ctx: Any,
         initiator: str,
     ) -> Mapping[str, JsonValue]:
-        key = (plan_hash, grant_id)
+        if not 16 <= len(operation_id) <= 128:
+            raise ToolExecutionError(
+                "tool_operation_id_invalid", "Operation id is invalid."
+            )
         with self._job_lock:
-            existing_id = self._job_keys.get(key)
+            existing_id = self._job_operations.get(operation_id)
             if existing_id is not None:
-                return self._jobs[existing_id].public_dict()
+                existing = self._jobs[existing_id]
+                if existing.plan_hash != plan_hash:
+                    raise ToolExecutionError(
+                        "tool_operation_conflict",
+                        "Operation id is already bound to a different execution plan.",
+                    )
+                return existing.public_dict()
         plan = self.prepared_plans.get(plan_hash)
         self.grants.peek(grant_id, plan)
         artifact, _analysis = self._assert_current(plan)
         with self._job_lock:
-            existing_id = self._job_keys.get(key)
+            existing_id = self._job_operations.get(operation_id)
             if existing_id is not None:
-                return self._jobs[existing_id].public_dict()
+                existing = self._jobs[existing_id]
+                if existing.plan_hash != plan_hash:
+                    raise ToolExecutionError(
+                        "tool_operation_conflict",
+                        "Operation id is already bound to a different execution plan.",
+                    )
+                return existing.public_dict()
             execution_id = uuid4().hex
             job = _ExecutionJob(
                 execution_id=execution_id,
+                operation_id=operation_id,
                 artifact_id=artifact.id,
                 content_hash=artifact.content_hash,
                 artifact_revision=artifact.revision,
@@ -1195,7 +1236,7 @@ class ToolExecutionEngine:
                 created_at=self._now(),
             )
             self._jobs[execution_id] = job
-            self._job_keys[key] = execution_id
+            self._job_operations[operation_id] = execution_id
             task = asyncio.create_task(
                 self._run_job(job, grant_id=grant_id, ctx=ctx),
                 name=f"ae-mcp-tool-{execution_id}",
@@ -1212,7 +1253,11 @@ class ToolExecutionEngine:
         initiator: str,
     ) -> Mapping[str, JsonValue]:
         started = await self.start_job(
-            plan_hash, grant_id, ctx=ctx, initiator=initiator
+            plan_hash,
+            grant_id,
+            operation_id=uuid4().hex,
+            ctx=ctx,
+            initiator=initiator,
         )
         execution_id = cast(str, started["executionId"])
         with self._job_lock:
@@ -1254,19 +1299,27 @@ class ToolExecutionEngine:
             result = await self.execute(job.plan_hash, grant_id, ctx=ctx)
         except ToolExecutionError as exc:
             with self._job_lock:
-                job.error_code = exc.code
-                job.error_message = str(exc)
+                error = exc.error_dict()
+                job.error = error
                 job.status = (
                     "outcome-unknown"
                     if exc.code == "tool_backend_timeout"
+                    or error.get("sideEffect") == "may-have-occurred"
                     else "failed"
                 )
                 job.finished_at = self._now()
                 job.audit = self._latest_audit(job.plan_hash, job.artifact_id)
         except BaseException as exc:  # task shutdown must remain explicitly ambiguous
             with self._job_lock:
-                job.error_code = "tool_execution_interrupted"
-                job.error_message = "Execution tracking was interrupted; inspect AE state before retrying."
+                job.error = {
+                    "code": "tool_execution_interrupted",
+                    "message": "Execution tracking was interrupted; inspect AE state before retrying.",
+                    "sideEffect": "may-have-occurred",
+                    "recovery": {
+                        "action": "inspect-state",
+                        "hint": "Inspect AE state and the audit record before retrying.",
+                    },
+                }
                 job.status = "outcome-unknown"
                 job.finished_at = self._now()
                 job.audit = self._latest_audit(job.plan_hash, job.artifact_id)
@@ -1390,7 +1443,11 @@ class ToolExecutionEngine:
             started_at=started_at,
             finished_at=self._now(),
             error_code=error_code,
-            engine=("maintained-jsx" if backend is not None else None),
+            engine=(
+                "native-aegp"
+                if backend == "native-aegp"
+                else "maintained-jsx" if backend is not None else None
+            ),
         )
         self.audit_log.append(record)
 
@@ -1590,6 +1647,8 @@ class ToolExecutionEngine:
                 self._assert_current(root_plan)
                 result = await run(schema.model_validate(normalized), ctx)
                 results.append(cast(JsonValue, _canonical_value(result, label="recipe result")))
+                if name in _NATIVE_AEGP_HANDLERS:
+                    backend_name = "native-aegp"
         return {"ok": True, "results": results}, backend_name
 
     async def execute(
@@ -1621,6 +1680,32 @@ class ToolExecutionEngine:
             )
             raise ToolExecutionError(
                 "tool_backend_timeout", "Tool execution timed out."
+            ) from exc
+        except NativeBackendError as exc:
+            public = cast(dict[str, JsonValue], exc.public_dict())
+            error_details = {
+                key: value
+                for key, value in public.items()
+                if key not in {"code", "message"}
+            }
+            outcome = (
+                "outcome-unknown"
+                if public.get("sideEffect") == "may-have-occurred"
+                else "backend-error"
+            )
+            self._audit(
+                plan,
+                grant=grant,
+                backend="native-aegp",
+                outcome=outcome,
+                started_at=started_at,
+                error_code=exc.code,
+            )
+            raise _BackendExecutionError(
+                exc.code,
+                str(exc),
+                "native-aegp",
+                error_details=error_details,
             ) from exc
         except ToolExecutionError as exc:
             backend_name = cast(

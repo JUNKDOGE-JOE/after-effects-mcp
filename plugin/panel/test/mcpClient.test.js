@@ -169,6 +169,12 @@ function spawnReplying(initResult) {
         proc.pushStdout({ jsonrpc: '2.0', id: msg.id, result: initResult });
       } else if (msg.method === 'tools/list') {
         proc.pushStdout({ jsonrpc: '2.0', id: msg.id, result: { tools: [] } });
+      } else if (msg.method === 'tools/call') {
+        proc.pushStdout({
+          jsonrpc: '2.0',
+          id: msg.id,
+          result: { content: [{ type: 'text', text: '{"ok":true}' }] },
+        });
       }
     };
     return proc;
@@ -214,6 +220,23 @@ test('createMcpClient passes the Tool Library tier file into the direct MCP proc
     getProc().spawnOptions.env.AE_MCP_TOOL_APPROVAL_TIER_FILE,
     '/tmp/panel.tier',
   );
+  client.stop();
+});
+
+test('createMcpClient keeps Developer Tools behind a per-process panel capability', async () => {
+  const { spawnImpl, getProc } = spawnReplying({});
+  const client = createMcpClient({
+    spawnImpl,
+    randomBytes: (size) => new Uint8Array(size).fill(0xab),
+    resolveCommand: async () => ({ command: 'ae-mcp', args: [], source: 'explicit' }),
+  });
+
+  await client.start();
+  assert.equal(getProc().spawnOptions.env.AE_MCP_PANEL_CAPABILITY, 'ab'.repeat(32));
+  await client.callPanelTool('ae_toolIndex', { kinds: ['system-command'] });
+  const call = getProc().clientWrites.find((message) => message.method === 'tools/call');
+  assert.equal(call.params.arguments._ae_panel_capability, 'ab'.repeat(32));
+  assert.equal(client.newOperationId(), 'ab'.repeat(16));
   client.stop();
 });
 

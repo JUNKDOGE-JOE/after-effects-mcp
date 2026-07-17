@@ -12743,12 +12743,23 @@
     const call = async (name, args) => parseMcpPayload(
       await mcp.callTool(name, args)
     );
+    const panelCall = async (name, args) => {
+      if (typeof mcp.callPanelTool !== "function") {
+        throw new Error("Trusted panel Tool Library channel is unavailable");
+      }
+      return parseMcpPayload(await mcp.callPanelTool(name, args));
+    };
     return {
       index: (args = {}) => call("ae_toolIndex", args),
       search: (args = {}) => call("ae_toolSearch", args),
       inspect: (artifactId, options = {}) => call("ae_toolInspect", {
         artifact_id: artifactId,
         ...options
+      }),
+      developerIndex: (args = {}) => panelCall("ae_toolIndex", args),
+      developerSearch: (args = {}) => panelCall("ae_toolSearch", args),
+      developerInspect: (artifactId) => panelCall("ae_toolInspect", {
+        artifact_id: artifactId
       }),
       create: (input) => call("ae_toolCreate", input),
       edit: (input) => call("ae_toolEdit", input),
@@ -12770,14 +12781,21 @@
       exportPackage: (artifactIds, outPath) => call("ae_toolExport", {
         artifact_ids: artifactIds,
         out_path: outPath
-      })
+      }),
+      newOperationId: () => {
+        if (typeof mcp.newOperationId !== "function") {
+          throw new Error("Secure operation id generation is unavailable");
+        }
+        return mcp.newOperationId();
+      }
     };
   }
   async function startToolPlan(api, {
     artifactId,
     operation,
     args = {},
-    target = {}
+    target = {},
+    operationId = api.newOperationId()
   }) {
     const plan = await api.use({
       artifact_id: artifactId,
@@ -12791,11 +12809,22 @@
       plan_hash: plan.planHash,
       grant_scope: "once"
     });
-    return api.use({
+    const startRequest = {
       action: "start",
       plan_hash: plan.planHash,
-      grant_id: grant.grantId
-    });
+      grant_id: grant.grantId,
+      operation_id: operationId
+    };
+    try {
+      return await api.use(startRequest);
+    } catch (firstError) {
+      try {
+        return await api.use(startRequest);
+      } catch (secondError) {
+        secondError.startRetryCause = firstError;
+        throw secondError;
+      }
+    }
   }
   async function waitForToolExecution(api, execution, {
     pollIntervalMs = 250,
@@ -13115,6 +13144,7 @@
     const [developerMode, setDeveloperMode] = import_react40.default.useState(false);
     const loadSequence = import_react40.default.useRef(0);
     const inspectSequence = import_react40.default.useRef(0);
+    const rowRunLock = import_react40.default.useRef(false);
     const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
     const artifact = state.inspected && state.inspected.artifact || null;
     const load = import_react40.default.useCallback(async () => {
@@ -13126,11 +13156,10 @@
         const needsSearch = Boolean(
           state.query || state.category || state.risk || state.kinds && state.kinds.length
         );
-        const payload = needsSearch ? await api.search({ ...searchArgsFromState(state), developer_mode: developerMode }) : await api.index({
+        const payload = needsSearch ? await (developerMode ? api.developerSearch : api.search)(searchArgsFromState(state)) : await (developerMode ? api.developerIndex : api.index)({
           statuses: state.statuses,
           source_types: state.sourceType ? [state.sourceType] : void 0,
           include_candidates: state.statuses.includes("candidate"),
-          developer_mode: developerMode,
           limit: 100
         });
         if (sequence === loadSequence.current) dispatch({ type: "load-success", payload });
@@ -13153,7 +13182,7 @@
       dispatch({ type: "select", id });
       setRunResult(null);
       try {
-        const payload = await api.inspect(id, { developer_mode: developerMode });
+        const payload = await (developerMode ? api.developerInspect(id) : api.inspect(id));
         if (sequence === inspectSequence.current) {
           dispatch({ type: "inspect-success", payload });
           const defaults = initialToolArgs(payload.artifact && payload.artifact.argsSchema);
@@ -13333,16 +13362,21 @@
       await executeArtifact(artifact, args, normalizedTarget);
     };
     const inspectForRun = async (row) => {
-      if (busy || !row) return;
-      const payload = await inspect(row.id);
-      const inspectedArtifact = payload && payload.artifact;
-      const capability = toolExecutionCapabilities(inspectedArtifact);
-      if (!capability.directRun || capability.requiresTarget) return;
-      const defaults = initialToolArgs(inspectedArtifact.argsSchema);
+      if (busy || rowRunLock.current || !row) return;
+      rowRunLock.current = true;
       try {
-        const args = buildToolArgs(inspectedArtifact.argsSchema, defaults);
-        await executeArtifact(inspectedArtifact, args);
-      } catch {
+        const payload = await inspect(row.id);
+        const inspectedArtifact = payload && payload.artifact;
+        const capability = toolExecutionCapabilities(inspectedArtifact);
+        if (!capability.directRun || capability.requiresTarget) return;
+        const defaults = initialToolArgs(inspectedArtifact.argsSchema);
+        try {
+          const args = buildToolArgs(inspectedArtifact.argsSchema, defaults);
+          await executeArtifact(inspectedArtifact, args);
+        } catch {
+        }
+      } finally {
+        rowRunLock.current = false;
       }
     };
     const cancelExecution = async () => {
@@ -13387,10 +13421,9 @@
         await api.commitImport(state.importPreview.importId, state.conflictResolutions);
         dispatch({ type: "import-finished" });
         dispatch({ type: "set-filter", key: "statuses", value: ["candidate", "saved", "pinned"] });
-        const payload = await api.index({
+        const payload = await (developerMode ? api.developerIndex : api.index)({
           statuses: ["candidate", "saved", "pinned"],
           include_candidates: true,
-          developer_mode: developerMode,
           limit: 100
         });
         dispatch({ type: "load-success", payload });
@@ -17334,6 +17367,20 @@
   var INITIALIZE_TIMEOUT_MS = 12e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
   var PANEL_VERSION = "0.9.2";
+  function defaultRandomBytes(size) {
+    const cryptoImpl = globalThis.crypto;
+    if (!cryptoImpl || typeof cryptoImpl.getRandomValues !== "function") {
+      throw new Error("Secure random generation is unavailable");
+    }
+    const value = new Uint8Array(size);
+    cryptoImpl.getRandomValues(value);
+    return value;
+  }
+  function secureHex(randomBytes, size) {
+    const value = randomBytes(size);
+    if (!value || value.length !== size) throw new Error("Secure random generation failed");
+    return Array.from(value, (byte) => Number(byte).toString(16).padStart(2, "0")).join("");
+  }
   function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
     const adapter = platform || createPlatformAdapter();
     if (repoRoot && fsImpl.existsSync(adapter.paths.join([repoRoot, "pyproject.toml"]))) return adapter.paths.resolve([repoRoot]);
@@ -17501,7 +17548,8 @@
     getExpertGuidance = () => true,
     packageVersion = PANEL_VERSION,
     retryDelays = [1e3, 2e3, 4e3],
-    initializeTimeoutMs = INITIALIZE_TIMEOUT_MS
+    initializeTimeoutMs = INITIALIZE_TIMEOUT_MS,
+    randomBytes = defaultRandomBytes
   } = {}) {
     let proc = null;
     let rpc = null;
@@ -17514,6 +17562,7 @@
     let lastError = null;
     let stopped = false;
     let restartTimer = null;
+    const panelCapability = secureHex(randomBytes, 32);
     function currentState() {
       return { status, retryCount, error: lastError, tools };
     }
@@ -17561,6 +17610,7 @@
         const commandSpec = await resolveCommand({ extRoot, repoRoot, platform: adapter || void 0 });
         const additions = {
           AE_MCP_BACKEND: "ae-mcp",
+          AE_MCP_PANEL_CAPABILITY: panelCapability,
           ...expertGuidanceEnv(getExpertGuidance())
         };
         const spawnEnv = adapter ? adapter.completeSpawnEnv(env || {}, additions) : Object.assign({}, env || {}, additions);
@@ -17660,6 +17710,12 @@
       await start();
       return rpc.request("tools/call", { name, arguments: args });
     }
+    async function callPanelTool(name, args = {}) {
+      return callTool(name, { ...args, _ae_panel_capability: panelCapability });
+    }
+    function newOperationId() {
+      return secureHex(randomBytes, 16);
+    }
     function stop() {
       stopped = true;
       clearTimeout(restartTimer);
@@ -17677,7 +17733,16 @@
       serverInfo = null;
       startPromise = null;
     }
-    return { start, listTools, callTool, stop, state: currentState, getServerInstructions: () => serverInstructions };
+    return {
+      start,
+      listTools,
+      callTool,
+      callPanelTool,
+      newOperationId,
+      stop,
+      state: currentState,
+      getServerInstructions: () => serverInstructions
+    };
   }
 
   // src/cep/approvalTierFile.js
@@ -27737,7 +27802,7 @@ data: ${JSON.stringify(payload)}
       revision: valueRef.revision
     };
   }
-  function defaultRandomBytes(size) {
+  function defaultRandomBytes2(size) {
     if (globalThis.crypto && typeof globalThis.crypto.getRandomValues === "function") {
       const bytes = new Uint8Array(size);
       globalThis.crypto.getRandomValues(bytes);
@@ -27771,7 +27836,7 @@ data: ${JSON.stringify(payload)}
   function createProviderSecretService({
     getHost,
     createReference = createProviderSecretReference,
-    randomBytes = defaultRandomBytes
+    randomBytes = defaultRandomBytes2
   } = {}) {
     if (typeof getHost !== "function") throw new TypeError("getHost must be a function");
     if (typeof createReference !== "function") throw new TypeError("createReference must be a function");
@@ -34541,7 +34606,8 @@ ${baseUrl}`),
       resolveCommand: getMcpSpec,
       env: approvalTierFile.env(),
       onElicitation: elicitationCoordinator.handle,
-      getExpertGuidance: () => loadExpertGuidance(window.localStorage)
+      getExpertGuidance: () => loadExpertGuidance(window.localStorage),
+      randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
     }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
     const toolsApi = import_react45.default.useMemo(() => createToolsApi(mcp), [mcp]);
     import_react45.default.useEffect(() => () => mcp.stop(), [mcp]);

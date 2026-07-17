@@ -74,10 +74,57 @@ test('startToolPlan uses once approval and returns one server job', async () => 
   };
   const started = await startToolPlan(api, {
     artifactId: 'user:1', operation: 'execute', args: { amount: 2 }, target: {},
+    operationId: 'operation-panel-0001',
   });
   assert.equal(started.executionId, 'execution-1');
   assert.deepEqual(calls.map((value) => value.action), ['prepare', 'grant', 'start']);
   assert.equal(calls[1].grant_scope, 'once');
+  assert.equal(calls[2].operation_id, 'operation-panel-0001');
+});
+
+test('startToolPlan retries one lost start response with the same operation id', async () => {
+  const starts = [];
+  const api = {
+    async use(input) {
+      if (input.action === 'prepare') return { planHash: 'plan-1' };
+      if (input.action === 'grant') return { grantId: 'grant-1' };
+      starts.push(input);
+      if (starts.length === 1) throw new Error('response lost');
+      return { executionId: 'execution-1', operationId: input.operation_id };
+    },
+  };
+  const result = await startToolPlan(api, {
+    artifactId: 'user:1',
+    operation: 'execute',
+    operationId: 'operation-retry-0001',
+  });
+  assert.equal(result.executionId, 'execution-1');
+  assert.equal(starts.length, 2);
+  assert.equal(starts[0].operation_id, starts[1].operation_id);
+  assert.equal(starts[1].operation_id, 'operation-retry-0001');
+});
+
+test('developer discovery uses only the trusted panel channel', async () => {
+  const publicCalls = [];
+  const panelCalls = [];
+  const api = createToolsApi({
+    async callTool(name, args) {
+      publicCalls.push({ name, args });
+      return { content: [{ type: 'text', text: '{"ok":true}' }] };
+    },
+    async callPanelTool(name, args) {
+      panelCalls.push({ name, args });
+      return { content: [{ type: 'text', text: '{"ok":true}' }] };
+    },
+    newOperationId: () => 'operation-api-0001',
+  });
+  await api.developerIndex({ kinds: ['system-command'] });
+  await api.developerSearch({ query: 'script' });
+  await api.developerInspect('user:command');
+  assert.equal(publicCalls.length, 0);
+  assert.deepEqual(panelCalls.map((value) => value.name), [
+    'ae_toolIndex', 'ae_toolSearch', 'ae_toolInspect',
+  ]);
 });
 
 test('waitForToolExecution reports late terminal completion without a second start', async () => {

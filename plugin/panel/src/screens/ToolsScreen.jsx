@@ -165,6 +165,7 @@ export function ToolsScreen({
   const [developerMode, setDeveloperMode] = React.useState(false);
   const loadSequence = React.useRef(0);
   const inspectSequence = React.useRef(0);
+  const rowRunLock = React.useRef(false);
   const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
   const artifact = state.inspected && state.inspected.artifact || null;
 
@@ -178,12 +179,11 @@ export function ToolsScreen({
         state.query || state.category || state.risk || (state.kinds && state.kinds.length),
       );
       const payload = needsSearch
-        ? await api.search({ ...searchArgsFromState(state), developer_mode: developerMode })
-        : await api.index({
+        ? await (developerMode ? api.developerSearch : api.search)(searchArgsFromState(state))
+        : await (developerMode ? api.developerIndex : api.index)({
           statuses: state.statuses,
           source_types: state.sourceType ? [state.sourceType] : undefined,
           include_candidates: state.statuses.includes('candidate'),
-          developer_mode: developerMode,
           limit: 100,
         });
       if (sequence === loadSequence.current) dispatch({ type: 'load-success', payload });
@@ -208,7 +208,7 @@ export function ToolsScreen({
     dispatch({ type: 'select', id });
     setRunResult(null);
     try {
-      const payload = await api.inspect(id, { developer_mode: developerMode });
+      const payload = await (developerMode ? api.developerInspect(id) : api.inspect(id));
       if (sequence === inspectSequence.current) {
         dispatch({ type: 'inspect-success', payload });
         const defaults = initialToolArgs(payload.artifact && payload.artifact.argsSchema);
@@ -412,18 +412,23 @@ export function ToolsScreen({
   };
 
   const inspectForRun = async (row) => {
-    if (busy || !row) return;
-    const payload = await inspect(row.id);
-    const inspectedArtifact = payload && payload.artifact;
-    const capability = toolExecutionCapabilities(inspectedArtifact);
-    if (!capability.directRun || capability.requiresTarget) return;
-    const defaults = initialToolArgs(inspectedArtifact.argsSchema);
+    if (busy || rowRunLock.current || !row) return;
+    rowRunLock.current = true;
     try {
-      const args = buildToolArgs(inspectedArtifact.argsSchema, defaults);
-      await executeArtifact(inspectedArtifact, args);
-    } catch {
-      // Required values without defaults belong in the detail form. Selecting
-      // the row above has already opened that deterministic input surface.
+      const payload = await inspect(row.id);
+      const inspectedArtifact = payload && payload.artifact;
+      const capability = toolExecutionCapabilities(inspectedArtifact);
+      if (!capability.directRun || capability.requiresTarget) return;
+      const defaults = initialToolArgs(inspectedArtifact.argsSchema);
+      try {
+        const args = buildToolArgs(inspectedArtifact.argsSchema, defaults);
+        await executeArtifact(inspectedArtifact, args);
+      } catch {
+        // Required values without defaults belong in the detail form. Selecting
+        // the row above has already opened that deterministic input surface.
+      }
+    } finally {
+      rowRunLock.current = false;
     }
   };
 
@@ -472,9 +477,9 @@ export function ToolsScreen({
       await api.commitImport(state.importPreview.importId, state.conflictResolutions);
       dispatch({ type: 'import-finished' });
       dispatch({ type: 'set-filter', key: 'statuses', value: ['candidate', 'saved', 'pinned'] });
-      const payload = await api.index({
+      const payload = await (developerMode ? api.developerIndex : api.index)({
         statuses: ['candidate', 'saved', 'pinned'], include_candidates: true,
-        developer_mode: developerMode, limit: 100,
+        limit: 100,
       });
       dispatch({ type: 'load-success', payload });
     } catch (error) {

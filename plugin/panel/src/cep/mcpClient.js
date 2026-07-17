@@ -7,6 +7,22 @@ const INITIALIZE_TIMEOUT_MS = 120000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
 export const PANEL_VERSION = '0.9.2';
 
+function defaultRandomBytes(size) {
+  const cryptoImpl = globalThis.crypto;
+  if (!cryptoImpl || typeof cryptoImpl.getRandomValues !== 'function') {
+    throw new Error('Secure random generation is unavailable');
+  }
+  const value = new Uint8Array(size);
+  cryptoImpl.getRandomValues(value);
+  return value;
+}
+
+function secureHex(randomBytes, size) {
+  const value = randomBytes(size);
+  if (!value || value.length !== size) throw new Error('Secure random generation failed');
+  return Array.from(value, (byte) => Number(byte).toString(16).padStart(2, '0')).join('');
+}
+
 export function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
   const adapter = platform || createPlatformAdapter();
   if (repoRoot && fsImpl.existsSync(adapter.paths.join([repoRoot, 'pyproject.toml']))) return adapter.paths.resolve([repoRoot]);
@@ -193,6 +209,7 @@ export function createMcpClient({
   packageVersion = PANEL_VERSION,
   retryDelays = [1000, 2000, 4000],
   initializeTimeoutMs = INITIALIZE_TIMEOUT_MS,
+  randomBytes = defaultRandomBytes,
 } = {}) {
   let proc = null;
   let rpc = null;
@@ -205,6 +222,7 @@ export function createMcpClient({
   let lastError = null;
   let stopped = false;
   let restartTimer = null;
+  const panelCapability = secureHex(randomBytes, 32);
 
   function currentState() {
     return { status, retryCount, error: lastError, tools };
@@ -258,6 +276,7 @@ export function createMcpClient({
       const commandSpec = await resolveCommand({ extRoot, repoRoot, platform: adapter || undefined });
       const additions = {
         AE_MCP_BACKEND: 'ae-mcp',
+        AE_MCP_PANEL_CAPABILITY: panelCapability,
         ...expertGuidanceEnv(getExpertGuidance()),
       };
       const spawnEnv = adapter ? adapter.completeSpawnEnv(env || {}, additions) : Object.assign({}, env || {}, additions);
@@ -363,6 +382,14 @@ export function createMcpClient({
     return rpc.request('tools/call', { name, arguments: args });
   }
 
+  async function callPanelTool(name, args = {}) {
+    return callTool(name, { ...args, _ae_panel_capability: panelCapability });
+  }
+
+  function newOperationId() {
+    return secureHex(randomBytes, 16);
+  }
+
   function stop() {
     stopped = true;
     clearTimeout(restartTimer);
@@ -378,5 +405,14 @@ export function createMcpClient({
     startPromise = null;
   }
 
-  return { start, listTools, callTool, stop, state: currentState, getServerInstructions: () => serverInstructions };
+  return {
+    start,
+    listTools,
+    callTool,
+    callPanelTool,
+    newOperationId,
+    stop,
+    state: currentState,
+    getServerInstructions: () => serverInstructions,
+  };
 }

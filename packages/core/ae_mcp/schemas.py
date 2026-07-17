@@ -933,6 +933,9 @@ class AeSkillUseArgs(_StrictModel):
 
 
 ToolArtifactKind = Literal[
+    "jsx", "expression", "prompt-skill", "recipe", "diagnostic"
+]
+PanelToolArtifactKind = Literal[
     "jsx", "expression", "prompt-skill", "recipe", "diagnostic", "system-command"
 ]
 ToolArtifactStatus = Literal["candidate", "saved", "pinned", "archived", "deprecated"]
@@ -947,7 +950,6 @@ class AeToolIndexArgs(_StrictModel):
     statuses: Optional[List[ToolArtifactStatus]] = None
     source_types: Optional[List[ToolSourceType]] = None
     include_candidates: bool = False
-    developer_mode: bool = False
     limit: int = Field(100, ge=1, le=1000)
 
 
@@ -960,7 +962,6 @@ class AeToolSearchArgs(_StrictModel):
     risks: Optional[List[ToolArtifactRisk]] = None
     statuses: Optional[List[ToolArtifactStatus]] = None
     source_types: Optional[List[ToolSourceType]] = None
-    developer_mode: bool = False
     offset: int = Field(0, ge=0)
     limit: int = Field(50, ge=1, le=1000)
 
@@ -968,7 +969,18 @@ class AeToolSearchArgs(_StrictModel):
 class AeToolInspectArgs(_StrictModel):
     """ae.toolInspect — read one full Tool Library artifact as untrusted content."""
     artifact_id: str = Field(..., min_length=1, max_length=256)
-    developer_mode: bool = False
+
+
+class AePanelToolIndexArgs(AeToolIndexArgs):
+    """Private panel-only index schema; never advertised through tools/list."""
+
+    kinds: Optional[List[PanelToolArtifactKind]] = None
+
+
+class AePanelToolSearchArgs(AeToolSearchArgs):
+    """Private panel-only search schema; never advertised through tools/list."""
+
+    kinds: Optional[List[PanelToolArtifactKind]] = None
 
 
 class AeToolUseArgs(_StrictModel):
@@ -984,46 +996,126 @@ class AeToolUseArgs(_StrictModel):
     grant_id: Optional[str] = Field(None, min_length=1, max_length=256)
     grant_scope: Optional[Literal["once", "session"]] = None
     execution_id: Optional[str] = Field(None, min_length=1, max_length=256)
+    operation_id: Optional[str] = Field(None, min_length=16, max_length=128)
     limit: Optional[int] = Field(None, ge=1, le=100)
 
     @model_validator(mode="after")
     def validate_action_shape(self) -> "AeToolUseArgs":
         if self.action == "render":
-            if self.artifact_id is None or self.plan_hash is not None or self.grant_id is not None:
+            if (
+                self.artifact_id is None
+                or self.plan_hash is not None
+                or self.grant_id is not None
+            ):
                 raise ValueError("render requires artifact_id and forbids plan_hash/grant_id")
-            if self.grant_scope is not None or self.target or self.execution_id is not None or self.limit is not None:
-                raise ValueError("render forbids grant_scope/target/execution_id/limit")
+            if (
+                self.grant_scope is not None
+                or self.target
+                or self.execution_id is not None
+                or self.operation_id is not None
+                or self.limit is not None
+            ):
+                raise ValueError(
+                    "render forbids grant_scope/target/execution_id/operation_id/limit"
+                )
             if self.operation not in {None, "render"}:
                 raise ValueError("render operation must be render")
             self.operation = "render"
         elif self.action == "prepare":
             if self.artifact_id is None or self.operation is None:
                 raise ValueError("prepare requires artifact_id and operation")
-            if self.plan_hash is not None or self.grant_id is not None or self.grant_scope is not None or self.execution_id is not None or self.limit is not None:
-                raise ValueError("prepare forbids plan_hash/grant_id/grant_scope/execution_id/limit")
+            if any(
+                value is not None
+                for value in (
+                    self.plan_hash,
+                    self.grant_id,
+                    self.grant_scope,
+                    self.execution_id,
+                    self.operation_id,
+                    self.limit,
+                )
+            ):
+                raise ValueError(
+                    "prepare forbids plan_hash/grant_id/grant_scope/"
+                    "execution_id/operation_id/limit"
+                )
         elif self.action == "grant":
             if self.plan_hash is None or self.grant_scope is None:
                 raise ValueError("grant requires plan_hash and grant_scope")
-            if self.artifact_id is not None or self.grant_id is not None or self.execution_id is not None or self.limit is not None:
-                raise ValueError("grant forbids artifact_id/grant_id/execution_id/limit")
+            if any(
+                value is not None
+                for value in (
+                    self.artifact_id,
+                    self.grant_id,
+                    self.execution_id,
+                    self.operation_id,
+                    self.limit,
+                )
+            ):
+                raise ValueError(
+                    "grant forbids artifact_id/grant_id/execution_id/operation_id/limit"
+                )
             if self.operation is not None or self.args or self.target:
                 raise ValueError("grant forbids operation/args/target")
         elif self.action in {"execute", "start"}:
             if self.plan_hash is None or self.grant_id is None:
                 raise ValueError(f"{self.action} requires plan_hash and grant_id")
-            if self.artifact_id is not None or self.grant_scope is not None or self.execution_id is not None or self.limit is not None:
-                raise ValueError(f"{self.action} forbids artifact_id/grant_scope/execution_id/limit")
+            if self.action == "start" and self.operation_id is None:
+                raise ValueError("start requires operation_id")
+            if self.action == "execute" and self.operation_id is not None:
+                raise ValueError("execute forbids operation_id")
+            if any(
+                value is not None
+                for value in (
+                    self.artifact_id,
+                    self.grant_scope,
+                    self.execution_id,
+                    self.limit,
+                )
+            ):
+                raise ValueError(
+                    f"{self.action} forbids artifact_id/grant_scope/execution_id/limit"
+                )
             if self.operation is not None or self.args or self.target:
                 raise ValueError(f"{self.action} forbids operation/args/target")
         elif self.action in {"status", "cancel"}:
             if self.execution_id is None:
                 raise ValueError(f"{self.action} requires execution_id")
-            if any(value is not None for value in (self.artifact_id, self.operation, self.plan_hash, self.grant_id, self.grant_scope, self.limit)) or self.args or self.target:
+            if (
+                any(
+                    value is not None
+                    for value in (
+                        self.artifact_id,
+                        self.operation,
+                        self.plan_hash,
+                        self.grant_id,
+                        self.grant_scope,
+                        self.operation_id,
+                        self.limit,
+                    )
+                )
+                or self.args
+                or self.target
+            ):
                 raise ValueError(f"{self.action} accepts execution_id only")
         else:
             if self.artifact_id is None:
                 raise ValueError("history requires artifact_id")
-            if any(value is not None for value in (self.operation, self.plan_hash, self.grant_id, self.grant_scope, self.execution_id)) or self.args or self.target:
+            if (
+                any(
+                    value is not None
+                    for value in (
+                        self.operation,
+                        self.plan_hash,
+                        self.grant_id,
+                        self.grant_scope,
+                        self.execution_id,
+                        self.operation_id,
+                    )
+                )
+                or self.args
+                or self.target
+            ):
                 raise ValueError("history accepts artifact_id and limit only")
             if self.limit is None:
                 self.limit = 20

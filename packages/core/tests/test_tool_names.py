@@ -215,6 +215,26 @@ async def test_call_tool_unknown_returns_structured_error():
     assert "unknown tool" in payload["error"]
 
 
+def test_panel_developer_capability_is_secret_bound_and_consumed(monkeypatch):
+    from ae_mcp import server as srv
+
+    secret = "ab" * 32
+    monkeypatch.setenv("AE_MCP_PANEL_CAPABILITY", secret)
+    values, trusted = srv._panel_request(
+        "ae.toolIndex",
+        {"_ae_panel_capability": secret, "kinds": ["system-command"]},
+    )
+    assert trusted is True
+    assert values == {"kinds": ["system-command"]}
+
+    public_values, public_trusted = srv._panel_request(
+        "ae.toolIndex",
+        {"_ae_panel_capability": "cd" * 32},
+    )
+    assert public_trusted is False
+    assert public_values == {}
+
+
 async def test_call_tool_schema_error_sets_iserror_true():
     """The direct dispatch path still marks pydantic validation failures."""
     load_all()

@@ -36,12 +36,23 @@ export function createToolsApi(mcp) {
   const call = async (name, args) => parseMcpPayload(
     await mcp.callTool(name, args),
   );
+  const panelCall = async (name, args) => {
+    if (typeof mcp.callPanelTool !== 'function') {
+      throw new Error('Trusted panel Tool Library channel is unavailable');
+    }
+    return parseMcpPayload(await mcp.callPanelTool(name, args));
+  };
   return {
     index: (args = {}) => call('ae_toolIndex', args),
     search: (args = {}) => call('ae_toolSearch', args),
     inspect: (artifactId, options = {}) => call('ae_toolInspect', {
       artifact_id: artifactId,
       ...options,
+    }),
+    developerIndex: (args = {}) => panelCall('ae_toolIndex', args),
+    developerSearch: (args = {}) => panelCall('ae_toolSearch', args),
+    developerInspect: (artifactId) => panelCall('ae_toolInspect', {
+      artifact_id: artifactId,
     }),
     create: (input) => call('ae_toolCreate', input),
     edit: (input) => call('ae_toolEdit', input),
@@ -60,6 +71,12 @@ export function createToolsApi(mcp) {
     exportPackage: (artifactIds, outPath) => call('ae_toolExport', {
       artifact_ids: artifactIds, out_path: outPath,
     }),
+    newOperationId: () => {
+      if (typeof mcp.newOperationId !== 'function') {
+        throw new Error('Secure operation id generation is unavailable');
+      }
+      return mcp.newOperationId();
+    },
   };
 }
 
@@ -93,6 +110,7 @@ export async function startToolPlan(api, {
   operation,
   args = {},
   target = {},
+  operationId = api.newOperationId(),
 }) {
   const plan = await api.use({
     artifact_id: artifactId,
@@ -106,11 +124,24 @@ export async function startToolPlan(api, {
     plan_hash: plan.planHash,
     grant_scope: 'once',
   });
-  return api.use({
+  const startRequest = {
     action: 'start',
     plan_hash: plan.planHash,
     grant_id: grant.grantId,
-  });
+    operation_id: operationId,
+  };
+  try {
+    return await api.use(startRequest);
+  } catch (firstError) {
+    // The start response can be lost after the server has accepted the job.
+    // One bounded retry with the same operation id is idempotent server-side.
+    try {
+      return await api.use(startRequest);
+    } catch (secondError) {
+      secondError.startRetryCause = firstError;
+      throw secondError;
+    }
+  }
 }
 
 export async function waitForToolExecution(api, execution, {

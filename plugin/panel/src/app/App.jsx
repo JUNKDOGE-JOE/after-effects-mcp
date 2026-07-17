@@ -576,6 +576,7 @@ function Shell({ cs }) {
     env: approvalTierFile.env(),
     onElicitation: elicitationCoordinator.handle,
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
+    randomBytes: (size) => cepRequire('crypto').randomBytes(size),
   }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
   const toolsApi = React.useMemo(() => createToolsApi(mcp), [mcp]);
   React.useEffect(() => () => mcp.stop(), [mcp]);
