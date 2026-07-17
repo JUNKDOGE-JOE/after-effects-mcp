@@ -242,6 +242,12 @@ class AeCompositionTimeInput(_StrictModel):
     scale: int = Field(..., ge=1, le=4_294_967_295)
 
 
+class AePositiveCompositionTimeInput(AeCompositionTimeInput):
+    """Exact positive A_Time value/scale pair for composition durations."""
+
+    value: int = Field(..., ge=1, le=2_147_483_647)
+
+
 class AeSetCompositionTimeArgs(_StrictModel):
     """ae.setCompositionTime — set exact composition time through native AEGP.
 
@@ -311,8 +317,8 @@ class AeCreateCompositionArgs(_StrictModel):
     )
     width: int = Field(1920, ge=1, le=30_000)
     height: int = Field(1080, ge=1, le=30_000)
-    duration: AeCompositionTimeInput = Field(
-        default_factory=lambda: AeCompositionTimeInput(value=5, scale=1),
+    duration: AePositiveCompositionTimeInput = Field(
+        default_factory=lambda: AePositiveCompositionTimeInput(value=5, scale=1),
         description="Exact positive duration; defaults to five seconds.",
     )
     frame_rate: AePositiveRatioInput = Field(
@@ -338,8 +344,6 @@ class AeCreateCompositionArgs(_StrictModel):
     def _valid_native_values(self) -> "AeCreateCompositionArgs":
         if any(0xD800 <= ord(character) <= 0xDFFF for character in self.name):
             raise ValueError("name must contain only Unicode scalar values")
-        if self.duration.value <= 0:
-            raise ValueError("duration must be positive")
         return self
 
 
