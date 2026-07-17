@@ -266,28 +266,82 @@ async def test_tampered_postcondition_is_uncertain_and_never_retried():
 
 @pytest.mark.asyncio
 async def test_public_mcp_schema_is_registered_and_rejects_before_dispatch(monkeypatch):
+    from mcp.shared.memory import create_connected_server_and_client_session
+
+    from ae_mcp import schemas, server as server_module
+
     load_all()
     schema_cls, _ = HANDLERS["ae.createComposition"]
+    dispatches: list[Any] = []
 
-    async def _must_not_dispatch(_validated, _ctx):
-        pytest.fail("invalid public MCP arguments reached the native handler")
+    async def _run(validated, _ctx):
+        dispatches.append(validated)
+        return {"ok": True, "value": {"accepted": True}}
 
-    monkeypatch.setitem(HANDLERS, "ae.createComposition", (schema_cls, _must_not_dispatch))
-    result = await build_server()._ae_call_tool(
-        "ae_createComposition",
-        {
-            "name": "SYNTHETIC_COMP",
-            "duration": {"value": 0, "scale": 1},
-            "idempotency_key": "synthetic-comp-create-0004",
-        },
+    async def _allow(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setitem(HANDLERS, "ae.createComposition", (schema_cls, _run))
+    monkeypatch.setattr(
+        server_module,
+        "_filtered_tool_names",
+        lambda: {"ae.createComposition"},
     )
+    monkeypatch.setattr(
+        server_module.approval_gate,
+        "enforce",
+        _allow,
+    )
+    server = build_server()
 
-    assert result.isError is True
-    payload = json.loads(result.content[0].text)
-    assert payload["error"]["code"] == "INVALID_ARGUMENT"
-    assert payload["error"]["sideEffect"] == "not-started"
-    assert payload["error"]["recovery"]["action"] == "change-arguments"
-    assert payload["error"]["details"] == {
-        "field": "arguments",
-        "capabilityId": "ae.composition.create",
-    }
+    async with create_connected_server_and_client_session(server) as client:
+        listed = await client.list_tools()
+        assert [tool.name for tool in listed.tools] == ["ae_createComposition"]
+        public_schema = listed.tools[0].inputSchema
+        duration_ref = public_schema["properties"]["duration"]["$ref"]
+        duration_schema = public_schema["$defs"][duration_ref.rsplit("/", 1)[1]]
+        assert duration_schema["properties"]["value"] == {
+            "maximum": 2_147_483_647,
+            "minimum": 1,
+            "title": "Value",
+            "type": "integer",
+        }
+
+        for bad_value in (0, -1):
+            result = await client.call_tool(
+                "ae_createComposition",
+                {
+                    "name": "SYNTHETIC_COMP",
+                    "duration": {"value": bad_value, "scale": 1},
+                    "idempotency_key": "synthetic-comp-create-0004",
+                },
+            )
+
+            assert result.isError is True
+            payload = json.loads(result.content[0].text)
+            assert payload["error"]["code"] == "INVALID_ARGUMENT"
+            assert payload["error"]["sideEffect"] == "not-started"
+            assert payload["error"]["recovery"]["action"] == "change-arguments"
+            assert payload["error"]["details"] == {
+                "field": "arguments.duration.value",
+                "capabilityId": "ae.composition.create",
+            }
+        assert dispatches == []
+
+        accepted = await client.call_tool(
+            "ae_createComposition",
+            {
+                "name": "SYNTHETIC_COMP",
+                "duration": {"value": 5, "scale": 2},
+                "idempotency_key": "synthetic-comp-create-0004",
+            },
+        )
+        assert accepted.isError is False
+        assert len(dispatches) == 1
+        assert dispatches[0].duration.value == 5
+        assert dispatches[0].duration.scale == 2
+
+    set_time_schema = schemas.AeSetCompositionTimeArgs.model_json_schema()
+    target_ref = set_time_schema["properties"]["target_time"]["$ref"]
+    target_schema = set_time_schema["$defs"][target_ref.rsplit("/", 1)[1]]
+    assert target_schema["properties"]["value"]["minimum"] == -2_147_483_648
