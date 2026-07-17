@@ -1406,7 +1406,15 @@ async def test_public_tool_use_returns_shared_execution_without_second_dispatch(
     assert len(first_backend.calls) + len(second_backend.calls) == 1
 
 
-def test_operation_claim_is_atomic_across_spawned_processes(tmp_path: Path) -> None:
+def test_operation_claim_is_atomic_across_spawned_processes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The pytest console launcher does not necessarily put the checkout root on
+    # a spawned interpreter's sys.path (notably on Windows). The pickled target
+    # is imported as packages.core.tests.test_tool_execution, so make that
+    # import path explicit for the child without changing the product runtime.
+    repo_root = str(Path(__file__).resolve().parents[3])
+    monkeypatch.syspath_prepend(repo_root)
     context = multiprocessing.get_context("spawn")
     start = context.Event()
     results = context.Queue()
