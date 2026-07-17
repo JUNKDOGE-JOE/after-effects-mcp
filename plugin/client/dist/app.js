@@ -25,9 +25,9 @@
     mod
   ));
 
-  // node_modules/react/cjs/react.production.min.js
+  // ../../../../plugin/panel/node_modules/react/cjs/react.production.min.js
   var require_react_production_min = __commonJS({
-    "node_modules/react/cjs/react.production.min.js"(exports) {
+    "../../../../plugin/panel/node_modules/react/cjs/react.production.min.js"(exports) {
       "use strict";
       var l = Symbol.for("react.element");
       var n = Symbol.for("react.portal");
@@ -298,9 +298,9 @@
     }
   });
 
-  // node_modules/react/index.js
+  // ../../../../plugin/panel/node_modules/react/index.js
   var require_react = __commonJS({
-    "node_modules/react/index.js"(exports, module) {
+    "../../../../plugin/panel/node_modules/react/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_production_min();
@@ -310,9 +310,9 @@
     }
   });
 
-  // node_modules/scheduler/cjs/scheduler.production.min.js
+  // ../../../../plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js
   var require_scheduler_production_min = __commonJS({
-    "node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+    "../../../../plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
       "use strict";
       function f(a, b) {
         var c = a.length;
@@ -563,9 +563,9 @@
     }
   });
 
-  // node_modules/scheduler/index.js
+  // ../../../../plugin/panel/node_modules/scheduler/index.js
   var require_scheduler = __commonJS({
-    "node_modules/scheduler/index.js"(exports, module) {
+    "../../../../plugin/panel/node_modules/scheduler/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_scheduler_production_min();
@@ -575,9 +575,9 @@
     }
   });
 
-  // node_modules/react-dom/cjs/react-dom.production.min.js
+  // ../../../../plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js
   var require_react_dom_production_min = __commonJS({
-    "node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+    "../../../../plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
       "use strict";
       var aa = require_react();
       var ca = require_scheduler();
@@ -7185,9 +7185,9 @@
     }
   });
 
-  // node_modules/react-dom/index.js
+  // ../../../../plugin/panel/node_modules/react-dom/index.js
   var require_react_dom = __commonJS({
-    "node_modules/react-dom/index.js"(exports, module) {
+    "../../../../plugin/panel/node_modules/react-dom/index.js"(exports, module) {
       "use strict";
       function checkDCE() {
         if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7211,9 +7211,9 @@
     }
   });
 
-  // node_modules/react-dom/client.js
+  // ../../../../plugin/panel/node_modules/react-dom/client.js
   var require_client = __commonJS({
-    "node_modules/react-dom/client.js"(exports) {
+    "../../../../plugin/panel/node_modules/react-dom/client.js"(exports) {
       "use strict";
       var m = require_react_dom();
       if (true) {
@@ -7242,9 +7242,9 @@
     }
   });
 
-  // node_modules/react/cjs/react-jsx-runtime.production.min.js
+  // ../../../../plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js
   var require_react_jsx_runtime_production_min = __commonJS({
-    "node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
+    "../../../../plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
       "use strict";
       var f = require_react();
       var k = Symbol.for("react.element");
@@ -7267,9 +7267,9 @@
     }
   });
 
-  // node_modules/react/jsx-runtime.js
+  // ../../../../plugin/panel/node_modules/react/jsx-runtime.js
   var require_jsx_runtime = __commonJS({
-    "node_modules/react/jsx-runtime.js"(exports, module) {
+    "../../../../plugin/panel/node_modules/react/jsx-runtime.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_jsx_runtime_production_min();
@@ -7318,19 +7318,19 @@
   // src/components/core/Icon.jsx
   var import_react4 = __toESM(require_react(), 1);
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var import_react3 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/shared/src/utils.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/shared/src/utils.js
   var toKebabCase = (string) => string.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   var mergeClasses = (...classes) => classes.filter((className, index, array) => {
     return Boolean(className) && array.indexOf(className) === index;
   }).join(" ");
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var import_react2 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/defaultAttributes.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/defaultAttributes.js
   var defaultAttributes = {
     xmlns: "http://www.w3.org/2000/svg",
     width: 24,
@@ -7343,7 +7343,7 @@
     strokeLinejoin: "round"
   };
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var Icon = (0, import_react2.forwardRef)(
     ({
       color = "currentColor",
@@ -7375,7 +7375,7 @@
     }
   );
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var createLucideIcon = (iconName, iconNode) => {
     const Component = (0, import_react3.forwardRef)(
       ({ className, ...props }, ref) => (0, import_react3.createElement)(Icon, {
@@ -7389,13 +7389,13 @@
     return Component;
   };
 
-  // node_modules/lucide-react/dist/esm/icons/arrow-up.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/arrow-up.js
   var ArrowUp = createLucideIcon("ArrowUp", [
     ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
     ["path", { d: "M12 19V5", key: "x0mq9r" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/book-open.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/book-open.js
   var BookOpen = createLucideIcon("BookOpen", [
     ["path", { d: "M12 7v14", key: "1akyts" }],
     [
@@ -7407,7 +7407,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/box.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/box.js
   var Box = createLucideIcon("Box", [
     [
       "path",
@@ -7420,7 +7420,7 @@
     ["path", { d: "M12 22V12", key: "d0xqtd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/brain.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/brain.js
   var Brain = createLucideIcon("Brain", [
     [
       "path",
@@ -7445,58 +7445,58 @@
     ["path", { d: "M19.967 17.484A4 4 0 0 1 18 18", key: "159ez6" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/check.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/check.js
   var Check = createLucideIcon("Check", [["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-down.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-down.js
   var ChevronDown = createLucideIcon("ChevronDown", [
     ["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-right.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-right.js
   var ChevronRight = createLucideIcon("ChevronRight", [
     ["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-alert.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-alert.js
   var CircleAlert = createLucideIcon("CircleAlert", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "12", x2: "12", y1: "8", y2: "12", key: "1pkeuh" }],
     ["line", { x1: "12", x2: "12.01", y1: "16", y2: "16", key: "4dfq90" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-slash.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-slash.js
   var CircleSlash = createLucideIcon("CircleSlash", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "9", x2: "15", y1: "15", y2: "9", key: "1dfufj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/circle.js
   var Circle = createLucideIcon("Circle", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/copy.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/copy.js
   var Copy = createLucideIcon("Copy", [
     ["rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2", key: "17jyea" }],
     ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2", key: "zix9uf" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/download.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/download.js
   var Download = createLucideIcon("Download", [
     ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
     ["polyline", { points: "7 10 12 15 17 10", key: "2ggqvy" }],
     ["line", { x1: "12", x2: "12", y1: "15", y2: "3", key: "1vk2je" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/external-link.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/external-link.js
   var ExternalLink = createLucideIcon("ExternalLink", [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye-off.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/eye-off.js
   var EyeOff = createLucideIcon("EyeOff", [
     [
       "path",
@@ -7516,7 +7516,7 @@
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/eye.js
   var Eye = createLucideIcon("Eye", [
     [
       "path",
@@ -7528,7 +7528,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/file-text.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/file-text.js
   var FileText = createLucideIcon("FileText", [
     ["path", { d: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", key: "1rqfz7" }],
     ["path", { d: "M14 2v4a2 2 0 0 0 2 2h4", key: "tnqrlb" }],
@@ -7537,7 +7537,7 @@
     ["path", { d: "M16 17H8", key: "z1uh3a" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/github.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/github.js
   var Github = createLucideIcon("Github", [
     [
       "path",
@@ -7549,28 +7549,28 @@
     ["path", { d: "M9 18c-4.51 2-5-2-7-2", key: "9comsn" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/globe.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/globe.js
   var Globe = createLucideIcon("Globe", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/history.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/history.js
   var History = createLucideIcon("History", [
     ["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "1357e3" }],
     ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
     ["path", { d: "M12 7v5l4 2", key: "1fdv2h" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/info.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/info.js
   var Info = createLucideIcon("Info", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 16v-4", key: "1dtifu" }],
     ["path", { d: "M12 8h.01", key: "e9boi3" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list-checks.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/list-checks.js
   var ListChecks = createLucideIcon("ListChecks", [
     ["path", { d: "m3 17 2 2 4-4", key: "1jhpwq" }],
     ["path", { d: "m3 7 2 2 4-4", key: "1obspn" }],
@@ -7579,7 +7579,7 @@
     ["path", { d: "M13 18h8", key: "oe0vm4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/list.js
   var List = createLucideIcon("List", [
     ["path", { d: "M3 12h.01", key: "nlz23k" }],
     ["path", { d: "M3 18h.01", key: "1tta3j" }],
@@ -7589,23 +7589,23 @@
     ["path", { d: "M8 6h13", key: "ik3vkj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/message-square.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/message-square.js
   var MessageSquare = createLucideIcon("MessageSquare", [
     ["path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", key: "1lielz" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/pause.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/pause.js
   var Pause = createLucideIcon("Pause", [
     ["rect", { x: "14", y: "4", width: "4", height: "16", rx: "1", key: "zuxfzm" }],
     ["rect", { x: "6", y: "4", width: "4", height: "16", rx: "1", key: "1okwgv" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/play.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/play.js
   var Play = createLucideIcon("Play", [
     ["polygon", { points: "6 3 20 12 6 21 6 3", key: "1oa8hb" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plug.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/plug.js
   var Plug = createLucideIcon("Plug", [
     ["path", { d: "M12 22v-5", key: "1ega77" }],
     ["path", { d: "M9 8V2", key: "14iosj" }],
@@ -7613,25 +7613,25 @@
     ["path", { d: "M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z", key: "osxo6l" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plus.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/plus.js
   var Plus = createLucideIcon("Plus", [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/rotate-cw.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/rotate-cw.js
   var RotateCw = createLucideIcon("RotateCw", [
     ["path", { d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", key: "1p45f6" }],
     ["path", { d: "M21 3v5h-5", key: "1q7to0" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/search.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/search.js
   var Search = createLucideIcon("Search", [
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }],
     ["path", { d: "m21 21-4.3-4.3", key: "1qie3q" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/send.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/send.js
   var Send = createLucideIcon("Send", [
     [
       "path",
@@ -7643,7 +7643,7 @@
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/settings.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/settings.js
   var Settings = createLucideIcon("Settings", [
     [
       "path",
@@ -7655,7 +7655,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield-alert.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/shield-alert.js
   var ShieldAlert = createLucideIcon("ShieldAlert", [
     [
       "path",
@@ -7668,7 +7668,7 @@
     ["path", { d: "M12 16h.01", key: "1drbdi" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/shield.js
   var Shield = createLucideIcon("Shield", [
     [
       "path",
@@ -7679,7 +7679,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/sparkles.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/sparkles.js
   var Sparkles = createLucideIcon("Sparkles", [
     [
       "path",
@@ -7694,12 +7694,12 @@
     ["path", { d: "M5 18H3", key: "zchphs" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/square.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/square.js
   var Square = createLucideIcon("Square", [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/stethoscope.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/stethoscope.js
   var Stethoscope = createLucideIcon("Stethoscope", [
     ["path", { d: "M11 2v2", key: "1539x4" }],
     ["path", { d: "M5 2v2", key: "1yf1q8" }],
@@ -7708,7 +7708,7 @@
     ["circle", { cx: "20", cy: "10", r: "2", key: "ts1r5v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/trash-2.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/trash-2.js
   var Trash2 = createLucideIcon("Trash2", [
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", key: "4alrt4" }],
@@ -7717,7 +7717,7 @@
     ["line", { x1: "14", x2: "14", y1: "11", y2: "17", key: "xtxkd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/triangle-alert.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/triangle-alert.js
   var TriangleAlert = createLucideIcon("TriangleAlert", [
     [
       "path",
@@ -7730,13 +7730,13 @@
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/undo-2.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/undo-2.js
   var Undo2 = createLucideIcon("Undo2", [
     ["path", { d: "M9 14 4 9l5-5", key: "102s5s" }],
     ["path", { d: "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11", key: "f3b9sd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/wrench.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/wrench.js
   var Wrench = createLucideIcon("Wrench", [
     [
       "path",
@@ -7747,13 +7747,13 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/x.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/x.js
   var X = createLucideIcon("X", [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/zap.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/zap.js
   var Zap = createLucideIcon("Zap", [
     [
       "path",
@@ -12187,7 +12187,8 @@
       revision: value.revision,
       updatedAt: value.updatedAt,
       lastUsedAt: (_a = value.lastUsedAt) != null ? _a : null,
-      sourceType: value.sourceType || value.source && value.source.type || ""
+      sourceType: value.sourceType || value.source && value.source.type || "",
+      executionCapabilities: value.executionCapabilities || null
     };
   }
   function messageOf(error) {
@@ -12204,11 +12205,14 @@
       case "load-success": {
         const payload = event.payload || event;
         const summaries = (payload.artifacts || payload.summaries || []).map(toSummary);
+        const selectedVisible = summaries.some((row) => row.id === state.selectedId);
         return {
           ...state,
           phase: "ready",
           summaries: sortSummaries(summaries),
           total: Number.isFinite(payload.total) ? payload.total : summaries.length,
+          selectedId: selectedVisible ? state.selectedId : null,
+          inspected: selectedVisible ? state.inspected : null,
           error: "",
           refreshRequired: false
         };
@@ -12320,19 +12324,22 @@
   }
   function canEditArtifact(artifact) {
     return Boolean(
-      artifact && sourceType(artifact) !== "bundled" && !["archived", "deprecated"].includes(artifact.status)
+      artifact && artifact.kind !== "system-command" && sourceType(artifact) !== "bundled" && !["archived", "deprecated"].includes(artifact.status)
     );
   }
-  function canExecuteArtifact(artifact) {
-    return Boolean(artifact && ["saved", "pinned"].includes(artifact.status));
-  }
   function toolExecutionCapabilities(artifact) {
-    const enabled = canExecuteArtifact(artifact);
-    const kind = artifact && artifact.kind;
+    const contract = artifact && artifact.executionCapabilities;
+    const operations = Array.isArray(contract && contract.operations) ? contract.operations : [];
+    const direct = contract && contract.directRun && typeof contract.directRun === "object" ? contract.directRun : {};
     return {
-      render: enabled && ["expression", "prompt-skill"].includes(kind),
-      execute: enabled && ["jsx", "diagnostic", "recipe"].includes(kind),
-      apply: enabled && kind === "expression"
+      render: operations.includes("render"),
+      execute: operations.includes("execute"),
+      apply: operations.includes("apply"),
+      directRun: Boolean(direct.available),
+      operation: direct.operation || null,
+      requiresTarget: Boolean(direct.requiresTarget),
+      disabledReason: direct.disabledReason || null,
+      runtime: contract && contract.runtime || null
     };
   }
   function canPromoteArtifact(artifact) {
@@ -12569,8 +12576,8 @@
   var import_react39 = __toESM(require_react(), 1);
   var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
   var L2 = {
-    zh: { never: "\u672A\u4F7F\u7528", verified: "\u5DF2\u9A8C\u8BC1" },
-    en: { never: "Never used", verified: "Verified" }
+    zh: { never: "\u672A\u4F7F\u7528", verified: "\u5DF2\u9A8C\u8BC1", run: "\u8FD0\u884C" },
+    en: { never: "Never used", verified: "Verified", run: "Run" }
   };
   function riskStatus(risk) {
     if (risk === "external" || risk === "destructive") return "error";
@@ -12585,30 +12592,58 @@
       return t.never;
     }
   }
-  function ToolArtifactRow({ artifact, selected = false, onSelect, lang = "zh" }) {
+  function ToolArtifactRow({
+    artifact,
+    selected = false,
+    onSelect,
+    onRun,
+    runDisabled = false,
+    lang = "zh"
+  }) {
     const t = L2[lang] || L2.zh;
+    const directRun = Boolean(
+      artifact && artifact.executionCapabilities && artifact.executionCapabilities.directRun && artifact.executionCapabilities.directRun.available
+    );
     return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(
-      "button",
+      "div",
       {
-        type: "button",
         className: `tools-artifact-row ds-focusable${selected ? " is-selected" : ""}`,
-        "aria-current": selected || void 0,
-        onClick: () => onSelect && onSelect(artifact.id),
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__top", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { className: "tools-artifact-row__name", children: artifact.name }),
-            artifact.verified ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: "ok", icon: "check", children: t.verified }) : null
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__badges", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.kind }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.category }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: riskStatus(artifact.declaredRisk), children: artifact.declaredRisk }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: artifact.status === "candidate" ? "warn" : artifact.status === "pinned" ? "accent" : "neutral", children: artifact.status })
-          ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__meta", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: artifact.sourceType }),
-            /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: lastUsed(artifact.lastUsedAt, t) })
-          ] })
+          /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)(
+            "button",
+            {
+              type: "button",
+              className: "tools-artifact-row__select",
+              "aria-current": selected || void 0,
+              onClick: () => onSelect && onSelect(artifact.id),
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__top", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { className: "tools-artifact-row__name", children: artifact.name }),
+                  artifact.verified ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: "ok", icon: "check", children: t.verified }) : null
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__badges", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.kind }),
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { children: artifact.category }),
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: riskStatus(artifact.declaredRisk), children: artifact.declaredRisk }),
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Badge, { status: artifact.status === "candidate" ? "warn" : artifact.status === "pinned" ? "accent" : "neutral", children: artifact.status })
+                ] }),
+                /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("span", { className: "tools-artifact-row__meta", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: artifact.sourceType }),
+                  /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("span", { children: lastUsed(artifact.lastUsedAt, t) })
+                ] })
+              ]
+            }
+          ),
+          directRun ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+            "button",
+            {
+              type: "button",
+              className: "tools-artifact-row__run",
+              onClick: () => onRun && onRun(artifact),
+              disabled: runDisabled,
+              children: t.run
+            }
+          ) : null
         ]
       }
     );
@@ -12616,6 +12651,7 @@
 
   // src/cep/toolFileDialogs.js
   var TOOL_PACKAGE_SUFFIX = ".aemcptools";
+  var SYSTEM_COMMAND_SUFFIXES = [".ps1", ".psm1", ".bat", ".cmd", ".sh", ".command"];
   function selectedValue(result) {
     if (!result || Number(result.err || 0) !== 0) return null;
     const data = result.data;
@@ -12643,13 +12679,14 @@
       false,
       title,
       initialPath,
-      ["aemcptools"]
+      ["aemcptools", "ps1", "psm1", "bat", "cmd", "sh", "command"]
     );
     const selected = selectedValue(result);
     if (!selected) return null;
     const path = normalizePath2(normalizeFileUrl(selected));
-    if (!path.toLowerCase().endsWith(TOOL_PACKAGE_SUFFIX)) {
-      throw new Error("Select a .aemcptools package");
+    const lower = path.toLowerCase();
+    if (!lower.endsWith(TOOL_PACKAGE_SUFFIX) && !SYSTEM_COMMAND_SUFFIXES.some((suffix) => lower.endsWith(suffix))) {
+      throw new Error("Select a .aemcptools package or a quarantined system-command file");
     }
     return path;
   }
@@ -12709,7 +12746,10 @@
     return {
       index: (args = {}) => call("ae_toolIndex", args),
       search: (args = {}) => call("ae_toolSearch", args),
-      inspect: (artifactId) => call("ae_toolInspect", { artifact_id: artifactId }),
+      inspect: (artifactId, options = {}) => call("ae_toolInspect", {
+        artifact_id: artifactId,
+        ...options
+      }),
       create: (input) => call("ae_toolCreate", input),
       edit: (input) => call("ae_toolEdit", input),
       delete: (input) => call("ae_toolDelete", input),
@@ -12733,7 +12773,7 @@
       })
     };
   }
-  async function executeToolPlan(api, {
+  async function startToolPlan(api, {
     artifactId,
     operation,
     args = {},
@@ -12752,10 +12792,97 @@
       grant_scope: "once"
     });
     return api.use({
-      action: "execute",
+      action: "start",
       plan_hash: plan.planHash,
       grant_id: grant.grantId
     });
+  }
+  async function waitForToolExecution(api, execution, {
+    pollIntervalMs = 250,
+    onProgress = () => {
+    },
+    wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds))
+  } = {}) {
+    let current = execution;
+    onProgress(current);
+    while (!current.terminal) {
+      await wait(pollIntervalMs);
+      current = await api.use({ action: "status", execution_id: current.executionId });
+      onProgress(current);
+    }
+    return current;
+  }
+
+  // src/lib/toolRunForm.js
+  function schemaParts(schema) {
+    const value = schema && typeof schema === "object" && !Array.isArray(schema) ? schema : {};
+    const canonical = value.type === "object" || value.properties || value.required;
+    return {
+      properties: canonical ? value.properties || {} : value,
+      required: new Set(canonical && Array.isArray(value.required) ? value.required : [])
+    };
+  }
+  function initialToolArgs(schema) {
+    const { properties } = schemaParts(schema);
+    return Object.entries(properties).reduce((result, [name, rule]) => {
+      if (rule && Object.hasOwn(rule, "default")) result[name] = rule.default;
+      else if (rule && rule.type === "boolean") result[name] = false;
+      else result[name] = "";
+      return result;
+    }, {});
+  }
+  function toolArgFields(schema) {
+    const { properties, required } = schemaParts(schema);
+    return Object.entries(properties).map(([name, rawRule]) => {
+      const rule = rawRule && typeof rawRule === "object" ? rawRule : {};
+      return {
+        name,
+        type: rule.type || "string",
+        required: required.has(name),
+        enum: Array.isArray(rule.enum) ? rule.enum : null,
+        minimum: rule.minimum,
+        maximum: rule.maximum,
+        supported: ["string", "number", "integer", "boolean"].includes(rule.type || "string") || Array.isArray(rule.enum)
+      };
+    });
+  }
+  function buildToolArgs(schema, values) {
+    const fields = toolArgFields(schema);
+    const result = {};
+    for (const field of fields) {
+      const value = values && values[field.name];
+      if ((value === "" || value === void 0) && !field.required) continue;
+      if ((value === "" || value === void 0) && field.required) {
+        throw new TypeError(`Missing required argument: ${field.name}`);
+      }
+      if (field.type === "integer") {
+        const parsed = Number(value);
+        if (!Number.isInteger(parsed)) throw new TypeError(`Invalid integer: ${field.name}`);
+        result[field.name] = parsed;
+      } else if (field.type === "number") {
+        const parsed = Number(value);
+        if (!Number.isFinite(parsed)) throw new TypeError(`Invalid number: ${field.name}`);
+        result[field.name] = parsed;
+      } else if (field.type === "boolean") {
+        result[field.name] = Boolean(value);
+      } else if (field.supported) {
+        result[field.name] = value;
+      } else {
+        throw new TypeError(`Use Advanced JSON for argument: ${field.name}`);
+      }
+      if (field.enum && !field.enum.some((item) => Object.is(item, result[field.name]))) {
+        throw new TypeError(`Invalid enum value: ${field.name}`);
+      }
+      if (typeof result[field.name] === "number") {
+        if (field.minimum !== void 0 && result[field.name] < field.minimum) {
+          throw new TypeError(`Value below minimum: ${field.name}`);
+        }
+        if (field.maximum !== void 0 && result[field.name] > field.maximum) {
+          throw new TypeError(`Value above maximum: ${field.name}`);
+        }
+      }
+    }
+    return result;
   }
 
   // src/screens/ToolsScreen.jsx
@@ -12792,11 +12919,18 @@
       promote: "\u63D0\u5347\u4E3A\u5DF2\u4FDD\u5B58",
       copy: "\u590D\u5236",
       renderCopy: "\u6E32\u67D3\u5E76\u590D\u5236",
-      run: "\u51C6\u5907\u5E76\u8FD0\u884C",
+      run: "\u8FD0\u884C",
       metadata: "\u5143\u6570\u636E",
       content: "\u5185\u5BB9\uFF08\u4E0D\u53EF\u4FE1\u7528\u6237\u6570\u636E\uFF09",
-      args: "\u53C2\u6570\uFF08JSON\uFF09",
+      args: "\u53C2\u6570",
       result: "\u6267\u884C\u7ED3\u679C",
+      advancedJson: "\u9AD8\u7EA7 JSON",
+      formView: "\u8868\u5355",
+      cancelRun: "\u53D6\u6D88\u8FD0\u884C",
+      history: "\u6267\u884C\u5386\u53F2",
+      developerTools: "\u5F00\u53D1\u8005\u5DE5\u5177",
+      incompatible: "\u5F53\u524D\u4E0D\u53EF\u8FD0\u884C",
+      progress: "\u8FDB\u5EA6",
       compId: "Comp ID",
       layerId: "Layer ID",
       propertyPath: "\u5C5E\u6027\u8DEF\u5F84",
@@ -12851,11 +12985,18 @@
       promote: "Promote to saved",
       copy: "Copy",
       renderCopy: "Render & copy",
-      run: "Prepare & run",
+      run: "Run",
       metadata: "Metadata",
       content: "Content (untrusted user data)",
-      args: "Arguments (JSON)",
+      args: "Arguments",
       result: "Execution result",
+      advancedJson: "Advanced JSON",
+      formView: "Form",
+      cancelRun: "Cancel run",
+      history: "Execution history",
+      developerTools: "Developer Tools",
+      incompatible: "Unavailable",
+      progress: "Progress",
       compId: "Comp ID",
       layerId: "Layer ID",
       propertyPath: "Property path",
@@ -12880,7 +13021,7 @@
       untrusted: "User untrusted"
     }
   };
-  var KIND_OPTIONS2 = ["", "jsx", "expression", "prompt-skill", "recipe", "diagnostic"];
+  var KIND_OPTIONS2 = ["", "jsx", "expression", "prompt-skill", "recipe", "diagnostic", "system-command"];
   var RISK_OPTIONS2 = ["", "read", "write", "destructive", "external"];
   var SOURCE_OPTIONS = ["", "user", "legacy", "bundled", "imported", "chat-tool-call"];
   function artifactSource(artifact) {
@@ -12965,8 +13106,13 @@
     const [busy, setBusy] = import_react40.default.useState(false);
     const initialRunInputs = import_react40.default.useMemo(() => emptyToolRunInputs(), []);
     const [runArgs, setRunArgs] = import_react40.default.useState(initialRunInputs.args);
+    const [runForm, setRunForm] = import_react40.default.useState({});
+    const [advancedJson, setAdvancedJson] = import_react40.default.useState(false);
     const [target, setTarget] = import_react40.default.useState(initialRunInputs.target);
     const [runResult, setRunResult] = import_react40.default.useState(null);
+    const [runJob, setRunJob] = import_react40.default.useState(null);
+    const [runHistory, setRunHistory] = import_react40.default.useState([]);
+    const [developerMode, setDeveloperMode] = import_react40.default.useState(false);
     const loadSequence = import_react40.default.useRef(0);
     const inspectSequence = import_react40.default.useRef(0);
     const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
@@ -12980,17 +13126,18 @@
         const needsSearch = Boolean(
           state.query || state.category || state.risk || state.kinds && state.kinds.length
         );
-        const payload = needsSearch ? await api.search(searchArgsFromState(state)) : await api.index({
+        const payload = needsSearch ? await api.search({ ...searchArgsFromState(state), developer_mode: developerMode }) : await api.index({
           statuses: state.statuses,
           source_types: state.sourceType ? [state.sourceType] : void 0,
           include_candidates: state.statuses.includes("candidate"),
+          developer_mode: developerMode,
           limit: 100
         });
         if (sequence === loadSequence.current) dispatch({ type: "load-success", payload });
       } catch (error) {
         if (sequence === loadSequence.current) dispatch({ type: "load-error", error });
       }
-    }, [api, state.query, state.kinds, state.category, state.risk, state.statuses, state.sourceType]);
+    }, [api, state.query, state.kinds, state.category, state.risk, state.statuses, state.sourceType, developerMode]);
     import_react40.default.useEffect(() => {
       const timer = setTimeout(load, 120);
       return () => clearTimeout(timer);
@@ -13000,12 +13147,30 @@
       inspectSequence.current = sequence;
       const freshInputs = emptyToolRunInputs();
       setRunArgs(freshInputs.args);
+      setRunForm({});
+      setAdvancedJson(false);
       setTarget(freshInputs.target);
       dispatch({ type: "select", id });
       setRunResult(null);
       try {
-        const payload = await api.inspect(id);
-        if (sequence === inspectSequence.current) dispatch({ type: "inspect-success", payload });
+        const payload = await api.inspect(id, { developer_mode: developerMode });
+        if (sequence === inspectSequence.current) {
+          dispatch({ type: "inspect-success", payload });
+          const defaults = initialToolArgs(payload.artifact && payload.artifact.argsSchema);
+          setRunForm(defaults);
+          let initialJson = {};
+          try {
+            initialJson = buildToolArgs(payload.artifact && payload.artifact.argsSchema, defaults);
+          } catch {
+            initialJson = Object.fromEntries(
+              Object.entries(defaults).filter(([, value]) => value !== "")
+            );
+          }
+          setRunArgs(JSON.stringify(initialJson, null, 2));
+          const history = await api.use({ action: "history", artifact_id: id, limit: 20 });
+          setRunHistory(history.executions || []);
+        }
+        return payload;
       } catch (error) {
         if (sequence === inspectSequence.current) dispatch({ type: "load-error", error });
       }
@@ -13120,18 +13285,44 @@
         setBusy(false);
       }
     };
+    const executeArtifact = async (artifactToRun, args, normalizedTarget = {}) => {
+      const capability = toolExecutionCapabilities(artifactToRun);
+      const operation = capability.operation;
+      if (!capability.directRun || !operation) return;
+      setBusy(true);
+      setRunResult(null);
+      setRunJob(null);
+      try {
+        const started = await startToolPlan(api, {
+          artifactId: artifactToRun.id,
+          operation,
+          args,
+          target: normalizedTarget
+        });
+        const completed = await waitForToolExecution(api, started, {
+          onProgress: setRunJob
+        });
+        await refreshAndInspect(artifactToRun.id);
+        setRunJob(completed);
+        setRunResult(completed);
+      } catch (error) {
+        dispatch({ type: "load-error", error });
+      } finally {
+        setBusy(false);
+      }
+    };
     const execute = async () => {
       if (!artifact) return;
       let args;
       try {
-        args = asObject(runArgs);
-      } catch {
+        args = advancedJson ? asObject(runArgs) : buildToolArgs(artifact.argsSchema, runForm);
+      } catch (error) {
         dispatch({ type: "load-error", error: new Error(t.invalidArgs) });
         return;
       }
-      const operation = artifact.kind === "expression" ? "apply" : "execute";
+      const capability = toolExecutionCapabilities(artifact);
       let normalizedTarget = {};
-      if (operation === "apply") {
+      if (capability.operation === "apply") {
         try {
           normalizedTarget = normalizeExpressionTarget(target);
         } catch {
@@ -13139,20 +13330,28 @@
           return;
         }
       }
-      setBusy(true);
+      await executeArtifact(artifact, args, normalizedTarget);
+    };
+    const inspectForRun = async (row) => {
+      if (busy || !row) return;
+      const payload = await inspect(row.id);
+      const inspectedArtifact = payload && payload.artifact;
+      const capability = toolExecutionCapabilities(inspectedArtifact);
+      if (!capability.directRun || capability.requiresTarget) return;
+      const defaults = initialToolArgs(inspectedArtifact.argsSchema);
       try {
-        const result = await executeToolPlan(api, {
-          artifactId: artifact.id,
-          operation,
-          args,
-          target: normalizedTarget
-        });
-        setRunResult(result);
-        await refreshAndInspect(artifact.id);
+        const args = buildToolArgs(inspectedArtifact.argsSchema, defaults);
+        await executeArtifact(inspectedArtifact, args);
+      } catch {
+      }
+    };
+    const cancelExecution = async () => {
+      if (!runJob || runJob.terminal) return;
+      try {
+        const next = await api.use({ action: "cancel", execution_id: runJob.executionId });
+        setRunJob(next);
       } catch (error) {
         dispatch({ type: "load-error", error });
-      } finally {
-        setBusy(false);
       }
     };
     const previewImport = async () => {
@@ -13191,6 +13390,7 @@
         const payload = await api.index({
           statuses: ["candidate", "saved", "pinned"],
           include_candidates: true,
+          developer_mode: developerMode,
           limit: 100
         });
         dispatch({ type: "load-success", payload });
@@ -13222,19 +13422,21 @@
     const source = artifactSource(artifact);
     const editable = canEditArtifact(artifact);
     const execution = toolExecutionCapabilities(artifact);
-    const executable = execution.render || execution.execute || execution.apply;
+    const executable = execution.render || execution.directRun;
+    const argFields = toolArgFields(artifact && artifact.argsSchema);
     return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-screen", children: [
       /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("header", { className: "tools-header", children: [
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-header__title", children: t.library }),
         /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-header__actions", children: [
           /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "primary", icon: "plus", onClick: () => dispatch({ type: "edit-start", editor: { mode: "create", artifact: null } }), children: t.new }),
           /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "download", onClick: previewImport, disabled: busy, children: t.import }),
-          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "external-link", onClick: exportPackage, disabled: busy || !state.summaries.length, children: t.export })
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "secondary", icon: "external-link", onClick: exportPackage, disabled: busy || !state.summaries.length, children: t.export }),
+          /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: developerMode ? "danger" : "ghost", onClick: () => setDeveloperMode((value) => !value), disabled: busy, children: t.developerTools })
         ] })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-filters", children: [
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: state.query, onChange: (value) => dispatch({ type: "set-query", value }), placeholder: t.search }),
-        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: state.kinds[0] || "", onChange: (value) => dispatch({ type: "set-filter", key: "kinds", value: value ? [value] : [] }), options: KIND_OPTIONS2.map((value) => ({ value, label: value || t.allKinds })) }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: state.kinds[0] || "", onChange: (value) => dispatch({ type: "set-filter", key: "kinds", value: value ? [value] : [] }), options: KIND_OPTIONS2.filter((value) => developerMode || value !== "system-command").map((value) => ({ value, label: value || t.allKinds })) }),
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: state.category, onChange: (value) => dispatch({ type: "set-filter", key: "category", value }), placeholder: t.category }),
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: state.risk, onChange: (value) => dispatch({ type: "set-filter", key: "risk", value }), options: RISK_OPTIONS2.map((value) => ({ value, label: value || t.allRisk })) }),
         /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: statusValue, onChange: (value) => dispatch({ type: "set-filter", key: "statuses", value: value.split(",").filter(Boolean) }), options: [
@@ -13260,6 +13462,8 @@
             artifact: row,
             selected: row.id === state.selectedId,
             onSelect: inspect,
+            onRun: inspectForRun,
+            runDisabled: busy,
             lang
           },
           row.id
@@ -13297,6 +13501,8 @@
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.status }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Source" }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: source }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Runtime" }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: execution.runtime || "\u2014" }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dt", { children: "Hash" }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("dd", { children: artifact.contentHash })
             ] })
@@ -13307,7 +13513,36 @@
           ] }),
           executable ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
             /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.args }),
-            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { mono: true, value: runArgs, onChange: setRunArgs, rows: 4 }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-runner__actions", children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { size: "sm", variant: "ghost", onClick: () => setAdvancedJson((value) => !value), disabled: busy, children: advancedJson ? t.formView : t.advancedJson }) }),
+            advancedJson ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { mono: true, value: runArgs, onChange: setRunArgs, rows: 4 }) : /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-runner__form", children: argFields.length ? argFields.map((field) => {
+              var _a;
+              return /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: `${field.name}${field.required ? " *" : ""}`, children: field.type === "boolean" ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+                Select,
+                {
+                  value: String(Boolean(runForm[field.name])),
+                  onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: value === "true" })),
+                  options: [{ value: "false", label: "false" }, { value: "true", label: "true" }]
+                }
+              ) : field.enum ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+                Select,
+                {
+                  value: runForm[field.name] === "" ? "" : JSON.stringify(runForm[field.name]),
+                  onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: JSON.parse(value) })),
+                  options: [
+                    ...!field.required ? [{ value: "", label: "\u2014" }] : [],
+                    ...field.enum.map((value) => ({ value: JSON.stringify(value), label: String(value) }))
+                  ]
+                }
+              ) : /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+                Input,
+                {
+                  value: (_a = runForm[field.name]) != null ? _a : "",
+                  type: ["number", "integer"].includes(field.type) ? "number" : "text",
+                  disabled: !field.supported,
+                  onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: value }))
+                }
+              ) }, field.name);
+            }) : /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: "{}" }) }),
             artifact.kind === "expression" ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-runner__target", children: [
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.compId, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: target.compId, onChange: (value) => setTarget((current) => ({ ...current, compId: value })) }) }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.layerId, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: target.layerId, onChange: (value) => setTarget((current) => ({ ...current, layerId: value })) }) }),
@@ -13315,12 +13550,27 @@
             ] }) : null,
             /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-runner__actions", children: [
               execution.render ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "secondary", onClick: renderAndCopy, disabled: busy, children: t.renderCopy }) : null,
-              execution.execute || execution.apply ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy, children: t.run }) : null
+              execution.directRun ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy, children: t.run }) : null,
+              runJob && !runJob.terminal ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "danger", onClick: cancelExecution, children: t.cancelRun }) : null
             ] }),
+            runJob ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { children: [
+              t.progress,
+              ": ",
+              runJob.progress,
+              "% \xB7 ",
+              runJob.status
+            ] }) : null,
             runResult ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.result }),
               /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: JSON.stringify(runResult, null, 2) })
+            ] }) : null,
+            runHistory.length ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(import_react40.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.history }),
+              /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("pre", { className: "tools-content", children: JSON.stringify(runHistory, null, 2) })
             ] }) : null
+          ] }) : execution.disabledReason ? /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("h3", { children: t.incompatible }),
+            /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("p", { children: execution.disabledReason.message })
           ] }) : null
         ] }) })
       ] }),

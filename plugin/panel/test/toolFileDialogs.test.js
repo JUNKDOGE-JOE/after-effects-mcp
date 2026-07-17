@@ -16,7 +16,9 @@ test('chooseToolPackage passes the exact CEP open-dialog contract', () => {
   assert.equal(chooseToolPackage(cepFs, {
     title: 'Import tools', initialPath: 'C:\\Tools', normalizePath: (value) => value.replaceAll('\\', '/'),
   }), 'C:/Tools/in.aemcptools');
-  assert.deepEqual(calls, [[false, false, 'Import tools', 'C:\\Tools', ['aemcptools']]]);
+  assert.deepEqual(calls, [[false, false, 'Import tools', 'C:\\Tools', [
+    'aemcptools', 'ps1', 'psm1', 'bat', 'cmd', 'sh', 'command',
+  ]]]);
 });
 
 test('chooseToolPackage returns null on cancel and rejects wrong extensions', () => {
@@ -26,6 +28,9 @@ test('chooseToolPackage returns null on cancel and rejects wrong extensions', ()
   assert.throws(() => chooseToolPackage({
     showOpenDialog: () => ({ err: 0, data: ['/tmp/tools.zip'] }),
   }), /\.aemcptools/i);
+  assert.equal(chooseToolPackage({
+    showOpenDialog: () => ({ err: 0, data: ['/tmp/developer.ps1'] }),
+  }), '/tmp/developer.ps1');
 });
 
 test('chooseToolExportPath normalizes cancellation and appends the extension', () => {

@@ -4,6 +4,8 @@ import {
   createToolsApi,
   executeToolPlan,
   parseMcpPayload,
+  startToolPlan,
+  waitForToolExecution,
 } from '../src/cep/toolsApi.js';
 
 test('Tools API uses exact progressive and mutation tool names', async () => {
@@ -58,6 +60,47 @@ test('Tools API uses exact progressive and mutation tool names', async () => {
   assert.deepEqual(calls[13].args, {
     artifact_ids: ['user:1'], out_path: '/tmp/out.aemcptools',
   });
+});
+
+test('startToolPlan uses once approval and returns one server job', async () => {
+  const calls = [];
+  const api = {
+    async use(input) {
+      calls.push(input);
+      if (input.action === 'prepare') return { planHash: 'plan-1' };
+      if (input.action === 'grant') return { grantId: 'grant-1' };
+      return { executionId: 'execution-1', status: 'queued', terminal: false };
+    },
+  };
+  const started = await startToolPlan(api, {
+    artifactId: 'user:1', operation: 'execute', args: { amount: 2 }, target: {},
+  });
+  assert.equal(started.executionId, 'execution-1');
+  assert.deepEqual(calls.map((value) => value.action), ['prepare', 'grant', 'start']);
+  assert.equal(calls[1].grant_scope, 'once');
+});
+
+test('waitForToolExecution reports late terminal completion without a second start', async () => {
+  const calls = [];
+  const states = [
+    { executionId: 'execution-1', status: 'running', progress: 25, terminal: false },
+    { executionId: 'execution-1', status: 'succeeded', progress: 100, terminal: true },
+  ];
+  const progress = [];
+  const result = await waitForToolExecution({
+    async use(input) {
+      calls.push(input);
+      return states.shift();
+    },
+  }, { executionId: 'execution-1', status: 'queued', progress: 0, terminal: false }, {
+    wait: async () => {}, onProgress: (value) => progress.push(value.status),
+  });
+  assert.equal(result.status, 'succeeded');
+  assert.deepEqual(progress, ['queued', 'running', 'succeeded']);
+  assert.deepEqual(calls, [
+    { action: 'status', execution_id: 'execution-1' },
+    { action: 'status', execution_id: 'execution-1' },
+  ]);
 });
 
 test('parseMcpPayload joins text blocks and preserves structured errors', () => {

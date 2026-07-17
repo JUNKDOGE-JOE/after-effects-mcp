@@ -118,9 +118,11 @@ def plan_decision(tier: str, risk: str) -> PlanDecision:
     return "allow"
 
 
-def build_plan_elicitation_schema(plan: "ExecutionPlan") -> dict[str, object]:
+def build_plan_elicitation_schema(
+    plan: "ExecutionPlan", *, requested_scope: PlanAuthorization | None = None
+) -> dict[str, object]:
     decisions = ["once", "deny"]
-    if plan.risk == "write":
+    if plan.risk == "write" and requested_scope != "once":
         decisions.insert(1, "session")
     return {
         "type": "object",
@@ -137,7 +139,12 @@ def build_plan_elicitation_schema(plan: "ExecutionPlan") -> dict[str, object]:
     }
 
 
-async def authorize_plan(plan: "ExecutionPlan", ctx: Any) -> PlanAuthorization:
+async def authorize_plan(
+    plan: "ExecutionPlan",
+    ctx: Any,
+    *,
+    requested_scope: PlanAuthorization | None = None,
+) -> PlanAuthorization:
     decision = plan_decision(current_tool_tier(), plan.risk)
     if decision == "allow":
         return "once"
@@ -157,7 +164,9 @@ async def authorize_plan(plan: "ExecutionPlan", ctx: Any) -> PlanAuthorization:
     try:
         result = await elicit(
             message=f"Approve Tool Library action for {plan.artifact_id} ({plan.risk})?",
-            requestedSchema=build_plan_elicitation_schema(plan),
+            requestedSchema=build_plan_elicitation_schema(
+                plan, requested_scope=requested_scope
+            ),
             related_request_id=getattr(ctx, "request_id", None),
         )
     except Exception as exc:

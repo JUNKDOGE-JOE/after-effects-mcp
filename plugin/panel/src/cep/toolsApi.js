@@ -39,7 +39,10 @@ export function createToolsApi(mcp) {
   return {
     index: (args = {}) => call('ae_toolIndex', args),
     search: (args = {}) => call('ae_toolSearch', args),
-    inspect: (artifactId) => call('ae_toolInspect', { artifact_id: artifactId }),
+    inspect: (artifactId, options = {}) => call('ae_toolInspect', {
+      artifact_id: artifactId,
+      ...options,
+    }),
     create: (input) => call('ae_toolCreate', input),
     edit: (input) => call('ae_toolEdit', input),
     delete: (input) => call('ae_toolDelete', input),
@@ -83,4 +86,44 @@ export async function executeToolPlan(api, {
     plan_hash: plan.planHash,
     grant_id: grant.grantId,
   });
+}
+
+export async function startToolPlan(api, {
+  artifactId,
+  operation,
+  args = {},
+  target = {},
+}) {
+  const plan = await api.use({
+    artifact_id: artifactId,
+    action: 'prepare',
+    operation,
+    args,
+    target,
+  });
+  const grant = await api.use({
+    action: 'grant',
+    plan_hash: plan.planHash,
+    grant_scope: 'once',
+  });
+  return api.use({
+    action: 'start',
+    plan_hash: plan.planHash,
+    grant_id: grant.grantId,
+  });
+}
+
+export async function waitForToolExecution(api, execution, {
+  pollIntervalMs = 250,
+  onProgress = () => {},
+  wait = (milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)),
+} = {}) {
+  let current = execution;
+  onProgress(current);
+  while (!current.terminal) {
+    await wait(pollIntervalMs);
+    current = await api.use({ action: 'status', execution_id: current.executionId });
+    onProgress(current);
+  }
+  return current;
 }

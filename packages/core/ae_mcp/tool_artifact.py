@@ -21,7 +21,7 @@ JsonValue: TypeAlias = (
     None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 )
 ArtifactKind: TypeAlias = Literal[
-    "jsx", "expression", "prompt-skill", "recipe", "diagnostic"
+    "jsx", "expression", "prompt-skill", "recipe", "diagnostic", "system-command"
 ]
 ArtifactStatus: TypeAlias = Literal[
     "candidate", "saved", "pinned", "archived", "deprecated"
@@ -56,7 +56,9 @@ class DiagnosticContent(TypedDict):
 ArtifactContent: TypeAlias = str | RecipeContent | DiagnosticContent
 
 
-_KINDS = frozenset({"jsx", "expression", "prompt-skill", "recipe", "diagnostic"})
+_KINDS = frozenset(
+    {"jsx", "expression", "prompt-skill", "recipe", "diagnostic", "system-command"}
+)
 _STATUSES = frozenset({"candidate", "saved", "pinned", "archived", "deprecated"})
 _RISKS = ("read", "write", "destructive", "external")
 _SOURCE_TYPES = frozenset({"user", "legacy", "bundled", "chat-tool-call", "imported"})
@@ -377,7 +379,7 @@ def _validate_recipe_tool(ref: str, args: Mapping[str, JsonValue]) -> None:
 
 
 def _validate_content(kind: ArtifactKind, value: Any) -> ArtifactContent:
-    if kind in {"jsx", "expression", "prompt-skill"}:
+    if kind in {"jsx", "expression", "prompt-skill", "system-command"}:
         if not isinstance(value, str):
             raise ValueError(f"{kind} content must be a string")
         return value
@@ -518,6 +520,8 @@ class ToolArtifact:
         risk = data["declaredRisk"]
         if risk not in _RISKS:
             raise ValueError("artifact declaredRisk is unsupported")
+        if kind == "system-command" and risk != "external":
+            raise ValueError("system-command artifacts must declare external risk")
         artifact_id = _string(
             data["id"], label="artifact id", max_length=256, allow_empty=False
         )
@@ -692,6 +696,8 @@ class ToolArtifactDraft:
         )
         if self.declared_risk not in _RISKS:
             raise ValueError("artifact declaredRisk is unsupported")
+        if self.kind == "system-command" and self.declared_risk != "external":
+            raise ValueError("system-command artifacts must declare external risk")
         if not isinstance(self.source, ToolSource):
             raise ValueError("artifact source must be a ToolSource")
         if self.status not in {"candidate", "saved"}:

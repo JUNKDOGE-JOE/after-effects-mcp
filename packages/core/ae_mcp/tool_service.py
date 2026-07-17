@@ -186,6 +186,27 @@ class _ToolArtifactStoreView(ToolArtifactStore):
             return self.native.get(artifact_id, include_content=include_content)
         return self.legacy.get(artifact_id)
 
+    def record_use(
+        self,
+        artifact_id: str,
+        *,
+        expected_content_hash: str,
+        used_at: int,
+    ) -> ToolArtifact:
+        if self._is_native(artifact_id):
+            return self.native.record_use(
+                artifact_id,
+                expected_content_hash=expected_content_hash,
+                used_at=used_at,
+            )
+        updated = self.legacy.record_use(
+            artifact_id,
+            expected_content_hash=expected_content_hash,
+            used_at=used_at,
+        )
+        self._publish(StoreMutation("use", (artifact_id,), self.store_revision()))
+        return updated
+
     def create(
         self,
         draft: ToolArtifactDraft,
