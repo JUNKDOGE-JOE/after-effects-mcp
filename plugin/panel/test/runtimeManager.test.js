@@ -11,6 +11,8 @@ import { createMacosAdapter } from '../src/cep/platform/macos.js';
 import { createRuntimeManager } from '../src/cep/runtimeManager.js';
 
 const execFileAsync = promisify(execFile);
+// These fixtures execute POSIX launchers and intentionally model macOS path semantics.
+const macosRuntimeTest = process.platform === 'win32' ? test.skip : test;
 
 function sha256(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
@@ -161,7 +163,7 @@ function managerFor(h, extensionRoot, options = {}) {
   });
 }
 
-test('clean macOS install activates and starts the bundled core without PATH tools', async (t) => {
+macosRuntimeTest('clean macOS install activates and starts the bundled core without PATH tools', async (t) => {
   const h = await harness(t);
   const payload = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'clean',
@@ -185,7 +187,7 @@ test('clean macOS install activates and starts the bundled core without PATH too
   assert.equal((await manager.inspect()).ok, true);
 });
 
-test('upgrade, downgrade, and rollback atomically select verified versions', async (t) => {
+macosRuntimeTest('upgrade, downgrade, and rollback atomically select verified versions', async (t) => {
   const h = await harness(t);
   const v1 = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'one',
@@ -219,7 +221,7 @@ test('upgrade, downgrade, and rollback atomically select verified versions', asy
   assert.equal(state.previous.record.version, '0.10.0');
 });
 
-test('a corrupt current runtime falls back once, then a later call repairs from the offline payload', async (t) => {
+macosRuntimeTest('a corrupt current runtime falls back once, then a later call repairs from the offline payload', async (t) => {
   const h = await harness(t);
   const v1 = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'one',
@@ -251,7 +253,7 @@ test('a corrupt current runtime falls back once, then a later call repairs from 
   assert.equal((await two.inspect()).ok, true);
 });
 
-test('a launcher contract change cannot publish a mixed launcher/runtime selection', async (t) => {
+macosRuntimeTest('a launcher contract change cannot publish a mixed launcher/runtime selection', async (t) => {
   const h = await harness(t);
   const v1 = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'one', launcherVersion: 'v1',
@@ -275,7 +277,7 @@ test('a launcher contract change cannot publish a mixed launcher/runtime selecti
   assert.match(launched.stdout, /core-started:one:-B -I -m ae_mcp --unchanged/);
 });
 
-test('a corrupt extension update retains the previously verified active runtime', async (t) => {
+macosRuntimeTest('a corrupt extension update retains the previously verified active runtime', async (t) => {
   const h = await harness(t);
   const payload = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'retained',
@@ -297,7 +299,7 @@ test('a corrupt extension update retains the previously verified active runtime'
   assert.match(launched.stdout, /core-started:retained:-B -I -m ae_mcp --after-corrupt-update/);
 });
 
-test('repair creates a fresh verified generation and uninstall removes active pointers', async (t) => {
+macosRuntimeTest('repair creates a fresh verified generation and uninstall removes active pointers', async (t) => {
   const h = await harness(t);
   const payload = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'repair',
@@ -315,7 +317,7 @@ test('repair creates a fresh verified generation and uninstall removes active po
   await assert.rejects(fs.promises.lstat(h.platform.paths.launcher), { code: 'ENOENT' });
 });
 
-test('concurrent panel launches serialize on the process-safe runtime lock', async (t) => {
+macosRuntimeTest('concurrent panel launches serialize on the process-safe runtime lock', async (t) => {
   const h = await harness(t);
   const payload = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'concurrent',
@@ -330,7 +332,7 @@ test('concurrent panel launches serialize on the process-safe runtime lock', asy
   await assert.rejects(fs.promises.lstat(path.join(h.platform.paths.runtimeRoot, '.runtime-manager.lock')), { code: 'ENOENT' });
 });
 
-test('concurrent cold-start checks on one panel share a single RuntimeManager activation', async (t) => {
+macosRuntimeTest('concurrent cold-start checks on one panel share a single RuntimeManager activation', async (t) => {
   const h = await harness(t);
   const payload = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'shared-cold-start',
@@ -347,7 +349,7 @@ test('concurrent cold-start checks on one panel share a single RuntimeManager ac
   assert.equal((await manager.inspect()).ok, true);
 });
 
-test('a held lock fails with an actionable bounded diagnostic', async (t) => {
+macosRuntimeTest('a held lock fails with an actionable bounded diagnostic', async (t) => {
   const h = await harness(t);
   const payload = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'locked',
