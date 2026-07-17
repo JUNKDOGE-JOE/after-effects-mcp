@@ -299,6 +299,7 @@ class ExecutionJobStore:
         ]
         unprotected.sort(
             key=lambda row: (
+                cast(int, row["finishedAt"]),
                 cast(int, row["createdAt"]),
                 cast(str, row["executionId"]),
             ),

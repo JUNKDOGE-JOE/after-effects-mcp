@@ -1686,6 +1686,29 @@ def test_just_completed_reservation_survives_full_history_pruning(
     assert stored["status"] == "succeeded"
     assert len(store.snapshot()) == 2
 
+    # A later history write must not immediately evict the long-running
+    # operation merely because it was created before the retention window.
+    store.upsert(
+        {
+            "executionId": "execution-newer-complete-2",
+            "operationId": "operation-newer-complete-2",
+            "artifactId": "user:one",
+            "contentHash": "a" * 64,
+            "artifactRevision": 1,
+            "planHash": "e" * 64,
+            "operation": "execute",
+            "initiator": "other-core",
+            "status": "succeeded",
+            "createdAt": 202,
+            "startedAt": 202,
+            "finishedAt": 202,
+            "cancelRequested": False,
+            "result": {"ok": True},
+            "error": None,
+            "audit": None,
+        }
+    )
+
     duplicate = store.claim(
         {
             **queued,
