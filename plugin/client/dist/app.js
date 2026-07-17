@@ -9926,6 +9926,7 @@
     onApplyPort,
     mcpConfig,
     mcpCommand = "ae-mcp",
+    mcpReady = true,
     logs = [],
     clients = [],
     onBlockClient,
@@ -10083,16 +10084,16 @@
         ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.mcp, caption: copied === "mcp" ? t.copied : null, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 160, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)" }, children: mcpConfig }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "copy", onClick: () => copy("mcp", mcpConfig), children: t.copy })
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", icon: "copy", disabled: !mcpReady, onClick: () => copy("mcp", mcpConfig), children: t.copy })
         ] }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Section, { id: "externalClients", title: t.externalClients, caption: t.externalClientsCap, expanded: sections.externalClients, onToggle: onToggleSection, children: EXTERNAL_CLIENTS.map((externalClient) => {
-        const configText = JSON.stringify(mcpConfigFor(
+        const configText = mcpReady ? JSON.stringify(mcpConfigFor(
           externalClient,
           Number(draftPort) || port || 11488,
           expertGuidance,
           mcpCommand
-        ), null, 2);
+        ), null, 2) : "";
         return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ExternalClientRow,
           {
@@ -10697,6 +10698,7 @@
     clientName = "Claude Desktop",
     mcpConfig = "",
     mcpCommand = "ae-mcp",
+    mcpReady = true,
     port = 11488,
     expertGuidance = true,
     onNext,
@@ -10716,7 +10718,7 @@
     const t = W[lang] || W.zh;
     const clientOptions = [{ id: "builtin", name: "builtin" }, ...EXTERNAL_CLIENTS];
     const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
-    const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance, mcpCommand), null, 2) : "";
+    const selectedMcpConfig = mcpReady && selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance, mcpCommand), null, 2) : "";
     return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
@@ -10763,7 +10765,7 @@
             },
             c.id
           )) }),
-          selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }) : null,
+          selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" && selectedMcpConfig ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }) : null,
           selectedExternalClient && selectedExternalClient.kind === "mcp-doc" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, padding: 10, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("a", { href: selectedExternalClient.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.docClient }),
             selectedExternalClient.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: selectedExternalClient.networkNote }) : null
@@ -35387,6 +35389,28 @@ ${baseUrl}`),
       return platform.fs.existsSync(debugMarker) && !platform.fs.existsSync(bundleManifest);
     }, [extRoot, platform]);
     const runtimeManager = import_react45.default.useMemo(() => platform.id === "macos-arm64" && !developmentRuntimeFallback ? createRuntimeManager({ platform, extensionRoot: extRoot }) : null, [developmentRuntimeFallback, extRoot, platform]);
+    const [runtimeActivation, setRuntimeActivation] = import_react45.default.useState(() => ({
+      state: runtimeManager ? "starting" : "ready",
+      result: null,
+      error: null
+    }));
+    import_react45.default.useEffect(() => {
+      if (!runtimeManager) {
+        setRuntimeActivation({ state: "ready", result: null, error: null });
+        return void 0;
+      }
+      let alive = true;
+      setRuntimeActivation({ state: "starting", result: null, error: null });
+      runtimeManager.ensureReady().then((result) => {
+        if (alive) setRuntimeActivation({ state: "ready", result, error: null });
+      }).catch((error) => {
+        if (alive) setRuntimeActivation({ state: "error", result: null, error });
+      });
+      return () => {
+        alive = false;
+      };
+    }, [runtimeManager]);
+    const runtimeReady = runtimeActivation.state === "ready";
     const mcpCommand = runtimeManager ? platform.paths.launcher : "ae-mcp";
     const resolvePanelNode = import_react45.default.useCallback(
       ({ platform: requestedPlatform } = {}) => runtimeManager ? runtimeManager.resolveNode() : resolveSystemNode({ platform: requestedPlatform || platform }),
@@ -36050,11 +36074,11 @@ ${baseUrl}`),
       markWizardDone(window.localStorage);
       setWizardDone(true);
     };
-    const mcpConfigStr = JSON.stringify(buildMcpConfig(
+    const mcpConfigStr = runtimeReady ? JSON.stringify(buildMcpConfig(
       status.port,
       expertGuidance,
       mcpCommand
-    ), null, 2);
+    ), null, 2) : "";
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
     const wizard = useWizardWiring({
       extRoot,
@@ -36076,6 +36100,7 @@ ${baseUrl}`),
           clientName: (CLIENT_NAMES[wizClient] || CLIENT_NAMES["claude-desktop"])[lang],
           mcpConfig: mcpConfigStr,
           mcpCommand,
+          mcpReady: runtimeReady,
           port: status.port,
           expertGuidance,
           channels,
@@ -36176,6 +36201,7 @@ ${baseUrl}`),
             onApplyPort: applyPort,
             mcpConfig: mcpConfigStr,
             mcpCommand,
+            mcpReady: runtimeReady,
             logs,
             clients,
             onBlockClient: (label, v) => {

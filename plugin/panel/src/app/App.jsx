@@ -577,6 +577,26 @@ function Shell({ cs }) {
       ? createRuntimeManager({ platform, extensionRoot: extRoot })
       : null
   ), [developmentRuntimeFallback, extRoot, platform]);
+  const [runtimeActivation, setRuntimeActivation] = React.useState(() => ({
+    state: runtimeManager ? 'starting' : 'ready',
+    result: null,
+    error: null,
+  }));
+  React.useEffect(() => {
+    if (!runtimeManager) {
+      setRuntimeActivation({ state: 'ready', result: null, error: null });
+      return undefined;
+    }
+    let alive = true;
+    setRuntimeActivation({ state: 'starting', result: null, error: null });
+    runtimeManager.ensureReady().then((result) => {
+      if (alive) setRuntimeActivation({ state: 'ready', result, error: null });
+    }).catch((error) => {
+      if (alive) setRuntimeActivation({ state: 'error', result: null, error });
+    });
+    return () => { alive = false; };
+  }, [runtimeManager]);
+  const runtimeReady = runtimeActivation.state === 'ready';
   const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
   const resolvePanelNode = React.useCallback(
     ({ platform: requestedPlatform } = {}) => (runtimeManager
@@ -1288,11 +1308,11 @@ function Shell({ cs }) {
     setWizardDone(true);
   };
 
-  const mcpConfigStr = JSON.stringify(buildMcpConfig(
+  const mcpConfigStr = runtimeReady ? JSON.stringify(buildMcpConfig(
     status.port,
     expertGuidance,
     mcpCommand,
-  ), null, 2);
+  ), null, 2) : '';
   const claudeStatus = probe === null ? { state: 'checking' }
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
@@ -1317,6 +1337,7 @@ function Shell({ cs }) {
         clientName={(CLIENT_NAMES[wizClient] || CLIENT_NAMES['claude-desktop'])[lang]}
         mcpConfig={mcpConfigStr}
         mcpCommand={mcpCommand}
+        mcpReady={runtimeReady}
         port={status.port}
         expertGuidance={expertGuidance}
         channels={channels}
@@ -1412,6 +1433,7 @@ function Shell({ cs }) {
             onApplyPort={applyPort}
             mcpConfig={mcpConfigStr}
             mcpCommand={mcpCommand}
+            mcpReady={runtimeReady}
             logs={logs}
             clients={clients}
             onBlockClient={(label, v) => {

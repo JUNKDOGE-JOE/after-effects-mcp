@@ -142,6 +142,7 @@ export function WizardScreen({
   clientName = 'Claude Desktop',
   mcpConfig = '',
   mcpCommand = 'ae-mcp',
+  mcpReady = true,
   port = 11488,
   expertGuidance = true,
   onNext,
@@ -163,7 +164,7 @@ export function WizardScreen({
   const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
   // Prefer the per-client config (so ZCode shows its mcp.servers format, etc.);
   // fall back to the generic connection config passed from App.
-  const selectedMcpConfig = selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio'
+  const selectedMcpConfig = mcpReady && selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio'
     ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance, mcpCommand), null, 2)
     : '';
   return (
@@ -229,7 +230,7 @@ export function WizardScreen({
                 />
               ))}
             </div>
-            {selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio' ? <CodeBlock code={selectedMcpConfig} copyLabel={t.copy} onCopy={() => (onCopy ? onCopy(selectedMcpConfig) : copyText(selectedMcpConfig))} maxHeight={150} /> : null}
+            {selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio' && selectedMcpConfig ? <CodeBlock code={selectedMcpConfig} copyLabel={t.copy} onCopy={() => (onCopy ? onCopy(selectedMcpConfig) : copyText(selectedMcpConfig))} maxHeight={150} /> : null}
             {selectedExternalClient && selectedExternalClient.kind === 'mcp-doc' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-panel)' }}>
                 <a href={selectedExternalClient.docsUrl} target="_blank" rel="noreferrer" style={{ font: '500 12px/1.35 var(--font-ui)', color: 'var(--accent)' }}>{t.docClient}</a>

@@ -284,6 +284,7 @@ export function SettingsScreen({
   onApplyPort,
   mcpConfig,
   mcpCommand = 'ae-mcp',
+  mcpReady = true,
   logs = [],
   clients = [],
   onBlockClient,
@@ -470,19 +471,19 @@ export function SettingsScreen({
         <Field label={t.mcp} caption={copied === 'mcp' ? t.copied : null}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <pre style={{ margin: 0, maxHeight: 160, overflow: 'auto', padding: 8, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', color: 'var(--text-secondary)', font: '400 10px/1.4 var(--font-mono)' }}>{mcpConfig}</pre>
-            <Button variant="secondary" icon="copy" onClick={() => copy('mcp', mcpConfig)}>{t.copy}</Button>
+            <Button variant="secondary" icon="copy" disabled={!mcpReady} onClick={() => copy('mcp', mcpConfig)}>{t.copy}</Button>
           </div>
         </Field>
       </Section>
 
       <Section id="externalClients" title={t.externalClients} caption={t.externalClientsCap} expanded={sections.externalClients} onToggle={onToggleSection}>
         {EXTERNAL_CLIENTS.map((externalClient) => {
-          const configText = JSON.stringify(mcpConfigFor(
+          const configText = mcpReady ? JSON.stringify(mcpConfigFor(
             externalClient,
             Number(draftPort) || port || 11488,
             expertGuidance,
             mcpCommand,
-          ), null, 2);
+          ), null, 2) : '';
           return (
             <ExternalClientRow
               key={externalClient.id}
