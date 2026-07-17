@@ -111,12 +111,14 @@ test('runDiagnostics reports bundled runtime and optional CLI resolutions with s
 
 test('runDiagnostics reports RuntimeManager provenance and corruption diagnostics', async () => {
   const deps = makeDeps();
+  const selectedRuntime = { action: 'ready', relative: 'example/macos-arm64' };
   const runtimeManager = {
     async resolveNode() {
       return {
         ok: true,
         version: '24.17.0',
         nodePath: '/Users/tester/.ae-mcp/runtime/example/macos-arm64/node/bin/node',
+        runtime: selectedRuntime,
       };
     },
     async inspect() {
@@ -135,6 +137,7 @@ test('runDiagnostics reports RuntimeManager provenance and corruption diagnostic
   assert.equal(runtime.ok, true);
   assert.match(runtime.detail, /0\.9\.3.*[a-f0-9]{40}/);
   assert.match(healthy.find((item) => item.id === 'node').detail, /24\.17\.0.*runtime/);
+  assert.equal(healthy.find((item) => item.id === 'node').runtime, selectedRuntime);
 
   runtimeManager.inspect = async () => ({
     ok: false,

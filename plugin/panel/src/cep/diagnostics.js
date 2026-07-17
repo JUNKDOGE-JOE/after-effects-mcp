@@ -190,6 +190,7 @@ export async function runDiagnostics({
         id: 'node',
         ok: node.ok,
         detail: node.ok ? [node.version, node.nodePath].filter(Boolean).join(' · ') : node.detail,
+        runtime: node.runtime,
         fixHint: HINTS.node,
         action: { kind: 'repair-runtime' },
       });

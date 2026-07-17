@@ -89,9 +89,7 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, pla
       return { ok, version: versionFrom(claudeStatus) };
     }
     const result = await detectTool(id, { platform, extRoot, runtimeManager });
-    if (result.ok && ['aeMcp', 'node'].includes(id) && runtimeManager && onRuntimeReady) {
-      onRuntimeReady(await runtimeManager.ensureReady());
-    }
+    if (result.ok && result.runtime && onRuntimeReady) onRuntimeReady(result.runtime);
     dispatch({ type: 'detect-result', id, ok: result.ok, version: result.version || '' });
     return result;
   }, [claudeStatus, extRoot, onRuntimeReady, platform, recheckLogin, runtimeManager]);

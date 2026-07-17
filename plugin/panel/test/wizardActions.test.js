@@ -82,6 +82,7 @@ test('detectTool uses RuntimeManager for the bundled production Node', async () 
   const p = platform();
   p.id = 'macos-arm64';
   const calls = [];
+  const runtime = { action: 'ready', relative: 'example/macos-arm64' };
   const result = await detectTool('node', {
     platform: p,
     runtimeManager: {
@@ -91,6 +92,7 @@ test('detectTool uses RuntimeManager for the bundled production Node', async () 
           ok: true,
           version: '24.17.0',
           nodePath: '/Users/a/.ae-mcp/runtime/example/macos-arm64/node/bin/node',
+          runtime,
         };
       },
     },
@@ -99,6 +101,7 @@ test('detectTool uses RuntimeManager for the bundled production Node', async () 
   assert.deepEqual(calls, ['resolveNode']);
   assert.equal(result.ok, true);
   assert.equal(result.source, 'runtime-manager');
+  assert.equal(result.runtime, runtime);
   assert.match(result.path, /node\/bin\/node$/);
   assert.deepEqual(p.calls, []);
 });

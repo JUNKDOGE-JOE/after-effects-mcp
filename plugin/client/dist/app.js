@@ -18031,6 +18031,7 @@
         ok: true,
         nodePath,
         version: "24.17.0",
+        runtime: selected,
         executable: {
           ok: true,
           id: "node",
@@ -33627,7 +33628,7 @@ data: ${JSON.stringify(payload)}
     if (id === "node" && adapter.id === "macos-arm64" && runtimeManager) {
       try {
         const resolved2 = await runtimeManager.resolveNode();
-        return { ok: true, version: resolved2.version, path: resolved2.nodePath, source: "runtime-manager" };
+        return { ok: true, version: resolved2.version, path: resolved2.nodePath, source: "runtime-manager", runtime: resolved2.runtime };
       } catch (error) {
         return { ok: false, detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED" };
       }
@@ -33635,7 +33636,7 @@ data: ${JSON.stringify(payload)}
     if (id === "aeMcp" && adapter.id === "macos-arm64" && (runtimeManager || extRoot)) {
       try {
         const resolved2 = await resolveMcpCommand({ platform: adapter, extRoot, runtimeManager });
-        return { ok: true, version: resolved2.command, path: resolved2.command, source: resolved2.source };
+        return { ok: true, version: resolved2.command, path: resolved2.command, source: resolved2.source, runtime: resolved2.runtime };
       } catch (error) {
         return { ok: false, detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED" };
       }
@@ -33759,9 +33760,7 @@ data: ${JSON.stringify(payload)}
         return { ok, version: versionFrom(claudeStatus) };
       }
       const result = await detectTool(id, { platform, extRoot, runtimeManager });
-      if (result.ok && ["aeMcp", "node"].includes(id) && runtimeManager && onRuntimeReady) {
-        onRuntimeReady(await runtimeManager.ensureReady());
-      }
+      if (result.ok && result.runtime && onRuntimeReady) onRuntimeReady(result.runtime);
       dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
       return result;
     }, [claudeStatus, extRoot, onRuntimeReady, platform, recheckLogin, runtimeManager]);
@@ -34021,6 +34020,7 @@ data: ${JSON.stringify(payload)}
           id: "node",
           ok: node.ok,
           detail: node.ok ? [node.version, node.nodePath].filter(Boolean).join(" \xB7 ") : node.detail,
+          runtime: node.runtime,
           fixHint: HINTS.node,
           action: { kind: "repair-runtime" }
         });
@@ -35438,10 +35438,7 @@ ${baseUrl}`),
     const getMcpSpec = import_react45.default.useCallback(async () => {
       try {
         const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
-        if (runtimeManager) {
-          const result = await runtimeManager.ensureReady();
-          markRuntimeReady(result);
-        }
+        if (runtimeManager && spec.runtime) markRuntimeReady(spec.runtime);
         return withToolApprovalTier(spec, approvalTierFile);
       } catch (error) {
         if (runtimeManager) setRuntimeActivation({ state: "error", result: null, error });
@@ -36061,6 +36058,7 @@ ${baseUrl}`),
       return () => clearInterval(i);
     }, [tab, getHost]);
     const runDiag = import_react45.default.useCallback(async () => {
+      var _a;
       setDiagnostics("running");
       try {
         const items = await runDiagnostics({
@@ -36072,7 +36070,8 @@ ${baseUrl}`),
           runtimeManager,
           allowDevelopmentPath: developmentRuntimeFallback
         });
-        if (runtimeManager) markRuntimeReady(await runtimeManager.ensureReady());
+        const verifiedRuntime = (_a = items.find((item) => item.id === "node" && item.ok && item.runtime)) == null ? void 0 : _a.runtime;
+        if (verifiedRuntime) markRuntimeReady(verifiedRuntime);
         setDiagnostics(items);
       } catch (e) {
         setDiagnostics([{ id: "host-listening", ok: false, detail: String(e && e.message), fixHint: { zh: "\u8BCA\u65AD\u6267\u884C\u5931\u8D25\uFF0C\u91CD\u542F\u9762\u677F\u540E\u91CD\u8BD5\u3002", en: "Diagnostics failed to run; reload the panel and retry." } }]);

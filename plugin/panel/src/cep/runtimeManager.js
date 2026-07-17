@@ -646,6 +646,7 @@ export function createRuntimeManager({
       ok: true,
       nodePath,
       version: '24.17.0',
+      runtime: selected,
       executable: {
         ok: true,
         id: 'node',

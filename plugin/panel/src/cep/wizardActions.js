@@ -14,7 +14,7 @@ export async function detectTool(id, { platform, extRoot, runtimeManager } = {})
   if (id === 'node' && adapter.id === 'macos-arm64' && runtimeManager) {
     try {
       const resolved = await runtimeManager.resolveNode();
-      return { ok: true, version: resolved.version, path: resolved.nodePath, source: 'runtime-manager' };
+      return { ok: true, version: resolved.version, path: resolved.nodePath, source: 'runtime-manager', runtime: resolved.runtime };
     } catch (error) {
       return { ok: false, detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED' };
     }
@@ -22,7 +22,7 @@ export async function detectTool(id, { platform, extRoot, runtimeManager } = {})
   if (id === 'aeMcp' && adapter.id === 'macos-arm64' && (runtimeManager || extRoot)) {
     try {
       const resolved = await resolveMcpCommand({ platform: adapter, extRoot, runtimeManager });
-      return { ok: true, version: resolved.command, path: resolved.command, source: resolved.source };
+      return { ok: true, version: resolved.command, path: resolved.command, source: resolved.source, runtime: resolved.runtime };
     } catch (error) {
       return { ok: false, detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED' };
     }

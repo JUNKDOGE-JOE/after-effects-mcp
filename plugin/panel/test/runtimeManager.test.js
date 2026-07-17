@@ -174,6 +174,8 @@ test('clean macOS install activates and starts the bundled core without PATH too
   assert.match(launched.stdout, /core-started:clean:-I -m ae_mcp --fixture/);
   const node = await manager.resolveNode();
   assert.equal(node.nodePath, path.join(h.platform.paths.runtimeRoot, result.relative, 'node', 'bin', 'node'));
+  assert.equal(node.runtime.relative, result.relative);
+  assert.equal(node.runtime.sourceCommitSha, result.sourceCommitSha);
   assert.equal(node.executable.source, 'runtime-manager');
   assert.equal((await manager.inspect()).ok, true);
 });

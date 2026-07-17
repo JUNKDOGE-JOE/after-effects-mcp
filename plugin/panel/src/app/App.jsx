@@ -624,10 +624,7 @@ function Shell({ cs }) {
   const getMcpSpec = React.useCallback(async () => {
     try {
       const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
-      if (runtimeManager) {
-        const result = await runtimeManager.ensureReady();
-        markRuntimeReady(result);
-      }
+      if (runtimeManager && spec.runtime) markRuntimeReady(spec.runtime);
       return withToolApprovalTier(spec, approvalTierFile);
     } catch (error) {
       if (runtimeManager) setRuntimeActivation({ state: 'error', result: null, error });
@@ -1300,7 +1297,8 @@ function Shell({ cs }) {
         runtimeManager,
         allowDevelopmentPath: developmentRuntimeFallback,
       });
-      if (runtimeManager) markRuntimeReady(await runtimeManager.ensureReady());
+      const verifiedRuntime = items.find((item) => item.id === 'node' && item.ok && item.runtime)?.runtime;
+      if (verifiedRuntime) markRuntimeReady(verifiedRuntime);
       setDiagnostics(items);
     } catch (e) {
       setDiagnostics([{ id: 'host-listening', ok: false, detail: String(e && e.message), fixHint: { zh: '诊断执行失败，重启面板后重试。', en: 'Diagnostics failed to run; reload the panel and retry.' } }]);

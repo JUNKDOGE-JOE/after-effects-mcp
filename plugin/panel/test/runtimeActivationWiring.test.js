@@ -12,9 +12,10 @@ test('runtime activation retries transient lock failures and resynchronizes afte
 
   assert.match(app, /error\.code === 'RUNTIME_MANAGER_LOCKED'/);
   assert.match(app, /setTimeout\(activate, 1000\)/);
-  assert.match(app, /markRuntimeReady\(await runtimeManager\.ensureReady\(\)\)/);
+  assert.match(app, /runtimeManager && spec\.runtime/);
+  assert.match(app, /item\.id === 'node' && item\.ok && item\.runtime/);
   assert.match(app, /onRuntimeReady: markRuntimeReady/);
-  assert.match(wizard, /onRuntimeReady\(await runtimeManager\.ensureReady\(\)\)/);
+  assert.match(wizard, /result\.ok && result\.runtime && onRuntimeReady/);
   assert.match(wizard, /onRuntimeReady\(repaired\)/);
 });
 
