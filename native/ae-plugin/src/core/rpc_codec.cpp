@@ -3990,13 +3990,15 @@ std::vector<std::uint8_t> encode_error_response(const ErrorResponse& response) {
   }
   std::string recovery_action = policy.recovery;
   if (response.recovery_action.has_value()) {
+    const bool property_locator_precondition = response.details.has_value()
+        && response.details->capability_id.has_value()
+        && (*response.details->capability_id == kLayerPropertySetCapability
+          || *response.details->capability_id == kLayerPropertyKeyframesListCapability)
+        && response.details->field.has_value()
+        && *response.details->field == "params.arguments.propertyLocator";
     if (response.code != RpcErrorCode::kPreconditionFailed
         || *response.recovery_action != "change-arguments"
-        || !response.details.has_value()
-        || !response.details->capability_id.has_value()
-        || *response.details->capability_id != kLayerPropertySetCapability
-        || !response.details->field.has_value()
-        || *response.details->field != "params.arguments.propertyLocator") {
+        || !property_locator_precondition) {
       invalid_argument("invalid capability-specific recovery action");
     }
     recovery_action = *response.recovery_action;

@@ -179,6 +179,7 @@ function strictTerminalValidator(request, response, timing) {
 }
 
 test('schema locks strict framing, bounded defaults, rate limits, and native provenance', () => {
+  const protocolReadme = fs.readFileSync(path.join(here, 'README.md'), 'utf8');
   assert.equal(schema.$schema, 'https://json-schema.org/draft/2020-12/schema');
   assert.deepEqual(schema['x-framing'], {
     lengthPrefixBytes: 4,
@@ -191,6 +192,8 @@ test('schema locks strict framing, bounded defaults, rate limits, and native pro
     stringLengthUnit: 'unicode-scalar-values',
     duplicateObjectKeys: 'reject',
   });
+  assert.equal([...protocolReadme.matchAll(/131,072 bytes/gu)].length, 2);
+  assert.doesNotMatch(protocolReadme, /65,536 bytes/u);
   assert.equal(schema['x-lifecycle'].defaultDeadlineMs, 5000);
   assert.equal(schema['x-lifecycle'].maximumDeadlineMs, 30000);
   assert.equal(schema['x-lifecycle'].pagination, 'capability-owned-offset-limit-v1');
@@ -970,6 +973,29 @@ test('every error code has one safe retry/side-effect/recovery tuple', () => {
   cancelled.recovery.retryAfterMs = 250;
   assert.equal(schemaAccepts(schema.$defs.rpcError, cancelled), false);
   assert.equal(validateErrorPolicy(cancelled, schema), false);
+});
+
+test('property-locator preconditions use bounded capability-specific recovery', () => {
+  for (const capabilityId of [
+    'ae.layer.property.set',
+    'ae.layer.property.keyframes.list',
+  ]) {
+    const error = errorVector('PRECONDITION_FAILED');
+    error.details = {
+      capabilityId,
+      field: 'params.arguments.propertyLocator',
+    };
+    error.recovery.action = 'change-arguments';
+    assert.equal(validateErrorPolicy(error, schema), true, capabilityId);
+  }
+
+  const wrongField = errorVector('PRECONDITION_FAILED');
+  wrongField.details = {
+    capabilityId: 'ae.layer.property.keyframes.list',
+    field: 'params.arguments.offset',
+  };
+  wrongField.recovery.action = 'change-arguments';
+  assert.equal(validateErrorPolicy(wrongField, schema), false);
 });
 
 test('request ledger resists poisoning and only replays verified, live, identical reads', () => {

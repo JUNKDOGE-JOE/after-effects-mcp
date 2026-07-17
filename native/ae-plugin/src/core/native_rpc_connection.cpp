@@ -125,14 +125,22 @@ rpc::ErrorResponse error_for(
       capability_id = invoke->capability_id;
     }
   }
-  const bool property_precondition = mapped == RpcErrorCode::kPreconditionFailed
+  const bool set_property_precondition = mapped == RpcErrorCode::kPreconditionFailed
       && capability_id == kLayerPropertySetCapability
       && field == "params.arguments.propertyLocator";
+  const bool keyframe_property_precondition =
+      mapped == RpcErrorCode::kPreconditionFailed
+      && capability_id == kLayerPropertyKeyframesListCapability
+      && field == "params.arguments.propertyLocator";
+  const bool property_precondition =
+      set_property_precondition || keyframe_property_precondition;
   response.code = mapped;
   response.message = std::move(message);
-  response.recovery_hint = property_precondition
-      ? "Choose a non-keyframed supported primitive property and retry with fresh locators."
-      : recovery_hint(mapped);
+  response.recovery_hint = keyframe_property_precondition
+      ? "Copy a keyframeable primitive scalar, vector, or color leaf locator from ae_listLayerProperties."
+      : set_property_precondition
+          ? "Choose a non-keyframed supported primitive property and retry with fresh locators."
+          : recovery_hint(mapped);
   if (property_precondition) response.recovery_action = "change-arguments";
   if (mapped == RpcErrorCode::kQueueFull) response.retry_after_ms = 50;
   if (mapped == RpcErrorCode::kWireVersionMismatch) {

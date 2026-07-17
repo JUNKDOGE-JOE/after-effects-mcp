@@ -2093,6 +2093,64 @@ test('CEP client preserves the complete structured native error contract', {
     );
 });
 
+test('CEP client preserves actionable keyframe property precondition recovery', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const fixture = await endpointFixture(t);
+    const protocol = installProtocol(fixture.server, {
+        invokeError: {
+            code: 'PRECONDITION_FAILED',
+            message: 'property must be a keyframeable primitive leaf stream',
+            retryable: false,
+            sideEffect: 'not-started',
+            recovery: {
+                action: 'change-arguments',
+                hint: 'Copy a keyframeable primitive scalar, vector, or color leaf locator from ae_listLayerProperties.',
+            },
+            details: {
+                capabilityId: 'ae.layer.property.keyframes.list',
+                field: 'params.arguments.propertyLocator',
+            },
+        },
+    });
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: fixture.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+        now: function () { return 1900000000000; },
+    });
+    t.after(function () { return client.close(); });
+    await client.beginPairing();
+    protocol.authorize();
+    await client.waitUntilConnected();
+    await client.capabilities({ detail: 'full', limit: 100 });
+    await assert.rejects(
+        client.invoke({
+            requestId: 'core-keyframe-precondition',
+            capabilityId: 'ae.layer.property.keyframes.list',
+            capabilityVersion: 1,
+            arguments: structuredClone(
+                LAYER_PROPERTY_KEYFRAMES_VECTOR.request.params.arguments,
+            ),
+            deadlineUnixMs: 1900000002000,
+        }),
+        function (error) {
+            assert.equal(error.code, 'PRECONDITION_FAILED');
+            assert.equal(error.retryable, false);
+            assert.equal(error.sideEffect, 'not-started');
+            assert.equal(error.recovery.action, 'change-arguments');
+            assert.equal(error.recovery.hint,
+                'Copy a keyframeable primitive scalar, vector, or color leaf locator from ae_listLayerProperties.');
+            assert.deepEqual(error.details, {
+                capabilityId: 'ae.layer.property.keyframes.list',
+                field: 'params.arguments.propertyLocator',
+            });
+            return true;
+        },
+    );
+});
+
 for (const errorFixture of [
     {
         name: 'keeps an actual native INVALID_REQUEST distinct',
