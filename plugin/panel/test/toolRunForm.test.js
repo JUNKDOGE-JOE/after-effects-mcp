@@ -36,4 +36,3 @@ test('schema form coerces bounded values and rejects missing or invalid input', 
   assert.throws(() => buildToolArgs(schema, { count: '7', mode: 'safe' }), /maximum/);
   assert.throws(() => buildToolArgs(schema, { count: '2', mode: 'unsafe' }), /enum/);
 });
-
