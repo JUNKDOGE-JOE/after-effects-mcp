@@ -264,6 +264,23 @@ test('concurrent panel launches serialize on the process-safe runtime lock', asy
   await assert.rejects(fs.promises.lstat(path.join(h.platform.paths.runtimeRoot, '.runtime-manager.lock')), { code: 'ENOENT' });
 });
 
+test('concurrent cold-start checks on one panel share a single RuntimeManager activation', async (t) => {
+  const h = await harness(t);
+  const payload = await packageFixture(h.root, {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'shared-cold-start',
+  });
+  const manager = managerFor(h, payload.extensionRoot);
+
+  const aeMcpCheck = manager.ensureReady();
+  const nodeCheck = manager.ensureReady();
+
+  assert.strictEqual(aeMcpCheck, nodeCheck);
+  const [first, second] = await Promise.all([aeMcpCheck, nodeCheck]);
+  assert.equal(first.action, 'install');
+  assert.deepEqual(second, first);
+  assert.equal((await manager.inspect()).ok, true);
+});
+
 test('a held lock fails with an actionable bounded diagnostic', async (t) => {
   const h = await harness(t);
   const payload = await packageFixture(h.root, {

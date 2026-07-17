@@ -17857,8 +17857,10 @@
         });
       }
     }
-    async function ensureReady() {
-      return withLock(async () => {
+    let readinessPromise = null;
+    function ensureReady() {
+      if (readinessPromise) return readinessPromise;
+      const pending = withLock(async () => {
         const packaged = await verifyPackagedPayload();
         const current = await pointerState(paths.currentPointer);
         const previous = await pointerState(paths.previousPointer);
@@ -17910,6 +17912,11 @@
           }] : []
         };
       });
+      const shared = pending.finally(() => {
+        if (readinessPromise === shared) readinessPromise = null;
+      });
+      readinessPromise = shared;
+      return shared;
     }
     async function repair() {
       return withLock(async () => {
@@ -17931,7 +17938,6 @@
     }
     async function rollback() {
       return withLock(async () => {
-        await verifyPackagedPayload();
         const current = await pointerState(paths.currentPointer);
         const previous = await pointerState(paths.previousPointer);
         if (!previous.ok) failure("RUNTIME_ROLLBACK_UNAVAILABLE", "No verified previous runtime is available");
@@ -33949,6 +33955,13 @@ data: ${JSON.stringify(payload)}
       items.push({ id: "extendscript-ping", ok: false, detail: e.message, fixHint: HINTS["extendscript-ping"] });
     }
     if (runtimeManager) {
+      let node = null;
+      let nodeError = null;
+      try {
+        node = await runtimeManager.resolveNode();
+      } catch (error) {
+        nodeError = error;
+      }
       try {
         const state = await runtimeManager.inspect();
         const current = ((_a = state.current) == null ? void 0 : _a.ok) ? state.current.record : null;
@@ -33968,8 +33981,7 @@ data: ${JSON.stringify(payload)}
           action: { kind: "repair-runtime" }
         });
       }
-      try {
-        const node = await runtimeManager.resolveNode();
+      if (node) {
         items.push({
           id: "node",
           ok: node.ok,
@@ -33977,11 +33989,11 @@ data: ${JSON.stringify(payload)}
           fixHint: HINTS.node,
           action: { kind: "repair-runtime" }
         });
-      } catch (error) {
+      } else {
         items.push({
           id: "node",
           ok: false,
-          detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED",
+          detail: (nodeError == null ? void 0 : nodeError.code) || (nodeError == null ? void 0 : nodeError.message) || "RUNTIME_MANAGER_FAILED",
           fixHint: HINTS.node,
           action: { kind: "repair-runtime" }
         });

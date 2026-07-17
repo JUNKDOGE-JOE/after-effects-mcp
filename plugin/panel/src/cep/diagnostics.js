@@ -149,6 +149,13 @@ export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform, r
   }
 
   if (runtimeManager) {
+    let node = null;
+    let nodeError = null;
+    try {
+      node = await runtimeManager.resolveNode();
+    } catch (error) {
+      nodeError = error;
+    }
     try {
       const state = await runtimeManager.inspect();
       const current = state.current?.ok ? state.current.record : null;
@@ -170,8 +177,7 @@ export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform, r
         action: { kind: 'repair-runtime' },
       });
     }
-    try {
-      const node = await runtimeManager.resolveNode();
+    if (node) {
       items.push({
         id: 'node',
         ok: node.ok,
@@ -179,11 +185,11 @@ export async function runDiagnostics({ getHost, port, fs, fetchImpl, platform, r
         fixHint: HINTS.node,
         action: { kind: 'repair-runtime' },
       });
-    } catch (error) {
+    } else {
       items.push({
         id: 'node',
         ok: false,
-        detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED',
+        detail: nodeError?.code || nodeError?.message || 'RUNTIME_MANAGER_FAILED',
         fixHint: HINTS.node,
         action: { kind: 'repair-runtime' },
       });

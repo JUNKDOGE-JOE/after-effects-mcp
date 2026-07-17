@@ -145,3 +145,41 @@ test('runDiagnostics reports RuntimeManager provenance and corruption diagnostic
   assert.equal(corrupt.find((item) => item.id === 'ae-mcp').ok, false);
   assert.match(corrupt.find((item) => item.id === 'ae-mcp').detail, /RUNTIME_HASH_MISMATCH/);
 });
+
+test('runDiagnostics inspects the RuntimeManager after resolveNode repairs it', async () => {
+  const calls = [];
+  let repaired = false;
+  const runtimeManager = {
+    async resolveNode() {
+      calls.push('resolveNode');
+      repaired = true;
+      return {
+        ok: true,
+        version: '24.17.0',
+        nodePath: '/Users/tester/.ae-mcp/runtime/repaired/macos-arm64/node/bin/node',
+      };
+    },
+    async inspect() {
+      calls.push('inspect');
+      return repaired ? {
+        ok: true,
+        current: {
+          ok: true,
+          record: { version: '0.9.3', sourceCommitSha: 'b'.repeat(40) },
+        },
+        launcher: { ok: true, path: '/Users/tester/.ae-mcp/bin/ae-mcp' },
+      } : {
+        ok: false,
+        current: { ok: false, code: 'RUNTIME_POINTER_MISSING' },
+        launcher: { ok: false, code: 'RUNTIME_LAUNCHER_MISSING' },
+      };
+    },
+  };
+
+  const items = await runDiagnostics({ ...makeDeps(), port: 11488, runtimeManager });
+
+  assert.deepEqual(calls, ['resolveNode', 'inspect']);
+  assert.equal(items.find((item) => item.id === 'ae-mcp').ok, true);
+  assert.match(items.find((item) => item.id === 'ae-mcp').detail, /0\.9\.3.*b{40}/);
+  assert.equal(items.find((item) => item.id === 'node').ok, true);
+});

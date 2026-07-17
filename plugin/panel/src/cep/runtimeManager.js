@@ -479,8 +479,11 @@ export function createRuntimeManager({
     }
   }
 
-  async function ensureReady() {
-    return withLock(async () => {
+  let readinessPromise = null;
+
+  function ensureReady() {
+    if (readinessPromise) return readinessPromise;
+    const pending = withLock(async () => {
       const packaged = await verifyPackagedPayload();
       const current = await pointerState(paths.currentPointer);
       const previous = await pointerState(paths.previousPointer);
@@ -528,6 +531,11 @@ export function createRuntimeManager({
         }] : [],
       };
     });
+    const shared = pending.finally(() => {
+      if (readinessPromise === shared) readinessPromise = null;
+    });
+    readinessPromise = shared;
+    return shared;
   }
 
   async function repair() {
