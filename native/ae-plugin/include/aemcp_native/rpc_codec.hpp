@@ -163,6 +163,8 @@ struct ParsedRequest {
     std::string_view idempotency_key);
 [[nodiscard]] std::string digest_composition_create_postcondition(
     const CompositionCreated& value);
+[[nodiscard]] std::string composition_create_persistent_diagnostic_fields(
+    const CompositionCreated& value);
 [[nodiscard]] std::string digest_composition_layer_create_arguments(
     const ObjectLocator& composition_locator,
     std::string_view kind,

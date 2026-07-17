@@ -126,6 +126,23 @@ test('native pairing command is enabled by the AE update-menu hook', () => {
   );
 });
 
+test('native composition-create diagnostics use the redacted serializer', () => {
+  const completionStart = PLUGIN_ENTRY.indexOf('void log_completion(');
+  const completionEnd = PLUGIN_ENTRY.indexOf('bool PluginState::start_ipc', completionStart);
+  assert.notEqual(completionStart, -1);
+  assert.notEqual(completionEnd, -1);
+
+  const completionLogger = PLUGIN_ENTRY.slice(completionStart, completionEnd);
+  assert.match(
+    completionLogger,
+    /composition_create_persistent_diagnostic_fields\(\s*completion\.composition_create_result\s*\)/u,
+  );
+  assert.doesNotMatch(
+    completionLogger,
+    /composition_create_result\.name/u,
+  );
+});
+
 test('native README examples use safe shell variables and the complete build inputs', async () => {
   for (const readmePath of ['README.md', 'README.zh-CN.md']) {
     const readme = await fs.promises.readFile(readmePath, 'utf8');
