@@ -35,7 +35,7 @@ function wingetMissing(output) {
 // App.jsx接线（orchestrator合并时加）：
 //   const wizard = useWizardWiring({ extRoot, lang }); // 内部 useReducer(stepReducer)
 //   <WizardScreen {...现有props} {...wizard.props} />
-export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, platform, runtimeManager } = {}) {
+export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, platform, runtimeManager, onRuntimeReady } = {}) {
   const [stepStates, dispatch] = React.useReducer(stepReducer, null, initialStepStates);
   const [useUvFallback, setUseUvFallback] = React.useState(false);
 
@@ -89,15 +89,19 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, pla
       return { ok, version: versionFrom(claudeStatus) };
     }
     const result = await detectTool(id, { platform, extRoot, runtimeManager });
+    if (result.ok && ['aeMcp', 'node'].includes(id) && runtimeManager && onRuntimeReady) {
+      onRuntimeReady(await runtimeManager.ensureReady());
+    }
     dispatch({ type: 'detect-result', id, ok: result.ok, version: result.version || '' });
     return result;
-  }, [claudeStatus, extRoot, platform, recheckLogin, runtimeManager]);
+  }, [claudeStatus, extRoot, onRuntimeReady, platform, recheckLogin, runtimeManager]);
 
   const install = React.useCallback(async (id) => {
     if (['aeMcp', 'node'].includes(id) && platform?.id === 'macos-arm64' && runtimeManager) {
       dispatch({ type: 'run-start', id });
       try {
         const repaired = await runtimeManager.repair();
+        if (onRuntimeReady) onRuntimeReady(repaired);
         const output = `Offline runtime ${repaired.version} activated at ${repaired.launcher}`;
         dispatch({ type: 'run-done', id, ok: true, output });
         await detect(id);
@@ -136,7 +140,7 @@ export function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, pla
     dispatch({ type: 'run-done', id, ok: result.ok, output: result.output });
     await detect(id);
     return result;
-  }, [activeCmds, detect, lang, platform, runtimeManager, useUvFallback]);
+  }, [activeCmds, detect, lang, onRuntimeReady, platform, runtimeManager, useUvFallback]);
 
   const openLogin = React.useCallback(() => {
     openLoginTerminal({ tool: 'claude' });

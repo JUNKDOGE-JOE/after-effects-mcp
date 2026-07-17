@@ -582,6 +582,9 @@ function Shell({ cs }) {
     result: null,
     error: null,
   }));
+  const markRuntimeReady = React.useCallback((result) => {
+    setRuntimeActivation({ state: 'ready', result: result || null, error: null });
+  }, []);
   React.useEffect(() => {
     if (!runtimeManager) {
       setRuntimeActivation({ state: 'ready', result: null, error: null });
@@ -589,13 +592,26 @@ function Shell({ cs }) {
     }
     let alive = true;
     setRuntimeActivation({ state: 'starting', result: null, error: null });
-    runtimeManager.ensureReady().then((result) => {
-      if (alive) setRuntimeActivation({ state: 'ready', result, error: null });
-    }).catch((error) => {
-      if (alive) setRuntimeActivation({ state: 'error', result: null, error });
-    });
-    return () => { alive = false; };
-  }, [runtimeManager]);
+    let retryTimer = null;
+    const activate = () => {
+      runtimeManager.ensureReady().then((result) => {
+        if (alive) markRuntimeReady(result);
+      }).catch((error) => {
+        if (!alive) return;
+        setRuntimeActivation({ state: 'error', result: null, error });
+        // A second panel can hold the short-lived install lock during boot.
+        // Keep configuration hidden, then retry without requiring a reload.
+        if (error && error.code === 'RUNTIME_MANAGER_LOCKED') {
+          retryTimer = setTimeout(activate, 1000);
+        }
+      });
+    };
+    activate();
+    return () => {
+      alive = false;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
+  }, [markRuntimeReady, runtimeManager]);
   const runtimeReady = runtimeActivation.state === 'ready';
   const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
   const resolvePanelNode = React.useCallback(
@@ -605,10 +621,19 @@ function Shell({ cs }) {
     [platform, runtimeManager],
   );
   const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
-  const getMcpSpec = React.useCallback(async () => withToolApprovalTier(
-    await resolveMcpCommand({ extRoot, platform, runtimeManager }),
-    approvalTierFile,
-  ), [approvalTierFile, extRoot, platform, runtimeManager]);
+  const getMcpSpec = React.useCallback(async () => {
+    try {
+      const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
+      if (runtimeManager) {
+        const result = await runtimeManager.ensureReady();
+        markRuntimeReady(result);
+      }
+      return withToolApprovalTier(spec, approvalTierFile);
+    } catch (error) {
+      if (runtimeManager) setRuntimeActivation({ state: 'error', result: null, error });
+      throw error;
+    }
+  }, [approvalTierFile, extRoot, markRuntimeReady, platform, runtimeManager]);
   const mcp = React.useMemo(() => createMcpClient({
     platform,
     extRoot,
@@ -1275,11 +1300,12 @@ function Shell({ cs }) {
         runtimeManager,
         allowDevelopmentPath: developmentRuntimeFallback,
       });
+      if (runtimeManager) markRuntimeReady(await runtimeManager.ensureReady());
       setDiagnostics(items);
     } catch (e) {
       setDiagnostics([{ id: 'host-listening', ok: false, detail: String(e && e.message), fixHint: { zh: '诊断执行失败，重启面板后重试。', en: 'Diagnostics failed to run; reload the panel and retry.' } }]);
     }
-  }, [developmentRuntimeFallback, getHost, platform, runtimeManager, status.port]);
+  }, [developmentRuntimeFallback, getHost, markRuntimeReady, platform, runtimeManager, status.port]);
 
   const togglePause = () => {
     const host = getHost();
@@ -1324,6 +1350,7 @@ function Shell({ cs }) {
     recheckLogin: runClaudeProbe,
     platform,
     runtimeManager,
+    onRuntimeReady: markRuntimeReady,
   });
 
   if (!wizardDone) {
@@ -1549,6 +1576,7 @@ function Shell({ cs }) {
         lang={lang}
         info={connInfo || {}}
         diagnostics={Array.isArray(diagnostics) ? diagnostics : []}
+        copyReady={runtimeReady}
         onDiagnose={runDiag}
         onCopyConfig={() => copyText(mcpConfigStr)}
         onRestart={() => applyPort(status.port)}

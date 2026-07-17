@@ -9869,7 +9869,7 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: blocked, onChange: onBlock })
     ] });
   }
-  function ExternalClientRow({ client, t, configText, copied, onCopy }) {
+  function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false }) {
     const isStdio = client.kind === "mcp-stdio";
     return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
@@ -9877,10 +9877,10 @@
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: isStdio ? t.mcpStdio : t.mcpDoc })
         ] }),
-        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: (e) => {
+        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: copyDisabled, onClick: (e) => {
           e.preventDefault();
-          onCopy();
-        }, children: copied ? t.copied : t.copy }) : null
+          if (!copyDisabled) onCopy();
+        }, children: copied && !copyDisabled ? t.copied : t.copy }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
         client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
@@ -10101,6 +10101,7 @@
             t,
             configText,
             copied: copied === externalClient.id,
+            copyDisabled: !mcpReady,
             onCopy: () => copy(externalClient.id, configText)
           },
           externalClient.id
@@ -10985,7 +10986,7 @@
     }).catch(() => {
     });
   }
-  function ConnectionDrawerBody({ lang = "zh", info = {}, panelVersion = package_default.version, statusLabel, onCopyConfig, onRestart, onDiagnose }) {
+  function ConnectionDrawerBody({ lang = "zh", info = {}, panelVersion = package_default.version, statusLabel, copyReady = true, onCopyConfig, onRestart, onDiagnose }) {
     const t = D[lang] || D.zh;
     const connected = !!info.lastClientSeenAt || !!info.lastHealthAt;
     const pythonVersion = info.pythonVersion || "-";
@@ -11000,7 +11001,7 @@
       /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.port, children: [
         info.port || "-",
         " ",
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "copy", title: t.copyConfig, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(IconButton, { icon: "copy", title: t.copyConfig, disabled: !copyReady, onClick: () => callCopy(onCopyConfig), style: { width: 20, height: 20 } })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(KV, { k: t.token, children: info.tokenLabel || t.tokenLocal }),
       /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)(KV, { k: t.ver, children: [
@@ -11018,7 +11019,7 @@
         /* @__PURE__ */ (0, import_jsx_runtime26.jsx)("span", { style: { flex: 1, minWidth: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }, children: r.text })
       ] }, i)) }),
       /* @__PURE__ */ (0, import_jsx_runtime26.jsxs)("div", { style: { display: "flex", gap: 6, marginTop: 4, flexWrap: "wrap" }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
+        /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: !copyReady, onClick: () => callCopy(onCopyConfig), children: t.copyConfig }),
         /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "rotate-cw", onClick: onRestart, children: t.restart }),
         /* @__PURE__ */ (0, import_jsx_runtime26.jsx)(Button, { variant: "secondary", size: "sm", icon: "stethoscope", onClick: onDiagnose, children: t.diagnose })
       ] })
@@ -11043,7 +11044,7 @@
       ] })
     ] });
   }
-  function ConnectionDrawer({ open = false, onClose, info = {}, onCopyConfig, onRestart, onDiagnose, diagnostics = [], lang = "zh" }) {
+  function ConnectionDrawer({ open = false, onClose, info = {}, copyReady = true, onCopyConfig, onRestart, onDiagnose, diagnostics = [], lang = "zh" }) {
     const diagList = Array.isArray(diagnostics) ? diagnostics : [];
     const t = D[lang] || D.zh;
     const panelVersion = info.panelVersion || package_default.version;
@@ -11054,6 +11055,7 @@
           lang,
           info,
           panelVersion,
+          copyReady,
           onCopyConfig,
           onRestart,
           onDiagnose
@@ -33715,7 +33717,7 @@ data: ${JSON.stringify(payload)}
     const text = String(output || "").toLowerCase();
     return text.includes("winget") && (text.includes("not recognized") || text.includes("not found") || text.includes("enoent") || text.includes("cannot find"));
   }
-  function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, platform, runtimeManager } = {}) {
+  function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, platform, runtimeManager, onRuntimeReady } = {}) {
     const [stepStates, dispatch] = import_react44.default.useReducer(stepReducer, null, initialStepStates);
     const [useUvFallback, setUseUvFallback] = import_react44.default.useState(false);
     const repoRoot = import_react44.default.useMemo(() => {
@@ -33757,14 +33759,18 @@ data: ${JSON.stringify(payload)}
         return { ok, version: versionFrom(claudeStatus) };
       }
       const result = await detectTool(id, { platform, extRoot, runtimeManager });
+      if (result.ok && ["aeMcp", "node"].includes(id) && runtimeManager && onRuntimeReady) {
+        onRuntimeReady(await runtimeManager.ensureReady());
+      }
       dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
       return result;
-    }, [claudeStatus, extRoot, platform, recheckLogin, runtimeManager]);
+    }, [claudeStatus, extRoot, onRuntimeReady, platform, recheckLogin, runtimeManager]);
     const install = import_react44.default.useCallback(async (id) => {
       if (["aeMcp", "node"].includes(id) && (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager) {
         dispatch({ type: "run-start", id });
         try {
           const repaired = await runtimeManager.repair();
+          if (onRuntimeReady) onRuntimeReady(repaired);
           const output = `Offline runtime ${repaired.version} activated at ${repaired.launcher}`;
           dispatch({ type: "run-done", id, ok: true, output });
           await detect(id);
@@ -33801,7 +33807,7 @@ data: ${JSON.stringify(payload)}
       dispatch({ type: "run-done", id, ok: result.ok, output: result.output });
       await detect(id);
       return result;
-    }, [activeCmds, detect, lang, platform, runtimeManager, useUvFallback]);
+    }, [activeCmds, detect, lang, onRuntimeReady, platform, runtimeManager, useUvFallback]);
     const openLogin = import_react44.default.useCallback(() => {
       openLoginTerminal({ tool: "claude" });
       dispatch({ type: "detect-result", id: "login", ok: false });
@@ -35394,6 +35400,9 @@ ${baseUrl}`),
       result: null,
       error: null
     }));
+    const markRuntimeReady = import_react45.default.useCallback((result) => {
+      setRuntimeActivation({ state: "ready", result: result || null, error: null });
+    }, []);
     import_react45.default.useEffect(() => {
       if (!runtimeManager) {
         setRuntimeActivation({ state: "ready", result: null, error: null });
@@ -35401,15 +35410,24 @@ ${baseUrl}`),
       }
       let alive = true;
       setRuntimeActivation({ state: "starting", result: null, error: null });
-      runtimeManager.ensureReady().then((result) => {
-        if (alive) setRuntimeActivation({ state: "ready", result, error: null });
-      }).catch((error) => {
-        if (alive) setRuntimeActivation({ state: "error", result: null, error });
-      });
+      let retryTimer = null;
+      const activate = () => {
+        runtimeManager.ensureReady().then((result) => {
+          if (alive) markRuntimeReady(result);
+        }).catch((error) => {
+          if (!alive) return;
+          setRuntimeActivation({ state: "error", result: null, error });
+          if (error && error.code === "RUNTIME_MANAGER_LOCKED") {
+            retryTimer = setTimeout(activate, 1e3);
+          }
+        });
+      };
+      activate();
       return () => {
         alive = false;
+        if (retryTimer) clearTimeout(retryTimer);
       };
-    }, [runtimeManager]);
+    }, [markRuntimeReady, runtimeManager]);
     const runtimeReady = runtimeActivation.state === "ready";
     const mcpCommand = runtimeManager ? platform.paths.launcher : "ae-mcp";
     const resolvePanelNode = import_react45.default.useCallback(
@@ -35417,10 +35435,19 @@ ${baseUrl}`),
       [platform, runtimeManager]
     );
     const sidecarPath = import_react45.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
-    const getMcpSpec = import_react45.default.useCallback(async () => withToolApprovalTier(
-      await resolveMcpCommand({ extRoot, platform, runtimeManager }),
-      approvalTierFile
-    ), [approvalTierFile, extRoot, platform, runtimeManager]);
+    const getMcpSpec = import_react45.default.useCallback(async () => {
+      try {
+        const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
+        if (runtimeManager) {
+          const result = await runtimeManager.ensureReady();
+          markRuntimeReady(result);
+        }
+        return withToolApprovalTier(spec, approvalTierFile);
+      } catch (error) {
+        if (runtimeManager) setRuntimeActivation({ state: "error", result: null, error });
+        throw error;
+      }
+    }, [approvalTierFile, extRoot, markRuntimeReady, platform, runtimeManager]);
     const mcp = import_react45.default.useMemo(() => createMcpClient({
       platform,
       extRoot,
@@ -36045,11 +36072,12 @@ ${baseUrl}`),
           runtimeManager,
           allowDevelopmentPath: developmentRuntimeFallback
         });
+        if (runtimeManager) markRuntimeReady(await runtimeManager.ensureReady());
         setDiagnostics(items);
       } catch (e) {
         setDiagnostics([{ id: "host-listening", ok: false, detail: String(e && e.message), fixHint: { zh: "\u8BCA\u65AD\u6267\u884C\u5931\u8D25\uFF0C\u91CD\u542F\u9762\u677F\u540E\u91CD\u8BD5\u3002", en: "Diagnostics failed to run; reload the panel and retry." } }]);
       }
-    }, [developmentRuntimeFallback, getHost, platform, runtimeManager, status.port]);
+    }, [developmentRuntimeFallback, getHost, markRuntimeReady, platform, runtimeManager, status.port]);
     const togglePause = () => {
       const host = getHost();
       if (!host || typeof host.setPaused !== "function") {
@@ -36086,7 +36114,8 @@ ${baseUrl}`),
       claudeStatus,
       recheckLogin: runClaudeProbe,
       platform,
-      runtimeManager
+      runtimeManager,
+      onRuntimeReady: markRuntimeReady
     });
     if (!wizardDone) {
       return /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
@@ -36333,6 +36362,7 @@ ${baseUrl}`),
           lang,
           info: connInfo || {},
           diagnostics: Array.isArray(diagnostics) ? diagnostics : [],
+          copyReady: runtimeReady,
           onDiagnose: runDiag,
           onCopyConfig: () => copyText(mcpConfigStr),
           onRestart: () => applyPort(status.port)

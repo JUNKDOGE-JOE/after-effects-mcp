@@ -74,7 +74,7 @@ function callCopy(handler) {
 }
 
 /* Body for the connection drawer (opened from the status bar). */
-export function ConnectionDrawerBody({ lang = 'zh', info = {}, panelVersion = pkg.version, statusLabel, onCopyConfig, onRestart, onDiagnose }) {
+export function ConnectionDrawerBody({ lang = 'zh', info = {}, panelVersion = pkg.version, statusLabel, copyReady = true, onCopyConfig, onRestart, onDiagnose }) {
   const t = D[lang] || D.zh;
   const connected = !!info.lastClientSeenAt || !!info.lastHealthAt;
   const pythonVersion = info.pythonVersion || '-';
@@ -87,7 +87,7 @@ export function ConnectionDrawerBody({ lang = 'zh', info = {}, panelVersion = pk
         <StatusDot status={connected ? 'connected' : 'waiting'} size={7} />
         <span style={{ fontFamily: 'var(--font-ui)' }}>{statusLabel || (connected ? t.connected : t.waiting)}</span>
       </KV>
-      <KV k={t.port}>{info.port || '-'} <IconButton icon="copy" title={t.copyConfig} onClick={() => callCopy(onCopyConfig)} style={{ width: 20, height: 20 }} /></KV>
+      <KV k={t.port}>{info.port || '-'} <IconButton icon="copy" title={t.copyConfig} disabled={!copyReady} onClick={() => callCopy(onCopyConfig)} style={{ width: 20, height: 20 }} /></KV>
       <KV k={t.token}>{info.tokenLabel || t.tokenLocal}</KV>
       <KV k={t.ver}>
         v{panelVersion} · host {hostVersion} · py {pythonVersion}
@@ -103,7 +103,7 @@ export function ConnectionDrawerBody({ lang = 'zh', info = {}, panelVersion = pk
         ))}
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
-        <Button variant="secondary" size="sm" icon="copy" onClick={() => callCopy(onCopyConfig)}>{t.copyConfig}</Button>
+        <Button variant="secondary" size="sm" icon="copy" disabled={!copyReady} onClick={() => callCopy(onCopyConfig)}>{t.copyConfig}</Button>
         <Button variant="secondary" size="sm" icon="rotate-cw" onClick={onRestart}>{t.restart}</Button>
         <Button variant="secondary" size="sm" icon="stethoscope" onClick={onDiagnose}>{t.diagnose}</Button>
       </div>
@@ -132,7 +132,7 @@ export function DiagnosticsBody({ lang = 'zh', diagnostics = [], onRerun }) {
   );
 }
 
-export function ConnectionDrawer({ open = false, onClose, info = {}, onCopyConfig, onRestart, onDiagnose, diagnostics = [], lang = 'zh' }) {
+export function ConnectionDrawer({ open = false, onClose, info = {}, copyReady = true, onCopyConfig, onRestart, onDiagnose, diagnostics = [], lang = 'zh' }) {
   // Default params only cover undefined — a caller passing null or a
   // non-array sentinel must not crash the panel (this component renders
   // even while the drawer is closed).
@@ -145,6 +145,7 @@ export function ConnectionDrawer({ open = false, onClose, info = {}, onCopyConfi
         lang={lang}
         info={info}
         panelVersion={panelVersion}
+        copyReady={copyReady}
         onCopyConfig={onCopyConfig}
         onRestart={onRestart}
         onDiagnose={onDiagnose}
