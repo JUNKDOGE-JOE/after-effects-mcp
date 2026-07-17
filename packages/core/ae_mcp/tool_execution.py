@@ -714,6 +714,7 @@ class _ExecutionJob:
     error: Mapping[str, JsonValue] | None = None
     audit: Mapping[str, JsonValue] | None = None
     owner_token: str | None = None
+    local_owner: bool = False
 
     @classmethod
     def from_record(cls, value: Mapping[str, JsonValue]) -> "_ExecutionJob":
@@ -923,7 +924,7 @@ class ToolExecutionEngine:
             # than the durable queued/running row. In particular, AE may have
             # finished while terminal persistence failed. Preserve the local
             # outcome-unknown record so a refresh cannot invite a blind retry.
-            if current is not None and current.owner_token is not None:
+            if current is not None and current.local_owner:
                 return current
             self._jobs[incoming.execution_id] = incoming
             self._job_operations[incoming.operation_id] = incoming.execution_id
@@ -1359,6 +1360,7 @@ class ToolExecutionEngine:
                 initiator=initiator or "unknown",
                 status="queued",
                 created_at=self._now(),
+                local_owner=True,
             )
             if self.job_store is not None:
                 try:
@@ -1585,14 +1587,16 @@ class ToolExecutionEngine:
                 store.renew(job.execution_id, owner_token=owner_token)
             except ExecutionJobStoreError:
                 # The write may already be running. Stopping or retrying it here
-                # would be unsafe. Terminal persistence will either reconcile the
-                # reservation or return outcome-unknown with inspect-state.
-                return
+                # would be unsafe. Keep retrying while the local task is alive so
+                # one transient store failure does not abandon an otherwise-live
+                # lease. If ownership was actually lost, terminal persistence will
+                # reconcile it as outcome-unknown with inspect-state guidance.
+                continue
 
     def job_status(self, execution_id: str) -> Mapping[str, JsonValue]:
         with self._job_lock:
             job = self._jobs.get(execution_id)
-            if job is not None and job.owner_token is not None:
+            if job is not None and job.local_owner:
                 return job.public_dict()
         if self.job_store is not None:
             try:

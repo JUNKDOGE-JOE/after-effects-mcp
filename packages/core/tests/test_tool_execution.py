@@ -1764,6 +1764,94 @@ async def test_running_job_renews_its_shared_reservation_lease(
 
 
 @pytest.mark.asyncio
+async def test_running_job_retries_a_transient_renewal_failure(
+    tmp_path: Path,
+) -> None:
+    class TransientRenewStore(ExecutionJobStore):
+        def __init__(self, root: Path) -> None:
+            super().__init__(root, reservation_lease_ms=300)
+            self.renew_attempts = 0
+            self.renewed = asyncio.Event()
+
+        def renew(self, execution_id, *, owner_token):
+            self.renew_attempts += 1
+            if self.renew_attempts == 1:
+                raise ExecutionJobStoreError("transient renewal failure")
+            super().renew(execution_id, owner_token=owner_token)
+            self.renewed.set()
+
+    artifact = _artifact()
+    backend = _BlockingBackend()
+    store = TransientRenewStore(tmp_path)
+    engine = ToolExecutionEngine(
+        _Store(artifact),
+        backend,
+        job_store=store,
+    )
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+    started = await engine.start_job(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-renew-after-transient-failure",
+        ctx=None,
+        initiator="first-core",
+    )
+    await backend.started.wait()
+    await asyncio.wait_for(store.renewed.wait(), timeout=1.0)
+
+    assert store.renew_attempts >= 2
+    reservation = store.lookup_execution(started["executionId"])
+    assert reservation is not None
+    assert reservation["status"] == "running"
+
+    backend.release.set()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+    assert engine.job_status(started["executionId"])["status"] == "succeeded"
+
+
+@pytest.mark.asyncio
+async def test_owner_keeps_complete_unredacted_terminal_result_in_memory(
+    tmp_path: Path,
+) -> None:
+    long_value = "x" * 700
+    long_list = list(range(70))
+
+    class LargeResultBackend(_Backend):
+        async def exec(self, code, **kwargs):
+            self.calls.append({"code": code, **kwargs})
+            return json.dumps({"ok": True, "value": long_value, "items": long_list})
+
+    artifact = _artifact()
+    engine = ToolExecutionEngine(
+        _Store(artifact),
+        LargeResultBackend(),
+        job_store=ExecutionJobStore(tmp_path),
+    )
+    plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
+    grant = engine.grants.issue_once(plan)
+    result = await engine.execute_tracked(
+        plan.plan_hash,
+        grant.grant_id,
+        operation_id="operation-local-full-terminal-result",
+        ctx=None,
+        initiator="first-core",
+    )
+
+    assert result["value"] == long_value
+    assert result["items"] == long_list
+    [durable] = engine.job_store.snapshot()
+    assert durable["result"]["value"].endswith("…")
+    assert durable["result"]["items"] != long_list
+    assert durable["result"]["items"][-1].startswith("[TRUNCATED ")
+    status = engine.job_status(durable["executionId"])
+    assert status["result"] == result
+    engine.job_history(artifact.id)
+    assert engine.job_status(durable["executionId"])["result"] == result
+
+
+@pytest.mark.asyncio
 async def test_terminal_persistence_failure_keeps_local_outcome_unknown(
     tmp_path: Path,
 ) -> None:
