@@ -285,7 +285,9 @@ async function verifyNativeFiles(root, platform, entries) {
     const nativeExtension = /\.(?:node|dylib|so|exe|dll|pyd)$/i.test(entry.path);
     if (detected) {
       const expected = platform === 'macos-arm64' ? 'macho-arm64' : 'pe-x64';
-      if (detected !== expected) {
+      const compatibleUniversal = platform === 'macos-arm64'
+        && detected === 'macho-universal-arm64';
+      if (detected !== expected && !compatibleUniversal) {
         throw bundleError(
           'BUNDLE_ARCH_MISMATCH',
           `native architecture mismatch for ${entry.path}: expected ${expected}, received ${detected}`,
@@ -315,7 +317,13 @@ function assertProductionFileSet(entries, platform) {
   const foreign = platform === 'macos-arm64'
     ? /(?:win32|windows-x64|linux-|darwin-x64)/i
     : /(?:darwin-|macos-|linux-|win32-arm64)/i;
-  const foreignEntry = entries.find((entry) => foreign.test(entry.path));
+  const portablePythonSource = (entry) => (
+    /^runtime\/[^/]+\/python\/(?:lib\/python3\.13|Lib)\//.test(entry.path)
+    && /\.(?:py|pyc)$/i.test(entry.path)
+  );
+  const foreignEntry = entries.find((entry) => (
+    foreign.test(entry.path) && !portablePythonSource(entry)
+  ));
   if (foreignEntry) throw bundleError('BUNDLE_FOREIGN_PLATFORM', `foreign platform payload: ${foreignEntry.path}`);
   const adobeSdkMaterial = entries.find((entry) => (
     ADOBE_SDK_LOCKED_FILE_DIGESTS.has(entry.sha256)
