@@ -740,6 +740,7 @@ export function classifyRequest(message) {
         ],
       )
           || typeof args.name !== 'string' || hasLoneSurrogate(args.name)
+          || args.name.includes('\u0000')
           || Array.from(args.name).length < 1 || Array.from(args.name).length > 255
           || !Number.isInteger(args.width) || args.width < 1 || args.width > 30000
           || !Number.isInteger(args.height) || args.height < 1 || args.height > 30000

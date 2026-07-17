@@ -313,7 +313,10 @@ class AeCreateCompositionArgs(_StrictModel):
         ...,
         min_length=1,
         max_length=255,
-        description="Exact composition name (1–255 Unicode scalar values).",
+        pattern=r"^[^\u0000]+$",
+        description=(
+            "Exact composition name (1–255 Unicode scalar values; U+0000 is forbidden)."
+        ),
     )
     width: int = Field(1920, ge=1, le=30_000)
     height: int = Field(1080, ge=1, le=30_000)

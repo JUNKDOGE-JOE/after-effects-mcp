@@ -111,7 +111,7 @@ constexpr std::string_view kCompositionTimeContractDigest =
 constexpr std::string_view kCompositionTimeSetContractDigest =
     "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308";
 constexpr std::string_view kCompositionCreateContractDigest =
-    "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6";
+    "0e65175a0d85640eda3eb58b08d4cabc0aa9f085068225e1b44f9cf01467310d";
 constexpr std::string_view kCompositionLayerCreateContractDigest =
     "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee";
 constexpr std::string_view kLayerEffectApplyContractDigest =
@@ -679,6 +679,15 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
     (void)decode_request_frame(frame(composition_create_invoke_json(
         "invoke-composition-create-extra", ",\"extra\":true")));
   }, "INVALID_ARGUMENT", "composition create extra argument");
+  expect_codec_error([&] {
+    std::string nul_name = composition_create_invoke_json(
+        "invoke-composition-create-nul");
+    const std::string expected = "\"name\":\"SYNTHETIC_COMP\"";
+    const auto offset = nul_name.find(expected);
+    require(offset != std::string::npos, "composition create fixture name missing");
+    nul_name.replace(offset, expected.size(), "\"name\":\"SYNTHETIC\\u0000COMP\"");
+    (void)decode_request_frame(frame(nul_name));
+  }, "INVALID_ARGUMENT", "composition create NUL name");
 
   const ParsedRequest create_parsed = decode_request_frame(frame(
       composition_layer_create_invoke_json()));

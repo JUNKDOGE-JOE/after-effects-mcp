@@ -539,7 +539,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "f2dfe6b726efb02a371ee45cfa814050e87122e81dd282a6b7797862c2a4638a",
+      "f589837c77ed835fc240c010e2a7a8c5582fbbe92130cbc84595abb33bb22236",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -547,7 +547,7 @@ NativeRpcRuntimeInfo runtime() {
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
       "fda1027148fb5bd49cba6bc6f2b4b3264d38d9b8958a6cb34a19ec14048b8acd",
       "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308",
-      "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6",
+      "0e65175a0d85640eda3eb58b08d4cabc0aa9f085068225e1b44f9cf01467310d",
       "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee",
       "5de12c7cd4ede09122a837c85ff2e589f695dd5377490b97b9de9d975ce00d77",
       "a687dc451eec34cc7425c382750bccb9882aa257785dd538a26d61a5689cf0ba",
@@ -1020,7 +1020,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "\"id\":\"ae.composition.create\"",
       "composition create capabilities response");
   require_contains(composition_create_capabilities,
-      "\"contractDigest\":\"a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6\"",
+      "\"contractDigest\":\"0e65175a0d85640eda3eb58b08d4cabc0aa9f085068225e1b44f9cf01467310d\"",
       "composition create capabilities response");
   require_contains(composition_create_capabilities,
       "aemcp.requirement.native.composition-create",

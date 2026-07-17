@@ -849,7 +849,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   assert.equal(compositionTimeSetCapability.contractDigest,
     compositionTimeSetContractDigest(schema));
   assert.equal(compositionCreateCapability.contractDigest,
-    'a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6');
+    '0e65175a0d85640eda3eb58b08d4cabc0aa9f085068225e1b44f9cf01467310d');
   assert.equal(compositionCreateCapability.contractDigest,
     compositionCreateContractDigest(schema));
   assert.equal(compositionLayerCreateCapability.contractDigest,
@@ -885,7 +885,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     layerPropertiesDescriptor,
     layerPropertyKeyframesDescriptor,
     layerPropertyDescriptor,
-  ]), 'f2dfe6b726efb02a371ee45cfa814050e87122e81dd282a6b7797862c2a4638a');
+  ]), 'f589837c77ed835fc240c010e2a7a8c5582fbbe92130cbc84595abb33bb22236');
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -1611,6 +1611,7 @@ test('composition create binds exact settings, root project growth, Undo, and pr
   ), true);
 
   for (const mutate of [
+    (request) => { request.params.arguments.name = 'SYNTHETIC\u0000COMP'; },
     (request) => { request.params.arguments.duration.value = 0; },
     (request) => { request.params.arguments.frameRate.denominator = 0; },
     (request) => { request.params.arguments.pixelAspectRatio.numerator = 0; },
@@ -1619,8 +1620,14 @@ test('composition create binds exact settings, root project growth, Undo, and pr
   ]) {
     const malformed = structuredClone(fixture.request);
     mutate(malformed);
+    assert.equal(schemaAccepts(schema.$defs.request, malformed), false);
     assert.equal(validateRequestComposite(malformed, schema).ok, false);
   }
+
+  const unicodeName = structuredClone(fixture.request);
+  unicodeName.params.arguments.name = '合成😀';
+  assert.equal(schemaAccepts(schema.$defs.request, unicodeName), true);
+  assert.equal(validateRequestComposite(unicodeName, schema).ok, true);
 
   for (const mutate of [
     (value) => { value.projectItemCountAfter = value.projectItemCountBefore; },

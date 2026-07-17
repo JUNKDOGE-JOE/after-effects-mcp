@@ -116,7 +116,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "f2dfe6b726efb02a371ee45cfa814050e87122e81dd282a6b7797862c2a4638a";
+    "f589837c77ed835fc240c010e2a7a8c5582fbbe92130cbc84595abb33bb22236";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -134,7 +134,7 @@ constexpr std::string_view kCompositionTimeReadContractDigest =
 constexpr std::string_view kCompositionTimeSetContractDigest =
     "724a779959a13e56fc679d3a9ad961708fadd535e3fbbf88abd33393530d3308";
 constexpr std::string_view kCompositionCreateContractDigest =
-    "a5e0ccfc15086d1b10987246048e539cf6332a4e24114ac81783f4a9758ab6f6";
+    "0e65175a0d85640eda3eb58b08d4cabc0aa9f085068225e1b44f9cf01467310d";
 constexpr std::string_view kCompositionLayerCreateContractDigest =
     "d48b5c0fcf9871ee579bf518679bc36277e2fd5194e70d9cc6fa1b2c573edeee";
 constexpr std::string_view kLayerEffectApplyContractDigest =
