@@ -6,11 +6,11 @@ Publish only redacted summaries. Omit credentials, tokens, pairing fingerprints,
 
 - Package PR:
 - Parent Epic:
-- Child Issues:
+- Child Issues (optional):
 - Exact candidate SHA:
 - Merge / clean-main SHA:
 
-## Per-Issue disposition
+## Per-Issue disposition (when child Issues are used)
 
 | Child Issue | Public tool(s) | Acceptance result | Evidence reference | Disposition |
 |---|---|---|---|---|
@@ -55,13 +55,13 @@ Provide one row per included public tool. Summarize request/response shapes here
 - Blockers fixed:
 - Follow-ups created:
 - Out-of-scope findings:
-- Required CI status:
+- Required CI status for each frozen candidate SHA:
 
 ## Candidate and clean-main hardware
 
 - Candidate T5 result and evidence:
 - Clean-main rebuild/reinstall identity:
-- Clean-main T6 result and evidence:
+- Clean-main T6 result and evidence (every included public tool; accepted optional child Issues; every write Undo):
 - Canonical plug-in mapping:
 
 ## Remaining risks
@@ -72,7 +72,7 @@ Provide one row per included public tool. Summarize request/response shapes here
 
 ## Efficiency counters
 
-- Included tools / accepted child Issues:
+- Included tools / accepted optional child Issues:
 - Scope-freeze to clean-main elapsed time:
 - Review rounds:
 - Candidate builds:

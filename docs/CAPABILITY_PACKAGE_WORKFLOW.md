@@ -21,7 +21,7 @@ The package owns one branch/worktree, one PR, one acceptance matrix, one concent
 
 Use `.github/ISSUE_TEMPLATE/capability-package.md` to freeze:
 
-- parent Epic, child Issues, priority, and user-visible outcome;
+- parent Epic, optional child Issues, priority, and user-visible outcome;
 - public MCP names and schemas;
 - shared native primitives and which ones are new on real AE;
 - read/write, side-effect, idempotency, postcondition, and Undo contracts;
@@ -36,16 +36,16 @@ Implementation may refine an ambiguous field, but a material scope expansion req
 
 | Phase | Normal target | Work | Exit condition |
 |---|---:|---|---|
-| Frame | 2-4 hours | Freeze schemas, matrix, fixture, native novelty, acceptance harness skeleton, exclusions | Matrix is reviewable and every child Issue has an observable result |
+| Frame | 2-4 hours | Freeze schemas, matrix, fixture, native novelty, acceptance harness skeleton, exclusions | Matrix is reviewable and every included public tool has an observable result |
 | Native novelty smoke | 0-1 focused run | Only for an unverified suite, lifecycle, or main-thread mechanism | Primitive works in real AE or the package is redesigned |
 | Implement | 1-2.5 working days | Up to three coordinated tracks: native; Core/bridge/public MCP; tests/fixture | All matrix rows pass T0-T2 and generated artifacts are current |
 | Review, freeze, and CI | 0.5-1 day | Concentrated review and blocker fixes, freeze the exact SHA, then run T3 and required CI | No unresolved in-scope blocker; the frozen SHA passes T3 and CI |
-| Candidate hardware | 60-90 minutes plus deterministic build time | One continuous exact-SHA package session on real AE | Every included child Issue has evidence; writes have verified Undo |
-| Merge and main | 0.5-1.5 hours plus build time | Merge, rebuild/reinstall from clean `main`, rerun package smoke | Merge SHA passes and accepted child Issues can close |
+| Candidate hardware | 60-90 minutes plus deterministic build time | One continuous exact-SHA package session on real AE | Every included public tool has evidence; writes have verified Undo |
+| Merge and main | 0.5-1.5 hours plus build time | Merge, rebuild/reinstall from clean `main`, rerun package smoke | Merge SHA passes; any accepted child Issues can close |
 
 These are scope alarms, not promises and not permission to drop evidence. When a phase exceeds its target, first remove unrelated work, repair the environment, or split a genuinely oversized package.
 
-Keep edit-level work local to the package worktree and run T0-T2 there. Publish the package branch for concentrated review/CI after the integration checkpoint instead of pushing every small edit and triggering a full remote matrix repeatedly.
+Keep edit-level work local to the package worktree and run T0-T2 there. Complete the concentrated review, resolve blockers, and freeze the exact candidate before the first branch publication and required CI run. Do not push every small edit and trigger a full remote matrix repeatedly. If a genuinely required human review can only occur on GitHub, publish a Draft explicitly as pre-candidate review input; any CI run on that unfrozen SHA is not candidate evidence and the completion report must explain the extra run.
 
 ## 4. Test escalation
 
@@ -87,9 +87,9 @@ Freeze the exact candidate SHA after:
 - concentrated review has no unresolved blocker;
 - the worktree is clean and all components can report the same full SHA.
 
-Run the relevant T3 full regression and required CI on that frozen SHA. T5 hardware starts only after they pass. If T3 or CI finds a blocker, unfreeze the candidate, collect and batch the complete fix set, run focused lower-tier tests and review, then freeze one replacement candidate. After freeze, a new SHA is otherwise allowed only for a reproduced acceptance blocker or an evidence-invalidating defect. Do not deploy once per small fix.
+Run the relevant T3 full regression and required CI on that frozen SHA. T5 hardware starts only after they pass. If T3 or CI finds a blocker, unfreeze the candidate, collect and batch the complete fix set, run focused lower-tier tests and review, then freeze one replacement candidate. The replacement SHA must pass required CI before T5; already-passing unaffected local tiers need not be repeated. After freeze, a new SHA is otherwise allowed only for a reproduced acceptance blocker or an evidence-invalidating defect. Do not deploy once per small fix.
 
-Normal budget: at most two candidate builds, one frozen-candidate full CI run, one candidate hardware session, and one clean-main hardware session. Record the reason for any excess.
+Normal budget: one candidate build and one full CI run. A reproduced blocker may justify one replacement build and its required CI run. The hardware budget remains one successful candidate session and one clean-main session. Record the reason for any excess.
 
 ## 7. Continuous hardware session
 
@@ -125,15 +125,15 @@ After candidate acceptance:
 
 1. Merge the single package PR.
 2. Build and install every relevant component from a clean merge commit.
-3. Run T6 with the same harness; the reduced smoke still touches every child Issue, and every write still verifies Undo.
+3. Run T6 with the same harness; the reduced smoke still touches every included public tool, covers every accepted optional child Issue, and verifies real Undo for every included write.
 4. Fill `docs/templates/capability-package-completion.md`.
-5. Close only the child Issues that passed, then update the parent Epic.
+5. Close only optional child Issues that passed, then update the parent Epic.
 
 ## 9. Efficiency counters
 
 Record these counters in the completion report:
 
-- included tools and accepted child Issues;
+- included tools and accepted optional child Issues;
 - elapsed time from scope freeze to clean-main acceptance;
 - review rounds and finding dispositions;
 - candidate builds and candidate SHA changes;

@@ -6,6 +6,7 @@ import {
   FINAL_WORKTREES,
   INVENTORY_PATH,
   REQUIRED_ARCHIVE_REFS,
+  SUPPORTING_WORKFLOW_PATHS,
   extractFinalRetainedWorktrees,
   normalizeWorktreePath,
   missingFinalWorktrees,
@@ -20,7 +21,7 @@ test('tracked repository rules and worktree baseline pass the governance contrac
   const errors = validateGovernance({
     agentsText,
     inventoryText,
-    trackedPaths: new Set([GOVERNANCE_PATH, INVENTORY_PATH]),
+    trackedPaths: new Set([GOVERNANCE_PATH, INVENTORY_PATH, ...SUPPORTING_WORKFLOW_PATHS]),
   });
   assert.deepEqual(errors, []);
 });
@@ -35,7 +36,7 @@ test('missing delivery rules and untracked governance files fail closed', () => 
 test('semantic rule reversal and final retained-set removal fail closed', () => {
   const agentsText = fs.readFileSync(GOVERNANCE_PATH, 'utf8');
   const inventoryText = fs.readFileSync(INVENTORY_PATH, 'utf8');
-  const trackedPaths = new Set([GOVERNANCE_PATH, INVENTORY_PATH]);
+  const trackedPaths = new Set([GOVERNANCE_PATH, INVENTORY_PATH, ...SUPPORTING_WORKFLOW_PATHS]);
   const weakened = agentsText.replace(
     'Automated tests and CI never substitute for hardware validation.',
     'Automated tests and CI fully substitute for hardware validation.',
@@ -52,6 +53,15 @@ test('semantic rule reversal and final retained-set removal fail closed', () => 
   assert.ok(validateGovernance({ agentsText, inventoryText: withoutFinalSet, trackedPaths })
     .some((error) => error.includes('final retained worktree set')));
   assert.equal(extractFinalRetainedWorktrees(withoutFinalSet).size, 0);
+});
+
+test('supporting capability-package workflow files must remain tracked', () => {
+  const agentsText = fs.readFileSync(GOVERNANCE_PATH, 'utf8');
+  const inventoryText = fs.readFileSync(INVENTORY_PATH, 'utf8');
+  const trackedPaths = new Set([GOVERNANCE_PATH, INVENTORY_PATH, ...SUPPORTING_WORKFLOW_PATHS]);
+  trackedPaths.delete(SUPPORTING_WORKFLOW_PATHS[0]);
+  assert.ok(validateGovernance({ agentsText, inventoryText, trackedPaths })
+    .some((error) => error.includes(SUPPORTING_WORKFLOW_PATHS[0])));
 });
 
 test('live registry validation rejects a missing required retained worktree', () => {

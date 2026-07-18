@@ -13,7 +13,7 @@ These rules apply to human developers and coding agents working in this reposito
 
 - Do not implement issues by issue number or creation order. Maintain P0/P1/P2/P3 priorities based on dependency and user value.
 - Work on one dependent P0 capability package at a time. A capability package normally groups about 5-15 tightly related tools that share an AEGP SDK suite, dispatcher, fixture, Undo model, or user scenario. Small infrastructure changes and isolated fixes may remain single-Issue packages when they do not belong to a tool family.
-- Prefer 6-10 tools for a normal capability package. Before implementation, freeze a short package brief containing the child Issues, public MCP schemas, capability/interaction matrix, native novelty, disposable fixture, Undo model, executable acceptance path, and explicit non-goals. Do not split the frozen package into one branch or PR per simple tool.
+- Prefer 6-10 tools for a normal capability package. Before implementation, freeze a short package brief containing any optional child Issues, public MCP schemas, capability/interaction matrix, native novelty, disposable fixture, Undo model, executable acceptance path, and explicit non-goals. Do not split the frozen package into one branch or PR per simple tool.
 - A capability package may retain multiple child Issues and acceptance checklists, but it uses one branch/worktree, one PR, one concentrated review, one exact-candidate hardware acceptance run, and one clean-`main` hardware revalidation. Close each child Issue only when its own acceptance result passed in the package evidence.
 - The package closure loop is: design the public MCP schemas and interaction matrix -> implement with incremental unit/contract/compile tests -> independent diff review -> CI -> exact-build package hardware validation -> merge -> rebuild/reinstall from `main` -> package hardware revalidation -> close accepted child Issues and update their parent epic.
 - Parallel work is allowed only when it is genuinely independent and cannot cause mixed builds, shared-fixture conflicts, or premature assumptions about an unmerged interface.
@@ -47,12 +47,12 @@ public MCP tool
 - Any package whose acceptance depends on AE loading, lifecycle, GUI state, main-thread behavior, CEP/native communication, or project mutation still requires this package-level real-machine validation before merge.
 - Automated tests and CI never substitute for hardware validation.
 - Build, install, and test the exact candidate commit. Core, CEP host, native plugin, protocol metadata, and test evidence must report the same full commit SHA. Abort validation on any mismatch.
-- After merge, repeat the relevant public MCP smoke test from a clean `main` build. Do not rely on the pre-merge installation.
+- After merge, repeat the public MCP package smoke from a clean `main` build. It must touch every included public tool, cover each accepted optional child Issue, and verify real Undo for every included write. Do not rely on the pre-merge installation.
 - Use a dedicated disposable AE project. Never use the user's production project for write testing.
 - Prepare GUI access, permissions, pairing, no-sleep state, fixture path, canonical plugin path, and log locations in one preflight instead of discovering them through repeated user interruptions.
 - After concentrated review has no unresolved blocker and all source, generated bundles, documentation, license metadata, fixtures, and evidence schemas are committed, designate that exact SHA as the candidate freeze. Run T3 and required CI on the frozen SHA; except for the single narrow smoke allowed for a genuinely new native primitive, do not begin exact-candidate hardware acceptance until they pass. This is the candidate freeze.
-- After candidate freeze, change the SHA only for a reproduced acceptance blocker or a defect that demonstrably invalidates the package evidence. Batch all known blockers into one fix set, rerun only the affected lower test tiers, perform a focused re-review, and then create one replacement candidate.
-- The normal target is at most two candidate builds, one full CI run for the frozen candidate, one candidate hardware session, and one clean-`main` hardware session. Exceeding the target must be explained in the completion evidence; it is not a reason to weaken a gate.
+- After candidate freeze, change the SHA only for a reproduced acceptance blocker or a defect that demonstrably invalidates the package evidence. Batch all known blockers into one fix set, rerun only the affected lower test tiers, perform a focused re-review, and then create one replacement candidate. The replacement is a new frozen candidate and must pass required CI before any T5 acceptance evidence is collected.
+- The normal target is one candidate and one full CI run. At most one replacement candidate is allowed for a reproduced blocker; that replacement gets its own required CI run, while already-passing unaffected local tiers need not be repeated. The normal hardware target remains one successful candidate session and one clean-`main` session. Exceeding these targets must be explained in the completion evidence; it is not a reason to weaken a gate.
 
 ## 5. Keep review feedback from expanding P0
 
@@ -74,10 +74,10 @@ Use the lowest test tier that can falsify the current change, then escalate at p
 - **T0, every edit:** formatting, syntax, lint, or a single focused unit test; target seconds.
 - **T1, each tool or adapter:** schema, codec, suite adapter, structured-error, and postcondition contract tests; target 1-5 minutes.
 - **T2, package integration:** affected native compile tests, Core/CEP integration, shared fixture, interaction corpus, and generated-file checks; target 10-30 minutes.
-- **T3, frozen candidate:** the relevant full repository regression plus required CI; run once after concentrated review.
+- **T3, frozen candidate:** the relevant full repository regression plus required CI; run once for each exact candidate SHA after concentrated or focused replacement review.
 - **T4, optional native-novelty smoke:** one narrow real-AE check only when the package introduces an unverified suite, object lifecycle, or main-thread mechanism.
 - **T5, candidate acceptance:** one exact-SHA public-MCP package run on real AE.
-- **T6, clean-main acceptance:** one rebuild/reinstall and package smoke from the merge commit.
+- **T6, clean-main acceptance:** one rebuild/reinstall and package smoke from the merge commit that touches every included public tool, covers each accepted optional child Issue, and verifies real Undo for every included write.
 
 Do not rerun T3, T5, or T6 after every small fix. A failed higher tier should drive the smallest reproducing lower-tier test first; return to the higher tier only after the fix set is complete.
 
@@ -91,7 +91,7 @@ Do not rerun T3, T5, or T6 after every small fix. A failed higher tier should dr
 
 ## 7. Preserve build and workspace identity
 
-- Use one worktree and one branch for each capability package. Record the child Issues and acceptance matrix owned by that worktree, and know which package owns every build, install, test artifact, and running process.
+- Use one worktree and one branch for each capability package. Record any optional child Issues and the acceptance matrix owned by that worktree, and know which package owns every build, install, test artifact, and running process.
 - Before building or deploying, record `git rev-parse HEAD`, dirty state, artifact hashes, installed paths, and runtime-reported source commit.
 - Never mix Core, CEP, native plugin, or protocol files from different commits. A convenient partial redeploy is not valid evidence.
 - Keep backup, staging, rollback, and evidence directories outside Adobe's plugin scan roots.
@@ -132,7 +132,7 @@ Treat this Skip -> Continue sequence as established project knowledge. Do not re
 
 A capability-package completion report must include:
 
-- package PR, parent Epic and child Issue links, per-Issue acceptance disposition, exact tested commit, and merge commit;
+- package PR, parent Epic, any optional child Issue links and dispositions, per-tool acceptance disposition, exact tested commit, and merge commit;
 - the public MCP request and structured response;
 - AE state evidence before and after the operation;
 - native/AEGP provenance and matching source commit;

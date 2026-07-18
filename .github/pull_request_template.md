@@ -24,6 +24,6 @@ Review findings and disposition (blocker / follow-up / out of scope):
 - T3 and required CI status on that SHA:
 - All relevant Core / CEP / native / protocol identities match: yes / no
 - Redacted T5 real-AE evidence link or summary:
-- Post-freeze SHA replacement and reason: none / describe
+- Post-freeze SHA replacement and reason: none / describe; if replaced, record required CI for the replacement SHA
 
-After merge, record T6, child-Issue closure, and efficiency counters once in the package completion comment using `docs/templates/capability-package-completion.md`.
+After merge, record per-tool T6, any optional child-Issue closure, and efficiency counters once in the package completion comment using `docs/templates/capability-package-completion.md`.

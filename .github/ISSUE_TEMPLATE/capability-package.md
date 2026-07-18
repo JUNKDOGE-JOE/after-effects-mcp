@@ -16,7 +16,7 @@ Follow `docs/CAPABILITY_PACKAGE_WORKFLOW.md`. This Issue is the single source of
 - User-visible outcome:
 - Normal target: 6-10 tools (allowed range 5-15)
 
-## Child Issues
+## Child Issues (optional)
 
 - [ ] #
 
@@ -43,7 +43,7 @@ Follow `docs/CAPABILITY_PACKAGE_WORKFLOW.md`. This Issue is the single source of
 
 ## Public capability and acceptance matrix
 
-| Child Issue | Public MCP tool and schema | Capability ID / shared primitive | R/W | Postcondition | Undo | Important interaction | Status |
+| Optional child Issue | Public MCP tool and schema | Capability ID / shared primitive | R/W | Postcondition | Undo | Important interaction | Status |
 |---|---|---|---|---|---|---|---|
 | # |  |  |  |  |  |  | planned |
 
@@ -71,10 +71,10 @@ public MCP tool
 - T0 commands:
 - T1 commands:
 - T2 commands:
-- T3 full regression / required CI:
+- T3 full regression / required CI for each frozen candidate SHA:
 - T4 narrow hardware smoke, if required:
 - T5 candidate harness:
-- T6 clean-main harness:
+- T6 clean-main harness (every included public tool; accepted optional child Issues; every write Undo):
 
 ## Hardware preflight
 
@@ -92,4 +92,4 @@ public MCP tool
 - [ ] Every write has executed and verified Undo.
 - [ ] Review/CI pass and candidate identity is exact.
 - [ ] Clean-main rebuild/reinstall and package smoke pass.
-- [ ] Per-Issue disposition and remaining risks are recorded.
+- [ ] Per-tool acceptance, optional per-Issue disposition, and remaining risks are recorded.

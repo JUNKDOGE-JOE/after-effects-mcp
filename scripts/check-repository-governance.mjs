@@ -9,7 +9,13 @@ import { fileURLToPath } from 'node:url';
 
 export const GOVERNANCE_PATH = 'AGENTS.md';
 export const INVENTORY_PATH = 'docs/checkpoints/2026-07-16-worktree-audit.md';
-export const GOVERNANCE_SHA256 = '766e9e84cbffd31c1a0df98ae0fc1817da57533ed2530ac862da866286a2d2c0';
+export const GOVERNANCE_SHA256 = '06c98ef7c5423b6bdde3a32849da88ae7ccb04136a0aca9784d1f1fd2d0fb949';
+export const SUPPORTING_WORKFLOW_PATHS = [
+  '.github/ISSUE_TEMPLATE/capability-package.md',
+  '.github/pull_request_template.md',
+  'docs/CAPABILITY_PACKAGE_WORKFLOW.md',
+  'docs/templates/capability-package-completion.md',
+];
 
 const REQUIRED_RULES = [
   '# Repository Development and Delivery Rules',
@@ -24,7 +30,7 @@ const REQUIRED_RULES = [
   '## 10. Stop conditions before starting the next dependent capability package',
   'Do not implement issues by issue number or creation order.',
   'Automated tests and CI never substitute for hardware validation.',
-  'After merge, repeat the relevant public MCP smoke test from a clean `main` build.',
+  'After merge, repeat the public MCP package smoke from a clean `main` build.',
   'Never blindly repeat a possibly completed write.',
   'This is the candidate freeze.',
   '**T0, every edit:**',
@@ -83,6 +89,9 @@ export function validateGovernance({ agentsText, inventoryText, trackedPaths }) 
   }
   if (!trackedPaths.has(GOVERNANCE_PATH)) errors.push(`${GOVERNANCE_PATH} must be tracked by git`);
   if (!trackedPaths.has(INVENTORY_PATH)) errors.push(`${INVENTORY_PATH} must be tracked by git`);
+  for (const workflowPath of SUPPORTING_WORKFLOW_PATHS) {
+    if (!trackedPaths.has(workflowPath)) errors.push(`${workflowPath} must be tracked by git`);
+  }
   if (!inventoryText.includes('Initial registered worktrees: **26**')) {
     errors.push(`${INVENTORY_PATH} must record the 26-worktree baseline`);
   }
