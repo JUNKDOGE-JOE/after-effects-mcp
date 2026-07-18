@@ -297,9 +297,11 @@ function installProtocol(server, options) {
                         request.params.capabilityId,
                     );
                     result = structuredClone(vector.response.result);
-                    result.evidence.requestId = request.requestId;
-                    result.evidence.requestDigest = invokeRequestDigest(request);
-                    rebindPostcondition(result);
+                    if (!input.preserveProjectCompositionFixtureEvidence) {
+                        result.evidence.requestId = request.requestId;
+                        result.evidence.requestDigest = invokeRequestDigest(request);
+                        rebindPostcondition(result);
+                    }
                     if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else if (request.params.capabilityId === 'ae.composition.create') {
                     result = structuredClone(COMPOSITION_CREATE_VECTOR.response.result);
@@ -565,6 +567,28 @@ test('CEP client negotiates and verifies all eight frozen #150 native contracts'
             .map(function (request) { return request.params.capabilityId; }),
         Array.from(PROJECT_COMPOSITION_VECTORS.keys()),
     );
+});
+
+test('CEP client accepts the shared comment fixture without rebinding native evidence', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client } = await readyNativeClient(t, {
+        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
+        preserveProjectCompositionFixtureEvidence: true,
+    });
+    const vector = PROJECT_COMPOSITION_VECTORS.get('ae.project.item.comment.set');
+    const result = await client.invoke({
+        requestId: vector.request.requestId,
+        capabilityId: vector.request.params.capabilityId,
+        capabilityVersion: vector.request.params.capabilityVersion,
+        arguments: structuredClone(vector.request.params.arguments),
+        deadlineUnixMs: vector.request.deadlineUnixMs,
+    });
+    assert.equal(
+        result.evidence.requestDigest,
+        vector.response.result.evidence.requestDigest,
+    );
+    assert.deepEqual(result.value, vector.response.result.value);
 });
 
 test('CEP client rejects tampered #150 read evidence as a contract mismatch', {

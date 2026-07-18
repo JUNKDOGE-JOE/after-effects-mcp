@@ -1464,6 +1464,20 @@ void project_composition_package_parses_and_serializes_all_eight_contracts() {
         "package-150 invoke parser lost its typed capability: " + capability_id);
   }
 
+  const ParsedRequest comment_fixture = decode_request_frame(frame(package150_invoke_json(
+      "invoke-item-comment-set-1",
+      "ae.project.item.comment.set",
+      "{\"itemLocator\":" + item
+        + ",\"comment\":\"SYNTHETIC_COMMENT\","
+          "\"idempotencyKey\":\"synthetic-item-comment-0001\"}")));
+  const auto& comment_params = std::get<InvokeParams>(comment_fixture.params);
+  require(comment_fixture.request_fingerprint_sha256
+          == "86593f8a6ba8292928dcbb25ba126c07f73ad4a0f55e71ccf99902505b725522",
+      "comment request fingerprint drifted from the shared RFC 8785 fixture");
+  require(comment_params.arguments_fingerprint_sha256
+          == "38951b3ec3463cdfbcb53ae0e0c6d35e73e39101da69cad83ede4410992f13a3",
+      "comment arguments fingerprint is not RFC 8785 canonical");
+
   const auto project = locator(
       "project", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
   const auto item_locator = locator(

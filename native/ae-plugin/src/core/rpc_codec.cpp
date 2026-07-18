@@ -676,6 +676,29 @@ std::string canonical_layer_effect_apply_arguments(
     std::string_view effect_match_name,
     std::string_view idempotency_key);
 
+std::string canonical_project_item_text_set_arguments(
+    std::string_view capability_id,
+    const ObjectLocator& item_locator,
+    std::string_view field_name,
+    std::string_view value,
+    std::string_view idempotency_key) {
+  if ((capability_id != "ae.project.item.name.set"
+          && capability_id != "ae.project.item.comment.set")
+      || (field_name != "name" && field_name != "comment")
+      || !valid_output_locator(item_locator)
+      || (item_locator.kind != "item" && item_locator.kind != "composition")
+      || !valid_idempotency_key(idempotency_key)) {
+    invalid_argument("invalid project item text arguments digest input");
+  }
+  std::vector<std::string> members{
+      "\"" + std::string(field_name) + "\":" + json_string(value),
+      "\"idempotencyKey\":" + json_string(idempotency_key),
+      "\"itemLocator\":" + locator_json(item_locator),
+  };
+  std::sort(members.begin(), members.end());
+  return "{" + members[0] + "," + members[1] + "," + members[2] + "}";
+}
+
 std::string canonical_request(const ParsedRequest& request) {
   std::string params;
   switch (request.method) {
@@ -770,9 +793,12 @@ std::string canonical_request(const ParsedRequest& request) {
           || value.capability_id == "ae.project.item.comment.set") {
         const std::string_view field = value.capability_id == "ae.project.item.name.set"
             ? "name" : "comment";
-        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
-            + ",\"itemLocator\":" + locator_json(*value.item_locator)
-            + ",\"" + std::string(field) + "\":" + json_string(value.item_text) + "}";
+        arguments = canonical_project_item_text_set_arguments(
+            value.capability_id,
+            *value.item_locator,
+            field,
+            value.item_text,
+            value.idempotency_key);
       } else if (value.capability_id == "ae.project.item.label.set") {
         arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
             + ",\"itemLocator\":" + locator_json(*value.item_locator)
@@ -2870,17 +2896,8 @@ std::string digest_project_item_text_set_arguments(
     std::string_view field_name,
     std::string_view value,
     std::string_view idempotency_key) {
-  if ((capability_id != "ae.project.item.name.set"
-          && capability_id != "ae.project.item.comment.set")
-      || (field_name != "name" && field_name != "comment")
-      || !valid_output_locator(item_locator)
-      || (item_locator.kind != "item" && item_locator.kind != "composition")
-      || !valid_idempotency_key(idempotency_key)) {
-    invalid_argument("invalid project item text arguments digest input");
-  }
-  return sha256_hex("{\"idempotencyKey\":" + json_string(idempotency_key)
-      + ",\"itemLocator\":" + locator_json(item_locator)
-      + ",\"" + std::string(field_name) + "\":" + json_string(value) + "}");
+  return sha256_hex(canonical_project_item_text_set_arguments(
+      capability_id, item_locator, field_name, value, idempotency_key));
 }
 
 std::string digest_project_item_text_set_postcondition(
