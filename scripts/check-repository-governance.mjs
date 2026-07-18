@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 export const GOVERNANCE_PATH = 'AGENTS.md';
 export const INVENTORY_PATH = 'docs/checkpoints/2026-07-16-worktree-audit.md';
-export const GOVERNANCE_SHA256 = 'cf384c1e4c800fc9b784cbcb01edc1534ef24a720c87218c8c7741e433b49da6';
+export const GOVERNANCE_SHA256 = '766e9e84cbffd31c1a0df98ae0fc1817da57533ed2530ac862da866286a2d2c0';
 
 const REQUIRED_RULES = [
   '# Repository Development and Delivery Rules',
@@ -26,6 +26,12 @@ const REQUIRED_RULES = [
   'Automated tests and CI never substitute for hardware validation.',
   'After merge, repeat the relevant public MCP smoke test from a clean `main` build.',
   'Never blindly repeat a possibly completed write.',
+  'This is the candidate freeze.',
+  '**T0, every edit:**',
+  '**T6, clean-main acceptance:**',
+  'no more than two concentrated review rounds by default',
+  'fully local, non-evictable storage',
+  'The WIP limit is one dependent native capability package.',
 ];
 
 export const FINAL_WORKTREES = [

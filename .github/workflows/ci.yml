@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
-  # Stacked native P0 PRs target their dependency branch until real-host
-  # validation is complete, so CI must run for every pull-request base.
+  # Test every PR base so an explicitly reviewed dependency branch remains testable;
+  # this does not authorize per-tool or dependent stacked PRs.
   pull_request: {}
 
 permissions:
