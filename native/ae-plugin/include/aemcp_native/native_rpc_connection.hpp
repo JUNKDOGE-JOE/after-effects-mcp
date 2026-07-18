@@ -40,6 +40,14 @@ struct NativeRpcRuntimeInfo {
   std::string project_item_comment_set_contract_digest;
   std::string project_item_label_set_contract_digest;
   std::string composition_duplicate_contract_digest;
+  std::string layer_details_read_contract_digest;
+  std::string layer_name_set_contract_digest;
+  std::string layer_range_set_contract_digest;
+  std::string layer_start_time_set_contract_digest;
+  std::string layer_stretch_set_contract_digest;
+  std::string layer_order_set_contract_digest;
+  std::string layer_parent_set_contract_digest;
+  std::string layer_duplicate_contract_digest;
 };
 
 class NativeRpcObserver {

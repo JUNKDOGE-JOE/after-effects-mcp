@@ -3,6 +3,40 @@
 These scripts call the same public MCP tools that a model sees. They do not
 call Core handlers, the CEP HTTP bridge, or the native socket directly.
 
+## Capability package #155
+
+`issue155_layer_timeline_acceptance.py` is the frozen driver for the Layer
+Timeline Editing package. T5/T6 exercise all eight public tools in one formal
+AE session, verify all seven writes with real Undo/readback, save the single
+active fixture in place, restart formal AE, reacquire fresh locators, and prove
+the post-restart state still matches the stable post-Undo baseline. T4 is the
+narrow duplication primitive smoke.
+
+The fixture lifecycle is always `ephemeral-validation`. The exact fixture path
+must be an absent absolute `.aep` path before preflight. The runner permits one
+first save and no Save As copies; after successful acceptance it moves the
+closed fixture into a unique run directory under the explicit recovery archive
+root. That root must be outside every Adobe CEP and plug-in scan root.
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 uv run --frozen python \
+  scripts/hardware/issue155_layer_timeline_acceptance.py \
+  --mode t5 \
+  --expected-sha 0123456789abcdef0123456789abcdef01234567 \
+  --fixture-path '/absolute/local/active/issue155-layer-timeline.aep' \
+  --recovery-archive-root '/absolute/local/recovery/ae-mcp-fixtures' \
+  --stretch-percent 125.5 \
+  --native-receipt /absolute/candidate/native/build-receipt.json \
+  --native-manifest /absolute/candidate/native-plugin-manifest.json \
+  --evidence-dir '/absolute/private/evidence/issue155-t5'
+```
+
+At `restart-ae`, save the current exact fixture in place before quitting. Start
+only the explicit formal AE application path and reopen the fixture through AE,
+never Finder/LaunchServices. The driver binds every response to the latest
+formal native load record, requires both host instance and session to change,
+and rejects any fixture-state drift before archival.
+
 ## Capability package #150
 
 `issue150_project_composition_acceptance.py` is the frozen hardware driver for

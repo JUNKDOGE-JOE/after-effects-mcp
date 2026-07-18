@@ -22,6 +22,7 @@ import {
   encodeFrame,
   materializeDeadline,
   nativeCapabilityRegistry,
+  layerTimelineDescriptors,
   projectCompositionDescriptors,
   postconditionDigest,
   compositionLayersListContractDigest,
@@ -188,7 +189,7 @@ test('schema locks strict framing, bounded defaults, rate limits, and native pro
     encoding: 'utf-8',
     maxFrameBytes: 524288,
     maxJsonDepth: 16,
-    maxJsonNodes: 8192,
+    maxJsonNodes: 12288,
     maxStringLength: 8192,
     stringLengthUnit: 'unicode-scalar-values',
     duplicateObjectKeys: 'reject',
@@ -254,6 +255,14 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-project-item-comment-set.json',
     'invoke-project-item-label-set.json',
     'invoke-composition-duplicate.json',
+    'invoke-layer-details-read.json',
+    'invoke-layer-name-set.json',
+    'invoke-layer-range-set.json',
+    'invoke-layer-start-time-set.json',
+    'invoke-layer-stretch-set.json',
+    'invoke-layer-order-set.json',
+    'invoke-layer-parent-set.json',
+    'invoke-layer-duplicate.json',
     'invalidate-graph.json',
     'cancel.json',
     'errors.json',
@@ -304,6 +313,14 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-project-item-comment-set.json',
     'invoke-project-item-label-set.json',
     'invoke-composition-duplicate.json',
+    'invoke-layer-details-read.json',
+    'invoke-layer-name-set.json',
+    'invoke-layer-range-set.json',
+    'invoke-layer-start-time-set.json',
+    'invoke-layer-stretch-set.json',
+    'invoke-layer-order-set.json',
+    'invoke-layer-parent-set.json',
+    'invoke-layer-duplicate.json',
     'invalidate-graph.json',
     'cancel.json',
   ]) {
@@ -370,7 +387,7 @@ test('strict framing handles UTF-8, fragments, multiple frames, and malformed JS
   }
   assert.throws(() => decodeFrame(frameFromText('{"a":1,"a":2}')), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson(`${'['.repeat(17)}0${']'.repeat(17)}`), { code: 'INVALID_REQUEST' });
-  assert.throws(() => strictParseJson(`[${'0,'.repeat(8192)}0]`), { code: 'INVALID_REQUEST' });
+  assert.throws(() => strictParseJson(`[${'0,'.repeat(12288)}0]`), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson(JSON.stringify('x'.repeat(8193))), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson('{"n":9007199254740993}'), { code: 'INVALID_REQUEST' });
 });
@@ -383,9 +400,9 @@ test('input and output codecs enforce the same exact JSON limits', () => {
   assert.throws(() => assertJsonLimits(depth17), { code: 'INVALID_REQUEST' });
   assert.throws(() => encodeFrame(depth17), { code: 'INVALID_REQUEST' });
 
-  const nodes8192 = Array.from({ length: 8191 }, () => 0);
-  assert.equal(assertJsonLimits(nodes8192), true);
-  assert.throws(() => assertJsonLimits([...nodes8192, 0]), { code: 'INVALID_REQUEST' });
+  const nodes12288 = Array.from({ length: 12287 }, () => 0);
+  assert.equal(assertJsonLimits(nodes12288), true);
+  assert.throws(() => assertJsonLimits([...nodes12288, 0]), { code: 'INVALID_REQUEST' });
   assert.doesNotThrow(() => encodeFrame('x'.repeat(8192)));
   assert.throws(() => encodeFrame('x'.repeat(8193)), { code: 'INVALID_REQUEST' });
   assert.throws(() => encodeFrame({ ['x'.repeat(8193)]: true }), { code: 'INVALID_REQUEST' });
@@ -631,7 +648,7 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 22);
+  assert.equal(nativeCapabilityRegistry(schema).length, 30);
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -822,6 +839,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const layerPropertyKeyframesDescriptor = layerPropertyKeyframesListDescriptor(schema);
   const layerPropertyDescriptor = layerPropertySetDescriptor(schema);
   const projectCompositionCapabilities = projectCompositionDescriptors(schema);
+  const layerTimelineCapabilities = layerTimelineDescriptors(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -906,7 +924,8 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     layerPropertyKeyframesDescriptor,
     layerPropertyDescriptor,
     ...projectCompositionCapabilities,
-  ]), '12640c0306641fd32553828d86a4c87728a2c964fe0d288c06a7107fcf9cfdd9');
+    ...layerTimelineCapabilities,
+  ]), capabilityDigest(nativeCapabilityRegistry(schema)));
   assert.equal(projectCompositionCapabilities.length, 8);
   for (const descriptor of projectCompositionCapabilities) {
     assert.equal(validateCapabilityDescriptor(descriptor, schema), true, descriptor.id);
@@ -916,6 +935,15 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
       resultSchema: descriptor.resultSchema,
     }), stem);
   }
+  assert.equal(layerTimelineCapabilities.length, 8);
+  for (const timelineDescriptor of layerTimelineCapabilities) {
+    assert.equal(validateCapabilityDescriptor(timelineDescriptor, schema), true,
+      timelineDescriptor.id);
+    assert.equal(timelineDescriptor.contractDigest, sha256Jcs({
+      inputSchema: timelineDescriptor.inputSchema,
+      resultSchema: timelineDescriptor.resultSchema,
+    }));
+  }
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -924,7 +952,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 22);
+  assert.equal(exchange.response.result.items.length, 30);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1456,6 +1484,99 @@ test('project and composition package vectors bind all eight frozen contracts', 
   splitFreshContext.at(-1).result.evidence.postcondition.digest =
     postconditionDigest(splitFreshContext.at(-1).result);
   assert.equal(duplicateIsValid(splitFreshContext), false);
+});
+
+test('layer timeline package vectors bind all eight frozen contracts', () => {
+  const names = [
+    'invoke-layer-details-read.json',
+    'invoke-layer-name-set.json',
+    'invoke-layer-range-set.json',
+    'invoke-layer-start-time-set.json',
+    'invoke-layer-stretch-set.json',
+    'invoke-layer-order-set.json',
+    'invoke-layer-parent-set.json',
+    'invoke-layer-duplicate.json',
+  ];
+  const descriptors = new Map(
+    layerTimelineDescriptors(schema).map((descriptor) => [descriptor.id, descriptor]),
+  );
+  const transcriptFor = (fixture) => ({
+    hello: golden('hello.json'),
+    descriptor: descriptors.get(fixture.request.params.capabilityId),
+    schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: fixture.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  });
+  for (const name of names) {
+    const fixture = golden(name);
+    assert.equal(fixture.response.result.evidence.requestDigest,
+      sha256Jcs(fixture.request), `${name} request digest`);
+    assert.equal(fixture.response.result.evidence.postcondition.digest,
+      postconditionDigest(fixture.response.result), `${name} postcondition digest`);
+    assert.equal(validateTranscript(
+      transcriptFor(fixture), fixture.request, [...fixture.events, fixture.response],
+    ), true, name);
+  }
+
+  const invalidRequests = [];
+  const range = golden('invoke-layer-range-set.json').request;
+  invalidRequests.push({ ...range, params: { ...range.params, arguments: {
+    ...range.params.arguments, inPoint: { value: 1, scale: 1, secondsRational: '1' },
+  } } });
+  const stretch = golden('invoke-layer-stretch-set.json').request;
+  invalidRequests.push({ ...stretch, params: { ...stretch.params, arguments: {
+    ...stretch.params.arguments, stretch: { num: 0, den: 1 },
+  } } });
+  const order = golden('invoke-layer-order-set.json').request;
+  invalidRequests.push({ ...order, params: { ...order.params, arguments: {
+    ...order.params.arguments, targetStackIndex: 0,
+  } } });
+  const parent = golden('invoke-layer-parent-set.json').request;
+  invalidRequests.push({ ...parent, params: { ...parent.params, arguments: {
+    ...parent.params.arguments, parentLayerLocator: parent.params.arguments.layerLocator,
+  } } });
+  const duplicate = golden('invoke-layer-duplicate.json').request;
+  const missingName = structuredClone(duplicate);
+  delete missingName.params.arguments.newName;
+  invalidRequests.push(missingName);
+  for (const [index, request] of invalidRequests.entries()) {
+    assert.equal(schemaAccepts(schema.$defs.request, request), index === 3,
+      'self-parenting is the one cross-field invariant left to composite validation');
+    assert.deepEqual(classifyRequest(request), { ok: false, errorCode: 'INVALID_ARGUMENT' });
+  }
+
+  const details = golden('invoke-layer-details-read.json');
+  const noncanonicalStretch = structuredClone([...details.events, details.response]);
+  noncanonicalStretch.at(-1).result.value.stretch.rational = '2/2';
+  noncanonicalStretch.at(-1).result.evidence.postcondition.digest =
+    postconditionDigest(noncanonicalStretch.at(-1).result);
+  assert.equal(validateTranscript(
+    transcriptFor(details), details.request, noncanonicalStretch,
+  ), false);
+
+  const rangeFixture = golden('invoke-layer-range-set.json');
+  const wrongRange = structuredClone([...rangeFixture.events, rangeFixture.response]);
+  wrongRange.at(-1).result.value.afterDuration = {
+    value: 3, scale: 1, secondsRational: '3',
+  };
+  wrongRange.at(-1).result.evidence.postcondition.digest =
+    postconditionDigest(wrongRange.at(-1).result);
+  assert.equal(validateTranscript(
+    transcriptFor(rangeFixture), rangeFixture.request, wrongRange,
+  ), false);
+
+  const duplicateFixture = golden('invoke-layer-duplicate.json');
+  const staleDuplicate = structuredClone([
+    ...duplicateFixture.events, duplicateFixture.response,
+  ]);
+  staleDuplicate.at(-1).result.value.sourceLayerLocator.generation =
+    duplicateFixture.request.params.arguments.layerLocator.generation;
+  staleDuplicate.at(-1).result.evidence.postcondition.digest =
+    postconditionDigest(staleDuplicate.at(-1).result);
+  assert.equal(validateTranscript(
+    transcriptFor(duplicateFixture), duplicateFixture.request, staleDuplicate,
+  ), false);
 });
 
 test('bit-depth invoke vectors bind native read and undoable set semantics', () => {

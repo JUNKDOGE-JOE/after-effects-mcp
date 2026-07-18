@@ -85,6 +85,14 @@ using aemcp::native::HostProjectGraphInvalidationResult;
 using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::HostLayerPropertyKeyframesResult;
 using aemcp::native::HostLayerPropertyWriteResult;
+using aemcp::native::HostLayerDetailsResult;
+using aemcp::native::HostLayerNameWriteResult;
+using aemcp::native::HostLayerRangeWriteResult;
+using aemcp::native::HostLayerStartTimeWriteResult;
+using aemcp::native::HostLayerStretchWriteResult;
+using aemcp::native::HostLayerOrderWriteResult;
+using aemcp::native::HostLayerParentWriteResult;
+using aemcp::native::HostLayerDuplicateResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
 using aemcp::native::NativeEndpointDescriptor;
@@ -107,6 +115,14 @@ using aemcp::native::CompositionPositiveRatio;
 using aemcp::native::CompositionSettings;
 using aemcp::native::CompositionWorkAreaChanged;
 using aemcp::native::CompositionDuplicated;
+using aemcp::native::LayerDetails;
+using aemcp::native::LayerDuplicated;
+using aemcp::native::LayerNameChanged;
+using aemcp::native::LayerOrderChanged;
+using aemcp::native::LayerParentChanged;
+using aemcp::native::LayerRangeChanged;
+using aemcp::native::LayerStartTimeChanged;
+using aemcp::native::LayerStretchChanged;
 using aemcp::native::ObjectLocator;
 using aemcp::native::Request;
 using aemcp::native::SystemClock;
@@ -133,6 +149,14 @@ using aemcp::native::kProjectItemNameSetCapability;
 using aemcp::native::kProjectItemCommentSetCapability;
 using aemcp::native::kProjectItemLabelSetCapability;
 using aemcp::native::kCompositionDuplicateCapability;
+using aemcp::native::kLayerDetailsReadCapability;
+using aemcp::native::kLayerNameSetCapability;
+using aemcp::native::kLayerRangeSetCapability;
+using aemcp::native::kLayerStartTimeSetCapability;
+using aemcp::native::kLayerStretchSetCapability;
+using aemcp::native::kLayerOrderSetCapability;
+using aemcp::native::kLayerParentSetCapability;
+using aemcp::native::kLayerDuplicateCapability;
 using aemcp::native::kProjectGraphInvalidateControl;
 using aemcp::native::locate_unique_insertion;
 
@@ -141,7 +165,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "12640c0306641fd32553828d86a4c87728a2c964fe0d288c06a7107fcf9cfdd9";
+    "53e3b7974e797b088aa1dd25d600a2506f59fed0d11c34ca8249e87dcf3ee4a1";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -186,6 +210,22 @@ constexpr std::string_view kProjectItemLabelSetContractDigest =
     "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f";
 constexpr std::string_view kCompositionDuplicateContractDigest =
     "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3";
+constexpr std::string_view kLayerDetailsReadContractDigest =
+    "b1b7a5f313bbf72eb6b33ac4a0507f9f925ef6873d53fd07d93d861164ac15d9";
+constexpr std::string_view kLayerNameSetContractDigest =
+    "a68fb7f75f050faf4e77c81c3fa9f53ad501016af0eeb065493716ff94fd5929";
+constexpr std::string_view kLayerRangeSetContractDigest =
+    "0b90618916f0df612726017ef80795b72829f367cbf46cad23b33beb129230e2";
+constexpr std::string_view kLayerStartTimeSetContractDigest =
+    "c0c09292b98f5fecfb69a487f2014aed6ce2b67d47f07231beea36d916e07e27";
+constexpr std::string_view kLayerStretchSetContractDigest =
+    "0545a85e87d8907f94597ba36e3021fd3fa6dfe1262ff0e81eb30551f5e3bbb8";
+constexpr std::string_view kLayerOrderSetContractDigest =
+    "e977b89201314e2e4ee1b6e7a09efadd06f012b2b97e3087b0d9c4bd8102d162";
+constexpr std::string_view kLayerParentSetContractDigest =
+    "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c";
+constexpr std::string_view kLayerDuplicateContractDigest =
+    "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75";
 constexpr std::int64_t kMaximumProjectItems = 100000;
 constexpr A_long kMaximumLayerEffects = 4096;
 static_assert(kSourceCommit.size() == 40);
@@ -5372,10 +5412,702 @@ class AegpHostApi final : public HostApi {
     return HostLayerPropertyWriteResult::success(std::move(changed));
   }
 
+  [[nodiscard]] HostLayerDetailsResult read_layer_details(
+      const aemcp::native::LayerDetailsQuery& query,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr) {
+      return HostLayerDetailsResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer detail suites are unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), query.layer_locator, query.host_instance_id,
+        query.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerDetailsResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto details = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        query.host_instance_id, query.session_id);
+    if (!details.has_value() || details->layer_locator != query.layer_locator) {
+      return HostLayerDetailsResult::failure(
+          "CAPABILITY_FAILED", "could not read complete layer details");
+    }
+    return HostLayerDetailsResult::success(*details);
+  }
+
+  [[nodiscard]] HostLayerNameWriteResult set_layer_name(
+      const aemcp::native::LayerNameSetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerNameWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer name suites are unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    const auto utf16_name = utf16_layer_name(command.name);
+    if (!resolved.has_value()) {
+      return HostLayerNameWriteResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto before = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    if (!utf16_name.has_value() || !before.has_value()) {
+      return HostLayerNameWriteResult::failure(
+          "CAPABILITY_FAILED", "could not validate layer name mutation");
+    }
+    if (before->name == command.name) {
+      return HostLayerNameWriteResult::failure(
+          "INVALID_ARGUMENT", "layer name already matches the requested value",
+          "params.arguments.name");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerNameWriteResult::failure(
+          "DEADLINE_EXCEEDED", "layer name mutation budget elapsed");
+    }
+    static constexpr char kUndoLabel[] = "ae-mcp: Set layer name";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerNameWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = layer_suite->AEGP_SetLayerName(
+        resolved->layer, utf16_name->data());
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value() || after->name != command.name) {
+      return HostLayerNameWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer name may have changed but readback or Undo close failed");
+    }
+    return HostLayerNameWriteResult::success({
+        true, command.layer_locator, before->name, after->name});
+  }
+
+  [[nodiscard]] HostLayerRangeWriteResult set_layer_range(
+      const aemcp::native::LayerRangeSetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerRangeWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer range suites are unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerRangeWriteResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto before = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    const auto equal_time = [](const CompositionCurrentTime& left,
+                               const CompositionCurrentTime& right) {
+      return static_cast<std::int64_t>(left.value) * right.scale
+          == static_cast<std::int64_t>(right.value) * left.scale;
+    };
+    if (!before.has_value()) {
+      return HostLayerRangeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read layer range before mutation");
+    }
+    if (equal_time(before->in_point, command.in_point)
+        && equal_time(before->duration, command.duration)) {
+      return HostLayerRangeWriteResult::failure(
+          "INVALID_ARGUMENT", "layer range already matches the requested value",
+          "params.arguments");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerRangeWriteResult::failure(
+          "DEADLINE_EXCEEDED", "layer range mutation budget elapsed");
+    }
+    const A_Time target_in{
+        static_cast<A_long>(command.in_point.value),
+        static_cast<A_u_long>(command.in_point.scale)};
+    const A_Time target_duration{
+        static_cast<A_long>(command.duration.value),
+        static_cast<A_u_long>(command.duration.scale)};
+    static constexpr char kUndoLabel[] = "ae-mcp: Set layer range";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerRangeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = layer_suite->AEGP_SetLayerInPointAndDuration(
+        resolved->layer, AEGP_LTimeMode_CompTime, &target_in, &target_duration);
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value() || !equal_time(after->in_point, command.in_point)
+        || !equal_time(after->duration, command.duration)) {
+      return HostLayerRangeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer range may have changed but readback or Undo close failed");
+    }
+    return HostLayerRangeWriteResult::success({
+        true,
+        command.layer_locator,
+        before->in_point,
+        before->duration,
+        after->in_point,
+        after->duration});
+  }
+
+  [[nodiscard]] HostLayerStartTimeWriteResult set_layer_start_time(
+      const aemcp::native::LayerStartTimeSetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerStartTimeWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer start-time suites are unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerStartTimeWriteResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto before = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    const auto equal_time = [](const CompositionCurrentTime& left,
+                               const CompositionCurrentTime& right) {
+      return static_cast<std::int64_t>(left.value) * right.scale
+          == static_cast<std::int64_t>(right.value) * left.scale;
+    };
+    if (!before.has_value()) {
+      return HostLayerStartTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read layer start time before mutation");
+    }
+    if (equal_time(before->start_time, command.start_time)) {
+      return HostLayerStartTimeWriteResult::failure(
+          "INVALID_ARGUMENT", "layer start time already matches the requested value",
+          "params.arguments.startTime");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerStartTimeWriteResult::failure(
+          "DEADLINE_EXCEEDED", "layer start-time mutation budget elapsed");
+    }
+    const A_Time target{
+        static_cast<A_long>(command.start_time.value),
+        static_cast<A_u_long>(command.start_time.scale)};
+    static constexpr char kUndoLabel[] = "ae-mcp: Set layer start time";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerStartTimeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = layer_suite->AEGP_SetLayerOffset(
+        resolved->layer, &target);
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value() || !equal_time(after->start_time, command.start_time)) {
+      return HostLayerStartTimeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer start time may have changed but readback or Undo close failed");
+    }
+    return HostLayerStartTimeWriteResult::success({
+        true, command.layer_locator, before->start_time, after->start_time});
+  }
+
+  [[nodiscard]] HostLayerStretchWriteResult set_layer_stretch(
+      const aemcp::native::LayerStretchSetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerStretchWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer stretch suites are unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerStretchWriteResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto before = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    if (!before.has_value()) {
+      return HostLayerStretchWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read layer stretch before mutation");
+    }
+    const auto ratio_equal = [](const aemcp::native::LayerStretchRatio& left,
+                                const aemcp::native::LayerStretchRatio& right) {
+      return static_cast<std::int64_t>(left.numerator) * right.denominator
+          == static_cast<std::int64_t>(right.numerator) * left.denominator;
+    };
+    if (ratio_equal(before->stretch, command.stretch)) {
+      return HostLayerStretchWriteResult::failure(
+          "INVALID_ARGUMENT", "layer stretch already matches the requested ratio",
+          "params.arguments.stretch");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerStretchWriteResult::failure(
+          "DEADLINE_EXCEEDED", "layer stretch mutation budget elapsed");
+    }
+    const A_Ratio target{
+        static_cast<A_long>(command.stretch.numerator),
+        static_cast<A_u_long>(command.stretch.denominator)};
+    static constexpr char kUndoLabel[] = "ae-mcp: Set layer stretch";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerStretchWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = layer_suite->AEGP_SetLayerStretch(
+        resolved->layer, &target);
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value() || !ratio_equal(after->stretch, command.stretch)) {
+      return HostLayerStretchWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer stretch may have changed but readback or Undo close failed");
+    }
+    return HostLayerStretchWriteResult::success({
+        true, command.layer_locator, before->stretch, after->stretch});
+  }
+
+  [[nodiscard]] HostLayerOrderWriteResult set_layer_order(
+      const aemcp::native::LayerOrderSetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerOrderWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer order suites are unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerOrderWriteResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto before = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    A_long layer_count = 0;
+    if (!before.has_value()
+        || layer_suite->AEGP_GetCompNumLayers(
+            resolved->composition, &layer_count) != A_Err_NONE
+        || layer_count < 1) {
+      return HostLayerOrderWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read layer order before mutation");
+    }
+    if (command.target_stack_index > static_cast<std::uint64_t>(layer_count)) {
+      return HostLayerOrderWriteResult::failure(
+          "INVALID_ARGUMENT", "targetStackIndex exceeds the composition layer count",
+          "params.arguments.targetStackIndex");
+    }
+    if (before->stack_index == command.target_stack_index) {
+      return HostLayerOrderWriteResult::failure(
+          "INVALID_ARGUMENT", "layer already occupies the requested stack index",
+          "params.arguments.targetStackIndex");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerOrderWriteResult::failure(
+          "DEADLINE_EXCEEDED", "layer order mutation budget elapsed");
+    }
+    static constexpr char kUndoLabel[] = "ae-mcp: Reorder layer";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerOrderWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = layer_suite->AEGP_ReorderLayer(
+        resolved->layer, static_cast<A_long>(command.target_stack_index - 1U));
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value()
+        || after->stack_index != command.target_stack_index) {
+      return HostLayerOrderWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer order may have changed but readback or Undo close failed");
+    }
+    return HostLayerOrderWriteResult::success({
+        true, command.layer_locator, before->stack_index, after->stack_index});
+  }
+
+  [[nodiscard]] HostLayerParentWriteResult set_layer_parent(
+      const aemcp::native::LayerParentSetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerParentWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer parent suites are unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerParentWriteResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto before = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    if (!before.has_value()) {
+      return HostLayerParentWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read layer parent before mutation");
+    }
+    if (before->parent_locator == command.parent_layer_locator) {
+      return HostLayerParentWriteResult::failure(
+          "INVALID_ARGUMENT", "layer parent already matches the requested value",
+          "params.arguments.parentLayerLocator");
+    }
+    AEGP_LayerH target_parent = nullptr;
+    if (command.parent_layer_locator.has_value()) {
+      const auto parent = resolve_layer(
+          project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+          memory_suite.get(), *command.parent_layer_locator,
+          command.host_instance_id, command.session_id, work_deadline);
+      if (!parent.has_value()) {
+        return HostLayerParentWriteResult::failure(
+            "STALE_LOCATOR", "parentLayerLocator does not identify a current layer",
+            "params.arguments.parentLayerLocator");
+      }
+      if (parent->composition_item_id != resolved->composition_item_id) {
+        return HostLayerParentWriteResult::failure(
+            "PRECONDITION_FAILED",
+            "parentLayerLocator must identify a layer in the same composition",
+            "params.arguments.parentLayerLocator");
+      }
+      if (parent->layer == resolved->layer) {
+        return HostLayerParentWriteResult::failure(
+            "INVALID_ARGUMENT",
+            "parentLayerLocator must identify a distinct layer",
+            "params.arguments.parentLayerLocator");
+      }
+      target_parent = parent->layer;
+      A_long layer_count = 0;
+      if (layer_suite->AEGP_GetCompNumLayers(
+              resolved->composition, &layer_count) != A_Err_NONE
+          || layer_count < 1) {
+        return HostLayerParentWriteResult::failure(
+            "CAPABILITY_FAILED", "could not validate the parent chain");
+      }
+      AEGP_LayerH cursor = target_parent;
+      for (A_long depth = 0; cursor != nullptr && depth <= layer_count; ++depth) {
+        if (cursor == resolved->layer) {
+          return HostLayerParentWriteResult::failure(
+              "INVALID_ARGUMENT", "parent assignment would create a cycle",
+              "params.arguments.parentLayerLocator");
+        }
+        AEGP_LayerH next = nullptr;
+        if (layer_suite->AEGP_GetLayerParent(cursor, &next) != A_Err_NONE) {
+          return HostLayerParentWriteResult::failure(
+              "CAPABILITY_FAILED", "could not validate the parent chain");
+        }
+        cursor = next;
+      }
+      if (cursor != nullptr) {
+        return HostLayerParentWriteResult::failure(
+            "CAPABILITY_FAILED", "parent chain exceeded the composition layer bound");
+      }
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerParentWriteResult::failure(
+          "DEADLINE_EXCEEDED", "layer parent mutation budget elapsed");
+    }
+    static constexpr char kUndoLabel[] = "ae-mcp: Set layer parent";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerParentWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = layer_suite->AEGP_SetLayerParent(
+        resolved->layer, target_parent);
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value()
+        || after->parent_locator != command.parent_layer_locator) {
+      return HostLayerParentWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer parent may have changed but readback or Undo close failed");
+    }
+    return HostLayerParentWriteResult::success({
+        true,
+        command.layer_locator,
+        before->parent_locator,
+        after->parent_locator});
+  }
+
+  [[nodiscard]] HostLayerDuplicateResult duplicate_layer(
+      const aemcp::native::LayerDuplicateCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerDuplicateResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer duplicate suites are unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    const auto utf16_name = utf16_layer_name(command.new_name);
+    A_long count_before = 0;
+    if (!resolved.has_value()) {
+      return HostLayerDuplicateResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    if (!utf16_name.has_value()
+        || layer_suite->AEGP_GetCompNumLayers(
+            resolved->composition, &count_before) != A_Err_NONE
+        || count_before < 1) {
+      return HostLayerDuplicateResult::failure(
+          "CAPABILITY_FAILED", "could not validate layer duplication inputs");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerDuplicateResult::failure(
+          "DEADLINE_EXCEEDED", "layer duplication budget elapsed");
+    }
+    static constexpr char kUndoLabel[] = "ae-mcp: Duplicate layer";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerDuplicateResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    AEGP_LayerH duplicate = nullptr;
+    const A_Err duplicate_error = layer_suite->AEGP_DuplicateLayer(
+        resolved->layer, &duplicate);
+    const A_Err name_error = duplicate_error == A_Err_NONE && duplicate != nullptr
+        ? layer_suite->AEGP_SetLayerName(duplicate, utf16_name->data())
+        : A_Err_GENERIC;
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    A_long count_after = 0;
+    AEGP_LayerIDVal duplicate_id = 0;
+    if (duplicate_error != A_Err_NONE || duplicate == nullptr
+        || name_error != A_Err_NONE || end_error != A_Err_NONE
+        || layer_suite->AEGP_GetLayerID(duplicate, &duplicate_id) != A_Err_NONE
+        || layer_suite->AEGP_GetCompNumLayers(
+            resolved->composition, &count_after) != A_Err_NONE
+        || count_after != count_before + 1) {
+      return HostLayerDuplicateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer may have duplicated but creation, rename, count, or Undo close failed");
+    }
+    bool invalidated = false;
+    try {
+      invalidated = graph_.invalidate_project();
+    } catch (...) {
+      invalidated = false;
+    }
+    if (!invalidated) {
+      return HostLayerDuplicateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer duplicated but fresh locator generation failed");
+    }
+    const ObjectLocator fresh_source = graph_.layer_locator(
+        resolved->composition_item_id, resolved->layer_id,
+        command.host_instance_id, command.session_id,
+        command.layer_locator.object_id);
+    const ObjectLocator fresh_new = graph_.layer_locator(
+        resolved->composition_item_id, duplicate_id,
+        command.host_instance_id, command.session_id);
+    const ObjectLocator fresh_composition = graph_.item_locator(
+        resolved->composition_item_id, true,
+        command.host_instance_id, command.session_id);
+    const auto fresh_source_details = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), *resolved,
+        command.host_instance_id, command.session_id);
+    ResolvedLayer new_resolved = *resolved;
+    new_resolved.layer_id = duplicate_id;
+    new_resolved.layer = duplicate;
+    const auto new_details = read_layer_details_value(
+        item_suite.get(), layer_suite.get(), memory_suite.get(), new_resolved,
+        command.host_instance_id, command.session_id);
+    const auto stable_semantics_match = [](const LayerDetails& source,
+                                           const LayerDetails& copied) {
+      const auto time_equal = [](const CompositionCurrentTime& left,
+                                 const CompositionCurrentTime& right) {
+        return static_cast<std::int64_t>(left.value) * right.scale
+            == static_cast<std::int64_t>(right.value) * left.scale;
+      };
+      const auto stretch_equal = [](const aemcp::native::LayerStretchRatio& left,
+                                    const aemcp::native::LayerStretchRatio& right) {
+        return static_cast<std::int64_t>(left.numerator) * right.denominator
+            == static_cast<std::int64_t>(right.numerator) * left.denominator;
+      };
+      return source.composition_locator == copied.composition_locator
+          && source.type == copied.type
+          && source.video_enabled == copied.video_enabled
+          && source.is_three_d == copied.is_three_d
+          && source.locked == copied.locked
+          && source.parent_locator == copied.parent_locator
+          && source.source_item_locator == copied.source_item_locator
+          && time_equal(source.in_point, copied.in_point)
+          && time_equal(source.duration, copied.duration)
+          && time_equal(source.start_time, copied.start_time)
+          && stretch_equal(source.stretch, copied.stretch);
+    };
+    if (!fresh_source_details.has_value() || !new_details.has_value()
+        || fresh_source_details->layer_locator != fresh_source
+        || fresh_source_details->composition_locator != fresh_composition
+        || new_details->name != command.new_name
+        || new_details->layer_locator != fresh_new
+        || new_details->composition_locator != fresh_composition
+        || !stable_semantics_match(*fresh_source_details, *new_details)
+        || std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerDuplicateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "duplicated layer did not preserve fresh-source stable semantics");
+    }
+    LayerDuplicated result;
+    result.source_layer_locator = fresh_source;
+    result.new_layer_locator = fresh_new;
+    result.composition_locator = fresh_composition;
+    result.layer_count_before = static_cast<std::uint64_t>(count_before);
+    result.layer_count_after = static_cast<std::uint64_t>(count_after);
+    result.new_layer = *new_details;
+    result.source_layer = *fresh_source_details;
+    return HostLayerDuplicateResult::success(std::move(result));
+  }
+
  private:
   struct OpenProject {
     AEGP_ProjectH project{nullptr};
     AEGP_ItemH root{nullptr};
+  };
+
+  struct ResolvedLayer {
+    OpenProject open;
+    A_long composition_item_id{0};
+    AEGP_LayerIDVal layer_id{0};
+    AEGP_ItemH composition_item{nullptr};
+    AEGP_CompH composition{nullptr};
+    AEGP_LayerH layer{nullptr};
   };
 
   [[nodiscard]] std::optional<OpenProject> observe_open_project(
@@ -5439,6 +6171,125 @@ class AegpHostApi final : public HostApi {
       item = next;
     }
     return std::nullopt;
+  }
+
+  [[nodiscard]] std::optional<ResolvedLayer> resolve_layer(
+      const AEGP_ProjSuite6* project_suite,
+      const AEGP_ItemSuite9* item_suite,
+      const AEGP_CompSuite12* comp_suite,
+      const AEGP_LayerSuite9* layer_suite,
+      const AEGP_MemorySuite1* memory_suite,
+      const ObjectLocator& locator,
+      std::string_view host,
+      std::string_view session,
+      TimePoint deadline) {
+    const auto open = observe_open_project(project_suite, item_suite, memory_suite);
+    const auto address = graph_.resolve_layer(locator, host, session);
+    if (!open.has_value() || !address.has_value()) return std::nullopt;
+    const auto item = find_project_item(
+        item_suite, open->project, open->root,
+        address->composition_item_id, deadline);
+    AEGP_CompH composition = nullptr;
+    AEGP_LayerH layer = nullptr;
+    if (!item.has_value()
+        || comp_suite->AEGP_GetCompFromItem(*item, &composition) != A_Err_NONE
+        || composition == nullptr
+        || layer_suite->AEGP_GetLayerFromLayerID(
+            composition, address->layer_id, &layer) != A_Err_NONE
+        || layer == nullptr) {
+      return std::nullopt;
+    }
+    return ResolvedLayer{
+        *open,
+        address->composition_item_id,
+        address->layer_id,
+        *item,
+        composition,
+        layer};
+  }
+
+  [[nodiscard]] std::optional<LayerDetails> read_layer_details_value(
+      const AEGP_ItemSuite9* item_suite,
+      const AEGP_LayerSuite9* layer_suite,
+      const AEGP_MemorySuite1* memory_suite,
+      const ResolvedLayer& resolved,
+      std::string_view host,
+      std::string_view session) {
+    A_long layer_index = -1;
+    AEGP_LayerFlags flags = 0;
+    AEGP_ObjectType object_type = AEGP_ObjectType_NONE;
+    AEGP_LayerH parent = nullptr;
+    AEGP_ItemH source = nullptr;
+    A_Time in_point{};
+    A_Time duration{};
+    A_Time offset{};
+    A_Ratio stretch{};
+    std::string name_error;
+    const auto name = read_effective_layer_name(
+        layer_suite, item_suite, memory_suite, plugin_id_,
+        resolved.layer, name_error);
+    if (!name.has_value()
+        || layer_suite->AEGP_GetLayerIndex(resolved.layer, &layer_index) != A_Err_NONE
+        || layer_index < 0
+        || layer_suite->AEGP_GetLayerFlags(resolved.layer, &flags) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerObjectType(
+            resolved.layer, &object_type) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerParent(resolved.layer, &parent) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerSourceItem(resolved.layer, &source) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerInPoint(
+            resolved.layer, AEGP_LTimeMode_CompTime, &in_point) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerDuration(
+            resolved.layer, AEGP_LTimeMode_CompTime, &duration) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerOffset(resolved.layer, &offset) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerStretch(resolved.layer, &stretch) != A_Err_NONE
+        || in_point.scale <= 0 || duration.scale <= 0 || duration.value <= 0
+        || offset.scale <= 0 || stretch.num == 0 || stretch.den <= 0) {
+      return std::nullopt;
+    }
+    const auto time_value = [](const A_Time& time) {
+      return CompositionCurrentTime{
+          static_cast<std::int32_t>(time.value),
+          static_cast<std::uint32_t>(time.scale),
+          aemcp::native::canonical_seconds_rational(time.value, time.scale)};
+    };
+    LayerDetails details;
+    details.layer_locator = graph_.layer_locator(
+        resolved.composition_item_id, resolved.layer_id, host, session);
+    details.composition_locator = graph_.item_locator(
+        resolved.composition_item_id, true, host, session);
+    details.stack_index = static_cast<std::uint64_t>(layer_index) + 1U;
+    details.name = *name;
+    details.type = layer_type(object_type, flags);
+    details.video_enabled = (flags & AEGP_LayerFlag_VIDEO_ACTIVE) != 0;
+    details.is_three_d = (flags & AEGP_LayerFlag_LAYER_IS_3D) != 0;
+    details.locked = (flags & AEGP_LayerFlag_LOCKED) != 0;
+    details.in_point = time_value(in_point);
+    details.duration = time_value(duration);
+    details.start_time = time_value(offset);
+    details.stretch = {
+        static_cast<std::int32_t>(stretch.num),
+        static_cast<std::int32_t>(stretch.den),
+        aemcp::native::canonical_seconds_rational(
+            stretch.num, static_cast<std::uint32_t>(stretch.den))};
+    if (parent != nullptr) {
+      AEGP_LayerIDVal parent_id = 0;
+      if (layer_suite->AEGP_GetLayerID(parent, &parent_id) != A_Err_NONE) {
+        return std::nullopt;
+      }
+      details.parent_locator = graph_.layer_locator(
+          resolved.composition_item_id, parent_id, host, session);
+    }
+    if (source != nullptr) {
+      A_long source_id = 0;
+      AEGP_ItemType source_type = AEGP_ItemType_NONE;
+      if (item_suite->AEGP_GetItemID(source, &source_id) != A_Err_NONE
+          || item_suite->AEGP_GetItemType(source, &source_type) != A_Err_NONE) {
+        return std::nullopt;
+      }
+      details.source_item_locator = graph_.item_locator(
+          source_id, source_type == AEGP_ItemType_COMP, host, session);
+    }
+    return details;
   }
 
   [[nodiscard]] std::optional<ProjectItemEntry> project_item_entry(
@@ -5732,6 +6583,14 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kProjectItemCommentSetContractDigest),
             std::string(kProjectItemLabelSetContractDigest),
             std::string(kCompositionDuplicateContractDigest),
+            std::string(kLayerDetailsReadContractDigest),
+            std::string(kLayerNameSetContractDigest),
+            std::string(kLayerRangeSetContractDigest),
+            std::string(kLayerStartTimeSetContractDigest),
+            std::string(kLayerStretchSetContractDigest),
+            std::string(kLayerOrderSetContractDigest),
+            std::string(kLayerParentSetContractDigest),
+            std::string(kLayerDuplicateContractDigest),
         },
         *this,
         idle_signal);
@@ -5990,6 +6849,51 @@ void log_completion(
       output << ",\"result\":{"
              << aemcp::native::rpc::composition_duplicate_persistent_diagnostic_fields(
                     completion.composition_duplicate_result);
+    } else if (completion.capability_id == kLayerDetailsReadCapability
+        && completion.layer_timeline_result != nullptr) {
+      const auto& value = std::get<LayerDetails>(*completion.layer_timeline_result);
+      output << ",\"result\":{\"stackIndex\":" << value.stack_index
+             << ",\"type\":\"" << json_escape(value.type)
+             << "\",\"projectGeneration\":" << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerNameSetCapability
+        && completion.layer_timeline_result != nullptr) {
+      const auto& value = std::get<LayerNameChanged>(*completion.layer_timeline_result);
+      output << ",\"result\":{\"changed\":true,\"projectGeneration\":"
+             << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerRangeSetCapability
+        && completion.layer_timeline_result != nullptr) {
+      const auto& value = std::get<LayerRangeChanged>(*completion.layer_timeline_result);
+      output << ",\"result\":{\"changed\":true,\"projectGeneration\":"
+             << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerStartTimeSetCapability
+        && completion.layer_timeline_result != nullptr) {
+      const auto& value = std::get<LayerStartTimeChanged>(*completion.layer_timeline_result);
+      output << ",\"result\":{\"changed\":true,\"projectGeneration\":"
+             << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerStretchSetCapability
+        && completion.layer_timeline_result != nullptr) {
+      const auto& value = std::get<LayerStretchChanged>(*completion.layer_timeline_result);
+      output << ",\"result\":{\"changed\":true,\"projectGeneration\":"
+             << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerOrderSetCapability
+        && completion.layer_timeline_result != nullptr) {
+      const auto& value = std::get<LayerOrderChanged>(*completion.layer_timeline_result);
+      output << ",\"result\":{\"changed\":true,\"beforeStackIndex\":"
+             << value.before_stack_index << ",\"afterStackIndex\":"
+             << value.after_stack_index << ",\"projectGeneration\":"
+             << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerParentSetCapability
+        && completion.layer_timeline_result != nullptr) {
+      const auto& value = std::get<LayerParentChanged>(*completion.layer_timeline_result);
+      output << ",\"result\":{\"changed\":true,\"projectGeneration\":"
+             << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerDuplicateCapability
+        && completion.layer_timeline_result != nullptr) {
+      const auto& value = std::get<LayerDuplicated>(*completion.layer_timeline_result);
+      output << ",\"result\":{\"changed\":true,\"layerCountBefore\":"
+             << value.layer_count_before << ",\"layerCountAfter\":"
+             << value.layer_count_after << ",\"projectGeneration\":"
+             << value.new_layer_locator.generation;
     } else if (completion.capability_id == kProjectSummaryCapability) {
       output << ",\"result\":{\"projectOpen\":"
              << (completion.result.project_open ? "true" : "false")

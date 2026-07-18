@@ -788,6 +788,101 @@ class Package150Host final : public HostApi {
   }
 };
 
+class Package155Host final : public HostApi {
+ public:
+  bool return_unrelated_duplicate{false};
+
+  [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
+    return HostReadResult::success({true, "fixture.aep", 3});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerDetailsResult read_layer_details(
+      const aemcp::native::LayerDetailsQuery& query, TimePoint) override {
+    return aemcp::native::HostLayerDetailsResult::success(details(query.layer_locator));
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerNameWriteResult set_layer_name(
+      const aemcp::native::LayerNameSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerNameWriteResult::success(
+        {true, command.layer_locator, "Before", command.name});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerRangeWriteResult set_layer_range(
+      const aemcp::native::LayerRangeSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerRangeWriteResult::success({
+        true, command.layer_locator,
+        {0, 1, "0"}, {5, 1, "5"}, command.in_point, command.duration});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerStartTimeWriteResult set_layer_start_time(
+      const aemcp::native::LayerStartTimeSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerStartTimeWriteResult::success(
+        {true, command.layer_locator, {0, 1, "0"}, command.start_time});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerStretchWriteResult set_layer_stretch(
+      const aemcp::native::LayerStretchSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerStretchWriteResult::success(
+        {true, command.layer_locator, {1, 1, "1"}, command.stretch});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerOrderWriteResult set_layer_order(
+      const aemcp::native::LayerOrderSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerOrderWriteResult::success(
+        {true, command.layer_locator, 1, command.target_stack_index});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerParentWriteResult set_layer_parent(
+      const aemcp::native::LayerParentSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerParentWriteResult::success(
+        {true, command.layer_locator, std::nullopt, command.parent_layer_locator});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerDuplicateResult duplicate_layer(
+      const aemcp::native::LayerDuplicateCommand& command, TimePoint) override {
+    ObjectLocator source = command.layer_locator;
+    source.project_id = "55555555-5555-4555-8555-555555555555";
+    source.generation += 1;
+    ObjectLocator duplicate = source;
+    duplicate.object_id = "99999999-9999-4999-8999-999999999999";
+    ObjectLocator composition = duplicate;
+    composition.kind = "composition";
+    composition.object_id = "66666666-6666-4666-8666-666666666666";
+    auto duplicate_details = details(duplicate, composition);
+    duplicate_details.name = command.new_name;
+    auto source_details = details(source, composition);
+    if (return_unrelated_duplicate) {
+      duplicate_details.type = "camera";
+      duplicate_details.video_enabled = false;
+    }
+    return aemcp::native::HostLayerDuplicateResult::success({
+        true, source, duplicate, composition, 2, 3,
+        std::move(duplicate_details), std::move(source_details)});
+  }
+
+ private:
+  [[nodiscard]] static aemcp::native::LayerDetails details(
+      ObjectLocator layer,
+      std::optional<ObjectLocator> composition_override = std::nullopt) {
+    ObjectLocator composition = composition_override.value_or(layer);
+    composition.kind = "composition";
+    composition.object_id = "66666666-6666-4666-8666-666666666666";
+    aemcp::native::LayerDetails value;
+    value.layer_locator = std::move(layer);
+    value.composition_locator = std::move(composition);
+    value.stack_index = 1;
+    value.name = "Fixture Layer";
+    value.type = "text";
+    value.video_enabled = true;
+    value.locked = false;
+    value.in_point = {0, 1, "0"};
+    value.duration = {5, 1, "5"};
+    value.start_time = {0, 1, "0"};
+    value.stretch = {1, 1, "1"};
+    return value;
+  }
+};
+
 class BlockingHost final : public HostApi {
  public:
   explicit BlockingHost(std::thread::id expected_thread)
@@ -1226,7 +1321,7 @@ void project_composition_package_dispatches_all_eight_capabilities() {
               .source_composition_locator.object_id
           != composition.object_id,
       "duplicate result did not reissue the source composition locator");
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 22);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 30);
   const std::array<std::string_view, 8> package_capabilities{
       aemcp::native::kProjectContextReadCapability,
       aemcp::native::kProjectItemMetadataReadCapability,
@@ -1245,6 +1340,147 @@ void project_composition_package_dispatches_all_eight_capabilities() {
     }
     require(advertised, "package-150 capability is missing from load advertisement");
   }
+}
+
+void layer_timeline_package_dispatches_all_eight_capabilities() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(8, 8, 16ms));
+  Package155Host host;
+  const ObjectLocator layer = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const ObjectLocator parent = FakeHost::locator(
+      "layer", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  const auto base = [&](std::string id, std::string capability) {
+    Request value;
+    value.request_id = std::move(id);
+    value.capability_id = std::move(capability);
+    value.deadline = clock.now() + 1s;
+    value.route_id = "package-155";
+    value.session_generation = 1;
+    value.host_instance_id = "22222222-2222-4222-8222-222222222222";
+    value.session_id = "11111111-1111-4111-8111-111111111111";
+    value.layer_locator = layer;
+    return value;
+  };
+  const auto enqueue = [&](Request value) {
+    const std::string capability = value.capability_id;
+    const auto admission = dispatcher.enqueue(std::move(value));
+    require(admission.code == EnqueueCode::kAccepted,
+        "package-155 request was rejected: " + capability + " / "
+          + admission.error_field);
+  };
+  const auto prepare_write = [&](Request& value, char digest) {
+    value.idempotency_key = std::string("package-155-intent-") + digest;
+    value.arguments_fingerprint_sha256 = std::string(64, digest);
+  };
+
+  enqueue(base("layer-details", std::string(
+      aemcp::native::kLayerDetailsReadCapability)));
+
+  Request name = base("layer-name", std::string(
+      aemcp::native::kLayerNameSetCapability));
+  prepare_write(name, '1');
+  name.layer_new_name = "After";
+  enqueue(std::move(name));
+
+  Request range = base("layer-range", std::string(
+      aemcp::native::kLayerRangeSetCapability));
+  prepare_write(range, '2');
+  range.layer_in_point = {1, 1, "1"};
+  range.layer_duration = {4, 1, "4"};
+  enqueue(std::move(range));
+
+  Request start_time = base("layer-start", std::string(
+      aemcp::native::kLayerStartTimeSetCapability));
+  prepare_write(start_time, '3');
+  start_time.layer_start_time = {2, 1, "2"};
+  enqueue(std::move(start_time));
+
+  Request stretch = base("layer-stretch", std::string(
+      aemcp::native::kLayerStretchSetCapability));
+  prepare_write(stretch, '4');
+  stretch.layer_stretch = {-2, 1, "-2"};
+  enqueue(std::move(stretch));
+
+  Request order = base("layer-order", std::string(
+      aemcp::native::kLayerOrderSetCapability));
+  prepare_write(order, '5');
+  order.target_stack_index = 2;
+  enqueue(std::move(order));
+
+  Request parent_set = base("layer-parent", std::string(
+      aemcp::native::kLayerParentSetCapability));
+  prepare_write(parent_set, '6');
+  parent_set.layer_parent_locator = parent;
+  enqueue(std::move(parent_set));
+
+  Request duplicate = base("layer-duplicate", std::string(
+      aemcp::native::kLayerDuplicateCapability));
+  prepare_write(duplicate, '7');
+  duplicate.layer_new_name = "Fixture Layer Copy";
+  enqueue(std::move(duplicate));
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 8 && batch.remaining == 0,
+      "package-155 dispatcher did not complete all eight requests");
+  for (const auto& completion : batch.completions) {
+    require(completion.ok && completion.layer_timeline_result != nullptr,
+        "package-155 dispatcher branch failed closed unexpectedly");
+  }
+  require(std::holds_alternative<aemcp::native::LayerDetails>(
+              *batch.completions[0].layer_timeline_result)
+          && std::holds_alternative<aemcp::native::LayerNameChanged>(
+              *batch.completions[1].layer_timeline_result)
+          && std::holds_alternative<aemcp::native::LayerRangeChanged>(
+              *batch.completions[2].layer_timeline_result)
+          && std::holds_alternative<aemcp::native::LayerStartTimeChanged>(
+              *batch.completions[3].layer_timeline_result)
+          && std::holds_alternative<aemcp::native::LayerStretchChanged>(
+              *batch.completions[4].layer_timeline_result)
+          && std::holds_alternative<aemcp::native::LayerOrderChanged>(
+              *batch.completions[5].layer_timeline_result)
+          && std::holds_alternative<aemcp::native::LayerParentChanged>(
+              *batch.completions[6].layer_timeline_result)
+          && std::holds_alternative<aemcp::native::LayerDuplicated>(
+              *batch.completions[7].layer_timeline_result),
+      "package-155 completion variants drifted from capability identities");
+  const auto& duplicated = std::get<aemcp::native::LayerDuplicated>(
+      *batch.completions[7].layer_timeline_result);
+  require(duplicated.layer_count_after == duplicated.layer_count_before + 1
+          && duplicated.new_layer.name == "Fixture Layer Copy"
+          && duplicated.source_layer.has_value()
+          && duplicated.source_layer->type == duplicated.new_layer.type
+          && duplicated.source_layer_locator.generation > layer.generation,
+      "package-155 duplicate result lost its fresh locator/count evidence");
+}
+
+void layer_duplicate_rejects_an_unrelated_layer_result() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(1, 1, 16ms));
+  Package155Host host;
+  host.return_unrelated_duplicate = true;
+  const ObjectLocator layer = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  Request duplicate;
+  duplicate.request_id = "layer-duplicate-unrelated";
+  duplicate.capability_id = std::string(aemcp::native::kLayerDuplicateCapability);
+  duplicate.deadline = clock.now() + 1s;
+  duplicate.route_id = "package-155";
+  duplicate.session_generation = 1;
+  duplicate.idempotency_key = "package-155-unrelated";
+  duplicate.arguments_fingerprint_sha256 = std::string(64, '8');
+  duplicate.host_instance_id = "22222222-2222-4222-8222-222222222222";
+  duplicate.session_id = "11111111-1111-4111-8111-111111111111";
+  duplicate.layer_locator = layer;
+  duplicate.layer_new_name = "Fixture Layer Copy";
+  require(dispatcher.enqueue(std::move(duplicate)).code == EnqueueCode::kAccepted,
+      "unrelated duplicate probe was not admitted");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && !batch.completions[0].ok
+          && batch.completions[0].error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE",
+      "dispatcher accepted a duplicate whose stable semantics differ from source");
 }
 
 void project_graph_reads_validate_arguments_and_dispatch_on_owner_thread() {
@@ -2380,6 +2616,8 @@ int main() {
   composition_time_rational_is_exact_and_overflow_safe();
   project_epoch_fences_reused_aegp_handles();
   project_composition_package_dispatches_all_eight_capabilities();
+  layer_timeline_package_dispatches_all_eight_capabilities();
+  layer_duplicate_rejects_an_unrelated_layer_result();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();
   composition_time_read_is_closed_main_thread_bound_and_verified();

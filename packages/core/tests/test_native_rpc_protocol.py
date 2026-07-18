@@ -198,6 +198,14 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "ae.project.item.comment.set",
         "ae.project.item.label.set",
         "ae.composition.duplicate",
+        "ae.layer.details.read",
+        "ae.layer.name.set",
+        "ae.layer.range.set",
+        "ae.layer.start-time.set",
+        "ae.layer.stretch.set",
+        "ae.layer.order.set",
+        "ae.layer.parent.set",
+        "ae.layer.duplicate",
     ]
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
         "response"

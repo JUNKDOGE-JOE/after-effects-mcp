@@ -8,7 +8,7 @@
     "encoding": "utf-8",
     "maxFrameBytes": 524288,
     "maxJsonDepth": 16,
-    "maxJsonNodes": 8192,
+    "maxJsonNodes": 12288,
     "maxStringLength": 8192,
     "stringLengthUnit": "unicode-scalar-values",
     "duplicateObjectKeys": "reject"
@@ -455,6 +455,109 @@
       "required": ["compositionLocator", "newName", "idempotencyKey"],
       "properties": {
         "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "newName": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "layerTimelineTimeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "scale"],
+      "properties": {
+        "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+      }
+    },
+    "layerTimelinePositiveTimeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "scale"],
+      "properties": {
+        "value": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+      }
+    },
+    "layerStretchInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["num", "den"],
+      "properties": {
+        "num": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647,
+          "not": { "const": 0 }
+        },
+        "den": { "type": "integer", "minimum": 1, "maximum": 2147483647 }
+      }
+    },
+    "layerDetailsReadArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator"],
+      "properties": { "layerLocator": { "$ref": "#/$defs/layerLocator" } }
+    },
+    "layerNameSetArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "name", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "layerRangeSetArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "inPoint", "duration", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "inPoint": { "$ref": "#/$defs/layerTimelineTimeInput" },
+        "duration": { "$ref": "#/$defs/layerTimelinePositiveTimeInput" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "layerStartTimeSetArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "startTime", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "startTime": { "$ref": "#/$defs/layerTimelineTimeInput" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "layerStretchSetArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "stretch", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "stretch": { "$ref": "#/$defs/layerStretchInput" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "layerOrderSetArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "targetStackIndex", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "targetStackIndex": { "$ref": "#/$defs/safePositiveInteger" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "layerParentSetArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "parentLayerLocator", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "parentLayerLocator": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/layerLocator" }]
+        },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "layerDuplicateArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "newName", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
         "newName": { "type": "string", "minLength": 1, "maxLength": 255 },
         "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
       }
@@ -1660,6 +1763,78 @@
         "arguments": { "$ref": "#/$defs/compositionDuplicateArguments" }
       }
     },
+    "layerDetailsReadInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.details.read" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerDetailsReadArguments" }
+      }
+    },
+    "layerNameSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.name.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerNameSetArguments" }
+      }
+    },
+    "layerRangeSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.range.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerRangeSetArguments" }
+      }
+    },
+    "layerStartTimeSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.start-time.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerStartTimeSetArguments" }
+      }
+    },
+    "layerStretchSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.stretch.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerStretchSetArguments" }
+      }
+    },
+    "layerOrderSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.order.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerOrderSetArguments" }
+      }
+    },
+    "layerParentSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.parent.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerParentSetArguments" }
+      }
+    },
+    "layerDuplicateInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.duplicate" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerDuplicateArguments" }
+      }
+    },
     "invokeParams": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeParams" },
@@ -1683,7 +1858,15 @@
         { "$ref": "#/$defs/projectItemNameSetInvokeParams" },
         { "$ref": "#/$defs/projectItemCommentSetInvokeParams" },
         { "$ref": "#/$defs/projectItemLabelSetInvokeParams" },
-        { "$ref": "#/$defs/compositionDuplicateInvokeParams" }
+        { "$ref": "#/$defs/compositionDuplicateInvokeParams" },
+        { "$ref": "#/$defs/layerDetailsReadInvokeParams" },
+        { "$ref": "#/$defs/layerNameSetInvokeParams" },
+        { "$ref": "#/$defs/layerRangeSetInvokeParams" },
+        { "$ref": "#/$defs/layerStartTimeSetInvokeParams" },
+        { "$ref": "#/$defs/layerStretchSetInvokeParams" },
+        { "$ref": "#/$defs/layerOrderSetInvokeParams" },
+        { "$ref": "#/$defs/layerParentSetInvokeParams" },
+        { "$ref": "#/$defs/layerDuplicateInvokeParams" }
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
     },
@@ -1954,7 +2137,15 @@
         { "$ref": "#/$defs/projectItemNameSetArguments" },
         { "$ref": "#/$defs/projectItemCommentSetArguments" },
         { "$ref": "#/$defs/projectItemLabelSetArguments" },
-        { "$ref": "#/$defs/compositionDuplicateArguments" }
+        { "$ref": "#/$defs/compositionDuplicateArguments" },
+        { "$ref": "#/$defs/layerDetailsReadArguments" },
+        { "$ref": "#/$defs/layerNameSetArguments" },
+        { "$ref": "#/$defs/layerRangeSetArguments" },
+        { "$ref": "#/$defs/layerStartTimeSetArguments" },
+        { "$ref": "#/$defs/layerStretchSetArguments" },
+        { "$ref": "#/$defs/layerOrderSetArguments" },
+        { "$ref": "#/$defs/layerParentSetArguments" },
+        { "$ref": "#/$defs/layerDuplicateArguments" }
       ]
     },
     "capabilityValue": {
@@ -1979,7 +2170,15 @@
         { "$ref": "#/$defs/projectItemNameSetValue" },
         { "$ref": "#/$defs/projectItemCommentSetValue" },
         { "$ref": "#/$defs/projectItemLabelSetValue" },
-        { "$ref": "#/$defs/compositionDuplicateValue" }
+        { "$ref": "#/$defs/compositionDuplicateValue" },
+        { "$ref": "#/$defs/layerDetailsValue" },
+        { "$ref": "#/$defs/layerNameSetValue" },
+        { "$ref": "#/$defs/layerRangeSetValue" },
+        { "$ref": "#/$defs/layerStartTimeSetValue" },
+        { "$ref": "#/$defs/layerStretchSetValue" },
+        { "$ref": "#/$defs/layerOrderSetValue" },
+        { "$ref": "#/$defs/layerParentSetValue" },
+        { "$ref": "#/$defs/layerDuplicateValue" }
       ]
     },
     "projectContextReadInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"selectionLimit":{"maximum":50,"minimum":1,"type":"integer"},"selectionOffset":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["selectionOffset","selectionLimit"],"type":"object"} },
@@ -1998,6 +2197,22 @@
     "projectItemLabelSetResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"afterLabelId":{"maximum":16,"minimum":0,"type":"integer"},"beforeLabelId":{"maximum":16,"minimum":0,"type":"integer"},"changed":{"const":true},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","itemLocator","beforeLabelId","afterLabelId"],"type":"object"} },
     "compositionDuplicateInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"newName":{"maxLength":255,"minLength":1,"type":"string"}},"required":["compositionLocator","newName","idempotencyKey"],"type":"object"} },
     "compositionDuplicateResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"changed":{"const":true},"newCompositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"newSettings":{"additionalProperties":false,"properties":{"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameDuration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"width":{"maximum":30000,"minimum":1,"type":"integer"},"workArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"}},"required":["name","width","height","duration","frameDuration","frameRate","pixelAspectRatio","workArea","displayStartTime","layerCount"],"type":"object"},"projectItemCountAfter":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"projectItemCountBefore":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sourceCompositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"sourceSettings":{"additionalProperties":false,"properties":{"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameDuration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"width":{"maximum":30000,"minimum":1,"type":"integer"},"workArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"}},"required":["name","width","height","duration","frameDuration","frameRate","pixelAspectRatio","workArea","displayStartTime","layerCount"],"type":"object"}},"required":["changed","sourceCompositionLocator","newCompositionLocator","projectItemCountBefore","projectItemCountAfter","sourceSettings","newSettings"],"type":"object"} },
+    "layerDetailsReadInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}}} },
+    "layerDetailsReadResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","compositionLocator","stackIndex","name","type","videoEnabled","isThreeD","locked","parentLocator","sourceItemLocator","inPoint","duration","startTime","stretch"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"stackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"type":{"enum":["av","camera","light","text","shape","model3d","null","adjustment","unknown"]},"videoEnabled":{"type":"boolean"},"isThreeD":{"type":"boolean"},"locked":{"type":"boolean"},"parentLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]},"sourceItemLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["item","composition"]},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]},"inPoint":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"duration":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"startTime":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"stretch":{"type":"object","additionalProperties":false,"required":["numerator","denominator","rational"],"properties":{"numerator":{"type":"integer","minimum":-2147483648,"maximum":2147483647,"not":{"const":0}},"denominator":{"type":"integer","minimum":1,"maximum":2147483647},"rational":{"type":"string","minLength":1,"maxLength":29,"pattern":"^-?[1-9][0-9]*(?:/[1-9][0-9]*)?$"}},"x-invariant":"rational-is-the-reduced-canonical-form-of-numerator-over-denominator"}},"x-invariant":"all-locators-share-one-current-graph-context"} },
+    "layerNameSetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","name","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"name":{"type":"string","minLength":1,"maxLength":255},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerNameSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeName","afterName"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeName":{"type":"string","maxLength":1024},"afterName":{"type":"string","minLength":1,"maxLength":255}},"x-invariant":"afterName-equals-request-and-differs-from-beforeName"} },
+    "layerRangeSetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","inPoint","duration","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"inPoint":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}},"duration":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":1,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerRangeSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeInPoint","beforeDuration","afterInPoint","afterDuration"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeInPoint":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"beforeDuration":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"afterInPoint":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"afterDuration":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}}},"x-invariant":"after-range-equals-request-and-differs-from-before-range"} },
+    "layerStartTimeSetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","startTime","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"startTime":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerStartTimeSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeStartTime","afterStartTime"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeStartTime":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"afterStartTime":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}}},"x-invariant":"afterStartTime-equals-request-and-differs-from-beforeStartTime"} },
+    "layerStretchSetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","stretch","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"stretch":{"type":"object","additionalProperties":false,"required":["num","den"],"properties":{"num":{"type":"integer","minimum":-2147483648,"maximum":2147483647,"not":{"const":0}},"den":{"type":"integer","minimum":1,"maximum":2147483647}}},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerStretchSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeStretch","afterStretch"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeStretch":{"type":"object","additionalProperties":false,"required":["numerator","denominator","rational"],"properties":{"numerator":{"type":"integer","minimum":-2147483648,"maximum":2147483647,"not":{"const":0}},"denominator":{"type":"integer","minimum":1,"maximum":2147483647},"rational":{"type":"string","minLength":1,"maxLength":29,"pattern":"^-?[1-9][0-9]*(?:/[1-9][0-9]*)?$"}},"x-invariant":"rational-is-the-reduced-canonical-form-of-numerator-over-denominator"},"afterStretch":{"type":"object","additionalProperties":false,"required":["numerator","denominator","rational"],"properties":{"numerator":{"type":"integer","minimum":-2147483648,"maximum":2147483647,"not":{"const":0}},"denominator":{"type":"integer","minimum":1,"maximum":2147483647},"rational":{"type":"string","minLength":1,"maxLength":29,"pattern":"^-?[1-9][0-9]*(?:/[1-9][0-9]*)?$"}},"x-invariant":"rational-is-the-reduced-canonical-form-of-numerator-over-denominator"}},"x-invariant":"afterStretch-equals-request-and-differs-from-beforeStretch"} },
+    "layerOrderSetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","targetStackIndex","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"targetStackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerOrderSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeStackIndex","afterStackIndex"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeStackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"afterStackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991}},"x-invariant":"afterStackIndex-equals-request-and-differs-from-beforeStackIndex"} },
+    "layerParentSetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","parentLayerLocator","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"parentLayerLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerParentSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeParentLocator","afterParentLocator"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeParentLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]},"afterParentLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]}},"x-invariant":"afterParentLocator-equals-request-and-differs-from-beforeParentLocator"} },
+    "layerDuplicateInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","newName","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"newName":{"type":"string","minLength":1,"maxLength":255},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerDuplicateResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","sourceLayerLocator","newLayerLocator","compositionLocator","layerCountBefore","layerCountAfter","newLayer"],"properties":{"changed":{"const":true},"sourceLayerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"newLayerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"layerCountBefore":{"type":"integer","minimum":0,"maximum":9007199254740991},"layerCountAfter":{"type":"integer","minimum":1,"maximum":9007199254740991},"newLayer":{"type":"object","additionalProperties":false,"required":["layerLocator","compositionLocator","stackIndex","name","type","videoEnabled","isThreeD","locked","parentLocator","sourceItemLocator","inPoint","duration","startTime","stretch"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"stackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"type":{"enum":["av","camera","light","text","shape","model3d","null","adjustment","unknown"]},"videoEnabled":{"type":"boolean"},"isThreeD":{"type":"boolean"},"locked":{"type":"boolean"},"parentLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]},"sourceItemLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["item","composition"]},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]},"inPoint":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"duration":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"startTime":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"stretch":{"type":"object","additionalProperties":false,"required":["numerator","denominator","rational"],"properties":{"numerator":{"type":"integer","minimum":-2147483648,"maximum":2147483647,"not":{"const":0}},"denominator":{"type":"integer","minimum":1,"maximum":2147483647},"rational":{"type":"string","minLength":1,"maxLength":29,"pattern":"^-?[1-9][0-9]*(?:/[1-9][0-9]*)?$"}},"x-invariant":"rational-is-the-reduced-canonical-form-of-numerator-over-denominator"}},"x-invariant":"all-locators-share-one-current-graph-context"}},"x-invariant":"fresh-locators-share-one-post-mutation-generation;new-layer-locator-matches-newLayer;layerCountAfter-equals-layerCountBefore-plus-one"} },
     "capabilityInputSchemaContract": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInputSchemaContract" },
@@ -2019,7 +2234,15 @@
         { "$ref": "#/$defs/projectItemNameSetInputSchemaContract" },
         { "$ref": "#/$defs/projectItemCommentSetInputSchemaContract" },
         { "$ref": "#/$defs/projectItemLabelSetInputSchemaContract" },
-        { "$ref": "#/$defs/compositionDuplicateInputSchemaContract" }
+        { "$ref": "#/$defs/compositionDuplicateInputSchemaContract" },
+        { "$ref": "#/$defs/layerDetailsReadInputSchemaContract" },
+        { "$ref": "#/$defs/layerNameSetInputSchemaContract" },
+        { "$ref": "#/$defs/layerRangeSetInputSchemaContract" },
+        { "$ref": "#/$defs/layerStartTimeSetInputSchemaContract" },
+        { "$ref": "#/$defs/layerStretchSetInputSchemaContract" },
+        { "$ref": "#/$defs/layerOrderSetInputSchemaContract" },
+        { "$ref": "#/$defs/layerParentSetInputSchemaContract" },
+        { "$ref": "#/$defs/layerDuplicateInputSchemaContract" }
       ]
     },
     "capabilityResultSchemaContract": {
@@ -2044,7 +2267,15 @@
         { "$ref": "#/$defs/projectItemNameSetResultSchemaContract" },
         { "$ref": "#/$defs/projectItemCommentSetResultSchemaContract" },
         { "$ref": "#/$defs/projectItemLabelSetResultSchemaContract" },
-        { "$ref": "#/$defs/compositionDuplicateResultSchemaContract" }
+        { "$ref": "#/$defs/compositionDuplicateResultSchemaContract" },
+        { "$ref": "#/$defs/layerDetailsReadResultSchemaContract" },
+        { "$ref": "#/$defs/layerNameSetResultSchemaContract" },
+        { "$ref": "#/$defs/layerRangeSetResultSchemaContract" },
+        { "$ref": "#/$defs/layerStartTimeSetResultSchemaContract" },
+        { "$ref": "#/$defs/layerStretchSetResultSchemaContract" },
+        { "$ref": "#/$defs/layerOrderSetResultSchemaContract" },
+        { "$ref": "#/$defs/layerParentSetResultSchemaContract" },
+        { "$ref": "#/$defs/layerDuplicateResultSchemaContract" }
       ]
     },
     "positiveCapabilityExample": {
@@ -2626,6 +2857,119 @@
       },
       "x-invariant": "new-locator-differs-from-source-and-projectItemCountAfter-equals-projectItemCountBefore-plus-one"
     },
+    "layerSignedRatioValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["numerator", "denominator", "rational"],
+      "properties": {
+        "numerator": {
+          "type": "integer", "minimum": -2147483648, "maximum": 2147483647,
+          "not": { "const": 0 }
+        },
+        "denominator": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+        "rational": {
+          "type": "string", "minLength": 1, "maxLength": 29,
+          "pattern": "^-?[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+        }
+      },
+      "x-invariant": "rational-is-the-reduced-canonical-form-of-numerator-over-denominator"
+    },
+    "layerDetailsValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "compositionLocator", "stackIndex", "name", "type", "videoEnabled", "isThreeD", "locked", "parentLocator", "sourceItemLocator", "inPoint", "duration", "startTime", "stretch"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "stackIndex": { "$ref": "#/$defs/safePositiveInteger" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "type": { "enum": ["av", "camera", "light", "text", "shape", "model3d", "null", "adjustment", "unknown"] },
+        "videoEnabled": { "type": "boolean" },
+        "isThreeD": { "type": "boolean" },
+        "locked": { "type": "boolean" },
+        "parentLocator": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/layerLocator" }] },
+        "sourceItemLocator": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/sourceItemLocator" }] },
+        "inPoint": { "$ref": "#/$defs/compositionCurrentTime" },
+        "duration": { "$ref": "#/$defs/compositionCurrentTime" },
+        "startTime": { "$ref": "#/$defs/compositionCurrentTime" },
+        "stretch": { "$ref": "#/$defs/layerSignedRatioValue" }
+      },
+      "x-invariant": "all-locators-share-one-current-graph-context"
+    },
+    "layerNameSetValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["changed", "layerLocator", "beforeName", "afterName"],
+      "properties": {
+        "changed": { "const": true }, "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "beforeName": { "type": "string", "maxLength": 1024 },
+        "afterName": { "type": "string", "minLength": 1, "maxLength": 255 }
+      },
+      "x-invariant": "afterName-equals-request-and-differs-from-beforeName"
+    },
+    "layerRangeSetValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["changed", "layerLocator", "beforeInPoint", "beforeDuration", "afterInPoint", "afterDuration"],
+      "properties": {
+        "changed": { "const": true }, "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "beforeInPoint": { "$ref": "#/$defs/compositionCurrentTime" },
+        "beforeDuration": { "$ref": "#/$defs/compositionCurrentTime" },
+        "afterInPoint": { "$ref": "#/$defs/compositionCurrentTime" },
+        "afterDuration": { "$ref": "#/$defs/compositionCurrentTime" }
+      },
+      "x-invariant": "after-range-equals-request-and-differs-from-before-range"
+    },
+    "layerStartTimeSetValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["changed", "layerLocator", "beforeStartTime", "afterStartTime"],
+      "properties": {
+        "changed": { "const": true }, "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "beforeStartTime": { "$ref": "#/$defs/compositionCurrentTime" },
+        "afterStartTime": { "$ref": "#/$defs/compositionCurrentTime" }
+      },
+      "x-invariant": "afterStartTime-equals-request-and-differs-from-beforeStartTime"
+    },
+    "layerStretchSetValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["changed", "layerLocator", "beforeStretch", "afterStretch"],
+      "properties": {
+        "changed": { "const": true }, "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "beforeStretch": { "$ref": "#/$defs/layerSignedRatioValue" },
+        "afterStretch": { "$ref": "#/$defs/layerSignedRatioValue" }
+      },
+      "x-invariant": "afterStretch-equals-request-and-differs-from-beforeStretch"
+    },
+    "layerOrderSetValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["changed", "layerLocator", "beforeStackIndex", "afterStackIndex"],
+      "properties": {
+        "changed": { "const": true }, "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "beforeStackIndex": { "$ref": "#/$defs/safePositiveInteger" },
+        "afterStackIndex": { "$ref": "#/$defs/safePositiveInteger" }
+      },
+      "x-invariant": "afterStackIndex-equals-request-and-differs-from-beforeStackIndex"
+    },
+    "layerParentSetValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["changed", "layerLocator", "beforeParentLocator", "afterParentLocator"],
+      "properties": {
+        "changed": { "const": true }, "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "beforeParentLocator": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/layerLocator" }] },
+        "afterParentLocator": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/layerLocator" }] }
+      },
+      "x-invariant": "afterParentLocator-equals-request-and-differs-from-beforeParentLocator"
+    },
+    "layerDuplicateValue": {
+      "type": "object", "additionalProperties": false,
+      "required": ["changed", "sourceLayerLocator", "newLayerLocator", "compositionLocator", "layerCountBefore", "layerCountAfter", "newLayer"],
+      "properties": {
+        "changed": { "const": true },
+        "sourceLayerLocator": { "$ref": "#/$defs/layerLocator" },
+        "newLayerLocator": { "$ref": "#/$defs/layerLocator" },
+        "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "layerCountBefore": { "$ref": "#/$defs/safeNonnegativeInteger" },
+        "layerCountAfter": { "$ref": "#/$defs/safePositiveInteger" },
+        "newLayer": { "$ref": "#/$defs/layerDetailsValue" }
+      },
+      "x-invariant": "fresh-locators-share-one-post-mutation-generation;new-layer-locator-matches-newLayer;layerCountAfter-equals-layerCountBefore-plus-one"
+    },
     "positiveRatioValue": {
       "type": "object",
       "additionalProperties": false,
@@ -3166,6 +3510,78 @@
         "value": { "$ref": "#/$defs/compositionDuplicateValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
     },
+    "layerDetailsReadInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.details.read" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerDetailsValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "layerNameSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.name.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerNameSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "layerRangeSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.range.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerRangeSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "layerStartTimeSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.start-time.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerStartTimeSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "layerStretchSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.stretch.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerStretchSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "layerOrderSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.order.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerOrderSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "layerParentSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.parent.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerParentSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "layerDuplicateInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.duplicate" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerDuplicateValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
     "invokeResult": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeResult" },
@@ -3189,7 +3605,15 @@
         { "$ref": "#/$defs/projectItemNameSetInvokeResult" },
         { "$ref": "#/$defs/projectItemCommentSetInvokeResult" },
         { "$ref": "#/$defs/projectItemLabelSetInvokeResult" },
-        { "$ref": "#/$defs/compositionDuplicateInvokeResult" }
+        { "$ref": "#/$defs/compositionDuplicateInvokeResult" },
+        { "$ref": "#/$defs/layerDetailsReadInvokeResult" },
+        { "$ref": "#/$defs/layerNameSetInvokeResult" },
+        { "$ref": "#/$defs/layerRangeSetInvokeResult" },
+        { "$ref": "#/$defs/layerStartTimeSetInvokeResult" },
+        { "$ref": "#/$defs/layerStretchSetInvokeResult" },
+        { "$ref": "#/$defs/layerOrderSetInvokeResult" },
+        { "$ref": "#/$defs/layerParentSetInvokeResult" },
+        { "$ref": "#/$defs/layerDuplicateInvokeResult" }
       ]
     },
     "cancelResult": {

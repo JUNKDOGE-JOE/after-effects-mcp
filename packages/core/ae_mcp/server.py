@@ -126,6 +126,14 @@ def _filtered_tool_names() -> set:
             "ae.listProjectItems",
             "ae.listCompositionLayers",
             "ae.listSelectedLayers",
+            "ae.getLayerDetails",
+            "ae.renameLayer",
+            "ae.setLayerRange",
+            "ae.setLayerStartTime",
+            "ae.setLayerStretch",
+            "ae.reorderLayer",
+            "ae.setLayerParent",
+            "ae.duplicateLayer",
             "ae.getCompositionTime",
             "ae.setCompositionTime",
             "ae.createComposition",
@@ -151,6 +159,14 @@ def _filtered_tool_names() -> set:
             "ae.listProjectItems",
             "ae.listCompositionLayers",
             "ae.listSelectedLayers",
+            "ae.getLayerDetails",
+            "ae.renameLayer",
+            "ae.setLayerRange",
+            "ae.setLayerStartTime",
+            "ae.setLayerStretch",
+            "ae.reorderLayer",
+            "ae.setLayerParent",
+            "ae.duplicateLayer",
             "ae.getCompositionTime",
             "ae.setCompositionTime",
             "ae.createComposition",
@@ -740,6 +756,38 @@ _PROJECT_COMPOSITION_VALIDATION = {
     "ae.duplicateComposition": (
         "ae.composition.duplicate",
         "Use a fresh composition_locator, a 1 to 255 scalar new_name, and a stable idempotency_key.",
+    ),
+    "ae.getLayerDetails": (
+        "ae.layer.details.read",
+        "Copy layer_locator unchanged from ae_listCompositionLayers.",
+    ),
+    "ae.renameLayer": (
+        "ae.layer.name.set",
+        "Use a fresh layer_locator, a 1 to 255 scalar name, and a stable idempotency_key.",
+    ),
+    "ae.setLayerRange": (
+        "ae.layer.range.set",
+        "Use a fresh layer_locator, exact in_point, positive duration, and a stable idempotency_key.",
+    ),
+    "ae.setLayerStartTime": (
+        "ae.layer.start-time.set",
+        "Use a fresh layer_locator, exact start_time, and a stable idempotency_key.",
+    ),
+    "ae.setLayerStretch": (
+        "ae.layer.stretch.set",
+        "Use a fresh layer_locator, a non-zero stretch_percent within [-9900, 9900], and a stable idempotency_key.",
+    ),
+    "ae.reorderLayer": (
+        "ae.layer.order.set",
+        "Use a fresh layer_locator, a valid one-based target_stack_index, and a stable idempotency_key.",
+    ),
+    "ae.setLayerParent": (
+        "ae.layer.parent.set",
+        "Use a fresh layer_locator and a fresh same-composition parent_layer_locator or null.",
+    ),
+    "ae.duplicateLayer": (
+        "ae.layer.duplicate",
+        "Use a fresh layer_locator, a required 1 to 255 scalar new_name, and a stable idempotency_key.",
     ),
 }
 

@@ -58,6 +58,12 @@ WORKFLOW — every task follows this loop:
                 key. Use the returned fresh layer locator when reading the
                 Effects group. If the result is uncertain, inspect AE state
                 and audit before any retry.
+                For native layer timing and hierarchy, first copy a fresh
+                layer locator into ae_getLayerDetails. Then use the dedicated
+                ae_renameLayer, ae_setLayerRange, ae_setLayerStartTime,
+                ae_setLayerStretch, ae_reorderLayer, ae_setLayerParent, or
+                ae_duplicateLayer tool with one stable idempotency key. After
+                duplication or Undo, reacquire fresh locators before continuing.
   2. Act      — Prefer the typed verbs (ae_createLayer, ae_setProperty,
                 ae_applyEffect, ae_moveLayer, ae_createRig). Drop to ae_exec
                 only for logic the typed verbs can't express.

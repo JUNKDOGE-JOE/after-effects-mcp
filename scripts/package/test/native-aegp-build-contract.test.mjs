@@ -143,6 +143,27 @@ test('native composition-create diagnostics use the redacted serializer', () => 
   );
 });
 
+test('native layer-parent adapter distinguishes stale, cross-composition, and self-parent failures', () => {
+  const start = PLUGIN_ENTRY.indexOf('HostLayerParentWriteResult set_layer_parent(');
+  const end = PLUGIN_ENTRY.indexOf('HostLayerDuplicateResult duplicate_layer(', start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const adapter = PLUGIN_ENTRY.slice(start, end);
+
+  assert.match(
+    adapter,
+    /!parent\.has_value\(\)[\s\S]*"STALE_LOCATOR"[\s\S]*params\.arguments\.parentLayerLocator/u,
+  );
+  assert.match(
+    adapter,
+    /parent->composition_item_id != resolved->composition_item_id[\s\S]*"PRECONDITION_FAILED"/u,
+  );
+  assert.match(
+    adapter,
+    /parent->layer == resolved->layer[\s\S]*"INVALID_ARGUMENT"/u,
+  );
+});
+
 test('native README examples use safe shell variables and the complete build inputs', async () => {
   for (const readmePath of ['README.md', 'README.zh-CN.md']) {
     const readme = await fs.promises.readFile(readmePath, 'utf8');
