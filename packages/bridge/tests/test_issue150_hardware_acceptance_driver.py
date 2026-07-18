@@ -7,6 +7,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import os
 import stat
 import sys
 from pathlib import Path
@@ -710,6 +711,7 @@ def test_evidence_redacts_sensitive_values_and_uses_private_permissions(tmp_path
     assert "/Users/example" not in event
     assert "visible" in event
     assert summary["details"]["fixturePath"] == "<redacted>"
-    assert stat.S_IMODE(evidence.events_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(evidence.summary_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(evidence.root.stat().st_mode) == 0o700
+    if os.name == "posix":
+        assert stat.S_IMODE(evidence.events_path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(evidence.summary_path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(evidence.root.stat().st_mode) == 0o700
