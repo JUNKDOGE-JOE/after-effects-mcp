@@ -430,7 +430,7 @@ class _FakeSession:
         if tool == "ae_listProjectItems":
             items = [
                 {
-                    "compositionLocator": self._locator("composition", comp["id"]),
+                    "locator": self._locator("composition", comp["id"]),
                     "name": comp["name"],
                     "type": "composition",
                     "parentLocator": None,
@@ -839,6 +839,54 @@ def _config(
         native_manifest=manifest,
         contract_fixture=capabilities,
     )
+
+
+@pytest.mark.asyncio
+async def test_composition_locator_uses_nested_public_locator_and_rejects_legacy_alias(
+    tmp_path: Path,
+) -> None:
+    session = _FakeSession()
+    composition_id = _uuid(20)
+    session.compositions["Fixture"] = {
+        "id": composition_id,
+        "name": "Fixture",
+        "layers": [],
+    }
+    config = _config(tmp_path, mode="t4")
+    acceptance = driver.PackageAcceptance(
+        config,
+        session_factory=_FakeFactory(session),
+        checkpoint=lambda *_args: None,
+        evidence=driver.EvidenceLog(
+            tmp_path / "nested-locator", mode="t4", expected_sha=EXPECTED_SHA
+        ),
+    )
+    acceptance._validate_machine_identity()
+    assert config.identity_home is not None
+    _write_native_load(config.identity_home, session.host)
+    acceptance._refresh_native_load_identity(stage="nested-locator")
+
+    locator = await acceptance._composition_locator(session, "Fixture")
+
+    assert locator == session._locator("composition", composition_id)
+    project_items_call = next(
+        arguments for tool, arguments in session.calls if tool == "ae_listProjectItems"
+    )
+    assert project_items_call == {"offset": 0, "limit": 50}
+    legacy_item = {
+        "compositionLocator": session._locator("composition", composition_id),
+        "name": "Fixture",
+        "type": "composition",
+        "parentLocator": None,
+    }
+
+    async def project_items(_session: _FakeSession) -> list[dict[str, Any]]:
+        return [legacy_item]
+
+    acceptance._project_items = project_items  # type: ignore[method-assign]
+
+    with pytest.raises(driver.AcceptanceFailure, match="locator must be an object"):
+        await acceptance._composition_locator(session, "Fixture")
 
 
 @pytest.mark.asyncio

@@ -1188,7 +1188,7 @@ class PackageAcceptance:
             if item.get("name") == target and item.get("type") == "composition"
         ]
         _require(len(matches) == 1, f"fixture composition {target!r} is not unique")
-        candidate = matches[0].get("compositionLocator", matches[0].get("itemLocator"))
+        candidate = matches[0].get("locator")
         return _locator(candidate, kind="composition")
 
     async def _list_layers(
