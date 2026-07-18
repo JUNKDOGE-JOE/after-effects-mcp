@@ -146,6 +146,24 @@ constexpr std::string_view kLayerPropertyKeyframesContractDigest =
     "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb";
 constexpr std::string_view kLayerPropertySetContractDigest =
     "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c";
+constexpr std::string_view kProjectContextReadContractDigest =
+    "ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca";
+constexpr std::string_view kProjectItemMetadataReadContractDigest =
+    "b13139c0b2e8073f6606bfbead1e59eb7fea63ec10a164b500e19ff8babd0f69";
+constexpr std::string_view kCompositionSettingsReadContractDigest =
+    "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b";
+constexpr std::string_view kCompositionWorkAreaSetContractDigest =
+    "a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997";
+constexpr std::string_view kProjectItemNameSetContractDigest =
+    "b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538";
+constexpr std::string_view kProjectItemCommentSetContractDigest =
+    "957985628474caa9c9cef3de76a2839e59691232b062b776ff800a79dd3cc35c";
+constexpr std::string_view kProjectItemLabelSetContractDigest =
+    "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f";
+constexpr std::string_view kCompositionDuplicateContractDigest =
+    "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3";
+constexpr std::string_view kCapabilitiesRegistryDigest =
+    "12640c0306641fd32553828d86a4c87728a2c964fe0d288c06a7107fcf9cfdd9";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -1847,7 +1865,7 @@ void response_helpers_are_bounded_and_typed() {
   capabilities.session_id = std::string(kSession);
   capabilities.detail = CapabilityDetail::kFull;
   capabilities.query_digest = std::string(kDigest);
-  capabilities.capabilities_digest = std::string(kDigest);
+  capabilities.capabilities_digest = std::string(kCapabilitiesRegistryDigest);
   capabilities.project_summary_contract_digest = std::string(kContractDigest);
   capabilities.project_bit_depth_read_contract_digest =
       std::string(kProjectBitDepthReadContractDigest);
@@ -1876,6 +1894,30 @@ void response_helpers_are_bounded_and_typed() {
   capabilities.include_composition_selected_layers_list = true;
   capabilities.composition_selected_layers_list_contract_digest =
       std::string(kCompositionLayersContractDigest);
+  capabilities.include_project_context_read = true;
+  capabilities.include_project_item_metadata_read = true;
+  capabilities.include_composition_settings_read = true;
+  capabilities.include_composition_work_area_set = true;
+  capabilities.include_project_item_name_set = true;
+  capabilities.include_project_item_comment_set = true;
+  capabilities.include_project_item_label_set = true;
+  capabilities.include_composition_duplicate = true;
+  capabilities.project_context_read_contract_digest =
+      std::string(kProjectContextReadContractDigest);
+  capabilities.project_item_metadata_read_contract_digest =
+      std::string(kProjectItemMetadataReadContractDigest);
+  capabilities.composition_settings_read_contract_digest =
+      std::string(kCompositionSettingsReadContractDigest);
+  capabilities.composition_work_area_set_contract_digest =
+      std::string(kCompositionWorkAreaSetContractDigest);
+  capabilities.project_item_name_set_contract_digest =
+      std::string(kProjectItemNameSetContractDigest);
+  capabilities.project_item_comment_set_contract_digest =
+      std::string(kProjectItemCommentSetContractDigest);
+  capabilities.project_item_label_set_contract_digest =
+      std::string(kProjectItemLabelSetContractDigest);
+  capabilities.composition_duplicate_contract_digest =
+      std::string(kCompositionDuplicateContractDigest);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -1956,8 +1998,50 @@ void response_helpers_are_bounded_and_typed() {
           != std::string::npos
       && capabilities_body.find("Controller") == std::string::npos
       && capabilities_body.find("\"id\":\"ae.layer.properties.list\"")
-          != std::string::npos,
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-project-item-metadata-read-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-composition-settings-read-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-composition-work-area-set-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-project-item-name-set-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-project-item-comment-set-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-project-item-label-set-stale\"")
+          != std::string::npos
+      && capabilities_body.find("\"beforeName\":\"SYNTHETIC_ITEM\"")
+          != std::string::npos
+      && capabilities_body.find("aemcp-example-project-item-metadata-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-composition-settings-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-composition-work-area-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-project-item-name-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-project-item-comment-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-project-item-label-stale")
+          == std::string::npos
+      && capabilities_body.find("\"beforeName\":\"\"") == std::string::npos,
       "full capability serializer omitted the closed contract");
+  capabilities.capabilities_digest = std::string(kDigest);
+  expect_argument_error([&] {
+    (void)encode_capabilities_success(capabilities);
+  }, "full capability registry digest drift");
+  capabilities.include_composition_duplicate = false;
+  const std::string filtered_capabilities_body = body(
+      encode_capabilities_success(capabilities));
+  require(filtered_capabilities_body.find(std::string(kDigest)) != std::string::npos,
+      "filtered capability response rejected the advertised full-registry digest");
 
   const std::string progress_body = body(encode_progress_event(ProgressEvent{
     "invoke-1", std::string(kSession), 1, ProgressPhase::kQueued, 0.25, "Queued safely."}));

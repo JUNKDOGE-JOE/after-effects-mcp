@@ -3411,6 +3411,44 @@ std::string double_json(double value) {
   return stream.str();
 }
 
+std::string canonical_json(const JsonValue& value) {
+  if (std::holds_alternative<std::nullptr_t>(value.value)) return "null";
+  if (const auto* boolean = std::get_if<bool>(&value.value)) {
+    return *boolean ? "true" : "false";
+  }
+  if (const auto* number = std::get_if<JsonNumber>(&value.value)) {
+    return double_json(number->value);
+  }
+  if (const auto* string = std::get_if<std::string>(&value.value)) {
+    return json_string(*string);
+  }
+  if (const auto* array = std::get_if<JsonValue::Array>(&value.value)) {
+    std::string output = "[";
+    for (std::size_t index = 0; index < array->size(); ++index) {
+      if (index != 0) output.push_back(',');
+      output += canonical_json((*array)[index]);
+    }
+    output.push_back(']');
+    return output;
+  }
+  const auto& object = std::get<JsonValue::Object>(value.value);
+  std::vector<const std::pair<std::string, JsonValue>*> sorted;
+  sorted.reserve(object.size());
+  for (const auto& member : object) sorted.push_back(&member);
+  std::sort(sorted.begin(), sorted.end(), [](const auto* left, const auto* right) {
+    return left->first < right->first;
+  });
+  std::string output = "{";
+  for (std::size_t index = 0; index < sorted.size(); ++index) {
+    if (index != 0) output.push_back(',');
+    output += json_string(sorted[index]->first);
+    output.push_back(':');
+    output += canonical_json(sorted[index]->second);
+  }
+  output.push_back('}');
+  return output;
+}
+
 void validate_limits(const NegotiatedLimits& limits) {
   if (limits.max_frame_bytes < 4'096 || limits.max_frame_bytes > kMaxFrameBytes
       || limits.max_in_flight < 1 || limits.max_in_flight > 64
@@ -3903,7 +3941,7 @@ std::string project_item_metadata_descriptor(const CapabilitiesSuccess& response
       "aemcp.contract.ae.project.item.metadata.read.input.v1",
       "aemcp.contract.ae.project.item.metadata.read.result.v1",
       "aemcp.requirement.native.project-item-metadata-read",
-      input, result, arguments, "aemcp-example-project-item-metadata-stale",
+      input, result, arguments, "aemcp-example-project-item-metadata-read-stale",
       "STALE_LOCATOR", "refresh-locator", false,
       "aemcp-example-project-item-metadata-read", positive_value},
       response.project_item_metadata_read_contract_digest);
@@ -3924,7 +3962,7 @@ std::string composition_settings_descriptor(const CapabilitiesSuccess& response)
       "aemcp.contract.ae.composition.settings.read.input.v1",
       "aemcp.contract.ae.composition.settings.read.result.v1",
       "aemcp.requirement.native.composition-settings-read",
-      input, result, arguments, "aemcp-example-composition-settings-stale",
+      input, result, arguments, "aemcp-example-composition-settings-read-stale",
       "STALE_LOCATOR", "refresh-locator", false,
       "aemcp-example-composition-settings-read", positive_value},
       response.composition_settings_read_contract_digest);
@@ -3945,7 +3983,7 @@ std::string composition_work_area_descriptor(const CapabilitiesSuccess& response
       "aemcp.contract.ae.composition.work-area.set.input.v1",
       "aemcp.contract.ae.composition.work-area.set.result.v1",
       "aemcp.requirement.native.composition-work-area-set",
-      input, result, arguments, "aemcp-example-composition-work-area-stale",
+      input, result, arguments, "aemcp-example-composition-work-area-set-stale",
       "STALE_LOCATOR", "refresh-locator", true,
       "aemcp-example-composition-work-area-set", positive_value},
       response.composition_work_area_set_contract_digest);
@@ -3954,7 +3992,7 @@ std::string project_item_name_descriptor(const CapabilitiesSuccess& response) {
   static constexpr std::string_view input = R"aemcp({"additionalProperties":false,"properties":{"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"name":{"maxLength":255,"minLength":1,"type":"string"}},"required":["itemLocator","name","idempotencyKey"],"type":"object"})aemcp";
   static constexpr std::string_view result = R"aemcp({"additionalProperties":false,"properties":{"afterName":{"maxLength":255,"minLength":1,"type":"string"},"beforeName":{"maxLength":1024,"type":"string"},"changed":{"const":true},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","itemLocator","beforeName","afterName"],"type":"object"})aemcp";
   static constexpr std::string_view arguments = R"aemcp({"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"name":"SYNTHETIC_RENAMED","idempotencyKey":"synthetic-item-name-0001"})aemcp";
-  static constexpr std::string_view positive_value = R"aemcp({"changed":true,"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"beforeName":"","afterName":"SYNTHETIC_RENAMED"})aemcp";
+  static constexpr std::string_view positive_value = R"aemcp({"changed":true,"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"beforeName":"SYNTHETIC_ITEM","afterName":"SYNTHETIC_RENAMED"})aemcp";
   if (response.detail == CapabilityDetail::kFull
       && response.project_item_name_set_contract_digest != "b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538") {
     invalid_argument("ae.project.item.name.set contract digest does not match the compiled descriptor");
@@ -3966,7 +4004,7 @@ std::string project_item_name_descriptor(const CapabilitiesSuccess& response) {
       "aemcp.contract.ae.project.item.name.set.input.v1",
       "aemcp.contract.ae.project.item.name.set.result.v1",
       "aemcp.requirement.native.project-item-name-set",
-      input, result, arguments, "aemcp-example-project-item-name-stale",
+      input, result, arguments, "aemcp-example-project-item-name-set-stale",
       "STALE_LOCATOR", "refresh-locator", true,
       "aemcp-example-project-item-name-set", positive_value},
       response.project_item_name_set_contract_digest);
@@ -3987,7 +4025,7 @@ std::string project_item_comment_descriptor(const CapabilitiesSuccess& response)
       "aemcp.contract.ae.project.item.comment.set.input.v1",
       "aemcp.contract.ae.project.item.comment.set.result.v1",
       "aemcp.requirement.native.project-item-comment-set",
-      input, result, arguments, "aemcp-example-project-item-comment-stale",
+      input, result, arguments, "aemcp-example-project-item-comment-set-stale",
       "STALE_LOCATOR", "refresh-locator", true,
       "aemcp-example-project-item-comment-set", positive_value},
       response.project_item_comment_set_contract_digest);
@@ -4008,7 +4046,7 @@ std::string project_item_label_descriptor(const CapabilitiesSuccess& response) {
       "aemcp.contract.ae.project.item.label.set.input.v1",
       "aemcp.contract.ae.project.item.label.set.result.v1",
       "aemcp.requirement.native.project-item-label-set",
-      input, result, arguments, "aemcp-example-project-item-label-stale",
+      input, result, arguments, "aemcp-example-project-item-label-set-stale",
       "STALE_LOCATOR", "refresh-locator", true,
       "aemcp-example-project-item-label-set", positive_value},
       response.project_item_label_set_contract_digest);
@@ -4319,6 +4357,34 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
     items += composition_duplicate_descriptor(response);
   }
   items.push_back(']');
+  const bool complete_full_registry = response.detail == CapabilityDetail::kFull
+      && response.include_project_summary
+      && response.include_project_bit_depth_read
+      && response.include_project_bit_depth_set
+      && response.include_project_items_list
+      && response.include_composition_layers_list
+      && response.include_composition_selected_layers_list
+      && response.include_composition_time_read
+      && response.include_composition_time_set
+      && response.include_composition_create
+      && response.include_composition_layer_create
+      && response.include_layer_effect_apply
+      && response.include_layer_properties_list
+      && response.include_layer_property_keyframes_list
+      && response.include_layer_property_set
+      && response.include_project_context_read
+      && response.include_project_item_metadata_read
+      && response.include_composition_settings_read
+      && response.include_composition_work_area_set
+      && response.include_project_item_name_set
+      && response.include_project_item_comment_set
+      && response.include_project_item_label_set
+      && response.include_composition_duplicate;
+  if (complete_full_registry
+      && sha256_hex(canonical_json(JsonParser(items).parse()))
+          != response.capabilities_digest) {
+    invalid_argument("capabilities digest does not match the encoded full registry");
+  }
   std::string json = "{\"kind\":\"response\",\"method\":\"capabilities\",\"ok\":true,"
       "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
       + ",\"result\":{\"capabilitiesDigest\":" + json_string(response.capabilities_digest)
