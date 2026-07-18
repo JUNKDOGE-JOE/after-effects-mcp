@@ -22,6 +22,14 @@ using aemcp::native::rpc::CompositionLayersSuccess;
 using aemcp::native::rpc::CompositionSelectedLayersSuccess;
 using aemcp::native::rpc::CompositionTimeSuccess;
 using aemcp::native::rpc::CompositionTimeSetSuccess;
+using aemcp::native::rpc::ProjectContextSuccess;
+using aemcp::native::rpc::ProjectItemMetadataSuccess;
+using aemcp::native::rpc::CompositionSettingsSuccess;
+using aemcp::native::rpc::CompositionWorkAreaSetSuccess;
+using aemcp::native::rpc::ProjectItemNameSetSuccess;
+using aemcp::native::rpc::ProjectItemCommentSetSuccess;
+using aemcp::native::rpc::ProjectItemLabelSetSuccess;
+using aemcp::native::rpc::CompositionDuplicateSuccess;
 using aemcp::native::rpc::CompositionCreateSuccess;
 using aemcp::native::rpc::CompositionLayerCreateSuccess;
 using aemcp::native::rpc::LayerEffectApplySuccess;
@@ -65,6 +73,14 @@ using aemcp::native::rpc::digest_composition_time_postcondition;
 using aemcp::native::rpc::digest_composition_time_set_postcondition;
 using aemcp::native::rpc::digest_composition_create_postcondition;
 using aemcp::native::rpc::composition_create_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_context_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_item_metadata_persistent_diagnostic_fields;
+using aemcp::native::rpc::composition_settings_persistent_diagnostic_fields;
+using aemcp::native::rpc::composition_work_area_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_item_name_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_item_comment_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_item_label_persistent_diagnostic_fields;
+using aemcp::native::rpc::composition_duplicate_persistent_diagnostic_fields;
 using aemcp::native::rpc::digest_composition_layer_create_postcondition;
 using aemcp::native::rpc::digest_layer_effect_apply_postcondition;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
@@ -84,6 +100,14 @@ using aemcp::native::rpc::encode_composition_layers_success;
 using aemcp::native::rpc::encode_composition_selected_layers_success;
 using aemcp::native::rpc::encode_composition_time_success;
 using aemcp::native::rpc::encode_composition_time_set_success;
+using aemcp::native::rpc::encode_project_context_success;
+using aemcp::native::rpc::encode_project_item_metadata_success;
+using aemcp::native::rpc::encode_composition_settings_success;
+using aemcp::native::rpc::encode_composition_work_area_set_success;
+using aemcp::native::rpc::encode_project_item_name_set_success;
+using aemcp::native::rpc::encode_project_item_comment_set_success;
+using aemcp::native::rpc::encode_project_item_label_set_success;
+using aemcp::native::rpc::encode_composition_duplicate_success;
 using aemcp::native::rpc::encode_composition_create_success;
 using aemcp::native::rpc::encode_composition_layer_create_success;
 using aemcp::native::rpc::encode_layer_effect_apply_success;
@@ -122,6 +146,24 @@ constexpr std::string_view kLayerPropertyKeyframesContractDigest =
     "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb";
 constexpr std::string_view kLayerPropertySetContractDigest =
     "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c";
+constexpr std::string_view kProjectContextReadContractDigest =
+    "ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca";
+constexpr std::string_view kProjectItemMetadataReadContractDigest =
+    "b13139c0b2e8073f6606bfbead1e59eb7fea63ec10a164b500e19ff8babd0f69";
+constexpr std::string_view kCompositionSettingsReadContractDigest =
+    "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b";
+constexpr std::string_view kCompositionWorkAreaSetContractDigest =
+    "a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997";
+constexpr std::string_view kProjectItemNameSetContractDigest =
+    "b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538";
+constexpr std::string_view kProjectItemCommentSetContractDigest =
+    "957985628474caa9c9cef3de76a2839e59691232b062b776ff800a79dd3cc35c";
+constexpr std::string_view kProjectItemLabelSetContractDigest =
+    "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f";
+constexpr std::string_view kCompositionDuplicateContractDigest =
+    "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3";
+constexpr std::string_view kCapabilitiesRegistryDigest =
+    "12640c0306641fd32553828d86a4c87728a2c964fe0d288c06a7107fcf9cfdd9";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -196,6 +238,17 @@ std::string invoke_json(
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":" + std::to_string(deadline)
       + ",\"params\":{\"capabilityId\":\"ae.project.summary\","
         "\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
+}
+
+std::string package150_invoke_json(
+    std::string_view request_id,
+    std::string_view capability_id,
+    std::string_view arguments) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"" + std::string(capability_id)
+      + "\",\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
 }
 
 std::string invalidate_graph_json(
@@ -1369,6 +1422,235 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
   }, "INVALID_ARGUMENT", "duplicate composition layer locator");
 }
 
+void project_composition_package_parses_and_serializes_all_eight_contracts() {
+  const std::string item = locator_json(
+      "item", "77777777-7777-4777-8777-777777777777");
+  const std::string composition = locator_json(
+      "composition", "66666666-6666-4666-8666-666666666666");
+  const std::array<std::tuple<std::string, std::string, std::string>, 8> requests{{
+      {"package-context", "ae.project.context.read",
+          "{\"selectionOffset\":0,\"selectionLimit\":25}"},
+      {"package-metadata", "ae.project.item.metadata.read",
+          "{\"itemLocator\":" + item + "}"},
+      {"package-settings", "ae.composition.settings.read",
+          "{\"compositionLocator\":" + composition + "}"},
+      {"package-work-area", "ae.composition.work-area.set",
+          "{\"compositionLocator\":" + composition
+            + ",\"start\":{\"value\":1,\"scale\":1},"
+              "\"duration\":{\"value\":4,\"scale\":1},"
+              "\"idempotencyKey\":\"package-work-area-0001\"}"},
+      {"package-name", "ae.project.item.name.set",
+          "{\"itemLocator\":" + item
+            + ",\"name\":\"After\","
+              "\"idempotencyKey\":\"package-item-name-0001\"}"},
+      {"package-comment", "ae.project.item.comment.set",
+          "{\"itemLocator\":" + item
+            + ",\"comment\":\"\","
+              "\"idempotencyKey\":\"package-item-comment-0001\"}"},
+      {"package-label", "ae.project.item.label.set",
+          "{\"itemLocator\":" + item
+            + ",\"labelId\":4,"
+              "\"idempotencyKey\":\"package-item-label-0001\"}"},
+      {"package-duplicate", "ae.composition.duplicate",
+          "{\"compositionLocator\":" + composition
+            + ",\"newName\":\"Fixture Copy\","
+              "\"idempotencyKey\":\"package-duplicate-0001\"}"},
+  }};
+  for (const auto& [request_id, capability_id, arguments] : requests) {
+    const ParsedRequest parsed = decode_request_frame(frame(package150_invoke_json(
+        request_id, capability_id, arguments)));
+    require(parsed.method == RpcMethod::kInvoke
+            && std::get<InvokeParams>(parsed.params).capability_id == capability_id,
+        "package-150 invoke parser lost its typed capability: " + capability_id);
+  }
+
+  const ParsedRequest comment_fixture = decode_request_frame(frame(package150_invoke_json(
+      "invoke-item-comment-set-1",
+      "ae.project.item.comment.set",
+      "{\"itemLocator\":" + item
+        + ",\"comment\":\"SYNTHETIC_COMMENT\","
+          "\"idempotencyKey\":\"synthetic-item-comment-0001\"}")));
+  const auto& comment_params = std::get<InvokeParams>(comment_fixture.params);
+  require(comment_fixture.request_fingerprint_sha256
+          == "86593f8a6ba8292928dcbb25ba126c07f73ad4a0f55e71ccf99902505b725522",
+      "comment request fingerprint drifted from the shared RFC 8785 fixture");
+  require(comment_params.arguments_fingerprint_sha256
+          == "38951b3ec3463cdfbcb53ae0e0c6d35e73e39101da69cad83ede4410992f13a3",
+      "comment arguments fingerprint is not RFC 8785 canonical");
+
+  const auto project = locator(
+      "project", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  const auto item_locator = locator(
+      "item", "77777777-7777-4777-8777-777777777777");
+  const auto composition_locator = locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+  const auto settings = [](aemcp::native::ObjectLocator locator_value,
+                           std::string name) {
+    aemcp::native::CompositionSettings value;
+    value.composition_locator = std::move(locator_value);
+    value.name = std::move(name);
+    value.width = 1920;
+    value.height = 1080;
+    value.duration = {10, 1, "10"};
+    value.frame_duration = {1, 24, "1/24"};
+    value.frame_rate = {24, 1, "24"};
+    value.pixel_aspect_ratio = {1, 1, "1"};
+    value.work_area_start = {0, 1, "0"};
+    value.work_area_duration = {5, 1, "5"};
+    value.display_start_time = {0, 1, "0"};
+    return value;
+  };
+  const auto success = [](auto value, std::string request_id, auto digest) {
+    using Success = aemcp::native::rpc::NativeValueSuccess<decltype(value)>;
+    return Success{
+        std::move(request_id),
+        std::string(kSession),
+        std::string(kHost),
+        std::move(value),
+        1'900'000'000'000ULL,
+        1'900'000'000'025ULL,
+        std::string(kDigest),
+        digest,
+        false};
+  };
+  aemcp::native::ProjectContext context;
+  context.project_locator = project;
+  context.selection_limit = 25;
+  ProjectItemMetadataSuccess metadata = success(
+      aemcp::native::ProjectItemMetadata{
+          item_locator, "", "footage", std::nullopt, "", 0,
+          std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt},
+      "package-metadata",
+      aemcp::native::rpc::digest_project_item_metadata_postcondition(
+          aemcp::native::ProjectItemMetadata{
+              item_locator, "", "footage", std::nullopt, "", 0,
+              std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt}));
+  const auto composition_settings = settings(composition_locator, "");
+  const aemcp::native::CompositionWorkAreaChanged work_area{
+      true, composition_locator, {0, 1, "0"}, {5, 1, "5"},
+      {1, 1, "1"}, {4, 1, "4"}};
+  const aemcp::native::ProjectItemTextChanged name_change{
+      true, item_locator, std::string(1024, 'B'), "After"};
+  const aemcp::native::ProjectItemTextChanged comment_change{
+      true, item_locator, "Before comment", ""};
+  const aemcp::native::ProjectItemLabelChanged label_change{
+      true, item_locator, 0, 4};
+  auto source_locator = composition_locator;
+  source_locator.project_id = "55555555-5555-4555-8555-555555555555";
+  source_locator.generation = 9;
+  source_locator.object_id = "77777777-7777-4777-8777-777777777777";
+  auto duplicate_locator = source_locator;
+  duplicate_locator.object_id = "99999999-9999-4999-8999-999999999999";
+  const aemcp::native::CompositionDuplicated duplicated{
+      true, source_locator, duplicate_locator, 2, 3,
+      settings(source_locator, ""), settings(duplicate_locator, "Fixture Copy")};
+
+  auto private_metadata = metadata.value;
+  private_metadata.name = "PRIVATE_CUSTOMER_ITEM_NAME_123";
+  private_metadata.comment = "PRIVATE_CUSTOMER_COMMENT_456";
+  auto private_settings = composition_settings;
+  private_settings.name = "PRIVATE_CUSTOMER_COMPOSITION_789";
+  auto private_name_change = name_change;
+  private_name_change.before_value = "PRIVATE_OLD_NAME";
+  private_name_change.after_value = "PRIVATE_NEW_NAME";
+  auto private_comment_change = comment_change;
+  private_comment_change.before_value = "PRIVATE_OLD_COMMENT";
+  private_comment_change.after_value = "PRIVATE_NEW_COMMENT";
+  auto private_duplicate = duplicated;
+  private_duplicate.source_settings.name = "PRIVATE_SOURCE_COMPOSITION";
+  private_duplicate.new_settings.name = "PRIVATE_DUPLICATE_COMPOSITION";
+  const std::array<std::string, 8> persistent_package_diagnostics{{
+      project_context_persistent_diagnostic_fields(context),
+      project_item_metadata_persistent_diagnostic_fields(private_metadata),
+      composition_settings_persistent_diagnostic_fields(private_settings),
+      composition_work_area_persistent_diagnostic_fields(work_area),
+      project_item_name_persistent_diagnostic_fields(private_name_change),
+      project_item_comment_persistent_diagnostic_fields(private_comment_change),
+      project_item_label_persistent_diagnostic_fields(label_change),
+      composition_duplicate_persistent_diagnostic_fields(private_duplicate),
+  }};
+  for (const std::string& diagnostic : persistent_package_diagnostics) {
+    require(diagnostic.find("PRIVATE_") == std::string::npos
+            && diagnostic.find("\"projectOpen\"") == std::string::npos,
+        "package-150 persistent diagnostics exposed user text or used summary fallback");
+  }
+  require(persistent_package_diagnostics[0].find("\"selectionReturned\":0")
+              != std::string::npos
+          && persistent_package_diagnostics[1].find("\"nameRedacted\":true")
+              != std::string::npos
+          && persistent_package_diagnostics[2].find("\"width\":1920")
+              != std::string::npos
+          && persistent_package_diagnostics[3].find("\"afterDuration\"")
+              != std::string::npos
+          && persistent_package_diagnostics[4].find("\"nameRedacted\":true")
+              != std::string::npos
+          && persistent_package_diagnostics[5].find("\"commentRedacted\":true")
+              != std::string::npos
+          && persistent_package_diagnostics[6].find("\"afterLabelId\":4")
+              != std::string::npos
+          && persistent_package_diagnostics[7].find("\"newNameRedacted\":true")
+              != std::string::npos,
+      "package-150 persistent diagnostics lost their bounded capability branch");
+
+  const std::array<std::string, 8> encoded{{
+      body(encode_project_context_success(success(
+          context, "package-context",
+          aemcp::native::rpc::digest_project_context_postcondition(context)))),
+      body(encode_project_item_metadata_success(metadata)),
+      body(encode_composition_settings_success(success(
+          composition_settings, "package-settings",
+          aemcp::native::rpc::digest_composition_settings_postcondition(
+              composition_settings)))),
+      body(encode_composition_work_area_set_success(success(
+          work_area, "package-work-area",
+          aemcp::native::rpc::digest_composition_work_area_set_postcondition(
+              work_area)))),
+      body(encode_project_item_name_set_success(success(
+          name_change, "package-name",
+          aemcp::native::rpc::digest_project_item_text_set_postcondition(
+              "ae.project.item.name.set", name_change)))),
+      body(encode_project_item_comment_set_success(success(
+          comment_change, "package-comment",
+          aemcp::native::rpc::digest_project_item_text_set_postcondition(
+              "ae.project.item.comment.set", comment_change)))),
+      body(encode_project_item_label_set_success(success(
+          label_change, "package-label",
+          aemcp::native::rpc::digest_project_item_label_set_postcondition(
+              label_change)))),
+      body(encode_composition_duplicate_success(success(
+          duplicated, "package-duplicate",
+          aemcp::native::rpc::digest_composition_duplicate_postcondition(
+              duplicated)))),
+  }};
+  for (std::size_t index = 0; index < encoded.size(); ++index) {
+    require(encoded[index].find("\"capabilityId\":\""
+            + std::get<1>(requests[index]) + "\"") != std::string::npos,
+        "package-150 success encoder emitted the wrong capability branch");
+  }
+
+  auto invalid_metadata = metadata;
+  invalid_metadata.value.width = 0;
+  expect_argument_error([&] {
+    (void)encode_project_item_metadata_success(invalid_metadata);
+  }, "zero-width optional footage metadata");
+  auto invalid_settings = success(
+      composition_settings, "package-settings-invalid",
+      aemcp::native::rpc::digest_composition_settings_postcondition(
+          composition_settings));
+  invalid_settings.value.width = 30001;
+  expect_argument_error([&] {
+    (void)encode_composition_settings_success(invalid_settings);
+  }, "oversized composition settings width");
+  auto oversized_before_name = name_change;
+  oversized_before_name.before_value = std::string(1025, 'B');
+  expect_argument_error([&] {
+    (void)encode_project_item_name_set_success(success(
+        oversized_before_name,
+        "package-name-oversized-before",
+        std::string(kDigest)));
+  }, "project item name result with oversized old name");
+}
+
 void framing_fragmentation_and_multiple_frames_work() {
   const auto first = frame(hello_json());
   const auto second = frame("{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
@@ -1597,7 +1879,7 @@ void response_helpers_are_bounded_and_typed() {
   capabilities.session_id = std::string(kSession);
   capabilities.detail = CapabilityDetail::kFull;
   capabilities.query_digest = std::string(kDigest);
-  capabilities.capabilities_digest = std::string(kDigest);
+  capabilities.capabilities_digest = std::string(kCapabilitiesRegistryDigest);
   capabilities.project_summary_contract_digest = std::string(kContractDigest);
   capabilities.project_bit_depth_read_contract_digest =
       std::string(kProjectBitDepthReadContractDigest);
@@ -1626,6 +1908,30 @@ void response_helpers_are_bounded_and_typed() {
   capabilities.include_composition_selected_layers_list = true;
   capabilities.composition_selected_layers_list_contract_digest =
       std::string(kCompositionLayersContractDigest);
+  capabilities.include_project_context_read = true;
+  capabilities.include_project_item_metadata_read = true;
+  capabilities.include_composition_settings_read = true;
+  capabilities.include_composition_work_area_set = true;
+  capabilities.include_project_item_name_set = true;
+  capabilities.include_project_item_comment_set = true;
+  capabilities.include_project_item_label_set = true;
+  capabilities.include_composition_duplicate = true;
+  capabilities.project_context_read_contract_digest =
+      std::string(kProjectContextReadContractDigest);
+  capabilities.project_item_metadata_read_contract_digest =
+      std::string(kProjectItemMetadataReadContractDigest);
+  capabilities.composition_settings_read_contract_digest =
+      std::string(kCompositionSettingsReadContractDigest);
+  capabilities.composition_work_area_set_contract_digest =
+      std::string(kCompositionWorkAreaSetContractDigest);
+  capabilities.project_item_name_set_contract_digest =
+      std::string(kProjectItemNameSetContractDigest);
+  capabilities.project_item_comment_set_contract_digest =
+      std::string(kProjectItemCommentSetContractDigest);
+  capabilities.project_item_label_set_contract_digest =
+      std::string(kProjectItemLabelSetContractDigest);
+  capabilities.composition_duplicate_contract_digest =
+      std::string(kCompositionDuplicateContractDigest);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -1706,8 +2012,50 @@ void response_helpers_are_bounded_and_typed() {
           != std::string::npos
       && capabilities_body.find("Controller") == std::string::npos
       && capabilities_body.find("\"id\":\"ae.layer.properties.list\"")
-          != std::string::npos,
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-project-item-metadata-read-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-composition-settings-read-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-composition-work-area-set-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-project-item-name-set-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-project-item-comment-set-stale\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"aemcp-example-project-item-label-set-stale\"")
+          != std::string::npos
+      && capabilities_body.find("\"beforeName\":\"SYNTHETIC_ITEM\"")
+          != std::string::npos
+      && capabilities_body.find("aemcp-example-project-item-metadata-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-composition-settings-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-composition-work-area-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-project-item-name-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-project-item-comment-stale")
+          == std::string::npos
+      && capabilities_body.find("aemcp-example-project-item-label-stale")
+          == std::string::npos
+      && capabilities_body.find("\"beforeName\":\"\"") == std::string::npos,
       "full capability serializer omitted the closed contract");
+  capabilities.capabilities_digest = std::string(kDigest);
+  expect_argument_error([&] {
+    (void)encode_capabilities_success(capabilities);
+  }, "full capability registry digest drift");
+  capabilities.include_composition_duplicate = false;
+  const std::string filtered_capabilities_body = body(
+      encode_capabilities_success(capabilities));
+  require(filtered_capabilities_body.find(std::string(kDigest)) != std::string::npos,
+      "filtered capability response rejected the advertised full-registry digest");
 
   const std::string progress_body = body(encode_progress_event(ProgressEvent{
     "invoke-1", std::string(kSession), 1, ProgressPhase::kQueued, 0.25, "Queued safely."}));
@@ -1906,6 +2254,7 @@ int main() {
   project_bit_depth_invokes_are_closed_and_explicitly_mapped();
   invalidate_graph_requests_and_results_are_closed_and_deterministic();
   project_graph_invokes_and_results_are_closed_and_deterministic();
+  project_composition_package_parses_and_serializes_all_eight_contracts();
   framing_fragmentation_and_multiple_frames_work();
   strict_json_and_frame_limits_fail_closed();
   negative_contract_vectors_are_classified();

@@ -220,6 +220,14 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.composition_selected_layers_list_contract_digest.size() != 64
       || runtime_.composition_time_read_contract_digest.size() != 64
       || runtime_.composition_time_set_contract_digest.size() != 64
+      || runtime_.project_context_read_contract_digest.size() != 64
+      || runtime_.project_item_metadata_read_contract_digest.size() != 64
+      || runtime_.composition_settings_read_contract_digest.size() != 64
+      || runtime_.composition_work_area_set_contract_digest.size() != 64
+      || runtime_.project_item_name_set_contract_digest.size() != 64
+      || runtime_.project_item_comment_set_contract_digest.size() != 64
+      || runtime_.project_item_label_set_contract_digest.size() != 64
+      || runtime_.composition_duplicate_contract_digest.size() != 64
       || runtime_.layer_effect_apply_contract_digest.size() != 64
       || runtime_.layer_properties_list_contract_digest.size() != 64
       || runtime_.layer_property_keyframes_list_contract_digest.size() != 64
@@ -307,6 +315,29 @@ void NativeRpcConnectionHandler::serve(
             } else if (completion.capability_id == kCompositionTimeSetCapability) {
               postcondition_digest = rpc::digest_composition_time_set_postcondition(
                   completion.composition_time_change_result);
+            } else if (completion.capability_id == kProjectContextReadCapability) {
+              postcondition_digest = rpc::digest_project_context_postcondition(
+                  completion.project_context_result);
+            } else if (completion.capability_id == kProjectItemMetadataReadCapability) {
+              postcondition_digest = rpc::digest_project_item_metadata_postcondition(
+                  completion.project_item_metadata_result);
+            } else if (completion.capability_id == kCompositionSettingsReadCapability) {
+              postcondition_digest = rpc::digest_composition_settings_postcondition(
+                  completion.composition_settings_result);
+            } else if (completion.capability_id == kCompositionWorkAreaSetCapability) {
+              postcondition_digest = rpc::digest_composition_work_area_set_postcondition(
+                  completion.composition_work_area_change_result);
+            } else if (completion.capability_id == kProjectItemNameSetCapability
+                || completion.capability_id == kProjectItemCommentSetCapability) {
+              postcondition_digest = rpc::digest_project_item_text_set_postcondition(
+                  completion.capability_id,
+                  completion.project_item_text_change_result);
+            } else if (completion.capability_id == kProjectItemLabelSetCapability) {
+              postcondition_digest = rpc::digest_project_item_label_set_postcondition(
+                  completion.project_item_label_change_result);
+            } else if (completion.capability_id == kCompositionDuplicateCapability) {
+              postcondition_digest = rpc::digest_composition_duplicate_postcondition(
+                  completion.composition_duplicate_result);
             } else if (completion.capability_id == kCompositionCreateCapability) {
               postcondition_digest = rpc::digest_composition_create_postcondition(
                   completion.composition_create_result);
@@ -343,7 +374,12 @@ void NativeRpcConnectionHandler::serve(
               || completion.capability_id == kCompositionCreateCapability
               || completion.capability_id == kCompositionLayerCreateCapability
               || completion.capability_id == kLayerEffectApplyCapability
-              || completion.capability_id == kLayerPropertySetCapability;
+              || completion.capability_id == kLayerPropertySetCapability
+              || completion.capability_id == kCompositionWorkAreaSetCapability
+              || completion.capability_id == kProjectItemNameSetCapability
+              || completion.capability_id == kProjectItemCommentSetCapability
+              || completion.capability_id == kProjectItemLabelSetCapability
+              || completion.capability_id == kCompositionDuplicateCapability;
           completion.error_code = mutating
               ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
               : graph_invalidation ? "NATIVE_UNAVAILABLE" : "CAPABILITY_FAILED";
@@ -475,6 +511,46 @@ void NativeRpcConnectionHandler::serve(
                 postcondition_digest,
                 completion.replayed,
             });
+          } else if (completion.capability_id == kProjectContextReadCapability) {
+            response = rpc::encode_project_context_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                completion.project_context_result, started_at, completed_at,
+                request_digest, postcondition_digest, false});
+          } else if (completion.capability_id == kProjectItemMetadataReadCapability) {
+            response = rpc::encode_project_item_metadata_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                completion.project_item_metadata_result, started_at, completed_at,
+                request_digest, postcondition_digest, false});
+          } else if (completion.capability_id == kCompositionSettingsReadCapability) {
+            response = rpc::encode_composition_settings_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                completion.composition_settings_result, started_at, completed_at,
+                request_digest, postcondition_digest, false});
+          } else if (completion.capability_id == kCompositionWorkAreaSetCapability) {
+            response = rpc::encode_composition_work_area_set_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                completion.composition_work_area_change_result, started_at, completed_at,
+                request_digest, postcondition_digest, completion.replayed});
+          } else if (completion.capability_id == kProjectItemNameSetCapability) {
+            response = rpc::encode_project_item_name_set_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                completion.project_item_text_change_result, started_at, completed_at,
+                request_digest, postcondition_digest, completion.replayed});
+          } else if (completion.capability_id == kProjectItemCommentSetCapability) {
+            response = rpc::encode_project_item_comment_set_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                completion.project_item_text_change_result, started_at, completed_at,
+                request_digest, postcondition_digest, completion.replayed});
+          } else if (completion.capability_id == kProjectItemLabelSetCapability) {
+            response = rpc::encode_project_item_label_set_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                completion.project_item_label_change_result, started_at, completed_at,
+                request_digest, postcondition_digest, completion.replayed});
+          } else if (completion.capability_id == kCompositionDuplicateCapability) {
+            response = rpc::encode_composition_duplicate_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                completion.composition_duplicate_result, started_at, completed_at,
+                request_digest, postcondition_digest, completion.replayed});
           } else if (completion.capability_id == kCompositionCreateCapability) {
             response = rpc::encode_composition_create_success({
                 completion.request_id,
@@ -676,6 +752,25 @@ void NativeRpcConnectionHandler::serve(
           const bool include_layer_property_set = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.layer.property.set")
                   != query.ids->end();
+          const auto includes = [&](std::string_view id) {
+            return !query.ids.has_value()
+                || std::find(query.ids->begin(), query.ids->end(), id) != query.ids->end();
+          };
+          const bool include_project_context = includes("ae.project.context.read");
+          const bool include_project_item_metadata =
+              includes("ae.project.item.metadata.read");
+          const bool include_composition_settings =
+              includes("ae.composition.settings.read");
+          const bool include_composition_work_area =
+              includes("ae.composition.work-area.set");
+          const bool include_project_item_name =
+              includes("ae.project.item.name.set");
+          const bool include_project_item_comment =
+              includes("ae.project.item.comment.set");
+          const bool include_project_item_label =
+              includes("ae.project.item.label.set");
+          const bool include_composition_duplicate =
+              includes("ae.composition.duplicate");
           const std::size_t selected = static_cast<std::size_t>(include_summary)
               + static_cast<std::size_t>(include_bit_depth_read)
               + static_cast<std::size_t>(include_bit_depth_set)
@@ -689,7 +784,15 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_layer_effect_apply)
               + static_cast<std::size_t>(include_layer_properties)
               + static_cast<std::size_t>(include_layer_property_keyframes)
-              + static_cast<std::size_t>(include_layer_property_set);
+              + static_cast<std::size_t>(include_layer_property_set)
+              + static_cast<std::size_t>(include_project_context)
+              + static_cast<std::size_t>(include_project_item_metadata)
+              + static_cast<std::size_t>(include_composition_settings)
+              + static_cast<std::size_t>(include_composition_work_area)
+              + static_cast<std::size_t>(include_project_item_name)
+              + static_cast<std::size_t>(include_project_item_comment)
+              + static_cast<std::size_t>(include_project_item_label)
+              + static_cast<std::size_t>(include_composition_duplicate);
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                     request,
@@ -736,6 +839,22 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.composition_selected_layers_list_contract_digest,
                   include_layer_effect_apply,
                   runtime_.layer_effect_apply_contract_digest,
+                  include_project_context,
+                  include_project_item_metadata,
+                  include_composition_settings,
+                  include_composition_work_area,
+                  include_project_item_name,
+                  include_project_item_comment,
+                  include_project_item_label,
+                  include_composition_duplicate,
+                  runtime_.project_context_read_contract_digest,
+                  runtime_.project_item_metadata_read_contract_digest,
+                  runtime_.composition_settings_read_contract_digest,
+                  runtime_.composition_work_area_set_contract_digest,
+                  runtime_.project_item_name_set_contract_digest,
+                  runtime_.project_item_comment_set_contract_digest,
+                  runtime_.project_item_label_set_contract_digest,
+                  runtime_.composition_duplicate_contract_digest,
               }))) {
             connected = false;
             break;
@@ -823,6 +942,12 @@ void NativeRpcConnectionHandler::serve(
               invoke.composition_create_frame_rate,
               invoke.composition_create_pixel_aspect_ratio,
               invoke.layer_effect_match_name,
+              invoke.item_locator,
+              invoke.work_area_start,
+              invoke.work_area_duration,
+              invoke.item_text,
+              invoke.item_label_id,
+              invoke.duplicate_new_name,
           };
         }
         const std::string dispatched_capability = dispatch_request.capability_id;

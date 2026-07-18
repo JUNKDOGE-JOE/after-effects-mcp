@@ -143,8 +143,8 @@ v0.9.3 macOS Panel 生成的最小配置形态如下：
 
 | 分类 | Tools |
 |---|---|
-| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_listLayerPropertyKeyframes`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
-| Mutation | `ae_exec`, `ae_applyEffect`, `ae_applyLayerEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
+| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_getProjectContext`, `ae_getProjectItemMetadata`, `ae_getCompositionSettings`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_listLayerPropertyKeyframes`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
+| Mutation | `ae_exec`, `ae_applyEffect`, `ae_applyLayerEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setCompositionWorkArea`, `ae_renameProjectItem`, `ae_setProjectItemComment`, `ae_setProjectItemLabel`, `ae_duplicateComposition`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
 | Rigging | `ae_createRig` |
@@ -289,6 +289,21 @@ primitive 值以及原生入/出插值，并且绝不回退 JSX。将返回的 l
 身份、新 layer locator、原生 provenance、审计证据和 Undo 可用性；相同 intent 的 replay 不会
 重复添加。后续读取 Effects group 必须使用返回的新 locator；遇到
 `POSSIBLY_SIDE_EFFECTING_FAILURE` 时，先核对 AE 状态与审计，禁止盲目重试。
+Project / Composition Operations 能力包新增 3 个严格原生只读工具和 5 个严格原生写工具。
+`ae_getProjectContext(selection_offset?, selection_limit?)` 返回 active item、最近使用的合成和
+有界的 Project 面板选择；将其中 locator 原样交给
+`ae_getProjectItemMetadata(item_locator)` 或
+`ae_getCompositionSettings(composition_locator)`。写工具包括
+`ae_setCompositionWorkArea(composition_locator, start, duration, idempotency_key)`、
+`ae_renameProjectItem(item_locator, name, idempotency_key)`、
+`ae_setProjectItemComment(item_locator, comment, idempotency_key)`、
+`ae_setProjectItemLabel(item_locator, label_id, idempotency_key)` 和
+`ae_duplicateComposition(composition_locator, new_name, idempotency_key)`。每次写入都在一个 AE
+Undo group 内执行，并返回已验证的 before/after、原生 provenance、审计证据与 Undo
+可用性；调用本身不会替用户执行 Undo。实机验收或需要恢复状态的调用方必须真正执行 AE Undo，
+再读取完整工程上下文、项目项 metadata 与合成 settings，证明基线已完全恢复。若写入结果不确定，
+必须先核对 AE 状态与审计，禁止盲目重试。
+上述能力在原生通道不可用时会结构化失败，绝不回退 JSX。
 
 CEP 面板 macOS 开发环境：
 

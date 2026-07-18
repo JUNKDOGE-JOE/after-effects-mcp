@@ -248,6 +248,198 @@ class AePositiveCompositionTimeInput(AeCompositionTimeInput):
     value: int = Field(..., ge=1, le=2_147_483_647)
 
 
+class AeNonNegativeCompositionTimeInput(AeCompositionTimeInput):
+    """Exact non-negative time used for a composition work-area start."""
+
+    value: int = Field(..., ge=0, le=2_147_483_647)
+
+
+class AeProjectItemLocator(_AeLocatorInput):
+    """Opaque project-item locator copied from a native project-context result."""
+
+    kind: Literal["item", "composition"]
+
+
+class AeGetProjectContextArgs(_StrictModel):
+    """ae.getProjectContext — read current project, selection, and composition context.
+
+    The selected-item page is bounded and every returned locator is tied to the
+    current native session. This native-only read never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    selection_offset: int = Field(
+        0,
+        ge=0,
+        le=9_007_199_254_740_991,
+        description="Zero-based offset within the current Project-panel selection.",
+    )
+    selection_limit: int = Field(
+        50,
+        ge=1,
+        le=50,
+        description="Maximum selected project items returned (default and max 50).",
+    )
+
+
+class AeGetProjectItemMetadataArgs(_StrictModel):
+    """ae.getProjectItemMetadata — read one project's item metadata.
+
+    Copy item from ae_getProjectContext or ae_listProjectItems. Both ordinary
+    project items and compositions are accepted; names and numeric ids are not.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    item_locator: AeProjectItemLocator = Field(
+        ...,
+        description="Fresh item or composition locator from a native project read.",
+    )
+
+
+class AeGetCompositionSettingsArgs(_StrictModel):
+    """ae.getCompositionSettings — read exact settings for one composition.
+
+    Copy composition from ae_getProjectContext or ae_listProjectItems. The
+    result uses exact integer time and ratio values and never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator = Field(
+        ...,
+        description="Fresh composition locator from a native project read.",
+    )
+
+
+class _AeProjectItemWriteArgs(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    item_locator: AeProjectItemLocator = Field(
+        ...,
+        description="Fresh item or composition locator from a native project read.",
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description="Stable key for this one write intent; use a new key for a new intent.",
+    )
+
+
+class AeSetCompositionWorkAreaArgs(_StrictModel):
+    """ae.setCompositionWorkArea — set one composition's exact work area.
+
+    The start is non-negative, duration is positive, and native readback
+    verifies the transition. This write never falls back to JSX.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator = Field(
+        ...,
+        description="Fresh composition locator from a native project read.",
+    )
+    start: AeNonNegativeCompositionTimeInput = Field(
+        ...,
+        description="Exact non-negative work-area start as value/scale.",
+    )
+    duration: AePositiveCompositionTimeInput = Field(
+        ...,
+        description="Exact positive work-area duration as value/scale.",
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description="Stable key for this work-area intent; use a new key for a new intent.",
+    )
+
+
+class AeRenameProjectItemArgs(_AeProjectItemWriteArgs):
+    """ae.renameProjectItem — rename one project item with verified readback."""
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=r"^[^\u0000]+$",
+        description="Exact new name (1–255 Unicode scalar values).",
+    )
+
+    @model_validator(mode="after")
+    def _valid_name(self) -> "AeRenameProjectItemArgs":
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in self.name):
+            raise ValueError("name must contain only Unicode scalar values")
+        return self
+
+
+class AeSetProjectItemCommentArgs(_AeProjectItemWriteArgs):
+    """ae.setProjectItemComment — set or clear one project item's comment."""
+
+    comment: str = Field(
+        ...,
+        max_length=1024,
+        pattern=r"^[^\u0000]*$",
+        description="Exact comment (0–1024 Unicode scalar values); empty clears it.",
+    )
+
+    @model_validator(mode="after")
+    def _valid_comment(self) -> "AeSetProjectItemCommentArgs":
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in self.comment):
+            raise ValueError("comment must contain only Unicode scalar values")
+        return self
+
+
+class AeSetProjectItemLabelArgs(_AeProjectItemWriteArgs):
+    """ae.setProjectItemLabel — set one numeric After Effects label slot."""
+
+    label_id: int = Field(
+        ...,
+        ge=0,
+        le=16,
+        description="After Effects label slot 0–16; 0 means no label.",
+    )
+
+
+class AeDuplicateCompositionArgs(_StrictModel):
+    """ae.duplicateComposition — duplicate one composition with a chosen name.
+
+    Returns fresh locators because duplication changes the project graph. A
+    stable idempotency key prevents accidental duplicate creation.
+    """
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator = Field(
+        ...,
+        description="Fresh source composition locator from a native project read.",
+    )
+    new_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=r"^[^\u0000]+$",
+        description="Exact name for the new composition (1–255 Unicode scalar values).",
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description="Stable key for this duplicate intent; reuse never creates another copy.",
+    )
+
+    @model_validator(mode="after")
+    def _valid_name(self) -> "AeDuplicateCompositionArgs":
+        if any(0xD800 <= ord(character) <= 0xDFFF for character in self.new_name):
+            raise ValueError("new_name must contain only Unicode scalar values")
+        return self
+
+
 class AeSetCompositionTimeArgs(_StrictModel):
     """ae.setCompositionTime — set exact composition time through native AEGP.
 

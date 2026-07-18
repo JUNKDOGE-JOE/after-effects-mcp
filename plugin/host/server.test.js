@@ -54,6 +54,18 @@ const layerPropertySetVector = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-set.json'
 );
 const layerPropertySetFixture = layerPropertySetVector.response.result;
+const projectCompositionVectors = [
+    'invoke-project-context-read.json',
+    'invoke-project-item-metadata-read.json',
+    'invoke-composition-settings-read.json',
+    'invoke-composition-work-area-set.json',
+    'invoke-project-item-name-set.json',
+    'invoke-project-item-comment-set.json',
+    'invoke-project-item-label-set.json',
+    'invoke-composition-duplicate.json',
+].map(function (filename) {
+    return require('../../native/ae-plugin/protocol/fixtures/' + filename);
+});
 
 const authToken = require('./auth-token');
 
@@ -676,6 +688,14 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.layer.properties.list',
                 'ae.layer.property.keyframes.list',
                 'ae.layer.property.set',
+                'ae.project.context.read',
+                'ae.project.item.metadata.read',
+                'ae.composition.settings.read',
+                'ae.composition.work-area.set',
+                'ae.project.item.name.set',
+                'ae.project.item.comment.set',
+                'ae.project.item.label.set',
+                'ae.composition.duplicate',
             ],
         );
 
@@ -957,6 +977,70 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
             ['invoke', layerPropertyKeyframesRequest],
             ['invoke', layerPropertySetRequest],
         ]);
+    } finally {
+        srv.close();
+        server.stop();
+    }
+});
+
+test('native invoke HTTP gate accepts all package #150 contracts and rejects closed-shape drift', async () => {
+    const nativeClient = fakeNativeClient();
+    nativeClient.authorize();
+    const { server, srv, port } = await startNativeApp(nativeClient);
+    const headers = {
+        'X-AE-MCP-Token': 'known-secret-token',
+        'x-ae-mcp-client': 'stdio-mcp/package-150',
+    };
+    try {
+        const deadlineUnixMs = Date.now() + 10000;
+        const expectedRequests = [];
+        for (const [index, vector] of projectCompositionVectors.entries()) {
+            const request = {
+                requestId: 'core-package-150-' + index,
+                capabilityId: vector.request.params.capabilityId,
+                capabilityVersion: vector.request.params.capabilityVersion,
+                arguments: structuredClone(vector.request.params.arguments),
+                deadlineUnixMs,
+            };
+            const response = await post(port, '/native/invoke', headers, request);
+            assert.strictEqual(response.status, 200, request.capabilityId);
+            expectedRequests.push(['invoke', request]);
+        }
+        assert.deepStrictEqual(nativeClient.calls, expectedRequests);
+
+        for (const [requestId, capabilityId, capabilityVersion, argumentsValue] of [
+            [
+                'core-package-150-extra-key',
+                projectCompositionVectors[0].request.params.capabilityId,
+                1,
+                {
+                    ...structuredClone(projectCompositionVectors[0].request.params.arguments),
+                    unexpected: true,
+                },
+            ],
+            [
+                'core-package-150-wrong-version',
+                projectCompositionVectors[0].request.params.capabilityId,
+                2,
+                structuredClone(projectCompositionVectors[0].request.params.arguments),
+            ],
+            ['core-package-150-prototype', 'toString', 1, {}],
+            ['core-package-150-constructor', 'constructor', 1, {}],
+            ['core-package-150-proto', '__proto__', 1, {}],
+        ]) {
+            const callsBefore = nativeClient.calls.length;
+            const response = await post(port, '/native/invoke', headers, {
+                requestId,
+                capabilityId,
+                capabilityVersion,
+                arguments: argumentsValue,
+                deadlineUnixMs,
+            });
+            assert.strictEqual(response.status, 400, capabilityId);
+            assert.strictEqual(response.body.error.code, 'INVALID_ARGUMENT');
+            assert.strictEqual(response.body.error.sideEffect, 'not-started');
+            assert.strictEqual(nativeClient.calls.length, callsBefore);
+        }
     } finally {
         srv.close();
         server.stop();

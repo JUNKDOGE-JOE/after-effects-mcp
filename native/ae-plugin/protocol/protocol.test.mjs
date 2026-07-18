@@ -22,6 +22,7 @@ import {
   encodeFrame,
   materializeDeadline,
   nativeCapabilityRegistry,
+  projectCompositionDescriptors,
   postconditionDigest,
   compositionLayersListContractDigest,
   compositionLayersListDescriptor,
@@ -185,14 +186,14 @@ test('schema locks strict framing, bounded defaults, rate limits, and native pro
     lengthPrefixBytes: 4,
     byteOrder: 'big-endian',
     encoding: 'utf-8',
-    maxFrameBytes: 131072,
+    maxFrameBytes: 524288,
     maxJsonDepth: 16,
-    maxJsonNodes: 4096,
+    maxJsonNodes: 8192,
     maxStringLength: 8192,
     stringLengthUnit: 'unicode-scalar-values',
     duplicateObjectKeys: 'reject',
   });
-  assert.equal([...protocolReadme.matchAll(/131,072 bytes/gu)].length, 2);
+  assert.equal([...protocolReadme.matchAll(/524,288 bytes/gu)].length, 2);
   assert.doesNotMatch(protocolReadme, /65,536 bytes/u);
   assert.equal(schema['x-lifecycle'].defaultDeadlineMs, 5000);
   assert.equal(schema['x-lifecycle'].maximumDeadlineMs, 30000);
@@ -245,6 +246,14 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
     'invoke-layer-properties-list.json',
     'invoke-layer-property-keyframes-list.json',
     'invoke-layer-property-set.json',
+    'invoke-project-context-read.json',
+    'invoke-project-item-metadata-read.json',
+    'invoke-composition-settings-read.json',
+    'invoke-composition-work-area-set.json',
+    'invoke-project-item-name-set.json',
+    'invoke-project-item-comment-set.json',
+    'invoke-project-item-label-set.json',
+    'invoke-composition-duplicate.json',
     'invalidate-graph.json',
     'cancel.json',
     'errors.json',
@@ -287,6 +296,14 @@ test('golden requests, events, responses, and bound error policies validate', ()
     'invoke-layer-properties-list.json',
     'invoke-layer-property-keyframes-list.json',
     'invoke-layer-property-set.json',
+    'invoke-project-context-read.json',
+    'invoke-project-item-metadata-read.json',
+    'invoke-composition-settings-read.json',
+    'invoke-composition-work-area-set.json',
+    'invoke-project-item-name-set.json',
+    'invoke-project-item-comment-set.json',
+    'invoke-project-item-label-set.json',
+    'invoke-composition-duplicate.json',
     'invalidate-graph.json',
     'cancel.json',
   ]) {
@@ -332,7 +349,9 @@ test('strict framing handles UTF-8, fragments, multiple frames, and malformed JS
     canonicalize(first), canonicalize(second),
   ]);
 
-  const boundedItems = Array.from({ length: 1000 }, () => 'x'.repeat(120));
+  const boundedItems = Array.from(
+    { length: 63 }, () => 'x'.repeat(LIMITS.maxStringLength),
+  );
   const emptyPadLength = Buffer.byteLength(canonicalize({ items: boundedItems, pad: '' }), 'utf8');
   const exactMaximum = { items: boundedItems, pad: 'x'.repeat(LIMITS.maxFrameBytes - emptyPadLength) };
   const maximumFrame = encodeFrame(exactMaximum);
@@ -351,7 +370,7 @@ test('strict framing handles UTF-8, fragments, multiple frames, and malformed JS
   }
   assert.throws(() => decodeFrame(frameFromText('{"a":1,"a":2}')), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson(`${'['.repeat(17)}0${']'.repeat(17)}`), { code: 'INVALID_REQUEST' });
-  assert.throws(() => strictParseJson(`[${'0,'.repeat(4096)}0]`), { code: 'INVALID_REQUEST' });
+  assert.throws(() => strictParseJson(`[${'0,'.repeat(8192)}0]`), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson(JSON.stringify('x'.repeat(8193))), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson('{"n":9007199254740993}'), { code: 'INVALID_REQUEST' });
 });
@@ -364,9 +383,9 @@ test('input and output codecs enforce the same exact JSON limits', () => {
   assert.throws(() => assertJsonLimits(depth17), { code: 'INVALID_REQUEST' });
   assert.throws(() => encodeFrame(depth17), { code: 'INVALID_REQUEST' });
 
-  const nodes4096 = Array.from({ length: 4095 }, () => 0);
-  assert.equal(assertJsonLimits(nodes4096), true);
-  assert.throws(() => assertJsonLimits([...nodes4096, 0]), { code: 'INVALID_REQUEST' });
+  const nodes8192 = Array.from({ length: 8191 }, () => 0);
+  assert.equal(assertJsonLimits(nodes8192), true);
+  assert.throws(() => assertJsonLimits([...nodes8192, 0]), { code: 'INVALID_REQUEST' });
   assert.doesNotThrow(() => encodeFrame('x'.repeat(8192)));
   assert.throws(() => encodeFrame('x'.repeat(8193)), { code: 'INVALID_REQUEST' });
   assert.throws(() => encodeFrame({ ['x'.repeat(8193)]: true }), { code: 'INVALID_REQUEST' });
@@ -612,7 +631,7 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 14);
+  assert.equal(nativeCapabilityRegistry(schema).length, 22);
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -802,6 +821,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const layerPropertiesDescriptor = layerPropertiesListDescriptor(schema);
   const layerPropertyKeyframesDescriptor = layerPropertyKeyframesListDescriptor(schema);
   const layerPropertyDescriptor = layerPropertySetDescriptor(schema);
+  const projectCompositionCapabilities = projectCompositionDescriptors(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -885,7 +905,17 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     layerPropertiesDescriptor,
     layerPropertyKeyframesDescriptor,
     layerPropertyDescriptor,
-  ]), 'f589837c77ed835fc240c010e2a7a8c5582fbbe92130cbc84595abb33bb22236');
+    ...projectCompositionCapabilities,
+  ]), '12640c0306641fd32553828d86a4c87728a2c964fe0d288c06a7107fcf9cfdd9');
+  assert.equal(projectCompositionCapabilities.length, 8);
+  for (const descriptor of projectCompositionCapabilities) {
+    assert.equal(validateCapabilityDescriptor(descriptor, schema), true, descriptor.id);
+    const stem = descriptor.id.replace(/^ae\./u, '').replaceAll('.', '-');
+    assert.equal(descriptor.contractDigest, sha256Jcs({
+      inputSchema: descriptor.inputSchema,
+      resultSchema: descriptor.resultSchema,
+    }), stem);
+  }
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
 });
 
@@ -894,7 +924,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 14);
+  assert.equal(exchange.response.result.items.length, 22);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1339,6 +1369,93 @@ test('invoke transcript binds progress order, one terminal result, identities, t
   const unverified = structuredClone(fixture.response);
   unverified.result.evidence.postcondition.verified = false;
   assert.equal(schemaAccepts(schema.$defs.response, unverified), false);
+});
+
+test('project and composition package vectors bind all eight frozen contracts', () => {
+  const names = [
+    'invoke-project-context-read.json',
+    'invoke-project-item-metadata-read.json',
+    'invoke-composition-settings-read.json',
+    'invoke-composition-work-area-set.json',
+    'invoke-project-item-name-set.json',
+    'invoke-project-item-comment-set.json',
+    'invoke-project-item-label-set.json',
+    'invoke-composition-duplicate.json',
+  ];
+  const descriptors = new Map(
+    projectCompositionDescriptors(schema).map((descriptor) => [descriptor.id, descriptor]),
+  );
+  for (const name of names) {
+    const fixture = golden(name);
+    const descriptor = descriptors.get(fixture.request.params.capabilityId);
+    const context = {
+      hello: golden('hello.json'),
+      descriptor,
+      schema,
+      brokerSendUnixMs: 1900000000000,
+      effectiveDeadlineUnixMs: fixture.request.deadlineUnixMs,
+      terminalObservedUnixMs: 1900000000030,
+    };
+    assert.equal(fixture.response.result.evidence.requestDigest,
+      sha256Jcs(fixture.request), `${name} request digest`);
+    assert.equal(fixture.response.result.evidence.postcondition.digest,
+      postconditionDigest(fixture.response.result), `${name} postcondition digest`);
+    assert.equal(validateTranscript(
+      context, fixture.request, [...fixture.events, fixture.response],
+    ), true, name);
+  }
+
+  const settings = golden('invoke-composition-settings-read.json');
+  const oversizedName = structuredClone([...settings.events, settings.response]);
+  oversizedName.at(-1).result.value.name = 'x'.repeat(1025);
+  oversizedName.at(-1).result.evidence.postcondition.digest =
+    postconditionDigest(oversizedName.at(-1).result);
+  assert.equal(validateTranscript({
+    hello: golden('hello.json'),
+    descriptor: descriptors.get(settings.request.params.capabilityId), schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: settings.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  }, settings.request, oversizedName), false);
+
+  const duplicate = golden('invoke-composition-duplicate.json');
+  const duplicateContext = {
+    hello: golden('hello.json'),
+    descriptor: descriptors.get(duplicate.request.params.capabilityId), schema,
+    brokerSendUnixMs: 1900000000000,
+    effectiveDeadlineUnixMs: duplicate.request.deadlineUnixMs,
+    terminalObservedUnixMs: 1900000000030,
+  };
+  const duplicateIsValid = (transcript) => validateTranscript(
+    duplicateContext, duplicate.request, transcript,
+  );
+  const staleSource = structuredClone([...duplicate.events, duplicate.response]);
+  staleSource.at(-1).result.value.sourceCompositionLocator.generation =
+    duplicate.request.params.arguments.compositionLocator.generation;
+  staleSource.at(-1).result.evidence.postcondition.digest =
+    postconditionDigest(staleSource.at(-1).result);
+  assert.equal(duplicateIsValid(staleSource), false);
+
+  const staleProject = structuredClone([...duplicate.events, duplicate.response]);
+  staleProject.at(-1).result.value.sourceCompositionLocator.projectId =
+    duplicate.request.params.arguments.compositionLocator.projectId;
+  staleProject.at(-1).result.evidence.postcondition.digest =
+    postconditionDigest(staleProject.at(-1).result);
+  assert.equal(duplicateIsValid(staleProject), false);
+
+  const sharedObjectIdentity = structuredClone([...duplicate.events, duplicate.response]);
+  sharedObjectIdentity.at(-1).result.value.sourceCompositionLocator.objectId =
+    sharedObjectIdentity.at(-1).result.value.newCompositionLocator.objectId;
+  sharedObjectIdentity.at(-1).result.evidence.postcondition.digest =
+    postconditionDigest(sharedObjectIdentity.at(-1).result);
+  assert.equal(duplicateIsValid(sharedObjectIdentity), false);
+
+  const splitFreshContext = structuredClone([...duplicate.events, duplicate.response]);
+  splitFreshContext.at(-1).result.value.newCompositionLocator.projectId =
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  splitFreshContext.at(-1).result.evidence.postcondition.digest =
+    postconditionDigest(splitFreshContext.at(-1).result);
+  assert.equal(duplicateIsValid(splitFreshContext), false);
 });
 
 test('bit-depth invoke vectors bind native read and undoable set semantics', () => {

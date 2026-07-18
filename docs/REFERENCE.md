@@ -69,6 +69,14 @@ MCP client
 | `ae.diagnose` | none | 端到端检查 host、Python 握手、token 与 AE 响应 |
 | `ae.overview` | none | 项目和 comp 概览 |
 | `ae.projectSummary` | none | 通过原生 AEGP 返回带 provenance 与 postcondition 的工程摘要；不回退 JSX |
+| `ae_getProjectContext` | `selection_offset?`, `selection_limit?` | 原生读取 active item、最近使用的合成与 Project 面板选择；默认/最多返回 50 个选择项；不回退 JSX |
+| `ae_getProjectItemMetadata` | `item_locator` | 原生读取一个项目项或合成的 metadata；不回退 JSX |
+| `ae_getCompositionSettings` | `composition_locator` | 原生读取一个合成的精确 settings；不回退 JSX |
+| `ae_setCompositionWorkArea` | `composition_locator`, `start`, `duration`, `idempotency_key` | 原生设置精确 work area，返回 before/after、Undo 可用性与审计；不回退 JSX |
+| `ae_renameProjectItem` | `item_locator`, `name`, `idempotency_key` | 原生重命名一个项目项，返回 before/after、Undo 可用性与审计；不回退 JSX |
+| `ae_setProjectItemComment` | `item_locator`, `comment`, `idempotency_key` | 原生设置或清空项目项 comment，返回 before/after、Undo 可用性与审计；不回退 JSX |
+| `ae_setProjectItemLabel` | `item_locator`, `label_id`, `idempotency_key` | 原生设置项目项的 0–16 label slot，返回 before/after、Undo 可用性与审计；不回退 JSX |
+| `ae_duplicateComposition` | `composition_locator`, `new_name`, `idempotency_key` | 原生复制合成，返回新 locator、settings、数量、Undo 与审计证据；不回退 JSX |
 | `ae.getProjectBitDepth` | none | 通过原生 AEGP 读取当前 `8/16/32` bits-per-channel；不回退 JSX |
 | `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | 通过原生 AEGP 设置 `8/16/32`，返回 before/after、Undo 可用性和审计；不回退 JSX |
 | `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | 通过原生 AEGP 分页列出工程项；默认 25、最多 50；不回退 JSX |
@@ -121,6 +129,17 @@ MCP client
 | `ae.toolExport` | `artifact_ids`, `out_path` | 确定性导出 `.aemcptools` |
 | `ae.createRig` | `comp_id?`, `target_layer_id`, `rig_type`, `name?`, `options?`, `controls?` | 创建 controller/effect/preset rig |
 | `ae.ping` | `expect?` | bridge 握手 |
+
+### 原生工程与合成操作
+
+Project / Composition Operations 能力包固定包含 8 个公开 MCP 工具，并全部走 `MCP -> Core -> native RPC -> AEGP -> AE`。其中 `ae_getProjectContext`、`ae_getProjectItemMetadata`、`ae_getCompositionSettings` 是 3 个严格原生只读工具；`ae_setCompositionWorkArea`、`ae_renameProjectItem`、`ae_setProjectItemComment`、`ae_setProjectItemLabel`、`ae_duplicateComposition` 是 5 个严格原生写工具。原生能力、契约或传输不可用时均返回结构化错误，**不会回退到 JSX**。
+
+- `ae_getProjectContext` 的 `selection_offset` 默认为 `0`，`selection_limit` 默认和最大均为 `50`。结果返回 project locator/generation、active item、最近使用的合成和当前 Project 面板选择页；后续工具必须原样复制其中的新鲜 locator。
+- `ae_getProjectItemMetadata` 接受 context 或 `ae_listProjectItems` 返回的 `item_locator`，读取名称、类型、parent、comment 与 label 等项目项 metadata。`ae_getCompositionSettings` 只接受 composition locator，读取名称、尺寸、时长、帧率、像素宽高比、work area 与图层数等精确 settings。
+- `ae_setCompositionWorkArea` 接受新鲜 `composition_locator`、`start={value,scale}`、`duration={value,scale}` 和至少 16 字符的稳定 `idempotency_key`；start 必须非负，duration 必须为正。它在一个 AE Undo group 中写入并原生读回验证。
+- `ae_renameProjectItem` 的 `name` 为 1–255 个 Unicode scalar；`ae_setProjectItemComment` 的 `comment` 为 0–1024 个 scalar，空字符串表示清空；`ae_setProjectItemLabel` 的 `label_id` 为 `0..16`，其中 `0` 表示无 label。三者都需要新鲜 `item_locator` 和至少 16 字符的稳定 `idempotency_key`，并在一个 AE Undo group 中执行原生写入与读回验证。
+- `ae_duplicateComposition` 接受新鲜 `composition_locator`、1–255 scalar 的 `new_name` 和至少 16 字符的稳定 `idempotency_key`。复制会改变工程图 generation；结果返回新鲜的 source/new composition locator、复制前后项目项数量与两份 settings。相同 intent 的安全重放不会再创建副本。
+- 5 个写工具的成功响应都会分别报告 `undo.available` 与 `undo.verified`；`available=true` 只表示 AE 已创建 Undo 步骤，调用本身不会替用户执行 Undo。需要恢复时必须真正执行 AE Undo，并重新读取完整工程 context、目标 metadata/settings 与项目项数量，证明所有语义状态回到 before 基线。遇到 `POSSIBLY_SIDE_EFFECTING_FAILURE` 时先核对 AE 状态与审计，禁止盲目重试。
 
 ### 原生工程与属性导航
 
@@ -401,6 +420,14 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 | `ae.diagnose` | none | end-to-end host, Python handshake, token, and AE responsiveness check |
 | `ae.overview` | none | project and comp overview |
 | `ae.projectSummary` | none | return a provenance-bound native AEGP project summary; never falls back to JSX |
+| `ae_getProjectContext` | `selection_offset?`, `selection_limit?` | natively read the active item, most-recently-used composition, and Project-panel selection; default/maximum 50 selected items; never falls back to JSX |
+| `ae_getProjectItemMetadata` | `item_locator` | natively read metadata for one project item or composition; never falls back to JSX |
+| `ae_getCompositionSettings` | `composition_locator` | natively read exact settings for one composition; never falls back to JSX |
+| `ae_setCompositionWorkArea` | `composition_locator`, `start`, `duration`, `idempotency_key` | natively set an exact work area with before/after, Undo availability, and audit evidence; never falls back to JSX |
+| `ae_renameProjectItem` | `item_locator`, `name`, `idempotency_key` | natively rename one project item with before/after, Undo availability, and audit evidence; never falls back to JSX |
+| `ae_setProjectItemComment` | `item_locator`, `comment`, `idempotency_key` | natively set or clear one project-item comment with before/after, Undo availability, and audit evidence; never falls back to JSX |
+| `ae_setProjectItemLabel` | `item_locator`, `label_id`, `idempotency_key` | natively set project-item label slot 0–16 with before/after, Undo availability, and audit evidence; never falls back to JSX |
+| `ae_duplicateComposition` | `composition_locator`, `new_name`, `idempotency_key` | natively duplicate a composition with fresh locators, settings/counts, Undo availability, and audit evidence; never falls back to JSX |
 | `ae.getProjectBitDepth` | none | read native AEGP `8/16/32` bits per channel; never falls back to JSX |
 | `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | set native AEGP `8/16/32` with before/after, Undo availability, and audit evidence; never falls back to JSX |
 | `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | page through project items via native AEGP; default 25, maximum 50; never falls back to JSX |
@@ -453,6 +480,17 @@ Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: fa
 | `ae.toolExport` | `artifact_ids`, `out_path` | deterministic `.aemcptools` export |
 | `ae.createRig` | `comp_id?`, `target_layer_id`, `rig_type`, `name?`, `options?`, `controls?` | create controller/effect/preset rigs |
 | `ae.ping` | `expect?` | bridge handshake |
+
+### Native Project and Composition Operations
+
+The Project / Composition Operations package contains exactly eight public MCP tools on the fixed `MCP -> Core -> native RPC -> AEGP -> AE` path. `ae_getProjectContext`, `ae_getProjectItemMetadata`, and `ae_getCompositionSettings` are three strict native reads. `ae_setCompositionWorkArea`, `ae_renameProjectItem`, `ae_setProjectItemComment`, `ae_setProjectItemLabel`, and `ae_duplicateComposition` are five strict native writes. If the native capability, contract, or transport is unavailable, every tool returns a structured error and **never falls back to JSX**.
+
+- `ae_getProjectContext` defaults `selection_offset` to `0`; `selection_limit` defaults to and is capped at `50`. It returns the project locator/generation, active item, most-recently-used composition, and a page of the current Project-panel selection. Copy its fresh locators unchanged into later calls.
+- `ae_getProjectItemMetadata` accepts an `item_locator` from context or `ae_listProjectItems` and reads the item's name, type, parent, comment, label, and related metadata. `ae_getCompositionSettings` accepts only a composition locator and reads exact name, dimensions, duration, frame rate, pixel aspect ratio, work area, layer count, and related settings.
+- `ae_setCompositionWorkArea` accepts a fresh `composition_locator`, exact `start={value,scale}`, exact `duration={value,scale}`, and a stable `idempotency_key` of at least 16 characters. Start must be non-negative and duration positive. The write runs inside one AE Undo group and is verified by native readback.
+- `ae_renameProjectItem` accepts a 1–255 Unicode-scalar `name`; `ae_setProjectItemComment` accepts a 0–1024-scalar `comment`, with an empty string clearing it; `ae_setProjectItemLabel` accepts `label_id` from `0` through `16`, where `0` means no label. Each also requires a fresh `item_locator` and a stable idempotency key of at least 16 characters, then performs one native, readback-verified AE Undo group.
+- `ae_duplicateComposition` accepts a fresh `composition_locator`, a 1–255-scalar `new_name`, and a stable idempotency key of at least 16 characters. Duplication advances the project-graph generation and returns fresh source/new composition locators, project-item counts, and both settings snapshots. Safe replay of the same intent does not create another duplicate.
+- Every write reports `undo.available` separately from `undo.verified`; `available=true` only means AE created an Undo step, and the call does not execute Undo for the user. To restore state, execute real AE Undo and re-read the complete project context, target metadata/settings, and project-item count to prove that all semantic state matches the before baseline. After `POSSIBLY_SIDE_EFFECTING_FAILURE`, reconcile AE state and audit before any retry.
 
 ### Native Project and Property Navigation
 

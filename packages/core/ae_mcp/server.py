@@ -112,6 +112,14 @@ def _filtered_tool_names() -> set:
         supported = supported - {"ae.snapshot"}
     if isinstance(backend, NativeInvokeBackend):
         supported = supported | {
+            "ae.getProjectContext",
+            "ae.getProjectItemMetadata",
+            "ae.getCompositionSettings",
+            "ae.setCompositionWorkArea",
+            "ae.renameProjectItem",
+            "ae.setProjectItemComment",
+            "ae.setProjectItemLabel",
+            "ae.duplicateComposition",
             "ae.projectSummary",
             "ae.getProjectBitDepth",
             "ae.setProjectBitDepth",
@@ -129,6 +137,14 @@ def _filtered_tool_names() -> set:
         }
     else:
         supported = supported - {
+            "ae.getProjectContext",
+            "ae.getProjectItemMetadata",
+            "ae.getCompositionSettings",
+            "ae.setCompositionWorkArea",
+            "ae.renameProjectItem",
+            "ae.setProjectItemComment",
+            "ae.setProjectItemLabel",
+            "ae.duplicateComposition",
             "ae.projectSummary",
             "ae.getProjectBitDepth",
             "ae.setProjectBitDepth",
@@ -692,6 +708,87 @@ def _selected_layers_validation_error(
     return structured.public_dict()
 
 
+_PROJECT_COMPOSITION_VALIDATION = {
+    "ae.getProjectContext": (
+        "ae.project.context.read",
+        "Use selection_offset >= 0 and selection_limit from 1 to 50.",
+    ),
+    "ae.getProjectItemMetadata": (
+        "ae.project.item.metadata.read",
+        "Copy item_locator unchanged from ae_getProjectContext or ae_listProjectItems.",
+    ),
+    "ae.getCompositionSettings": (
+        "ae.composition.settings.read",
+        "Copy composition_locator unchanged from a native project read.",
+    ),
+    "ae.setCompositionWorkArea": (
+        "ae.composition.work-area.set",
+        "Use a fresh composition_locator, non-negative start, positive duration, and a stable idempotency_key.",
+    ),
+    "ae.renameProjectItem": (
+        "ae.project.item.name.set",
+        "Use a fresh item_locator, a 1 to 255 scalar name, and a stable idempotency_key.",
+    ),
+    "ae.setProjectItemComment": (
+        "ae.project.item.comment.set",
+        "Use a fresh item_locator, a comment of at most 1024 scalars, and a stable idempotency_key.",
+    ),
+    "ae.setProjectItemLabel": (
+        "ae.project.item.label.set",
+        "Use a fresh item_locator, label_id from 0 to 16, and a stable idempotency_key.",
+    ),
+    "ae.duplicateComposition": (
+        "ae.composition.duplicate",
+        "Use a fresh composition_locator, a 1 to 255 scalar new_name, and a stable idempotency_key.",
+    ),
+}
+
+
+def _project_composition_validation_error(
+    name: str,
+    error: JsonSchemaValidationError | PydanticValidationError,
+) -> dict[str, Any]:
+    """Structured argument recovery for the frozen #150 public surface."""
+
+    path: list[Any] = []
+    if isinstance(error, PydanticValidationError):
+        errors = error.errors(include_url=False, include_input=False)
+        if errors:
+            path = list(errors[0].get("loc") or ())
+    else:
+        path = list(error.absolute_path)
+        if (
+            error.validator == "required"
+            and isinstance(error.instance, dict)
+            and isinstance(error.validator_value, list)
+        ):
+            missing = [key for key in error.validator_value if key not in error.instance]
+            if len(missing) == 1:
+                path.append(missing[0])
+        elif (
+            error.validator == "additionalProperties"
+            and isinstance(error.instance, dict)
+            and isinstance(error.schema, dict)
+        ):
+            properties = error.schema.get("properties")
+            if isinstance(properties, dict):
+                unexpected = sorted(set(error.instance) - set(properties))
+                if len(unexpected) == 1:
+                    path.append(unexpected[0])
+    field = "arguments"
+    if path:
+        field += "." + ".".join(str(part) for part in path)
+    capability_id, hint = _PROJECT_COMPOSITION_VALIDATION[name]
+    return NativeBackendError(
+        "INVALID_ARGUMENT",
+        f"{name} arguments did not match the published schema.",
+        retryable=False,
+        side_effect="not-started",
+        recovery={"action": "change-arguments", "hint": hint},
+        details={"field": field[:128], "capabilityId": capability_id},
+    ).public_dict()
+
+
 def build_server() -> Server:
     """Construct the low-level MCP Server with all registered verbs."""
     load_all()
@@ -806,8 +903,13 @@ def build_server() -> Server:
                     schema=input_schema,
                 )
             except JsonSchemaValidationError as error:
-                if name == "ae.listLayerProperties":
-                    public_error: Any = _layer_properties_validation_error(error)
+                if name in _PROJECT_COMPOSITION_VALIDATION:
+                    public_error: Any = _project_composition_validation_error(
+                        name, error
+                    )
+                    payload = _format_result({"ok": False, "error": public_error})
+                elif name == "ae.listLayerProperties":
+                    public_error = _layer_properties_validation_error(error)
                     payload = _format_result({"ok": False, "error": public_error})
                 elif name == "ae.listLayerPropertyKeyframes":
                     public_error = _layer_property_keyframes_validation_error(error)
@@ -843,10 +945,14 @@ def build_server() -> Server:
         try:
             validated = schema_cls(**(arguments or {}))
         except Exception as e:  # noqa: BLE001
-            if name == "ae.listLayerProperties" and isinstance(
+            if name in _PROJECT_COMPOSITION_VALIDATION and isinstance(
                 e, PydanticValidationError
             ):
-                error: Any = _layer_properties_validation_error(e)
+                error: Any = _project_composition_validation_error(name, e)
+            elif name == "ae.listLayerProperties" and isinstance(
+                e, PydanticValidationError
+            ):
+                error = _layer_properties_validation_error(e)
             elif name == "ae.listLayerPropertyKeyframes" and isinstance(
                 e, PydanticValidationError
             ):

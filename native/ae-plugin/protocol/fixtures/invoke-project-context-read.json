@@ -1,0 +1,119 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "request": {
+    "wireVersion": 1,
+    "kind": "request",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-context-1",
+    "method": "invoke",
+    "deadlineUnixMs": 1900000005000,
+    "params": {
+      "capabilityId": "ae.project.context.read",
+      "capabilityVersion": 1,
+      "arguments": {
+        "selectionOffset": 0,
+        "selectionLimit": 25
+      }
+    }
+  },
+  "events": [
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-context-1",
+      "event": "progress",
+      "sequence": 1,
+      "progress": {
+        "phase": "queued",
+        "fraction": 0,
+        "message": "Queued for the bounded main-thread dispatcher."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-context-1",
+      "event": "progress",
+      "sequence": 2,
+      "progress": {
+        "phase": "dispatched",
+        "fraction": 0.5,
+        "message": "Entered the synthetic host-thread dispatch phase."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-context-1",
+      "event": "progress",
+      "sequence": 3,
+      "progress": {
+        "phase": "validating",
+        "fraction": 0.9,
+        "message": "Validating the bounded synthetic result."
+      }
+    }
+  ],
+  "response": {
+    "wireVersion": 1,
+    "kind": "response",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-context-1",
+    "method": "invoke",
+    "ok": true,
+    "replayed": false,
+    "result": {
+      "capabilityId": "ae.project.context.read",
+      "capabilityVersion": 1,
+      "engine": "native-aegp",
+      "outcome": "succeeded",
+      "value": {
+        "projectLocator": {
+          "kind": "project",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "44444444-4444-4444-8444-444444444444",
+          "generation": 8,
+          "objectId": "55555555-5555-4555-8555-555555555555"
+        },
+        "generation": 8,
+        "activeItem": null,
+        "mostRecentlyUsedComposition": null,
+        "selection": {
+          "total": 0,
+          "offset": 0,
+          "limit": 25,
+          "returned": 0,
+          "hasMore": false,
+          "nextOffset": null,
+          "items": []
+        }
+      },
+      "evidence": {
+        "engine": "native-aegp",
+        "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "requestId": "invoke-context-1",
+        "capabilityId": "ae.project.context.read",
+        "capabilityVersion": 1,
+        "startedAtUnixMs": 1900000000000,
+        "completedAtUnixMs": 1900000000025,
+        "effect": "none",
+        "requestDigest": "eea76a8e6e57069d13c4168bfc3ded46f160db45892c71b2de0d042fbfb3b542",
+        "postcondition": {
+          "verified": true,
+          "kind": "project-context-read",
+          "algorithm": "sha256-rfc8785-jcs-v1",
+          "digest": "1615515c17478b1d8a1ef8b82a416a9edc6e271387470a669361109dbd7b1ad9"
+        }
+      }
+    }
+  }
+}

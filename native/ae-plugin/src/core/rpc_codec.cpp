@@ -535,6 +535,43 @@ ObjectLocator parse_locator(const JsonValue& value, std::string_view expected_ki
   return locator;
 }
 
+ObjectLocator parse_project_item_locator(const JsonValue& value) {
+  const JsonValue::Object* object = object_of(value);
+  if (object == nullptr) invalid_argument("item locator must be an object");
+  const std::string kind = required_string(
+      *object, "kind", CodecErrorKind::kInvalidArgument);
+  if (kind != "item" && kind != "composition") {
+    invalid_argument("item locator kind must be item or composition");
+  }
+  return parse_locator(value, kind);
+}
+
+CompositionCurrentTime parse_exact_time_input(
+    const JsonValue& value,
+    std::string_view field_name,
+    bool allow_zero) {
+  const JsonValue::Object* object = object_of(value);
+  if (object == nullptr
+      || !exact_keys(*object, {"value", "scale"}, {"value", "scale"})) {
+    invalid_argument(std::string(field_name) + " must be a closed exact time pair");
+  }
+  CompositionCurrentTime time;
+  time.value = static_cast<std::int32_t>(required_int(
+      *object,
+      "value",
+      CodecErrorKind::kInvalidArgument,
+      allow_zero ? 0 : 1,
+      std::numeric_limits<std::int32_t>::max()));
+  time.scale = static_cast<std::uint32_t>(required_uint(
+      *object,
+      "scale",
+      CodecErrorKind::kInvalidArgument,
+      1,
+      std::numeric_limits<std::uint32_t>::max()));
+  time.seconds_rational = canonical_seconds_rational(time.value, time.scale);
+  return time;
+}
+
 bool valid_output_locator(const ObjectLocator& locator) {
   return (locator.kind == "project" || locator.kind == "item"
           || locator.kind == "composition" || locator.kind == "layer"
@@ -639,6 +676,29 @@ std::string canonical_layer_effect_apply_arguments(
     std::string_view effect_match_name,
     std::string_view idempotency_key);
 
+std::string canonical_project_item_text_set_arguments(
+    std::string_view capability_id,
+    const ObjectLocator& item_locator,
+    std::string_view field_name,
+    std::string_view value,
+    std::string_view idempotency_key) {
+  if ((capability_id != "ae.project.item.name.set"
+          && capability_id != "ae.project.item.comment.set")
+      || (field_name != "name" && field_name != "comment")
+      || !valid_output_locator(item_locator)
+      || (item_locator.kind != "item" && item_locator.kind != "composition")
+      || !valid_idempotency_key(idempotency_key)) {
+    invalid_argument("invalid project item text arguments digest input");
+  }
+  std::vector<std::string> members{
+      "\"" + std::string(field_name) + "\":" + json_string(value),
+      "\"idempotencyKey\":" + json_string(idempotency_key),
+      "\"itemLocator\":" + locator_json(item_locator),
+  };
+  std::sort(members.begin(), members.end());
+  return "{" + members[0] + "," + members[1] + "," + members[2] + "}";
+}
+
 std::string canonical_request(const ParsedRequest& request) {
   std::string params;
   switch (request.method) {
@@ -711,6 +771,43 @@ std::string canonical_request(const ParsedRequest& request) {
             + ",\"targetTime\":{\"scale\":"
             + std::to_string(value.target_time.scale) + ",\"value\":"
             + std::to_string(value.target_time.value) + "}}";
+      } else if (value.capability_id == "ae.project.context.read") {
+        arguments = "{\"selectionLimit\":" + std::to_string(value.limit)
+            + ",\"selectionOffset\":" + std::to_string(value.offset) + "}";
+      } else if (value.capability_id == "ae.project.item.metadata.read") {
+        arguments = "{\"itemLocator\":" + locator_json(*value.item_locator) + "}";
+      } else if (value.capability_id == "ae.composition.settings.read") {
+        arguments = "{\"compositionLocator\":"
+            + locator_json(*value.composition_locator) + "}";
+      } else if (value.capability_id == "ae.composition.work-area.set") {
+        arguments = "{\"compositionLocator\":"
+            + locator_json(*value.composition_locator)
+            + ",\"duration\":{\"scale\":"
+            + std::to_string(value.work_area_duration.scale) + ",\"value\":"
+            + std::to_string(value.work_area_duration.value)
+            + "},\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"start\":{\"scale\":"
+            + std::to_string(value.work_area_start.scale) + ",\"value\":"
+            + std::to_string(value.work_area_start.value) + "}}";
+      } else if (value.capability_id == "ae.project.item.name.set"
+          || value.capability_id == "ae.project.item.comment.set") {
+        const std::string_view field = value.capability_id == "ae.project.item.name.set"
+            ? "name" : "comment";
+        arguments = canonical_project_item_text_set_arguments(
+            value.capability_id,
+            *value.item_locator,
+            field,
+            value.item_text,
+            value.idempotency_key);
+      } else if (value.capability_id == "ae.project.item.label.set") {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"itemLocator\":" + locator_json(*value.item_locator)
+            + ",\"labelId\":" + std::to_string(value.item_label_id) + "}";
+      } else if (value.capability_id == "ae.composition.duplicate") {
+        arguments = "{\"compositionLocator\":"
+            + locator_json(*value.composition_locator)
+            + ",\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"newName\":" + json_string(value.duplicate_new_name) + "}";
       } else if (value.capability_id == "ae.composition.create") {
         arguments = canonical_composition_create_arguments(
             value.composition_create_name,
@@ -1093,6 +1190,125 @@ ParsedRequest classify_request(const JsonValue& root) {
         result.arguments_fingerprint_sha256 = digest_composition_time_set_arguments(
             *result.composition_locator,
             result.target_time,
+            result.idempotency_key);
+      } else if (capability == "ae.project.context.read") {
+        if (!exact_keys(
+                *arguments,
+                {"selectionOffset", "selectionLimit"},
+                {"selectionOffset", "selectionLimit"})) {
+          invalid_argument("project context arguments are not closed");
+        }
+        result.offset = required_uint(
+            *arguments, "selectionOffset", CodecErrorKind::kInvalidArgument,
+            0, kMaxSafeInteger);
+        result.limit = static_cast<std::uint16_t>(required_uint(
+            *arguments, "selectionLimit", CodecErrorKind::kInvalidArgument, 1, 50));
+      } else if (capability == "ae.project.item.metadata.read") {
+        if (!exact_keys(*arguments, {"itemLocator"}, {"itemLocator"})) {
+          invalid_argument("project item metadata arguments are not closed");
+        }
+        result.item_locator = parse_project_item_locator(
+            *member(*arguments, "itemLocator"));
+      } else if (capability == "ae.composition.settings.read") {
+        if (!exact_keys(
+                *arguments, {"compositionLocator"}, {"compositionLocator"})) {
+          invalid_argument("composition settings arguments are not closed");
+        }
+        result.composition_locator = parse_locator(
+            *member(*arguments, "compositionLocator"), "composition");
+      } else if (capability == "ae.composition.work-area.set") {
+        if (!exact_keys(
+                *arguments,
+                {"compositionLocator", "start", "duration", "idempotencyKey"},
+                {"compositionLocator", "start", "duration", "idempotencyKey"})) {
+          invalid_argument("composition work area arguments are not closed");
+        }
+        result.composition_locator = parse_locator(
+            *member(*arguments, "compositionLocator"), "composition");
+        result.work_area_start = parse_exact_time_input(
+            *member(*arguments, "start"), "start", true);
+        result.work_area_duration = parse_exact_time_input(
+            *member(*arguments, "duration"), "duration", false);
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid composition work area idempotency key");
+        }
+        result.arguments_fingerprint_sha256 = digest_composition_work_area_set_arguments(
+            *result.composition_locator,
+            result.work_area_start,
+            result.work_area_duration,
+            result.idempotency_key);
+      } else if (capability == "ae.project.item.name.set"
+          || capability == "ae.project.item.comment.set") {
+        const std::string field = capability == "ae.project.item.name.set"
+            ? "name" : "comment";
+        if (!exact_keys(
+                *arguments,
+                {"itemLocator", field, "idempotencyKey"},
+                {"itemLocator", field, "idempotencyKey"})) {
+          invalid_argument("project item text arguments are not closed");
+        }
+        result.item_locator = parse_project_item_locator(
+            *member(*arguments, "itemLocator"));
+        result.item_text = required_string(
+            *arguments, field, CodecErrorKind::kInvalidArgument);
+        const std::size_t scalars = validate_utf8_and_count(result.item_text);
+        if ((field == "name" && (scalars < 1 || scalars > 255))
+            || (field == "comment" && scalars > 1024)
+            || result.item_text.find('\0') != std::string::npos) {
+          invalid_argument("invalid project item text");
+        }
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid project item text idempotency key");
+        }
+        result.arguments_fingerprint_sha256 = digest_project_item_text_set_arguments(
+            capability, *result.item_locator, field, result.item_text,
+            result.idempotency_key);
+      } else if (capability == "ae.project.item.label.set") {
+        if (!exact_keys(
+                *arguments,
+                {"itemLocator", "labelId", "idempotencyKey"},
+                {"itemLocator", "labelId", "idempotencyKey"})) {
+          invalid_argument("project item label arguments are not closed");
+        }
+        result.item_locator = parse_project_item_locator(
+            *member(*arguments, "itemLocator"));
+        result.item_label_id = static_cast<std::uint8_t>(required_uint(
+            *arguments, "labelId", CodecErrorKind::kInvalidArgument, 0, 16));
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid project item label idempotency key");
+        }
+        result.arguments_fingerprint_sha256 = digest_project_item_label_set_arguments(
+            *result.item_locator, result.item_label_id, result.idempotency_key);
+      } else if (capability == "ae.composition.duplicate") {
+        if (!exact_keys(
+                *arguments,
+                {"compositionLocator", "newName", "idempotencyKey"},
+                {"compositionLocator", "newName", "idempotencyKey"})) {
+          invalid_argument("composition duplicate arguments are not closed");
+        }
+        result.composition_locator = parse_locator(
+            *member(*arguments, "compositionLocator"), "composition");
+        result.duplicate_new_name = required_string(
+            *arguments, "newName", CodecErrorKind::kInvalidArgument);
+        const std::size_t scalars = validate_utf8_and_count(result.duplicate_new_name);
+        if (scalars < 1 || scalars > 255
+            || result.duplicate_new_name.find('\0') != std::string::npos) {
+          invalid_argument("invalid duplicate composition name");
+        }
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid composition duplicate idempotency key");
+        }
+        result.arguments_fingerprint_sha256 = digest_composition_duplicate_arguments(
+            *result.composition_locator,
+            result.duplicate_new_name,
             result.idempotency_key);
       } else if (capability == "ae.composition.create") {
         if (!exact_keys(
@@ -1647,6 +1863,267 @@ std::string canonical_positive_ratio(
   }
   result.push_back('}');
   return result;
+}
+
+std::string canonical_project_item_entry(
+    const ProjectItemEntry& item,
+    const ObjectLocator& project_locator) {
+  const bool valid_type = item.type == "folder" || item.type == "composition"
+      || item.type == "footage" || item.type == "unknown";
+  if (!valid_output_locator(item.locator)
+      || !same_locator_scope(item.locator, project_locator)
+      || !valid_type
+      || (item.type == "composition" ? item.locator.kind != "composition"
+                                      : item.locator.kind != "item")
+      || validate_utf8_and_count(item.name) > 1'024
+      || !item.parent_locator.has_value()
+      || !valid_output_locator(*item.parent_locator)
+      || !same_locator_scope(*item.parent_locator, project_locator)
+      || (item.parent_locator->kind != "project" && item.parent_locator->kind != "item")
+      || (item.parent_locator->kind == "project"
+          && *item.parent_locator != project_locator)) {
+    invalid_argument("invalid project item entry");
+  }
+  return "{\"locator\":" + locator_json(item.locator)
+      + ",\"name\":" + json_string(item.name)
+      + ",\"parentLocator\":" + locator_json(*item.parent_locator)
+      + ",\"type\":" + json_string(item.type) + "}";
+}
+
+std::string canonical_project_context_value(const ProjectContext& value) {
+  if (!valid_output_locator(value.project_locator)
+      || value.project_locator.kind != "project"
+      || value.selection_total > kMaxSafeInteger
+      || value.selection_offset > value.selection_total
+      || value.selection_limit < 1 || value.selection_limit > 50
+      || value.selected_items.size() > value.selection_limit
+      || value.selected_items.size() > value.selection_total - value.selection_offset) {
+    invalid_argument("invalid project context result");
+  }
+  const std::uint64_t returned = value.selected_items.size();
+  const bool expected_more = value.selection_offset + returned < value.selection_total;
+  if (value.selection_has_more != expected_more
+      || (expected_more
+          ? (!value.selection_next_offset.has_value()
+              || *value.selection_next_offset != value.selection_offset + returned)
+          : value.selection_next_offset.has_value())) {
+    invalid_argument("invalid project context selection pagination");
+  }
+  const auto optional_entry = [&](const std::optional<ProjectItemEntry>& item) {
+    return item.has_value()
+        ? canonical_project_item_entry(*item, value.project_locator) : std::string("null");
+  };
+  if (value.most_recently_used_composition.has_value()
+      && value.most_recently_used_composition->type != "composition") {
+    invalid_argument("most recently used composition is not a composition");
+  }
+  std::set<std::string> selected_ids;
+  std::string selected = "[";
+  for (std::size_t index = 0; index < value.selected_items.size(); ++index) {
+    if (index != 0) selected.push_back(',');
+    if (!selected_ids.insert(value.selected_items[index].locator.object_id).second) {
+      invalid_argument("duplicate selected project item locator");
+    }
+    selected += canonical_project_item_entry(
+        value.selected_items[index], value.project_locator);
+  }
+  selected.push_back(']');
+  return "{\"activeItem\":" + optional_entry(value.active_item)
+      + ",\"generation\":" + std::to_string(value.project_locator.generation)
+      + ",\"mostRecentlyUsedComposition\":"
+      + optional_entry(value.most_recently_used_composition)
+      + ",\"projectLocator\":" + locator_json(value.project_locator)
+      + ",\"selection\":{\"hasMore\":"
+      + std::string(value.selection_has_more ? "true" : "false")
+      + ",\"items\":" + selected
+      + ",\"limit\":" + std::to_string(value.selection_limit)
+      + ",\"nextOffset\":"
+      + (value.selection_next_offset.has_value()
+          ? std::to_string(*value.selection_next_offset) : "null")
+      + ",\"offset\":" + std::to_string(value.selection_offset)
+      + ",\"returned\":" + std::to_string(returned)
+      + ",\"total\":" + std::to_string(value.selection_total) + "}}";
+}
+
+std::string canonical_project_item_metadata_value(const ProjectItemMetadata& value) {
+  const bool valid_type = value.type == "folder" || value.type == "composition"
+      || value.type == "footage" || value.type == "unknown";
+  const bool dimensions_valid = (!value.width.has_value()
+          || (*value.width >= 1 && *value.width <= 30000))
+      && (!value.height.has_value()
+          || (*value.height >= 1 && *value.height <= 30000));
+  const bool composition_facts_valid = value.type != "composition"
+      || (value.width.has_value() && value.height.has_value()
+          && value.duration.has_value() && value.duration->value > 0
+          && value.pixel_aspect_ratio.has_value()
+          && value.layer_count.has_value());
+  if (!valid_output_locator(value.item_locator)
+      || (value.item_locator.kind != "item" && value.item_locator.kind != "composition")
+      || !valid_type
+      || (value.type == "composition" ? value.item_locator.kind != "composition"
+                                       : value.item_locator.kind != "item")
+      || validate_utf8_and_count(value.name) > 1'024
+      || validate_utf8_and_count(value.comment) > 1'024
+      || value.label_id > 16
+      || !dimensions_valid || !composition_facts_valid
+      || (value.parent_locator.has_value()
+          && (!valid_output_locator(*value.parent_locator)
+              || !same_locator_scope(*value.parent_locator, value.item_locator)
+              || (value.parent_locator->kind != "project"
+                  && value.parent_locator->kind != "item")))) {
+    invalid_argument("invalid project item metadata result");
+  }
+  std::string result = "{\"comment\":" + json_string(value.comment);
+  if (value.duration.has_value()) {
+    result += ",\"duration\":" + canonical_current_time(*value.duration);
+  }
+  if (value.height.has_value()) result += ",\"height\":" + std::to_string(*value.height);
+  result += ",\"itemLocator\":" + locator_json(value.item_locator)
+      + ",\"labelId\":" + std::to_string(value.label_id);
+  if (value.layer_count.has_value()) {
+    if (*value.layer_count > kMaxSafeInteger) invalid_argument("layer count exceeds safe integer");
+    result += ",\"layerCount\":" + std::to_string(*value.layer_count);
+  }
+  result += ",\"name\":" + json_string(value.name)
+      + ",\"parentLocator\":" + nullable_locator_json(value.parent_locator);
+  if (value.pixel_aspect_ratio.has_value()) {
+    result += ",\"pixelAspectRatio\":"
+        + canonical_positive_ratio(*value.pixel_aspect_ratio, true);
+  }
+  result += ",\"type\":" + json_string(value.type);
+  if (value.width.has_value()) result += ",\"width\":" + std::to_string(*value.width);
+  result.push_back('}');
+  return result;
+}
+
+std::string canonical_composition_settings_value(const CompositionSettings& value) {
+  if (!valid_output_locator(value.composition_locator)
+      || value.composition_locator.kind != "composition"
+      || validate_utf8_and_count(value.name) > 1'024
+      || value.width < 1 || value.width > 30000
+      || value.height < 1 || value.height > 30000
+      || value.duration.value <= 0 || value.frame_duration.value <= 0
+      || value.work_area_start.value < 0 || value.work_area_duration.value <= 0
+      || value.layer_count > kMaxSafeInteger) {
+    invalid_argument("invalid composition settings result");
+  }
+  return "{\"compositionLocator\":" + locator_json(value.composition_locator)
+      + ",\"displayStartTime\":" + canonical_current_time(value.display_start_time)
+      + ",\"duration\":" + canonical_current_time(value.duration)
+      + ",\"frameDuration\":" + canonical_current_time(value.frame_duration)
+      + ",\"frameRate\":" + canonical_positive_ratio(value.frame_rate, true)
+      + ",\"height\":" + std::to_string(value.height)
+      + ",\"layerCount\":" + std::to_string(value.layer_count)
+      + ",\"name\":" + json_string(value.name)
+      + ",\"pixelAspectRatio\":"
+      + canonical_positive_ratio(value.pixel_aspect_ratio, true)
+      + ",\"width\":" + std::to_string(value.width)
+      + ",\"workArea\":{\"duration\":"
+      + canonical_current_time(value.work_area_duration)
+      + ",\"start\":" + canonical_current_time(value.work_area_start) + "}}";
+}
+
+std::string canonical_composition_settings_snapshot(const CompositionSettings& value) {
+  (void)canonical_composition_settings_value(value);
+  return "{\"displayStartTime\":" + canonical_current_time(value.display_start_time)
+      + ",\"duration\":" + canonical_current_time(value.duration)
+      + ",\"frameDuration\":" + canonical_current_time(value.frame_duration)
+      + ",\"frameRate\":" + canonical_positive_ratio(value.frame_rate, true)
+      + ",\"height\":" + std::to_string(value.height)
+      + ",\"layerCount\":" + std::to_string(value.layer_count)
+      + ",\"name\":" + json_string(value.name)
+      + ",\"pixelAspectRatio\":"
+      + canonical_positive_ratio(value.pixel_aspect_ratio, true)
+      + ",\"width\":" + std::to_string(value.width)
+      + ",\"workArea\":{\"duration\":"
+      + canonical_current_time(value.work_area_duration)
+      + ",\"start\":" + canonical_current_time(value.work_area_start) + "}}";
+}
+
+std::string canonical_work_area_pair(
+    const CompositionCurrentTime& start,
+    const CompositionCurrentTime& duration) {
+  if (start.value < 0 || duration.value <= 0) {
+    invalid_argument("invalid composition work area");
+  }
+  return "{\"duration\":" + canonical_current_time(duration)
+      + ",\"start\":" + canonical_current_time(start) + "}";
+}
+
+std::string canonical_composition_work_area_set_value(
+    const CompositionWorkAreaChanged& value) {
+  if (!value.changed || !valid_output_locator(value.composition_locator)
+      || value.composition_locator.kind != "composition"
+      || (composition_times_equal(value.before_start, value.after_start)
+          && composition_times_equal(value.before_duration, value.after_duration))) {
+    invalid_argument("invalid composition work area mutation result");
+  }
+  return "{\"afterWorkArea\":"
+      + canonical_work_area_pair(value.after_start, value.after_duration)
+      + ",\"beforeWorkArea\":"
+      + canonical_work_area_pair(value.before_start, value.before_duration)
+      + ",\"changed\":true,\"compositionLocator\":"
+      + locator_json(value.composition_locator) + "}";
+}
+
+std::string canonical_project_item_text_set_value(
+    const ProjectItemTextChanged& value,
+    std::string_view field) {
+  const bool allow_empty = field == "Comment";
+  const std::size_t before_length = validate_utf8_and_count(value.before_value);
+  const std::size_t after_length = validate_utf8_and_count(value.after_value);
+  if (!value.changed || !valid_output_locator(value.item_locator)
+      || (value.item_locator.kind != "item" && value.item_locator.kind != "composition")
+      || value.before_value == value.after_value
+      || (!allow_empty && after_length < 1)
+      || after_length > (allow_empty ? 1024U : 255U)
+      || before_length > 1024U) {
+    invalid_argument("invalid project item text mutation result");
+  }
+  return "{\"after" + std::string(field) + "\":" + json_string(value.after_value)
+      + ",\"before" + std::string(field) + "\":" + json_string(value.before_value)
+      + ",\"changed\":true,\"itemLocator\":" + locator_json(value.item_locator) + "}";
+}
+
+std::string canonical_project_item_label_set_value(
+    const ProjectItemLabelChanged& value) {
+  if (!value.changed || !valid_output_locator(value.item_locator)
+      || (value.item_locator.kind != "item" && value.item_locator.kind != "composition")
+      || value.before_label_id > 16 || value.after_label_id > 16
+      || value.before_label_id == value.after_label_id) {
+    invalid_argument("invalid project item label mutation result");
+  }
+  return "{\"afterLabelId\":" + std::to_string(value.after_label_id)
+      + ",\"beforeLabelId\":" + std::to_string(value.before_label_id)
+      + ",\"changed\":true,\"itemLocator\":" + locator_json(value.item_locator) + "}";
+}
+
+std::string canonical_composition_duplicate_value(const CompositionDuplicated& value) {
+  if (!value.changed
+      || !valid_output_locator(value.source_composition_locator)
+      || !valid_output_locator(value.new_composition_locator)
+      || value.source_composition_locator.kind != "composition"
+      || value.new_composition_locator.kind != "composition"
+      || value.source_composition_locator.object_id == value.new_composition_locator.object_id
+      || !same_locator_scope(
+          value.source_composition_locator, value.new_composition_locator)
+      || value.project_item_count_before >= kMaxSafeInteger
+      || value.project_item_count_after != value.project_item_count_before + 1
+      || value.source_settings.composition_locator != value.source_composition_locator
+      || value.new_settings.composition_locator != value.new_composition_locator) {
+    invalid_argument("invalid composition duplicate result");
+  }
+  return "{\"changed\":true,\"newCompositionLocator\":"
+      + locator_json(value.new_composition_locator)
+      + ",\"newSettings\":" + canonical_composition_settings_snapshot(value.new_settings)
+      + ",\"projectItemCountAfter\":"
+      + std::to_string(value.project_item_count_after)
+      + ",\"projectItemCountBefore\":"
+      + std::to_string(value.project_item_count_before)
+      + ",\"sourceCompositionLocator\":"
+      + locator_json(value.source_composition_locator)
+      + ",\"sourceSettings\":"
+      + canonical_composition_settings_snapshot(value.source_settings) + "}";
 }
 
 std::string canonical_composition_create_arguments(
@@ -2368,6 +2845,116 @@ std::string digest_composition_time_set_postcondition(
       + canonical_composition_time_set_value(value) + "}");
 }
 
+std::string digest_project_context_postcondition(const ProjectContext& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.project.context.read\",\"capabilityVersion\":1,\"value\":"
+      + canonical_project_context_value(value) + "}");
+}
+
+std::string digest_project_item_metadata_postcondition(
+    const ProjectItemMetadata& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.project.item.metadata.read\",\"capabilityVersion\":1,\"value\":"
+      + canonical_project_item_metadata_value(value) + "}");
+}
+
+std::string digest_composition_settings_postcondition(
+    const CompositionSettings& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.composition.settings.read\",\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_settings_value(value) + "}");
+}
+
+std::string digest_composition_work_area_set_arguments(
+    const ObjectLocator& composition_locator,
+    const CompositionCurrentTime& start,
+    const CompositionCurrentTime& duration,
+    std::string_view idempotency_key) {
+  if (!valid_idempotency_key(idempotency_key)
+      || !valid_output_locator(composition_locator)
+      || composition_locator.kind != "composition") {
+    invalid_argument("invalid composition work area arguments digest input");
+  }
+  return sha256_hex("{\"compositionLocator\":" + locator_json(composition_locator)
+      + ",\"duration\":{\"scale\":" + std::to_string(duration.scale)
+      + ",\"value\":" + std::to_string(duration.value)
+      + "},\"idempotencyKey\":" + json_string(idempotency_key)
+      + ",\"start\":{\"scale\":" + std::to_string(start.scale)
+      + ",\"value\":" + std::to_string(start.value) + "}}");
+}
+
+std::string digest_composition_work_area_set_postcondition(
+    const CompositionWorkAreaChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.composition.work-area.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_work_area_set_value(value) + "}");
+}
+
+std::string digest_project_item_text_set_arguments(
+    std::string_view capability_id,
+    const ObjectLocator& item_locator,
+    std::string_view field_name,
+    std::string_view value,
+    std::string_view idempotency_key) {
+  return sha256_hex(canonical_project_item_text_set_arguments(
+      capability_id, item_locator, field_name, value, idempotency_key));
+}
+
+std::string digest_project_item_text_set_postcondition(
+    std::string_view capability_id,
+    const ProjectItemTextChanged& value) {
+  const std::string_view field = capability_id == "ae.project.item.name.set"
+      ? "Name" : capability_id == "ae.project.item.comment.set" ? "Comment" : "";
+  if (field.empty()) invalid_argument("invalid project item text capability");
+  return sha256_hex("{\"capabilityId\":" + json_string(capability_id)
+      + ",\"capabilityVersion\":1,\"value\":"
+      + canonical_project_item_text_set_value(value, field) + "}");
+}
+
+std::string digest_project_item_label_set_arguments(
+    const ObjectLocator& item_locator,
+    std::uint8_t label_id,
+    std::string_view idempotency_key) {
+  if (!valid_output_locator(item_locator)
+      || (item_locator.kind != "item" && item_locator.kind != "composition")
+      || label_id > 16 || !valid_idempotency_key(idempotency_key)) {
+    invalid_argument("invalid project item label arguments digest input");
+  }
+  return sha256_hex("{\"idempotencyKey\":" + json_string(idempotency_key)
+      + ",\"itemLocator\":" + locator_json(item_locator)
+      + ",\"labelId\":" + std::to_string(label_id) + "}");
+}
+
+std::string digest_project_item_label_set_postcondition(
+    const ProjectItemLabelChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.project.item.label.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_project_item_label_set_value(value) + "}");
+}
+
+std::string digest_composition_duplicate_arguments(
+    const ObjectLocator& composition_locator,
+    std::string_view new_name,
+    std::string_view idempotency_key) {
+  if (!valid_output_locator(composition_locator)
+      || composition_locator.kind != "composition"
+      || validate_utf8_and_count(new_name) < 1
+      || validate_utf8_and_count(new_name) > 255
+      || !valid_idempotency_key(idempotency_key)) {
+    invalid_argument("invalid composition duplicate arguments digest input");
+  }
+  return sha256_hex("{\"compositionLocator\":" + locator_json(composition_locator)
+      + ",\"idempotencyKey\":" + json_string(idempotency_key)
+      + ",\"newName\":" + json_string(new_name) + "}");
+}
+
+std::string digest_composition_duplicate_postcondition(
+    const CompositionDuplicated& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.composition.duplicate\",\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_duplicate_value(value) + "}");
+}
+
 std::string digest_composition_create_arguments(
     std::string_view name,
     std::uint32_t width,
@@ -2402,6 +2989,96 @@ std::string composition_create_persistent_diagnostic_fields(
       + ",\"height\":" + std::to_string(value.height)
       + ",\"projectGeneration\":"
       + std::to_string(value.composition_locator.generation);
+}
+
+std::string project_context_persistent_diagnostic_fields(
+    const ProjectContext& value) {
+  return "\"selectionTotal\":" + std::to_string(value.selection_total)
+      + ",\"selectionOffset\":" + std::to_string(value.selection_offset)
+      + ",\"selectionReturned\":"
+      + std::to_string(value.selected_items.size())
+      + ",\"selectionHasMore\":"
+      + (value.selection_has_more ? "true" : "false")
+      + ",\"projectGeneration\":"
+      + std::to_string(value.project_locator.generation);
+}
+
+std::string project_item_metadata_persistent_diagnostic_fields(
+    const ProjectItemMetadata& value) {
+  return "\"type\":" + json_string(value.type)
+      + ",\"nameRedacted\":true,\"commentRedacted\":true"
+      + ",\"labelId\":" + std::to_string(value.label_id)
+      + ",\"hasParent\":" + (value.parent_locator.has_value() ? "true" : "false")
+      + ",\"hasDimensions\":"
+      + (value.width.has_value() && value.height.has_value() ? "true" : "false")
+      + ",\"hasDuration\":" + (value.duration.has_value() ? "true" : "false")
+      + ",\"hasPixelAspectRatio\":"
+      + (value.pixel_aspect_ratio.has_value() ? "true" : "false")
+      + ",\"hasLayerCount\":"
+      + (value.layer_count.has_value() ? "true" : "false")
+      + ",\"projectGeneration\":"
+      + std::to_string(value.item_locator.generation);
+}
+
+std::string composition_settings_persistent_diagnostic_fields(
+    const CompositionSettings& value) {
+  return "\"nameRedacted\":true,\"width\":" + std::to_string(value.width)
+      + ",\"height\":" + std::to_string(value.height)
+      + ",\"layerCount\":" + std::to_string(value.layer_count)
+      + ",\"projectGeneration\":"
+      + std::to_string(value.composition_locator.generation);
+}
+
+std::string composition_work_area_persistent_diagnostic_fields(
+    const CompositionWorkAreaChanged& value) {
+  return "\"changed\":true,\"beforeStart\":{\"value\":"
+      + std::to_string(value.before_start.value)
+      + ",\"scale\":" + std::to_string(value.before_start.scale)
+      + "},\"beforeDuration\":{\"value\":"
+      + std::to_string(value.before_duration.value)
+      + ",\"scale\":" + std::to_string(value.before_duration.scale)
+      + "},\"afterStart\":{\"value\":"
+      + std::to_string(value.after_start.value)
+      + ",\"scale\":" + std::to_string(value.after_start.scale)
+      + "},\"afterDuration\":{\"value\":"
+      + std::to_string(value.after_duration.value)
+      + ",\"scale\":" + std::to_string(value.after_duration.scale)
+      + "},\"projectGeneration\":"
+      + std::to_string(value.composition_locator.generation);
+}
+
+std::string project_item_name_persistent_diagnostic_fields(
+    const ProjectItemTextChanged& value) {
+  return "\"changed\":true,\"nameRedacted\":true,\"projectGeneration\":"
+      + std::to_string(value.item_locator.generation);
+}
+
+std::string project_item_comment_persistent_diagnostic_fields(
+    const ProjectItemTextChanged& value) {
+  return "\"changed\":true,\"commentRedacted\":true,\"projectGeneration\":"
+      + std::to_string(value.item_locator.generation);
+}
+
+std::string project_item_label_persistent_diagnostic_fields(
+    const ProjectItemLabelChanged& value) {
+  return "\"changed\":true,\"beforeLabelId\":"
+      + std::to_string(value.before_label_id)
+      + ",\"afterLabelId\":" + std::to_string(value.after_label_id)
+      + ",\"projectGeneration\":"
+      + std::to_string(value.item_locator.generation);
+}
+
+std::string composition_duplicate_persistent_diagnostic_fields(
+    const CompositionDuplicated& value) {
+  return "\"changed\":true,\"sourceNameRedacted\":true"
+      ",\"newNameRedacted\":true,\"projectItemCountBefore\":"
+      + std::to_string(value.project_item_count_before)
+      + ",\"projectItemCountAfter\":"
+      + std::to_string(value.project_item_count_after)
+      + ",\"sourceProjectGeneration\":"
+      + std::to_string(value.source_composition_locator.generation)
+      + ",\"newProjectGeneration\":"
+      + std::to_string(value.new_composition_locator.generation);
 }
 
 std::string digest_composition_layer_create_arguments(
@@ -2749,6 +3426,44 @@ std::string double_json(double value) {
   stream << std::setprecision(std::numeric_limits<double>::max_digits10) << value;
   if (!stream) invalid_argument("could not encode output number");
   return stream.str();
+}
+
+std::string canonical_json(const JsonValue& value) {
+  if (std::holds_alternative<std::nullptr_t>(value.value)) return "null";
+  if (const auto* boolean = std::get_if<bool>(&value.value)) {
+    return *boolean ? "true" : "false";
+  }
+  if (const auto* number = std::get_if<JsonNumber>(&value.value)) {
+    return double_json(number->value);
+  }
+  if (const auto* string = std::get_if<std::string>(&value.value)) {
+    return json_string(*string);
+  }
+  if (const auto* array = std::get_if<JsonValue::Array>(&value.value)) {
+    std::string output = "[";
+    for (std::size_t index = 0; index < array->size(); ++index) {
+      if (index != 0) output.push_back(',');
+      output += canonical_json((*array)[index]);
+    }
+    output.push_back(']');
+    return output;
+  }
+  const auto& object = std::get<JsonValue::Object>(value.value);
+  std::vector<const std::pair<std::string, JsonValue>*> sorted;
+  sorted.reserve(object.size());
+  for (const auto& member : object) sorted.push_back(&member);
+  std::sort(sorted.begin(), sorted.end(), [](const auto* left, const auto* right) {
+    return left->first < right->first;
+  });
+  std::string output = "{";
+  for (std::size_t index = 0; index < sorted.size(); ++index) {
+    if (index != 0) output.push_back(',');
+    output += json_string(sorted[index]->first);
+    output.push_back(':');
+    output += canonical_json(sorted[index]->second);
+  }
+  output.push_back('}');
+  return output;
 }
 
 void validate_limits(const NegotiatedLimits& limits) {
@@ -3136,6 +3851,310 @@ std::string layer_property_set_descriptor(const CapabilitiesSuccess& response) {
   return R"aemcp({"detail":"full","id":"ae.layer.property.set","version":1,"schemaVersion":1,"summary":"Set one non-keyframed primitive After Effects layer property value.","risk":"write","mutability":"mutating","idempotency":"idempotency-key","cancellation":"before-dispatch","undo":"ae-undo-group","sideEffectSummary":"Changes one primitive layer property and creates one After Effects Undo step.","preconditions":["An After Effects project must be open.","Both locators must come from ae.layer.properties.list@1 for the same layer.","The property must be a non-keyframed scalar, vector, or color leaf stream.","value must differ from the property's current sampled value."],"compatibility":{"status":"unverified","intendedPlatforms":["macos-arm64","windows-x64"]},"inputContractId":"aemcp.contract.ae.layer.property.set.input.v1","resultContractId":"aemcp.contract.ae.layer.property.set.result.v1","contractDigest":"5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c","inputSchema":{"type":"object","additionalProperties":false,"required":["layerLocator","propertyLocator","value","idempotencyKey"],"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"},"propertyLocator":{"$ref":"#/$defs/streamLocator"},"value":{"$ref":"#/$defs/primitiveValue"},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"streamLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"stream"}}}]},"primitiveValue":{"oneOf":[{"type":"object","additionalProperties":false,"required":["kind","value"],"properties":{"kind":{"const":"scalar"},"value":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}},{"type":"object","additionalProperties":false,"required":["kind","components"],"properties":{"kind":{"const":"vector"},"components":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}},{"type":"object","additionalProperties":false,"required":["kind","alpha","red","green","blue"],"properties":{"kind":{"const":"color"},"alpha":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"red":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"green":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"blue":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}]}},"x-invariant":"both-locators-must-share-one-host-session-project-generation"},"resultSchema":{"type":"object","additionalProperties":false,"required":["changed","layerLocator","propertyLocator","valueType","beforeValue","afterValue"],"properties":{"changed":{"const":true},"layerLocator":{"$ref":"#/$defs/layerLocator"},"propertyLocator":{"$ref":"#/$defs/streamLocator"},"valueType":{"enum":["one-d","two-d","two-d-spatial","three-d","three-d-spatial","color"]},"beforeValue":{"$ref":"#/$defs/primitiveValue"},"afterValue":{"$ref":"#/$defs/primitiveValue"}},"$defs":{"uuid":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"locatorBase":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["layer","stream"]},"hostInstanceId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"$ref":"#/$defs/uuid"}}},"layerLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"layer"}}}]},"streamLocator":{"allOf":[{"$ref":"#/$defs/locatorBase"},{"properties":{"kind":{"const":"stream"}}}]},"primitiveValue":{"oneOf":[{"type":"object","additionalProperties":false,"required":["kind","value"],"properties":{"kind":{"const":"scalar"},"value":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}},{"type":"object","additionalProperties":false,"required":["kind","components"],"properties":{"kind":{"const":"vector"},"components":{"type":"array","minItems":2,"maxItems":3,"items":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}},{"type":"object","additionalProperties":false,"required":["kind","alpha","red","green","blue"],"properties":{"kind":{"const":"color"},"alpha":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"red":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"green":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"},"blue":{"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"}}}]}},"x-invariant":"beforeValue-must-differ-from-afterValue-and-values-must-match-valueType"},"requirements":[{"id":"aemcp.requirement.native.layer-property-set","contractVersion":1}],"examples":[{"id":"aemcp-example-layer-property-set","kind":"positive","summary":"Change one non-keyframed scalar property with Undo available.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"propertyLocator":{"kind":"stream","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"},"value":{"kind":"scalar","value":"40"},"idempotencyKey":"synthetic-property-0001"},"expected":{"outcome":"succeeded","value":{"changed":true,"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"propertyLocator":{"kind":"stream","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"},"valueType":"one-d","beforeValue":{"kind":"scalar","value":"25"},"afterValue":{"kind":"scalar","value":"40"}}}},{"id":"aemcp-example-layer-property-set-keyframed","kind":"negative","summary":"Reject a keyframed stream without changing After Effects state.","arguments":{"layerLocator":{"kind":"layer","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"88888888-8888-4888-8888-888888888888"},"propertyLocator":{"kind":"stream","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"cccccccc-cccc-4ccc-8ccc-cccccccccccc"},"value":{"kind":"scalar","value":"40"},"idempotencyKey":"synthetic-property-0002"},"expected":{"errorCode":"PRECONDITION_FAILED","recoveryAction":"change-arguments"}}]})aemcp";
 }
 
+struct PackageDescriptorSpec {
+  std::string_view id;
+  std::string_view summary;
+  std::string_view side_effect_summary;
+  std::string_view preconditions_json;
+  std::string_view input_contract_id;
+  std::string_view result_contract_id;
+  std::string_view requirement_id;
+  std::string_view input_schema_json;
+  std::string_view result_schema_json;
+  std::string_view example_arguments_json;
+  std::string_view example_id;
+  std::string_view example_error_code;
+  std::string_view example_recovery_action;
+  bool mutating{false};
+  std::string_view positive_example_id;
+  std::string_view positive_example_value_json;
+};
+
+std::string package_descriptor(
+    const CapabilitiesSuccess& response,
+    const PackageDescriptorSpec& spec,
+    std::string_view contract_digest) {
+  const std::string mutability = spec.mutating ? "mutating" : "read-only";
+  const std::string risk = spec.mutating ? "write" : "read";
+  const std::string idempotency = spec.mutating ? "idempotency-key" : "idempotent";
+  const std::string undo = spec.mutating ? "ae-undo-group" : "not-applicable";
+  std::string descriptor = "{\"cancellation\":\"before-dispatch\","
+      "\"compatibility\":{\"intendedPlatforms\":[\"macos-arm64\",\"windows-x64\"],"
+      "\"status\":\"unverified\"},\"detail\":"
+      + json_string(response.detail == CapabilityDetail::kFull ? "full" : "summary");
+  if (response.detail == CapabilityDetail::kFull) {
+    require_digest(contract_digest, "contract digest");
+    descriptor += ",\"contractDigest\":" + json_string(contract_digest);
+  }
+  descriptor += ",\"id\":" + json_string(spec.id)
+      + ",\"idempotency\":" + json_string(idempotency);
+  if (response.detail == CapabilityDetail::kFull) {
+    descriptor += ",\"inputContractId\":" + json_string(spec.input_contract_id)
+        + ",\"inputSchema\":" + std::string(spec.input_schema_json);
+  }
+  descriptor += ",\"mutability\":" + json_string(mutability)
+      + ",\"preconditions\":" + std::string(spec.preconditions_json);
+  if (response.detail == CapabilityDetail::kFull) {
+    descriptor += ",\"requirements\":[{\"contractVersion\":1,\"id\":"
+        + json_string(spec.requirement_id) + "}],\"resultContractId\":"
+        + json_string(spec.result_contract_id) + ",\"resultSchema\":"
+        + std::string(spec.result_schema_json);
+  }
+  descriptor += ",\"risk\":" + json_string(risk)
+      + ",\"schemaVersion\":1,\"sideEffectSummary\":"
+      + json_string(spec.side_effect_summary)
+      + ",\"summary\":" + json_string(spec.summary)
+      + ",\"undo\":" + json_string(undo) + ",\"version\":1";
+  if (response.detail == CapabilityDetail::kFull) {
+    descriptor += ",\"examples\":[{\"arguments\":"
+        + std::string(spec.example_arguments_json)
+        + ",\"expected\":{\"outcome\":\"succeeded\",\"value\":"
+        + std::string(spec.positive_example_value_json)
+        + "},\"id\":" + json_string(spec.positive_example_id)
+        + ",\"kind\":\"positive\",\"summary\":\"Synthetic success demonstrates the typed result contract.\"},{\"arguments\":"
+        + std::string(spec.example_arguments_json)
+        + ",\"expected\":{\"errorCode\":" + json_string(spec.example_error_code)
+        + ",\"recoveryAction\":" + json_string(spec.example_recovery_action)
+        + "},\"id\":" + json_string(spec.example_id)
+        + ",\"kind\":\"negative\",\"summary\":\"Synthetic failure exercises the documented recovery path.\"}]";
+  }
+  return descriptor + "}";
+}
+
+std::string project_context_descriptor(const CapabilitiesSuccess& response) {
+  static constexpr std::string_view input = R"aemcp({"additionalProperties":false,"properties":{"selectionLimit":{"maximum":50,"minimum":1,"type":"integer"},"selectionOffset":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["selectionOffset","selectionLimit"],"type":"object"})aemcp";
+  static constexpr std::string_view result = R"aemcp({"additionalProperties":false,"properties":{"activeItem":{"anyOf":[{"additionalProperties":false,"properties":{"locator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"name":{"maxLength":1024,"type":"string"},"parentLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["project","item"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"type":{"enum":["folder","composition","footage","unknown"]}},"required":["locator","name","type","parentLocator"],"type":"object"},{"type":"null"}]},"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"mostRecentlyUsedComposition":{"anyOf":[{"additionalProperties":false,"properties":{"locator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"name":{"maxLength":1024,"type":"string"},"parentLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["project","item"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"type":{"enum":["folder","composition","footage","unknown"]}},"required":["locator","name","type","parentLocator"],"type":"object"},{"type":"null"}]},"projectLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"project"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"selection":{"additionalProperties":false,"properties":{"hasMore":{"type":"boolean"},"items":{"items":{"additionalProperties":false,"properties":{"locator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"name":{"maxLength":1024,"type":"string"},"parentLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["project","item"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"type":{"enum":["folder","composition","footage","unknown"]}},"required":["locator","name","type","parentLocator"],"type":"object"},"maxItems":50,"type":"array"},"limit":{"maximum":50,"minimum":1,"type":"integer"},"nextOffset":{"anyOf":[{"maximum":9007199254740991,"minimum":0,"type":"integer"},{"type":"null"}]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"returned":{"maximum":50,"minimum":0,"type":"integer"},"total":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["total","offset","limit","returned","hasMore","nextOffset","items"],"type":"object"}},"required":["projectLocator","generation","activeItem","mostRecentlyUsedComposition","selection"],"type":"object"})aemcp";
+  static constexpr std::string_view arguments = R"aemcp({"selectionOffset":0,"selectionLimit":25})aemcp";
+  static constexpr std::string_view positive_value = R"aemcp({"projectLocator":{"kind":"project","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"55555555-5555-4555-8555-555555555555"},"generation":8,"activeItem":null,"mostRecentlyUsedComposition":null,"selection":{"total":0,"offset":0,"limit":25,"returned":0,"hasMore":false,"nextOffset":null,"items":[]}})aemcp";
+  if (response.detail == CapabilityDetail::kFull
+      && response.project_context_read_contract_digest != "ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca") {
+    invalid_argument("ae.project.context.read contract digest does not match the compiled descriptor");
+  }
+  return package_descriptor(response, {
+      "ae.project.context.read", "Read current After Effects project context and selected items.",
+      "Reads project context without changing After Effects state.",
+      R"aemcp(["An After Effects project must be open."])aemcp",
+      "aemcp.contract.ae.project.context.read.input.v1",
+      "aemcp.contract.ae.project.context.read.result.v1",
+      "aemcp.requirement.native.project-context-read",
+      input, result, arguments, "aemcp-example-project-context-read-stale",
+      "PRECONDITION_FAILED", "open-project", false,
+      "aemcp-example-project-context-read", positive_value},
+      response.project_context_read_contract_digest);
+}
+std::string project_item_metadata_descriptor(const CapabilitiesSuccess& response) {
+  static constexpr std::string_view input = R"aemcp({"additionalProperties":false,"properties":{"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["itemLocator"],"type":"object"})aemcp";
+  static constexpr std::string_view result = R"aemcp({"additionalProperties":false,"properties":{"comment":{"maxLength":1024,"type":"string"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"labelId":{"maximum":16,"minimum":0,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"parentLocator":{"anyOf":[{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["project","item"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},{"type":"null"}]},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"type":{"enum":["folder","composition","footage","unknown"]},"width":{"maximum":30000,"minimum":1,"type":"integer"}},"required":["itemLocator","name","type","parentLocator","comment","labelId"],"type":"object"})aemcp";
+  static constexpr std::string_view arguments = R"aemcp({"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"}})aemcp";
+  static constexpr std::string_view positive_value = R"aemcp({"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"name":"SYNTHETIC_ITEM","type":"footage","parentLocator":{"kind":"project","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"55555555-5555-4555-8555-555555555555"},"comment":"","labelId":0})aemcp";
+  if (response.detail == CapabilityDetail::kFull
+      && response.project_item_metadata_read_contract_digest != "b13139c0b2e8073f6606bfbead1e59eb7fea63ec10a164b500e19ff8babd0f69") {
+    invalid_argument("ae.project.item.metadata.read contract digest does not match the compiled descriptor");
+  }
+  return package_descriptor(response, {
+      "ae.project.item.metadata.read", "Read metadata and bounded type facts for one After Effects project item.",
+      "Reads project item metadata without changing After Effects state.",
+      R"aemcp(["An After Effects project must be open.","itemLocator must come from ae.project.context.read@1 or ae.project.items.list@1."])aemcp",
+      "aemcp.contract.ae.project.item.metadata.read.input.v1",
+      "aemcp.contract.ae.project.item.metadata.read.result.v1",
+      "aemcp.requirement.native.project-item-metadata-read",
+      input, result, arguments, "aemcp-example-project-item-metadata-read-stale",
+      "STALE_LOCATOR", "refresh-locator", false,
+      "aemcp-example-project-item-metadata-read", positive_value},
+      response.project_item_metadata_read_contract_digest);
+}
+std::string composition_settings_descriptor(const CapabilitiesSuccess& response) {
+  static constexpr std::string_view input = R"aemcp({"additionalProperties":false,"properties":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["compositionLocator"],"type":"object"})aemcp";
+  static constexpr std::string_view result = R"aemcp({"additionalProperties":false,"properties":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameDuration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"width":{"maximum":30000,"minimum":1,"type":"integer"},"workArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"}},"required":["compositionLocator","name","width","height","duration","frameDuration","frameRate","pixelAspectRatio","workArea","displayStartTime","layerCount"],"type":"object"})aemcp";
+  static constexpr std::string_view arguments = R"aemcp({"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"}})aemcp";
+  static constexpr std::string_view positive_value = R"aemcp({"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"name":"SYNTHETIC_COMPOSITION","width":1920,"height":1080,"duration":{"value":5,"scale":1,"secondsRational":"5"},"frameDuration":{"value":1,"scale":24,"secondsRational":"1/24"},"frameRate":{"numerator":24,"denominator":1,"rational":"24"},"pixelAspectRatio":{"numerator":1,"denominator":1,"rational":"1"},"workArea":{"start":{"value":0,"scale":1,"secondsRational":"0"},"duration":{"value":5,"scale":1,"secondsRational":"5"}},"displayStartTime":{"value":0,"scale":1,"secondsRational":"0"},"layerCount":0})aemcp";
+  if (response.detail == CapabilityDetail::kFull
+      && response.composition_settings_read_contract_digest != "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b") {
+    invalid_argument("ae.composition.settings.read contract digest does not match the compiled descriptor");
+  }
+  return package_descriptor(response, {
+      "ae.composition.settings.read", "Read exact settings for one After Effects composition.",
+      "Reads composition settings without changing After Effects state.",
+      R"aemcp(["An After Effects project must be open.","compositionLocator must come from ae.project.context.read@1 or ae.project.items.list@1."])aemcp",
+      "aemcp.contract.ae.composition.settings.read.input.v1",
+      "aemcp.contract.ae.composition.settings.read.result.v1",
+      "aemcp.requirement.native.composition-settings-read",
+      input, result, arguments, "aemcp-example-composition-settings-read-stale",
+      "STALE_LOCATOR", "refresh-locator", false,
+      "aemcp-example-composition-settings-read", positive_value},
+      response.composition_settings_read_contract_digest);
+}
+std::string composition_work_area_descriptor(const CapabilitiesSuccess& response) {
+  static constexpr std::string_view input = R"aemcp({"additionalProperties":false,"properties":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["value","scale"],"type":"object"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":0,"type":"integer"}},"required":["value","scale"],"type":"object"}},"required":["compositionLocator","start","duration","idempotencyKey"],"type":"object"})aemcp";
+  static constexpr std::string_view result = R"aemcp({"additionalProperties":false,"properties":{"afterWorkArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"},"beforeWorkArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"},"changed":{"const":true},"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","compositionLocator","beforeWorkArea","afterWorkArea"],"type":"object"})aemcp";
+  static constexpr std::string_view arguments = R"aemcp({"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"start":{"value":0,"scale":1},"duration":{"value":4,"scale":1},"idempotencyKey":"synthetic-work-area-0001"})aemcp";
+  static constexpr std::string_view positive_value = R"aemcp({"changed":true,"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"beforeWorkArea":{"start":{"value":0,"scale":1,"secondsRational":"0"},"duration":{"value":5,"scale":1,"secondsRational":"5"}},"afterWorkArea":{"start":{"value":0,"scale":1,"secondsRational":"0"},"duration":{"value":4,"scale":1,"secondsRational":"4"}}})aemcp";
+  if (response.detail == CapabilityDetail::kFull
+      && response.composition_work_area_set_contract_digest != "a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997") {
+    invalid_argument("ae.composition.work-area.set contract digest does not match the compiled descriptor");
+  }
+  return package_descriptor(response, {
+      "ae.composition.work-area.set", "Set the exact work area of one After Effects composition.",
+      "Changes one composition work area and creates one After Effects Undo step.",
+      R"aemcp(["An After Effects project must be open.","compositionLocator must come from ae.project.context.read@1 or ae.project.items.list@1.","start plus duration must fit within the composition duration.","The requested work area must differ from the current work area."])aemcp",
+      "aemcp.contract.ae.composition.work-area.set.input.v1",
+      "aemcp.contract.ae.composition.work-area.set.result.v1",
+      "aemcp.requirement.native.composition-work-area-set",
+      input, result, arguments, "aemcp-example-composition-work-area-set-stale",
+      "STALE_LOCATOR", "refresh-locator", true,
+      "aemcp-example-composition-work-area-set", positive_value},
+      response.composition_work_area_set_contract_digest);
+}
+std::string project_item_name_descriptor(const CapabilitiesSuccess& response) {
+  static constexpr std::string_view input = R"aemcp({"additionalProperties":false,"properties":{"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"name":{"maxLength":255,"minLength":1,"type":"string"}},"required":["itemLocator","name","idempotencyKey"],"type":"object"})aemcp";
+  static constexpr std::string_view result = R"aemcp({"additionalProperties":false,"properties":{"afterName":{"maxLength":255,"minLength":1,"type":"string"},"beforeName":{"maxLength":1024,"type":"string"},"changed":{"const":true},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","itemLocator","beforeName","afterName"],"type":"object"})aemcp";
+  static constexpr std::string_view arguments = R"aemcp({"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"name":"SYNTHETIC_RENAMED","idempotencyKey":"synthetic-item-name-0001"})aemcp";
+  static constexpr std::string_view positive_value = R"aemcp({"changed":true,"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"beforeName":"SYNTHETIC_ITEM","afterName":"SYNTHETIC_RENAMED"})aemcp";
+  if (response.detail == CapabilityDetail::kFull
+      && response.project_item_name_set_contract_digest != "b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538") {
+    invalid_argument("ae.project.item.name.set contract digest does not match the compiled descriptor");
+  }
+  return package_descriptor(response, {
+      "ae.project.item.name.set", "Rename one After Effects project item.",
+      "Changes one project item name and creates one After Effects Undo step.",
+      R"aemcp(["An After Effects project must be open.","itemLocator must come from ae.project.context.read@1 or ae.project.items.list@1.","name must differ from the current project item name."])aemcp",
+      "aemcp.contract.ae.project.item.name.set.input.v1",
+      "aemcp.contract.ae.project.item.name.set.result.v1",
+      "aemcp.requirement.native.project-item-name-set",
+      input, result, arguments, "aemcp-example-project-item-name-set-stale",
+      "STALE_LOCATOR", "refresh-locator", true,
+      "aemcp-example-project-item-name-set", positive_value},
+      response.project_item_name_set_contract_digest);
+}
+std::string project_item_comment_descriptor(const CapabilitiesSuccess& response) {
+  static constexpr std::string_view input = R"aemcp({"additionalProperties":false,"properties":{"comment":{"maxLength":1024,"type":"string"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["itemLocator","comment","idempotencyKey"],"type":"object"})aemcp";
+  static constexpr std::string_view result = R"aemcp({"additionalProperties":false,"properties":{"afterComment":{"maxLength":1024,"type":"string"},"beforeComment":{"maxLength":1024,"type":"string"},"changed":{"const":true},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","itemLocator","beforeComment","afterComment"],"type":"object"})aemcp";
+  static constexpr std::string_view arguments = R"aemcp({"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"comment":"SYNTHETIC_COMMENT","idempotencyKey":"synthetic-item-comment-0001"})aemcp";
+  static constexpr std::string_view positive_value = R"aemcp({"changed":true,"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"beforeComment":"","afterComment":"SYNTHETIC_COMMENT"})aemcp";
+  if (response.detail == CapabilityDetail::kFull
+      && response.project_item_comment_set_contract_digest != "957985628474caa9c9cef3de76a2839e59691232b062b776ff800a79dd3cc35c") {
+    invalid_argument("ae.project.item.comment.set contract digest does not match the compiled descriptor");
+  }
+  return package_descriptor(response, {
+      "ae.project.item.comment.set", "Set or clear one After Effects project item comment.",
+      "Changes one project item comment and creates one After Effects Undo step.",
+      R"aemcp(["An After Effects project must be open.","itemLocator must come from ae.project.context.read@1 or ae.project.items.list@1.","comment must differ from the current project item comment."])aemcp",
+      "aemcp.contract.ae.project.item.comment.set.input.v1",
+      "aemcp.contract.ae.project.item.comment.set.result.v1",
+      "aemcp.requirement.native.project-item-comment-set",
+      input, result, arguments, "aemcp-example-project-item-comment-set-stale",
+      "STALE_LOCATOR", "refresh-locator", true,
+      "aemcp-example-project-item-comment-set", positive_value},
+      response.project_item_comment_set_contract_digest);
+}
+std::string project_item_label_descriptor(const CapabilitiesSuccess& response) {
+  static constexpr std::string_view input = R"aemcp({"additionalProperties":false,"properties":{"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"labelId":{"maximum":16,"minimum":0,"type":"integer"}},"required":["itemLocator","labelId","idempotencyKey"],"type":"object"})aemcp";
+  static constexpr std::string_view result = R"aemcp({"additionalProperties":false,"properties":{"afterLabelId":{"maximum":16,"minimum":0,"type":"integer"},"beforeLabelId":{"maximum":16,"minimum":0,"type":"integer"},"changed":{"const":true},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","itemLocator","beforeLabelId","afterLabelId"],"type":"object"})aemcp";
+  static constexpr std::string_view arguments = R"aemcp({"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"labelId":3,"idempotencyKey":"synthetic-item-label-0001"})aemcp";
+  static constexpr std::string_view positive_value = R"aemcp({"changed":true,"itemLocator":{"kind":"item","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"77777777-7777-4777-8777-777777777777"},"beforeLabelId":0,"afterLabelId":3})aemcp";
+  if (response.detail == CapabilityDetail::kFull
+      && response.project_item_label_set_contract_digest != "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f") {
+    invalid_argument("ae.project.item.label.set contract digest does not match the compiled descriptor");
+  }
+  return package_descriptor(response, {
+      "ae.project.item.label.set", "Set one numeric After Effects project item label slot.",
+      "Changes one project item label and creates one After Effects Undo step.",
+      R"aemcp(["An After Effects project must be open.","itemLocator must come from ae.project.context.read@1 or ae.project.items.list@1.","labelId must differ from the current project item label."])aemcp",
+      "aemcp.contract.ae.project.item.label.set.input.v1",
+      "aemcp.contract.ae.project.item.label.set.result.v1",
+      "aemcp.requirement.native.project-item-label-set",
+      input, result, arguments, "aemcp-example-project-item-label-set-stale",
+      "STALE_LOCATOR", "refresh-locator", true,
+      "aemcp-example-project-item-label-set", positive_value},
+      response.project_item_label_set_contract_digest);
+}
+std::string composition_duplicate_descriptor(const CapabilitiesSuccess& response) {
+  static constexpr std::string_view input = R"aemcp({"additionalProperties":false,"properties":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"newName":{"maxLength":255,"minLength":1,"type":"string"}},"required":["compositionLocator","newName","idempotencyKey"],"type":"object"})aemcp";
+  static constexpr std::string_view result = R"aemcp({"additionalProperties":false,"properties":{"changed":{"const":true},"newCompositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"newSettings":{"additionalProperties":false,"properties":{"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameDuration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"width":{"maximum":30000,"minimum":1,"type":"integer"},"workArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"}},"required":["name","width","height","duration","frameDuration","frameRate","pixelAspectRatio","workArea","displayStartTime","layerCount"],"type":"object"},"projectItemCountAfter":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"projectItemCountBefore":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sourceCompositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"sourceSettings":{"additionalProperties":false,"properties":{"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameDuration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"width":{"maximum":30000,"minimum":1,"type":"integer"},"workArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"}},"required":["name","width","height","duration","frameDuration","frameRate","pixelAspectRatio","workArea","displayStartTime","layerCount"],"type":"object"}},"required":["changed","sourceCompositionLocator","newCompositionLocator","projectItemCountBefore","projectItemCountAfter","sourceSettings","newSettings"],"type":"object"})aemcp";
+  static constexpr std::string_view arguments = R"aemcp({"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"newName":"SYNTHETIC_COPY","idempotencyKey":"synthetic-comp-duplicate-0001"})aemcp";
+  static constexpr std::string_view positive_value = R"aemcp({"changed":true,"sourceCompositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":9,"objectId":"66666666-6666-4666-8666-666666666666"},"newCompositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":9,"objectId":"88888888-8888-4888-8888-888888888888"},"projectItemCountBefore":1,"projectItemCountAfter":2,"sourceSettings":{"name":"SYNTHETIC_COMPOSITION","width":1920,"height":1080,"duration":{"value":5,"scale":1,"secondsRational":"5"},"frameDuration":{"value":1,"scale":24,"secondsRational":"1/24"},"frameRate":{"numerator":24,"denominator":1,"rational":"24"},"pixelAspectRatio":{"numerator":1,"denominator":1,"rational":"1"},"workArea":{"start":{"value":0,"scale":1,"secondsRational":"0"},"duration":{"value":5,"scale":1,"secondsRational":"5"}},"displayStartTime":{"value":0,"scale":1,"secondsRational":"0"},"layerCount":0},"newSettings":{"name":"SYNTHETIC_COPY","width":1920,"height":1080,"duration":{"value":5,"scale":1,"secondsRational":"5"},"frameDuration":{"value":1,"scale":24,"secondsRational":"1/24"},"frameRate":{"numerator":24,"denominator":1,"rational":"24"},"pixelAspectRatio":{"numerator":1,"denominator":1,"rational":"1"},"workArea":{"start":{"value":0,"scale":1,"secondsRational":"0"},"duration":{"value":5,"scale":1,"secondsRational":"5"}},"displayStartTime":{"value":0,"scale":1,"secondsRational":"0"},"layerCount":0}})aemcp";
+  const std::string fresh_context_positive_value = replace_descriptor_text(
+      std::string(positive_value),
+      "\"projectId\":\"44444444-4444-4444-8444-444444444444\",\"generation\":9",
+      "\"projectId\":\"55555555-5555-4555-8555-555555555555\",\"generation\":9");
+  const std::string fresh_source_positive_value = replace_descriptor_text(
+      fresh_context_positive_value,
+      "\"objectId\":\"66666666-6666-4666-8666-666666666666\"",
+      "\"objectId\":\"77777777-7777-4777-8777-777777777777\"");
+  if (response.detail == CapabilityDetail::kFull
+      && response.composition_duplicate_contract_digest != "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3") {
+    invalid_argument("ae.composition.duplicate contract digest does not match the compiled descriptor");
+  }
+  return package_descriptor(response, {
+      "ae.composition.duplicate", "Duplicate one After Effects composition with an explicit new name.",
+      "Adds one composition and creates one After Effects Undo step.",
+      R"aemcp(["An After Effects project must be open.","compositionLocator must come from ae.project.context.read@1 or ae.project.items.list@1."])aemcp",
+      "aemcp.contract.ae.composition.duplicate.input.v1",
+      "aemcp.contract.ae.composition.duplicate.result.v1",
+      "aemcp.requirement.native.composition-duplicate",
+      input, result, arguments, "aemcp-example-composition-duplicate-stale",
+      "STALE_LOCATOR", "refresh-locator", true,
+      "aemcp-example-composition-duplicate", fresh_source_positive_value},
+      response.composition_duplicate_contract_digest);
+}
+std::string project_item_text_descriptor(
+    const CapabilitiesSuccess& response, bool name) {
+  return name ? project_item_name_descriptor(response)
+              : project_item_comment_descriptor(response);
+}
+
+template <typename Response>
+std::vector<std::uint8_t> encode_native_value_success(
+    const Response& response,
+    std::string_view capability_id,
+    std::string_view postcondition_kind,
+    const ObjectLocator& scope_locator,
+    std::string value_json,
+    std::string expected_postcondition_digest,
+    bool mutating) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  if ((!mutating && response.replayed)
+      || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || scope_locator.host_instance_id != response.host_instance_id
+      || scope_locator.session_id != response.session_id
+      || response.postcondition_digest != expected_postcondition_digest) {
+    invalid_argument("invalid or unvalidated native capability evidence");
+  }
+  const std::string replayed = response.replayed ? "true" : "false";
+  const std::string effect = mutating ? "committed" : "none";
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":" + replayed + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"result\":{\"capabilityId\":"
+      + json_string(capability_id)
+      + ",\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+        "\"capabilityId\":" + json_string(capability_id)
+      + ",\"capabilityVersion\":1,\"completedAtUnixMs\":"
+      + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":" + json_string(effect)
+      + ",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":"
+      + json_string(response.postcondition_digest)
+      + ",\"kind\":" + json_string(postcondition_kind)
+      + ",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms);
+  if (mutating) json += ",\"undo\":{\"available\":true,\"verified\":false}";
+  json += "},\"outcome\":\"succeeded\",\"value\":" + value_json
+      + "},\"sessionId\":" + json_string(response.session_id)
+      + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
 
 struct ErrorPolicy {
   const char* code;
@@ -3313,8 +4332,76 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_layer_property_set) {
     if (needs_comma) items.push_back(',');
     items += layer_property_set_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_project_context_read) {
+    if (needs_comma) items.push_back(',');
+    items += project_context_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_project_item_metadata_read) {
+    if (needs_comma) items.push_back(',');
+    items += project_item_metadata_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_composition_settings_read) {
+    if (needs_comma) items.push_back(',');
+    items += composition_settings_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_composition_work_area_set) {
+    if (needs_comma) items.push_back(',');
+    items += composition_work_area_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_project_item_name_set) {
+    if (needs_comma) items.push_back(',');
+    items += project_item_text_descriptor(response, true);
+    needs_comma = true;
+  }
+  if (response.include_project_item_comment_set) {
+    if (needs_comma) items.push_back(',');
+    items += project_item_text_descriptor(response, false);
+    needs_comma = true;
+  }
+  if (response.include_project_item_label_set) {
+    if (needs_comma) items.push_back(',');
+    items += project_item_label_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_composition_duplicate) {
+    if (needs_comma) items.push_back(',');
+    items += composition_duplicate_descriptor(response);
   }
   items.push_back(']');
+  const bool complete_full_registry = response.detail == CapabilityDetail::kFull
+      && response.include_project_summary
+      && response.include_project_bit_depth_read
+      && response.include_project_bit_depth_set
+      && response.include_project_items_list
+      && response.include_composition_layers_list
+      && response.include_composition_selected_layers_list
+      && response.include_composition_time_read
+      && response.include_composition_time_set
+      && response.include_composition_create
+      && response.include_composition_layer_create
+      && response.include_layer_effect_apply
+      && response.include_layer_properties_list
+      && response.include_layer_property_keyframes_list
+      && response.include_layer_property_set
+      && response.include_project_context_read
+      && response.include_project_item_metadata_read
+      && response.include_composition_settings_read
+      && response.include_composition_work_area_set
+      && response.include_project_item_name_set
+      && response.include_project_item_comment_set
+      && response.include_project_item_label_set
+      && response.include_composition_duplicate;
+  if (complete_full_registry
+      && sha256_hex(canonical_json(JsonParser(items).parse()))
+          != response.capabilities_digest) {
+    invalid_argument("capabilities digest does not match the encoded full registry");
+  }
   std::string json = "{\"kind\":\"response\",\"method\":\"capabilities\",\"ok\":true,"
       "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
       + ",\"result\":{\"capabilitiesDigest\":" + json_string(response.capabilities_digest)
@@ -3646,6 +4733,104 @@ std::vector<std::uint8_t> encode_composition_time_set_success(
         "\"outcome\":\"succeeded\",\"value\":" + value
       + "},\"sessionId\":" + json_string(response.session_id) + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_project_context_success(
+    const ProjectContextSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.project.context.read",
+      "project-context-read",
+      response.value.project_locator,
+      canonical_project_context_value(response.value),
+      digest_project_context_postcondition(response.value),
+      false);
+}
+
+std::vector<std::uint8_t> encode_project_item_metadata_success(
+    const ProjectItemMetadataSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.project.item.metadata.read",
+      "project-item-metadata-read",
+      response.value.item_locator,
+      canonical_project_item_metadata_value(response.value),
+      digest_project_item_metadata_postcondition(response.value),
+      false);
+}
+
+std::vector<std::uint8_t> encode_composition_settings_success(
+    const CompositionSettingsSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.composition.settings.read",
+      "composition-settings-read",
+      response.value.composition_locator,
+      canonical_composition_settings_value(response.value),
+      digest_composition_settings_postcondition(response.value),
+      false);
+}
+
+std::vector<std::uint8_t> encode_composition_work_area_set_success(
+    const CompositionWorkAreaSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.composition.work-area.set",
+      "composition-work-area-set",
+      response.value.composition_locator,
+      canonical_composition_work_area_set_value(response.value),
+      digest_composition_work_area_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_project_item_name_set_success(
+    const ProjectItemNameSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.project.item.name.set",
+      "project-item-name-set",
+      response.value.item_locator,
+      canonical_project_item_text_set_value(response.value, "Name"),
+      digest_project_item_text_set_postcondition(
+          "ae.project.item.name.set", response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_project_item_comment_set_success(
+    const ProjectItemCommentSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.project.item.comment.set",
+      "project-item-comment-set",
+      response.value.item_locator,
+      canonical_project_item_text_set_value(response.value, "Comment"),
+      digest_project_item_text_set_postcondition(
+          "ae.project.item.comment.set", response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_project_item_label_set_success(
+    const ProjectItemLabelSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.project.item.label.set",
+      "project-item-label-set",
+      response.value.item_locator,
+      canonical_project_item_label_set_value(response.value),
+      digest_project_item_label_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_composition_duplicate_success(
+    const CompositionDuplicateSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.composition.duplicate",
+      "composition-duplicate",
+      response.value.source_composition_locator,
+      canonical_composition_duplicate_value(response.value),
+      digest_composition_duplicate_postcondition(response.value),
+      true);
 }
 
 std::vector<std::uint8_t> encode_composition_create_success(

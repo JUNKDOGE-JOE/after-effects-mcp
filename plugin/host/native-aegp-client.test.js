@@ -16,6 +16,7 @@ const {
     parseAuthPending,
     parseAuthDecision,
 } = require('./native-aegp-client');
+const projectCompositionContracts = require('./native-project-composition-contract');
 
 const CAPABILITIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
@@ -65,6 +66,24 @@ const LAYER_PROPERTY_SET_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-set.json',
 ), 'utf8'));
+const PROJECT_COMPOSITION_VECTOR_FILES = [
+    'invoke-project-context-read.json',
+    'invoke-project-item-metadata-read.json',
+    'invoke-composition-settings-read.json',
+    'invoke-composition-work-area-set.json',
+    'invoke-project-item-name-set.json',
+    'invoke-project-item-comment-set.json',
+    'invoke-project-item-label-set.json',
+    'invoke-composition-duplicate.json',
+];
+const PROJECT_COMPOSITION_VECTORS = new Map(PROJECT_COMPOSITION_VECTOR_FILES.map(function (name) {
+    const vector = JSON.parse(fs.readFileSync(path.join(
+        __dirname,
+        '../../native/ae-plugin/protocol/fixtures',
+        name,
+    ), 'utf8'));
+    return [vector.request.params.capabilityId, vector];
+}));
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const CLIENT = '33333333-3333-4333-8333-333333333333';
@@ -271,6 +290,19 @@ function installProtocol(server, options) {
                         generation: 8,
                         invalidated: true,
                     };
+                } else if (input.projectCompositionVectors?.has(
+                    request.params.capabilityId,
+                )) {
+                    const vector = input.projectCompositionVectors.get(
+                        request.params.capabilityId,
+                    );
+                    result = structuredClone(vector.response.result);
+                    if (!input.preserveProjectCompositionFixtureEvidence) {
+                        result.evidence.requestId = request.requestId;
+                        result.evidence.requestDigest = invokeRequestDigest(request);
+                        rebindPostcondition(result);
+                    }
+                    if (input.mutateInvoke) input.mutateInvoke(result, request);
                 } else if (request.params.capabilityId === 'ae.composition.create') {
                     result = structuredClone(COMPOSITION_CREATE_VECTOR.response.result);
                     result.evidence.requestId = request.requestId;
@@ -498,6 +530,123 @@ async function readyNativeClient(t, protocolOptions) {
     await client.capabilities({ detail: 'full', limit: 100 });
     return { client, protocol };
 }
+
+test('CEP client negotiates and verifies all eight frozen #150 native contracts', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client, protocol } = await readyNativeClient(t, {
+        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
+    });
+    let index = 0;
+    for (const [capabilityId, vector] of PROJECT_COMPOSITION_VECTORS) {
+        index += 1;
+        let result;
+        try {
+            result = await client.invoke({
+                requestId: 'issue150-success-' + index,
+                capabilityId,
+                capabilityVersion: 1,
+                arguments: structuredClone(vector.request.params.arguments),
+                deadlineUnixMs: 1900000005000,
+            });
+        } catch (error) {
+            error.message = capabilityId + ': ' + error.message;
+            throw error;
+        }
+        assert.deepEqual(result.value, vector.response.result.value, capabilityId);
+        assert.equal(result.replayed, false, capabilityId);
+    }
+    assert.deepEqual(
+        client.status().projectCompositionContractDigests,
+        Object.fromEntries(Array.from(PROJECT_COMPOSITION_VECTORS).map(function (entry) {
+            return [entry[0], projectCompositionContracts.getContract(entry[0]).digest];
+        })),
+    );
+    assert.deepEqual(
+        protocol.requests.filter(function (request) { return request.method === 'invoke'; })
+            .map(function (request) { return request.params.capabilityId; }),
+        Array.from(PROJECT_COMPOSITION_VECTORS.keys()),
+    );
+});
+
+test('CEP client accepts the shared comment fixture without rebinding native evidence', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client } = await readyNativeClient(t, {
+        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
+        preserveProjectCompositionFixtureEvidence: true,
+    });
+    const vector = PROJECT_COMPOSITION_VECTORS.get('ae.project.item.comment.set');
+    const result = await client.invoke({
+        requestId: vector.request.requestId,
+        capabilityId: vector.request.params.capabilityId,
+        capabilityVersion: vector.request.params.capabilityVersion,
+        arguments: structuredClone(vector.request.params.arguments),
+        deadlineUnixMs: vector.request.deadlineUnixMs,
+    });
+    assert.equal(
+        result.evidence.requestDigest,
+        vector.response.result.evidence.requestDigest,
+    );
+    assert.deepEqual(result.value, vector.response.result.value);
+});
+
+test('CEP client rejects tampered #150 read evidence as a contract mismatch', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client } = await readyNativeClient(t, {
+        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
+        mutateInvoke: function (result, request) {
+            if (request.params.capabilityId === 'ae.project.context.read') {
+                result.value.unadvertised = true;
+            }
+        },
+    });
+    const vector = PROJECT_COMPOSITION_VECTORS.get('ae.project.context.read');
+    await assert.rejects(
+        client.invoke({
+            requestId: 'issue150-read-tamper',
+            capabilityId: 'ae.project.context.read',
+            capabilityVersion: 1,
+            arguments: structuredClone(vector.request.params.arguments),
+            deadlineUnixMs: 1900000005000,
+        }),
+        { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false, sideEffect: 'not-started' },
+    );
+});
+
+test('CEP client treats tampered #150 write evidence as side-effect uncertain', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client } = await readyNativeClient(t, {
+        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
+        mutateInvoke: function (result, request) {
+            if (request.params.capabilityId === 'ae.project.item.comment.set') {
+                result.value.afterComment = result.value.beforeComment;
+            }
+        },
+    });
+    const vector = PROJECT_COMPOSITION_VECTORS.get('ae.project.item.comment.set');
+    await assert.rejects(
+        client.invoke({
+            requestId: 'issue150-write-tamper',
+            capabilityId: 'ae.project.item.comment.set',
+            capabilityVersion: 1,
+            arguments: structuredClone(vector.request.params.arguments),
+            deadlineUnixMs: 1900000005000,
+        }),
+        function (error) {
+            assert.equal(error.code, 'POSSIBLY_SIDE_EFFECTING_FAILURE');
+            assert.equal(error.retryable, false);
+            assert.equal(error.sideEffect, 'may-have-occurred');
+            assert.equal(error.recovery.action, 'inspect-state');
+            assert.deepEqual(error.details, {
+                capabilityId: 'ae.project.item.comment.set',
+            });
+            return true;
+        },
+    );
+});
 
 test('descriptor and fixed transport messages are strict and closed', () => {
     assert.equal(endpointDescriptor(descriptor('s-123456abcdef.sock')).hostInstanceId, HOST);

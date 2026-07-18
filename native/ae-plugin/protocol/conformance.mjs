@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
 
 export const LIMITS = Object.freeze({
-  maxFrameBytes: 131072,
+  maxFrameBytes: 524288,
   maxJsonDepth: 16,
-  maxJsonNodes: 4096,
+  maxJsonNodes: 8192,
   maxStringLength: 8192,
   defaultDeadlineMs: 5000,
   maximumDeadlineMs: 30000,
@@ -121,6 +121,46 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.layer.property.set.input.v1',
     resultContractId: 'aemcp.contract.ae.layer.property.set.result.v1',
   }),
+  Object.freeze({
+    id: 'ae.project.context.read', version: 1,
+    inputContractId: 'aemcp.contract.ae.project.context.read.input.v1',
+    resultContractId: 'aemcp.contract.ae.project.context.read.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.project.item.metadata.read', version: 1,
+    inputContractId: 'aemcp.contract.ae.project.item.metadata.read.input.v1',
+    resultContractId: 'aemcp.contract.ae.project.item.metadata.read.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.composition.settings.read', version: 1,
+    inputContractId: 'aemcp.contract.ae.composition.settings.read.input.v1',
+    resultContractId: 'aemcp.contract.ae.composition.settings.read.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.composition.work-area.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.composition.work-area.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.composition.work-area.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.project.item.name.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.project.item.name.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.project.item.name.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.project.item.comment.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.project.item.comment.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.project.item.comment.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.project.item.label.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.project.item.label.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.project.item.label.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.composition.duplicate', version: 1,
+    inputContractId: 'aemcp.contract.ae.composition.duplicate.input.v1',
+    resultContractId: 'aemcp.contract.ae.composition.duplicate.result.v1',
+  }),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -191,6 +231,17 @@ function isPositiveRatioInput(value) {
     && value.numerator <= 2147483647
     && Number.isInteger(value.denominator) && value.denominator >= 1
     && value.denominator <= 2147483647;
+}
+
+function isTimeInput(value, minimum) {
+  return exactKeys(value, new Set(['value', 'scale']), ['value', 'scale'])
+    && Number.isInteger(value.value) && value.value >= minimum && value.value <= 2147483647
+    && Number.isInteger(value.scale) && value.scale >= 1 && value.scale <= 4294967295;
+}
+
+function isIdempotencyKey(value) {
+  return typeof value === 'string'
+    && /^[A-Za-z0-9][A-Za-z0-9._:-]{15,63}$/u.test(value);
 }
 
 function sameLocatorContext(left, right) {
@@ -833,6 +884,68 @@ export function classifyRequest(message) {
           || !isLocatorShape(args.propertyLocator, ['stream'])
           || !Number.isSafeInteger(args.offset) || args.offset < 0
           || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 25) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.project.context.read') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['selectionOffset', 'selectionLimit']),
+        ['selectionOffset', 'selectionLimit'])
+          || !Number.isSafeInteger(args.selectionOffset) || args.selectionOffset < 0
+          || !Number.isInteger(args.selectionLimit)
+          || args.selectionLimit < 1 || args.selectionLimit > 50) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.project.item.metadata.read') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['itemLocator']), ['itemLocator'])
+          || !isLocatorShape(args.itemLocator, ['item', 'composition'])) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.composition.settings.read') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['compositionLocator']), ['compositionLocator'])
+          || !isLocatorShape(args.compositionLocator, ['composition'])) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.composition.work-area.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set([
+        'compositionLocator', 'start', 'duration', 'idempotencyKey',
+      ]), ['compositionLocator', 'start', 'duration', 'idempotencyKey'])
+          || !isLocatorShape(args.compositionLocator, ['composition'])
+          || !isTimeInput(args.start, 0) || !isTimeInput(args.duration, 1)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.project.item.name.set'
+        || params.capabilityId === 'ae.project.item.comment.set') {
+      const args = params.arguments;
+      const field = params.capabilityId === 'ae.project.item.name.set' ? 'name' : 'comment';
+      const minimum = field === 'name' ? 1 : 0;
+      const maximum = field === 'name' ? 255 : 1024;
+      if (!exactKeys(args, new Set(['itemLocator', field, 'idempotencyKey']),
+        ['itemLocator', field, 'idempotencyKey'])
+          || !isLocatorShape(args.itemLocator, ['item', 'composition'])
+          || !isBoundedScalarString(args[field], minimum, maximum)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.project.item.label.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['itemLocator', 'labelId', 'idempotencyKey']),
+        ['itemLocator', 'labelId', 'idempotencyKey'])
+          || !isLocatorShape(args.itemLocator, ['item', 'composition'])
+          || !Number.isInteger(args.labelId) || args.labelId < 0 || args.labelId > 16
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.composition.duplicate') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['compositionLocator', 'newName', 'idempotencyKey']),
+        ['compositionLocator', 'newName', 'idempotencyKey'])
+          || !isLocatorShape(args.compositionLocator, ['composition'])
+          || !isBoundedScalarString(args.newName, 1, 255)
+          || !isIdempotencyKey(args.idempotencyKey)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
     } else {
@@ -2107,6 +2220,216 @@ export function layerPropertySetDescriptor(schema) {
   };
 }
 
+const PROJECT_COMPOSITION_SPECS = Object.freeze([
+  Object.freeze({
+    id: 'ae.project.context.read', schema: 'projectContextRead',
+    summary: 'Read current After Effects project context and selected items.',
+    risk: 'read', sideEffectSummary: 'Reads project context without changing After Effects state.',
+    preconditions: ['An After Effects project must be open.'],
+    requirementId: 'aemcp.requirement.native.project-context-read',
+  }),
+  Object.freeze({
+    id: 'ae.project.item.metadata.read', schema: 'projectItemMetadataRead',
+    summary: 'Read metadata and bounded type facts for one After Effects project item.',
+    risk: 'read', sideEffectSummary: 'Reads project item metadata without changing After Effects state.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'itemLocator must come from ae.project.context.read@1 or ae.project.items.list@1.',
+    ],
+    requirementId: 'aemcp.requirement.native.project-item-metadata-read',
+  }),
+  Object.freeze({
+    id: 'ae.composition.settings.read', schema: 'compositionSettingsRead',
+    summary: 'Read exact settings for one After Effects composition.',
+    risk: 'read', sideEffectSummary: 'Reads composition settings without changing After Effects state.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'compositionLocator must come from ae.project.context.read@1 or ae.project.items.list@1.',
+    ],
+    requirementId: 'aemcp.requirement.native.composition-settings-read',
+  }),
+  Object.freeze({
+    id: 'ae.composition.work-area.set', schema: 'compositionWorkAreaSet',
+    summary: 'Set the exact work area of one After Effects composition.',
+    risk: 'write', sideEffectSummary: 'Changes one composition work area and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'compositionLocator must come from ae.project.context.read@1 or ae.project.items.list@1.',
+      'start plus duration must fit within the composition duration.',
+      'The requested work area must differ from the current work area.',
+    ],
+    requirementId: 'aemcp.requirement.native.composition-work-area-set',
+  }),
+  Object.freeze({
+    id: 'ae.project.item.name.set', schema: 'projectItemNameSet',
+    summary: 'Rename one After Effects project item.',
+    risk: 'write', sideEffectSummary: 'Changes one project item name and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'itemLocator must come from ae.project.context.read@1 or ae.project.items.list@1.',
+      'name must differ from the current project item name.',
+    ],
+    requirementId: 'aemcp.requirement.native.project-item-name-set',
+  }),
+  Object.freeze({
+    id: 'ae.project.item.comment.set', schema: 'projectItemCommentSet',
+    summary: 'Set or clear one After Effects project item comment.',
+    risk: 'write', sideEffectSummary: 'Changes one project item comment and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'itemLocator must come from ae.project.context.read@1 or ae.project.items.list@1.',
+      'comment must differ from the current project item comment.',
+    ],
+    requirementId: 'aemcp.requirement.native.project-item-comment-set',
+  }),
+  Object.freeze({
+    id: 'ae.project.item.label.set', schema: 'projectItemLabelSet',
+    summary: 'Set one numeric After Effects project item label slot.',
+    risk: 'write', sideEffectSummary: 'Changes one project item label and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'itemLocator must come from ae.project.context.read@1 or ae.project.items.list@1.',
+      'labelId must differ from the current project item label.',
+    ],
+    requirementId: 'aemcp.requirement.native.project-item-label-set',
+  }),
+  Object.freeze({
+    id: 'ae.composition.duplicate', schema: 'compositionDuplicate',
+    summary: 'Duplicate one After Effects composition with an explicit new name.',
+    risk: 'write', sideEffectSummary: 'Adds one composition and creates one After Effects Undo step.',
+    preconditions: [
+      'An After Effects project must be open.',
+      'compositionLocator must come from ae.project.context.read@1 or ae.project.items.list@1.',
+    ],
+    requirementId: 'aemcp.requirement.native.composition-duplicate',
+  }),
+]);
+
+function packageExample(spec) {
+  const projectLocator = syntheticDescriptorLocator(
+    'project', '55555555-5555-4555-8555-555555555555',
+  );
+  const itemLocator = syntheticDescriptorLocator(
+    'item', '77777777-7777-4777-8777-777777777777',
+  );
+  const compositionLocator = syntheticDescriptorLocator(
+    'composition', '66666666-6666-4666-8666-666666666666',
+  );
+  const newCompositionLocator = {
+    ...syntheticDescriptorLocator('composition', '88888888-8888-4888-8888-888888888888'),
+    projectId: '55555555-5555-4555-8555-555555555555',
+    generation: 9,
+  };
+  const exactTime = (value, scale = 1) => ({
+    value, scale, secondsRational: scale === 1 ? String(value) : `${value}/${scale}`,
+  });
+  const settings = (name) => ({
+    name, width: 1920, height: 1080,
+    duration: exactTime(5), frameDuration: exactTime(1, 24),
+    frameRate: { numerator: 24, denominator: 1, rational: '24' },
+    pixelAspectRatio: { numerator: 1, denominator: 1, rational: '1' },
+    workArea: { start: exactTime(0), duration: exactTime(5) },
+    displayStartTime: exactTime(0), layerCount: 0,
+  });
+  const entries = {
+    'ae.project.context.read': {
+      arguments: { selectionOffset: 0, selectionLimit: 25 },
+      value: { projectLocator, generation: 8, activeItem: null,
+        mostRecentlyUsedComposition: null,
+        selection: { total: 0, offset: 0, limit: 25, returned: 0,
+          hasMore: false, nextOffset: null, items: [] } },
+      action: 'open-project', errorCode: 'PRECONDITION_FAILED',
+    },
+    'ae.project.item.metadata.read': {
+      arguments: { itemLocator },
+      value: { itemLocator, name: 'SYNTHETIC_ITEM', type: 'footage',
+        parentLocator: projectLocator, comment: '', labelId: 0 },
+      action: 'refresh-locator', errorCode: 'STALE_LOCATOR',
+    },
+    'ae.composition.settings.read': {
+      arguments: { compositionLocator },
+      value: { compositionLocator, ...settings('SYNTHETIC_COMPOSITION') },
+      action: 'refresh-locator', errorCode: 'STALE_LOCATOR',
+    },
+    'ae.composition.work-area.set': {
+      arguments: { compositionLocator, start: { value: 0, scale: 1 },
+        duration: { value: 4, scale: 1 }, idempotencyKey: 'synthetic-work-area-0001' },
+      value: { changed: true, compositionLocator,
+        beforeWorkArea: { start: exactTime(0), duration: exactTime(5) },
+        afterWorkArea: { start: exactTime(0), duration: exactTime(4) } },
+      action: 'refresh-locator', errorCode: 'STALE_LOCATOR',
+    },
+    'ae.project.item.name.set': {
+      arguments: { itemLocator, name: 'SYNTHETIC_RENAMED',
+        idempotencyKey: 'synthetic-item-name-0001' },
+      value: { changed: true, itemLocator, beforeName: 'SYNTHETIC_ITEM',
+        afterName: 'SYNTHETIC_RENAMED' },
+      action: 'refresh-locator', errorCode: 'STALE_LOCATOR',
+    },
+    'ae.project.item.comment.set': {
+      arguments: { itemLocator, comment: 'SYNTHETIC_COMMENT',
+        idempotencyKey: 'synthetic-item-comment-0001' },
+      value: { changed: true, itemLocator, beforeComment: '',
+        afterComment: 'SYNTHETIC_COMMENT' },
+      action: 'refresh-locator', errorCode: 'STALE_LOCATOR',
+    },
+    'ae.project.item.label.set': {
+      arguments: { itemLocator, labelId: 3, idempotencyKey: 'synthetic-item-label-0001' },
+      value: { changed: true, itemLocator, beforeLabelId: 0, afterLabelId: 3 },
+      action: 'refresh-locator', errorCode: 'STALE_LOCATOR',
+    },
+    'ae.composition.duplicate': {
+      arguments: { compositionLocator, newName: 'SYNTHETIC_COPY',
+        idempotencyKey: 'synthetic-comp-duplicate-0001' },
+      value: { changed: true,
+        sourceCompositionLocator: { ...compositionLocator,
+          projectId: '55555555-5555-4555-8555-555555555555', generation: 9,
+          objectId: '77777777-7777-4777-8777-777777777777' },
+        newCompositionLocator, projectItemCountBefore: 1, projectItemCountAfter: 2,
+        sourceSettings: settings('SYNTHETIC_COMPOSITION'),
+        newSettings: settings('SYNTHETIC_COPY') },
+      action: 'refresh-locator', errorCode: 'STALE_LOCATOR',
+    },
+  };
+  return entries[spec.id];
+}
+
+export function projectCompositionDescriptors(schema) {
+  return PROJECT_COMPOSITION_SPECS.map((spec) => {
+    const registration = INVOKE_REGISTRY.find((candidate) => candidate.id === spec.id);
+    const example = packageExample(spec);
+    const inputSchema = structuredClone(schema.$defs[`${spec.schema}InputSchemaContract`].const);
+    const resultSchema = structuredClone(schema.$defs[`${spec.schema}ResultSchemaContract`].const);
+    const stem = spec.id.replace(/^ae\./u, '').replaceAll('.', '-');
+    return {
+      detail: 'full', id: spec.id, version: 1, schemaVersion: 1,
+      summary: spec.summary, risk: spec.risk,
+      mutability: spec.risk === 'read' ? 'read-only' : 'mutating',
+      idempotency: spec.risk === 'read' ? 'idempotent' : 'idempotency-key',
+      cancellation: 'before-dispatch',
+      undo: spec.risk === 'read' ? 'not-applicable' : 'ae-undo-group',
+      sideEffectSummary: spec.sideEffectSummary,
+      preconditions: [...spec.preconditions],
+      compatibility: { status: 'unverified', intendedPlatforms: ['macos-arm64', 'windows-x64'] },
+      inputContractId: registration.inputContractId,
+      resultContractId: registration.resultContractId,
+      contractDigest: sha256Jcs({ inputSchema, resultSchema }),
+      inputSchema, resultSchema,
+      requirements: [{ id: spec.requirementId, contractVersion: 1 }],
+      examples: [
+        { id: `aemcp-example-${stem}`, kind: 'positive',
+          summary: 'Synthetic success demonstrates the typed result contract.',
+          arguments: structuredClone(example.arguments),
+          expected: { outcome: 'succeeded', value: structuredClone(example.value) } },
+        { id: `aemcp-example-${stem}-stale`, kind: 'negative',
+          summary: 'Synthetic failure exercises the documented recovery path.',
+          arguments: structuredClone(example.arguments),
+          expected: { errorCode: example.errorCode, recoveryAction: example.action } },
+      ],
+    };
+  });
+}
+
 export function nativeCapabilityRegistry(schema) {
   return [
     projectSummaryDescriptor(schema),
@@ -2123,6 +2446,7 @@ export function nativeCapabilityRegistry(schema) {
     layerPropertiesListDescriptor(schema),
     layerPropertyKeyframesListDescriptor(schema),
     layerPropertySetDescriptor(schema),
+    ...projectCompositionDescriptors(schema),
   ];
 }
 
@@ -2337,6 +2661,123 @@ function positiveRatiosEqual(left, right) {
     && canonicalPositiveRatio(right?.numerator, right?.denominator) !== null
     && BigInt(left.numerator) * BigInt(right.denominator)
       === BigInt(right.numerator) * BigInt(left.denominator);
+}
+
+function validateExactTime(value) {
+  return canonicalSecondsRational(value?.value, value?.scale) === value?.secondsRational;
+}
+
+function validatePositiveRatio(value) {
+  return canonicalPositiveRatio(value?.numerator, value?.denominator) === value?.rational;
+}
+
+function validateSettingsSnapshot(value) {
+  return isPlainObject(value)
+    && validateExactTime(value.duration)
+    && validateExactTime(value.frameDuration)
+    && validatePositiveRatio(value.frameRate)
+    && validatePositiveRatio(value.pixelAspectRatio)
+    && validateExactTime(value.workArea?.start)
+    && validateExactTime(value.workArea?.duration)
+    && validateExactTime(value.displayStartTime);
+}
+
+function validateProjectCompositionResult(request, result, helloContext, schema) {
+  const id = request.params.capabilityId;
+  const packageIds = new Set(PROJECT_COMPOSITION_SPECS.map((spec) => spec.id));
+  if (!packageIds.has(id)) return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  const expectedKind = PROJECT_COMPOSITION_SPECS.find((spec) => spec.id === id).schema
+    .replace(/([A-Z])/gu, '-$1').toLowerCase();
+  if (result.evidence.postcondition.kind !== expectedKind) return false;
+  const hostId = helloContext.response.result.host.instanceId;
+  const locatorValid = (locator, kinds) => isLocatorShape(locator, kinds)
+    && locator.hostInstanceId === hostId && locator.sessionId === request.sessionId
+    && validateLocator(locator, locatorContext(locator), schema);
+
+  if (id === 'ae.project.context.read') {
+    if (!locatorValid(value.projectLocator, ['project'])
+        || value.generation !== value.projectLocator.generation
+        || value.selection.offset !== args.selectionOffset
+        || value.selection.limit !== args.selectionLimit
+        || !validatePageMetadata({ ...value.selection, selected: value.selection.items },
+          { offset: args.selectionOffset, limit: args.selectionLimit }, 'selected')) return false;
+    const context = locatorContext(value.projectLocator);
+    const validEntry = (entry) => entry === null || (
+      validateLocator(entry.locator, context, schema)
+      && validateLocator(entry.parentLocator, context, schema)
+      && (entry.type === 'composition') === (entry.locator.kind === 'composition')
+    );
+    return validEntry(value.activeItem)
+      && validEntry(value.mostRecentlyUsedComposition)
+      && (value.mostRecentlyUsedComposition === null
+        || value.mostRecentlyUsedComposition.type === 'composition')
+      && value.selection.items.every(validEntry);
+  }
+
+  if (id === 'ae.project.item.metadata.read') {
+    if (!jsonDeepEqual(value.itemLocator, args.itemLocator)
+        || !locatorValid(value.itemLocator, ['item', 'composition'])
+        || value.parentLocator !== null
+          && !validateLocator(value.parentLocator, locatorContext(value.itemLocator), schema)
+        || (value.type === 'composition') !== (value.itemLocator.kind === 'composition')) return false;
+    return (value.duration === undefined || validateExactTime(value.duration))
+      && (value.pixelAspectRatio === undefined || validatePositiveRatio(value.pixelAspectRatio));
+  }
+
+  if (id === 'ae.composition.settings.read') {
+    return jsonDeepEqual(value.compositionLocator, args.compositionLocator)
+      && locatorValid(value.compositionLocator, ['composition'])
+      && validateSettingsSnapshot(value);
+  }
+
+  if (id === 'ae.composition.work-area.set') {
+    return value.changed === true
+      && jsonDeepEqual(value.compositionLocator, args.compositionLocator)
+      && locatorValid(value.compositionLocator, ['composition'])
+      && validateExactTime(value.beforeWorkArea?.start)
+      && validateExactTime(value.beforeWorkArea?.duration)
+      && validateExactTime(value.afterWorkArea?.start)
+      && validateExactTime(value.afterWorkArea?.duration)
+      && compositionTimesEqual(value.afterWorkArea.start, args.start)
+      && compositionTimesEqual(value.afterWorkArea.duration, args.duration)
+      && (!compositionTimesEqual(value.beforeWorkArea.start, value.afterWorkArea.start)
+        || !compositionTimesEqual(value.beforeWorkArea.duration, value.afterWorkArea.duration));
+  }
+
+  if (id === 'ae.project.item.name.set' || id === 'ae.project.item.comment.set') {
+    const field = id === 'ae.project.item.name.set' ? 'Name' : 'Comment';
+    return value.changed === true
+      && jsonDeepEqual(value.itemLocator, args.itemLocator)
+      && locatorValid(value.itemLocator, ['item', 'composition'])
+      && value[`after${field}`] === args[field.toLowerCase()]
+      && value[`before${field}`] !== value[`after${field}`];
+  }
+
+  if (id === 'ae.project.item.label.set') {
+    return value.changed === true
+      && jsonDeepEqual(value.itemLocator, args.itemLocator)
+      && locatorValid(value.itemLocator, ['item', 'composition'])
+      && value.afterLabelId === args.labelId
+      && value.beforeLabelId !== value.afterLabelId;
+  }
+
+  const source = value.sourceCompositionLocator;
+  const duplicate = value.newCompositionLocator;
+  if (value.changed !== true
+      || !locatorValid(source, ['composition']) || !locatorValid(duplicate, ['composition'])
+      || source.hostInstanceId !== args.compositionLocator.hostInstanceId
+      || source.sessionId !== args.compositionLocator.sessionId
+      || source.projectId === args.compositionLocator.projectId
+      || source.generation <= args.compositionLocator.generation
+      || duplicate.objectId === source.objectId
+      || !sameLocatorContext(source, duplicate)
+      || value.projectItemCountAfter !== value.projectItemCountBefore + 1
+      || !validateSettingsSnapshot(value.sourceSettings)
+      || !validateSettingsSnapshot(value.newSettings)
+      || value.newSettings.name !== args.newName) return false;
+  return true;
 }
 
 function validateNavigationResult(request, result, helloContext, schema) {
@@ -2951,7 +3392,7 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set']
+            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set', 'ae.composition.work-area.set', 'ae.project.item.name.set', 'ae.project.item.comment.set', 'ae.project.item.label.set', 'ae.composition.duplicate']
               .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
@@ -2966,6 +3407,7 @@ export function validateTranscript(context, request, messages) {
     && validateLayerEffectApplyResult(request, result, helloContext, schema)
     && validateLayerPropertyKeyframesResult(request, result, helloContext, schema)
     && validateLayerPropertySetResult(request, result, helloContext, schema)
+    && validateProjectCompositionResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest
     && evidence.postcondition.digest === resultDigest;

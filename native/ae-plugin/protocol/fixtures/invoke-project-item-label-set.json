@@ -1,0 +1,122 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "request": {
+    "wireVersion": 1,
+    "kind": "request",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-item-label-set-1",
+    "method": "invoke",
+    "deadlineUnixMs": 1900000005000,
+    "params": {
+      "capabilityId": "ae.project.item.label.set",
+      "capabilityVersion": 1,
+      "arguments": {
+        "itemLocator": {
+          "kind": "item",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "44444444-4444-4444-8444-444444444444",
+          "generation": 8,
+          "objectId": "77777777-7777-4777-8777-777777777777"
+        },
+        "labelId": 3,
+        "idempotencyKey": "synthetic-item-label-0001"
+      }
+    }
+  },
+  "events": [
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-item-label-set-1",
+      "event": "progress",
+      "sequence": 1,
+      "progress": {
+        "phase": "queued",
+        "fraction": 0,
+        "message": "Queued for the bounded main-thread dispatcher."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-item-label-set-1",
+      "event": "progress",
+      "sequence": 2,
+      "progress": {
+        "phase": "dispatched",
+        "fraction": 0.5,
+        "message": "Entered the synthetic host-thread dispatch phase."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-item-label-set-1",
+      "event": "progress",
+      "sequence": 3,
+      "progress": {
+        "phase": "validating",
+        "fraction": 0.9,
+        "message": "Validating the bounded synthetic result."
+      }
+    }
+  ],
+  "response": {
+    "wireVersion": 1,
+    "kind": "response",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-item-label-set-1",
+    "method": "invoke",
+    "ok": true,
+    "replayed": false,
+    "result": {
+      "capabilityId": "ae.project.item.label.set",
+      "capabilityVersion": 1,
+      "engine": "native-aegp",
+      "outcome": "succeeded",
+      "value": {
+        "changed": true,
+        "itemLocator": {
+          "kind": "item",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "44444444-4444-4444-8444-444444444444",
+          "generation": 8,
+          "objectId": "77777777-7777-4777-8777-777777777777"
+        },
+        "beforeLabelId": 0,
+        "afterLabelId": 3
+      },
+      "evidence": {
+        "engine": "native-aegp",
+        "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "requestId": "invoke-item-label-set-1",
+        "capabilityId": "ae.project.item.label.set",
+        "capabilityVersion": 1,
+        "startedAtUnixMs": 1900000000000,
+        "completedAtUnixMs": 1900000000025,
+        "effect": "committed",
+        "requestDigest": "c59522093f3b5a13b84798e1e5f0cce8be3264dc2cbb1de3600ad3a79ef08110",
+        "postcondition": {
+          "verified": true,
+          "kind": "project-item-label-set",
+          "algorithm": "sha256-rfc8785-jcs-v1",
+          "digest": "59eee3aaedaf8b1da56ef60c1a0d662ff8eafbedd93043cc24e10ad3d340b2fa"
+        },
+        "undo": {
+          "available": true,
+          "verified": false
+        }
+      }
+    }
+  }
+}

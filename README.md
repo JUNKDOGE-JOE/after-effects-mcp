@@ -108,8 +108,8 @@ External clients must run on the same machine as After Effects, or otherwise be 
 
 | Category | Tools |
 |---|---|
-| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_listLayerPropertyKeyframes`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
-| Mutation | `ae_exec`, `ae_applyEffect`, `ae_applyLayerEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
+| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_getProjectContext`, `ae_getProjectItemMetadata`, `ae_getCompositionSettings`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_listLayerPropertyKeyframes`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
+| Mutation | `ae_exec`, `ae_applyEffect`, `ae_applyLayerEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setCompositionWorkArea`, `ae_renameProjectItem`, `ae_setProjectItemComment`, `ae_setProjectItemLabel`, `ae_duplicateComposition`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
 | Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
 | Preview / capture | `ae_previewFrame`, `ae_snapshot` |
 | Rigging | `ae_createRig` |
@@ -277,6 +277,21 @@ effect counts each increased by exactly one, and returns the insertion index, ef
 fresh layer locator, native provenance, audit evidence, and Undo availability. The same intent
 replays without adding a duplicate. Use the returned locator to inspect the Effects group; after
 `POSSIBLY_SIDE_EFFECTING_FAILURE`, inspect AE state and audit before any retry.
+The Project / Composition Operations package adds three native-only reads and five native-only
+writes. `ae_getProjectContext(selection_offset?, selection_limit?)` returns the active item, most
+recently used composition, and a bounded Project-panel selection; its locators feed
+`ae_getProjectItemMetadata(item_locator)` and
+`ae_getCompositionSettings(composition_locator)`. The write tools are
+`ae_setCompositionWorkArea(composition_locator, start, duration, idempotency_key)`,
+`ae_renameProjectItem(item_locator, name, idempotency_key)`,
+`ae_setProjectItemComment(item_locator, comment, idempotency_key)`,
+`ae_setProjectItemLabel(item_locator, label_id, idempotency_key)`, and
+`ae_duplicateComposition(composition_locator, new_name, idempotency_key)`. Each write executes in
+one AE Undo group and returns verified before/after state, native provenance, audit evidence, and
+Undo availability. The call does not execute Undo for the user: hardware acceptance and callers
+that need restoration must perform real AE Undo and re-read the full project context, item
+metadata, and composition settings to prove the baseline was restored. After an uncertain write
+failure, reconcile AE state and audit before retrying.
 These native tools fail explicitly when the native plane is unavailable and never fall back to JSX.
 
 CEP panel macOS development setup:

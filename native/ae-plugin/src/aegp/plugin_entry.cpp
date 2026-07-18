@@ -28,6 +28,7 @@
 #include <memory>
 #include <mutex>
 #include <new>
+#include <numeric>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
@@ -58,6 +59,7 @@
 namespace {
 
 using namespace std::chrono_literals;
+using aemcp::native::BoundedPageBudget;
 using aemcp::native::Completion;
 using aemcp::native::DrainBatch;
 using aemcp::native::HostApi;
@@ -72,6 +74,13 @@ using aemcp::native::HostLayerEffectApplyResult;
 using aemcp::native::HostDispatcher;
 using aemcp::native::HostReadResult;
 using aemcp::native::HostProjectItemsResult;
+using aemcp::native::HostProjectContextResult;
+using aemcp::native::HostProjectItemMetadataResult;
+using aemcp::native::HostCompositionSettingsResult;
+using aemcp::native::HostCompositionWorkAreaWriteResult;
+using aemcp::native::HostProjectItemTextWriteResult;
+using aemcp::native::HostProjectItemLabelWriteResult;
+using aemcp::native::HostCompositionDuplicateResult;
 using aemcp::native::HostProjectGraphInvalidationResult;
 using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::HostLayerPropertyKeyframesResult;
@@ -90,6 +99,14 @@ using aemcp::native::ProjectBitDepthChanged;
 using aemcp::native::ProjectEpochTracker;
 using aemcp::native::ProjectObservation;
 using aemcp::native::ProjectSummary;
+using aemcp::native::ProjectContext;
+using aemcp::native::ProjectItemEntry;
+using aemcp::native::ProjectItemMetadata;
+using aemcp::native::CompositionCurrentTime;
+using aemcp::native::CompositionPositiveRatio;
+using aemcp::native::CompositionSettings;
+using aemcp::native::CompositionWorkAreaChanged;
+using aemcp::native::CompositionDuplicated;
 using aemcp::native::ObjectLocator;
 using aemcp::native::Request;
 using aemcp::native::SystemClock;
@@ -108,6 +125,14 @@ using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kLayerPropertiesListCapability;
 using aemcp::native::kLayerPropertyKeyframesListCapability;
 using aemcp::native::kLayerPropertySetCapability;
+using aemcp::native::kProjectContextReadCapability;
+using aemcp::native::kProjectItemMetadataReadCapability;
+using aemcp::native::kCompositionSettingsReadCapability;
+using aemcp::native::kCompositionWorkAreaSetCapability;
+using aemcp::native::kProjectItemNameSetCapability;
+using aemcp::native::kProjectItemCommentSetCapability;
+using aemcp::native::kProjectItemLabelSetCapability;
+using aemcp::native::kCompositionDuplicateCapability;
 using aemcp::native::kProjectGraphInvalidateControl;
 using aemcp::native::locate_unique_insertion;
 
@@ -116,7 +141,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "f589837c77ed835fc240c010e2a7a8c5582fbbe92130cbc84595abb33bb22236";
+    "12640c0306641fd32553828d86a4c87728a2c964fe0d288c06a7107fcf9cfdd9";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -145,9 +170,81 @@ constexpr std::string_view kLayerPropertyKeyframesListContractDigest =
     "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb";
 constexpr std::string_view kLayerPropertySetContractDigest =
     "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c";
+constexpr std::string_view kProjectContextReadContractDigest =
+    "ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca";
+constexpr std::string_view kProjectItemMetadataReadContractDigest =
+    "b13139c0b2e8073f6606bfbead1e59eb7fea63ec10a164b500e19ff8babd0f69";
+constexpr std::string_view kCompositionSettingsReadContractDigest =
+    "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b";
+constexpr std::string_view kCompositionWorkAreaSetContractDigest =
+    "a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997";
+constexpr std::string_view kProjectItemNameSetContractDigest =
+    "b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538";
+constexpr std::string_view kProjectItemCommentSetContractDigest =
+    "957985628474caa9c9cef3de76a2839e59691232b062b776ff800a79dd3cc35c";
+constexpr std::string_view kProjectItemLabelSetContractDigest =
+    "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f";
+constexpr std::string_view kCompositionDuplicateContractDigest =
+    "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3";
 constexpr std::int64_t kMaximumProjectItems = 100000;
 constexpr A_long kMaximumLayerEffects = 4096;
 static_assert(kSourceCommit.size() == 40);
+
+constexpr bool exact_nonnegative_fraction_leq(
+    std::uint64_t left_numerator,
+    std::uint64_t left_denominator,
+    std::uint64_t right_numerator,
+    std::uint64_t right_denominator) {
+  bool reversed = false;
+  for (;;) {
+    const std::uint64_t left_quotient = left_numerator / left_denominator;
+    const std::uint64_t right_quotient = right_numerator / right_denominator;
+    if (left_quotient != right_quotient) {
+      return reversed ? left_quotient > right_quotient
+                      : left_quotient < right_quotient;
+    }
+    left_numerator %= left_denominator;
+    right_numerator %= right_denominator;
+    if (left_numerator == 0 || right_numerator == 0) {
+      if (left_numerator == right_numerator) return true;
+      return reversed ? left_numerator != 0 : left_numerator == 0;
+    }
+    std::swap(left_numerator, left_denominator);
+    std::swap(right_numerator, right_denominator);
+    reversed = !reversed;
+  }
+}
+
+constexpr bool exact_nonnegative_time_sum_leq(
+    std::int32_t left_value,
+    std::uint32_t left_scale,
+    std::int32_t right_value,
+    std::uint32_t right_scale,
+    std::int32_t limit_value,
+    std::uint32_t limit_scale) {
+  if (left_value < 0 || right_value < 0 || limit_value < 0
+      || left_scale == 0 || right_scale == 0 || limit_scale == 0) {
+    return false;
+  }
+  const std::uint64_t common = std::gcd(left_scale, right_scale);
+  const std::uint64_t left_factor = right_scale / common;
+  const std::uint64_t right_factor = left_scale / common;
+  const std::uint64_t numerator =
+      static_cast<std::uint64_t>(left_value) * left_factor
+      + static_cast<std::uint64_t>(right_value) * right_factor;
+  const std::uint64_t denominator =
+      static_cast<std::uint64_t>(left_scale) * left_factor;
+  return exact_nonnegative_fraction_leq(
+      numerator, denominator,
+      static_cast<std::uint64_t>(limit_value), limit_scale);
+}
+
+static_assert(exact_nonnegative_time_sum_leq(
+    2147483646, 4294967295U, 1, 4294967295U,
+    2147483647, 4294967295U));
+static_assert(!exact_nonnegative_time_sum_leq(
+    2147483646, 4294967295U, 2, 4294967295U,
+    2147483647, 4294967295U));
 
 std::string json_escape(std::string_view input) {
   std::ostringstream escaped;
@@ -387,9 +484,12 @@ class MemHandleOwner final {
   bool locked_{false};
 };
 
-[[nodiscard]] std::optional<std::vector<A_UTF16Char>> utf16_layer_name(
-    std::string_view input) {
-  if (input.empty() || input.size() > 1024) return std::nullopt;
+[[nodiscard]] std::optional<std::vector<A_UTF16Char>> utf16_bounded_text(
+    std::string_view input, std::size_t maximum_scalars, bool allow_empty) {
+  if ((!allow_empty && input.empty()) || maximum_scalars == 0
+      || maximum_scalars > 1024 || input.size() > maximum_scalars * 4) {
+    return std::nullopt;
+  }
   std::vector<A_UTF16Char> output;
   output.reserve(input.size() + 1);
   std::size_t scalars = 0;
@@ -421,7 +521,7 @@ class MemHandleOwner final {
         || (trailing == 3 && scalar < 0x10000U)
         || scalar == 0 || scalar > 0x10ffffU
         || (scalar >= 0xd800U && scalar <= 0xdfffU)
-        || ++scalars > 255) {
+        || ++scalars > maximum_scalars) {
       return std::nullopt;
     }
     if (scalar <= 0xffffU) {
@@ -434,6 +534,11 @@ class MemHandleOwner final {
   }
   output.push_back(0);
   return output;
+}
+
+[[nodiscard]] std::optional<std::vector<A_UTF16Char>> utf16_layer_name(
+    std::string_view input) {
+  return utf16_bounded_text(input, 255, false);
 }
 
 [[nodiscard]] std::optional<std::uint64_t> count_project_items(
@@ -813,6 +918,21 @@ class ProjectGraphRegistry final {
       std::string_view session) const {
     if (locator.kind != "composition" || locator.host_instance_id != host
         || locator.session_id != session || locator.project_id != project_id_
+        || locator.generation != epoch_.generation()) {
+      return std::nullopt;
+    }
+    const auto found = item_ids_by_object_.find(locator.object_id);
+    return found == item_ids_by_object_.end()
+        ? std::nullopt : std::optional<A_long>(found->second);
+  }
+
+  [[nodiscard]] std::optional<A_long> resolve_project_item(
+      const ObjectLocator& locator,
+      std::string_view host,
+      std::string_view session) const {
+    if ((locator.kind != "item" && locator.kind != "composition")
+        || locator.host_instance_id != host || locator.session_id != session
+        || locator.project_id != project_id_
         || locator.generation != epoch_.generation()) {
       return std::nullopt;
     }
@@ -1591,6 +1711,658 @@ class AegpHostApi final : public HostApi {
     page.has_more = query.offset + page.items.size() < page.total;
     if (page.has_more) page.next_offset = query.offset + page.items.size();
     return HostProjectItemsResult::success(std::move(page));
+  }
+
+  [[nodiscard]] HostProjectContextResult read_project_context(
+      const aemcp::native::ProjectContextQuery& query,
+      TimePoint work_deadline) override {
+    const auto expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostProjectContextResult::failure(
+          "NATIVE_UNSUPPORTED", "required project context suites are unavailable");
+    }
+    if (expired()) {
+      return HostProjectContextResult::failure(
+          "DEADLINE_EXCEEDED", "project context budget elapsed");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    if (!open.has_value()) {
+      return HostProjectContextResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+    ProjectContext context;
+    context.project_locator = graph_.project_locator(
+        query.host_instance_id, query.session_id);
+    context.selection_offset = query.selection_offset;
+    context.selection_limit = query.selection_limit;
+
+    AEGP_ItemH active = nullptr;
+    if (item_suite->AEGP_GetActiveItem(&active) != A_Err_NONE) {
+      return HostProjectContextResult::failure(
+          "CAPABILITY_FAILED", "could not read the active Project-panel item");
+    }
+    if (active != nullptr) {
+      context.active_item = project_item_entry(
+          item_suite.get(), memory_suite.get(), active, open->root,
+          query.host_instance_id, query.session_id);
+      if (!context.active_item.has_value()) {
+        return HostProjectContextResult::failure(
+            "CAPABILITY_FAILED", "could not describe the active Project-panel item");
+      }
+    }
+
+    AEGP_CompH recent_comp = nullptr;
+    if (comp_suite->AEGP_GetMostRecentlyUsedComp(&recent_comp) != A_Err_NONE) {
+      return HostProjectContextResult::failure(
+          "CAPABILITY_FAILED", "could not read the most recently used composition");
+    }
+    if (recent_comp != nullptr) {
+      AEGP_ItemH recent_item = nullptr;
+      if (comp_suite->AEGP_GetItemFromComp(recent_comp, &recent_item) != A_Err_NONE
+          || recent_item == nullptr) {
+        return HostProjectContextResult::failure(
+            "CAPABILITY_FAILED", "could not resolve the most recently used composition item");
+      }
+      context.most_recently_used_composition = project_item_entry(
+          item_suite.get(), memory_suite.get(), recent_item, open->root,
+          query.host_instance_id, query.session_id);
+      if (!context.most_recently_used_composition.has_value()
+          || context.most_recently_used_composition->type != "composition") {
+        return HostProjectContextResult::failure(
+            "CAPABILITY_FAILED", "most recently used composition identity was inconsistent");
+      }
+    }
+
+    BoundedPageBudget page_budget(1536U + locator_json_size(context.project_locator));
+    AEGP_ItemH item = nullptr;
+    if (item_suite->AEGP_GetNextProjItem(
+            open->project, open->root, &item) != A_Err_NONE) {
+      return HostProjectContextResult::failure(
+          "CAPABILITY_FAILED", "could not begin selected project item traversal");
+    }
+    std::uint64_t selected_position = 0;
+    std::size_t visited = 0;
+    bool response_budget_exhausted = false;
+    while (item != nullptr) {
+      if (expired()) {
+        return HostProjectContextResult::failure(
+            "DEADLINE_EXCEEDED", "selected project item traversal budget elapsed");
+      }
+      if (++visited > static_cast<std::size_t>(kMaximumProjectItems)) {
+        return HostProjectContextResult::failure(
+            "CAPABILITY_FAILED", "project item bound exceeded");
+      }
+      A_Boolean selected = FALSE;
+      if (item_suite->AEGP_IsItemSelected(item, &selected) != A_Err_NONE) {
+        return HostProjectContextResult::failure(
+            "CAPABILITY_FAILED", "could not read Project-panel selection state");
+      }
+      if (selected != FALSE) {
+        if (selected_position >= query.selection_offset
+            && context.selected_items.size() < query.selection_limit
+            && !response_budget_exhausted) {
+          auto entry = project_item_entry(
+              item_suite.get(), memory_suite.get(), item, open->root,
+              query.host_instance_id, query.session_id);
+          if (!entry.has_value()) {
+            return HostProjectContextResult::failure(
+                "CAPABILITY_FAILED", "could not describe a selected project item");
+          }
+          const std::size_t entry_bytes = project_item_json_size(*entry)
+              + (context.selected_items.empty() ? 0U : 1U);
+          if (!page_budget.try_reserve(entry_bytes)) {
+            if (context.selected_items.empty()) {
+              return HostProjectContextResult::failure(
+                  "CAPABILITY_FAILED",
+                  "one selected project item exceeds the bounded response budget");
+            }
+            response_budget_exhausted = true;
+          } else {
+            context.selected_items.push_back(std::move(*entry));
+          }
+        }
+        ++selected_position;
+      }
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(
+              open->project, item, &next) != A_Err_NONE) {
+        return HostProjectContextResult::failure(
+            "CAPABILITY_FAILED", "selected project item traversal failed");
+      }
+      item = next;
+    }
+    context.selection_total = selected_position;
+    if (query.selection_offset > context.selection_total) {
+      return HostProjectContextResult::failure(
+          "INVALID_ARGUMENT", "selectionOffset exceeds the current selection total",
+          "params.arguments.selectionOffset");
+    }
+    context.selection_has_more = query.selection_offset
+        + context.selected_items.size() < context.selection_total;
+    if (context.selection_has_more) {
+      context.selection_next_offset = query.selection_offset
+          + context.selected_items.size();
+    }
+    return HostProjectContextResult::success(std::move(context));
+  }
+
+  [[nodiscard]] HostProjectItemMetadataResult read_project_item_metadata(
+      const aemcp::native::ProjectItemQuery& query,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr) {
+      return HostProjectItemMetadataResult::failure(
+          "NATIVE_UNSUPPORTED", "required project item metadata suites are unavailable");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    const auto item_id = graph_.resolve_project_item(
+        query.item_locator, query.host_instance_id, query.session_id);
+    if (!open.has_value() || !item_id.has_value()) {
+      return HostProjectItemMetadataResult::failure(
+          "STALE_LOCATOR", "itemLocator does not identify an item in the open project",
+          "params.arguments.itemLocator");
+    }
+    const auto item = find_project_item(
+        item_suite.get(), open->project, open->root, *item_id, work_deadline);
+    if (!item.has_value()) {
+      return HostProjectItemMetadataResult::failure(
+          "STALE_LOCATOR", "project item identity could not be reacquired",
+          "params.arguments.itemLocator");
+    }
+    AEGP_ItemType sdk_type = AEGP_ItemType_NONE;
+    AEGP_ItemH parent = nullptr;
+    AEGP_LabelID sdk_label = 0;
+    const auto name = read_item_name(item_suite.get(), memory_suite.get(), *item);
+    const auto comment = read_item_comment(item_suite.get(), memory_suite.get(), *item);
+    if (item_suite->AEGP_GetItemType(*item, &sdk_type) != A_Err_NONE
+        || item_suite->AEGP_GetItemParentFolder(*item, &parent) != A_Err_NONE
+        || item_suite->AEGP_GetItemLabel(*item, &sdk_label) != A_Err_NONE
+        || !name.has_value() || !comment.has_value()) {
+      return HostProjectItemMetadataResult::failure(
+          "CAPABILITY_FAILED", "could not read project item metadata");
+    }
+    const auto unsigned_label = static_cast<unsigned char>(sdk_label);
+    if (unsigned_label > 16) {
+      return HostProjectItemMetadataResult::failure(
+          "CAPABILITY_FAILED", "project item returned an unsupported label slot");
+    }
+    ProjectItemMetadata metadata;
+    metadata.item_locator = query.item_locator;
+    metadata.name = *name;
+    metadata.type = project_item_type(sdk_type);
+    metadata.comment = *comment;
+    metadata.label_id = static_cast<std::uint8_t>(unsigned_label);
+    if (parent == nullptr || parent == open->root) {
+      metadata.parent_locator = graph_.project_locator(
+          query.host_instance_id, query.session_id);
+    } else {
+      A_long parent_id = 0;
+      if (item_suite->AEGP_GetItemID(parent, &parent_id) != A_Err_NONE) {
+        return HostProjectItemMetadataResult::failure(
+            "CAPABILITY_FAILED", "could not read project item parent identity");
+      }
+      metadata.parent_locator = graph_.item_locator(
+          parent_id, false, query.host_instance_id, query.session_id);
+    }
+    if (sdk_type == AEGP_ItemType_COMP || sdk_type == AEGP_ItemType_FOOTAGE
+        || sdk_type == AEGP_ItemType_SOLID_defunct) {
+      A_long width = 0;
+      A_long height = 0;
+      A_Time duration{};
+      A_Ratio pixel_aspect{};
+      const A_Err dimensions_error = item_suite->AEGP_GetItemDimensions(
+          *item, &width, &height);
+      const A_Err duration_error = item_suite->AEGP_GetItemDuration(*item, &duration);
+      const A_Err aspect_error = item_suite->AEGP_GetItemPixelAspectRatio(
+          *item, &pixel_aspect);
+      if (sdk_type == AEGP_ItemType_COMP
+          && (dimensions_error != A_Err_NONE || duration_error != A_Err_NONE
+            || aspect_error != A_Err_NONE || width < 1 || width > 30000
+            || height < 1 || height > 30000 || duration.scale <= 0
+            || duration.value <= 0 || pixel_aspect.num <= 0
+            || pixel_aspect.den <= 0)) {
+        return HostProjectItemMetadataResult::failure(
+            "CAPABILITY_FAILED", "could not read bounded project item facts");
+      }
+      if (dimensions_error == A_Err_NONE && width >= 1 && width <= 30000) {
+        metadata.width = static_cast<std::uint32_t>(width);
+      }
+      if (dimensions_error == A_Err_NONE && height >= 1 && height <= 30000) {
+        metadata.height = static_cast<std::uint32_t>(height);
+      }
+      if (duration_error == A_Err_NONE && duration.scale > 0
+          && duration.value >= 0) {
+        metadata.duration = CompositionCurrentTime{
+            static_cast<std::int32_t>(duration.value),
+            static_cast<std::uint32_t>(duration.scale),
+            aemcp::native::canonical_seconds_rational(
+                duration.value, duration.scale)};
+      }
+      if (aspect_error == A_Err_NONE && pixel_aspect.num > 0
+          && pixel_aspect.den > 0) {
+        metadata.pixel_aspect_ratio = CompositionPositiveRatio{
+            static_cast<std::int32_t>(pixel_aspect.num),
+            static_cast<std::int32_t>(pixel_aspect.den),
+            aemcp::native::canonical_seconds_rational(
+                pixel_aspect.num, static_cast<std::uint32_t>(pixel_aspect.den))};
+      }
+    }
+    if (sdk_type == AEGP_ItemType_COMP) {
+      AEGP_CompH comp = nullptr;
+      A_long layer_count = 0;
+      if (comp_suite->AEGP_GetCompFromItem(*item, &comp) != A_Err_NONE
+          || comp == nullptr
+          || layer_suite->AEGP_GetCompNumLayers(comp, &layer_count) != A_Err_NONE
+          || layer_count < 0) {
+        return HostProjectItemMetadataResult::failure(
+            "CAPABILITY_FAILED", "could not read composition layer count");
+      }
+      metadata.layer_count = static_cast<std::uint64_t>(layer_count);
+    }
+    return HostProjectItemMetadataResult::success(std::move(metadata));
+  }
+
+  [[nodiscard]] HostCompositionSettingsResult read_composition_settings(
+      const aemcp::native::CompositionSettingsQuery& query,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr) {
+      return HostCompositionSettingsResult::failure(
+          "NATIVE_UNSUPPORTED", "required composition settings suites are unavailable");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    const auto item_id = graph_.resolve_composition(
+        query.composition_locator, query.host_instance_id, query.session_id);
+    if (!open.has_value() || !item_id.has_value()) {
+      return HostCompositionSettingsResult::failure(
+          "STALE_LOCATOR", "compositionLocator does not identify an open-project composition",
+          "params.arguments.compositionLocator");
+    }
+    const auto item = find_project_item(
+        item_suite.get(), open->project, open->root, *item_id, work_deadline);
+    AEGP_CompH comp = nullptr;
+    if (!item.has_value()
+        || comp_suite->AEGP_GetCompFromItem(*item, &comp) != A_Err_NONE
+        || comp == nullptr) {
+      return HostCompositionSettingsResult::failure(
+          "STALE_LOCATOR", "composition identity could not be reacquired",
+          "params.arguments.compositionLocator");
+    }
+    auto settings = composition_settings(
+        item_suite.get(), comp_suite.get(), layer_suite.get(), memory_suite.get(),
+        *item, comp, query.composition_locator);
+    if (!settings.has_value()) {
+      return HostCompositionSettingsResult::failure(
+          "CAPABILITY_FAILED", "could not read composition settings");
+    }
+    return HostCompositionSettingsResult::success(std::move(*settings));
+  }
+
+  [[nodiscard]] HostCompositionWorkAreaWriteResult set_composition_work_area(
+      const aemcp::native::CompositionWorkAreaSetCommand& command,
+      TimePoint work_deadline) override {
+    const auto expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || utility_suite.get() == nullptr
+        || memory_suite.get() == nullptr) {
+      return HostCompositionWorkAreaWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required work-area mutation suites are unavailable");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    const auto item_id = graph_.resolve_composition(
+        command.composition_locator, command.host_instance_id, command.session_id);
+    if (!open.has_value() || !item_id.has_value()) {
+      return HostCompositionWorkAreaWriteResult::failure(
+          "STALE_LOCATOR", "compositionLocator does not identify the open composition",
+          "params.arguments.compositionLocator");
+    }
+    const auto item = find_project_item(
+        item_suite.get(), open->project, open->root, *item_id, work_deadline);
+    AEGP_CompH comp = nullptr;
+    A_Time comp_duration{};
+    A_Time before_start{};
+    A_Time before_duration{};
+    if (!item.has_value()
+        || comp_suite->AEGP_GetCompFromItem(*item, &comp) != A_Err_NONE
+        || comp == nullptr
+        || item_suite->AEGP_GetItemDuration(*item, &comp_duration) != A_Err_NONE
+        || comp_suite->AEGP_GetCompWorkAreaStart(comp, &before_start) != A_Err_NONE
+        || comp_suite->AEGP_GetCompWorkAreaDuration(
+            comp, &before_duration) != A_Err_NONE
+        || comp_duration.scale <= 0 || before_start.scale <= 0
+        || before_duration.scale <= 0) {
+      return HostCompositionWorkAreaWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read work area before mutation");
+    }
+    if (!exact_nonnegative_time_sum_leq(
+            command.start.value, command.start.scale,
+            command.duration.value, command.duration.scale,
+            static_cast<std::int32_t>(comp_duration.value),
+            static_cast<std::uint32_t>(comp_duration.scale))) {
+      return HostCompositionWorkAreaWriteResult::failure(
+          "INVALID_ARGUMENT", "work area must end within the composition duration",
+          "params.arguments.duration");
+    }
+    const auto to_exact = [](const A_Time& value) {
+      return CompositionCurrentTime{
+          static_cast<std::int32_t>(value.value),
+          static_cast<std::uint32_t>(value.scale),
+          aemcp::native::canonical_seconds_rational(value.value, value.scale)};
+    };
+    const CompositionCurrentTime before_start_value = to_exact(before_start);
+    const CompositionCurrentTime before_duration_value = to_exact(before_duration);
+    const auto equal_time = [](const CompositionCurrentTime& left,
+                               const CompositionCurrentTime& right) {
+      return static_cast<std::int64_t>(left.value) * right.scale
+          == static_cast<std::int64_t>(right.value) * left.scale;
+    };
+    if (equal_time(before_start_value, command.start)
+        && equal_time(before_duration_value, command.duration)) {
+      return HostCompositionWorkAreaWriteResult::failure(
+          "INVALID_ARGUMENT", "work area already matches the requested value",
+          "params.arguments");
+    }
+    if (expired()) {
+      return HostCompositionWorkAreaWriteResult::failure(
+          "DEADLINE_EXCEEDED", "work-area mutation budget elapsed");
+    }
+    const A_Time target_start{
+        static_cast<A_long>(command.start.value),
+        static_cast<A_u_long>(command.start.scale)};
+    const A_Time target_duration{
+        static_cast<A_long>(command.duration.value),
+        static_cast<A_u_long>(command.duration.scale)};
+    static constexpr char kUndoLabel[] = "ae-mcp: Set composition work area";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostCompositionWorkAreaWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = comp_suite->AEGP_SetCompWorkAreaStartAndDuration(
+        comp, &target_start, &target_duration);
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    A_Time after_start{};
+    A_Time after_duration{};
+    const A_Err start_error = comp_suite->AEGP_GetCompWorkAreaStart(
+        comp, &after_start);
+    const A_Err duration_error = comp_suite->AEGP_GetCompWorkAreaDuration(
+        comp, &after_duration);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || start_error != A_Err_NONE || duration_error != A_Err_NONE
+        || after_start.scale <= 0 || after_duration.scale <= 0) {
+      return HostCompositionWorkAreaWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "work area may have changed but native readback or Undo validation failed");
+    }
+    CompositionWorkAreaChanged changed;
+    changed.composition_locator = command.composition_locator;
+    changed.before_start = before_start_value;
+    changed.before_duration = before_duration_value;
+    changed.after_start = to_exact(after_start);
+    changed.after_duration = to_exact(after_duration);
+    if (!equal_time(changed.after_start, command.start)
+        || !equal_time(changed.after_duration, command.duration)
+        || expired()) {
+      return HostCompositionWorkAreaWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "work area changed but exact readback did not match the request");
+    }
+    return HostCompositionWorkAreaWriteResult::success(std::move(changed));
+  }
+
+  [[nodiscard]] HostProjectItemTextWriteResult set_project_item_name(
+      const aemcp::native::ProjectItemTextSetCommand& command,
+      TimePoint work_deadline) override {
+    return set_project_item_text(command, work_deadline, true);
+  }
+
+  [[nodiscard]] HostProjectItemTextWriteResult set_project_item_comment(
+      const aemcp::native::ProjectItemTextSetCommand& command,
+      TimePoint work_deadline) override {
+    return set_project_item_text(command, work_deadline, false);
+  }
+
+  [[nodiscard]] HostProjectItemLabelWriteResult set_project_item_label(
+      const aemcp::native::ProjectItemLabelSetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostProjectItemLabelWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required item-label mutation suites are unavailable");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    const auto item_id = graph_.resolve_project_item(
+        command.item_locator, command.host_instance_id, command.session_id);
+    if (!open.has_value() || !item_id.has_value()) {
+      return HostProjectItemLabelWriteResult::failure(
+          "STALE_LOCATOR", "itemLocator does not identify an item in the open project",
+          "params.arguments.itemLocator");
+    }
+    const auto item = find_project_item(
+        item_suite.get(), open->project, open->root, *item_id, work_deadline);
+    AEGP_LabelID before = 0;
+    if (!item.has_value()
+        || item_suite->AEGP_GetItemLabel(*item, &before) != A_Err_NONE) {
+      return HostProjectItemLabelWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read item label before mutation");
+    }
+    const std::uint8_t before_id = static_cast<std::uint8_t>(
+        static_cast<unsigned char>(before));
+    if (before_id > 16) {
+      return HostProjectItemLabelWriteResult::failure(
+          "CAPABILITY_FAILED", "item returned an unsupported label slot");
+    }
+    if (before_id == command.label_id) {
+      return HostProjectItemLabelWriteResult::failure(
+          "INVALID_ARGUMENT", "labelId already matches the item label",
+          "params.arguments.labelId");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostProjectItemLabelWriteResult::failure(
+          "DEADLINE_EXCEEDED", "item label mutation budget elapsed");
+    }
+    static constexpr char kUndoLabel[] = "ae-mcp: Set project item label";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostProjectItemLabelWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = item_suite->AEGP_SetItemLabel(
+        *item, static_cast<AEGP_LabelID>(command.label_id));
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    AEGP_LabelID after = 0;
+    const A_Err readback_error = item_suite->AEGP_GetItemLabel(*item, &after);
+    const std::uint8_t after_id = static_cast<std::uint8_t>(
+        static_cast<unsigned char>(after));
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || readback_error != A_Err_NONE || after_id != command.label_id
+        || std::chrono::steady_clock::now() >= work_deadline) {
+      return HostProjectItemLabelWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "item label may have changed but native readback or Undo validation failed");
+    }
+    return HostProjectItemLabelWriteResult::success({
+        true, command.item_locator, before_id, after_id});
+  }
+
+  [[nodiscard]] HostCompositionDuplicateResult duplicate_composition(
+      const aemcp::native::CompositionDuplicateCommand& command,
+      TimePoint work_deadline) override {
+    const auto expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostCompositionDuplicateResult::failure(
+          "NATIVE_UNSUPPORTED", "required composition duplicate suites are unavailable");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    const auto source_id = graph_.resolve_composition(
+        command.composition_locator, command.host_instance_id, command.session_id);
+    if (!open.has_value() || !source_id.has_value()) {
+      return HostCompositionDuplicateResult::failure(
+          "STALE_LOCATOR", "compositionLocator does not identify the open composition",
+          "params.arguments.compositionLocator");
+    }
+    const auto source_item = find_project_item(
+        item_suite.get(), open->project, open->root, *source_id, work_deadline);
+    AEGP_CompH source_comp = nullptr;
+    if (!source_item.has_value()
+        || comp_suite->AEGP_GetCompFromItem(*source_item, &source_comp) != A_Err_NONE
+        || source_comp == nullptr) {
+      return HostCompositionDuplicateResult::failure(
+          "STALE_LOCATOR", "source composition identity could not be reacquired",
+          "params.arguments.compositionLocator");
+    }
+    const auto count_before = count_project_items(
+        item_suite.get(), open->project, open->root);
+    auto source_before = composition_settings(
+        item_suite.get(), comp_suite.get(), layer_suite.get(), memory_suite.get(),
+        *source_item, source_comp, command.composition_locator);
+    const auto utf16_name = utf16_bounded_text(command.new_name, 255, false);
+    if (!count_before.has_value() || !source_before.has_value()
+        || !utf16_name.has_value()) {
+      return HostCompositionDuplicateResult::failure(
+          "CAPABILITY_FAILED", "could not validate composition duplicate inputs");
+    }
+    if (expired()) {
+      return HostCompositionDuplicateResult::failure(
+          "DEADLINE_EXCEEDED", "composition duplicate budget elapsed");
+    }
+    static constexpr char kUndoLabel[] = "ae-mcp: Duplicate composition";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostCompositionDuplicateResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    AEGP_CompH new_comp = nullptr;
+    const A_Err duplicate_error = comp_suite->AEGP_DuplicateComp(
+        source_comp, &new_comp);
+    AEGP_ItemH new_item = nullptr;
+    A_Err item_error = duplicate_error == A_Err_NONE && new_comp != nullptr
+        ? comp_suite->AEGP_GetItemFromComp(new_comp, &new_item) : A_Err_GENERIC;
+    const A_Err name_error = item_error == A_Err_NONE && new_item != nullptr
+        ? item_suite->AEGP_SetItemName(new_item, utf16_name->data()) : A_Err_GENERIC;
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    if (duplicate_error != A_Err_NONE || new_comp == nullptr
+        || item_error != A_Err_NONE || new_item == nullptr
+        || name_error != A_Err_NONE || end_error != A_Err_NONE) {
+      return HostCompositionDuplicateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "composition may have duplicated but creation, rename, or Undo close failed");
+    }
+    A_long new_item_id = 0;
+    const auto count_after = count_project_items(
+        item_suite.get(), open->project, open->root);
+    auto source_after = composition_settings(
+        item_suite.get(), comp_suite.get(), layer_suite.get(), memory_suite.get(),
+        *source_item, source_comp, command.composition_locator);
+    auto new_after = composition_settings(
+        item_suite.get(), comp_suite.get(), layer_suite.get(), memory_suite.get(),
+        new_item, new_comp, command.composition_locator);
+    if (item_suite->AEGP_GetItemID(new_item, &new_item_id) != A_Err_NONE
+        || new_item_id <= 0 || !count_after.has_value()
+        || *count_after != *count_before + 1 || !source_after.has_value()
+        || !new_after.has_value() || new_after->name != command.new_name
+        || expired()) {
+      return HostCompositionDuplicateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "duplicated composition did not pass native state readback");
+    }
+    bool invalidated = false;
+    try {
+      invalidated = graph_.invalidate_project();
+    } catch (...) {
+      invalidated = false;
+    }
+    if (!invalidated) {
+      return HostCompositionDuplicateResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "composition duplicated but fresh locator generation failed");
+    }
+    const ObjectLocator fresh_source = graph_.item_locator(
+        *source_id, true, command.host_instance_id, command.session_id);
+    const ObjectLocator fresh_new = graph_.item_locator(
+        new_item_id, true, command.host_instance_id, command.session_id);
+    source_after->composition_locator = fresh_source;
+    new_after->composition_locator = fresh_new;
+    CompositionDuplicated duplicated;
+    duplicated.source_composition_locator = fresh_source;
+    duplicated.new_composition_locator = fresh_new;
+    duplicated.project_item_count_before = *count_before;
+    duplicated.project_item_count_after = *count_after;
+    duplicated.source_settings = std::move(*source_after);
+    duplicated.new_settings = std::move(*new_after);
+    return HostCompositionDuplicateResult::success(std::move(duplicated));
   }
 
   [[nodiscard]] HostCompositionLayersResult list_composition_layers(
@@ -4601,6 +5373,286 @@ class AegpHostApi final : public HostApi {
   }
 
  private:
+  struct OpenProject {
+    AEGP_ProjectH project{nullptr};
+    AEGP_ItemH root{nullptr};
+  };
+
+  [[nodiscard]] std::optional<OpenProject> observe_open_project(
+      const AEGP_ProjSuite6* project_suite,
+      const AEGP_ItemSuite9* item_suite,
+      const AEGP_MemorySuite1* memory_suite) {
+    if (project_suite == nullptr || item_suite == nullptr || memory_suite == nullptr) {
+      return std::nullopt;
+    }
+    A_long project_count = 0;
+    AEGP_ProjectH project = nullptr;
+    AEGP_ItemH root = nullptr;
+    A_long root_id = 0;
+    if (project_suite->AEGP_GetNumProjects(&project_count) != A_Err_NONE
+        || project_count <= 0
+        || project_suite->AEGP_GetProjectByIndex(0, &project) != A_Err_NONE
+        || project == nullptr
+        || project_suite->AEGP_GetProjectRootFolder(project, &root) != A_Err_NONE
+        || root == nullptr
+        || item_suite->AEGP_GetItemID(root, &root_id) != A_Err_NONE) {
+      if (project_count <= 0) graph_.project_closed();
+      return std::nullopt;
+    }
+    std::optional<std::string> path = read_project_path(
+        project_suite, memory_suite, project);
+    if (!path.has_value()) return std::nullopt;
+    graph_.observe_project(
+        reinterpret_cast<std::uintptr_t>(project),
+        reinterpret_cast<std::uintptr_t>(root),
+        root_id,
+        std::move(*path));
+    return OpenProject{project, root};
+  }
+
+  [[nodiscard]] static std::optional<AEGP_ItemH> find_project_item(
+      const AEGP_ItemSuite9* item_suite,
+      AEGP_ProjectH project,
+      AEGP_ItemH root,
+      A_long wanted_id,
+      TimePoint deadline) {
+    AEGP_ItemH item = nullptr;
+    if (item_suite == nullptr
+        || item_suite->AEGP_GetNextProjItem(project, root, &item) != A_Err_NONE) {
+      return std::nullopt;
+    }
+    std::size_t visited = 0;
+    while (item != nullptr) {
+      if (std::chrono::steady_clock::now() >= deadline
+          || ++visited > static_cast<std::size_t>(kMaximumProjectItems)) {
+        return std::nullopt;
+      }
+      A_long item_id = 0;
+      if (item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE) {
+        return std::nullopt;
+      }
+      if (item_id == wanted_id) return item;
+      AEGP_ItemH next = nullptr;
+      if (item_suite->AEGP_GetNextProjItem(project, item, &next) != A_Err_NONE) {
+        return std::nullopt;
+      }
+      item = next;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] std::optional<ProjectItemEntry> project_item_entry(
+      const AEGP_ItemSuite9* item_suite,
+      const AEGP_MemorySuite1* memory_suite,
+      AEGP_ItemH item,
+      AEGP_ItemH root,
+      std::string_view host,
+      std::string_view session) {
+    AEGP_ItemType type = AEGP_ItemType_NONE;
+    A_long item_id = 0;
+    AEGP_ItemH parent = nullptr;
+    AEGP_MemHandle name_handle = nullptr;
+    if (item == nullptr
+        || item_suite->AEGP_GetItemType(item, &type) != A_Err_NONE
+        || item_suite->AEGP_GetItemID(item, &item_id) != A_Err_NONE
+        || item_suite->AEGP_GetItemParentFolder(item, &parent) != A_Err_NONE
+        || item_suite->AEGP_GetItemName(plugin_id_, item, &name_handle) != A_Err_NONE
+        || name_handle == nullptr) {
+      return std::nullopt;
+    }
+    MemHandleOwner name_owner(memory_suite, name_handle);
+    std::optional<std::string> name = name_owner.utf8();
+    if (!name.has_value()) return std::nullopt;
+    ProjectItemEntry entry;
+    entry.locator = graph_.item_locator(
+        item_id, type == AEGP_ItemType_COMP, host, session);
+    entry.name = std::move(*name);
+    entry.type = project_item_type(type);
+    if (parent == nullptr || parent == root) {
+      entry.parent_locator = graph_.project_locator(host, session);
+    } else {
+      A_long parent_id = 0;
+      if (item_suite->AEGP_GetItemID(parent, &parent_id) != A_Err_NONE) {
+        return std::nullopt;
+      }
+      entry.parent_locator = graph_.item_locator(parent_id, false, host, session);
+    }
+    return entry;
+  }
+
+  [[nodiscard]] std::optional<std::string> read_item_name(
+      const AEGP_ItemSuite9* item_suite,
+      const AEGP_MemorySuite1* memory_suite,
+      AEGP_ItemH item) const {
+    AEGP_MemHandle handle = nullptr;
+    if (item_suite->AEGP_GetItemName(plugin_id_, item, &handle) != A_Err_NONE
+        || handle == nullptr) {
+      return std::nullopt;
+    }
+    MemHandleOwner owner(memory_suite, handle);
+    return owner.utf8();
+  }
+
+  [[nodiscard]] static std::optional<std::string> read_item_comment(
+      const AEGP_ItemSuite9* item_suite,
+      const AEGP_MemorySuite1* memory_suite,
+      AEGP_ItemH item) {
+    AEGP_MemHandle handle = nullptr;
+    if (item_suite->AEGP_GetItemComment(item, &handle) != A_Err_NONE) {
+      return std::nullopt;
+    }
+    if (handle == nullptr) return std::string{};
+    MemHandleOwner owner(memory_suite, handle);
+    return owner.utf8();
+  }
+
+  [[nodiscard]] std::optional<CompositionSettings> composition_settings(
+      const AEGP_ItemSuite9* item_suite,
+      const AEGP_CompSuite12* comp_suite,
+      const AEGP_LayerSuite9* layer_suite,
+      const AEGP_MemorySuite1* memory_suite,
+      AEGP_ItemH item,
+      AEGP_CompH comp,
+      ObjectLocator locator) const {
+    const std::optional<std::string> name = read_item_name(
+        item_suite, memory_suite, item);
+    A_long width = 0;
+    A_long height = 0;
+    A_long layer_count = 0;
+    A_Time duration{};
+    A_Time frame_duration{};
+    A_Time work_start{};
+    A_Time work_duration{};
+    A_Time display_start{};
+    A_Ratio pixel_aspect{};
+    if (!name.has_value()
+        || item_suite->AEGP_GetItemDimensions(item, &width, &height) != A_Err_NONE
+        || item_suite->AEGP_GetItemDuration(item, &duration) != A_Err_NONE
+        || item_suite->AEGP_GetItemPixelAspectRatio(item, &pixel_aspect) != A_Err_NONE
+        || comp_suite->AEGP_GetCompFrameDuration(comp, &frame_duration) != A_Err_NONE
+        || comp_suite->AEGP_GetCompWorkAreaStart(comp, &work_start) != A_Err_NONE
+        || comp_suite->AEGP_GetCompWorkAreaDuration(comp, &work_duration) != A_Err_NONE
+        || comp_suite->AEGP_GetCompDisplayStartTime(comp, &display_start) != A_Err_NONE
+        || layer_suite->AEGP_GetCompNumLayers(comp, &layer_count) != A_Err_NONE
+        || width < 1 || width > 30000 || height < 1 || height > 30000
+        || layer_count < 0
+        || duration.scale <= 0 || duration.value <= 0
+        || frame_duration.scale <= 0 || frame_duration.value <= 0
+        || work_start.scale <= 0 || work_start.value < 0
+        || work_duration.scale <= 0 || work_duration.value <= 0
+        || display_start.scale <= 0
+        || pixel_aspect.num <= 0 || pixel_aspect.den <= 0) {
+      return std::nullopt;
+    }
+    const auto exact_time = [](const A_Time& value) {
+      return CompositionCurrentTime{
+          static_cast<std::int32_t>(value.value),
+          static_cast<std::uint32_t>(value.scale),
+          aemcp::native::canonical_seconds_rational(value.value, value.scale)};
+    };
+    const std::uint64_t rate_divisor = std::gcd(
+        static_cast<std::uint64_t>(frame_duration.scale),
+        static_cast<std::uint64_t>(frame_duration.value));
+    CompositionSettings settings;
+    settings.composition_locator = std::move(locator);
+    settings.name = *name;
+    settings.width = static_cast<std::uint32_t>(width);
+    settings.height = static_cast<std::uint32_t>(height);
+    settings.duration = exact_time(duration);
+    settings.frame_duration = exact_time(frame_duration);
+    settings.frame_rate = {
+        static_cast<std::int32_t>(frame_duration.scale / rate_divisor),
+        static_cast<std::int32_t>(frame_duration.value / rate_divisor),
+        aemcp::native::canonical_seconds_rational(
+            frame_duration.scale / rate_divisor,
+            static_cast<std::uint32_t>(frame_duration.value / rate_divisor))};
+    settings.pixel_aspect_ratio = {
+        static_cast<std::int32_t>(pixel_aspect.num),
+        static_cast<std::int32_t>(pixel_aspect.den),
+        aemcp::native::canonical_seconds_rational(
+            pixel_aspect.num, static_cast<std::uint32_t>(pixel_aspect.den))};
+    settings.work_area_start = exact_time(work_start);
+    settings.work_area_duration = exact_time(work_duration);
+    settings.display_start_time = exact_time(display_start);
+    settings.layer_count = static_cast<std::uint64_t>(layer_count);
+    return settings;
+  }
+
+  [[nodiscard]] HostProjectItemTextWriteResult set_project_item_text(
+      const aemcp::native::ProjectItemTextSetCommand& command,
+      TimePoint work_deadline,
+      bool set_name) {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostProjectItemTextWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required project item text suites are unavailable");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    const auto item_id = graph_.resolve_project_item(
+        command.item_locator, command.host_instance_id, command.session_id);
+    if (!open.has_value() || !item_id.has_value()) {
+      return HostProjectItemTextWriteResult::failure(
+          "STALE_LOCATOR", "itemLocator does not identify an item in the open project",
+          "params.arguments.itemLocator");
+    }
+    const auto item = find_project_item(
+        item_suite.get(), open->project, open->root, *item_id, work_deadline);
+    const auto before = item.has_value()
+        ? (set_name
+          ? read_item_name(item_suite.get(), memory_suite.get(), *item)
+          : read_item_comment(item_suite.get(), memory_suite.get(), *item))
+        : std::nullopt;
+    const auto utf16 = utf16_bounded_text(
+        command.value, set_name ? 255U : 1024U, !set_name);
+    if (!item.has_value() || !before.has_value() || !utf16.has_value()) {
+      return HostProjectItemTextWriteResult::failure(
+          "CAPABILITY_FAILED", "could not validate project item text mutation");
+    }
+    if (*before == command.value) {
+      return HostProjectItemTextWriteResult::failure(
+          "INVALID_ARGUMENT",
+          set_name ? "name already matches the project item"
+                   : "comment already matches the project item",
+          set_name ? "params.arguments.name" : "params.arguments.comment");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostProjectItemTextWriteResult::failure(
+          "DEADLINE_EXCEEDED", "project item text mutation budget elapsed");
+    }
+    static constexpr char kNameUndoLabel[] = "ae-mcp: Rename project item";
+    static constexpr char kCommentUndoLabel[] = "ae-mcp: Set project item comment";
+    if (utility_suite->AEGP_StartUndoGroup(
+            set_name ? kNameUndoLabel : kCommentUndoLabel) != A_Err_NONE) {
+      return HostProjectItemTextWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = set_name
+        ? item_suite->AEGP_SetItemName(*item, utf16->data())
+        : item_suite->AEGP_SetItemComment(*item, utf16->data());
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = set_name
+        ? read_item_name(item_suite.get(), memory_suite.get(), *item)
+        : read_item_comment(item_suite.get(), memory_suite.get(), *item);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value() || *after != command.value
+        || std::chrono::steady_clock::now() >= work_deadline) {
+      return HostProjectItemTextWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "project item text may have changed but readback or Undo validation failed");
+    }
+    return HostProjectItemTextWriteResult::success({
+        true, command.item_locator, *before, *after});
+  }
+
   SPBasicSuite* basic_{nullptr};
   AEGP_PluginID plugin_id_{0};
   ProjectGraphRegistry& graph_;
@@ -4672,6 +5724,14 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kLayerPropertyKeyframesListContractDigest),
             std::string(kLayerPropertySetContractDigest),
             std::string(kCompositionSelectedLayersListContractDigest),
+            std::string(kProjectContextReadContractDigest),
+            std::string(kProjectItemMetadataReadContractDigest),
+            std::string(kCompositionSettingsReadContractDigest),
+            std::string(kCompositionWorkAreaSetContractDigest),
+            std::string(kProjectItemNameSetContractDigest),
+            std::string(kProjectItemCommentSetContractDigest),
+            std::string(kProjectItemLabelSetContractDigest),
+            std::string(kCompositionDuplicateContractDigest),
         },
         *this,
         idle_signal);
@@ -4742,21 +5802,15 @@ void log_load(PluginState& state) {
          << ",\"minor\":" << state.driver_minor << "}"
          << ",\"host\":{\"version\":\"" << json_escape(state.host_identity.version)
          << "\",\"build\":\"" << json_escape(state.host_identity.build) << "\"}"
-         << ",\"capabilities\":[\"" << kProjectSummaryCapability << "\",\""
-         << kProjectBitDepthReadCapability << "\",\""
-         << kProjectBitDepthSetCapability << "\",\""
-         << kProjectItemsListCapability << "\",\""
-         << kCompositionLayersListCapability << "\",\""
-         << kCompositionSelectedLayersListCapability << "\",\""
-         << kCompositionTimeReadCapability << "\",\""
-         << kCompositionTimeSetCapability << "\",\""
-         << kCompositionCreateCapability << "\",\""
-         << kCompositionLayerCreateCapability << "\",\""
-         << kLayerEffectApplyCapability << "\",\""
-         << kLayerPropertiesListCapability << "\",\""
-         << kLayerPropertyKeyframesListCapability << "\",\""
-         << kLayerPropertySetCapability << "\"]}"
-         ;
+         << ",\"capabilities\":[";
+  for (std::size_t index = 0;
+       index < aemcp::native::kAdvertisedNativeCapabilities.size();
+       ++index) {
+    if (index > 0) output << ',';
+    output << '"' << json_escape(
+        aemcp::native::kAdvertisedNativeCapabilities[index]) << '"';
+  }
+  output << "]}";
   state.log.append(output.str());
 }
 
@@ -4904,12 +5958,46 @@ void log_completion(
              << json_escape(completion.layer_property_change_result.value_type)
              << "\",\"projectGeneration\":"
              << completion.layer_property_change_result.layer_locator.generation;
-    } else {
+    } else if (completion.capability_id == kProjectContextReadCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::project_context_persistent_diagnostic_fields(
+                    completion.project_context_result);
+    } else if (completion.capability_id == kProjectItemMetadataReadCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::project_item_metadata_persistent_diagnostic_fields(
+                    completion.project_item_metadata_result);
+    } else if (completion.capability_id == kCompositionSettingsReadCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::composition_settings_persistent_diagnostic_fields(
+                    completion.composition_settings_result);
+    } else if (completion.capability_id == kCompositionWorkAreaSetCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::composition_work_area_persistent_diagnostic_fields(
+                    completion.composition_work_area_change_result);
+    } else if (completion.capability_id == kProjectItemNameSetCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::project_item_name_persistent_diagnostic_fields(
+                    completion.project_item_text_change_result);
+    } else if (completion.capability_id == kProjectItemCommentSetCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::project_item_comment_persistent_diagnostic_fields(
+                    completion.project_item_text_change_result);
+    } else if (completion.capability_id == kProjectItemLabelSetCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::project_item_label_persistent_diagnostic_fields(
+                    completion.project_item_label_change_result);
+    } else if (completion.capability_id == kCompositionDuplicateCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::composition_duplicate_persistent_diagnostic_fields(
+                    completion.composition_duplicate_result);
+    } else if (completion.capability_id == kProjectSummaryCapability) {
       output << ",\"result\":{\"projectOpen\":"
              << (completion.result.project_open ? "true" : "false")
              << ",\"projectNameRedacted\":"
              << (completion.result.project_name.empty() ? "false" : "true")
              << ",\"itemCount\":" << completion.result.item_count;
+    } else {
+      output << ",\"result\":{\"unrecognizedCapability\":true";
     }
     if (!postcondition_digest.empty()) {
       output << ",\"postconditionDigest\":\""
