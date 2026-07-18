@@ -6,6 +6,7 @@ import contextlib
 import copy
 import hashlib
 import importlib.util
+import io
 import json
 import math
 import os
@@ -43,6 +44,34 @@ def _load_driver() -> ModuleType:
 
 
 driver = _load_driver()
+
+
+@pytest.mark.asyncio
+async def test_stdin_checkpoint_serializes_nested_path_and_accepts_ack(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(driver.secrets, "token_hex", lambda _size: "abcdef123456")
+    monkeypatch.setattr(
+        driver.sys,
+        "stdin",
+        io.StringIO(
+            '{"checkpointId":"preflight-ae-abcdef123456","status":"completed"}\n'
+        ),
+    )
+
+    fixture = tmp_path / "AE 验证 工程" / "fixture 名称.aep"
+    await driver.stdin_checkpoint(
+        "preflight-ae",
+        {"identity": {"formalAeApp": fixture.parent}, "fixtures": [fixture]},
+    )
+
+    checkpoint = json.loads(capsys.readouterr().out)
+    assert checkpoint["details"] == {
+        "identity": {"formalAeApp": os.fsdecode(fixture.parent)},
+        "fixtures": [os.fsdecode(fixture)],
+    }
 
 
 def _uuid(index: int) -> str:

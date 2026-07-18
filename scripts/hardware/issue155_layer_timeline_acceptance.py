@@ -181,6 +181,12 @@ def _redact(value: Any, *, key: str = "") -> Any:
     return value
 
 
+def _json_default(value: Any) -> str:
+    if isinstance(value, os.PathLike):
+        return os.fsdecode(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
+
+
 def _json_hash(value: Any) -> str:
     """Hash this package's integer/string closed JSON contract.
 
@@ -1989,6 +1995,7 @@ async def stdin_checkpoint(kind: str, details: Mapping[str, Any]) -> None:
             },
             ensure_ascii=False,
             separators=(",", ":"),
+            default=_json_default,
         ),
         flush=True,
     )
