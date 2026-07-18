@@ -16,6 +16,7 @@
 #include <string>
 #include <string_view>
 #include <thread>
+#include <tuple>
 #include <utility>
 #include <vector>
 
@@ -408,6 +409,78 @@ class FakeHost final : public HostApi {
     return aemcp::native::HostLayerPropertyWriteResult::success(std::move(changed));
   }
 
+  [[nodiscard]] aemcp::native::HostProjectContextResult read_project_context(
+      const aemcp::native::ProjectContextQuery& query, TimePoint) override {
+    aemcp::native::ProjectContext value;
+    value.project_locator = package_locator(
+        "project", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        query.host_instance_id, query.session_id);
+    value.selection_offset = query.selection_offset;
+    value.selection_limit = query.selection_limit;
+    return aemcp::native::HostProjectContextResult::success(std::move(value));
+  }
+
+  [[nodiscard]] aemcp::native::HostProjectItemMetadataResult
+  read_project_item_metadata(
+      const aemcp::native::ProjectItemQuery& query, TimePoint) override {
+    return aemcp::native::HostProjectItemMetadataResult::success({
+        query.item_locator, "", "footage", std::nullopt, "", 0,
+        std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt});
+  }
+
+  [[nodiscard]] aemcp::native::HostCompositionSettingsResult
+  read_composition_settings(
+      const aemcp::native::CompositionSettingsQuery& query, TimePoint) override {
+    return aemcp::native::HostCompositionSettingsResult::success(
+        package_settings(query.composition_locator, ""));
+  }
+
+  [[nodiscard]] aemcp::native::HostCompositionWorkAreaWriteResult
+  set_composition_work_area(
+      const aemcp::native::CompositionWorkAreaSetCommand& command,
+      TimePoint) override {
+    return aemcp::native::HostCompositionWorkAreaWriteResult::success({
+        true, command.composition_locator,
+        {0, 1, "0"}, {5, 1, "5"}, command.start, command.duration});
+  }
+
+  [[nodiscard]] aemcp::native::HostProjectItemTextWriteResult set_project_item_name(
+      const aemcp::native::ProjectItemTextSetCommand& command,
+      TimePoint) override {
+    return aemcp::native::HostProjectItemTextWriteResult::success(
+        {true, command.item_locator, std::string(1024, 'B'), command.value});
+  }
+
+  [[nodiscard]] aemcp::native::HostProjectItemTextWriteResult
+  set_project_item_comment(
+      const aemcp::native::ProjectItemTextSetCommand& command,
+      TimePoint) override {
+    return aemcp::native::HostProjectItemTextWriteResult::success(
+        {true, command.item_locator, "Before comment", command.value});
+  }
+
+  [[nodiscard]] aemcp::native::HostProjectItemLabelWriteResult set_project_item_label(
+      const aemcp::native::ProjectItemLabelSetCommand& command,
+      TimePoint) override {
+    return aemcp::native::HostProjectItemLabelWriteResult::success(
+        {true, command.item_locator, 0, command.label_id});
+  }
+
+  [[nodiscard]] aemcp::native::HostCompositionDuplicateResult duplicate_composition(
+      const aemcp::native::CompositionDuplicateCommand& command,
+      TimePoint) override {
+    auto source = command.composition_locator;
+    source.project_id = "55555555-5555-4555-8555-555555555555";
+    source.generation += 1;
+    source.object_id = "77777777-7777-4777-8777-777777777777";
+    auto duplicate = source;
+    duplicate.object_id = "99999999-9999-4999-8999-999999999999";
+    return aemcp::native::HostCompositionDuplicateResult::success({
+        true, source, duplicate, 2, 3,
+        package_settings(source, ""),
+        package_settings(duplicate, command.new_name)});
+  }
+
   [[nodiscard]] HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint) override {
     ++project_graph_invalidation_calls;
@@ -426,6 +499,34 @@ class FakeHost final : public HostApi {
         "44444444-4444-4444-8444-444444444444",
         8,
         std::move(object_id)};
+  }
+
+  [[nodiscard]] static aemcp::native::ObjectLocator package_locator(
+      std::string kind,
+      std::string object_id,
+      std::string host_instance_id = std::string(kHost),
+      std::string session_id = std::string(kSession)) {
+    return {
+        std::move(kind), std::move(host_instance_id), std::move(session_id),
+        "44444444-4444-4444-8444-444444444444", 8,
+        std::move(object_id)};
+  }
+
+  [[nodiscard]] static aemcp::native::CompositionSettings package_settings(
+      aemcp::native::ObjectLocator locator_value, std::string name) {
+    aemcp::native::CompositionSettings value;
+    value.composition_locator = std::move(locator_value);
+    value.name = std::move(name);
+    value.width = 1920;
+    value.height = 1080;
+    value.duration = {10, 1, "10"};
+    value.frame_duration = {1, 24, "1/24"};
+    value.frame_rate = {24, 1, "24"};
+    value.pixel_aspect_ratio = {1, 1, "1"};
+    value.work_area_start = {0, 1, "0"};
+    value.work_area_duration = {5, 1, "5"};
+    value.display_start_time = {0, 1, "0"};
+    return value;
   }
 
   ProjectSummary summary{true, "fixture.aep", 3};
@@ -539,7 +640,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "f589837c77ed835fc240c010e2a7a8c5582fbbe92130cbc84595abb33bb22236",
+      "12640c0306641fd32553828d86a4c87728a2c964fe0d288c06a7107fcf9cfdd9",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -554,6 +655,14 @@ NativeRpcRuntimeInfo runtime() {
       "f089d4cd1d35f492df660cbd83667968b2add70b5353172253691e33758e42bb",
       "5cb9b24ac33125823b08d1dcc43839bf1b568fd02da22b8fb3c30bb3c722689c",
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
+      "ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca",
+      "b13139c0b2e8073f6606bfbead1e59eb7fea63ec10a164b500e19ff8babd0f69",
+      "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b",
+      "a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997",
+      "b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538",
+      "957985628474caa9c9cef3de76a2839e59691232b062b776ff800a79dd3cc35c",
+      "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f",
+      "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3",
   };
 }
 
@@ -727,6 +836,17 @@ std::string graph_locator_json(std::string_view kind, std::string_view object_id
       + "\",\"sessionId\":\"" + std::string(kSession)
       + "\",\"projectId\":\"44444444-4444-4444-8444-444444444444\""
         ",\"generation\":8,\"objectId\":\"" + std::string(object_id) + "\"}";
+}
+
+std::string package150_invoke_json(
+    std::string_view request_id,
+    std::string_view capability_id,
+    std::string_view arguments) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"" + std::string(capability_id)
+      + "\",\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
 }
 
 std::string project_items_invoke_json(std::string_view request_id) {
@@ -1814,6 +1934,100 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   (void)dispatcher.shutdown();
 }
 
+void project_composition_package_emits_eight_verified_terminals() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcConnectionHandler handler(
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
+  std::array<int, 2> sockets{};
+  require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0,
+      "package-150 socketpair failed");
+  const AuthenticatedConnection authenticated = connection(
+      sockets[1], "route-package-150", 11);
+  std::thread worker([&] { handler.serve(authenticated); });
+
+  send_json(sockets[0], hello_json());
+  require_contains(read_body(sockets[0]), "\"ok\":true", "package-150 hello");
+
+  const std::string item = graph_locator_json(
+      "item", "77777777-7777-4777-8777-777777777777");
+  const std::string composition = graph_locator_json(
+      "composition", "66666666-6666-4666-8666-666666666666");
+  const std::array<std::tuple<std::string, std::string, std::string>, 8> requests{{
+      {"package-context", "ae.project.context.read",
+          "{\"selectionOffset\":0,\"selectionLimit\":25}"},
+      {"package-metadata", "ae.project.item.metadata.read",
+          "{\"itemLocator\":" + item + "}"},
+      {"package-settings", "ae.composition.settings.read",
+          "{\"compositionLocator\":" + composition + "}"},
+      {"package-work-area", "ae.composition.work-area.set",
+          "{\"compositionLocator\":" + composition
+            + ",\"start\":{\"value\":1,\"scale\":1},"
+              "\"duration\":{\"value\":4,\"scale\":1},"
+              "\"idempotencyKey\":\"package-work-area-0001\"}"},
+      {"package-name", "ae.project.item.name.set",
+          "{\"itemLocator\":" + item
+            + ",\"name\":\"After\","
+              "\"idempotencyKey\":\"package-item-name-0001\"}"},
+      {"package-comment", "ae.project.item.comment.set",
+          "{\"itemLocator\":" + item
+            + ",\"comment\":\"\","
+              "\"idempotencyKey\":\"package-item-comment-0001\"}"},
+      {"package-label", "ae.project.item.label.set",
+          "{\"itemLocator\":" + item
+            + ",\"labelId\":4,"
+              "\"idempotencyKey\":\"package-item-label-0001\"}"},
+      {"package-duplicate", "ae.composition.duplicate",
+          "{\"compositionLocator\":" + composition
+            + ",\"newName\":\"Fixture Copy\","
+              "\"idempotencyKey\":\"package-duplicate-0001\"}"},
+  }};
+  FakeHost host;
+  for (std::size_t index = 0; index < requests.size(); ++index) {
+    const auto& [request_id, capability_id, arguments] = requests[index];
+    send_json(sockets[0], package150_invoke_json(
+        request_id, capability_id, arguments));
+    require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+        "package-150 queued progress");
+    wait_until([&] { return dispatcher.queued() == 1; },
+        "package-150 queued invoke");
+    const auto batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1 && batch.completions[0].ok,
+        "package-150 completion did not verify");
+    const std::string terminal = read_body(sockets[0]);
+    require_contains(terminal, "\"ok\":true", "package-150 terminal");
+    require_contains(terminal,
+        "\"capabilityId\":\"" + capability_id + "\"",
+        "package-150 terminal");
+    require_contains(terminal, "\"engine\":\"native-aegp\"",
+        "package-150 terminal");
+    if (request_id == "package-name") {
+      require(terminal.find("POSSIBLY_SIDE_EFFECTING_FAILURE") == std::string::npos,
+          "1024-scalar old name was misclassified as an uncertain write");
+    }
+    if (index >= 3) {
+      require_contains(terminal, "\"effect\":\"committed\"",
+          "package-150 write terminal");
+      require_contains(terminal, "\"undo\":{\"available\":true",
+          "package-150 write terminal");
+    }
+    wait_until([&] { return !observer.terminal(request_id).request_id.empty(); },
+        "package-150 terminal audit");
+    const TerminalRecord record = observer.terminal(request_id);
+    require(record.ok && record.request_digest.size() == 64
+            && record.postcondition_digest.size() == 64,
+        "package-150 terminal audit lost verified evidence");
+  }
+  require(idle_signal.calls() == 8,
+      "package-150 invokes did not schedule exactly eight owner-thread wakes");
+
+  finish_connection(sockets[0], sockets[1], worker);
+  (void)dispatcher.shutdown();
+}
+
 void invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
@@ -2020,6 +2234,7 @@ void construction_failure_is_contained_by_noexcept_boundary() {
 
 int main() {
   hello_capabilities_invoke_cancel_and_fencing_work();
+  project_composition_package_emits_eight_verified_terminals();
   invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced();
   invalid_postcondition_becomes_structured_failure();
   construction_failure_is_contained_by_noexcept_boundary();

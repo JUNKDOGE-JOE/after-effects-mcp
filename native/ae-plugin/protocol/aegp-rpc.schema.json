@@ -6,9 +6,9 @@
     "lengthPrefixBytes": 4,
     "byteOrder": "big-endian",
     "encoding": "utf-8",
-    "maxFrameBytes": 131072,
+    "maxFrameBytes": 524288,
     "maxJsonDepth": 16,
-    "maxJsonNodes": 4096,
+    "maxJsonNodes": 8192,
     "maxStringLength": 8192,
     "stringLengthUnit": "unicode-scalar-values",
     "duplicateObjectKeys": "reject"
@@ -72,6 +72,12 @@
     "requestId": {
       "type": "string",
       "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 16,
       "maxLength": 64,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
     },
@@ -363,6 +369,94 @@
           "maxLength": 64,
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
         }
+      }
+    },
+    "projectContextReadArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["selectionOffset", "selectionLimit"],
+      "properties": {
+        "selectionOffset": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+        "selectionLimit": { "type": "integer", "minimum": 1, "maximum": 50 }
+      }
+    },
+    "projectItemMetadataReadArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemLocator"],
+      "properties": { "itemLocator": { "$ref": "#/$defs/projectItemLocator" } }
+    },
+    "compositionSettingsReadArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compositionLocator"],
+      "properties": { "compositionLocator": { "$ref": "#/$defs/compositionLocator" } }
+    },
+    "compositionWorkAreaSetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compositionLocator", "start", "duration", "idempotencyKey"],
+      "properties": {
+        "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "start": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "scale"],
+          "properties": {
+            "value": { "type": "integer", "minimum": 0, "maximum": 2147483647 },
+            "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+          }
+        },
+        "duration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["value", "scale"],
+          "properties": {
+            "value": { "type": "integer", "minimum": 1, "maximum": 2147483647 },
+            "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+          }
+        },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "projectItemNameSetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemLocator", "name", "idempotencyKey"],
+      "properties": {
+        "itemLocator": { "$ref": "#/$defs/projectItemLocator" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "projectItemCommentSetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemLocator", "comment", "idempotencyKey"],
+      "properties": {
+        "itemLocator": { "$ref": "#/$defs/projectItemLocator" },
+        "comment": { "type": "string", "maxLength": 1024 },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "projectItemLabelSetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemLocator", "labelId", "idempotencyKey"],
+      "properties": {
+        "itemLocator": { "$ref": "#/$defs/projectItemLocator" },
+        "labelId": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "compositionDuplicateArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["compositionLocator", "newName", "idempotencyKey"],
+      "properties": {
+        "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "newName": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
       }
     },
     "positiveRatioInput": {
@@ -1486,6 +1580,86 @@
         "arguments": { "$ref": "#/$defs/layerPropertySetArguments" }
       }
     },
+    "projectContextReadInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.context.read" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/projectContextReadArguments" }
+      }
+    },
+    "projectItemMetadataReadInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.item.metadata.read" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/projectItemMetadataReadArguments" }
+      }
+    },
+    "compositionSettingsReadInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.settings.read" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/compositionSettingsReadArguments" }
+      }
+    },
+    "compositionWorkAreaSetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.work-area.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/compositionWorkAreaSetArguments" }
+      }
+    },
+    "projectItemNameSetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.item.name.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/projectItemNameSetArguments" }
+      }
+    },
+    "projectItemCommentSetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.item.comment.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/projectItemCommentSetArguments" }
+      }
+    },
+    "projectItemLabelSetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.item.label.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/projectItemLabelSetArguments" }
+      }
+    },
+    "compositionDuplicateInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.duplicate" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/compositionDuplicateArguments" }
+      }
+    },
     "invokeParams": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeParams" },
@@ -1501,7 +1675,15 @@
         { "$ref": "#/$defs/layerEffectApplyInvokeParams" },
         { "$ref": "#/$defs/layerPropertiesListInvokeParams" },
         { "$ref": "#/$defs/layerPropertyKeyframesListInvokeParams" },
-        { "$ref": "#/$defs/layerPropertySetInvokeParams" }
+        { "$ref": "#/$defs/layerPropertySetInvokeParams" },
+        { "$ref": "#/$defs/projectContextReadInvokeParams" },
+        { "$ref": "#/$defs/projectItemMetadataReadInvokeParams" },
+        { "$ref": "#/$defs/compositionSettingsReadInvokeParams" },
+        { "$ref": "#/$defs/compositionWorkAreaSetInvokeParams" },
+        { "$ref": "#/$defs/projectItemNameSetInvokeParams" },
+        { "$ref": "#/$defs/projectItemCommentSetInvokeParams" },
+        { "$ref": "#/$defs/projectItemLabelSetInvokeParams" },
+        { "$ref": "#/$defs/compositionDuplicateInvokeParams" }
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
     },
@@ -1651,7 +1833,7 @@
         "terminalCacheTtlMs"
       ],
       "properties": {
-        "maxFrameBytes": { "type": "integer", "minimum": 4096, "maximum": 131072 },
+        "maxFrameBytes": { "type": "integer", "minimum": 4096, "maximum": 524288 },
         "maxInFlight": { "type": "integer", "minimum": 1, "maximum": 64 },
         "maxQueueDepth": { "type": "integer", "minimum": 1, "maximum": 256 },
         "maxDeadlineMs": { "type": "integer", "minimum": 100, "maximum": 30000 },
@@ -1752,7 +1934,7 @@
       ]
     },
     "capabilityArguments": {
-      "oneOf": [
+      "anyOf": [
         { "$ref": "#/$defs/projectSummaryArguments" },
         { "$ref": "#/$defs/projectBitDepthSetArguments" },
         { "$ref": "#/$defs/projectItemsListArguments" },
@@ -1764,7 +1946,15 @@
         { "$ref": "#/$defs/layerEffectApplyArguments" },
         { "$ref": "#/$defs/layerPropertiesListArguments" },
         { "$ref": "#/$defs/layerPropertyKeyframesListArguments" },
-        { "$ref": "#/$defs/layerPropertySetArguments" }
+        { "$ref": "#/$defs/layerPropertySetArguments" },
+        { "$ref": "#/$defs/projectContextReadArguments" },
+        { "$ref": "#/$defs/projectItemMetadataReadArguments" },
+        { "$ref": "#/$defs/compositionSettingsReadArguments" },
+        { "$ref": "#/$defs/compositionWorkAreaSetArguments" },
+        { "$ref": "#/$defs/projectItemNameSetArguments" },
+        { "$ref": "#/$defs/projectItemCommentSetArguments" },
+        { "$ref": "#/$defs/projectItemLabelSetArguments" },
+        { "$ref": "#/$defs/compositionDuplicateArguments" }
       ]
     },
     "capabilityValue": {
@@ -1781,9 +1971,33 @@
         { "$ref": "#/$defs/layerEffectApplyValue" },
         { "$ref": "#/$defs/layerPropertiesListValue" },
         { "$ref": "#/$defs/layerPropertyKeyframesListValue" },
-        { "$ref": "#/$defs/layerPropertySetValue" }
+        { "$ref": "#/$defs/layerPropertySetValue" },
+        { "$ref": "#/$defs/projectContextReadValue" },
+        { "$ref": "#/$defs/projectItemMetadataReadValue" },
+        { "$ref": "#/$defs/compositionSettingsReadValue" },
+        { "$ref": "#/$defs/compositionWorkAreaSetValue" },
+        { "$ref": "#/$defs/projectItemNameSetValue" },
+        { "$ref": "#/$defs/projectItemCommentSetValue" },
+        { "$ref": "#/$defs/projectItemLabelSetValue" },
+        { "$ref": "#/$defs/compositionDuplicateValue" }
       ]
     },
+    "projectContextReadInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"selectionLimit":{"maximum":50,"minimum":1,"type":"integer"},"selectionOffset":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["selectionOffset","selectionLimit"],"type":"object"} },
+    "projectContextReadResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"activeItem":{"anyOf":[{"additionalProperties":false,"properties":{"locator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"name":{"maxLength":1024,"type":"string"},"parentLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["project","item"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"type":{"enum":["folder","composition","footage","unknown"]}},"required":["locator","name","type","parentLocator"],"type":"object"},{"type":"null"}]},"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"mostRecentlyUsedComposition":{"anyOf":[{"additionalProperties":false,"properties":{"locator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"name":{"maxLength":1024,"type":"string"},"parentLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["project","item"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"type":{"enum":["folder","composition","footage","unknown"]}},"required":["locator","name","type","parentLocator"],"type":"object"},{"type":"null"}]},"projectLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"project"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"selection":{"additionalProperties":false,"properties":{"hasMore":{"type":"boolean"},"items":{"items":{"additionalProperties":false,"properties":{"locator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"name":{"maxLength":1024,"type":"string"},"parentLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["project","item"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"type":{"enum":["folder","composition","footage","unknown"]}},"required":["locator","name","type","parentLocator"],"type":"object"},"maxItems":50,"type":"array"},"limit":{"maximum":50,"minimum":1,"type":"integer"},"nextOffset":{"anyOf":[{"maximum":9007199254740991,"minimum":0,"type":"integer"},{"type":"null"}]},"offset":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"returned":{"maximum":50,"minimum":0,"type":"integer"},"total":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["total","offset","limit","returned","hasMore","nextOffset","items"],"type":"object"}},"required":["projectLocator","generation","activeItem","mostRecentlyUsedComposition","selection"],"type":"object"} },
+    "projectItemMetadataReadInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["itemLocator"],"type":"object"} },
+    "projectItemMetadataReadResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"comment":{"maxLength":1024,"type":"string"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"labelId":{"maximum":16,"minimum":0,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"parentLocator":{"anyOf":[{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["project","item"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},{"type":"null"}]},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"type":{"enum":["folder","composition","footage","unknown"]},"width":{"maximum":30000,"minimum":1,"type":"integer"}},"required":["itemLocator","name","type","parentLocator","comment","labelId"],"type":"object"} },
+    "compositionSettingsReadInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["compositionLocator"],"type":"object"} },
+    "compositionSettingsReadResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameDuration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"width":{"maximum":30000,"minimum":1,"type":"integer"},"workArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"}},"required":["compositionLocator","name","width","height","duration","frameDuration","frameRate","pixelAspectRatio","workArea","displayStartTime","layerCount"],"type":"object"} },
+    "compositionWorkAreaSetInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["value","scale"],"type":"object"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":0,"type":"integer"}},"required":["value","scale"],"type":"object"}},"required":["compositionLocator","start","duration","idempotencyKey"],"type":"object"} },
+    "compositionWorkAreaSetResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"afterWorkArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"},"beforeWorkArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"},"changed":{"const":true},"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","compositionLocator","beforeWorkArea","afterWorkArea"],"type":"object"} },
+    "projectItemNameSetInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"name":{"maxLength":255,"minLength":1,"type":"string"}},"required":["itemLocator","name","idempotencyKey"],"type":"object"} },
+    "projectItemNameSetResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"afterName":{"maxLength":255,"minLength":1,"type":"string"},"beforeName":{"maxLength":1024,"type":"string"},"changed":{"const":true},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","itemLocator","beforeName","afterName"],"type":"object"} },
+    "projectItemCommentSetInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"comment":{"maxLength":1024,"type":"string"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["itemLocator","comment","idempotencyKey"],"type":"object"} },
+    "projectItemCommentSetResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"afterComment":{"maxLength":1024,"type":"string"},"beforeComment":{"maxLength":1024,"type":"string"},"changed":{"const":true},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","itemLocator","beforeComment","afterComment"],"type":"object"} },
+    "projectItemLabelSetInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"labelId":{"maximum":16,"minimum":0,"type":"integer"}},"required":["itemLocator","labelId","idempotencyKey"],"type":"object"} },
+    "projectItemLabelSetResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"afterLabelId":{"maximum":16,"minimum":0,"type":"integer"},"beforeLabelId":{"maximum":16,"minimum":0,"type":"integer"},"changed":{"const":true},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"enum":["item","composition"]},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"}},"required":["changed","itemLocator","beforeLabelId","afterLabelId"],"type":"object"} },
+    "compositionDuplicateInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"newName":{"maxLength":255,"minLength":1,"type":"string"}},"required":["compositionLocator","newName","idempotencyKey"],"type":"object"} },
+    "compositionDuplicateResultSchemaContract": { "const": {"additionalProperties":false,"properties":{"changed":{"const":true},"newCompositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"newSettings":{"additionalProperties":false,"properties":{"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameDuration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"width":{"maximum":30000,"minimum":1,"type":"integer"},"workArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"}},"required":["name","width","height","duration","frameDuration","frameRate","pixelAspectRatio","workArea","displayStartTime","layerCount"],"type":"object"},"projectItemCountAfter":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"projectItemCountBefore":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"sourceCompositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"kind":{"const":"composition"},"objectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"projectId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"},"sessionId":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"sourceSettings":{"additionalProperties":false,"properties":{"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameDuration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"height":{"maximum":30000,"minimum":1,"type":"integer"},"layerCount":{"maximum":9007199254740991,"minimum":0,"type":"integer"},"name":{"maxLength":1024,"type":"string"},"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"},"rational":{"maxLength":28,"minLength":1,"pattern":"^[1-9][0-9]*(?:/[1-9][0-9]*)?$","type":"string"}},"required":["numerator","denominator","rational"],"type":"object"},"width":{"maximum":30000,"minimum":1,"type":"integer"},"workArea":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"},"start":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"secondsRational":{"maxLength":28,"minLength":1,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$","type":"string"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale","secondsRational"],"type":"object"}},"required":["start","duration"],"type":"object"}},"required":["name","width","height","duration","frameDuration","frameRate","pixelAspectRatio","workArea","displayStartTime","layerCount"],"type":"object"}},"required":["changed","sourceCompositionLocator","newCompositionLocator","projectItemCountBefore","projectItemCountAfter","sourceSettings","newSettings"],"type":"object"} },
     "capabilityInputSchemaContract": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInputSchemaContract" },
@@ -1797,7 +2011,15 @@
         { "$ref": "#/$defs/layerEffectApplyInputSchemaContract" },
         { "$ref": "#/$defs/layerPropertiesListInputSchemaContract" },
         { "$ref": "#/$defs/layerPropertyKeyframesListInputSchemaContract" },
-        { "$ref": "#/$defs/layerPropertySetInputSchemaContract" }
+        { "$ref": "#/$defs/layerPropertySetInputSchemaContract" },
+        { "$ref": "#/$defs/projectContextReadInputSchemaContract" },
+        { "$ref": "#/$defs/projectItemMetadataReadInputSchemaContract" },
+        { "$ref": "#/$defs/compositionSettingsReadInputSchemaContract" },
+        { "$ref": "#/$defs/compositionWorkAreaSetInputSchemaContract" },
+        { "$ref": "#/$defs/projectItemNameSetInputSchemaContract" },
+        { "$ref": "#/$defs/projectItemCommentSetInputSchemaContract" },
+        { "$ref": "#/$defs/projectItemLabelSetInputSchemaContract" },
+        { "$ref": "#/$defs/compositionDuplicateInputSchemaContract" }
       ]
     },
     "capabilityResultSchemaContract": {
@@ -1814,7 +2036,15 @@
         { "$ref": "#/$defs/layerEffectApplyResultSchemaContract" },
         { "$ref": "#/$defs/layerPropertiesListResultSchemaContract" },
         { "$ref": "#/$defs/layerPropertyKeyframesListResultSchemaContract" },
-        { "$ref": "#/$defs/layerPropertySetResultSchemaContract" }
+        { "$ref": "#/$defs/layerPropertySetResultSchemaContract" },
+        { "$ref": "#/$defs/projectContextReadResultSchemaContract" },
+        { "$ref": "#/$defs/projectItemMetadataReadResultSchemaContract" },
+        { "$ref": "#/$defs/compositionSettingsReadResultSchemaContract" },
+        { "$ref": "#/$defs/compositionWorkAreaSetResultSchemaContract" },
+        { "$ref": "#/$defs/projectItemNameSetResultSchemaContract" },
+        { "$ref": "#/$defs/projectItemCommentSetResultSchemaContract" },
+        { "$ref": "#/$defs/projectItemLabelSetResultSchemaContract" },
+        { "$ref": "#/$defs/compositionDuplicateResultSchemaContract" }
       ]
     },
     "positiveCapabilityExample": {
@@ -2249,6 +2479,152 @@
         "afterTime": { "$ref": "#/$defs/compositionCurrentTime" }
       },
       "x-invariant": "beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"
+    },
+    "projectContextReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["projectLocator", "generation", "activeItem", "mostRecentlyUsedComposition", "selection"],
+      "properties": {
+        "projectLocator": { "$ref": "#/$defs/projectLocator" },
+        "generation": { "$ref": "#/$defs/safePositiveInteger" },
+        "activeItem": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/projectItemValue" }]
+        },
+        "mostRecentlyUsedComposition": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/projectItemValue" }]
+        },
+        "selection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["total", "offset", "limit", "returned", "hasMore", "nextOffset", "items"],
+          "properties": {
+            "total": { "$ref": "#/$defs/safeNonnegativeInteger" },
+            "offset": { "$ref": "#/$defs/safeNonnegativeInteger" },
+            "limit": { "type": "integer", "minimum": 1, "maximum": 50 },
+            "returned": { "type": "integer", "minimum": 0, "maximum": 50 },
+            "hasMore": { "type": "boolean" },
+            "nextOffset": {
+              "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/safeNonnegativeInteger" }]
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 50,
+              "items": { "$ref": "#/$defs/projectItemValue" }
+            }
+          }
+        }
+      },
+      "x-invariant": "generation-equals-projectLocator-generation;selection-returned-equals-items-length;mostRecentlyUsedComposition-is-null-or-composition"
+    },
+    "projectItemMetadataReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["itemLocator", "name", "type", "parentLocator", "comment", "labelId"],
+      "properties": {
+        "itemLocator": { "$ref": "#/$defs/projectItemLocator" },
+        "name": { "type": "string", "maxLength": 1024 },
+        "type": { "enum": ["folder", "composition", "footage", "unknown"] },
+        "parentLocator": {
+          "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/projectParentLocator" }]
+        },
+        "comment": { "type": "string", "maxLength": 1024 },
+        "labelId": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "width": { "type": "integer", "minimum": 1, "maximum": 30000 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 30000 },
+        "duration": { "$ref": "#/$defs/compositionCurrentTime" },
+        "pixelAspectRatio": { "$ref": "#/$defs/positiveRatioValue" },
+        "layerCount": { "$ref": "#/$defs/safeNonnegativeInteger" }
+      },
+      "x-invariant": "optional-media-facts-are-present-only-when-supported-by-the-item-type"
+    },
+    "compositionWorkAreaValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start", "duration"],
+      "properties": {
+        "start": { "$ref": "#/$defs/compositionCurrentTime" },
+        "duration": { "$ref": "#/$defs/compositionCurrentTime" }
+      }
+    },
+    "compositionSettingsSnapshotValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "width", "height", "duration", "frameDuration", "frameRate", "pixelAspectRatio", "workArea", "displayStartTime", "layerCount"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 255 },
+        "width": { "type": "integer", "minimum": 1, "maximum": 30000 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 30000 },
+        "duration": { "$ref": "#/$defs/compositionCurrentTime" },
+        "frameDuration": { "$ref": "#/$defs/compositionCurrentTime" },
+        "frameRate": { "$ref": "#/$defs/positiveRatioValue" },
+        "pixelAspectRatio": { "$ref": "#/$defs/positiveRatioValue" },
+        "workArea": { "$ref": "#/$defs/compositionWorkAreaValue" },
+        "displayStartTime": { "$ref": "#/$defs/compositionCurrentTime" },
+        "layerCount": { "$ref": "#/$defs/safeNonnegativeInteger" }
+      }
+    },
+    "compositionSettingsReadValue": {
+      "$ref": "#/$defs/compositionSettingsReadResultSchemaContract/const"
+    },
+    "compositionWorkAreaSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "compositionLocator", "beforeWorkArea", "afterWorkArea"],
+      "properties": {
+        "changed": { "const": true },
+        "compositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "beforeWorkArea": { "$ref": "#/$defs/compositionWorkAreaValue" },
+        "afterWorkArea": { "$ref": "#/$defs/compositionWorkAreaValue" }
+      },
+      "x-invariant": "afterWorkArea-matches-the-request-and-differs-from-beforeWorkArea"
+    },
+    "projectItemNameSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "itemLocator", "beforeName", "afterName"],
+      "properties": {
+        "changed": { "const": true },
+        "itemLocator": { "$ref": "#/$defs/projectItemLocator" },
+        "beforeName": { "type": "string", "maxLength": 1024 },
+        "afterName": { "type": "string", "minLength": 1, "maxLength": 255 }
+      }
+    },
+    "projectItemCommentSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "itemLocator", "beforeComment", "afterComment"],
+      "properties": {
+        "changed": { "const": true },
+        "itemLocator": { "$ref": "#/$defs/projectItemLocator" },
+        "beforeComment": { "type": "string", "maxLength": 1024 },
+        "afterComment": { "type": "string", "maxLength": 1024 }
+      }
+    },
+    "projectItemLabelSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "itemLocator", "beforeLabelId", "afterLabelId"],
+      "properties": {
+        "changed": { "const": true },
+        "itemLocator": { "$ref": "#/$defs/projectItemLocator" },
+        "beforeLabelId": { "type": "integer", "minimum": 0, "maximum": 16 },
+        "afterLabelId": { "type": "integer", "minimum": 0, "maximum": 16 }
+      }
+    },
+    "compositionDuplicateValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "sourceCompositionLocator", "newCompositionLocator", "projectItemCountBefore", "projectItemCountAfter", "sourceSettings", "newSettings"],
+      "properties": {
+        "changed": { "const": true },
+        "sourceCompositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "newCompositionLocator": { "$ref": "#/$defs/compositionLocator" },
+        "projectItemCountBefore": { "$ref": "#/$defs/safeNonnegativeInteger" },
+        "projectItemCountAfter": { "$ref": "#/$defs/safePositiveInteger" },
+        "sourceSettings": { "$ref": "#/$defs/compositionSettingsSnapshotValue" },
+        "newSettings": { "$ref": "#/$defs/compositionSettingsSnapshotValue" }
+      },
+      "x-invariant": "new-locator-differs-from-source-and-projectItemCountAfter-equals-projectItemCountBefore-plus-one"
     },
     "positiveRatioValue": {
       "type": "object",
@@ -2718,6 +3094,78 @@
         "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
     },
+    "projectContextReadInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.context.read" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/projectContextReadValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "projectItemMetadataReadInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.item.metadata.read" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/projectItemMetadataReadValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "compositionSettingsReadInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.settings.read" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/compositionSettingsReadValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "compositionWorkAreaSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.work-area.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/compositionWorkAreaSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "projectItemNameSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.item.name.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/projectItemNameSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "projectItemCommentSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.item.comment.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/projectItemCommentSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "projectItemLabelSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.project.item.label.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/projectItemLabelSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "compositionDuplicateInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.composition.duplicate" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/compositionDuplicateValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
     "invokeResult": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeResult" },
@@ -2733,7 +3181,15 @@
         { "$ref": "#/$defs/layerEffectApplyInvokeResult" },
         { "$ref": "#/$defs/layerPropertiesListInvokeResult" },
         { "$ref": "#/$defs/layerPropertyKeyframesListInvokeResult" },
-        { "$ref": "#/$defs/layerPropertySetInvokeResult" }
+        { "$ref": "#/$defs/layerPropertySetInvokeResult" },
+        { "$ref": "#/$defs/projectContextReadInvokeResult" },
+        { "$ref": "#/$defs/projectItemMetadataReadInvokeResult" },
+        { "$ref": "#/$defs/compositionSettingsReadInvokeResult" },
+        { "$ref": "#/$defs/compositionWorkAreaSetInvokeResult" },
+        { "$ref": "#/$defs/projectItemNameSetInvokeResult" },
+        { "$ref": "#/$defs/projectItemCommentSetInvokeResult" },
+        { "$ref": "#/$defs/projectItemLabelSetInvokeResult" },
+        { "$ref": "#/$defs/compositionDuplicateInvokeResult" }
       ]
     },
     "cancelResult": {

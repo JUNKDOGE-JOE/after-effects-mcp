@@ -15,6 +15,13 @@ from ae_mcp.backends.native import (
     NativeCancellationToken,
     NativeInvokeRequest,
 )
+from ae_mcp.backends.native_project_composition import (
+    COMPOSITION_DUPLICATE_CAPABILITY_ID,
+    COMPOSITION_WORK_AREA_SET_CAPABILITY_ID,
+    PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID,
+    PROJECT_ITEM_LABEL_SET_CAPABILITY_ID,
+    PROJECT_ITEM_NAME_SET_CAPABILITY_ID,
+)
 from ae_mcp_bridge import HttpBridge
 
 
@@ -300,6 +307,42 @@ async def test_native_bit_depth_transport_loss_preserves_side_effect_uncertainty
     assert raised.value.retryable is False
     assert raised.value.recovery.action == "inspect-state"
     assert raised.value.details == {"capabilityId": request.capability_id}
+
+
+@pytest.mark.parametrize(
+    ("capability_id", "expected_hint"),
+    [
+        (COMPOSITION_WORK_AREA_SET_CAPABILITY_ID, "composition settings"),
+        (PROJECT_ITEM_NAME_SET_CAPABILITY_ID, "project item metadata"),
+        (PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID, "project item metadata"),
+        (PROJECT_ITEM_LABEL_SET_CAPABILITY_ID, "project item metadata"),
+        (COMPOSITION_DUPLICATE_CAPABILITY_ID, "do not duplicate again"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_project_composition_writes_preserve_transport_uncertainty(
+    token_file,
+    capability_id,
+    expected_hint,
+):
+    request = NativeInvokeRequest(
+        request_id=f"issue150-timeout-{capability_id.rsplit('.', 1)[-1]}",
+        capability_id=capability_id,
+        capability_version=1,
+        arguments={"idempotencyKey": "issue150-transport-intent"},
+        deadline_unix_ms=_DEADLINE,
+    )
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
+    assert raised.value.retryable is False
+    assert raised.value.recovery.action == "inspect-state"
+    assert expected_hint in raised.value.recovery.hint
+    assert raised.value.details == {"capabilityId": capability_id}
 
 
 @pytest.mark.asyncio

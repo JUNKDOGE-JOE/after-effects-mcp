@@ -1,0 +1,122 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "request": {
+    "wireVersion": 1,
+    "kind": "request",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-item-comment-set-1",
+    "method": "invoke",
+    "deadlineUnixMs": 1900000005000,
+    "params": {
+      "capabilityId": "ae.project.item.comment.set",
+      "capabilityVersion": 1,
+      "arguments": {
+        "itemLocator": {
+          "kind": "item",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "44444444-4444-4444-8444-444444444444",
+          "generation": 8,
+          "objectId": "77777777-7777-4777-8777-777777777777"
+        },
+        "comment": "SYNTHETIC_COMMENT",
+        "idempotencyKey": "synthetic-item-comment-0001"
+      }
+    }
+  },
+  "events": [
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-item-comment-set-1",
+      "event": "progress",
+      "sequence": 1,
+      "progress": {
+        "phase": "queued",
+        "fraction": 0,
+        "message": "Queued for the bounded main-thread dispatcher."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-item-comment-set-1",
+      "event": "progress",
+      "sequence": 2,
+      "progress": {
+        "phase": "dispatched",
+        "fraction": 0.5,
+        "message": "Entered the synthetic host-thread dispatch phase."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-item-comment-set-1",
+      "event": "progress",
+      "sequence": 3,
+      "progress": {
+        "phase": "validating",
+        "fraction": 0.9,
+        "message": "Validating the bounded synthetic result."
+      }
+    }
+  ],
+  "response": {
+    "wireVersion": 1,
+    "kind": "response",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-item-comment-set-1",
+    "method": "invoke",
+    "ok": true,
+    "replayed": false,
+    "result": {
+      "capabilityId": "ae.project.item.comment.set",
+      "capabilityVersion": 1,
+      "engine": "native-aegp",
+      "outcome": "succeeded",
+      "value": {
+        "changed": true,
+        "itemLocator": {
+          "kind": "item",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "44444444-4444-4444-8444-444444444444",
+          "generation": 8,
+          "objectId": "77777777-7777-4777-8777-777777777777"
+        },
+        "beforeComment": "",
+        "afterComment": "SYNTHETIC_COMMENT"
+      },
+      "evidence": {
+        "engine": "native-aegp",
+        "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "requestId": "invoke-item-comment-set-1",
+        "capabilityId": "ae.project.item.comment.set",
+        "capabilityVersion": 1,
+        "startedAtUnixMs": 1900000000000,
+        "completedAtUnixMs": 1900000000025,
+        "effect": "committed",
+        "requestDigest": "86593f8a6ba8292928dcbb25ba126c07f73ad4a0f55e71ccf99902505b725522",
+        "postcondition": {
+          "verified": true,
+          "kind": "project-item-comment-set",
+          "algorithm": "sha256-rfc8785-jcs-v1",
+          "digest": "82dd00635757c3deb2641ba761cd3bc2fc2608e02885478fac35a114710011f6"
+        },
+        "undo": {
+          "available": true,
+          "verified": false
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -46,6 +47,46 @@ inline constexpr std::string_view kLayerPropertyKeyframesListCapability =
     "ae.layer.property.keyframes.list";
 inline constexpr std::string_view kLayerPropertySetCapability =
     "ae.layer.property.set";
+inline constexpr std::string_view kProjectContextReadCapability =
+    "ae.project.context.read";
+inline constexpr std::string_view kProjectItemMetadataReadCapability =
+    "ae.project.item.metadata.read";
+inline constexpr std::string_view kCompositionSettingsReadCapability =
+    "ae.composition.settings.read";
+inline constexpr std::string_view kCompositionWorkAreaSetCapability =
+    "ae.composition.work-area.set";
+inline constexpr std::string_view kProjectItemNameSetCapability =
+    "ae.project.item.name.set";
+inline constexpr std::string_view kProjectItemCommentSetCapability =
+    "ae.project.item.comment.set";
+inline constexpr std::string_view kProjectItemLabelSetCapability =
+    "ae.project.item.label.set";
+inline constexpr std::string_view kCompositionDuplicateCapability =
+    "ae.composition.duplicate";
+inline constexpr std::array<std::string_view, 22> kAdvertisedNativeCapabilities{
+    kProjectSummaryCapability,
+    kProjectBitDepthReadCapability,
+    kProjectBitDepthSetCapability,
+    kProjectItemsListCapability,
+    kCompositionLayersListCapability,
+    kCompositionSelectedLayersListCapability,
+    kCompositionTimeReadCapability,
+    kCompositionTimeSetCapability,
+    kCompositionCreateCapability,
+    kCompositionLayerCreateCapability,
+    kLayerEffectApplyCapability,
+    kLayerPropertiesListCapability,
+    kLayerPropertyKeyframesListCapability,
+    kLayerPropertySetCapability,
+    kProjectContextReadCapability,
+    kProjectItemMetadataReadCapability,
+    kCompositionSettingsReadCapability,
+    kCompositionWorkAreaSetCapability,
+    kProjectItemNameSetCapability,
+    kProjectItemCommentSetCapability,
+    kProjectItemLabelSetCapability,
+    kCompositionDuplicateCapability,
+};
 // Authenticated broker control-plane operation. This is deliberately omitted
 // from model-facing capability discovery and can only fence native locator
 // cache state; it never changes the After Effects project.
@@ -154,6 +195,18 @@ struct ProjectItemsPage {
   std::vector<ProjectItemEntry> items;
 };
 
+struct ProjectContext {
+  ObjectLocator project_locator;
+  std::optional<ProjectItemEntry> active_item;
+  std::optional<ProjectItemEntry> most_recently_used_composition;
+  std::uint64_t selection_total{0};
+  std::uint64_t selection_offset{0};
+  std::uint16_t selection_limit{0};
+  bool selection_has_more{false};
+  std::optional<std::uint64_t> selection_next_offset;
+  std::vector<ProjectItemEntry> selected_items;
+};
+
 struct CompositionLayerEntry {
   ObjectLocator locator;
   std::uint64_t stack_index{0};
@@ -201,6 +254,68 @@ struct CompositionPositiveRatio {
   std::string rational{"1"};
 
   [[nodiscard]] bool operator==(const CompositionPositiveRatio&) const = default;
+};
+
+struct ProjectItemMetadata {
+  ObjectLocator item_locator;
+  std::string name;
+  std::string type;
+  std::optional<ObjectLocator> parent_locator;
+  std::string comment;
+  std::uint8_t label_id{0};
+  std::optional<std::uint32_t> width;
+  std::optional<std::uint32_t> height;
+  std::optional<CompositionCurrentTime> duration;
+  std::optional<CompositionPositiveRatio> pixel_aspect_ratio;
+  std::optional<std::uint64_t> layer_count;
+};
+
+struct CompositionSettings {
+  ObjectLocator composition_locator;
+  std::string name;
+  std::uint32_t width{0};
+  std::uint32_t height{0};
+  CompositionCurrentTime duration;
+  CompositionCurrentTime frame_duration;
+  CompositionPositiveRatio frame_rate;
+  CompositionPositiveRatio pixel_aspect_ratio;
+  CompositionCurrentTime work_area_start;
+  CompositionCurrentTime work_area_duration;
+  CompositionCurrentTime display_start_time;
+  std::uint64_t layer_count{0};
+};
+
+struct CompositionWorkAreaChanged {
+  bool changed{true};
+  ObjectLocator composition_locator;
+  CompositionCurrentTime before_start;
+  CompositionCurrentTime before_duration;
+  CompositionCurrentTime after_start;
+  CompositionCurrentTime after_duration;
+};
+
+struct ProjectItemTextChanged {
+  bool changed{true};
+  ObjectLocator item_locator;
+  std::string before_value;
+  std::string after_value;
+};
+
+struct ProjectItemLabelChanged {
+  bool changed{true};
+  ObjectLocator item_locator;
+  std::uint8_t before_label_id{0};
+  std::uint8_t after_label_id{0};
+};
+
+struct CompositionDuplicated {
+  bool changed{true};
+  ObjectLocator source_composition_locator;
+  ObjectLocator new_composition_locator;
+  std::uint64_t project_item_count_before{0};
+  std::uint64_t project_item_count_after{0};
+  CompositionSettings source_settings;
+  CompositionSettings new_settings;
 };
 
 struct CompositionCreated {
@@ -453,6 +568,54 @@ struct LayerPropertySetCommand {
   LayerPropertyValue value;
 };
 
+struct ProjectContextQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  std::uint64_t selection_offset{0};
+  std::uint16_t selection_limit{0};
+};
+
+struct ProjectItemQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator item_locator;
+};
+
+struct CompositionSettingsQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator composition_locator;
+};
+
+struct CompositionWorkAreaSetCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator composition_locator;
+  CompositionCurrentTime start;
+  CompositionCurrentTime duration;
+};
+
+struct ProjectItemTextSetCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator item_locator;
+  std::string value;
+};
+
+struct ProjectItemLabelSetCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator item_locator;
+  std::uint8_t label_id{0};
+};
+
+struct CompositionDuplicateCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator composition_locator;
+  std::string new_name;
+};
+
 struct HostReadResult {
   bool ok{false};
   ProjectSummary value;
@@ -495,6 +658,94 @@ struct HostProjectItemsResult {
 
   [[nodiscard]] static HostProjectItemsResult success(ProjectItemsPage page);
   [[nodiscard]] static HostProjectItemsResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostProjectContextResult {
+  bool ok{false};
+  ProjectContext value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostProjectContextResult success(ProjectContext value);
+  [[nodiscard]] static HostProjectContextResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostProjectItemMetadataResult {
+  bool ok{false};
+  ProjectItemMetadata value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostProjectItemMetadataResult success(ProjectItemMetadata value);
+  [[nodiscard]] static HostProjectItemMetadataResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostCompositionSettingsResult {
+  bool ok{false};
+  CompositionSettings value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostCompositionSettingsResult success(CompositionSettings value);
+  [[nodiscard]] static HostCompositionSettingsResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostCompositionWorkAreaWriteResult {
+  bool ok{false};
+  CompositionWorkAreaChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostCompositionWorkAreaWriteResult success(
+      CompositionWorkAreaChanged value);
+  [[nodiscard]] static HostCompositionWorkAreaWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostProjectItemTextWriteResult {
+  bool ok{false};
+  ProjectItemTextChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostProjectItemTextWriteResult success(
+      ProjectItemTextChanged value);
+  [[nodiscard]] static HostProjectItemTextWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostProjectItemLabelWriteResult {
+  bool ok{false};
+  ProjectItemLabelChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostProjectItemLabelWriteResult success(
+      ProjectItemLabelChanged value);
+  [[nodiscard]] static HostProjectItemLabelWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostCompositionDuplicateResult {
+  bool ok{false};
+  CompositionDuplicated value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostCompositionDuplicateResult success(
+      CompositionDuplicated value);
+  [[nodiscard]] static HostCompositionDuplicateResult failure(
       std::string code, std::string detail, std::string field = {});
 };
 
@@ -633,6 +884,22 @@ class HostApi {
       std::int32_t target_depth, TimePoint work_deadline);
   [[nodiscard]] virtual HostProjectItemsResult list_project_items(
       const ProjectItemsQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostProjectContextResult read_project_context(
+      const ProjectContextQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostProjectItemMetadataResult read_project_item_metadata(
+      const ProjectItemQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionSettingsResult read_composition_settings(
+      const CompositionSettingsQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionWorkAreaWriteResult set_composition_work_area(
+      const CompositionWorkAreaSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostProjectItemTextWriteResult set_project_item_name(
+      const ProjectItemTextSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostProjectItemTextWriteResult set_project_item_comment(
+      const ProjectItemTextSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostProjectItemLabelWriteResult set_project_item_label(
+      const ProjectItemLabelSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionDuplicateResult duplicate_composition(
+      const CompositionDuplicateCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionLayersResult list_composition_layers(
       const CompositionLayersQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionLayersResult list_selected_composition_layers(
@@ -691,7 +958,13 @@ struct Request {
       CompositionCurrentTime composition_create_duration_value = {},
       CompositionPositiveRatio composition_create_frame_rate_value = {},
       CompositionPositiveRatio composition_create_pixel_aspect_ratio_value = {},
-      std::string layer_effect_match_name_value = {})
+      std::string layer_effect_match_name_value = {},
+      std::optional<ObjectLocator> item_locator_value = std::nullopt,
+      CompositionCurrentTime work_area_start_value = {},
+      CompositionCurrentTime work_area_duration_value = {},
+      std::string item_text_value = {},
+      std::uint8_t item_label_id_value = 0,
+      std::string duplicate_new_name_value = {})
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -724,7 +997,13 @@ struct Request {
         composition_create_frame_rate(std::move(composition_create_frame_rate_value)),
         composition_create_pixel_aspect_ratio(
             std::move(composition_create_pixel_aspect_ratio_value)),
-        layer_effect_match_name(std::move(layer_effect_match_name_value)) {}
+        layer_effect_match_name(std::move(layer_effect_match_name_value)),
+        item_locator(std::move(item_locator_value)),
+        work_area_start(std::move(work_area_start_value)),
+        work_area_duration(std::move(work_area_duration_value)),
+        item_text(std::move(item_text_value)),
+        item_label_id(item_label_id_value),
+        duplicate_new_name(std::move(duplicate_new_name_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -761,6 +1040,12 @@ struct Request {
   CompositionPositiveRatio composition_create_frame_rate;
   CompositionPositiveRatio composition_create_pixel_aspect_ratio;
   std::string layer_effect_match_name;
+  std::optional<ObjectLocator> item_locator;
+  CompositionCurrentTime work_area_start;
+  CompositionCurrentTime work_area_duration;
+  std::string item_text;
+  std::uint8_t item_label_id{0};
+  std::string duplicate_new_name;
 };
 
 enum class EnqueueCode {
@@ -812,6 +1097,13 @@ struct Completion {
   LayerPropertiesPage layer_properties_result;
   LayerPropertyKeyframesPage layer_property_keyframes_result;
   LayerPropertyChanged layer_property_change_result;
+  ProjectContext project_context_result;
+  ProjectItemMetadata project_item_metadata_result;
+  CompositionSettings composition_settings_result;
+  CompositionWorkAreaChanged composition_work_area_change_result;
+  ProjectItemTextChanged project_item_text_change_result;
+  ProjectItemLabelChanged project_item_label_change_result;
+  CompositionDuplicated composition_duplicate_result;
   ProjectGraphInvalidation project_graph_invalidation_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;

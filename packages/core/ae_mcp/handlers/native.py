@@ -29,6 +29,16 @@ from ae_mcp.backends.native import (
     invoke_project_items_list,
     invoke_project_summary,
 )
+from ae_mcp.backends.native_project_composition import (
+    invoke_composition_duplicate,
+    invoke_composition_settings_read,
+    invoke_composition_work_area_set,
+    invoke_project_context_read,
+    invoke_project_item_comment_set,
+    invoke_project_item_label_set,
+    invoke_project_item_metadata_read,
+    invoke_project_item_name_set,
+)
 from ae_mcp.handlers import register
 
 
@@ -46,6 +56,14 @@ _LAYER_EFFECT_APPLY_TIMEOUT_MS = 10_000
 _LAYER_PROPERTIES_LIST_TIMEOUT_MS = 10_000
 _LAYER_PROPERTY_KEYFRAMES_LIST_TIMEOUT_MS = 10_000
 _LAYER_PROPERTY_SET_TIMEOUT_MS = 10_000
+_PROJECT_CONTEXT_READ_TIMEOUT_MS = 10_000
+_PROJECT_ITEM_METADATA_READ_TIMEOUT_MS = 10_000
+_COMPOSITION_SETTINGS_READ_TIMEOUT_MS = 10_000
+_COMPOSITION_WORK_AREA_SET_TIMEOUT_MS = 10_000
+_PROJECT_ITEM_NAME_SET_TIMEOUT_MS = 10_000
+_PROJECT_ITEM_COMMENT_SET_TIMEOUT_MS = 10_000
+_PROJECT_ITEM_LABEL_SET_TIMEOUT_MS = 10_000
+_COMPOSITION_DUPLICATE_TIMEOUT_MS = 10_000
 
 
 def _backend() -> NativeInvokeBackend:
@@ -78,6 +96,7 @@ def _native_read_response(execution: Any) -> dict[str, Any]:
             "risk": implementation.risk,
             "mutability": implementation.mutability,
             "idempotency": implementation.idempotency,
+            "undo": implementation.undo,
         },
         "provenance": {
             key: audit[key]
@@ -1036,6 +1055,367 @@ async def _run_set_layer_property_value(
     }
 
 
+def _project_package_write_response(execution: Any) -> dict[str, Any]:
+    """Public response shared only by the five #150 native writes."""
+
+    implementation = execution.implementation
+    audit = execution.audit_fields()
+    return {
+        "ok": True,
+        "replayed": execution.replayed,
+        "value": execution.value.model_dump(mode="json", by_alias=True),
+        "implementation": {
+            "engine": execution.engine,
+            "capabilityId": implementation.capability_id,
+            "capabilityVersion": implementation.capability_version,
+            "contractDigest": implementation.contract_digest,
+            "risk": implementation.risk,
+            "mutability": implementation.mutability,
+            "idempotency": implementation.idempotency,
+            "cancellation": implementation.cancellation,
+            "undo": implementation.undo,
+            "sideEffectSummary": implementation.side_effect_summary,
+            "preconditions": list(implementation.preconditions),
+        },
+        "provenance": {
+            key: audit[key]
+            for key in (
+                "engine",
+                "selectedWireVersion",
+                "pluginVersion",
+                "compiledSdkVersion",
+                "sourceCommit",
+                "hostInstanceId",
+                "sessionId",
+                "sessionGeneration",
+                "capabilitiesDigest",
+            )
+        },
+        "audit": {
+            key: audit[key]
+            for key in (
+                "requestId",
+                "evidenceRequestId",
+                "idempotencyKey",
+                "replayed",
+                "capabilityId",
+                "capabilityVersion",
+                "contractDigest",
+                "effect",
+                "requestDigest",
+                "postconditionAlgorithm",
+                "postconditionDigest",
+                "undoAvailable",
+                "undoVerified",
+                "startedAtUnixMs",
+                "completedAtUnixMs",
+            )
+        },
+        "evidence": execution.evidence.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+        ),
+    }
+
+
+async def _await_project_package_write(
+    call: Any,
+    *,
+    cancellation: NativeCancellationToken,
+    ctx: Any,
+    start_msg: str,
+) -> Any:
+    call_task = asyncio.create_task(call())
+    try:
+        return await progress.with_heartbeat(
+            ctx,
+            asyncio.shield(call_task),
+            start_msg=start_msg,
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        return await asyncio.shield(call_task)
+
+
+async def _run_get_project_context(
+    args: schemas.AeGetProjectContextArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _PROJECT_CONTEXT_READ_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_project_context_read(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            selection_offset=args.selection_offset,
+            selection_limit=args.selection_limit,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.getProjectContext native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_get_project_item_metadata(
+    args: schemas.AeGetProjectItemMetadataArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _PROJECT_ITEM_METADATA_READ_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_project_item_metadata_read(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            item_locator=args.item_locator.model_dump(mode="json", by_alias=True),
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.getProjectItemMetadata native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    response = _native_read_response(execution)
+    # Unsupported type-specific facts are absent on the native wire. Keep the
+    # public value byte-for-byte consistent with the verified postcondition.
+    response["value"] = execution.value.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
+    return response
+
+
+async def _run_get_composition_settings(
+    args: schemas.AeGetCompositionSettingsArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _COMPOSITION_SETTINGS_READ_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_composition_settings_read(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            composition_locator=args.composition_locator.model_dump(
+                mode="json", by_alias=True
+            ),
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.getCompositionSettings native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_set_composition_work_area(
+    args: schemas.AeSetCompositionWorkAreaArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _COMPOSITION_WORK_AREA_SET_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_composition_work_area_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            composition_locator=args.composition_locator.model_dump(
+                mode="json", by_alias=True
+            ),
+            start=args.start.model_dump(mode="json", by_alias=True),
+            duration=args.duration.model_dump(mode="json", by_alias=True),
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg=(
+            "ae.setCompositionWorkArea native AEGP write; after dispatch, "
+            "wait for verified readback..."
+        ),
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_rename_project_item(
+    args: schemas.AeRenameProjectItemArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _PROJECT_ITEM_NAME_SET_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_project_item_name_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            item_locator=args.item_locator.model_dump(mode="json", by_alias=True),
+            name=args.name,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.renameProjectItem native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_project_item_comment(
+    args: schemas.AeSetProjectItemCommentArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _PROJECT_ITEM_COMMENT_SET_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_project_item_comment_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            item_locator=args.item_locator.model_dump(mode="json", by_alias=True),
+            comment=args.comment,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.setProjectItemComment native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_project_item_label(
+    args: schemas.AeSetProjectItemLabelArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _PROJECT_ITEM_LABEL_SET_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_project_item_label_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            item_locator=args.item_locator.model_dump(mode="json", by_alias=True),
+            label_id=args.label_id,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.setProjectItemLabel native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_duplicate_composition(
+    args: schemas.AeDuplicateCompositionArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _COMPOSITION_DUPLICATE_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_composition_duplicate(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            composition_locator=args.composition_locator.model_dump(
+                mode="json", by_alias=True
+            ),
+            new_name=args.new_name,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.duplicateComposition native AEGP write; wait for verified identity...",
+    )
+    return _project_package_write_response(execution)
+
+
+register(
+    "ae.getProjectContext",
+    schemas.AeGetProjectContextArgs,
+    _run_get_project_context,
+)
+register(
+    "ae.getProjectItemMetadata",
+    schemas.AeGetProjectItemMetadataArgs,
+    _run_get_project_item_metadata,
+)
+register(
+    "ae.getCompositionSettings",
+    schemas.AeGetCompositionSettingsArgs,
+    _run_get_composition_settings,
+)
+register(
+    "ae.setCompositionWorkArea",
+    schemas.AeSetCompositionWorkAreaArgs,
+    _run_set_composition_work_area,
+)
+register(
+    "ae.renameProjectItem",
+    schemas.AeRenameProjectItemArgs,
+    _run_rename_project_item,
+)
+register(
+    "ae.setProjectItemComment",
+    schemas.AeSetProjectItemCommentArgs,
+    _run_set_project_item_comment,
+)
+register(
+    "ae.setProjectItemLabel",
+    schemas.AeSetProjectItemLabelArgs,
+    _run_set_project_item_label,
+)
+register(
+    "ae.duplicateComposition",
+    schemas.AeDuplicateCompositionArgs,
+    _run_duplicate_composition,
+)
 register(
     "ae.projectSummary",
     schemas.AeProjectSummaryArgs,
@@ -1109,6 +1489,10 @@ register(
 
 
 __all__ = [
+    "_run_duplicate_composition",
+    "_run_get_composition_settings",
+    "_run_get_project_context",
+    "_run_get_project_item_metadata",
     "_run_get_composition_time",
     "_run_get_project_bit_depth",
     "_run_create_composition",
@@ -1119,6 +1503,10 @@ __all__ = [
     "_run_list_layer_property_keyframes",
     "_run_list_project_items",
     "_run_project_summary",
+    "_run_rename_project_item",
+    "_run_set_composition_work_area",
+    "_run_set_project_item_comment",
+    "_run_set_project_item_label",
     "_run_set_project_bit_depth",
     "_run_set_composition_time",
     "_run_set_layer_property_value",

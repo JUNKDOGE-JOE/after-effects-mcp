@@ -59,6 +59,10 @@ bool composition_times_equal(
           * static_cast<std::int64_t>(left.scale);
 }
 
+bool has_nondefault_time(const CompositionCurrentTime& value) {
+  return value.value != 0 || value.scale != 1 || value.seconds_rational != "0";
+}
+
 bool valid_layer_create_color(const CompositionLayerCreateColor& value) {
   return value.red <= 255 && value.green <= 255
       && value.blue <= 255 && value.alpha <= 255;
@@ -82,6 +86,12 @@ bool valid_composition_create_request(const Request& request) {
       && valid_composition_time(request.composition_create_duration)
       && valid_positive_ratio(request.composition_create_frame_rate)
       && valid_positive_ratio(request.composition_create_pixel_aspect_ratio);
+}
+
+bool valid_bounded_text(
+    std::string_view value, std::size_t maximum_bytes, bool allow_empty) {
+  return (allow_empty || !value.empty()) && value.size() <= maximum_bytes
+      && value.find('\0') == std::string_view::npos;
 }
 
 bool has_composition_create_arguments(const Request& request) {
@@ -163,6 +173,11 @@ bool valid_locator(const ObjectLocator& locator) {
       && valid_uuid(locator.object_id);
 }
 
+bool valid_item_locator(const ObjectLocator& locator) {
+  return valid_locator(locator)
+      && (locator.kind == "item" || locator.kind == "composition");
+}
+
 bool valid_property_value(const LayerPropertyValue& value) {
   if (const auto* scalar = std::get_if<LayerPropertyScalarValue>(&value)) {
     return !scalar->value.empty();
@@ -186,6 +201,55 @@ bool same_locator_context(const ObjectLocator& left, const ObjectLocator& right)
       && left.generation == right.generation;
 }
 
+bool valid_project_item_entry(const ProjectItemEntry& value) {
+  return valid_item_locator(value.locator)
+      && valid_bounded_text(value.name, 4096, true)
+      && (value.type == "folder" || value.type == "composition"
+          || value.type == "footage" || value.type == "unknown")
+      && (!value.parent_locator.has_value()
+          || (valid_locator(*value.parent_locator)
+            && (value.parent_locator->kind == "project"
+              || value.parent_locator->kind == "item")
+            && same_locator_context(value.locator, *value.parent_locator)));
+}
+
+bool valid_composition_settings(const CompositionSettings& value) {
+  return valid_locator(value.composition_locator)
+      && value.composition_locator.kind == "composition"
+      && valid_bounded_text(value.name, 4096, true)
+      && value.width >= 1 && value.width <= 30000
+      && value.height >= 1 && value.height <= 30000
+      && valid_composition_time(value.duration) && value.duration.value > 0
+      && valid_composition_time(value.frame_duration)
+      && value.frame_duration.value > 0
+      && valid_positive_ratio(value.frame_rate)
+      && valid_positive_ratio(value.pixel_aspect_ratio)
+      && valid_composition_time(value.work_area_start)
+      && value.work_area_start.value >= 0
+      && valid_composition_time(value.work_area_duration)
+      && value.work_area_duration.value > 0
+      && valid_composition_time(value.display_start_time);
+}
+
+bool composition_settings_equivalent(
+    const CompositionSettings& left, const CompositionSettings& right) {
+  const auto ratios_equal = [](const CompositionPositiveRatio& lhs,
+                               const CompositionPositiveRatio& rhs) {
+    return static_cast<std::int64_t>(lhs.numerator) * rhs.denominator
+        == static_cast<std::int64_t>(rhs.numerator) * lhs.denominator;
+  };
+  return left.name == right.name && left.width == right.width
+      && left.height == right.height
+      && composition_times_equal(left.duration, right.duration)
+      && composition_times_equal(left.frame_duration, right.frame_duration)
+      && ratios_equal(left.frame_rate, right.frame_rate)
+      && ratios_equal(left.pixel_aspect_ratio, right.pixel_aspect_ratio)
+      && composition_times_equal(left.work_area_start, right.work_area_start)
+      && composition_times_equal(left.work_area_duration, right.work_area_duration)
+      && composition_times_equal(left.display_start_time, right.display_start_time)
+      && left.layer_count == right.layer_count;
+}
+
 bool rebind_creation_replay_session(Completion& replay, const Request& request) {
   const auto rebind = [&](ObjectLocator& locator) {
     if (!valid_locator(locator)
@@ -199,6 +263,16 @@ bool rebind_creation_replay_session(Completion& replay, const Request& request) 
   if (replay.capability_id == kCompositionCreateCapability) {
     ObjectLocator& composition = replay.composition_create_result.composition_locator;
     return composition.kind == "composition" && rebind(composition);
+  }
+  if (replay.capability_id == kCompositionDuplicateCapability) {
+    CompositionDuplicated& duplicated = replay.composition_duplicate_result;
+    return duplicated.source_composition_locator.kind == "composition"
+        && duplicated.new_composition_locator.kind == "composition"
+        && rebind(duplicated.source_composition_locator)
+        && rebind(duplicated.new_composition_locator)
+        && same_locator_context(
+            duplicated.source_composition_locator,
+            duplicated.new_composition_locator);
   }
   if (replay.capability_id == kLayerEffectApplyCapability) {
     ObjectLocator& layer = replay.layer_effect_apply_result.layer_locator;
@@ -415,6 +489,124 @@ HostProjectItemsResult HostProjectItemsResult::failure(
   return result;
 }
 
+HostProjectContextResult HostProjectContextResult::success(ProjectContext value) {
+  HostProjectContextResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostProjectContextResult HostProjectContextResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostProjectContextResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
+HostProjectItemMetadataResult HostProjectItemMetadataResult::success(
+    ProjectItemMetadata value) {
+  HostProjectItemMetadataResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostProjectItemMetadataResult HostProjectItemMetadataResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostProjectItemMetadataResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
+HostCompositionSettingsResult HostCompositionSettingsResult::success(
+    CompositionSettings value) {
+  HostCompositionSettingsResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostCompositionSettingsResult HostCompositionSettingsResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostCompositionSettingsResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
+HostCompositionWorkAreaWriteResult HostCompositionWorkAreaWriteResult::success(
+    CompositionWorkAreaChanged value) {
+  HostCompositionWorkAreaWriteResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostCompositionWorkAreaWriteResult HostCompositionWorkAreaWriteResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostCompositionWorkAreaWriteResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
+HostProjectItemTextWriteResult HostProjectItemTextWriteResult::success(
+    ProjectItemTextChanged value) {
+  HostProjectItemTextWriteResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostProjectItemTextWriteResult HostProjectItemTextWriteResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostProjectItemTextWriteResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
+HostProjectItemLabelWriteResult HostProjectItemLabelWriteResult::success(
+    ProjectItemLabelChanged value) {
+  HostProjectItemLabelWriteResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostProjectItemLabelWriteResult HostProjectItemLabelWriteResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostProjectItemLabelWriteResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
+HostCompositionDuplicateResult HostCompositionDuplicateResult::success(
+    CompositionDuplicated value) {
+  HostCompositionDuplicateResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostCompositionDuplicateResult HostCompositionDuplicateResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostCompositionDuplicateResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 HostCompositionLayersResult HostCompositionLayersResult::success(
     CompositionLayersPage value) {
   HostCompositionLayersResult result;
@@ -600,6 +792,54 @@ HostProjectItemsResult HostApi::list_project_items(
       "NATIVE_UNSUPPORTED", "project item reads are unavailable");
 }
 
+HostProjectContextResult HostApi::read_project_context(
+    const ProjectContextQuery&, TimePoint) {
+  return HostProjectContextResult::failure(
+      "NATIVE_UNSUPPORTED", "project context reads are unavailable");
+}
+
+HostProjectItemMetadataResult HostApi::read_project_item_metadata(
+    const ProjectItemQuery&, TimePoint) {
+  return HostProjectItemMetadataResult::failure(
+      "NATIVE_UNSUPPORTED", "project item metadata reads are unavailable");
+}
+
+HostCompositionSettingsResult HostApi::read_composition_settings(
+    const CompositionSettingsQuery&, TimePoint) {
+  return HostCompositionSettingsResult::failure(
+      "NATIVE_UNSUPPORTED", "composition settings reads are unavailable");
+}
+
+HostCompositionWorkAreaWriteResult HostApi::set_composition_work_area(
+    const CompositionWorkAreaSetCommand&, TimePoint) {
+  return HostCompositionWorkAreaWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "composition work-area writes are unavailable");
+}
+
+HostProjectItemTextWriteResult HostApi::set_project_item_name(
+    const ProjectItemTextSetCommand&, TimePoint) {
+  return HostProjectItemTextWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "project item name writes are unavailable");
+}
+
+HostProjectItemTextWriteResult HostApi::set_project_item_comment(
+    const ProjectItemTextSetCommand&, TimePoint) {
+  return HostProjectItemTextWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "project item comment writes are unavailable");
+}
+
+HostProjectItemLabelWriteResult HostApi::set_project_item_label(
+    const ProjectItemLabelSetCommand&, TimePoint) {
+  return HostProjectItemLabelWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "project item label writes are unavailable");
+}
+
+HostCompositionDuplicateResult HostApi::duplicate_composition(
+    const CompositionDuplicateCommand&, TimePoint) {
+  return HostCompositionDuplicateResult::failure(
+      "NATIVE_UNSUPPORTED", "composition duplication is unavailable");
+}
+
 HostCompositionLayersResult HostApi::list_composition_layers(
     const CompositionLayersQuery&, TimePoint) {
   return HostCompositionLayersResult::failure(
@@ -722,11 +962,29 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kLayerPropertyKeyframesListCapability;
   const bool layer_property_set =
       request.capability_id == kLayerPropertySetCapability;
+  const bool project_context_read =
+      request.capability_id == kProjectContextReadCapability;
+  const bool project_item_metadata_read =
+      request.capability_id == kProjectItemMetadataReadCapability;
+  const bool composition_settings_read =
+      request.capability_id == kCompositionSettingsReadCapability;
+  const bool composition_work_area_set =
+      request.capability_id == kCompositionWorkAreaSetCapability;
+  const bool project_item_name_set =
+      request.capability_id == kProjectItemNameSetCapability;
+  const bool project_item_comment_set =
+      request.capability_id == kProjectItemCommentSetCapability;
+  const bool project_item_label_set =
+      request.capability_id == kProjectItemLabelSetCapability;
+  const bool composition_duplicate =
+      request.capability_id == kCompositionDuplicateCapability;
   const bool mutation = project_bit_depth_set || composition_time_set
       || composition_create
       || composition_layer_create
       || layer_effect_apply
-      || layer_property_set;
+      || layer_property_set || composition_work_area_set
+      || project_item_name_set || project_item_comment_set
+      || project_item_label_set || composition_duplicate;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
@@ -735,6 +993,10 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !composition_time_set && !composition_create && !composition_layer_create
       && !layer_effect_apply && !layer_properties_list
       && !layer_property_keyframes_list && !layer_property_set
+      && !project_context_read && !project_item_metadata_read
+      && !composition_settings_read && !composition_work_area_set
+      && !project_item_name_set && !project_item_comment_set
+      && !project_item_label_set && !composition_duplicate
       && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
@@ -756,6 +1018,11 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || request.layer_create_height.has_value()
           || request.layer_create_duration.has_value()
           || !request.layer_effect_match_name.empty()
+          || request.item_locator.has_value()
+          || !request.item_text.empty() || request.item_label_id != 0
+          || !request.duplicate_new_name.empty()
+          || has_nondefault_time(request.work_area_start)
+          || has_nondefault_time(request.work_area_duration)
           || has_composition_create_arguments(request))) {
     return {
         EnqueueCode::kInvalidRequest,
@@ -913,6 +1180,134 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "native layer effect apply arguments failed closed validation",
         "params.arguments"};
   }
+  const bool package150_capability = project_context_read
+      || project_item_metadata_read || composition_settings_read
+      || composition_work_area_set || project_item_name_set
+      || project_item_comment_set || project_item_label_set
+      || composition_duplicate;
+  if (!package150_capability
+      && (request.item_locator.has_value() || !request.item_text.empty()
+          || request.item_label_id != 0 || !request.duplicate_new_name.empty()
+          || has_nondefault_time(request.work_area_start)
+          || has_nondefault_time(request.work_area_duration))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "project context arguments are not accepted by this capability",
+        "params.arguments"};
+  }
+  if (package150_capability
+      && (request.target_depth != 0 || request.project_locator.has_value()
+          || request.layer_locator.has_value()
+          || request.parent_property_locator.has_value()
+          || request.property_locator.has_value()
+          || !std::holds_alternative<std::monostate>(request.property_value)
+          || !request.layer_create_kind.empty() || !request.layer_create_name.empty()
+          || request.layer_create_color.has_value()
+          || request.layer_create_width.has_value()
+          || request.layer_create_height.has_value()
+          || request.layer_create_duration.has_value()
+          || has_composition_create_arguments(request)
+          || !request.layer_effect_match_name.empty()
+          || !valid_uuid(request.host_instance_id)
+          || !valid_uuid(request.session_id))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "project context capability arguments failed closed validation",
+        "params.arguments"};
+  }
+  if (project_context_read
+      && (request.offset > 9'007'199'254'740'991ULL || request.limit < 1
+          || request.limit > 50 || request.composition_locator.has_value()
+          || request.item_locator.has_value() || !request.idempotency_key.empty()
+          || !request.arguments_fingerprint_sha256.empty()
+          || !request.item_text.empty() || request.item_label_id != 0
+          || !request.duplicate_new_name.empty()
+          || has_nondefault_time(request.work_area_start)
+          || has_nondefault_time(request.work_area_duration))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "project context page arguments failed closed validation",
+        "params.arguments"};
+  }
+  if (project_item_metadata_read
+      && (!request.item_locator.has_value()
+          || !valid_item_locator(*request.item_locator)
+          || request.composition_locator.has_value() || request.offset != 0
+          || request.limit != 0 || !request.idempotency_key.empty()
+          || !request.arguments_fingerprint_sha256.empty())) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "itemLocator must be a closed item or composition locator",
+        "params.arguments.itemLocator"};
+  }
+  if (composition_settings_read
+      && (!request.composition_locator.has_value()
+          || request.item_locator.has_value() || request.offset != 0
+          || request.limit != 0 || !request.idempotency_key.empty()
+          || !request.arguments_fingerprint_sha256.empty())) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "compositionLocator is required for composition settings",
+        "params.arguments.compositionLocator"};
+  }
+  const bool package150_item_write = project_item_name_set
+      || project_item_comment_set || project_item_label_set;
+  if (package150_item_write
+      && (!request.item_locator.has_value()
+          || !valid_item_locator(*request.item_locator)
+          || request.composition_locator.has_value() || request.offset != 0
+          || request.limit != 0
+          || !valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256)
+          || (project_item_name_set
+            && !valid_bounded_text(request.item_text, 1020, false))
+          || (project_item_comment_set
+            && !valid_bounded_text(request.item_text, 4096, true))
+          || (project_item_label_set && request.item_label_id > 16))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "project item write arguments failed closed validation",
+        project_item_label_set
+            ? "params.arguments.labelId"
+            : project_item_name_set
+                ? "params.arguments.name" : "params.arguments.comment"};
+  }
+  if (composition_work_area_set
+      && (!request.composition_locator.has_value()
+          || request.item_locator.has_value() || request.offset != 0
+          || request.limit != 0
+          || !valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256)
+          || !valid_composition_time(request.work_area_start)
+          || request.work_area_start.value < 0
+          || !valid_composition_time(request.work_area_duration)
+          || request.work_area_duration.value <= 0)) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "composition work-area arguments failed closed validation",
+        request.work_area_start.value < 0
+            ? "params.arguments.start" : "params.arguments.duration"};
+  }
+  if (composition_duplicate
+      && (!request.composition_locator.has_value()
+          || request.item_locator.has_value() || request.offset != 0
+          || request.limit != 0
+          || !valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256)
+          || !valid_bounded_text(request.duplicate_new_name, 1020, false))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "composition duplicate arguments failed closed validation",
+        "params.arguments.newName"};
+  }
   if (!composition_layer_create
       && (!request.layer_create_kind.empty()
           || !request.layer_create_name.empty()
@@ -969,7 +1364,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   }
   if ((composition_layers_list || composition_selected_layers_list
           || composition_time_read || composition_time_set
-          || composition_layer_create)
+          || composition_layer_create || composition_settings_read
+          || composition_work_area_set || composition_duplicate)
       && (request.project_locator.has_value() || !request.composition_locator.has_value())) {
     return {
         EnqueueCode::kInvalidRequest,
@@ -979,7 +1375,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   }
   if (composition_layers_list || composition_selected_layers_list
       || composition_time_read || composition_time_set
-      || composition_layer_create) {
+      || composition_layer_create || composition_settings_read
+      || composition_work_area_set || composition_duplicate) {
     const ObjectLocator& locator = *request.composition_locator;
     if (!valid_locator(locator) || locator.kind != "composition") {
       return {
@@ -995,6 +1392,17 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "STALE_LOCATOR",
           "compositionLocator belongs to another host or native session",
           "params.arguments.compositionLocator"};
+      }
+  }
+  if (project_item_metadata_read || package150_item_write) {
+    const ObjectLocator& locator = *request.item_locator;
+    if (locator.host_instance_id != request.host_instance_id
+        || locator.session_id != request.session_id) {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "STALE_LOCATOR",
+          "itemLocator belongs to another host or native session",
+          "params.arguments.itemLocator"};
     }
   }
   if ((layer_properties_list || layer_property_keyframes_list
@@ -1136,7 +1544,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
     if (existing != idempotency_ledger_.end()) {
       const bool same_arguments = existing->second.arguments_fingerprint_sha256
           == request.arguments_fingerprint_sha256;
-      if ((composition_create || composition_layer_create || layer_effect_apply)
+      if ((composition_create || composition_layer_create || layer_effect_apply
+              || composition_duplicate)
           && same_arguments
           && existing->second.state == IdempotencyState::kSucceeded
           && existing->second.replay_completion.has_value()) {
@@ -1424,6 +1833,332 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.session_generation = request.session_generation;
             completion.ok = true;
             completion.project_items_result = std::move(host_result.value);
+          }
+        } else if (request.capability_id == kProjectContextReadCapability) {
+          HostProjectContextResult host_result = host.read_project_context(
+              ProjectContextQuery{
+                  request.host_instance_id,
+                  request.session_id,
+                  request.offset,
+                  request.limit},
+              std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else {
+            const ProjectContext& value = host_result.value;
+            bool verified = valid_locator(value.project_locator)
+                && value.project_locator.kind == "project"
+                && value.project_locator.host_instance_id == request.host_instance_id
+                && value.project_locator.session_id == request.session_id
+                && value.selection_offset == request.offset
+                && value.selection_limit == request.limit
+                && value.selected_items.size() <= request.limit
+                && value.selection_total >= value.selected_items.size()
+                && value.selection_has_more
+                    == (value.selection_offset + value.selected_items.size()
+                        < value.selection_total)
+                && (value.selection_has_more
+                    ? value.selection_next_offset
+                        == std::optional<std::uint64_t>(
+                            value.selection_offset + value.selected_items.size())
+                    : !value.selection_next_offset.has_value());
+            const auto valid_context_item = [&](const ProjectItemEntry& item) {
+              return valid_project_item_entry(item)
+                  && same_locator_context(value.project_locator, item.locator);
+            };
+            verified = verified && std::all_of(
+                value.selected_items.begin(), value.selected_items.end(), valid_context_item)
+                && (!value.active_item.has_value()
+                    || valid_context_item(*value.active_item))
+                && (!value.most_recently_used_composition.has_value()
+                    || (value.most_recently_used_composition->type == "composition"
+                      && value.most_recently_used_composition->locator.kind == "composition"
+                      && valid_context_item(*value.most_recently_used_composition)));
+            if (!verified) {
+              completion = failure_for(
+                  request, "CAPABILITY_FAILED",
+                  "native project context result was not bound to its request");
+            } else {
+              completion.request_id = request.request_id;
+              completion.capability_id = request.capability_id;
+              completion.route_id = request.route_id;
+              completion.session_generation = request.session_generation;
+              completion.ok = true;
+              completion.project_context_result = std::move(host_result.value);
+            }
+          }
+        } else if (request.capability_id == kProjectItemMetadataReadCapability) {
+          HostProjectItemMetadataResult host_result = host.read_project_item_metadata(
+              ProjectItemQuery{
+                  request.host_instance_id,
+                  request.session_id,
+                  *request.item_locator},
+              std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else {
+            const ProjectItemMetadata& value = host_result.value;
+            const bool dimensions_valid = (!value.width.has_value()
+                    || (*value.width >= 1 && *value.width <= 30000))
+                && (!value.height.has_value()
+                    || (*value.height >= 1 && *value.height <= 30000));
+            const bool composition_facts_valid = value.type != "composition"
+                || (value.width.has_value() && value.height.has_value()
+                    && value.duration.has_value() && value.duration->value > 0
+                    && value.pixel_aspect_ratio.has_value()
+                    && value.layer_count.has_value());
+            const bool verified = value.item_locator == *request.item_locator
+                && valid_bounded_text(value.name, 4096, true)
+                && valid_bounded_text(value.comment, 4096, true)
+                && value.label_id <= 16
+                && dimensions_valid && composition_facts_valid
+                && (value.type == "folder" || value.type == "composition"
+                    || value.type == "footage" || value.type == "unknown")
+                && (!value.parent_locator.has_value()
+                    || (valid_locator(*value.parent_locator)
+                      && same_locator_context(value.item_locator, *value.parent_locator)))
+                && (!value.duration.has_value()
+                    || valid_composition_time(*value.duration))
+                && (!value.pixel_aspect_ratio.has_value()
+                    || valid_positive_ratio(*value.pixel_aspect_ratio));
+            if (!verified) {
+              completion = failure_for(
+                  request, "CAPABILITY_FAILED",
+                  "native project item metadata result was not bound to its request");
+            } else {
+              completion.request_id = request.request_id;
+              completion.capability_id = request.capability_id;
+              completion.route_id = request.route_id;
+              completion.session_generation = request.session_generation;
+              completion.ok = true;
+              completion.project_item_metadata_result = std::move(host_result.value);
+            }
+          }
+        } else if (request.capability_id == kCompositionSettingsReadCapability) {
+          HostCompositionSettingsResult host_result = host.read_composition_settings(
+              CompositionSettingsQuery{
+                  request.host_instance_id,
+                  request.session_id,
+                  *request.composition_locator},
+              std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (host_result.value.composition_locator
+                != *request.composition_locator
+              || !valid_composition_settings(host_result.value)) {
+            completion = failure_for(
+                request, "CAPABILITY_FAILED",
+                "native composition settings result was not bound to its request");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.ok = true;
+            completion.composition_settings_result = std::move(host_result.value);
+          }
+        } else if (request.capability_id == kCompositionWorkAreaSetCapability) {
+          HostCompositionWorkAreaWriteResult host_result =
+              host.set_composition_work_area(
+                  CompositionWorkAreaSetCommand{
+                      request.host_instance_id,
+                      request.session_id,
+                      *request.composition_locator,
+                      request.work_area_start,
+                      request.work_area_duration},
+                  request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect composition work area");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else {
+            const CompositionWorkAreaChanged& value = host_result.value;
+            const bool verified = value.changed
+                && value.composition_locator == *request.composition_locator
+                && valid_composition_time(value.before_start)
+                && valid_composition_time(value.before_duration)
+                && valid_composition_time(value.after_start)
+                && valid_composition_time(value.after_duration)
+                && ( !composition_times_equal(value.before_start, value.after_start)
+                    || !composition_times_equal(
+                        value.before_duration, value.after_duration))
+                && composition_times_equal(value.after_start, request.work_area_start)
+                && composition_times_equal(
+                    value.after_duration, request.work_area_duration);
+            if (!verified) {
+              completion = failure_for(
+                  request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                  "native write did not verify the requested work area");
+            } else {
+              completion.request_id = request.request_id;
+              completion.capability_id = request.capability_id;
+              completion.route_id = request.route_id;
+              completion.session_generation = request.session_generation;
+              completion.idempotency_key = request.idempotency_key;
+              completion.ok = true;
+              completion.composition_work_area_change_result =
+                  std::move(host_result.value);
+            }
+          }
+        } else if (request.capability_id == kProjectItemNameSetCapability
+            || request.capability_id == kProjectItemCommentSetCapability) {
+          HostProjectItemTextWriteResult host_result =
+              request.capability_id == kProjectItemNameSetCapability
+              ? host.set_project_item_name(
+                  ProjectItemTextSetCommand{
+                      request.host_instance_id, request.session_id,
+                      *request.item_locator, request.item_text},
+                  request.deadline)
+              : host.set_project_item_comment(
+                  ProjectItemTextSetCommand{
+                      request.host_instance_id, request.session_id,
+                      *request.item_locator, request.item_text},
+                  request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect project item metadata");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || host_result.value.item_locator != *request.item_locator
+              || host_result.value.before_value == host_result.value.after_value
+              || host_result.value.after_value != request.item_text) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write did not verify the requested project item text");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.project_item_text_change_result = std::move(host_result.value);
+          }
+        } else if (request.capability_id == kProjectItemLabelSetCapability) {
+          HostProjectItemLabelWriteResult host_result = host.set_project_item_label(
+              ProjectItemLabelSetCommand{
+                  request.host_instance_id, request.session_id,
+                  *request.item_locator, request.item_label_id},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect project item label");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || host_result.value.item_locator != *request.item_locator
+              || host_result.value.before_label_id == host_result.value.after_label_id
+              || host_result.value.after_label_id != request.item_label_id
+              || host_result.value.before_label_id > 16) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write did not verify the requested project item label");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.project_item_label_change_result = std::move(host_result.value);
+          }
+        } else if (request.capability_id == kCompositionDuplicateCapability) {
+          HostCompositionDuplicateResult host_result = host.duplicate_composition(
+              CompositionDuplicateCommand{
+                  request.host_instance_id, request.session_id,
+                  *request.composition_locator, request.duplicate_new_name},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native duplicate completed after its deadline; inspect project items");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else {
+            CompositionDuplicated& value = host_result.value;
+            CompositionSettings comparable_new = value.new_settings;
+            comparable_new.name = value.source_settings.name;
+            const bool verified = value.changed
+                && value.project_item_count_after == value.project_item_count_before + 1
+                && valid_composition_settings(value.source_settings)
+                && valid_composition_settings(value.new_settings)
+                && value.new_settings.name == request.duplicate_new_name
+                && composition_settings_equivalent(
+                    value.source_settings, comparable_new)
+                && value.source_composition_locator.kind == "composition"
+                && value.new_composition_locator.kind == "composition"
+                && value.source_composition_locator.object_id
+                    != value.new_composition_locator.object_id
+                && same_locator_context(
+                    value.source_composition_locator,
+                    value.new_composition_locator)
+                && value.source_composition_locator.host_instance_id
+                    == request.host_instance_id
+                && value.source_composition_locator.session_id == request.session_id
+                && value.source_composition_locator.generation
+                    > request.composition_locator->generation
+                && value.source_composition_locator.project_id
+                    != request.composition_locator->project_id
+                && value.source_settings.composition_locator
+                    == value.source_composition_locator
+                && value.new_settings.composition_locator
+                    == value.new_composition_locator;
+            if (!verified) {
+              completion = failure_for(
+                  request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                  "native duplicate did not verify source and new composition state");
+            } else {
+              completion.request_id = request.request_id;
+              completion.capability_id = request.capability_id;
+              completion.route_id = request.route_id;
+              completion.session_generation = request.session_generation;
+              completion.idempotency_key = request.idempotency_key;
+              completion.ok = true;
+              completion.composition_duplicate_result = std::move(host_result.value);
+            }
           }
         } else if (request.capability_id == kCompositionLayersListCapability) {
           HostCompositionLayersResult host_result = host.list_composition_layers(
@@ -1931,7 +2666,12 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 || request.capability_id == kCompositionCreateCapability
                 || request.capability_id == kCompositionLayerCreateCapability
                 || request.capability_id == kLayerEffectApplyCapability
-                || request.capability_id == kLayerPropertySetCapability)
+                || request.capability_id == kLayerPropertySetCapability
+                || request.capability_id == kCompositionWorkAreaSetCapability
+                || request.capability_id == kProjectItemNameSetCapability
+                || request.capability_id == kProjectItemCommentSetCapability
+                || request.capability_id == kProjectItemLabelSetCapability
+                || request.capability_id == kCompositionDuplicateCapability)
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
             "native host adapter raised an exception");
       }
@@ -2136,7 +2876,12 @@ void HostDispatcher::finish_idempotency_locked(
           && request.capability_id != kCompositionCreateCapability
           && request.capability_id != kCompositionLayerCreateCapability
           && request.capability_id != kLayerEffectApplyCapability
-          && request.capability_id != kLayerPropertySetCapability)
+          && request.capability_id != kLayerPropertySetCapability
+          && request.capability_id != kCompositionWorkAreaSetCapability
+          && request.capability_id != kProjectItemNameSetCapability
+          && request.capability_id != kProjectItemCommentSetCapability
+          && request.capability_id != kProjectItemLabelSetCapability
+          && request.capability_id != kCompositionDuplicateCapability)
       || request.idempotency_key.empty()) {
     return;
   }
@@ -2146,7 +2891,8 @@ void HostDispatcher::finish_idempotency_locked(
     entry->second.state = IdempotencyState::kSucceeded;
     if (request.capability_id == kCompositionCreateCapability
         || request.capability_id == kCompositionLayerCreateCapability
-        || request.capability_id == kLayerEffectApplyCapability) {
+        || request.capability_id == kLayerEffectApplyCapability
+        || request.capability_id == kCompositionDuplicateCapability) {
       entry->second.replay_completion = completion;
     }
     return;

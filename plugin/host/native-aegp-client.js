@@ -6,6 +6,8 @@ const net = require('net');
 const os = require('os');
 const path = require('path');
 
+const projectCompositionContracts = require('./native-project-composition-contract');
+
 const MAX_FRAME_BYTES = 131072;
 const MAX_BUFFERED_BYTES = MAX_FRAME_BYTES * 8;
 const MAX_ENDPOINT_ENTRIES = 128;
@@ -282,6 +284,17 @@ function encodeFrame(value) {
 
 function sha256Canonical(value) {
     return crypto.createHash('sha256').update(JSON.stringify(value), 'utf8').digest('hex');
+}
+
+function canonicalizeForDigest(value) {
+    if (Array.isArray(value)) return value.map(canonicalizeForDigest);
+    if (value && typeof value === 'object') {
+        return Object.keys(value).sort().reduce(function (result, key) {
+            result[key] = canonicalizeForDigest(value[key]);
+            return result;
+        }, {});
+    }
+    return value;
 }
 
 function capabilitiesQueryDigest(sessionId, ids, detail, limit) {
@@ -1277,7 +1290,13 @@ function layerPropertyValuesEqual(left, right) {
 // the exact request it sent instead of trusting a digest-shaped string.
 function invokeRequestDigest(request) {
     let argumentsValue = {};
-    if (request.params.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY) {
+    if (projectCompositionContracts.getContract(request.params.capabilityId)) {
+        // The package-specific validator has already proved a recursively
+        // closed argument shape before send() can reach this digest boundary.
+        // Sort every nested member here because the public request may arrive
+        // in any insertion order while native evidence is RFC 8785 canonical.
+        argumentsValue = canonicalizeForDigest(request.params.arguments);
+    } else if (request.params.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY) {
         argumentsValue = {
             idempotencyKey: request.params.arguments.idempotencyKey,
             targetDepth: request.params.arguments.targetDepth,
@@ -1444,6 +1463,7 @@ function createNativeAegpClient(options) {
     let layerPropertiesListContractDigest = null;
     let layerPropertyKeyframesListContractDigest = null;
     let layerPropertySetContractDigest = null;
+    const projectCompositionContractDigests = new Map();
     let helloIdentity = null;
     let nextRequest = 1;
     let inputBuffer = Buffer.alloc(0);
@@ -1500,6 +1520,7 @@ function createNativeAegpClient(options) {
         layerPropertiesListContractDigest = null;
         layerPropertyKeyframesListContractDigest = null;
         layerPropertySetContractDigest = null;
+        projectCompositionContractDigests.clear();
         helloIdentity = null;
         if (socket) {
             const current = socket;
@@ -1606,7 +1627,8 @@ function createNativeAegpClient(options) {
                 || params.capabilityId === COMPOSITION_CREATE_CAPABILITY
                 || params.capabilityId === COMPOSITION_LAYER_CREATE_CAPABILITY
                 || params.capabilityId === LAYER_EFFECT_APPLY_CAPABILITY
-                || params.capabilityId === LAYER_PROPERTY_SET_CAPABILITY);
+                || params.capabilityId === LAYER_PROPERTY_SET_CAPABILITY
+                || projectCompositionContracts.getContract(params.capabilityId)?.mutating === true);
         return new Promise(function (resolve, reject) {
             const remainingMs = deadlineUnixMs === undefined
                 ? requestTimeoutMs : Math.max(1, deadlineUnixMs - now());
@@ -1910,6 +1932,11 @@ function createNativeAegpClient(options) {
         const layerPropertySetItem = Array.isArray(result?.items)
             ? result.items.find(function (candidate) { return candidate?.id === LAYER_PROPERTY_SET_CAPABILITY; })
             : null;
+        const packageContractDigests = projectCompositionContracts.validateCapabilityItems(
+            result?.items,
+            ids,
+            requestedDetail,
+        );
         const requiresSummary = ids === undefined || ids.includes(PROJECT_SUMMARY_CAPABILITY);
         const requiresBitDepthRead = ids === undefined || ids.includes(PROJECT_BIT_DEPTH_READ_CAPABILITY);
         const requiresBitDepthSet = ids === undefined || ids.includes(PROJECT_BIT_DEPTH_SET_CAPABILITY);
@@ -1952,6 +1979,7 @@ function createNativeAegpClient(options) {
             || (requiresLayerPropertiesList && !layerPropertiesListItem)
             || (requiresLayerPropertyKeyframesList && !layerPropertyKeyframesListItem)
             || (requiresLayerPropertySet && !layerPropertySetItem)
+            || packageContractDigests === null
             || (summaryItem && (summaryItem.version !== 1 || summaryItem.detail !== requestedDetail
                 || (requestedDetail === 'full' && !SHA256_PATTERN.test(summaryItem.contractDigest))))
             || (bitDepthReadItem && (bitDepthReadItem.version !== 1
@@ -2064,11 +2092,20 @@ function createNativeAegpClient(options) {
         if (requestedDetail === 'full' && layerPropertySetItem) {
             layerPropertySetContractDigest = layerPropertySetItem.contractDigest;
         }
+        if (requestedDetail === 'full') {
+            for (const [capabilityId, digest] of packageContractDigests) {
+                projectCompositionContractDigests.set(capabilityId, digest);
+            }
+        }
         return result;
     }
 
     async function invoke(options) {
         const call = options || {};
+        const packageContract = projectCompositionContracts.getContract(call.capabilityId);
+        const packageCall = packageContract !== null
+            && call.capabilityVersion === 1
+            && packageContract.validArguments(call.arguments);
         const summaryCall = call.capabilityId === PROJECT_SUMMARY_CAPABILITY
             && call.capabilityVersion === 1
             && call.arguments && typeof call.arguments === 'object'
@@ -2128,11 +2165,18 @@ function createNativeAegpClient(options) {
                 && !compositionLayerCreateCall
                 && !layerEffectApplyCall
                 && !layerPropertiesListCall && !layerPropertyKeyframesListCall
-                && !layerPropertySetCall)
+                && !layerPropertySetCall && !packageCall)
             || !Number.isSafeInteger(call.deadlineUnixMs) || call.deadlineUnixMs <= 0) {
             throw nativeError('INVALID_ARGUMENT', 'native invoke request is invalid', false);
         }
         if (state !== 'connected') await waitUntilConnected(call.deadlineUnixMs);
+        if (packageCall
+            && projectCompositionContractDigests.get(call.capabilityId)
+                !== packageContract.digest) {
+            throw nativeContractMismatch(
+                'native project/composition capability was not verified before dispatch',
+            );
+        }
         if (bitDepthReadCall
             && projectBitDepthReadContractDigest !== PROJECT_BIT_DEPTH_READ_CONTRACT_DIGEST) {
             throw nativeContractMismatch(
@@ -2215,7 +2259,12 @@ function createNativeAegpClient(options) {
             );
         }
         let locatorChecks = [];
-        if (projectItemsListCall && call.arguments.projectLocator !== undefined) {
+        if (packageCall) {
+            locatorChecks = projectCompositionContracts.locatorChecks(
+                packageContract,
+                call.arguments,
+            );
+        } else if (projectItemsListCall && call.arguments.projectLocator !== undefined) {
             locatorChecks = [[call.arguments.projectLocator, 'projectLocator', 'ae_listProjectItems']];
         } else if (compositionLayersListCall || compositionSelectedLayersListCall
             || compositionTimeReadCall || compositionTimeSetCall
@@ -2359,7 +2408,8 @@ function createNativeAegpClient(options) {
             && evidence.postcondition.algorithm === 'sha256-rfc8785-jcs-v1'
             && SHA256_PATTERN.test(evidence.postcondition.digest || '');
         if (!commonValid || !evidenceValid) {
-            if (bitDepthSetCall || compositionTimeSetCall || compositionCreateCall
+            if ((packageCall && packageContract.mutating)
+                || bitDepthSetCall || compositionTimeSetCall || compositionCreateCall
                 || compositionLayerCreateCall
                 || layerEffectApplyCall
                 || layerPropertySetCall) {
@@ -2368,7 +2418,8 @@ function createNativeAegpClient(options) {
                     call.capabilityId,
                 );
             }
-            if (bitDepthReadCall || projectItemsListCall || compositionLayersListCall
+            if ((packageCall && !packageContract.mutating)
+                || bitDepthReadCall || projectItemsListCall || compositionLayersListCall
                 || compositionSelectedLayersListCall
                 || compositionTimeReadCall
                 || layerPropertiesListCall || layerPropertyKeyframesListCall) {
@@ -2377,6 +2428,62 @@ function createNativeAegpClient(options) {
                 );
             }
             throw nativeContractMismatch('native project summary result lacked verified AEGP evidence');
+        }
+        if (packageCall) {
+            const resultShapeValid = exactKeys(result, [
+                'capabilityId', 'capabilityVersion', 'engine', 'outcome',
+                'evidence', 'value', 'replayed',
+            ]);
+            const expectedEvidenceKeys = [
+                'engine', 'hostInstanceId', 'sessionId', 'requestId', 'capabilityId',
+                'capabilityVersion', 'startedAtUnixMs', 'completedAtUnixMs', 'effect',
+                'requestDigest', 'postcondition',
+            ].concat(packageContract.mutating ? ['undo'] : []);
+            const replayValid = packageContract.mutating
+                ? (packageContract.allowReplay
+                    ? typeof result.replayed === 'boolean'
+                    : result.replayed === false)
+                : result.replayed === false;
+            const shapeValid = exactKeys(evidence, expectedEvidenceKeys)
+                && exactKeys(evidence.postcondition, [
+                    'verified', 'kind', 'algorithm', 'digest',
+                ])
+                && (packageContract.mutating
+                    ? (evidence.effect === 'committed'
+                        && exactKeys(evidence.undo, ['available', 'verified'])
+                        && evidence.undo.available === true
+                        && evidence.undo.verified === false)
+                    : (evidence.effect === 'none' && evidence.undo === undefined));
+            const valueValid = packageContract.validValue(
+                value,
+                call.arguments,
+                endpoint.hostInstanceId,
+                sessionId,
+            );
+            const expectedPostconditionDigest = valueValid
+                ? sha256Canonical({
+                    capabilityId: call.capabilityId,
+                    capabilityVersion: 1,
+                    value: canonicalizeForDigest(value),
+                })
+                : null;
+            const verified = resultShapeValid && replayValid && shapeValid && valueValid
+                && projectCompositionContractDigests.get(call.capabilityId)
+                    === packageContract.digest
+                && evidence.completedAtUnixMs <= call.deadlineUnixMs
+                && evidence.postcondition.kind === packageContract.postconditionKind
+                && evidence.postcondition.digest === expectedPostconditionDigest;
+            if (!verified) {
+                if (packageContract.mutating) {
+                    throw nativeMutationUncertain(
+                        'Native project/composition mutation failed post-dispatch verification.',
+                        call.capabilityId,
+                    );
+                }
+                throw nativeContractMismatch(
+                    'native project/composition read failed verification',
+                );
+            }
         }
         if (summaryCall && (evidence.effect !== 'none'
             || evidence.undo !== undefined
@@ -2658,6 +2765,9 @@ function createNativeAegpClient(options) {
                 layerPropertiesListContractDigest,
                 layerPropertyKeyframesListContractDigest,
                 layerPropertySetContractDigest,
+                projectCompositionContractDigests: Object.fromEntries(
+                    projectCompositionContractDigests,
+                ),
             });
         },
     });

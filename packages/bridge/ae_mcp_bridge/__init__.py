@@ -28,6 +28,13 @@ from ae_mcp.backends.native import (
     LAYER_PROPERTY_SET_CAPABILITY_ID,
     PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
 )
+from ae_mcp.backends.native_project_composition import (
+    COMPOSITION_DUPLICATE_CAPABILITY_ID,
+    COMPOSITION_WORK_AREA_SET_CAPABILITY_ID,
+    PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID,
+    PROJECT_ITEM_LABEL_SET_CAPABILITY_ID,
+    PROJECT_ITEM_NAME_SET_CAPABILITY_ID,
+)
 
 # Header carrying the shared-secret token on /exec requests. Must match the
 # header the Node host (plugin/host/server.js) checks.
@@ -155,6 +162,25 @@ class HttpBridge(Backend, NativeInvokeBackend):
             recovery_hint = (
                 "List project items with fresh locators and inspect the Undo stack "
                 "before retrying."
+            )
+        elif capability_id == COMPOSITION_WORK_AREA_SET_CAPABILITY_ID:
+            recovery_hint = (
+                "Read the composition settings with a fresh locator and inspect "
+                "the Undo stack before retrying."
+            )
+        elif capability_id in {
+            PROJECT_ITEM_NAME_SET_CAPABILITY_ID,
+            PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID,
+            PROJECT_ITEM_LABEL_SET_CAPABILITY_ID,
+        }:
+            recovery_hint = (
+                "Read the project item metadata with a fresh locator and inspect "
+                "the Undo stack before retrying."
+            )
+        elif capability_id == COMPOSITION_DUPLICATE_CAPABILITY_ID:
+            recovery_hint = (
+                "Refresh project context and list project items before inspecting "
+                "the Undo stack; do not duplicate again until the prior outcome is known."
             )
         elif capability_id == COMPOSITION_LAYER_CREATE_CAPABILITY_ID:
             recovery_hint = (
@@ -571,6 +597,11 @@ class HttpBridge(Backend, NativeInvokeBackend):
             COMPOSITION_LAYER_CREATE_CAPABILITY_ID,
             LAYER_EFFECT_APPLY_CAPABILITY_ID,
             LAYER_PROPERTY_SET_CAPABILITY_ID,
+            COMPOSITION_WORK_AREA_SET_CAPABILITY_ID,
+            PROJECT_ITEM_NAME_SET_CAPABILITY_ID,
+            PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID,
+            PROJECT_ITEM_LABEL_SET_CAPABILITY_ID,
+            COMPOSITION_DUPLICATE_CAPABILITY_ID,
         }
         try:
             raw = await self._native_post(

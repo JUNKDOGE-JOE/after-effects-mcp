@@ -17,9 +17,9 @@
 namespace aemcp::native::rpc {
 
 inline constexpr std::size_t kFramePrefixBytes = 4;
-inline constexpr std::size_t kMaxFrameBytes = 131'072;
+inline constexpr std::size_t kMaxFrameBytes = 524'288;
 inline constexpr std::size_t kMaxJsonDepth = 16;
-inline constexpr std::size_t kMaxJsonNodes = 4'096;
+inline constexpr std::size_t kMaxJsonNodes = 8'192;
 inline constexpr std::size_t kMaxStringScalars = 8'192;
 inline constexpr std::uint64_t kMaxSafeInteger = 9'007'199'254'740'991ULL;
 
@@ -91,6 +91,12 @@ struct InvokeParams {
   CompositionPositiveRatio composition_create_frame_rate;
   CompositionPositiveRatio composition_create_pixel_aspect_ratio;
   std::string layer_effect_match_name;
+  std::optional<ObjectLocator> item_locator;
+  CompositionCurrentTime work_area_start;
+  CompositionCurrentTime work_area_duration;
+  std::string item_text;
+  std::uint8_t item_label_id{0};
+  std::string duplicate_new_name;
 };
 
 struct CancelParams {
@@ -153,6 +159,40 @@ struct ParsedRequest {
     std::string_view idempotency_key);
 [[nodiscard]] std::string digest_composition_time_set_postcondition(
     const CompositionTimeChanged& value);
+[[nodiscard]] std::string digest_project_context_postcondition(
+    const ProjectContext& value);
+[[nodiscard]] std::string digest_project_item_metadata_postcondition(
+    const ProjectItemMetadata& value);
+[[nodiscard]] std::string digest_composition_settings_postcondition(
+    const CompositionSettings& value);
+[[nodiscard]] std::string digest_composition_work_area_set_arguments(
+    const ObjectLocator& composition_locator,
+    const CompositionCurrentTime& start,
+    const CompositionCurrentTime& duration,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_composition_work_area_set_postcondition(
+    const CompositionWorkAreaChanged& value);
+[[nodiscard]] std::string digest_project_item_text_set_arguments(
+    std::string_view capability_id,
+    const ObjectLocator& item_locator,
+    std::string_view field_name,
+    std::string_view value,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_project_item_text_set_postcondition(
+    std::string_view capability_id,
+    const ProjectItemTextChanged& value);
+[[nodiscard]] std::string digest_project_item_label_set_arguments(
+    const ObjectLocator& item_locator,
+    std::uint8_t label_id,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_project_item_label_set_postcondition(
+    const ProjectItemLabelChanged& value);
+[[nodiscard]] std::string digest_composition_duplicate_arguments(
+    const ObjectLocator& composition_locator,
+    std::string_view new_name,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_composition_duplicate_postcondition(
+    const CompositionDuplicated& value);
 [[nodiscard]] std::string digest_composition_create_arguments(
     std::string_view name,
     std::uint32_t width,
@@ -165,6 +205,22 @@ struct ParsedRequest {
     const CompositionCreated& value);
 [[nodiscard]] std::string composition_create_persistent_diagnostic_fields(
     const CompositionCreated& value);
+[[nodiscard]] std::string project_context_persistent_diagnostic_fields(
+    const ProjectContext& value);
+[[nodiscard]] std::string project_item_metadata_persistent_diagnostic_fields(
+    const ProjectItemMetadata& value);
+[[nodiscard]] std::string composition_settings_persistent_diagnostic_fields(
+    const CompositionSettings& value);
+[[nodiscard]] std::string composition_work_area_persistent_diagnostic_fields(
+    const CompositionWorkAreaChanged& value);
+[[nodiscard]] std::string project_item_name_persistent_diagnostic_fields(
+    const ProjectItemTextChanged& value);
+[[nodiscard]] std::string project_item_comment_persistent_diagnostic_fields(
+    const ProjectItemTextChanged& value);
+[[nodiscard]] std::string project_item_label_persistent_diagnostic_fields(
+    const ProjectItemLabelChanged& value);
+[[nodiscard]] std::string composition_duplicate_persistent_diagnostic_fields(
+    const CompositionDuplicated& value);
 [[nodiscard]] std::string digest_composition_layer_create_arguments(
     const ObjectLocator& composition_locator,
     std::string_view kind,
@@ -381,6 +437,22 @@ struct CapabilitiesSuccess {
   std::string composition_selected_layers_list_contract_digest;
   bool include_layer_effect_apply{true};
   std::string layer_effect_apply_contract_digest;
+  bool include_project_context_read{false};
+  bool include_project_item_metadata_read{false};
+  bool include_composition_settings_read{false};
+  bool include_composition_work_area_set{false};
+  bool include_project_item_name_set{false};
+  bool include_project_item_comment_set{false};
+  bool include_project_item_label_set{false};
+  bool include_composition_duplicate{false};
+  std::string project_context_read_contract_digest;
+  std::string project_item_metadata_read_contract_digest;
+  std::string composition_settings_read_contract_digest;
+  std::string composition_work_area_set_contract_digest;
+  std::string project_item_name_set_contract_digest;
+  std::string project_item_comment_set_contract_digest;
+  std::string project_item_label_set_contract_digest;
+  std::string composition_duplicate_contract_digest;
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -483,6 +555,28 @@ struct CompositionTimeSetSuccess {
   std::string postcondition_digest;
   bool replayed{false};
 };
+
+template <typename Value>
+struct NativeValueSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  Value value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+using ProjectContextSuccess = NativeValueSuccess<ProjectContext>;
+using ProjectItemMetadataSuccess = NativeValueSuccess<ProjectItemMetadata>;
+using CompositionSettingsSuccess = NativeValueSuccess<CompositionSettings>;
+using CompositionWorkAreaSetSuccess = NativeValueSuccess<CompositionWorkAreaChanged>;
+using ProjectItemNameSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
+using ProjectItemCommentSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
+using ProjectItemLabelSetSuccess = NativeValueSuccess<ProjectItemLabelChanged>;
+using CompositionDuplicateSuccess = NativeValueSuccess<CompositionDuplicated>;
 
 struct CompositionCreateSuccess {
   std::string request_id;
@@ -637,6 +731,22 @@ struct ErrorResponse {
     const CompositionTimeSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_time_set_success(
     const CompositionTimeSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_project_context_success(
+    const ProjectContextSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_project_item_metadata_success(
+    const ProjectItemMetadataSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_settings_success(
+    const CompositionSettingsSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_work_area_set_success(
+    const CompositionWorkAreaSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_project_item_name_set_success(
+    const ProjectItemNameSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_project_item_comment_set_success(
+    const ProjectItemCommentSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_project_item_label_set_success(
+    const ProjectItemLabelSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_duplicate_success(
+    const CompositionDuplicateSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_create_success(
     const CompositionCreateSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_layer_create_success(

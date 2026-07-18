@@ -27,7 +27,7 @@ provenance, or compatibility with any AE/SDK/OS combination. Compatibility stays
 
 Each message is UTF-8 JSON preceded by one unsigned, four-byte, big-endian
 length. The length covers only the JSON bytes. Version 1 rejects zero-length,
-invalid UTF-8, trailing bytes inside a frame, and frames over 131,072 bytes.
+invalid UTF-8, trailing bytes inside a frame, and frames over 524,288 bytes.
 Transport implementations may apply a lower authenticated-session limit.
 
 Parsers also reject duplicate object keys, unsafe integers, more than 16 JSON
@@ -133,7 +133,7 @@ session after bounded tombstones expire or are evicted.
 
 - omitted request deadline: 5,000 ms from broker send time;
 - maximum accepted deadline: 30,000 ms;
-- maximum frame size: 131,072 bytes;
+- maximum frame size: 524,288 bytes;
 - omitted capability detail: `summary`;
 - omitted capability page size: 50, maximum 100;
 - public project-item and composition-layer page size: 25 by default, maximum

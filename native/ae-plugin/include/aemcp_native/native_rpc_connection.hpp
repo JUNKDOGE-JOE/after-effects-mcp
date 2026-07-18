@@ -32,6 +32,14 @@ struct NativeRpcRuntimeInfo {
   std::string layer_property_keyframes_list_contract_digest;
   std::string layer_property_set_contract_digest;
   std::string composition_selected_layers_list_contract_digest;
+  std::string project_context_read_contract_digest;
+  std::string project_item_metadata_read_contract_digest;
+  std::string composition_settings_read_contract_digest;
+  std::string composition_work_area_set_contract_digest;
+  std::string project_item_name_set_contract_digest;
+  std::string project_item_comment_set_contract_digest;
+  std::string project_item_label_set_contract_digest;
+  std::string composition_duplicate_contract_digest;
 };
 
 class NativeRpcObserver {

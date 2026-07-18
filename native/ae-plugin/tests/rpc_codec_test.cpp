@@ -22,6 +22,14 @@ using aemcp::native::rpc::CompositionLayersSuccess;
 using aemcp::native::rpc::CompositionSelectedLayersSuccess;
 using aemcp::native::rpc::CompositionTimeSuccess;
 using aemcp::native::rpc::CompositionTimeSetSuccess;
+using aemcp::native::rpc::ProjectContextSuccess;
+using aemcp::native::rpc::ProjectItemMetadataSuccess;
+using aemcp::native::rpc::CompositionSettingsSuccess;
+using aemcp::native::rpc::CompositionWorkAreaSetSuccess;
+using aemcp::native::rpc::ProjectItemNameSetSuccess;
+using aemcp::native::rpc::ProjectItemCommentSetSuccess;
+using aemcp::native::rpc::ProjectItemLabelSetSuccess;
+using aemcp::native::rpc::CompositionDuplicateSuccess;
 using aemcp::native::rpc::CompositionCreateSuccess;
 using aemcp::native::rpc::CompositionLayerCreateSuccess;
 using aemcp::native::rpc::LayerEffectApplySuccess;
@@ -65,6 +73,14 @@ using aemcp::native::rpc::digest_composition_time_postcondition;
 using aemcp::native::rpc::digest_composition_time_set_postcondition;
 using aemcp::native::rpc::digest_composition_create_postcondition;
 using aemcp::native::rpc::composition_create_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_context_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_item_metadata_persistent_diagnostic_fields;
+using aemcp::native::rpc::composition_settings_persistent_diagnostic_fields;
+using aemcp::native::rpc::composition_work_area_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_item_name_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_item_comment_persistent_diagnostic_fields;
+using aemcp::native::rpc::project_item_label_persistent_diagnostic_fields;
+using aemcp::native::rpc::composition_duplicate_persistent_diagnostic_fields;
 using aemcp::native::rpc::digest_composition_layer_create_postcondition;
 using aemcp::native::rpc::digest_layer_effect_apply_postcondition;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
@@ -84,6 +100,14 @@ using aemcp::native::rpc::encode_composition_layers_success;
 using aemcp::native::rpc::encode_composition_selected_layers_success;
 using aemcp::native::rpc::encode_composition_time_success;
 using aemcp::native::rpc::encode_composition_time_set_success;
+using aemcp::native::rpc::encode_project_context_success;
+using aemcp::native::rpc::encode_project_item_metadata_success;
+using aemcp::native::rpc::encode_composition_settings_success;
+using aemcp::native::rpc::encode_composition_work_area_set_success;
+using aemcp::native::rpc::encode_project_item_name_set_success;
+using aemcp::native::rpc::encode_project_item_comment_set_success;
+using aemcp::native::rpc::encode_project_item_label_set_success;
+using aemcp::native::rpc::encode_composition_duplicate_success;
 using aemcp::native::rpc::encode_composition_create_success;
 using aemcp::native::rpc::encode_composition_layer_create_success;
 using aemcp::native::rpc::encode_layer_effect_apply_success;
@@ -196,6 +220,17 @@ std::string invoke_json(
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":" + std::to_string(deadline)
       + ",\"params\":{\"capabilityId\":\"ae.project.summary\","
         "\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
+}
+
+std::string package150_invoke_json(
+    std::string_view request_id,
+    std::string_view capability_id,
+    std::string_view arguments) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"" + std::string(capability_id)
+      + "\",\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
 }
 
 std::string invalidate_graph_json(
@@ -1369,6 +1404,221 @@ void project_graph_invokes_and_results_are_closed_and_deterministic() {
   }, "INVALID_ARGUMENT", "duplicate composition layer locator");
 }
 
+void project_composition_package_parses_and_serializes_all_eight_contracts() {
+  const std::string item = locator_json(
+      "item", "77777777-7777-4777-8777-777777777777");
+  const std::string composition = locator_json(
+      "composition", "66666666-6666-4666-8666-666666666666");
+  const std::array<std::tuple<std::string, std::string, std::string>, 8> requests{{
+      {"package-context", "ae.project.context.read",
+          "{\"selectionOffset\":0,\"selectionLimit\":25}"},
+      {"package-metadata", "ae.project.item.metadata.read",
+          "{\"itemLocator\":" + item + "}"},
+      {"package-settings", "ae.composition.settings.read",
+          "{\"compositionLocator\":" + composition + "}"},
+      {"package-work-area", "ae.composition.work-area.set",
+          "{\"compositionLocator\":" + composition
+            + ",\"start\":{\"value\":1,\"scale\":1},"
+              "\"duration\":{\"value\":4,\"scale\":1},"
+              "\"idempotencyKey\":\"package-work-area-0001\"}"},
+      {"package-name", "ae.project.item.name.set",
+          "{\"itemLocator\":" + item
+            + ",\"name\":\"After\","
+              "\"idempotencyKey\":\"package-item-name-0001\"}"},
+      {"package-comment", "ae.project.item.comment.set",
+          "{\"itemLocator\":" + item
+            + ",\"comment\":\"\","
+              "\"idempotencyKey\":\"package-item-comment-0001\"}"},
+      {"package-label", "ae.project.item.label.set",
+          "{\"itemLocator\":" + item
+            + ",\"labelId\":4,"
+              "\"idempotencyKey\":\"package-item-label-0001\"}"},
+      {"package-duplicate", "ae.composition.duplicate",
+          "{\"compositionLocator\":" + composition
+            + ",\"newName\":\"Fixture Copy\","
+              "\"idempotencyKey\":\"package-duplicate-0001\"}"},
+  }};
+  for (const auto& [request_id, capability_id, arguments] : requests) {
+    const ParsedRequest parsed = decode_request_frame(frame(package150_invoke_json(
+        request_id, capability_id, arguments)));
+    require(parsed.method == RpcMethod::kInvoke
+            && std::get<InvokeParams>(parsed.params).capability_id == capability_id,
+        "package-150 invoke parser lost its typed capability: " + capability_id);
+  }
+
+  const auto project = locator(
+      "project", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  const auto item_locator = locator(
+      "item", "77777777-7777-4777-8777-777777777777");
+  const auto composition_locator = locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+  const auto settings = [](aemcp::native::ObjectLocator locator_value,
+                           std::string name) {
+    aemcp::native::CompositionSettings value;
+    value.composition_locator = std::move(locator_value);
+    value.name = std::move(name);
+    value.width = 1920;
+    value.height = 1080;
+    value.duration = {10, 1, "10"};
+    value.frame_duration = {1, 24, "1/24"};
+    value.frame_rate = {24, 1, "24"};
+    value.pixel_aspect_ratio = {1, 1, "1"};
+    value.work_area_start = {0, 1, "0"};
+    value.work_area_duration = {5, 1, "5"};
+    value.display_start_time = {0, 1, "0"};
+    return value;
+  };
+  const auto success = [](auto value, std::string request_id, auto digest) {
+    using Success = aemcp::native::rpc::NativeValueSuccess<decltype(value)>;
+    return Success{
+        std::move(request_id),
+        std::string(kSession),
+        std::string(kHost),
+        std::move(value),
+        1'900'000'000'000ULL,
+        1'900'000'000'025ULL,
+        std::string(kDigest),
+        digest,
+        false};
+  };
+  aemcp::native::ProjectContext context;
+  context.project_locator = project;
+  context.selection_limit = 25;
+  ProjectItemMetadataSuccess metadata = success(
+      aemcp::native::ProjectItemMetadata{
+          item_locator, "", "footage", std::nullopt, "", 0,
+          std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt},
+      "package-metadata",
+      aemcp::native::rpc::digest_project_item_metadata_postcondition(
+          aemcp::native::ProjectItemMetadata{
+              item_locator, "", "footage", std::nullopt, "", 0,
+              std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt}));
+  const auto composition_settings = settings(composition_locator, "");
+  const aemcp::native::CompositionWorkAreaChanged work_area{
+      true, composition_locator, {0, 1, "0"}, {5, 1, "5"},
+      {1, 1, "1"}, {4, 1, "4"}};
+  const aemcp::native::ProjectItemTextChanged name_change{
+      true, item_locator, std::string(1024, 'B'), "After"};
+  const aemcp::native::ProjectItemTextChanged comment_change{
+      true, item_locator, "Before comment", ""};
+  const aemcp::native::ProjectItemLabelChanged label_change{
+      true, item_locator, 0, 4};
+  auto source_locator = composition_locator;
+  source_locator.project_id = "55555555-5555-4555-8555-555555555555";
+  source_locator.generation = 9;
+  source_locator.object_id = "77777777-7777-4777-8777-777777777777";
+  auto duplicate_locator = source_locator;
+  duplicate_locator.object_id = "99999999-9999-4999-8999-999999999999";
+  const aemcp::native::CompositionDuplicated duplicated{
+      true, source_locator, duplicate_locator, 2, 3,
+      settings(source_locator, ""), settings(duplicate_locator, "Fixture Copy")};
+
+  auto private_metadata = metadata.value;
+  private_metadata.name = "PRIVATE_CUSTOMER_ITEM_NAME_123";
+  private_metadata.comment = "PRIVATE_CUSTOMER_COMMENT_456";
+  auto private_settings = composition_settings;
+  private_settings.name = "PRIVATE_CUSTOMER_COMPOSITION_789";
+  auto private_name_change = name_change;
+  private_name_change.before_value = "PRIVATE_OLD_NAME";
+  private_name_change.after_value = "PRIVATE_NEW_NAME";
+  auto private_comment_change = comment_change;
+  private_comment_change.before_value = "PRIVATE_OLD_COMMENT";
+  private_comment_change.after_value = "PRIVATE_NEW_COMMENT";
+  auto private_duplicate = duplicated;
+  private_duplicate.source_settings.name = "PRIVATE_SOURCE_COMPOSITION";
+  private_duplicate.new_settings.name = "PRIVATE_DUPLICATE_COMPOSITION";
+  const std::array<std::string, 8> persistent_package_diagnostics{{
+      project_context_persistent_diagnostic_fields(context),
+      project_item_metadata_persistent_diagnostic_fields(private_metadata),
+      composition_settings_persistent_diagnostic_fields(private_settings),
+      composition_work_area_persistent_diagnostic_fields(work_area),
+      project_item_name_persistent_diagnostic_fields(private_name_change),
+      project_item_comment_persistent_diagnostic_fields(private_comment_change),
+      project_item_label_persistent_diagnostic_fields(label_change),
+      composition_duplicate_persistent_diagnostic_fields(private_duplicate),
+  }};
+  for (const std::string& diagnostic : persistent_package_diagnostics) {
+    require(diagnostic.find("PRIVATE_") == std::string::npos
+            && diagnostic.find("\"projectOpen\"") == std::string::npos,
+        "package-150 persistent diagnostics exposed user text or used summary fallback");
+  }
+  require(persistent_package_diagnostics[0].find("\"selectionReturned\":0")
+              != std::string::npos
+          && persistent_package_diagnostics[1].find("\"nameRedacted\":true")
+              != std::string::npos
+          && persistent_package_diagnostics[2].find("\"width\":1920")
+              != std::string::npos
+          && persistent_package_diagnostics[3].find("\"afterDuration\"")
+              != std::string::npos
+          && persistent_package_diagnostics[4].find("\"nameRedacted\":true")
+              != std::string::npos
+          && persistent_package_diagnostics[5].find("\"commentRedacted\":true")
+              != std::string::npos
+          && persistent_package_diagnostics[6].find("\"afterLabelId\":4")
+              != std::string::npos
+          && persistent_package_diagnostics[7].find("\"newNameRedacted\":true")
+              != std::string::npos,
+      "package-150 persistent diagnostics lost their bounded capability branch");
+
+  const std::array<std::string, 8> encoded{{
+      body(encode_project_context_success(success(
+          context, "package-context",
+          aemcp::native::rpc::digest_project_context_postcondition(context)))),
+      body(encode_project_item_metadata_success(metadata)),
+      body(encode_composition_settings_success(success(
+          composition_settings, "package-settings",
+          aemcp::native::rpc::digest_composition_settings_postcondition(
+              composition_settings)))),
+      body(encode_composition_work_area_set_success(success(
+          work_area, "package-work-area",
+          aemcp::native::rpc::digest_composition_work_area_set_postcondition(
+              work_area)))),
+      body(encode_project_item_name_set_success(success(
+          name_change, "package-name",
+          aemcp::native::rpc::digest_project_item_text_set_postcondition(
+              "ae.project.item.name.set", name_change)))),
+      body(encode_project_item_comment_set_success(success(
+          comment_change, "package-comment",
+          aemcp::native::rpc::digest_project_item_text_set_postcondition(
+              "ae.project.item.comment.set", comment_change)))),
+      body(encode_project_item_label_set_success(success(
+          label_change, "package-label",
+          aemcp::native::rpc::digest_project_item_label_set_postcondition(
+              label_change)))),
+      body(encode_composition_duplicate_success(success(
+          duplicated, "package-duplicate",
+          aemcp::native::rpc::digest_composition_duplicate_postcondition(
+              duplicated)))),
+  }};
+  for (std::size_t index = 0; index < encoded.size(); ++index) {
+    require(encoded[index].find("\"capabilityId\":\""
+            + std::get<1>(requests[index]) + "\"") != std::string::npos,
+        "package-150 success encoder emitted the wrong capability branch");
+  }
+
+  auto invalid_metadata = metadata;
+  invalid_metadata.value.width = 0;
+  expect_argument_error([&] {
+    (void)encode_project_item_metadata_success(invalid_metadata);
+  }, "zero-width optional footage metadata");
+  auto invalid_settings = success(
+      composition_settings, "package-settings-invalid",
+      aemcp::native::rpc::digest_composition_settings_postcondition(
+          composition_settings));
+  invalid_settings.value.width = 30001;
+  expect_argument_error([&] {
+    (void)encode_composition_settings_success(invalid_settings);
+  }, "oversized composition settings width");
+  auto oversized_before_name = name_change;
+  oversized_before_name.before_value = std::string(1025, 'B');
+  expect_argument_error([&] {
+    (void)encode_project_item_name_set_success(success(
+        oversized_before_name,
+        "package-name-oversized-before",
+        std::string(kDigest)));
+  }, "project item name result with oversized old name");
+}
+
 void framing_fragmentation_and_multiple_frames_work() {
   const auto first = frame(hello_json());
   const auto second = frame("{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
@@ -1906,6 +2156,7 @@ int main() {
   project_bit_depth_invokes_are_closed_and_explicitly_mapped();
   invalidate_graph_requests_and_results_are_closed_and_deterministic();
   project_graph_invokes_and_results_are_closed_and_deterministic();
+  project_composition_package_parses_and_serializes_all_eight_contracts();
   framing_fragmentation_and_multiple_frames_work();
   strict_json_and_frame_limits_fail_closed();
   negative_contract_vectors_are_classified();

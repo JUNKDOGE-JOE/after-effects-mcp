@@ -679,6 +679,115 @@ class FakeHost final : public HostApi {
   aemcp::native::LayerPropertySetCommand observed_property_command;
 };
 
+class Package150Host final : public HostApi {
+ public:
+  [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
+    return HostReadResult::success({true, "fixture.aep", 2});
+  }
+
+  [[nodiscard]] aemcp::native::HostProjectContextResult read_project_context(
+      const aemcp::native::ProjectContextQuery& query, TimePoint) override {
+    aemcp::native::ProjectContext value;
+    value.project_locator = FakeHost::locator(
+        "project", "77777777-7777-4777-8777-777777777777");
+    value.selection_offset = query.selection_offset;
+    value.selection_limit = query.selection_limit;
+    return aemcp::native::HostProjectContextResult::success(std::move(value));
+  }
+
+  [[nodiscard]] aemcp::native::HostProjectItemMetadataResult
+  read_project_item_metadata(
+      const aemcp::native::ProjectItemQuery& query, TimePoint) override {
+    aemcp::native::ProjectItemMetadata value;
+    value.item_locator = query.item_locator;
+    value.name = "";
+    value.type = "footage";
+    value.comment = "";
+    value.label_id = 0;
+    return aemcp::native::HostProjectItemMetadataResult::success(std::move(value));
+  }
+
+  [[nodiscard]] aemcp::native::HostCompositionSettingsResult
+  read_composition_settings(
+      const aemcp::native::CompositionSettingsQuery& query, TimePoint) override {
+    return aemcp::native::HostCompositionSettingsResult::success(
+        settings(query.composition_locator, ""));
+  }
+
+  [[nodiscard]] aemcp::native::HostCompositionWorkAreaWriteResult
+  set_composition_work_area(
+      const aemcp::native::CompositionWorkAreaSetCommand& command,
+      TimePoint) override {
+    return aemcp::native::HostCompositionWorkAreaWriteResult::success({
+        true,
+        command.composition_locator,
+        {0, 1, "0"},
+        {5, 1, "5"},
+        command.start,
+        command.duration});
+  }
+
+  [[nodiscard]] aemcp::native::HostProjectItemTextWriteResult set_project_item_name(
+      const aemcp::native::ProjectItemTextSetCommand& command,
+      TimePoint) override {
+    return aemcp::native::HostProjectItemTextWriteResult::success(
+        {true, command.item_locator, "Before", command.value});
+  }
+
+  [[nodiscard]] aemcp::native::HostProjectItemTextWriteResult
+  set_project_item_comment(
+      const aemcp::native::ProjectItemTextSetCommand& command,
+      TimePoint) override {
+    return aemcp::native::HostProjectItemTextWriteResult::success(
+        {true, command.item_locator, "Before comment", command.value});
+  }
+
+  [[nodiscard]] aemcp::native::HostProjectItemLabelWriteResult set_project_item_label(
+      const aemcp::native::ProjectItemLabelSetCommand& command,
+      TimePoint) override {
+    return aemcp::native::HostProjectItemLabelWriteResult::success(
+        {true, command.item_locator, 0, command.label_id});
+  }
+
+  [[nodiscard]] aemcp::native::HostCompositionDuplicateResult duplicate_composition(
+      const aemcp::native::CompositionDuplicateCommand& command,
+      TimePoint) override {
+    ObjectLocator source = command.composition_locator;
+    source.project_id = "55555555-5555-4555-8555-555555555555";
+    source.generation += 1;
+    source.object_id = "77777777-7777-4777-8777-777777777777";
+    ObjectLocator duplicate = source;
+    duplicate.object_id = "99999999-9999-4999-8999-999999999999";
+    return aemcp::native::HostCompositionDuplicateResult::success({
+        true,
+        source,
+        duplicate,
+        2,
+        3,
+        settings(source, ""),
+        settings(duplicate, command.new_name)});
+  }
+
+ private:
+  [[nodiscard]] static aemcp::native::CompositionSettings settings(
+      ObjectLocator locator, std::string name) {
+    aemcp::native::CompositionSettings value;
+    value.composition_locator = std::move(locator);
+    value.name = std::move(name);
+    value.width = 1920;
+    value.height = 1080;
+    value.duration = {10, 1, "10"};
+    value.frame_duration = {1, 24, "1/24"};
+    value.frame_rate = {24, 1, "24"};
+    value.pixel_aspect_ratio = {1, 1, "1"};
+    value.work_area_start = {0, 1, "0"};
+    value.work_area_duration = {5, 1, "5"};
+    value.display_start_time = {0, 1, "0"};
+    value.layer_count = 0;
+    return value;
+  }
+};
+
 class BlockingHost final : public HostApi {
  public:
   explicit BlockingHost(std::thread::id expected_thread)
@@ -1012,6 +1121,130 @@ DispatcherConfig config(
       route_fences,
       idempotency_entries,
   };
+}
+
+void project_composition_package_dispatches_all_eight_capabilities() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(8, 8, 16ms));
+  Package150Host host;
+  const ObjectLocator item = FakeHost::locator(
+      "item", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  const ObjectLocator composition = FakeHost::locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+  const auto base = [&](std::string id, std::string capability) {
+    Request value;
+    value.request_id = std::move(id);
+    value.capability_id = std::move(capability);
+    value.deadline = clock.now() + 1s;
+    value.route_id = "package-150";
+    value.session_generation = 1;
+    value.host_instance_id = "22222222-2222-4222-8222-222222222222";
+    value.session_id = "11111111-1111-4111-8111-111111111111";
+    return value;
+  };
+  const auto enqueue = [&](Request value) {
+    const std::string capability = value.capability_id;
+    const auto admission = dispatcher.enqueue(std::move(value));
+    require(admission.code == EnqueueCode::kAccepted,
+        "package-150 request was rejected: " + capability + " / "
+          + admission.error_field);
+  };
+
+  Request context = base("package-context", std::string(
+      aemcp::native::kProjectContextReadCapability));
+  context.limit = 25;
+  enqueue(std::move(context));
+
+  Request metadata = base("package-metadata", std::string(
+      aemcp::native::kProjectItemMetadataReadCapability));
+  metadata.item_locator = item;
+  enqueue(std::move(metadata));
+
+  Request settings = base("package-settings", std::string(
+      aemcp::native::kCompositionSettingsReadCapability));
+  settings.composition_locator = composition;
+  enqueue(std::move(settings));
+
+  const auto prepare_write = [&](Request& value, char digest) {
+    value.idempotency_key = std::string("package-150-intent-") + digest;
+    value.arguments_fingerprint_sha256 = std::string(64, digest);
+  };
+  Request work_area = base("package-work-area", std::string(
+      aemcp::native::kCompositionWorkAreaSetCapability));
+  prepare_write(work_area, 'a');
+  work_area.composition_locator = composition;
+  work_area.work_area_start = {1, 1, "1"};
+  work_area.work_area_duration = {4, 1, "4"};
+  enqueue(std::move(work_area));
+
+  Request name = base("package-name", std::string(
+      aemcp::native::kProjectItemNameSetCapability));
+  prepare_write(name, 'b');
+  name.item_locator = item;
+  name.item_text = "After";
+  enqueue(std::move(name));
+
+  Request comment = base("package-comment", std::string(
+      aemcp::native::kProjectItemCommentSetCapability));
+  prepare_write(comment, 'c');
+  comment.item_locator = item;
+  comment.item_text = "";
+  enqueue(std::move(comment));
+
+  Request label = base("package-label", std::string(
+      aemcp::native::kProjectItemLabelSetCapability));
+  prepare_write(label, 'd');
+  label.item_locator = item;
+  label.item_label_id = 4;
+  enqueue(std::move(label));
+
+  Request duplicate = base("package-duplicate", std::string(
+      aemcp::native::kCompositionDuplicateCapability));
+  prepare_write(duplicate, 'e');
+  duplicate.composition_locator = composition;
+  duplicate.duplicate_new_name = "Fixture Copy";
+  enqueue(std::move(duplicate));
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 8 && batch.remaining == 0,
+      "package-150 dispatcher did not complete all eight requests");
+  for (const auto& completion : batch.completions) {
+    require(completion.ok, "package-150 dispatcher branch failed closed unexpectedly");
+  }
+  require(batch.completions[0].project_context_result.selection_limit == 25,
+      "project context result lost the requested page limit");
+  require(!batch.completions[1].project_item_metadata_result.width.has_value(),
+      "footage metadata invented unavailable dimensions");
+  require(batch.completions[2].composition_settings_result.name.empty(),
+      "empty read-side composition name was rejected");
+  require(batch.completions[7].composition_duplicate_result
+              .source_composition_locator.generation
+          > composition.generation,
+      "duplicate result did not reissue the source locator generation");
+  require(batch.completions[7].composition_duplicate_result
+              .source_composition_locator.object_id
+          != composition.object_id,
+      "duplicate result did not reissue the source composition locator");
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 22);
+  const std::array<std::string_view, 8> package_capabilities{
+      aemcp::native::kProjectContextReadCapability,
+      aemcp::native::kProjectItemMetadataReadCapability,
+      aemcp::native::kCompositionSettingsReadCapability,
+      aemcp::native::kCompositionWorkAreaSetCapability,
+      aemcp::native::kProjectItemNameSetCapability,
+      aemcp::native::kProjectItemCommentSetCapability,
+      aemcp::native::kProjectItemLabelSetCapability,
+      aemcp::native::kCompositionDuplicateCapability,
+  };
+  for (const std::string_view expected : package_capabilities) {
+    bool advertised = false;
+    for (const std::string_view actual :
+         aemcp::native::kAdvertisedNativeCapabilities) {
+      advertised = advertised || actual == expected;
+    }
+    require(advertised, "package-150 capability is missing from load advertisement");
+  }
 }
 
 void project_graph_reads_validate_arguments_and_dispatch_on_owner_thread() {
@@ -2146,6 +2379,7 @@ int main() {
   selected_collection_ownership_and_mixed_filter_are_portable_tested();
   composition_time_rational_is_exact_and_overflow_safe();
   project_epoch_fences_reused_aegp_handles();
+  project_composition_package_dispatches_all_eight_capabilities();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();
   composition_time_read_is_closed_main_thread_bound_and_verified();

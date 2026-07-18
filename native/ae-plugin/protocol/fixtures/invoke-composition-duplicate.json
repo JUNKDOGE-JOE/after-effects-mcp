@@ -1,0 +1,216 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "request": {
+    "wireVersion": 1,
+    "kind": "request",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-comp-duplicate-1",
+    "method": "invoke",
+    "deadlineUnixMs": 1900000005000,
+    "params": {
+      "capabilityId": "ae.composition.duplicate",
+      "capabilityVersion": 1,
+      "arguments": {
+        "compositionLocator": {
+          "kind": "composition",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "44444444-4444-4444-8444-444444444444",
+          "generation": 8,
+          "objectId": "66666666-6666-4666-8666-666666666666"
+        },
+        "newName": "SYNTHETIC_COPY",
+        "idempotencyKey": "synthetic-comp-duplicate-0001"
+      }
+    }
+  },
+  "events": [
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-comp-duplicate-1",
+      "event": "progress",
+      "sequence": 1,
+      "progress": {
+        "phase": "queued",
+        "fraction": 0,
+        "message": "Queued for the bounded main-thread dispatcher."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-comp-duplicate-1",
+      "event": "progress",
+      "sequence": 2,
+      "progress": {
+        "phase": "dispatched",
+        "fraction": 0.5,
+        "message": "Entered the synthetic host-thread dispatch phase."
+      }
+    },
+    {
+      "wireVersion": 1,
+      "kind": "event",
+      "sessionId": "11111111-1111-4111-8111-111111111111",
+      "requestId": "invoke-comp-duplicate-1",
+      "event": "progress",
+      "sequence": 3,
+      "progress": {
+        "phase": "validating",
+        "fraction": 0.9,
+        "message": "Validating the bounded synthetic result."
+      }
+    }
+  ],
+  "response": {
+    "wireVersion": 1,
+    "kind": "response",
+    "sessionId": "11111111-1111-4111-8111-111111111111",
+    "requestId": "invoke-comp-duplicate-1",
+    "method": "invoke",
+    "ok": true,
+    "replayed": false,
+    "result": {
+      "capabilityId": "ae.composition.duplicate",
+      "capabilityVersion": 1,
+      "engine": "native-aegp",
+      "outcome": "succeeded",
+      "value": {
+        "changed": true,
+        "sourceCompositionLocator": {
+          "kind": "composition",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "55555555-5555-4555-8555-555555555555",
+          "generation": 9,
+          "objectId": "77777777-7777-4777-8777-777777777777"
+        },
+        "newCompositionLocator": {
+          "kind": "composition",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "55555555-5555-4555-8555-555555555555",
+          "generation": 9,
+          "objectId": "88888888-8888-4888-8888-888888888888"
+        },
+        "projectItemCountBefore": 1,
+        "projectItemCountAfter": 2,
+        "sourceSettings": {
+          "name": "SYNTHETIC_COMPOSITION",
+          "width": 1920,
+          "height": 1080,
+          "duration": {
+            "value": 5,
+            "scale": 1,
+            "secondsRational": "5"
+          },
+          "frameDuration": {
+            "value": 1,
+            "scale": 24,
+            "secondsRational": "1/24"
+          },
+          "frameRate": {
+            "numerator": 24,
+            "denominator": 1,
+            "rational": "24"
+          },
+          "pixelAspectRatio": {
+            "numerator": 1,
+            "denominator": 1,
+            "rational": "1"
+          },
+          "workArea": {
+            "start": {
+              "value": 0,
+              "scale": 1,
+              "secondsRational": "0"
+            },
+            "duration": {
+              "value": 5,
+              "scale": 1,
+              "secondsRational": "5"
+            }
+          },
+          "displayStartTime": {
+            "value": 0,
+            "scale": 1,
+            "secondsRational": "0"
+          },
+          "layerCount": 0
+        },
+        "newSettings": {
+          "name": "SYNTHETIC_COPY",
+          "width": 1920,
+          "height": 1080,
+          "duration": {
+            "value": 5,
+            "scale": 1,
+            "secondsRational": "5"
+          },
+          "frameDuration": {
+            "value": 1,
+            "scale": 24,
+            "secondsRational": "1/24"
+          },
+          "frameRate": {
+            "numerator": 24,
+            "denominator": 1,
+            "rational": "24"
+          },
+          "pixelAspectRatio": {
+            "numerator": 1,
+            "denominator": 1,
+            "rational": "1"
+          },
+          "workArea": {
+            "start": {
+              "value": 0,
+              "scale": 1,
+              "secondsRational": "0"
+            },
+            "duration": {
+              "value": 5,
+              "scale": 1,
+              "secondsRational": "5"
+            }
+          },
+          "displayStartTime": {
+            "value": 0,
+            "scale": 1,
+            "secondsRational": "0"
+          },
+          "layerCount": 0
+        }
+      },
+      "evidence": {
+        "engine": "native-aegp",
+        "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "requestId": "invoke-comp-duplicate-1",
+        "capabilityId": "ae.composition.duplicate",
+        "capabilityVersion": 1,
+        "startedAtUnixMs": 1900000000000,
+        "completedAtUnixMs": 1900000000025,
+        "effect": "committed",
+        "requestDigest": "bf3f33787792857f6937847463f402b921fc340728fa53f4364a84e3d6e5b2b6",
+        "postcondition": {
+          "verified": true,
+          "kind": "composition-duplicate",
+          "algorithm": "sha256-rfc8785-jcs-v1",
+          "digest": "0da842461e5143f19ea82d495b3af5e007460f9e781d1fb35b4ef6c96503922a"
+        },
+        "undo": {
+          "available": true,
+          "verified": false
+        }
+      }
+    }
+  }
+}
