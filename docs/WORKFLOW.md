@@ -8,23 +8,25 @@
 
 ```text
 MCP 客户端或面板内嵌 AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 49 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, public typed tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
-  -> CSInterface.evalScript
-  -> ExtendScript (plugin/jsx/runtime.jsx + jsx_templates/*.jsx)
-  -> After Effects project state
+     -> native broker -> local RPC -> AEGP plug-in -> AE main thread/state
+     -> maintained JSX -> CSInterface.evalScript -> ExtendScript -> AE state
 ```
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>49 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>public typed tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]
-    E --> F["CSInterface.evalScript"]
-    F --> G["ExtendScript runtime + templates"]
-    G --> H["After Effects"]
+    E --> F["/native/* -> native broker + local RPC"]
+    F --> G["AEGP plug-in<br/>AE main thread"]
+    E --> H["/exec -> CSInterface.evalScript"]
+    H --> I["maintained JSX"]
+    G --> J["After Effects state"]
+    I --> J
 ```
 
 每一层各自负责：
@@ -32,8 +34,9 @@ flowchart LR
 - 面板内嵌 AI 或外部 MCP 客户端：发起工具调用，例如 `ae_previewFrame`、`ae_createRig`、`ae_exec`。
 - `ae-mcp` / `ae_mcp`：暴露 MCP tool surface，做 schema 校验、工具 annotations、审批 gate 和 handler 路由。
 - `ae-mcp-bridge`：把 handler 的 AE 调用转成对本机面板的 HTTP 请求。
-- CEP panel host：常驻在 AE 内，接收 HTTP 请求并把 JSX 投给 ExtendScript。
-- ExtendScript：在 AE 里真正读取项目、改图层、写表达式、创建 rig、保存 checkpoint。
+- CEP panel host：常驻在 AE 内，按固定端点执行请求：`/native/*` 进入原生 broker，`/exec` 进入 JSX。实现绑定由 Core/public handler 显式定义；当前不存在运行时 AEGP/JSX resolver，也不会在原生失败后自动 fallback。
+- AEGP plug-in：通过本地 native RPC 在 AE 主线程读取或修改真实 AE 状态，并返回原生 provenance、审计和可验证后置条件。
+- ExtendScript：承担仍由 maintained JSX 实现的能力；它不是原生 AEGP 执行证据，也不会自动替代失败的原生调用。
 - `ae-mcp-snapshot-mss`：提供跨平台截图 backend。
 
 v0.9.2 的普通用户路径只使用同一个 candidate SHA 生成的离线平台资产：
@@ -214,23 +217,25 @@ This document describes the two v0.9.2 (unreleased candidate) usage paths: built
 
 ```text
 MCP client or panel-embedded AI
-  -> packages/core (ae_mcp, Python stdio MCP server, 49 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, public typed tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
-  -> CSInterface.evalScript
-  -> ExtendScript (plugin/jsx/runtime.jsx + jsx_templates/*.jsx)
-  -> After Effects project state
+     -> native broker -> local RPC -> AEGP plug-in -> AE main thread/state
+     -> maintained JSX -> CSInterface.evalScript -> ExtendScript -> AE state
 ```
 
 ```mermaid
 flowchart LR
-    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>49 ae_ tools"]
+    A["AI client / embedded chat"] --> B["ae_mcp stdio server<br/>public typed tools"]
     B --> C["ae-mcp bridge<br/>httpx backend"]
     C --> D["127.0.0.1:11488"]
     D --> E["CEP panel host<br/>Express"]
-    E --> F["CSInterface.evalScript"]
-    F --> G["ExtendScript runtime + templates"]
-    G --> H["After Effects"]
+    E --> F["/native/* -> native broker + local RPC"]
+    F --> G["AEGP plug-in<br/>AE main thread"]
+    E --> H["/exec -> CSInterface.evalScript"]
+    H --> I["maintained JSX"]
+    G --> J["After Effects state"]
+    I --> J
 ```
 
 Each layer is responsible for:
@@ -238,8 +243,9 @@ Each layer is responsible for:
 - Embedded AI or external MCP client: issues tool calls such as `ae_previewFrame`, `ae_createRig`, or `ae_exec`.
 - `ae-mcp` / `ae_mcp`: exposes MCP tools, schemas, tool annotations, approval gates, and handler routing.
 - `ae-mcp-bridge`: turns handler-side AE requests into HTTP calls to the local panel.
-- CEP panel host: stays resident inside AE, receives HTTP requests, and forwards JSX into ExtendScript.
-- ExtendScript: performs project reads, layer edits, expression writes, rig creation, and checkpoints.
+- CEP panel host: stays resident inside AE and follows fixed endpoints: `/native/*` enters the native broker and `/exec` enters JSX. Core/public handlers bind implementations explicitly; there is no runtime AEGP/JSX resolver or automatic fallback after a native failure.
+- AEGP plug-in: uses local native RPC and the AE main thread to read or mutate real AE state, returning native provenance, audit, and verifiable postconditions.
+- ExtendScript: implements capabilities that remain maintained JSX; it is not native AEGP evidence and is not an automatic fallback for a failed native call.
 - `ae-mcp-snapshot-mss`: provides the cross-platform screenshot backend.
 
 The normal-user v0.9.2 path uses only offline platform assets built from the same candidate SHA:
