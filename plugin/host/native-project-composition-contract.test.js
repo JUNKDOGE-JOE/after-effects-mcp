@@ -5,6 +5,12 @@ const test = require('node:test');
 
 const packageContracts = require('./native-project-composition-contract');
 
+test('getContract rejects unknown, non-string, and inherited property names', () => {
+    for (const capabilityId of ['unknown', 'toString', 'constructor', '__proto__', null]) {
+        assert.equal(packageContracts.getContract(capabilityId), null);
+    }
+});
+
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const PROJECT = '44444444-4444-4444-8444-444444444444';

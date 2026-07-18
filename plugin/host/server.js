@@ -4,6 +4,7 @@ const jsxBridge = require('./jsx-bridge');
 const authToken = require('./auth-token');
 const activity = require('./activity');
 const nativeAegp = require('./native-aegp-client');
+const nativeProjectComposition = require('./native-project-composition-contract');
 const PKG_VERSION = require('./package.json').version;
 
 let app = null;
@@ -463,6 +464,12 @@ function validNativeInvokeBody(body) {
     ])
         || typeof body.requestId !== 'string' || !NATIVE_REQUEST_ID_PATTERN.test(body.requestId)
         || !validDeadline(body.deadlineUnixMs)) return false;
+    if (body.capabilityVersion === 1) {
+        const packageContract = nativeProjectComposition.getContract(body.capabilityId);
+        if (packageContract !== null) {
+            return packageContract.validArguments(body.arguments) === true;
+        }
+    }
     if ((body.capabilityId === PROJECT_SUMMARY_CAPABILITY
         || body.capabilityId === PROJECT_BIT_DEPTH_READ_CAPABILITY)
         && body.capabilityVersion === 1) {

@@ -465,8 +465,10 @@ const CONTRACTS = Object.freeze({
 });
 
 function getContract(capabilityId) {
-    const contract = CONTRACTS[capabilityId];
-    return contract === undefined ? null : contract;
+    if (typeof capabilityId !== 'string' || !Object.hasOwn(CONTRACTS, capabilityId)) {
+        return null;
+    }
+    return CONTRACTS[capabilityId];
 }
 
 function validateCapabilityItems(items, requestedIds, detail) {
