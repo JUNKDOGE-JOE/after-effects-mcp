@@ -676,6 +676,14 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
                 'ae.layer.properties.list',
                 'ae.layer.property.keyframes.list',
                 'ae.layer.property.set',
+                'ae.project.context.read',
+                'ae.project.item.metadata.read',
+                'ae.composition.settings.read',
+                'ae.composition.work-area.set',
+                'ae.project.item.name.set',
+                'ae.project.item.comment.set',
+                'ae.project.item.label.set',
+                'ae.composition.duplicate',
             ],
         );
 
