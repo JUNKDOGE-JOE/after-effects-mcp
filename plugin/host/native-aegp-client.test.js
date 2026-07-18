@@ -75,6 +75,14 @@ const PROJECT_COMPOSITION_VECTOR_FILES = [
     'invoke-project-item-comment-set.json',
     'invoke-project-item-label-set.json',
     'invoke-composition-duplicate.json',
+    'invoke-layer-details-read.json',
+    'invoke-layer-name-set.json',
+    'invoke-layer-range-set.json',
+    'invoke-layer-start-time-set.json',
+    'invoke-layer-stretch-set.json',
+    'invoke-layer-order-set.json',
+    'invoke-layer-parent-set.json',
+    'invoke-layer-duplicate.json',
 ];
 const PROJECT_COMPOSITION_VECTORS = new Map(PROJECT_COMPOSITION_VECTOR_FILES.map(function (name) {
     const vector = JSON.parse(fs.readFileSync(path.join(
@@ -531,7 +539,7 @@ async function readyNativeClient(t, protocolOptions) {
     return { client, protocol };
 }
 
-test('CEP client negotiates and verifies all eight frozen #150 native contracts', {
+test('CEP client negotiates and verifies all sixteen frozen #150/#155 native contracts', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const { client, protocol } = await readyNativeClient(t, {
@@ -646,6 +654,85 @@ test('CEP client treats tampered #150 write evidence as side-effect uncertain', 
             return true;
         },
     );
+});
+
+test('CEP client rejects tampered #155 read and write results with correct side-effect semantics', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client } = await readyNativeClient(t, {
+        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
+        mutateInvoke: function (result, request) {
+            if (request.params.capabilityId === 'ae.layer.details.read') {
+                result.value.unadvertised = true;
+            } else if (request.params.capabilityId.startsWith('ae.layer.')) {
+                result.evidence.undo.verified = true;
+            }
+        },
+    });
+    const readVector = PROJECT_COMPOSITION_VECTORS.get('ae.layer.details.read');
+    await assert.rejects(client.invoke({
+        requestId: 'issue155-read-tamper',
+        capabilityId: 'ae.layer.details.read',
+        capabilityVersion: 1,
+        arguments: structuredClone(readVector.request.params.arguments),
+        deadlineUnixMs: 1900000005000,
+    }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false, sideEffect: 'not-started' });
+
+    for (const capabilityId of [
+        'ae.layer.name.set',
+        'ae.layer.range.set',
+        'ae.layer.start-time.set',
+        'ae.layer.stretch.set',
+        'ae.layer.order.set',
+        'ae.layer.parent.set',
+        'ae.layer.duplicate',
+    ]) {
+        const vector = PROJECT_COMPOSITION_VECTORS.get(capabilityId);
+        await assert.rejects(client.invoke({
+            requestId: 'issue155-write-tamper-' + capabilityId,
+            capabilityId,
+            capabilityVersion: 1,
+            arguments: structuredClone(vector.request.params.arguments),
+            deadlineUnixMs: 1900000005000,
+        }), {
+            code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+            retryable: false,
+            sideEffect: 'may-have-occurred',
+        }, capabilityId);
+    }
+});
+
+test('CEP client rejects stale #155 layer locators before native dispatch', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client, protocol } = await readyNativeClient(t, {
+        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
+    });
+    const vector = PROJECT_COMPOSITION_VECTORS.get('ae.layer.details.read');
+    const argumentsValue = structuredClone(vector.request.params.arguments);
+    argumentsValue.layerLocator.sessionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const invokeCount = protocol.requests.filter(function (request) {
+        return request.method === 'invoke';
+    }).length;
+    await assert.rejects(client.invoke({
+        requestId: 'issue155-stale-layer',
+        capabilityId: 'ae.layer.details.read',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: 1900000005000,
+    }), function (error) {
+        assert.equal(error.code, 'STALE_LOCATOR');
+        assert.deepEqual(error.details, {
+            field: 'params.arguments.layerLocator',
+            capabilityId: 'ae.layer.details.read',
+        });
+        assert.equal(error.recovery.action, 'refresh-locator');
+        assert.match(error.recovery.hint, /ae_listCompositionLayers/);
+        return true;
+    });
+    assert.equal(protocol.requests.filter(function (request) {
+        return request.method === 'invoke';
+    }).length, invokeCount);
 });
 
 test('descriptor and fixed transport messages are strict and closed', () => {

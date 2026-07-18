@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const test = require('node:test');
 
 const packageContracts = require('./native-project-composition-contract');
@@ -77,7 +79,7 @@ function cases() {
         type: 'composition',
         parentLocator: project,
     };
-    return {
+    const vectors = {
         'ae.project.context.read': {
             arguments: { selectionOffset: 0, selectionLimit: 50 },
             value: {
@@ -186,9 +188,28 @@ function cases() {
             },
         },
     };
+    for (const filename of [
+        'invoke-layer-details-read.json',
+        'invoke-layer-name-set.json',
+        'invoke-layer-range-set.json',
+        'invoke-layer-start-time-set.json',
+        'invoke-layer-stretch-set.json',
+        'invoke-layer-order-set.json',
+        'invoke-layer-parent-set.json',
+        'invoke-layer-duplicate.json',
+    ]) {
+        const vector = JSON.parse(fs.readFileSync(path.join(
+            __dirname, '../../native/ae-plugin/protocol/fixtures', filename,
+        ), 'utf8'));
+        vectors[vector.request.params.capabilityId] = {
+            arguments: vector.request.params.arguments,
+            value: vector.response.result.value,
+        };
+    }
+    return vectors;
 }
 
-test('all eight frozen package contracts accept their closed valid shapes', () => {
+test('all sixteen frozen #150/#155 contracts accept their closed valid shapes', () => {
     const vectors = cases();
     assert.deepEqual(Object.keys(packageContracts.CONTRACTS), Object.keys(vectors));
     for (const [capabilityId, vector] of Object.entries(vectors)) {
@@ -211,6 +232,71 @@ test('all eight frozen package contracts accept their closed valid shapes', () =
             capabilityId + ' open value',
         );
     }
+});
+
+test('#155 layer contracts bind locators, readbacks, replay, and nullable parent refresh', () => {
+    const vectors = cases();
+    const writes = [
+        'ae.layer.name.set',
+        'ae.layer.range.set',
+        'ae.layer.start-time.set',
+        'ae.layer.stretch.set',
+        'ae.layer.order.set',
+        'ae.layer.parent.set',
+        'ae.layer.duplicate',
+    ];
+    assert.equal(packageContracts.getContract('ae.layer.details.read').mutating, false);
+    for (const capabilityId of writes) {
+        const contract = packageContracts.getContract(capabilityId);
+        assert.equal(contract.mutating, true, capabilityId);
+        assert.equal(contract.allowReplay, capabilityId === 'ae.layer.duplicate', capabilityId);
+    }
+
+    const details = vectors['ae.layer.details.read'];
+    assert.equal(packageContracts.getContract('ae.layer.details.read').validValue(
+        { ...details.value, stackIndex: 2 }, details.arguments, HOST, SESSION,
+    ), true);
+    assert.equal(packageContracts.getContract('ae.layer.details.read').validValue(
+        {
+            ...details.value,
+            layerLocator: { ...details.value.layerLocator, objectId: CREATED },
+        },
+        details.arguments,
+        HOST,
+        SESSION,
+    ), false);
+
+    const duplicate = vectors['ae.layer.duplicate'];
+    assert.equal(packageContracts.getContract('ae.layer.duplicate').validValue(
+        { ...duplicate.value, layerCountAfter: duplicate.value.layerCountBefore + 2 },
+        duplicate.arguments,
+        HOST,
+        SESSION,
+    ), false);
+    assert.equal(packageContracts.getContract('ae.layer.duplicate').validValue(
+        {
+            ...duplicate.value,
+            newLayer: {
+                ...duplicate.value.newLayer,
+                stackIndex: duplicate.value.layerCountAfter + 1,
+            },
+        },
+        duplicate.arguments,
+        HOST,
+        SESSION,
+    ), false);
+
+    const parent = vectors['ae.layer.parent.set'];
+    const clearParent = {
+        ...parent.arguments,
+        parentLayerLocator: null,
+    };
+    assert.deepEqual(
+        packageContracts.locatorChecks(
+            packageContracts.getContract('ae.layer.parent.set'), clearParent,
+        ),
+        [[clearParent.layerLocator, 'layerLocator', 'ae_listCompositionLayers']],
+    );
 });
 
 test('capability descriptors bind every package contract digest', () => {

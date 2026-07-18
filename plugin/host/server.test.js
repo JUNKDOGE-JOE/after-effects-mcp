@@ -63,6 +63,14 @@ const projectCompositionVectors = [
     'invoke-project-item-comment-set.json',
     'invoke-project-item-label-set.json',
     'invoke-composition-duplicate.json',
+    'invoke-layer-details-read.json',
+    'invoke-layer-name-set.json',
+    'invoke-layer-range-set.json',
+    'invoke-layer-start-time-set.json',
+    'invoke-layer-stretch-set.json',
+    'invoke-layer-order-set.json',
+    'invoke-layer-parent-set.json',
+    'invoke-layer-duplicate.json',
 ].map(function (filename) {
     return require('../../native/ae-plugin/protocol/fixtures/' + filename);
 });
@@ -991,7 +999,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
     }
 });
 
-test('native invoke HTTP gate accepts all package #150 contracts and rejects closed-shape drift', async () => {
+test('native invoke HTTP gate accepts all #150/#155 contracts and rejects closed-shape drift', async () => {
     const nativeClient = fakeNativeClient();
     nativeClient.authorize();
     const { server, srv, port } = await startNativeApp(nativeClient);

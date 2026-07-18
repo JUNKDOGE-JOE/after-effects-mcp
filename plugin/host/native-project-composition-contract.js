@@ -1,7 +1,7 @@
 'use strict';
 
-// Closed CEP-side verification for capability package #150. This is not a
-// route resolver: it only validates the eight named native wire contracts.
+// Closed CEP-side verification for the #150 and #155 capability packages.
+// This is not a route resolver: it only validates the named native contracts.
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
@@ -107,6 +107,24 @@ function validRatio(value) {
         || !Number.isInteger(value.denominator) || value.denominator < 1
         || value.denominator > 2147483647) return false;
     return value.rational === reducedRational(value.numerator, value.denominator);
+}
+
+function validSignedRatio(value) {
+    if (!exactKeys(value, ['numerator', 'denominator', 'rational'])
+        || !Number.isInteger(value.numerator) || value.numerator === 0
+        || value.numerator < -2147483648 || value.numerator > 2147483647
+        || !Number.isInteger(value.denominator) || value.denominator < 1
+        || value.denominator > 2147483647) return false;
+    return value.rational === reducedRational(value.numerator, value.denominator);
+}
+
+function ratiosEqual(left, right) {
+    const leftNumerator = Object.hasOwn(left, 'numerator') ? left.numerator : left.num;
+    const leftDenominator = Object.hasOwn(left, 'denominator') ? left.denominator : left.den;
+    const rightNumerator = Object.hasOwn(right, 'numerator') ? right.numerator : right.num;
+    const rightDenominator = Object.hasOwn(right, 'denominator') ? right.denominator : right.den;
+    return BigInt(leftNumerator) * BigInt(rightDenominator)
+        === BigInt(rightNumerator) * BigInt(leftDenominator);
 }
 
 function validWorkArea(value) {
@@ -359,6 +377,181 @@ function validDuplicateValue(value, argumentsValue, hostInstanceId, sessionId) {
         === JSON.stringify(canonicalize(settingsFacts(value.newSettings)));
 }
 
+function validLayerLocatorArguments(value) {
+    return exactKeys(value, ['layerLocator'])
+        && validLocator(value.layerLocator, ['layer']);
+}
+
+function validLayerDetails(value, hostInstanceId, sessionId) {
+    if (!exactKeys(value, [
+        'layerLocator', 'compositionLocator', 'stackIndex', 'name', 'type',
+        'videoEnabled', 'isThreeD', 'locked', 'parentLocator', 'sourceItemLocator',
+        'inPoint', 'duration', 'startTime', 'stretch',
+    ]) || !validLocator(value.layerLocator, ['layer'])
+        || !validLocator(value.compositionLocator, ['composition'])
+        || !boundToSession(value.layerLocator, hostInstanceId, sessionId)
+        || !sameContext(value.layerLocator, value.compositionLocator)
+        || !Number.isSafeInteger(value.stackIndex) || value.stackIndex < 1
+        || !validString(value.name, 0, 1024)
+        || !['av', 'camera', 'light', 'text', 'shape', 'model3d', 'null', 'adjustment', 'unknown']
+            .includes(value.type)
+        || typeof value.videoEnabled !== 'boolean'
+        || typeof value.isThreeD !== 'boolean'
+        || typeof value.locked !== 'boolean'
+        || !validTime(value.inPoint, true, -2147483648)
+        || !validTime(value.duration, true, -2147483648)
+        || value.duration.value <= 0
+        || !validTime(value.startTime, true, -2147483648)
+        || !validSignedRatio(value.stretch)) return false;
+    if (value.parentLocator !== null
+        && (!validLocator(value.parentLocator, ['layer'])
+            || !sameContext(value.layerLocator, value.parentLocator)
+            || value.parentLocator.objectId === value.layerLocator.objectId)) return false;
+    return value.sourceItemLocator === null
+        || (validLocator(value.sourceItemLocator, ['item', 'composition'])
+            && sameContext(value.layerLocator, value.sourceItemLocator));
+}
+
+function validLayerDetailsValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return validLayerDetails(value, hostInstanceId, sessionId)
+        && sameLocator(value.layerLocator, argumentsValue.layerLocator);
+}
+
+function validLayerWriteArguments(value, member, validator) {
+    return exactKeys(value, ['layerLocator', member, 'idempotencyKey'])
+        && validLocator(value.layerLocator, ['layer'])
+        && validator(value[member])
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId) {
+    return validLocator(value.layerLocator, ['layer'])
+        && sameLocator(value.layerLocator, argumentsValue.layerLocator)
+        && boundToSession(value.layerLocator, hostInstanceId, sessionId);
+}
+
+function validLayerNameValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, ['changed', 'layerLocator', 'beforeName', 'afterName'])
+        && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && validString(value.beforeName, 0, 1024)
+        && validString(value.afterName, 1, 255)
+        && value.beforeName !== value.afterName
+        && value.afterName === argumentsValue.name;
+}
+
+function validLayerRangeValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'changed', 'layerLocator', 'beforeInPoint', 'beforeDuration',
+        'afterInPoint', 'afterDuration',
+    ]) && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && validTime(value.beforeInPoint, true, -2147483648)
+        && validTime(value.beforeDuration, true, -2147483648)
+        && validTime(value.afterInPoint, true, -2147483648)
+        && validTime(value.afterDuration, true, -2147483648)
+        && (!timesEqual(value.beforeInPoint, value.afterInPoint)
+            || !timesEqual(value.beforeDuration, value.afterDuration))
+        && timesEqual(value.afterInPoint, argumentsValue.inPoint)
+        && timesEqual(value.afterDuration, argumentsValue.duration);
+}
+
+function validLayerStartTimeValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, ['changed', 'layerLocator', 'beforeStartTime', 'afterStartTime'])
+        && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && validTime(value.beforeStartTime, true, -2147483648)
+        && validTime(value.afterStartTime, true, -2147483648)
+        && !timesEqual(value.beforeStartTime, value.afterStartTime)
+        && timesEqual(value.afterStartTime, argumentsValue.startTime);
+}
+
+function validLayerStretchInput(value) {
+    return exactKeys(value, ['num', 'den'])
+        && Number.isInteger(value.num) && value.num !== 0
+        && value.num >= -2147483648 && value.num <= 2147483647
+        && Number.isInteger(value.den) && value.den >= 1 && value.den <= 2147483647;
+}
+
+function validLayerStretchValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, ['changed', 'layerLocator', 'beforeStretch', 'afterStretch'])
+        && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && validSignedRatio(value.beforeStretch) && validSignedRatio(value.afterStretch)
+        && !ratiosEqual(value.beforeStretch, value.afterStretch)
+        && ratiosEqual(value.afterStretch, argumentsValue.stretch);
+}
+
+function validLayerOrderValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, ['changed', 'layerLocator', 'beforeStackIndex', 'afterStackIndex'])
+        && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && Number.isSafeInteger(value.beforeStackIndex) && value.beforeStackIndex > 0
+        && Number.isSafeInteger(value.afterStackIndex) && value.afterStackIndex > 0
+        && value.beforeStackIndex !== value.afterStackIndex
+        && value.afterStackIndex === argumentsValue.targetStackIndex;
+}
+
+function validNullableParent(locator, layerLocator) {
+    return locator === null
+        || (validLocator(locator, ['layer'])
+            && sameContext(locator, layerLocator)
+            && locator.objectId !== layerLocator.objectId);
+}
+
+function sameNullableLocator(left, right) {
+    return left === null ? right === null : right !== null && sameLocator(left, right);
+}
+
+function validLayerParentArguments(value) {
+    return exactKeys(value, ['layerLocator', 'parentLayerLocator', 'idempotencyKey'])
+        && validLocator(value.layerLocator, ['layer'])
+        && validNullableParent(value.parentLayerLocator, value.layerLocator)
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validLayerParentValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'changed', 'layerLocator', 'beforeParentLocator', 'afterParentLocator',
+    ]) && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && validNullableParent(value.beforeParentLocator, value.layerLocator)
+        && validNullableParent(value.afterParentLocator, value.layerLocator)
+        && !sameNullableLocator(value.beforeParentLocator, value.afterParentLocator)
+        && sameNullableLocator(value.afterParentLocator, argumentsValue.parentLayerLocator);
+}
+
+function validLayerDuplicateArguments(value) {
+    return validLayerWriteArguments(value, 'newName', function (name) {
+        return validString(name, 1, 255);
+    });
+}
+
+function validLayerDuplicateValue(value, argumentsValue, hostInstanceId, sessionId) {
+    if (!exactKeys(value, [
+        'changed', 'sourceLayerLocator', 'newLayerLocator', 'compositionLocator',
+        'layerCountBefore', 'layerCountAfter', 'newLayer',
+    ]) || value.changed !== true
+        || !validLocator(value.sourceLayerLocator, ['layer'])
+        || !validLocator(value.newLayerLocator, ['layer'])
+        || !validLocator(value.compositionLocator, ['composition'])
+        || !boundToSession(value.sourceLayerLocator, hostInstanceId, sessionId)
+        || !sameContext(value.sourceLayerLocator, value.newLayerLocator)
+        || !sameContext(value.sourceLayerLocator, value.compositionLocator)
+        || value.sourceLayerLocator.objectId !== argumentsValue.layerLocator.objectId
+        || value.sourceLayerLocator.projectId === argumentsValue.layerLocator.projectId
+        || value.sourceLayerLocator.generation <= argumentsValue.layerLocator.generation
+        || value.newLayerLocator.objectId === value.sourceLayerLocator.objectId
+        || !Number.isSafeInteger(value.layerCountBefore) || value.layerCountBefore < 0
+        || value.layerCountAfter !== value.layerCountBefore + 1
+        || !validLayerDetails(value.newLayer, hostInstanceId, sessionId)
+        || !sameLocator(value.newLayer.layerLocator, value.newLayerLocator)
+        || !sameLocator(value.newLayer.compositionLocator, value.compositionLocator)
+        || value.newLayer.stackIndex > value.layerCountAfter
+        || value.newLayer.name !== argumentsValue.newName) return false;
+    return true;
+}
+
 const CONTRACTS = Object.freeze({
     'ae.project.context.read': Object.freeze({
         digest: 'ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca',
@@ -462,6 +655,100 @@ const CONTRACTS = Object.freeze({
         validValue: validDuplicateValue,
         locatorFields: Object.freeze([['compositionLocator', 'ae_getProjectContext']]),
     }),
+    'ae.layer.details.read': Object.freeze({
+        digest: 'b1b7a5f313bbf72eb6b33ac4a0507f9f925ef6873d53fd07d93d861164ac15d9',
+        mutating: false,
+        postconditionKind: 'layer-details-read',
+        validArguments: validLayerLocatorArguments,
+        validValue: validLayerDetailsValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.name.set': Object.freeze({
+        digest: 'a68fb7f75f050faf4e77c81c3fa9f53ad501016af0eeb065493716ff94fd5929',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-name-set',
+        validArguments: function (value) {
+            return validLayerWriteArguments(value, 'name', function (name) {
+                return validString(name, 1, 255);
+            });
+        },
+        validValue: validLayerNameValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.range.set': Object.freeze({
+        digest: '0b90618916f0df612726017ef80795b72829f367cbf46cad23b33beb129230e2',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-range-set',
+        validArguments: function (value) {
+            return exactKeys(value, ['layerLocator', 'inPoint', 'duration', 'idempotencyKey'])
+                && validLocator(value.layerLocator, ['layer'])
+                && validTime(value.inPoint, false, -2147483648)
+                && validTime(value.duration, false, 1)
+                && validIdempotencyKey(value.idempotencyKey);
+        },
+        validValue: validLayerRangeValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.start-time.set': Object.freeze({
+        digest: 'c0c09292b98f5fecfb69a487f2014aed6ce2b67d47f07231beea36d916e07e27',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-start-time-set',
+        validArguments: function (value) {
+            return validLayerWriteArguments(value, 'startTime', function (time) {
+                return validTime(time, false, -2147483648);
+            });
+        },
+        validValue: validLayerStartTimeValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.stretch.set': Object.freeze({
+        digest: '0545a85e87d8907f94597ba36e3021fd3fa6dfe1262ff0e81eb30551f5e3bbb8',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-stretch-set',
+        validArguments: function (value) {
+            return validLayerWriteArguments(value, 'stretch', validLayerStretchInput);
+        },
+        validValue: validLayerStretchValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.order.set': Object.freeze({
+        digest: 'e977b89201314e2e4ee1b6e7a09efadd06f012b2b97e3087b0d9c4bd8102d162',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-order-set',
+        validArguments: function (value) {
+            return validLayerWriteArguments(value, 'targetStackIndex', function (index) {
+                return Number.isSafeInteger(index) && index > 0;
+            });
+        },
+        validValue: validLayerOrderValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.parent.set': Object.freeze({
+        digest: '36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-parent-set',
+        validArguments: validLayerParentArguments,
+        validValue: validLayerParentValue,
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listCompositionLayers'],
+            ['parentLayerLocator', 'ae_listCompositionLayers'],
+        ]),
+    }),
+    'ae.layer.duplicate': Object.freeze({
+        digest: '334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'layer-duplicate',
+        validArguments: validLayerDuplicateArguments,
+        validValue: validLayerDuplicateValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
 });
 
 function getContract(capabilityId) {
@@ -501,7 +788,7 @@ function validateCapabilityItems(items, requestedIds, detail) {
 function locatorChecks(contract, argumentsValue) {
     return contract.locatorFields.map(function (entry) {
         return [argumentsValue[entry[0]], entry[0], entry[1]];
-    });
+    }).filter(function (entry) { return entry[0] !== null && entry[0] !== undefined; });
 }
 
 module.exports = Object.freeze({
