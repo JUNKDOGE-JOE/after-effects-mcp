@@ -273,7 +273,7 @@ function installProtocol(server, options) {
                         },
                         sessionId: SESSION,
                         sessionGeneration: 7,
-                        limits: { maxFrameBytes: 131072 },
+                        limits: { maxFrameBytes: 524288 },
                         capabilitiesDigest: DIGEST,
                         clientNonce: request.params.nonce,
                     };

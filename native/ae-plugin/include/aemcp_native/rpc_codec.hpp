@@ -395,7 +395,7 @@ class RpcSessionFrontDoor final {
 };
 
 struct NegotiatedLimits {
-  std::uint32_t max_frame_bytes{131'072};
+  std::uint32_t max_frame_bytes{kMaxFrameBytes};
   std::uint16_t max_in_flight{8};
   std::uint16_t max_queue_depth{32};
   std::uint32_t max_deadline_ms{30'000};

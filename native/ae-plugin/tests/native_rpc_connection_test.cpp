@@ -771,7 +771,8 @@ AuthenticatedConnection connection(int socket_fd, std::string route, std::uint32
 }
 
 std::vector<std::uint8_t> frame(std::string_view json) {
-  require(!json.empty() && json.size() <= 131'072, "test JSON frame size is invalid");
+  require(!json.empty() && json.size() <= aemcp::native::rpc::kMaxFrameBytes,
+          "test JSON frame size is invalid");
   std::vector<std::uint8_t> output(json.size() + 4);
   const auto size = static_cast<std::uint32_t>(json.size());
   output[0] = static_cast<std::uint8_t>(size >> 24U);
@@ -823,7 +824,8 @@ std::string read_body(int socket_fd) {
       | (static_cast<std::uint32_t>(prefix[1]) << 16U)
       | (static_cast<std::uint32_t>(prefix[2]) << 8U)
       | static_cast<std::uint32_t>(prefix[3]);
-  require(size > 0 && size <= 131'072, "response frame prefix is invalid");
+  require(size > 0 && size <= aemcp::native::rpc::kMaxFrameBytes,
+          "response frame prefix is invalid");
   std::vector<std::uint8_t> body(size);
   read_exact(socket_fd, body.data(), body.size());
   return std::string(reinterpret_cast<const char*>(body.data()), body.size());
