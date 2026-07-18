@@ -99,6 +99,31 @@ Do not rerun T3, T5, or T6 after every small fix. A failed higher tier should dr
 - Do not use a stale or dirty root checkout as an implicit source for another issue's build.
 - Keep the active build and evidence worktree on fully local, non-evictable storage. Cloud/on-demand placeholders, including macOS `dataless` files, are not valid candidate inputs; hydrate the complete scoped inputs or create a local checkout before freezing the candidate.
 
+### 7.1 Classify `.aep` lifecycle by purpose
+
+Classify every agent-created After Effects project before creating it. Lifecycle follows the project's purpose, not its Issue, PR, branch, candidate SHA, or evidence directory. The default is `ephemeral-validation`.
+
+- **`ephemeral-validation`:** single candidate, read/write, Undo, recovery, or acceptance work. After structured evidence is extracted, move it to a short-lived recoverable archive outside Adobe scan roots.
+- **`reusable-fixture`:** deterministic input shared by multiple capability packages. Keep exactly one canonical copy plus its rebuild recipe; do not duplicate it per Issue or candidate.
+- **`persistent-workspace`:** a project the user explicitly chose for continued editing, or a project in a user-selected workspace. Never move, archive, overwrite, or delete it automatically.
+- **`evidence-snapshot`:** allowed only when an unresolved defect cannot be reproduced from structured logs and a deterministic recipe. Keep one minimal, redacted snapshot bound to the exact source SHA.
+
+Before creating, retaining, moving, or archiving an `.aep`, determine and record:
+
+1. whether the user created it or selected its directory;
+2. whether public MCP or a checked-in recipe can rebuild it deterministically;
+3. whether an unresolved defect genuinely requires the complete project;
+4. whether an open acceptance checklist explicitly references it; and
+5. whether the user explicitly requested persistent retention.
+
+- If long-term value cannot be demonstrated, do not retain the project permanently under an Issue or candidate directory; use a dated recovery archive with a cleanup condition.
+- One T5/T6 hardware session may have only one active fixture. Retry by resetting or deterministically rebuilding that fixture; do not accumulate projects through repeated Save As operations.
+- Issue and evidence directories should normally store the fixture ID, lifecycle, owner, rebuild recipe, exact SHA, content digest, public MCP request/response, before/after state, audit, Undo, and result—not a complete `.aep`.
+- When a candidate is superseded, archive its ephemeral project by default. An old SHA is traceability metadata, not a reason for permanent retention.
+- Permanent retention requires a recorded reason, owner, references, exact SHA, and cleanup condition. A canonical reusable fixture also requires a uniqueness check before another copy is created.
+- Use centralized `canonical`, `active`, `recovery`, and `evidence` roots outside Adobe scan directories. Do not create a new file-management framework merely to enforce this lifecycle.
+- Completion evidence must report `.aep` counts: created, canonical retained, evidence snapshots retained, archived, unclassified, and logical/physical space moved or released.
+
 ## 8. Minimize human interruption during hardware work
 
 - Consolidate all known permissions and GUI prerequisites into one preflight.
