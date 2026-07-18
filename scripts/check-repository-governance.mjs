@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 export const GOVERNANCE_PATH = 'AGENTS.md';
 export const INVENTORY_PATH = 'docs/checkpoints/2026-07-16-worktree-audit.md';
-export const GOVERNANCE_SHA256 = '06c98ef7c5423b6bdde3a32849da88ae7ccb04136a0aca9784d1f1fd2d0fb949';
+export const GOVERNANCE_SHA256 = '20dbc057da24f10c8b7ad96f24555d288fde6e8129f5edf59aedd5ff0b911861';
 export const SUPPORTING_WORKFLOW_PATHS = [
   '.github/ISSUE_TEMPLATE/capability-package.md',
   '.github/pull_request_template.md',
