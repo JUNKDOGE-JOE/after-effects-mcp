@@ -211,7 +211,12 @@ function cases() {
 
 test('all sixteen frozen #150/#155 contracts accept their closed valid shapes', () => {
     const vectors = cases();
-    assert.deepEqual(Object.keys(packageContracts.CONTRACTS), Object.keys(vectors));
+    assert.deepEqual(
+        Object.keys(packageContracts.CONTRACTS).filter(function (capabilityId) {
+            return !capabilityId.startsWith('ae.layer.property.keyframe.');
+        }),
+        Object.keys(vectors),
+    );
     for (const [capabilityId, vector] of Object.entries(vectors)) {
         const contract = packageContracts.getContract(capabilityId);
         assert.match(contract.digest, /^[0-9a-f]{64}$/);
@@ -232,6 +237,144 @@ test('all sixteen frozen #150/#155 contracts accept their closed valid shapes', 
             capabilityId + ' open value',
         );
     }
+});
+
+function keyframeCases() {
+    const layer = locator('layer', SOURCE, 8);
+    const property = locator('stream', CREATED, 8);
+    const targetTime = { value: 24, scale: 24 };
+    const ease = function (speed, influence) {
+        return [{
+            dimension: 0,
+            inEase: { speed, influence },
+            outEase: { speed, influence },
+        }];
+    };
+    const details = function (overrides) {
+        return {
+            propertyLocator: property,
+            time: time(24, 24),
+            temporalDimensionality: 1,
+            valueType: 'one-d',
+            value: { kind: 'scalar', value: '1' },
+            inInterpolation: 'linear',
+            outInterpolation: 'linear',
+            temporalEaseDimensions: ease('0', '33'),
+            behaviors: {
+                temporalContinuous: false,
+                temporalAutoBezier: false,
+                spatialContinuous: false,
+                spatialAutoBezier: false,
+                roving: false,
+            },
+            ...overrides,
+        };
+    };
+    const write = function (extra) {
+        return {
+            layerLocator: layer,
+            propertyLocator: property,
+            time: targetTime,
+            idempotencyKey: 'issue157-host-contract-0001',
+            ...extra,
+        };
+    };
+    const mutation = function (beforeKeyframe, afterKeyframe, beforeCount, afterCount) {
+        return {
+            changed: true,
+            layerLocator: layer,
+            propertyLocator: property,
+            time: time(24, 24),
+            keyframeCountBefore: beforeCount,
+            keyframeCountAfter: afterCount,
+            beforeKeyframe,
+            afterKeyframe,
+        };
+    };
+    const before = details();
+    const valueAfter = details({ value: { kind: 'scalar', value: '2' } });
+    const interpolationAfter = details({ inInterpolation: 'bezier', outInterpolation: 'hold' });
+    const easeAfter = details({ temporalEaseDimensions: ease('5', '50') });
+    const behaviorAfter = details({
+        behaviors: { ...before.behaviors, spatialContinuous: true },
+    });
+    return {
+        'ae.layer.property.keyframe.details.read': {
+            arguments: { propertyLocator: property, time: targetTime }, value: before,
+        },
+        'ae.layer.property.keyframe.add': {
+            arguments: write({ value: { kind: 'scalar', value: '1' } }),
+            value: mutation(null, before, 0, 1),
+        },
+        'ae.layer.property.keyframe.value.set': {
+            arguments: write({ value: { kind: 'scalar', value: '2' } }),
+            value: mutation(before, valueAfter, 1, 1),
+        },
+        'ae.layer.property.keyframe.interpolation.set': {
+            arguments: write({ inInterpolation: 'bezier', outInterpolation: 'hold' }),
+            value: mutation(before, interpolationAfter, 1, 1),
+        },
+        'ae.layer.property.keyframe.temporal-ease.set': {
+            arguments: write({ dimensions: ease('5.0', '50.0') }),
+            value: mutation(before, easeAfter, 1, 1),
+        },
+        'ae.layer.property.keyframe.behavior.set': {
+            arguments: write({ behavior: 'spatial-continuous', enabled: true }),
+            value: mutation(before, behaviorAfter, 1, 1),
+        },
+        'ae.layer.property.keyframe.delete': {
+            arguments: write({}), value: mutation(before, null, 1, 0),
+        },
+    };
+}
+
+test('seven #157 contracts bind checked-in registry metadata and closed typed values', () => {
+    const matrix = JSON.parse(fs.readFileSync(path.join(
+        __dirname,
+        '../../native/ae-plugin/protocol/fixtures/keyframe-authoring-matrix.json',
+    ), 'utf8'));
+    const capabilities = JSON.parse(fs.readFileSync(path.join(
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
+    ), 'utf8')).response.result.items;
+    const vectors = keyframeCases();
+    assert.deepEqual(Object.keys(vectors), matrix.cases.map(function (item) {
+        return item.capabilityId;
+    }));
+    for (const entry of matrix.cases) {
+        const contract = packageContracts.getContract(entry.capabilityId);
+        const descriptor = capabilities.find(function (item) {
+            return item.id === entry.capabilityId;
+        });
+        const vector = vectors[entry.capabilityId];
+        assert.equal(contract.digest, entry.contractDigest, entry.capabilityId);
+        assert.equal(contract.postconditionKind, entry.postconditionKind, entry.capabilityId);
+        assert.equal(contract.mutating, entry.mutating, entry.capabilityId);
+        assert.equal(descriptor.contractDigest, entry.contractDigest, entry.capabilityId);
+        assert.equal(contract.validArguments(vector.arguments), true, entry.capabilityId);
+        assert.equal(
+            contract.validValue(vector.value, vector.arguments, HOST, SESSION),
+            true,
+            entry.capabilityId,
+        );
+        assert.equal(contract.validArguments({ ...vector.arguments, extra: true }), false);
+        assert.equal(contract.validValue(
+            { ...vector.value, extra: true }, vector.arguments, HOST, SESSION,
+        ), false);
+    }
+});
+
+test('#157 read tampering is safe and write tampering remains side-effect-sensitive', () => {
+    const vectors = keyframeCases();
+    const read = vectors['ae.layer.property.keyframe.details.read'];
+    const write = vectors['ae.layer.property.keyframe.add'];
+    assert.equal(packageContracts.getContract(
+        'ae.layer.property.keyframe.details.read',
+    ).validValue(
+        { ...read.value, temporalDimensionality: 2 }, read.arguments, HOST, SESSION,
+    ), false);
+    assert.equal(packageContracts.getContract('ae.layer.property.keyframe.add').validValue(
+        { ...write.value, keyframeCountAfter: 2 }, write.arguments, HOST, SESSION,
+    ), false);
 });
 
 test('#155 layer contracts bind locators, readbacks, replay, and nullable parent refresh', () => {

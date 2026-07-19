@@ -7,6 +7,7 @@ LLM reads them in the tool-picker.
 
 from __future__ import annotations
 
+import math
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
@@ -948,6 +949,199 @@ class AeSetLayerPropertyValueArgs(_StrictModel):
     )
 
 
+class _AeLayerPropertyKeyframeTargetArgs(_StrictModel):
+    """Stable property locator plus exact composition time; never an array index."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    property_locator: AePropertyLocator = Field(
+        ...,
+        description="Leaf property locator returned by ae_listLayerProperties.",
+    )
+    time: AeCompositionTimeInput = Field(
+        ...,
+        description=(
+            "Exact composition time as an int32 value and positive uint32 scale. "
+            "The public contract intentionally does not accept a keyframe index."
+        ),
+    )
+
+
+class _AeLayerPropertyKeyframeWriteArgs(_AeLayerPropertyKeyframeTargetArgs):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Layer locator used to obtain property_locator.",
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description=(
+            "Stable key for this one keyframe write intent; use a new key for a "
+            "different target time or requested state."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _same_locator_context(self) -> "_AeLayerPropertyKeyframeWriteArgs":
+        layer = self.layer_locator
+        prop = self.property_locator
+        if (
+            layer.host_instance_id != prop.host_instance_id
+            or layer.session_id != prop.session_id
+            or layer.project_id != prop.project_id
+            or layer.generation != prop.generation
+        ):
+            raise ValueError(
+                "property_locator must share the layer_locator's current context"
+            )
+        return self
+
+
+class AeGetLayerPropertyKeyframeDetailsArgs(_AeLayerPropertyKeyframeTargetArgs):
+    """Read one native keyframe by stable property locator and exact time."""
+
+
+class AeAddLayerPropertyKeyframeArgs(_AeLayerPropertyKeyframeWriteArgs):
+    """Add one primitive native keyframe with a required initial value and Undo."""
+
+    value: Union[
+        AePropertyScalarInput,
+        AePropertyVectorInput,
+        AePropertyColorInput,
+    ] = Field(
+        ...,
+        description="Typed initial scalar, 2/3 component vector, or ARGB color value.",
+    )
+
+
+class AeSetLayerPropertyKeyframeValueArgs(_AeLayerPropertyKeyframeWriteArgs):
+    """Set one existing native keyframe value with verified readback and Undo."""
+
+    value: Union[
+        AePropertyScalarInput,
+        AePropertyVectorInput,
+        AePropertyColorInput,
+    ] = Field(
+        ...,
+        description="Typed replacement scalar, 2/3 component vector, or ARGB color value.",
+    )
+
+
+class AeSetLayerPropertyKeyframeInterpolationArgs(
+    _AeLayerPropertyKeyframeWriteArgs
+):
+    """Set explicit incoming and outgoing interpolation on one keyframe."""
+
+    in_interpolation: Literal["linear", "bezier", "hold"] = Field(
+        ...,
+        description="Incoming temporal interpolation; choose exactly one enum value.",
+    )
+    out_interpolation: Literal["linear", "bezier", "hold"] = Field(
+        ...,
+        description="Outgoing temporal interpolation; choose exactly one enum value.",
+    )
+
+
+class AeKeyframeEaseInput(_StrictModel):
+    """One native temporal-ease speed/influence pair as finite decimals."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    speed: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
+    influence: str = Field(
+        ...,
+        min_length=1,
+        max_length=32,
+        pattern=_PROPERTY_DECIMAL,
+        description="Influence percentage in the inclusive range 0..100.",
+    )
+
+    @model_validator(mode="after")
+    def _finite_ease(self) -> "AeKeyframeEaseInput":
+        try:
+            speed = Decimal(self.speed)
+            influence = Decimal(self.influence)
+            speed_binary = float(self.speed)
+            influence_binary = float(self.influence)
+        except (InvalidOperation, OverflowError, ValueError) as error:
+            raise ValueError("keyframe ease values must be finite decimals") from error
+        if (
+            not speed.is_finite()
+            or not influence.is_finite()
+            or not math.isfinite(speed_binary)
+            or not math.isfinite(influence_binary)
+        ):
+            raise ValueError("keyframe ease values must be finite decimals")
+        for text, decimal_value, binary_value in (
+            (self.speed, speed, speed_binary),
+            (self.influence, influence, influence_binary),
+        ):
+            if binary_value == 0 and not decimal_value.is_zero():
+                raise ValueError("keyframe ease values must not underflow binary64")
+            if binary_value == 0 and text.startswith("-"):
+                raise ValueError("keyframe ease values must normalize negative zero to 0")
+        if influence < 0 or influence > 100:
+            raise ValueError("keyframe ease influence must be within 0..100")
+        return self
+
+
+class AeKeyframeEaseDimensionInput(_StrictModel):
+    """Ease for one zero-based property dimension."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    dimension: int = Field(..., ge=0, le=3)
+    in_ease: AeKeyframeEaseInput
+    out_ease: AeKeyframeEaseInput
+
+
+class AeSetLayerPropertyKeyframeTemporalEaseArgs(
+    _AeLayerPropertyKeyframeWriteArgs
+):
+    """Set typed temporal ease for every dimension of one native keyframe."""
+
+    dimensions: List[AeKeyframeEaseDimensionInput] = Field(
+        ...,
+        min_length=1,
+        max_length=4,
+        description=(
+            "One entry per property dimension, in contiguous zero-based order. "
+            "Use one for scalar, two for 2D, three for 3D, and four for color."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _contiguous_dimensions(
+        self,
+    ) -> "AeSetLayerPropertyKeyframeTemporalEaseArgs":
+        if [item.dimension for item in self.dimensions] != list(
+            range(len(self.dimensions))
+        ):
+            raise ValueError("dimensions must be contiguous and zero-based")
+        return self
+
+
+class AeSetLayerPropertyKeyframeBehaviorArgs(_AeLayerPropertyKeyframeWriteArgs):
+    """Toggle exactly one native keyframe behavior flag."""
+
+    behavior: Literal[
+        "temporal-continuous",
+        "temporal-auto-bezier",
+        "spatial-continuous",
+        "spatial-auto-bezier",
+        "roving",
+    ] = Field(..., description="The single native keyframe behavior to change.")
+    enabled: bool = Field(..., description="Required target state for that behavior.")
+
+
+class AeDeleteLayerPropertyKeyframeArgs(_AeLayerPropertyKeyframeWriteArgs):
+    """Delete one native keyframe selected by exact composition time with Undo."""
+
+
 class AeLayersArgs(_StrictModel):
     """ae.layers — list layers in a comp (paginated)."""
     comp_id: Optional[str] = Field(
@@ -1640,6 +1834,13 @@ SCHEMAS = {
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.listLayerPropertyKeyframes": AeListLayerPropertyKeyframesArgs,
     "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
+    "ae.getLayerPropertyKeyframeDetails": AeGetLayerPropertyKeyframeDetailsArgs,
+    "ae.addLayerPropertyKeyframe": AeAddLayerPropertyKeyframeArgs,
+    "ae.setLayerPropertyKeyframeValue": AeSetLayerPropertyKeyframeValueArgs,
+    "ae.setLayerPropertyKeyframeInterpolation": AeSetLayerPropertyKeyframeInterpolationArgs,
+    "ae.setLayerPropertyKeyframeTemporalEase": AeSetLayerPropertyKeyframeTemporalEaseArgs,
+    "ae.setLayerPropertyKeyframeBehavior": AeSetLayerPropertyKeyframeBehaviorArgs,
+    "ae.deleteLayerPropertyKeyframe": AeDeleteLayerPropertyKeyframeArgs,
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
     "ae.exec": AeExecArgs,
@@ -1684,4 +1885,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 58, f"expected 58 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 65, f"expected 65 verbs, got {len(SCHEMAS)}"

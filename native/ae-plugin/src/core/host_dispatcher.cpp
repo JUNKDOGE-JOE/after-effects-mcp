@@ -89,6 +89,15 @@ bool has_layer_timeline_arguments(const Request& request) {
       || request.target_stack_index != 0 || !request.layer_new_name.empty();
 }
 
+bool has_keyframe_arguments(const Request& request) {
+  return request.keyframe_time != LayerPropertySampleTime{}
+      || !request.keyframe_in_interpolation.empty()
+      || !request.keyframe_out_interpolation.empty()
+      || !request.keyframe_temporal_ease.empty()
+      || !request.keyframe_behavior.empty()
+      || request.keyframe_behavior_enabled.has_value();
+}
+
 bool valid_composition_create_request(const Request& request) {
   return !request.composition_create_name.empty()
       && request.composition_create_name.size() <= 1024
@@ -207,6 +216,34 @@ bool valid_property_value(const LayerPropertyValue& value) {
         && !color->green.empty() && !color->blue.empty();
   }
   return false;
+}
+
+bool keyframe_write_capability(std::string_view capability_id) {
+  return capability_id == kLayerPropertyKeyframeAddCapability
+      || capability_id == kLayerPropertyKeyframeValueSetCapability
+      || capability_id == kLayerPropertyKeyframeInterpolationSetCapability
+      || capability_id == kLayerPropertyKeyframeTemporalEaseSetCapability
+      || capability_id == kLayerPropertyKeyframeBehaviorSetCapability
+      || capability_id == kLayerPropertyKeyframeDeleteCapability;
+}
+
+bool valid_keyframe_time(const LayerPropertySampleTime& value) {
+  return value.value >= std::numeric_limits<std::int32_t>::min()
+      && value.value <= std::numeric_limits<std::int32_t>::max()
+      && value.scale >= 1
+      && value.scale <= std::numeric_limits<std::uint32_t>::max();
+}
+
+bool keyframe_times_equal(
+    const LayerPropertySampleTime& left,
+    const LayerPropertySampleTime& right) {
+  // valid_keyframe_time narrows values to int32 and scales to uint32.  Their
+  // signed cross-products therefore fit exactly inside int64, including the
+  // INT32_MIN * UINT32_MAX boundary, without a non-standard integer type.
+  return static_cast<std::int64_t>(left.value)
+          * static_cast<std::int64_t>(right.scale)
+      == static_cast<std::int64_t>(right.value)
+          * static_cast<std::int64_t>(left.scale);
 }
 
 bool same_locator_context(const ObjectLocator& left, const ObjectLocator& right) {
@@ -865,6 +902,44 @@ HostLayerPropertyWriteResult HostLayerPropertyWriteResult::failure(
   return result;
 }
 
+HostLayerPropertyKeyframeDetailsResult
+HostLayerPropertyKeyframeDetailsResult::success(
+    LayerPropertyKeyframeDetails value) {
+  HostLayerPropertyKeyframeDetailsResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostLayerPropertyKeyframeDetailsResult
+HostLayerPropertyKeyframeDetailsResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostLayerPropertyKeyframeDetailsResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
+HostLayerPropertyKeyframeWriteResult
+HostLayerPropertyKeyframeWriteResult::success(
+    LayerPropertyKeyframeChanged value) {
+  HostLayerPropertyKeyframeWriteResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostLayerPropertyKeyframeWriteResult
+HostLayerPropertyKeyframeWriteResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostLayerPropertyKeyframeWriteResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 #define AEMCP_DEFINE_HOST_RESULT(ResultType, ValueType)                        \
   ResultType ResultType::success(ValueType value) {                           \
     ResultType result;                                                        \
@@ -1032,6 +1107,19 @@ HostLayerPropertyWriteResult HostApi::set_layer_property(
       "NATIVE_UNSUPPORTED", "layer property writes are unavailable");
 }
 
+HostLayerPropertyKeyframeDetailsResult
+HostApi::read_layer_property_keyframe_details(
+    const LayerPropertyKeyframeDetailsQuery&, TimePoint) {
+  return HostLayerPropertyKeyframeDetailsResult::failure(
+      "NATIVE_UNSUPPORTED", "layer property keyframe detail reads are unavailable");
+}
+
+HostLayerPropertyKeyframeWriteResult HostApi::mutate_layer_property_keyframe(
+    const LayerPropertyKeyframeMutationCommand&, TimePoint) {
+  return HostLayerPropertyKeyframeWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer property keyframe writes are unavailable");
+}
+
 HostLayerDetailsResult HostApi::read_layer_details(
     const LayerDetailsQuery&, TimePoint) {
   return HostLayerDetailsResult::failure(
@@ -1142,6 +1230,9 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kLayerPropertyKeyframesListCapability;
   const bool layer_property_set =
       request.capability_id == kLayerPropertySetCapability;
+  const bool keyframe_details_read =
+      request.capability_id == kLayerPropertyKeyframeDetailsReadCapability;
+  const bool keyframe_write = keyframe_write_capability(request.capability_id);
   const bool project_context_read =
       request.capability_id == kProjectContextReadCapability;
   const bool project_item_metadata_read =
@@ -1176,7 +1267,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || composition_create
       || composition_layer_create
       || layer_effect_apply
-      || layer_property_set || composition_work_area_set
+      || layer_property_set || keyframe_write || composition_work_area_set
       || project_item_name_set || project_item_comment_set
       || project_item_label_set || composition_duplicate || layer_name_set
       || layer_range_set || layer_start_time_set || layer_stretch_set
@@ -1189,6 +1280,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !composition_time_set && !composition_create && !composition_layer_create
       && !layer_effect_apply && !layer_properties_list
       && !layer_property_keyframes_list && !layer_property_set
+      && !keyframe_details_read && !keyframe_write
       && !project_context_read && !project_item_metadata_read
       && !composition_settings_read && !composition_work_area_set
       && !project_item_name_set && !project_item_comment_set
@@ -1219,6 +1311,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || !request.item_text.empty() || request.item_label_id != 0
           || !request.duplicate_new_name.empty()
           || has_layer_timeline_arguments(request)
+          || has_keyframe_arguments(request)
           || has_nondefault_time(request.work_area_start)
           || has_nondefault_time(request.work_area_duration)
           || has_composition_create_arguments(request))) {
@@ -1270,6 +1363,44 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
         "native layer property write arguments failed closed validation",
+        "params.arguments"};
+  }
+  if (keyframe_details_read
+      && (request.target_depth != 0 || !request.idempotency_key.empty()
+          || !request.arguments_fingerprint_sha256.empty()
+          || !valid_uuid(request.host_instance_id)
+          || !valid_uuid(request.session_id)
+          || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value()
+          || request.composition_locator.has_value()
+          || request.layer_locator.has_value()
+          || request.parent_property_locator.has_value()
+          || !request.property_locator.has_value()
+          || !std::holds_alternative<std::monostate>(request.property_value)
+          || !valid_keyframe_time(request.keyframe_time))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native keyframe details arguments failed closed validation",
+        "params.arguments"};
+  }
+  if (keyframe_write
+      && (request.target_depth != 0
+          || !valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256)
+          || !valid_uuid(request.host_instance_id)
+          || !valid_uuid(request.session_id)
+          || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value()
+          || request.composition_locator.has_value()
+          || request.parent_property_locator.has_value()
+          || !request.layer_locator.has_value()
+          || !request.property_locator.has_value()
+          || !valid_keyframe_time(request.keyframe_time))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native keyframe write arguments failed closed validation",
         "params.arguments"};
   }
   if ((project_items_list || composition_layers_list
@@ -1738,23 +1869,24 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
     }
   }
   if ((layer_properties_list || layer_property_keyframes_list
-          || layer_property_set || layer_effect_apply || layer_timeline)
+          || layer_property_set || layer_effect_apply || layer_timeline
+          || keyframe_details_read || keyframe_write)
       && (request.project_locator.has_value()
           || request.composition_locator.has_value()
-          || (layer_property_keyframes_list
+          || ((layer_property_keyframes_list || keyframe_details_read)
               ? !request.property_locator.has_value()
               : !request.layer_locator.has_value()))) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
-        layer_property_keyframes_list
+        (layer_property_keyframes_list || keyframe_details_read)
             ? "propertyLocator is required for keyframe access"
             : "layerLocator is required for layer property access",
-        layer_property_keyframes_list
+        (layer_property_keyframes_list || keyframe_details_read)
             ? "params.arguments.propertyLocator"
             : "params.arguments.layerLocator"};
   }
-  if (layer_property_keyframes_list) {
+  if (layer_property_keyframes_list || keyframe_details_read) {
     const ObjectLocator& property = *request.property_locator;
     if (!valid_locator(property) || property.kind != "stream") {
       return {
@@ -1781,7 +1913,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "params.arguments"};
     }
   } else if (layer_properties_list || layer_property_set || layer_effect_apply
-      || layer_timeline) {
+      || layer_timeline || keyframe_write) {
     const ObjectLocator& layer = *request.layer_locator;
     if (!valid_locator(layer) || layer.kind != "layer") {
       return {
@@ -1827,7 +1959,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "property write arguments are not accepted by the read capability",
           "params.arguments"};
     }
-    if (layer_property_set) {
+    if (layer_property_set || keyframe_write) {
       const ObjectLocator& property = *request.property_locator;
       if (!valid_locator(property) || property.kind != "stream") {
         return {
@@ -1842,6 +1974,48 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
             "STALE_LOCATOR",
             "propertyLocator belongs to another layer session",
             "params.arguments.propertyLocator"};
+      }
+      if (keyframe_write) {
+        const bool value_write = request.capability_id == kLayerPropertyKeyframeAddCapability
+            || request.capability_id == kLayerPropertyKeyframeValueSetCapability;
+        const bool interpolation_write =
+            request.capability_id == kLayerPropertyKeyframeInterpolationSetCapability;
+        const bool ease_write =
+            request.capability_id == kLayerPropertyKeyframeTemporalEaseSetCapability;
+        const bool behavior_write =
+            request.capability_id == kLayerPropertyKeyframeBehaviorSetCapability;
+        const auto interpolation_valid = [](std::string_view value) {
+          return value == "linear" || value == "bezier" || value == "hold";
+        };
+        constexpr std::array<std::string_view, 5> behaviors = {
+            "temporal-continuous", "temporal-auto-bezier", "spatial-continuous",
+            "spatial-auto-bezier", "roving"};
+        const bool ease_valid = !request.keyframe_temporal_ease.empty()
+            && request.keyframe_temporal_ease.size() <= 4
+            && std::all_of(
+                request.keyframe_temporal_ease.begin(),
+                request.keyframe_temporal_ease.end(),
+                [&](const LayerPropertyKeyframeDimensionEase& dimension) {
+                  return dimension.dimension
+                      == static_cast<std::size_t>(
+                          &dimension - request.keyframe_temporal_ease.data());
+                });
+        if ((value_write && !valid_property_value(request.property_value))
+            || (interpolation_write
+                && (!interpolation_valid(request.keyframe_in_interpolation)
+                    || !interpolation_valid(request.keyframe_out_interpolation)))
+            || (ease_write && !ease_valid)
+            || (behavior_write
+                && (std::find(
+                        behaviors.begin(), behaviors.end(), request.keyframe_behavior)
+                    == behaviors.end()
+                    || !request.keyframe_behavior_enabled.has_value()))) {
+          return {
+              EnqueueCode::kInvalidRequest,
+              "INVALID_ARGUMENT",
+              "keyframe write payload is invalid",
+              "params.arguments"};
+        }
       }
     }
   } else if (request.layer_locator.has_value()
@@ -3252,6 +3426,104 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.ok = true;
             completion.layer_property_keyframes_result = std::move(host_result.value);
           }
+        } else if (request.capability_id
+            == kLayerPropertyKeyframeDetailsReadCapability) {
+          HostLayerPropertyKeyframeDetailsResult host_result =
+              host.read_layer_property_keyframe_details(
+                  LayerPropertyKeyframeDetailsQuery{
+                      request.host_instance_id,
+                      request.session_id,
+                      *request.property_locator,
+                      request.keyframe_time},
+                  std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (host_result.value.property_locator != *request.property_locator
+              || !keyframe_times_equal(host_result.value.time, request.keyframe_time)) {
+            completion = failure_for(
+                request,
+                "CAPABILITY_FAILED",
+                "native keyframe details were not bound to the requested target");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.ok = true;
+            completion.layer_property_keyframe_details_result =
+                std::move(host_result.value);
+          }
+        } else if (keyframe_write_capability(request.capability_id)) {
+          LayerPropertyKeyframeMutationKind kind =
+              LayerPropertyKeyframeMutationKind::kAdd;
+          if (request.capability_id == kLayerPropertyKeyframeValueSetCapability) {
+            kind = LayerPropertyKeyframeMutationKind::kSetValue;
+          } else if (request.capability_id
+              == kLayerPropertyKeyframeInterpolationSetCapability) {
+            kind = LayerPropertyKeyframeMutationKind::kSetInterpolation;
+          } else if (request.capability_id
+              == kLayerPropertyKeyframeTemporalEaseSetCapability) {
+            kind = LayerPropertyKeyframeMutationKind::kSetTemporalEase;
+          } else if (request.capability_id
+              == kLayerPropertyKeyframeBehaviorSetCapability) {
+            kind = LayerPropertyKeyframeMutationKind::kSetBehavior;
+          } else if (request.capability_id == kLayerPropertyKeyframeDeleteCapability) {
+            kind = LayerPropertyKeyframeMutationKind::kDelete;
+          }
+          HostLayerPropertyKeyframeWriteResult host_result =
+              host.mutate_layer_property_keyframe(
+                  LayerPropertyKeyframeMutationCommand{
+                      request.host_instance_id,
+                      request.session_id,
+                      *request.layer_locator,
+                      *request.property_locator,
+                      request.keyframe_time,
+                      kind,
+                      request.property_value,
+                      request.keyframe_in_interpolation,
+                      request.keyframe_out_interpolation,
+                      request.keyframe_temporal_ease,
+                      request.keyframe_behavior,
+                      request.keyframe_behavior_enabled.value_or(false)},
+                  request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request,
+                "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native keyframe write completed after its deadline; inspect keyframe state");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || host_result.value.layer_locator != *request.layer_locator
+              || host_result.value.property_locator != *request.property_locator
+              || !keyframe_times_equal(host_result.value.time, request.keyframe_time)
+              || (!host_result.value.before.has_value()
+                  && !host_result.value.after.has_value())) {
+            completion = failure_for(
+                request,
+                "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native keyframe write result was not bound to the requested target");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.layer_property_keyframe_change_result =
+                std::move(host_result.value);
+          }
         } else if (request.capability_id == kLayerPropertySetCapability) {
           HostLayerPropertyWriteResult host_result = host.set_layer_property(
               LayerPropertySetCommand{
@@ -3344,6 +3616,7 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 || request.capability_id == kCompositionLayerCreateCapability
                 || request.capability_id == kLayerEffectApplyCapability
                 || request.capability_id == kLayerPropertySetCapability
+                || keyframe_write_capability(request.capability_id)
                 || request.capability_id == kCompositionWorkAreaSetCapability
                 || request.capability_id == kProjectItemNameSetCapability
                 || request.capability_id == kProjectItemCommentSetCapability

@@ -85,6 +85,8 @@ using aemcp::native::HostProjectGraphInvalidationResult;
 using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::HostLayerPropertyKeyframesResult;
 using aemcp::native::HostLayerPropertyWriteResult;
+using aemcp::native::HostLayerPropertyKeyframeDetailsResult;
+using aemcp::native::HostLayerPropertyKeyframeWriteResult;
 using aemcp::native::HostLayerDetailsResult;
 using aemcp::native::HostLayerNameWriteResult;
 using aemcp::native::HostLayerRangeWriteResult;
@@ -123,6 +125,9 @@ using aemcp::native::LayerParentChanged;
 using aemcp::native::LayerRangeChanged;
 using aemcp::native::LayerStartTimeChanged;
 using aemcp::native::LayerStretchChanged;
+using aemcp::native::LayerPropertyKeyframeDetails;
+using aemcp::native::LayerPropertyKeyframeChanged;
+using aemcp::native::LayerPropertySampleTime;
 using aemcp::native::ObjectLocator;
 using aemcp::native::Request;
 using aemcp::native::SystemClock;
@@ -157,6 +162,13 @@ using aemcp::native::kLayerStretchSetCapability;
 using aemcp::native::kLayerOrderSetCapability;
 using aemcp::native::kLayerParentSetCapability;
 using aemcp::native::kLayerDuplicateCapability;
+using aemcp::native::kLayerPropertyKeyframeDetailsReadCapability;
+using aemcp::native::kLayerPropertyKeyframeAddCapability;
+using aemcp::native::kLayerPropertyKeyframeValueSetCapability;
+using aemcp::native::kLayerPropertyKeyframeInterpolationSetCapability;
+using aemcp::native::kLayerPropertyKeyframeTemporalEaseSetCapability;
+using aemcp::native::kLayerPropertyKeyframeBehaviorSetCapability;
+using aemcp::native::kLayerPropertyKeyframeDeleteCapability;
 using aemcp::native::kProjectGraphInvalidateControl;
 using aemcp::native::locate_unique_insertion;
 
@@ -165,7 +177,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "53e3b7974e797b088aa1dd25d600a2506f59fed0d11c34ca8249e87dcf3ee4a1";
+    "c5d12ffb9e1a90b9e7341144e22ecda41bacac5500f4cedebfee50d1acc17af1";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -226,6 +238,20 @@ constexpr std::string_view kLayerParentSetContractDigest =
     "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c";
 constexpr std::string_view kLayerDuplicateContractDigest =
     "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75";
+constexpr std::string_view kLayerPropertyKeyframeDetailsReadContractDigest =
+    "254ec7933e9628b6c4fba4cc60e183331e4edc9f723c0ccb3f1e37619b7c5249";
+constexpr std::string_view kLayerPropertyKeyframeAddContractDigest =
+    "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e";
+constexpr std::string_view kLayerPropertyKeyframeValueSetContractDigest =
+    "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e";
+constexpr std::string_view kLayerPropertyKeyframeInterpolationSetContractDigest =
+    "42e8e12224bd1653fa8ca9f775c97553d61c0c2e60b3b2dcf76a8fc68deb2a20";
+constexpr std::string_view kLayerPropertyKeyframeTemporalEaseSetContractDigest =
+    "a73d70029c9a470b57d20fe54517cb36bb7fe249847c49da294f1db2d1c4bc8f";
+constexpr std::string_view kLayerPropertyKeyframeBehaviorSetContractDigest =
+    "e2ff59d765613db12468d2140d8c937fd1ceb5def9f632877b18b664b6d6bf5c";
+constexpr std::string_view kLayerPropertyKeyframeDeleteContractDigest =
+    "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9";
 constexpr std::int64_t kMaximumProjectItems = 100000;
 constexpr A_long kMaximumLayerEffects = 4096;
 static_assert(kSourceCommit.size() == 40);
@@ -749,6 +775,10 @@ class StreamValueOwner final {
   [[nodiscard]] AEGP_StreamValue2* out() noexcept { return &value_; }
   void mark_initialized() noexcept { initialized_ = true; }
   [[nodiscard]] const AEGP_StreamValue2& value() const noexcept { return value_; }
+  [[nodiscard]] AEGP_StreamValue2& mutable_value() noexcept { return value_; }
+  [[nodiscard]] const AEGP_StreamValue2* borrow() const noexcept {
+    return initialized_ ? &value_ : nullptr;
+  }
 
  private:
   const AEGP_StreamSuite6* suite_{nullptr};
@@ -1081,6 +1111,70 @@ class ProjectGraphRegistry final {
     return std::nullopt;
   }
   return parsed;
+}
+
+[[nodiscard]] bool decimal_values_equal(
+    std::string_view left, std::string_view right) {
+  const auto left_value = decimal_value(left);
+  const auto right_value = decimal_value(right);
+  return left_value.has_value() && right_value.has_value()
+      && *left_value == *right_value;
+}
+
+[[nodiscard]] bool layer_property_values_equal(
+    const aemcp::native::LayerPropertyValue& left,
+    const aemcp::native::LayerPropertyValue& right) {
+  if (left.index() != right.index()) return false;
+  if (const auto* scalar =
+          std::get_if<aemcp::native::LayerPropertyScalarValue>(&left)) {
+    return decimal_values_equal(
+        scalar->value,
+        std::get<aemcp::native::LayerPropertyScalarValue>(right).value);
+  }
+  if (const auto* vector =
+          std::get_if<aemcp::native::LayerPropertyVectorValue>(&left)) {
+    const auto& other =
+        std::get<aemcp::native::LayerPropertyVectorValue>(right).components;
+    if (vector->components.size() != other.size()) return false;
+    for (std::size_t index = 0; index < other.size(); ++index) {
+      if (!decimal_values_equal(vector->components[index], other[index])) return false;
+    }
+    return true;
+  }
+  if (const auto* color =
+          std::get_if<aemcp::native::LayerPropertyColorValue>(&left)) {
+    const auto& other = std::get<aemcp::native::LayerPropertyColorValue>(right);
+    return decimal_values_equal(color->alpha, other.alpha)
+        && decimal_values_equal(color->red, other.red)
+        && decimal_values_equal(color->green, other.green)
+        && decimal_values_equal(color->blue, other.blue);
+  }
+  return std::holds_alternative<std::monostate>(left);
+}
+
+[[nodiscard]] bool keyframe_ease_equal(
+    const aemcp::native::LayerPropertyKeyframeEase& left,
+    const aemcp::native::LayerPropertyKeyframeEase& right) {
+  const auto left_speed = decimal_value(left.speed);
+  const auto right_speed = decimal_value(right.speed);
+  const auto left_influence = decimal_value(left.influence);
+  const auto right_influence = decimal_value(right.influence);
+  const auto close = [](A_FpLong first, A_FpLong second) {
+    return std::abs(first - second)
+        <= std::max({1.0, std::abs(first), std::abs(second)}) * 1e-9;
+  };
+  return left_speed.has_value() && right_speed.has_value()
+      && left_influence.has_value() && right_influence.has_value()
+      && close(*left_speed, *right_speed)
+      && close(*left_influence, *right_influence);
+}
+
+[[nodiscard]] bool keyframe_dimension_ease_equal(
+    const aemcp::native::LayerPropertyKeyframeDimensionEase& left,
+    const aemcp::native::LayerPropertyKeyframeDimensionEase& right) {
+  return left.dimension == right.dimension
+      && keyframe_ease_equal(left.in_ease, right.in_ease)
+      && keyframe_ease_equal(left.out_ease, right.out_ease);
 }
 
 [[nodiscard]] std::optional<aemcp::native::LayerPropertyValue> primitive_stream_value(
@@ -5132,6 +5226,430 @@ class AegpHostApi final : public HostApi {
     return HostLayerPropertyKeyframesResult::success(std::move(page));
   }
 
+  [[nodiscard]] HostLayerPropertyKeyframeDetailsResult
+      read_layer_property_keyframe_details(
+          const aemcp::native::LayerPropertyKeyframeDetailsQuery& query,
+          TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    SuiteLease<AEGP_StreamSuite6> stream_suite(
+        basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+    SuiteLease<AEGP_DynamicStreamSuite4> dynamic_suite(
+        basic_, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4);
+    SuiteLease<AEGP_KeyframeSuite5> keyframe_suite(
+        basic_, kAEGPKeyframeSuite, kAEGPKeyframeSuiteVersion5);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr || stream_suite.get() == nullptr
+        || dynamic_suite.get() == nullptr || keyframe_suite.get() == nullptr) {
+      return HostLayerPropertyKeyframeDetailsResult::failure(
+          "NATIVE_UNSUPPORTED", "required keyframe detail suites are unavailable");
+    }
+    if (query.time.scale == 0
+        || query.time.value < std::numeric_limits<std::int32_t>::min()
+        || query.time.value > std::numeric_limits<std::int32_t>::max()) {
+      return HostLayerPropertyKeyframeDetailsResult::failure(
+          "INVALID_ARGUMENT", "time must be an exact bounded comp time",
+          "params.arguments.time");
+    }
+    const auto resolved = resolve_keyframe_property(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), stream_suite.get(), dynamic_suite.get(),
+        keyframe_suite.get(), query.property_locator, std::nullopt,
+        query.host_instance_id, query.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerPropertyKeyframeDetailsResult::failure(
+          "PRECONDITION_FAILED",
+          "propertyLocator must identify a current keyframeable primitive property",
+          "params.arguments.propertyLocator");
+    }
+    const auto index = find_keyframe_at_time(
+        keyframe_suite.get(), resolved->stream.get(), resolved->keyframe_count,
+        query.time, work_deadline);
+    if (!index.has_value()) {
+      return HostLayerPropertyKeyframeDetailsResult::failure(
+          "PRECONDITION_FAILED", "no keyframe exists at the exact comp time",
+          "params.arguments.time");
+    }
+    const auto details = read_keyframe_details_value(
+        stream_suite.get(), keyframe_suite.get(), *resolved, *index,
+        query.property_locator);
+    if (!details.has_value() || !keyframe_time_equal(details->time, query.time)) {
+      return HostLayerPropertyKeyframeDetailsResult::failure(
+          "CAPABILITY_FAILED", "could not read complete keyframe details");
+    }
+    return HostLayerPropertyKeyframeDetailsResult::success(*details);
+  }
+
+  [[nodiscard]] HostLayerPropertyKeyframeWriteResult
+      mutate_layer_property_keyframe(
+          const aemcp::native::LayerPropertyKeyframeMutationCommand& command,
+          TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    SuiteLease<AEGP_StreamSuite6> stream_suite(
+        basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+    SuiteLease<AEGP_DynamicStreamSuite4> dynamic_suite(
+        basic_, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4);
+    SuiteLease<AEGP_KeyframeSuite5> keyframe_suite(
+        basic_, kAEGPKeyframeSuite, kAEGPKeyframeSuiteVersion5);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr || stream_suite.get() == nullptr
+        || dynamic_suite.get() == nullptr || keyframe_suite.get() == nullptr
+        || utility_suite.get() == nullptr) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required keyframe mutation suites are unavailable");
+    }
+    if (command.time.scale == 0
+        || command.time.value < std::numeric_limits<std::int32_t>::min()
+        || command.time.value > std::numeric_limits<std::int32_t>::max()) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "INVALID_ARGUMENT", "time must be an exact bounded comp time",
+          "params.arguments.time");
+    }
+    auto resolved = resolve_keyframe_property(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), stream_suite.get(), dynamic_suite.get(),
+        keyframe_suite.get(), command.property_locator, command.layer_locator,
+        command.host_instance_id, command.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "PRECONDITION_FAILED",
+          "locators must identify one current keyframeable primitive property",
+          "params.arguments.propertyLocator");
+    }
+    const A_long count_before = resolved->keyframe_count;
+    const auto before_index = find_keyframe_at_time(
+        keyframe_suite.get(), resolved->stream.get(), count_before,
+        command.time, work_deadline);
+    const bool adding = command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kAdd;
+    if (adding && before_index.has_value()) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "PRECONDITION_FAILED", "a keyframe already exists at the exact comp time",
+          "params.arguments.time");
+    }
+    if (!adding && !before_index.has_value()) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "PRECONDITION_FAILED", "no keyframe exists at the exact comp time",
+          "params.arguments.time");
+    }
+    std::optional<LayerPropertyKeyframeDetails> before;
+    if (before_index.has_value()) {
+      before = read_keyframe_details_value(
+          stream_suite.get(), keyframe_suite.get(), *resolved, *before_index,
+          command.property_locator);
+      if (!before.has_value()) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "CAPABILITY_FAILED", "could not read keyframe state before mutation");
+      }
+    }
+
+    // Keep the SDK-owned seed alive until every AEGP_SetKeyframeValue call has
+    // returned. AEGP_StreamValue2 is a shallow SDK value containing streamH;
+    // copying it does not extend the lifetime ended by DisposeStreamValue.
+    StreamValueOwner desired_value_owner(stream_suite.get());
+    AEGP_KeyframeInterpolationType desired_in = AEGP_KeyInterp_NONE;
+    AEGP_KeyframeInterpolationType desired_out = AEGP_KeyInterp_NONE;
+    std::vector<std::pair<A_long, std::pair<AEGP_KeyframeEase, AEGP_KeyframeEase>>>
+        desired_ease;
+    AEGP_KeyframeFlags desired_flag = AEGP_KeyframeFlag_NONE;
+    const auto interpolation_value = [](std::string_view value)
+        -> std::optional<AEGP_KeyframeInterpolationType> {
+      if (value == "linear") return AEGP_KeyInterp_LINEAR;
+      if (value == "bezier") return AEGP_KeyInterp_BEZIER;
+      if (value == "hold") return AEGP_KeyInterp_HOLD;
+      return std::nullopt;
+    };
+    const auto behavior_flag = [](std::string_view behavior)
+        -> std::optional<AEGP_KeyframeFlags> {
+      if (behavior == "temporal-continuous") {
+        return AEGP_KeyframeFlag_TEMPORAL_CONTINUOUS;
+      }
+      if (behavior == "temporal-auto-bezier") {
+        return AEGP_KeyframeFlag_TEMPORAL_AUTOBEZIER;
+      }
+      if (behavior == "spatial-continuous") {
+        return AEGP_KeyframeFlag_SPATIAL_CONTINUOUS;
+      }
+      if (behavior == "spatial-auto-bezier") {
+        return AEGP_KeyframeFlag_SPATIAL_AUTOBEZIER;
+      }
+      if (behavior == "roving") return AEGP_KeyframeFlag_ROVING;
+      return std::nullopt;
+    };
+    if (adding || command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kSetValue) {
+      A_Time sample_time{
+          static_cast<A_long>(command.time.value),
+          static_cast<A_u_long>(command.time.scale)};
+      if (stream_suite->AEGP_GetNewStreamValue(
+              plugin_id_, resolved->stream.get(), AEGP_LTimeMode_CompTime,
+              &sample_time, FALSE, desired_value_owner.out()) != A_Err_NONE) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "CAPABILITY_FAILED", "could not prepare a typed keyframe value");
+      }
+      desired_value_owner.mark_initialized();
+      if (!assign_primitive_stream_value(
+              resolved->type, command.value,
+              desired_value_owner.mutable_value())) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "INVALID_ARGUMENT", "value does not match the property type",
+            "params.arguments.value");
+      }
+      if (!adding && before.has_value()
+          && layer_property_values_equal(command.value, before->value)) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "INVALID_ARGUMENT", "value already matches the keyframe",
+            "params.arguments.value");
+      }
+    } else if (command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kSetInterpolation) {
+      const auto in_value = interpolation_value(command.in_interpolation);
+      const auto out_value = interpolation_value(command.out_interpolation);
+      AEGP_KeyInterpolationMask valid = AEGP_KeyInterpMask_NONE;
+      if (!in_value.has_value() || !out_value.has_value()
+          || stream_suite->AEGP_GetValidInterpolations(
+              resolved->stream.get(), &valid) != A_Err_NONE) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "INVALID_ARGUMENT", "unsupported keyframe interpolation",
+            "params.arguments.inInterpolation");
+      }
+      const auto allowed = [valid](AEGP_KeyframeInterpolationType value) {
+        const AEGP_KeyInterpolationMask mask = value == AEGP_KeyInterp_LINEAR
+            ? AEGP_KeyInterpMask_LINEAR
+            : value == AEGP_KeyInterp_BEZIER
+                ? AEGP_KeyInterpMask_BEZIER : AEGP_KeyInterpMask_HOLD;
+        return (valid & mask) != 0;
+      };
+      if (!allowed(*in_value) || !allowed(*out_value)) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "PRECONDITION_FAILED",
+            "the property does not support the requested interpolation",
+            "params.arguments.inInterpolation");
+      }
+      desired_in = *in_value;
+      desired_out = *out_value;
+      if (before->in_interpolation == command.in_interpolation
+          && before->out_interpolation == command.out_interpolation) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "INVALID_ARGUMENT", "interpolation already matches the keyframe",
+            "params.arguments.inInterpolation");
+      }
+    } else if (command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kSetTemporalEase) {
+      if (command.temporal_ease.size()
+          != static_cast<std::size_t>(resolved->temporal_dimensions)) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "INVALID_ARGUMENT", "dimensions must cover the temporal dimensionality",
+            "params.arguments.dimensions");
+      }
+      std::array<bool, 4> seen{};
+      bool differs = false;
+      std::uint16_t expected_dimension = 0;
+      for (const auto& dimension : command.temporal_ease) {
+        if (dimension.dimension >= resolved->temporal_dimensions
+            || seen[dimension.dimension]
+            || dimension.dimension != expected_dimension) {
+          return HostLayerPropertyKeyframeWriteResult::failure(
+              "INVALID_ARGUMENT", "temporal ease dimensions must be unique and in range",
+              "params.arguments.dimensions");
+        }
+        seen[dimension.dimension] = true;
+        ++expected_dimension;
+        const auto in_speed = decimal_value(dimension.in_ease.speed);
+        const auto in_influence = decimal_value(dimension.in_ease.influence);
+        const auto out_speed = decimal_value(dimension.out_ease.speed);
+        const auto out_influence = decimal_value(dimension.out_ease.influence);
+        if (!in_speed.has_value() || !in_influence.has_value()
+            || !out_speed.has_value() || !out_influence.has_value()
+            || *in_influence < 0.0 || *in_influence > 100.0
+            || *out_influence < 0.0 || *out_influence > 100.0) {
+          return HostLayerPropertyKeyframeWriteResult::failure(
+              "INVALID_ARGUMENT", "ease influence must be from 0 through 100",
+              "params.arguments.dimensions");
+        }
+        desired_ease.push_back({
+            static_cast<A_long>(dimension.dimension),
+            {{*in_speed, *in_influence / 100.0},
+             {*out_speed, *out_influence / 100.0}}});
+        differs = differs || !keyframe_dimension_ease_equal(
+            before->temporal_ease[dimension.dimension], dimension);
+      }
+      if (!differs) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "INVALID_ARGUMENT", "temporal ease already matches the keyframe",
+            "params.arguments.dimensions");
+      }
+    } else if (command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kSetBehavior) {
+      const auto flag = behavior_flag(command.behavior);
+      const bool spatial = resolved->type == AEGP_StreamType_TwoD_SPATIAL
+          || resolved->type == AEGP_StreamType_ThreeD_SPATIAL;
+      const bool spatial_behavior = command.behavior == "spatial-continuous"
+          || command.behavior == "spatial-auto-bezier"
+          || command.behavior == "roving";
+      if (!flag.has_value() || (spatial_behavior && !spatial)) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "PRECONDITION_FAILED",
+            "the property does not support the requested keyframe behavior",
+            "params.arguments.behavior");
+      }
+      desired_flag = *flag;
+      const bool current = command.behavior == "temporal-continuous"
+          ? before->behavior.temporal_continuous
+          : command.behavior == "temporal-auto-bezier"
+              ? before->behavior.temporal_auto_bezier
+              : command.behavior == "spatial-continuous"
+                  ? before->behavior.spatial_continuous
+                  : command.behavior == "spatial-auto-bezier"
+                      ? before->behavior.spatial_auto_bezier
+                      : before->behavior.roving;
+      if (current == command.enabled) {
+        return HostLayerPropertyKeyframeWriteResult::failure(
+            "INVALID_ARGUMENT", "behavior already matches the keyframe",
+            "params.arguments.enabled");
+      }
+    }
+
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "DEADLINE_EXCEEDED", "keyframe mutation budget elapsed");
+    }
+    static constexpr char kUndoLabel[] = "ae-mcp: Edit property keyframe";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    A_Err mutation_error = A_Err_NONE;
+    if (adding) {
+      const A_Time time{static_cast<A_long>(command.time.value),
+          static_cast<A_u_long>(command.time.scale)};
+      AEGP_KeyframeIndex inserted = 0;
+      mutation_error = keyframe_suite->AEGP_InsertKeyframe(
+          resolved->stream.get(), AEGP_LTimeMode_CompTime, &time, &inserted);
+      if (mutation_error == A_Err_NONE) {
+        mutation_error = keyframe_suite->AEGP_SetKeyframeValue(
+            resolved->stream.get(), inserted, desired_value_owner.borrow());
+      }
+    } else if (command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kSetValue) {
+      mutation_error = keyframe_suite->AEGP_SetKeyframeValue(
+          resolved->stream.get(), *before_index, desired_value_owner.borrow());
+    } else if (command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kSetInterpolation) {
+      mutation_error = keyframe_suite->AEGP_SetKeyframeInterpolation(
+          resolved->stream.get(), *before_index, desired_in, desired_out);
+    } else if (command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kSetTemporalEase) {
+      for (const auto& [dimension, ease] : desired_ease) {
+        mutation_error = keyframe_suite->AEGP_SetKeyframeTemporalEase(
+            resolved->stream.get(), *before_index, dimension,
+            &ease.first, &ease.second);
+        if (mutation_error != A_Err_NONE) break;
+      }
+    } else if (command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kSetBehavior) {
+      mutation_error = keyframe_suite->AEGP_SetKeyframeFlag(
+          resolved->stream.get(), *before_index, desired_flag,
+          command.enabled ? TRUE : FALSE);
+    } else {
+      mutation_error = keyframe_suite->AEGP_DeleteKeyframe(
+          resolved->stream.get(), *before_index);
+    }
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+
+    A_long count_after = -1;
+    if (keyframe_suite->AEGP_GetStreamNumKFs(
+            resolved->stream.get(), &count_after) != A_Err_NONE
+        || count_after < 0) count_after = -1;
+    const auto after_index = count_after >= 0
+        ? find_keyframe_at_time(
+            keyframe_suite.get(), resolved->stream.get(), count_after,
+            command.time, work_deadline)
+        : std::nullopt;
+    std::optional<LayerPropertyKeyframeDetails> after;
+    if (after_index.has_value()) {
+      after = read_keyframe_details_value(
+          stream_suite.get(), keyframe_suite.get(), *resolved, *after_index,
+          command.property_locator);
+    }
+    const bool deleting = command.kind
+        == aemcp::native::LayerPropertyKeyframeMutationKind::kDelete;
+    const bool count_valid = adding
+        ? count_after == count_before + 1
+        : deleting ? count_after + 1 == count_before : count_after == count_before;
+    const bool state_valid = deleting
+        ? !after_index.has_value()
+        : after.has_value() && keyframe_time_equal(after->time, command.time);
+    bool requested_state_valid = state_valid;
+    if (requested_state_valid && after.has_value()) {
+      if (adding || command.kind
+          == aemcp::native::LayerPropertyKeyframeMutationKind::kSetValue) {
+        requested_state_valid = layer_property_values_equal(
+            after->value, command.value);
+      } else if (command.kind
+          == aemcp::native::LayerPropertyKeyframeMutationKind::kSetInterpolation) {
+        requested_state_valid = after->in_interpolation == command.in_interpolation
+            && after->out_interpolation == command.out_interpolation;
+      } else if (command.kind
+          == aemcp::native::LayerPropertyKeyframeMutationKind::kSetTemporalEase) {
+        for (const auto& dimension : command.temporal_ease) {
+          requested_state_valid = requested_state_valid
+              && keyframe_dimension_ease_equal(
+                  after->temporal_ease[dimension.dimension], dimension);
+        }
+      } else if (command.kind
+          == aemcp::native::LayerPropertyKeyframeMutationKind::kSetBehavior) {
+        const bool actual = command.behavior == "temporal-continuous"
+            ? after->behavior.temporal_continuous
+            : command.behavior == "temporal-auto-bezier"
+                ? after->behavior.temporal_auto_bezier
+                : command.behavior == "spatial-continuous"
+                    ? after->behavior.spatial_continuous
+                    : command.behavior == "spatial-auto-bezier"
+                        ? after->behavior.spatial_auto_bezier
+                        : after->behavior.roving;
+        requested_state_valid = actual == command.enabled;
+      }
+    }
+    if (mutation_error != A_Err_NONE || end_error != A_Err_NONE
+        || !count_valid || !requested_state_valid
+        || std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "keyframe may have changed but native readback or Undo validation failed");
+    }
+    LayerPropertyKeyframeChanged changed;
+    changed.layer_locator = command.layer_locator;
+    changed.property_locator = command.property_locator;
+    changed.time = command.time;
+    changed.keyframe_count_before = static_cast<std::uint64_t>(count_before);
+    changed.keyframe_count_after = static_cast<std::uint64_t>(count_after);
+    changed.before = std::move(before);
+    changed.after = std::move(after);
+    return HostLayerPropertyKeyframeWriteResult::success(std::move(changed));
+  }
+
   [[nodiscard]] HostLayerPropertyWriteResult set_layer_property(
       const aemcp::native::LayerPropertySetCommand& command,
       TimePoint work_deadline) override {
@@ -6110,6 +6628,26 @@ class AegpHostApi final : public HostApi {
     AEGP_LayerH layer{nullptr};
   };
 
+  struct ResolvedProperty {
+    ResolvedLayer layer;
+    StreamRefOwner stream;
+    AEGP_StreamType type{AEGP_StreamType_NO_DATA};
+    A_short temporal_dimensions{0};
+    A_long keyframe_count{0};
+
+    ResolvedProperty(
+        ResolvedLayer resolved_layer,
+        StreamRefOwner resolved_stream,
+        AEGP_StreamType stream_type,
+        A_short dimensions,
+        A_long count)
+        : layer(std::move(resolved_layer)),
+          stream(std::move(resolved_stream)),
+          type(stream_type),
+          temporal_dimensions(dimensions),
+          keyframe_count(count) {}
+  };
+
   [[nodiscard]] std::optional<OpenProject> observe_open_project(
       const AEGP_ProjSuite6* project_suite,
       const AEGP_ItemSuite9* item_suite,
@@ -6206,6 +6744,224 @@ class AegpHostApi final : public HostApi {
         *item,
         composition,
         layer};
+  }
+
+  [[nodiscard]] std::optional<ResolvedProperty> resolve_keyframe_property(
+      const AEGP_ProjSuite6* project_suite,
+      const AEGP_ItemSuite9* item_suite,
+      const AEGP_CompSuite12* comp_suite,
+      const AEGP_LayerSuite9* layer_suite,
+      const AEGP_MemorySuite1* memory_suite,
+      const AEGP_StreamSuite6* stream_suite,
+      const AEGP_DynamicStreamSuite4* dynamic_suite,
+      const AEGP_KeyframeSuite5* keyframe_suite,
+      const ObjectLocator& property_locator,
+      const std::optional<ObjectLocator>& expected_layer_locator,
+      std::string_view host,
+      std::string_view session,
+      TimePoint deadline) {
+    if (stream_suite == nullptr || dynamic_suite == nullptr
+        || keyframe_suite == nullptr) return std::nullopt;
+    const auto open = observe_open_project(project_suite, item_suite, memory_suite);
+    const auto stream_address = graph_.resolve_stream(property_locator, host, session);
+    if (!open.has_value() || !stream_address.has_value()) return std::nullopt;
+    const auto layer_address = graph_.resolve_layer_object(
+        stream_address->layer_object_id);
+    if (!layer_address.has_value()) return std::nullopt;
+    const auto composition_item = find_project_item(
+        item_suite, open->project, open->root,
+        layer_address->composition_item_id, deadline);
+    AEGP_CompH composition = nullptr;
+    AEGP_LayerH layer = nullptr;
+    if (!composition_item.has_value()
+        || comp_suite->AEGP_GetCompFromItem(*composition_item, &composition)
+            != A_Err_NONE
+        || composition == nullptr
+        || layer_suite->AEGP_GetLayerFromLayerID(
+            composition, layer_address->layer_id, &layer) != A_Err_NONE
+        || layer == nullptr) {
+      return std::nullopt;
+    }
+    const ObjectLocator actual_layer_locator = graph_.layer_locator(
+        layer_address->composition_item_id, layer_address->layer_id, host, session);
+    if (expected_layer_locator.has_value()
+        && *expected_layer_locator != actual_layer_locator) return std::nullopt;
+
+    AEGP_StreamRefH root = nullptr;
+    if (dynamic_suite->AEGP_GetNewStreamRefForLayer(plugin_id_, layer, &root)
+            != A_Err_NONE
+        || root == nullptr) return std::nullopt;
+    StreamRefOwner stream(stream_suite, root);
+    for (std::size_t depth = 0; depth < stream_address->child_indices.size(); ++depth) {
+      if (std::chrono::steady_clock::now() >= deadline) return std::nullopt;
+      AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
+      A_long child_count = 0;
+      if (dynamic_suite->AEGP_GetStreamGroupingType(stream.get(), &grouping)
+              != A_Err_NONE
+          || grouping == AEGP_StreamGroupingType_LEAF
+          || dynamic_suite->AEGP_GetNumStreamsInGroup(stream.get(), &child_count)
+              != A_Err_NONE
+          || stream_address->child_indices[depth] < 0
+          || stream_address->child_indices[depth] >= child_count) {
+        return std::nullopt;
+      }
+      AEGP_StreamRefH next = nullptr;
+      if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+              plugin_id_, stream.get(), stream_address->child_indices[depth], &next)
+              != A_Err_NONE
+          || next == nullptr) return std::nullopt;
+      StreamRefOwner next_owner(stream_suite, next);
+      std::int32_t unique_id = 0;
+      if (stream_suite->AEGP_GetUniqueStreamID(next_owner.get(), &unique_id)
+              != A_Err_NONE
+          || unique_id != stream_address->unique_ids[depth]) return std::nullopt;
+      stream = std::move(next_owner);
+    }
+
+    AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
+    AEGP_StreamType type = AEGP_StreamType_NO_DATA;
+    A_Boolean can_vary = FALSE;
+    A_short temporal_dimensions = 0;
+    A_long keyframe_count = 0;
+    if (dynamic_suite->AEGP_GetStreamGroupingType(stream.get(), &grouping)
+            != A_Err_NONE
+        || stream_suite->AEGP_GetStreamType(stream.get(), &type) != A_Err_NONE
+        || stream_suite->AEGP_CanVaryOverTime(stream.get(), &can_vary) != A_Err_NONE
+        || keyframe_suite->AEGP_GetStreamTemporalDimensionality(
+            stream.get(), &temporal_dimensions) != A_Err_NONE
+        || keyframe_suite->AEGP_GetStreamNumKFs(stream.get(), &keyframe_count)
+            != A_Err_NONE) {
+      return std::nullopt;
+    }
+    const bool primitive = type == AEGP_StreamType_OneD
+        || type == AEGP_StreamType_TwoD || type == AEGP_StreamType_TwoD_SPATIAL
+        || type == AEGP_StreamType_ThreeD || type == AEGP_StreamType_ThreeD_SPATIAL
+        || type == AEGP_StreamType_COLOR;
+    if (grouping != AEGP_StreamGroupingType_LEAF || can_vary == FALSE
+        || !primitive || temporal_dimensions < 1 || temporal_dimensions > 4
+        || keyframe_count == AEGP_NumKF_NO_DATA || keyframe_count < 0) {
+      return std::nullopt;
+    }
+    return ResolvedProperty{
+        ResolvedLayer{*open, layer_address->composition_item_id,
+            layer_address->layer_id, *composition_item, composition, layer},
+        std::move(stream), type, temporal_dimensions, keyframe_count};
+  }
+
+  [[nodiscard]] static bool keyframe_time_equal(
+      const A_Time& actual,
+      const LayerPropertySampleTime& requested) noexcept {
+    if (actual.scale <= 0 || requested.scale == 0) return false;
+    return static_cast<__int128>(actual.value)
+            * static_cast<__int128>(requested.scale)
+        == static_cast<__int128>(requested.value)
+            * static_cast<__int128>(actual.scale);
+  }
+
+  [[nodiscard]] static bool keyframe_time_equal(
+      const LayerPropertySampleTime& actual,
+      const LayerPropertySampleTime& requested) noexcept {
+    if (actual.scale == 0 || requested.scale == 0) return false;
+    return static_cast<__int128>(actual.value)
+            * static_cast<__int128>(requested.scale)
+        == static_cast<__int128>(requested.value)
+            * static_cast<__int128>(actual.scale);
+  }
+
+  [[nodiscard]] static std::optional<AEGP_KeyframeIndex> find_keyframe_at_time(
+      const AEGP_KeyframeSuite5* keyframe_suite,
+      AEGP_StreamRefH stream,
+      A_long keyframe_count,
+      const LayerPropertySampleTime& requested,
+      TimePoint deadline) {
+    if (keyframe_suite == nullptr || stream == nullptr || requested.scale == 0
+        || requested.value < std::numeric_limits<std::int32_t>::min()
+        || requested.value > std::numeric_limits<std::int32_t>::max()) {
+      return std::nullopt;
+    }
+    for (A_long index = 0; index < keyframe_count; ++index) {
+      if (std::chrono::steady_clock::now() >= deadline) return std::nullopt;
+      A_Time time{};
+      if (keyframe_suite->AEGP_GetKeyframeTime(
+              stream, index, AEGP_LTimeMode_CompTime, &time) != A_Err_NONE) {
+        return std::nullopt;
+      }
+      if (keyframe_time_equal(time, requested)) return index;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] std::optional<LayerPropertyKeyframeDetails>
+      read_keyframe_details_value(
+          const AEGP_StreamSuite6* stream_suite,
+          const AEGP_KeyframeSuite5* keyframe_suite,
+          const ResolvedProperty& resolved,
+          AEGP_KeyframeIndex index,
+          const ObjectLocator& property_locator) const {
+    A_Time time{};
+    StreamValueOwner value_owner(stream_suite);
+    AEGP_KeyframeInterpolationType in_interpolation = AEGP_KeyInterp_NONE;
+    AEGP_KeyframeInterpolationType out_interpolation = AEGP_KeyInterp_NONE;
+    AEGP_KeyframeFlags flags = AEGP_KeyframeFlag_NONE;
+    if (keyframe_suite->AEGP_GetKeyframeTime(
+            resolved.stream.get(), index, AEGP_LTimeMode_CompTime, &time)
+            != A_Err_NONE
+        || time.scale <= 0
+        || keyframe_suite->AEGP_GetNewKeyframeValue(
+            plugin_id_, resolved.stream.get(), index, value_owner.out())
+            != A_Err_NONE) return std::nullopt;
+    value_owner.mark_initialized();
+    if (keyframe_suite->AEGP_GetKeyframeInterpolation(
+            resolved.stream.get(), index, &in_interpolation, &out_interpolation)
+            != A_Err_NONE
+        || keyframe_suite->AEGP_GetKeyframeFlags(
+            resolved.stream.get(), index, &flags) != A_Err_NONE) {
+      return std::nullopt;
+    }
+    const auto value = primitive_stream_value(resolved.type, value_owner.value());
+    const auto in_name = keyframe_interpolation_name(in_interpolation);
+    const auto out_name = keyframe_interpolation_name(out_interpolation);
+    if (!value.has_value() || !in_name.has_value() || !out_name.has_value()) {
+      return std::nullopt;
+    }
+    LayerPropertyKeyframeDetails details;
+    details.property_locator = property_locator;
+    details.time = {static_cast<std::int64_t>(time.value),
+        static_cast<std::uint64_t>(time.scale)};
+    details.value_type = stream_type_name(resolved.type);
+    details.value = *value;
+    details.temporal_dimensionality = static_cast<std::uint16_t>(
+        resolved.temporal_dimensions);
+    details.in_interpolation = *in_name;
+    details.out_interpolation = *out_name;
+    details.temporal_ease.reserve(
+        static_cast<std::size_t>(resolved.temporal_dimensions));
+    for (A_long dimension = 0; dimension < resolved.temporal_dimensions; ++dimension) {
+      AEGP_KeyframeEase in_ease{};
+      AEGP_KeyframeEase out_ease{};
+      if (keyframe_suite->AEGP_GetKeyframeTemporalEase(
+              resolved.stream.get(), index, dimension, &in_ease, &out_ease)
+              != A_Err_NONE) return std::nullopt;
+      const auto in_speed = decimal_string(in_ease.speedF);
+      const auto in_influence = decimal_string(in_ease.influenceF * 100.0);
+      const auto out_speed = decimal_string(out_ease.speedF);
+      const auto out_influence = decimal_string(out_ease.influenceF * 100.0);
+      if (!in_speed.has_value() || !in_influence.has_value()
+          || !out_speed.has_value() || !out_influence.has_value()) {
+        return std::nullopt;
+      }
+      details.temporal_ease.push_back({
+          static_cast<std::uint16_t>(dimension),
+          {*in_speed, *in_influence},
+          {*out_speed, *out_influence}});
+    }
+    details.behavior = {
+        (flags & AEGP_KeyframeFlag_TEMPORAL_CONTINUOUS) != 0,
+        (flags & AEGP_KeyframeFlag_TEMPORAL_AUTOBEZIER) != 0,
+        (flags & AEGP_KeyframeFlag_SPATIAL_CONTINUOUS) != 0,
+        (flags & AEGP_KeyframeFlag_SPATIAL_AUTOBEZIER) != 0,
+        (flags & AEGP_KeyframeFlag_ROVING) != 0};
+    return details;
   }
 
   [[nodiscard]] std::optional<LayerDetails> read_layer_details_value(
@@ -6591,6 +7347,13 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kLayerOrderSetContractDigest),
             std::string(kLayerParentSetContractDigest),
             std::string(kLayerDuplicateContractDigest),
+            std::string(kLayerPropertyKeyframeDetailsReadContractDigest),
+            std::string(kLayerPropertyKeyframeAddContractDigest),
+            std::string(kLayerPropertyKeyframeValueSetContractDigest),
+            std::string(kLayerPropertyKeyframeInterpolationSetContractDigest),
+            std::string(kLayerPropertyKeyframeTemporalEaseSetContractDigest),
+            std::string(kLayerPropertyKeyframeBehaviorSetContractDigest),
+            std::string(kLayerPropertyKeyframeDeleteContractDigest),
         },
         *this,
         idle_signal);

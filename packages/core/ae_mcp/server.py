@@ -142,6 +142,13 @@ def _filtered_tool_names() -> set:
             "ae.listLayerProperties",
             "ae.listLayerPropertyKeyframes",
             "ae.setLayerPropertyValue",
+            "ae.getLayerPropertyKeyframeDetails",
+            "ae.addLayerPropertyKeyframe",
+            "ae.setLayerPropertyKeyframeValue",
+            "ae.setLayerPropertyKeyframeInterpolation",
+            "ae.setLayerPropertyKeyframeTemporalEase",
+            "ae.setLayerPropertyKeyframeBehavior",
+            "ae.deleteLayerPropertyKeyframe",
         }
     else:
         supported = supported - {
@@ -175,6 +182,13 @@ def _filtered_tool_names() -> set:
             "ae.listLayerProperties",
             "ae.listLayerPropertyKeyframes",
             "ae.setLayerPropertyValue",
+            "ae.getLayerPropertyKeyframeDetails",
+            "ae.addLayerPropertyKeyframe",
+            "ae.setLayerPropertyKeyframeValue",
+            "ae.setLayerPropertyKeyframeInterpolation",
+            "ae.setLayerPropertyKeyframeTemporalEase",
+            "ae.setLayerPropertyKeyframeBehavior",
+            "ae.deleteLayerPropertyKeyframe",
         }
     return supported | {"ae.status", "ae.diagnose"}
 
@@ -789,6 +803,34 @@ _PROJECT_COMPOSITION_VALIDATION = {
         "ae.layer.duplicate",
         "Use a fresh layer_locator, a required 1 to 255 scalar new_name, and a stable idempotency_key.",
     ),
+    "ae.getLayerPropertyKeyframeDetails": (
+        "ae.layer.property.keyframe.details.read",
+        "Use a fresh property_locator and exact time {value, scale}; keyframe indices are not accepted.",
+    ),
+    "ae.addLayerPropertyKeyframe": (
+        "ae.layer.property.keyframe.add",
+        "Use same-context fresh locators, exact time, a typed property value, and a stable idempotency_key.",
+    ),
+    "ae.setLayerPropertyKeyframeValue": (
+        "ae.layer.property.keyframe.value.set",
+        "Use same-context fresh locators, exact time, a matching typed value, and a stable idempotency_key.",
+    ),
+    "ae.setLayerPropertyKeyframeInterpolation": (
+        "ae.layer.property.keyframe.interpolation.set",
+        "Use exact time, explicit linear/bezier/hold in and out interpolation, and a stable idempotency_key.",
+    ),
+    "ae.setLayerPropertyKeyframeTemporalEase": (
+        "ae.layer.property.keyframe.temporal-ease.set",
+        "Use exact time and contiguous zero-based typed ease dimensions with finite decimal speed/influence values.",
+    ),
+    "ae.setLayerPropertyKeyframeBehavior": (
+        "ae.layer.property.keyframe.behavior.set",
+        "Use exact time, one supported behavior enum, required enabled state, and a stable idempotency_key.",
+    ),
+    "ae.deleteLayerPropertyKeyframe": (
+        "ae.layer.property.keyframe.delete",
+        "Use same-context fresh locators, exact time, and a stable idempotency_key; inspect state before retrying uncertain writes.",
+    ),
 }
 
 
@@ -796,7 +838,7 @@ def _project_composition_validation_error(
     name: str,
     error: JsonSchemaValidationError | PydanticValidationError,
 ) -> dict[str, Any]:
-    """Structured argument recovery for the frozen #150 public surface."""
+    """Structured argument recovery for frozen native package surfaces."""
 
     path: list[Any] = []
     if isinstance(error, PydanticValidationError):

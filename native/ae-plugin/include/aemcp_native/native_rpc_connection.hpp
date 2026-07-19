@@ -48,6 +48,13 @@ struct NativeRpcRuntimeInfo {
   std::string layer_order_set_contract_digest;
   std::string layer_parent_set_contract_digest;
   std::string layer_duplicate_contract_digest;
+  std::string layer_property_keyframe_details_read_contract_digest;
+  std::string layer_property_keyframe_add_contract_digest;
+  std::string layer_property_keyframe_value_set_contract_digest;
+  std::string layer_property_keyframe_interpolation_set_contract_digest;
+  std::string layer_property_keyframe_temporal_ease_set_contract_digest;
+  std::string layer_property_keyframe_behavior_set_contract_digest;
+  std::string layer_property_keyframe_delete_contract_digest;
 };
 
 class NativeRpcObserver {

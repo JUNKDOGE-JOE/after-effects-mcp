@@ -201,7 +201,7 @@ class NativeCapabilityDescriptor(_NativeModel):
         StrictStr, Field(min_length=1, max_length=160)
     ]
     preconditions: tuple[
-        Annotated[StrictStr, Field(min_length=1, max_length=96)], ...
+        Annotated[StrictStr, Field(min_length=1, max_length=128)], ...
     ] = Field(max_length=16)
     compatibility: NativeCompatibility
     input_contract_id: ContractId

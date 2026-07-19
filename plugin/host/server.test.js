@@ -14,6 +14,9 @@ const brokerFailureFixtures = Object.values(require(
 const nativeCapabilitiesFixture = require(
     '../../native/ae-plugin/protocol/fixtures/capabilities.json'
 ).response.result;
+const keyframeAuthoringMatrix = require(
+    '../../native/ae-plugin/protocol/fixtures/keyframe-authoring-matrix.json'
+);
 const projectItemsFixture = require(
     '../../native/ae-plugin/protocol/fixtures/invoke-project-items-list.json'
 ).response.result;
@@ -73,6 +76,20 @@ const projectCompositionVectors = [
     'invoke-layer-duplicate.json',
 ].map(function (filename) {
     return require('../../native/ae-plugin/protocol/fixtures/' + filename);
+});
+const keyframeAuthoringVectors = keyframeAuthoringMatrix.cases.map(function (entry) {
+    const descriptor = nativeCapabilitiesFixture.items.find(function (item) {
+        return item.id === entry.capabilityId;
+    });
+    return {
+        request: {
+            params: {
+                capabilityId: entry.capabilityId,
+                capabilityVersion: 1,
+                arguments: descriptor.examples[0].arguments,
+            },
+        },
+    };
 });
 
 const authToken = require('./auth-token');
@@ -679,40 +696,10 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         });
         assert.strictEqual(capabilities.status, 200);
         assert.strictEqual(capabilities.body.result.sessionId, '11111111-1111-4111-8111-111111111111');
+        assert.strictEqual(capabilities.body.result.items.length, 37);
         assert.deepStrictEqual(
             capabilities.body.result.items.map((item) => item.id),
-            [
-                'ae.project.summary',
-                'ae.project.bit-depth.read',
-                'ae.project.bit-depth.set',
-                'ae.project.items.list',
-                'ae.composition.layers.list',
-                'ae.composition.selected-layers.list',
-                'ae.composition.time.read',
-                'ae.composition.time.set',
-                'ae.composition.create',
-                'ae.composition.layer.create',
-                'ae.layer.effect.apply',
-                'ae.layer.properties.list',
-                'ae.layer.property.keyframes.list',
-                'ae.layer.property.set',
-                'ae.project.context.read',
-                'ae.project.item.metadata.read',
-                'ae.composition.settings.read',
-                'ae.composition.work-area.set',
-                'ae.project.item.name.set',
-                'ae.project.item.comment.set',
-                'ae.project.item.label.set',
-                'ae.composition.duplicate',
-                'ae.layer.details.read',
-                'ae.layer.name.set',
-                'ae.layer.range.set',
-                'ae.layer.start-time.set',
-                'ae.layer.stretch.set',
-                'ae.layer.order.set',
-                'ae.layer.parent.set',
-                'ae.layer.duplicate',
-            ],
+            nativeCapabilitiesFixture.items.map((item) => item.id),
         );
 
         const invoked = await post(port, '/native/invoke', headers, {
@@ -999,7 +986,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
     }
 });
 
-test('native invoke HTTP gate accepts all #150/#155 contracts and rejects closed-shape drift', async () => {
+test('native invoke HTTP gate accepts all #150/#155/#157 contracts and rejects closed-shape drift', async () => {
     const nativeClient = fakeNativeClient();
     nativeClient.authorize();
     const { server, srv, port } = await startNativeApp(nativeClient);
@@ -1010,7 +997,8 @@ test('native invoke HTTP gate accepts all #150/#155 contracts and rejects closed
     try {
         const deadlineUnixMs = Date.now() + 10000;
         const expectedRequests = [];
-        for (const [index, vector] of projectCompositionVectors.entries()) {
+        const packageVectors = projectCompositionVectors.concat(keyframeAuthoringVectors);
+        for (const [index, vector] of packageVectors.entries()) {
             const request = {
                 requestId: 'core-package-150-' + index,
                 capabilityId: vector.request.params.capabilityId,
@@ -1039,6 +1027,15 @@ test('native invoke HTTP gate accepts all #150/#155 contracts and rejects closed
                 projectCompositionVectors[0].request.params.capabilityId,
                 2,
                 structuredClone(projectCompositionVectors[0].request.params.arguments),
+            ],
+            [
+                'core-package-157-extra-key',
+                keyframeAuthoringVectors[0].request.params.capabilityId,
+                1,
+                {
+                    ...structuredClone(keyframeAuthoringVectors[0].request.params.arguments),
+                    unexpected: true,
+                },
             ],
             ['core-package-150-prototype', 'toString', 1, {}],
             ['core-package-150-constructor', 'constructor', 1, {}],

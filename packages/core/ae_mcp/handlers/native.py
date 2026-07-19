@@ -50,6 +50,15 @@ from ae_mcp.backends.native_layer_timeline import (
     invoke_layer_stretch_set,
     stretch_percent_to_ratio,
 )
+from ae_mcp.backends.native_keyframe_authoring import (
+    invoke_keyframe_add,
+    invoke_keyframe_behavior_set,
+    invoke_keyframe_delete,
+    invoke_keyframe_details_read,
+    invoke_keyframe_interpolation_set,
+    invoke_keyframe_temporal_ease_set,
+    invoke_keyframe_value_set,
+)
 from ae_mcp.handlers import register
 
 
@@ -83,6 +92,8 @@ _LAYER_STRETCH_SET_TIMEOUT_MS = 10_000
 _LAYER_ORDER_SET_TIMEOUT_MS = 10_000
 _LAYER_PARENT_SET_TIMEOUT_MS = 10_000
 _LAYER_DUPLICATE_TIMEOUT_MS = 10_000
+_KEYFRAME_DETAILS_READ_TIMEOUT_MS = 10_000
+_KEYFRAME_WRITE_TIMEOUT_MS = 10_000
 
 
 def _backend() -> NativeInvokeBackend:
@@ -1619,6 +1630,237 @@ async def _run_duplicate_layer(
     return _project_package_write_response(execution)
 
 
+def _keyframe_write_target(
+    args: Any,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    return (
+        args.layer_locator.model_dump(mode="json", by_alias=True),
+        args.property_locator.model_dump(mode="json", by_alias=True),
+        args.time.model_dump(mode="json", by_alias=True),
+    )
+
+
+async def _run_get_layer_property_keyframe_details(
+    args: schemas.AeGetLayerPropertyKeyframeDetailsArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _KEYFRAME_DETAILS_READ_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_keyframe_details_read(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            property_locator=args.property_locator.model_dump(
+                mode="json", by_alias=True
+            ),
+            time=args.time.model_dump(mode="json", by_alias=True),
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.getLayerPropertyKeyframeDetails native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_add_layer_property_keyframe(
+    args: schemas.AeAddLayerPropertyKeyframeArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _KEYFRAME_WRITE_TIMEOUT_MS
+    layer, prop, target_time = _keyframe_write_target(args)
+
+    async def _call():
+        return await invoke_keyframe_add(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=layer,
+            property_locator=prop,
+            time=target_time,
+            value=args.value.model_dump(mode="json", by_alias=True),
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.addLayerPropertyKeyframe native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_property_keyframe_value(
+    args: schemas.AeSetLayerPropertyKeyframeValueArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _KEYFRAME_WRITE_TIMEOUT_MS
+    layer, prop, target_time = _keyframe_write_target(args)
+
+    async def _call():
+        return await invoke_keyframe_value_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=layer,
+            property_locator=prop,
+            time=target_time,
+            value=args.value.model_dump(mode="json", by_alias=True),
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.setLayerPropertyKeyframeValue native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_property_keyframe_interpolation(
+    args: schemas.AeSetLayerPropertyKeyframeInterpolationArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _KEYFRAME_WRITE_TIMEOUT_MS
+    layer, prop, target_time = _keyframe_write_target(args)
+
+    async def _call():
+        return await invoke_keyframe_interpolation_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=layer,
+            property_locator=prop,
+            time=target_time,
+            in_interpolation=args.in_interpolation,
+            out_interpolation=args.out_interpolation,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg=(
+            "ae.setLayerPropertyKeyframeInterpolation native AEGP write; "
+            "wait for verified readback..."
+        ),
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_property_keyframe_temporal_ease(
+    args: schemas.AeSetLayerPropertyKeyframeTemporalEaseArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _KEYFRAME_WRITE_TIMEOUT_MS
+    layer, prop, target_time = _keyframe_write_target(args)
+
+    async def _call():
+        return await invoke_keyframe_temporal_ease_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=layer,
+            property_locator=prop,
+            time=target_time,
+            dimensions=tuple(
+                item.model_dump(mode="json", by_alias=True)
+                for item in args.dimensions
+            ),
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg=(
+            "ae.setLayerPropertyKeyframeTemporalEase native AEGP write; "
+            "wait for verified readback..."
+        ),
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_property_keyframe_behavior(
+    args: schemas.AeSetLayerPropertyKeyframeBehaviorArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _KEYFRAME_WRITE_TIMEOUT_MS
+    layer, prop, target_time = _keyframe_write_target(args)
+
+    async def _call():
+        return await invoke_keyframe_behavior_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=layer,
+            property_locator=prop,
+            time=target_time,
+            behavior=args.behavior,
+            enabled=args.enabled,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.setLayerPropertyKeyframeBehavior native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_delete_layer_property_keyframe(
+    args: schemas.AeDeleteLayerPropertyKeyframeArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _KEYFRAME_WRITE_TIMEOUT_MS
+    layer, prop, target_time = _keyframe_write_target(args)
+
+    async def _call():
+        return await invoke_keyframe_delete(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=layer,
+            property_locator=prop,
+            time=target_time,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.deleteLayerPropertyKeyframe native AEGP write; wait for verified deletion...",
+    )
+    return _project_package_write_response(execution)
+
+
 register(
     "ae.getProjectContext",
     schemas.AeGetProjectContextArgs,
@@ -1769,6 +2011,41 @@ register(
     schemas.AeSetLayerPropertyValueArgs,
     _run_set_layer_property_value,
 )
+register(
+    "ae.getLayerPropertyKeyframeDetails",
+    schemas.AeGetLayerPropertyKeyframeDetailsArgs,
+    _run_get_layer_property_keyframe_details,
+)
+register(
+    "ae.addLayerPropertyKeyframe",
+    schemas.AeAddLayerPropertyKeyframeArgs,
+    _run_add_layer_property_keyframe,
+)
+register(
+    "ae.setLayerPropertyKeyframeValue",
+    schemas.AeSetLayerPropertyKeyframeValueArgs,
+    _run_set_layer_property_keyframe_value,
+)
+register(
+    "ae.setLayerPropertyKeyframeInterpolation",
+    schemas.AeSetLayerPropertyKeyframeInterpolationArgs,
+    _run_set_layer_property_keyframe_interpolation,
+)
+register(
+    "ae.setLayerPropertyKeyframeTemporalEase",
+    schemas.AeSetLayerPropertyKeyframeTemporalEaseArgs,
+    _run_set_layer_property_keyframe_temporal_ease,
+)
+register(
+    "ae.setLayerPropertyKeyframeBehavior",
+    schemas.AeSetLayerPropertyKeyframeBehaviorArgs,
+    _run_set_layer_property_keyframe_behavior,
+)
+register(
+    "ae.deleteLayerPropertyKeyframe",
+    schemas.AeDeleteLayerPropertyKeyframeArgs,
+    _run_delete_layer_property_keyframe,
+)
 
 
 __all__ = [
@@ -1801,4 +2078,11 @@ __all__ = [
     "_run_set_layer_range",
     "_run_set_layer_start_time",
     "_run_set_layer_stretch",
+    "_run_get_layer_property_keyframe_details",
+    "_run_add_layer_property_keyframe",
+    "_run_set_layer_property_keyframe_value",
+    "_run_set_layer_property_keyframe_interpolation",
+    "_run_set_layer_property_keyframe_temporal_ease",
+    "_run_set_layer_property_keyframe_behavior",
+    "_run_delete_layer_property_keyframe",
 ]

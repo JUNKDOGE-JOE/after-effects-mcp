@@ -202,8 +202,20 @@ constexpr std::string_view kLayerParentContractDigest =
     "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c";
 constexpr std::string_view kLayerDuplicateContractDigest =
     "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75";
+constexpr std::string_view kKeyframeDetailsContractDigest =
+    "254ec7933e9628b6c4fba4cc60e183331e4edc9f723c0ccb3f1e37619b7c5249";
+constexpr std::string_view kKeyframeAddContractDigest =
+    "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e";
+constexpr std::string_view kKeyframeInterpolationContractDigest =
+    "42e8e12224bd1653fa8ca9f775c97553d61c0c2e60b3b2dcf76a8fc68deb2a20";
+constexpr std::string_view kKeyframeEaseContractDigest =
+    "a73d70029c9a470b57d20fe54517cb36bb7fe249847c49da294f1db2d1c4bc8f";
+constexpr std::string_view kKeyframeBehaviorContractDigest =
+    "e2ff59d765613db12468d2140d8c937fd1ceb5def9f632877b18b664b6d6bf5c";
+constexpr std::string_view kKeyframeDeleteContractDigest =
+    "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9";
 constexpr std::string_view kCapabilitiesRegistryDigest =
-    "53e3b7974e797b088aa1dd25d600a2506f59fed0d11c34ca8249e87dcf3ee4a1";
+    "c5d12ffb9e1a90b9e7341144e22ecda41bacac5500f4cedebfee50d1acc17af1";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -475,6 +487,18 @@ std::string layer_property_keyframes_invoke_json(
         "\"capabilityVersion\":1,\"arguments\":{\"propertyLocator\":"
       + locator_json("stream", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
       + ",\"offset\":0,\"limit\":2" + std::string(arguments_suffix) + "}}}";
+}
+
+std::string keyframe_authoring_invoke_json(
+    std::string_view request_id,
+    std::string_view capability_id,
+    std::string_view arguments) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"" + std::string(capability_id)
+      + "\",\"capabilityVersion\":1,\"arguments\":" + std::string(arguments)
+      + "}}";
 }
 
 void golden_requests_are_typed_and_closed() {
@@ -1887,6 +1911,164 @@ void layer_timeline_package_parses_and_serializes_all_eight_contracts() {
   }, "layer name result with unbound postcondition digest");
 }
 
+void keyframe_authoring_package_parses_and_serializes_closed_contracts() {
+  const std::string layer = locator_json(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const std::string property = locator_json(
+      "stream", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+  const std::string time = "{\"value\":1,\"scale\":2}";
+  const std::string write_prefix = "{\"layerLocator\":" + layer
+      + ",\"propertyLocator\":" + property + ",\"time\":" + time;
+  const std::string idempotency = "synthetic-keyframe-0001";
+  const auto decode = [&](std::string_view request_id,
+                          std::string_view capability_id,
+                          const std::string& arguments) {
+    const ParsedRequest request = decode_request_frame(frame(
+        keyframe_authoring_invoke_json(request_id, capability_id, arguments)));
+    require(request.method == RpcMethod::kInvoke,
+        "keyframe authoring request did not classify as invoke");
+    return std::get<InvokeParams>(request.params);
+  };
+
+  const InvokeParams details = decode(
+      "keyframe-details", "ae.layer.property.keyframe.details.read",
+      "{\"propertyLocator\":" + property + ",\"time\":" + time + "}");
+  require(details.property_locator.has_value()
+          && !details.layer_locator.has_value()
+          && details.keyframe_time == aemcp::native::LayerPropertySampleTime{1, 2},
+      "keyframe details request lost its property locator or exact time");
+
+  const InvokeParams add = decode(
+      "keyframe-add", "ae.layer.property.keyframe.add",
+      write_prefix + ",\"idempotencyKey\":\"" + idempotency
+        + "\",\"value\":{\"kind\":\"scalar\",\"value\":\"10\"}}");
+  require(add.layer_locator.has_value() && add.property_locator.has_value()
+          && std::holds_alternative<aemcp::native::LayerPropertyScalarValue>(
+              add.property_value)
+          && add.arguments_fingerprint_sha256
+              == aemcp::native::rpc::digest_layer_property_keyframe_write_arguments(
+                  add.capability_id, *add.layer_locator, *add.property_locator,
+                  add.keyframe_time, add.property_value,
+                  add.keyframe_in_interpolation, add.keyframe_out_interpolation,
+                  add.keyframe_temporal_ease, add.keyframe_behavior,
+                  add.keyframe_behavior_enabled, add.idempotency_key),
+      "keyframe add request lost its typed value or mutation digest");
+
+  const InvokeParams value_set = decode(
+      "keyframe-value", "ae.layer.property.keyframe.value.set",
+      write_prefix + ",\"idempotencyKey\":\"" + idempotency
+        + "\",\"value\":{\"kind\":\"scalar\",\"value\":\"20\"}}");
+  require(std::get<aemcp::native::LayerPropertyScalarValue>(
+              value_set.property_value).value == "20",
+      "keyframe value set request lost its primitive value");
+
+  const InvokeParams interpolation = decode(
+      "keyframe-interpolation", "ae.layer.property.keyframe.interpolation.set",
+      write_prefix + ",\"idempotencyKey\":\"" + idempotency
+        + "\",\"inInterpolation\":\"bezier\",\"outInterpolation\":\"hold\"}");
+  require(interpolation.keyframe_in_interpolation == "bezier"
+          && interpolation.keyframe_out_interpolation == "hold"
+          && interpolation.arguments_fingerprint_sha256
+              == "a8fea9f4e84c865ff0922670b5bcc6a96b9ab56987507565b67f4bb2803573ba",
+      "keyframe interpolation request lost its closed enum pair or JCS digest");
+
+  const InvokeParams ease = decode(
+      "keyframe-ease", "ae.layer.property.keyframe.temporal-ease.set",
+      write_prefix + ",\"idempotencyKey\":\"" + idempotency
+        + "\",\"dimensions\":[{\"dimension\":0,"
+          "\"inEase\":{\"speed\":\"0\",\"influence\":\"33\"},"
+          "\"outEase\":{\"speed\":\"1\",\"influence\":\"67\"}}]}");
+  require(ease.keyframe_temporal_ease.size() == 1
+          && ease.keyframe_temporal_ease[0].dimension == 0
+          && ease.keyframe_temporal_ease[0].out_ease.influence == "67"
+          && ease.arguments_fingerprint_sha256
+              == "a71cd2b9726d538d8ced25917fadacf9ed917ce58067299eed1c4cc01c0fcbc9",
+      "keyframe ease request lost its typed dimension payload or JCS digest");
+
+  const InvokeParams behavior = decode(
+      "keyframe-behavior", "ae.layer.property.keyframe.behavior.set",
+      write_prefix + ",\"idempotencyKey\":\"" + idempotency
+        + "\",\"behavior\":\"temporal-continuous\",\"enabled\":true}");
+  require(behavior.keyframe_behavior == "temporal-continuous"
+          && behavior.keyframe_behavior_enabled == std::optional<bool>{true}
+          && behavior.arguments_fingerprint_sha256
+              == "b17ceeb349ace335f9cb6bdf883af411acd510e43198b57e2ce3ff737150f7be",
+      "keyframe behavior request lost its flag intent or JCS digest");
+
+  const InvokeParams deletion = decode(
+      "keyframe-delete", "ae.layer.property.keyframe.delete",
+      write_prefix + ",\"idempotencyKey\":\"" + idempotency + "\"}");
+  require(std::holds_alternative<std::monostate>(deletion.property_value)
+          && deletion.keyframe_temporal_ease.empty()
+          && !deletion.keyframe_behavior_enabled.has_value(),
+      "keyframe delete request invented unsupported mutation fields");
+
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(keyframe_authoring_invoke_json(
+        "keyframe-index-forbidden", "ae.layer.property.keyframe.delete",
+        write_prefix + ",\"idempotencyKey\":\"" + idempotency
+          + "\",\"keyframeIndex\":1}")));
+  }, "INVALID_ARGUMENT", "public keyframe index must remain forbidden");
+
+  aemcp::native::LayerPropertyKeyframeDetails detail;
+  detail.property_locator = locator(
+      "stream", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+  detail.time = {1, 2};
+  detail.value_type = "one-d";
+  detail.value = aemcp::native::LayerPropertyScalarValue{"10"};
+  detail.temporal_dimensionality = 1;
+  detail.in_interpolation = "linear";
+  detail.out_interpolation = "bezier";
+  detail.temporal_ease.push_back({0, {"0", "33"}, {"1", "67"}});
+
+  aemcp::native::rpc::LayerPropertyKeyframeDetailsSuccess detail_success;
+  detail_success.request_id = "keyframe-details-success";
+  detail_success.session_id = std::string(kSession);
+  detail_success.host_instance_id = std::string(kHost);
+  detail_success.value = detail;
+  detail_success.started_at_unix_ms = 1'900'000'000'000ULL;
+  detail_success.completed_at_unix_ms = 1'900'000'000'025ULL;
+  detail_success.request_digest = std::string(kDigest);
+  detail_success.postcondition_digest =
+      aemcp::native::rpc::digest_layer_property_keyframe_details_postcondition(detail);
+  const std::string detail_body = body(
+      aemcp::native::rpc::encode_layer_property_keyframe_details_success(
+          detail_success));
+  require(detail_body.find("\"temporalDimensionality\":1") != std::string::npos
+          && detail_body.find("\"secondsRational\":\"1/2\"")
+              != std::string::npos
+          && detail_body.find("\"keyframeIndex\"") == std::string::npos,
+      "keyframe details success omitted typed exact-time evidence or exposed an index");
+
+  aemcp::native::LayerPropertyKeyframeChanged changed;
+  changed.layer_locator = locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  changed.property_locator = detail.property_locator;
+  changed.time = detail.time;
+  changed.keyframe_count_before = 0;
+  changed.keyframe_count_after = 1;
+  changed.after = detail;
+  aemcp::native::rpc::LayerPropertyKeyframeWriteSuccess add_success;
+  add_success.request_id = "keyframe-add-success";
+  add_success.session_id = std::string(kSession);
+  add_success.host_instance_id = std::string(kHost);
+  add_success.capability_id = "ae.layer.property.keyframe.add";
+  add_success.value = changed;
+  add_success.started_at_unix_ms = 1'900'000'000'000ULL;
+  add_success.completed_at_unix_ms = 1'900'000'000'025ULL;
+  add_success.request_digest = std::string(kDigest);
+  add_success.postcondition_digest =
+      aemcp::native::rpc::digest_layer_property_keyframe_write_postcondition(
+          add_success.capability_id, changed);
+  const std::string add_body = body(
+      aemcp::native::rpc::encode_layer_property_keyframe_write_success(add_success));
+  require(add_body.find("\"beforeKeyframe\":null") != std::string::npos
+          && add_body.find("\"effect\":\"committed\"") != std::string::npos
+          && add_body.find("\"undo\":{\"available\":true,\"verified\":false}")
+              != std::string::npos,
+      "keyframe write success omitted before/after or Undo evidence");
+}
+
 void framing_fragmentation_and_multiple_frames_work() {
   const auto first = frame(hello_json());
   const auto second = frame("{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
@@ -1936,16 +2118,16 @@ void strict_json_and_frame_limits_fail_closed() {
   }
 
   std::string nested = "0";
-  for (int level = 0; level < 17; ++level) nested = "[" + nested + "]";
-  expect_codec_error([&] { (void)decode_request_frame(frame(nested)); }, "INVALID_REQUEST", "depth 17");
+  for (int level = 0; level < 33; ++level) nested = "[" + nested + "]";
+  expect_codec_error([&] { (void)decode_request_frame(frame(nested)); }, "INVALID_REQUEST", "depth 33");
 
   std::string nodes = "[";
-  for (int index = 0; index < 2'048; ++index) {
+  for (int index = 0; index < 32'768; ++index) {
     if (index != 0) nodes.push_back(',');
     nodes += "null";
   }
   nodes.push_back(']');
-  expect_codec_error([&] { (void)decode_request_frame(frame(nodes)); }, "INVALID_REQUEST", "node 2049");
+  expect_codec_error([&] { (void)decode_request_frame(frame(nodes)); }, "INVALID_REQUEST", "node 32769");
 
   std::string long_nonce(8'193, 'a');
   expect_codec_error([&] { (void)decode_request_frame(frame("{\"x\":\"" + long_nonce + "\"}")); },
@@ -1964,16 +2146,16 @@ void strict_json_and_frame_limits_fail_closed() {
       "maximum-size frame was rejected");
 
   std::string at_depth = "0";
-  for (int level = 0; level < 12; ++level) at_depth = "[" + at_depth + "]";
+  for (int level = 0; level < 28; ++level) at_depth = "[" + at_depth + "]";
   expect_codec_error([&] {
     (void)decode_request_frame(frame(invoke_json("depth-16", 1'900'000'005'000ULL,
       "{\"x\":" + at_depth + "}")));
-  }, "INVALID_ARGUMENT", "depth 16 closed-argument rejection");
+  }, "INVALID_ARGUMENT", "depth 32 closed-argument rejection");
   at_depth = "[" + at_depth + "]";
   expect_codec_error([&] {
     (void)decode_request_frame(frame(invoke_json("depth-17", 1'900'000'005'000ULL,
       "{\"x\":" + at_depth + "}")));
-  }, "INVALID_REQUEST", "depth 17 parser rejection");
+  }, "INVALID_REQUEST", "depth 33 parser rejection");
 }
 
 void negative_contract_vectors_are_classified() {
@@ -2192,6 +2374,27 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kLayerParentContractDigest);
   capabilities.layer_duplicate_contract_digest =
       std::string(kLayerDuplicateContractDigest);
+  capabilities.include_layer_property_keyframe_details_read = true;
+  capabilities.include_layer_property_keyframe_add = true;
+  capabilities.include_layer_property_keyframe_value_set = true;
+  capabilities.include_layer_property_keyframe_interpolation_set = true;
+  capabilities.include_layer_property_keyframe_temporal_ease_set = true;
+  capabilities.include_layer_property_keyframe_behavior_set = true;
+  capabilities.include_layer_property_keyframe_delete = true;
+  capabilities.layer_property_keyframe_details_read_contract_digest =
+      std::string(kKeyframeDetailsContractDigest);
+  capabilities.layer_property_keyframe_add_contract_digest =
+      std::string(kKeyframeAddContractDigest);
+  capabilities.layer_property_keyframe_value_set_contract_digest =
+      std::string(kKeyframeAddContractDigest);
+  capabilities.layer_property_keyframe_interpolation_set_contract_digest =
+      std::string(kKeyframeInterpolationContractDigest);
+  capabilities.layer_property_keyframe_temporal_ease_set_contract_digest =
+      std::string(kKeyframeEaseContractDigest);
+  capabilities.layer_property_keyframe_behavior_set_contract_digest =
+      std::string(kKeyframeBehaviorContractDigest);
+  capabilities.layer_property_keyframe_delete_contract_digest =
+      std::string(kKeyframeDeleteContractDigest);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -2320,6 +2523,41 @@ void response_helpers_are_bounded_and_typed() {
       && capabilities_body.find("\"id\":\"ae.layer.parent.set\"")
           != std::string::npos
       && capabilities_body.find("\"id\":\"ae.layer.duplicate\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"ae.layer.property.keyframe.details.read\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"ae.layer.property.keyframe.add\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"ae.layer.property.keyframe.value.set\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"ae.layer.property.keyframe.interpolation.set\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"ae.layer.property.keyframe.temporal-ease.set\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"ae.layer.property.keyframe.behavior.set\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"ae.layer.property.keyframe.delete\"")
+          != std::string::npos
+      && capabilities_body.find(std::string(kKeyframeDetailsContractDigest))
+          != std::string::npos
+      && capabilities_body.find(std::string(kKeyframeAddContractDigest))
+          != std::string::npos
+      && capabilities_body.find(std::string(kKeyframeInterpolationContractDigest))
+          != std::string::npos
+      && capabilities_body.find(std::string(kKeyframeEaseContractDigest))
+          != std::string::npos
+      && capabilities_body.find(std::string(kKeyframeBehaviorContractDigest))
+          != std::string::npos
+      && capabilities_body.find(std::string(kKeyframeDeleteContractDigest))
+          != std::string::npos
+      && capabilities_body.find("\"temporalDimensionality\"")
           != std::string::npos
       && capabilities_body.find("\"beforeName\":\"\"") == std::string::npos,
       "full capability serializer omitted the closed contract");
@@ -2477,10 +2715,24 @@ void response_helpers_are_bounded_and_typed() {
       && error_body.find("\"retryAfterMs\":250") != std::string::npos,
       "error serializer violated the bound policy tuple");
 
+  error.code = RpcErrorCode::kPreconditionFailed;
+  error.retry_after_ms.reset();
+  error.recovery_action = "change-arguments";
+  error.details = ErrorDetails{};
+  error.details->capability_id = "ae.layer.property.keyframe.details.read";
+  error.details->field = "params.arguments.propertyLocator";
+  const std::string keyframe_precondition = body(encode_error_response(error));
+  require(keyframe_precondition.find("\"action\":\"change-arguments\"")
+              != std::string::npos
+          && keyframe_precondition.find(
+              "\"capabilityId\":\"ae.layer.property.keyframe.details.read\"")
+              != std::string::npos,
+      "keyframe property precondition omitted its typed recovery action");
+
   error.code = RpcErrorCode::kWireVersionMismatch;
   error.method = RpcMethod::kHello;
   error.session_id.reset();
-  error.retry_after_ms.reset();
+  error.recovery_action.reset();
   error.details = ErrorDetails{};
   expect_argument_error([&] { (void)encode_error_response(error); }, "mismatch without supported range");
   summary.project_name = std::string(1'025, 'x');
@@ -2540,6 +2792,7 @@ int main() {
   project_graph_invokes_and_results_are_closed_and_deterministic();
   project_composition_package_parses_and_serializes_all_eight_contracts();
   layer_timeline_package_parses_and_serializes_all_eight_contracts();
+  keyframe_authoring_package_parses_and_serializes_closed_contracts();
   framing_fragmentation_and_multiple_frames_work();
   strict_json_and_frame_limits_fail_closed();
   negative_contract_vectors_are_classified();

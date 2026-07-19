@@ -3,6 +3,61 @@
 These scripts call the same public MCP tools that a model sees. They do not
 call Core handlers, the CEP HTTP bridge, or the native socket directly.
 
+## Capability package #157
+
+`issue157_keyframe_authoring_acceptance.py` is the thin CLI and
+`issue157_keyframe_authoring_spec.py` owns the package-specific matrix,
+fixture recipe, target-field assertions, Undo semantics, and interaction
+order. Stable exact-identity, public-MCP, evidence, call-budget, checkpoint,
+and `.aep` lifecycle mechanics are shared by `capability_package_runtime.py`;
+the shared code does not infer package semantics.
+
+Run `preflight` before candidate freeze. It emits `candidateEvidence=false`,
+uses exactly seven public calls, proves the deployed base launcher/CEP/native
+identity and its existing support-tool contracts, creates/saves/archives one
+disposable fixture, and verifies that the
+Opacity property locator remains valid across a native property write and a
+real AE Undo. It does not require or advertise the seven unbuilt package
+capabilities. A preflight failure is T0-T2 work, not T4/T5 evidence.
+Before the first Save, one public `ae_listProjectItems(offset=0, limit=1)` read
+proves readiness and completes pairing. Only after that read succeeds does the
+runner save the still-empty project, before composition creation or any locator
+acquisition. Later archival saves the populated project in place. This avoids
+both an abandoned AEP after pairing failure and locators invalidated by AE's
+first-save project-generation advance while keeping `saveAsCopies=0`.
+
+If the first call in a native-host epoch returns `NATIVE_PAIRING_REQUIRED` with
+`sideEffect=not-started`, the runner emits one `pair-native` checkpoint and
+retries the identical request once. The failed handshake is excluded from the
+seven effective `publicCalls` and reported separately as `handshakeAttempts`.
+Neither the short-lived fingerprint nor any token is written to evidence. A
+rejection or a second pairing-required response in that epoch fails closed
+without another retry. After the formal-AE restart, the new host instance starts
+one new pairing epoch under the same rule.
+
+T5/T6 each use exactly 28 public calls: all seven package tools, scalar and
+spatial behavior paths, real Undo and independent readback for all six writes,
+one formal-AE restart, fresh Opacity/Position locator reacquisition, and archival
+of the single active fixture. Every public call,
+including support and expected-error calls, is counted by one ledger; the
+runner aborts before dispatching call 31. Package #157 has no new native suite,
+lifecycle, or main-thread primitive, so it deliberately has no T4 mode.
+The RuntimeManager current record, generation launcher and canonical
+`$HOME/.ae-mcp/bin/ae-mcp` launcher must all report the same locked launcher
+SHA-256; an alternate `--launcher` path is rejected.
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 uv run --frozen python \
+  scripts/hardware/issue157_keyframe_authoring_acceptance.py \
+  --mode preflight \
+  --expected-sha 0123456789abcdef0123456789abcdef01234567 \
+  --fixture-path '/absolute/local/active/issue157-keyframes.aep' \
+  --recovery-archive-root '/absolute/local/recovery/ae-mcp-fixtures' \
+  --native-receipt /absolute/candidate/native/build-receipt.json \
+  --native-manifest /absolute/candidate/native-plugin-manifest.json \
+  --evidence-dir '/absolute/private/evidence/issue157-preflight'
+```
+
 ## Capability package #155
 
 `issue155_layer_timeline_acceptance.py` is the frozen driver for the Layer

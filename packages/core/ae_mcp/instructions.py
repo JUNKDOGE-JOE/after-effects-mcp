@@ -36,7 +36,15 @@ WORKFLOW — every task follows this loop:
                 non-keyframed primitive leaf,
                 copy both returned locators and the typed value shape into
                 ae_setLayerPropertyValue, supply one stable idempotency key,
-                then read the property again. ae_listSelectedLayers reports only selected
+                then read the property again. For native animation authoring,
+                address a keyframe by
+                property_locator plus exact {value, scale} time — never by a
+                shifting keyframe index. Use ae_getLayerPropertyKeyframeDetails
+                for one verified keyframe, then the dedicated add, value,
+                interpolation, temporal-ease, behavior, or delete keyframe
+                tool. Every write requires the originating layer locator and
+                a fresh idempotency key; inspect state and Undo before retrying
+                any possibly-side-effecting failure. ae_listSelectedLayers reports only selected
                 layers, not property, mask, effect, or keyframe selections.
                 ae_setCompositionTime likewise requires an exact value/scale,
                 a fresh composition locator, and one stable idempotency key;

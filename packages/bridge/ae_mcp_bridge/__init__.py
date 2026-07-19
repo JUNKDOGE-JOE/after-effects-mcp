@@ -28,6 +28,14 @@ from ae_mcp.backends.native import (
     LAYER_PROPERTY_SET_CAPABILITY_ID,
     PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
 )
+from ae_mcp.backends.native_keyframe_authoring import (
+    KEYFRAME_ADD_CAPABILITY_ID,
+    KEYFRAME_BEHAVIOR_SET_CAPABILITY_ID,
+    KEYFRAME_DELETE_CAPABILITY_ID,
+    KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID,
+    KEYFRAME_TEMPORAL_EASE_SET_CAPABILITY_ID,
+    KEYFRAME_VALUE_SET_CAPABILITY_ID,
+)
 from ae_mcp.backends.native_project_composition import (
     COMPOSITION_DUPLICATE_CAPABILITY_ID,
     COMPOSITION_WORK_AREA_SET_CAPABILITY_ID,
@@ -192,6 +200,18 @@ class HttpBridge(Backend, NativeInvokeBackend):
                 "List project items, composition layers, and layer properties "
                 "with fresh locators, then inspect the Effects group and Undo "
                 "stack before retrying."
+            )
+        elif capability_id in {
+            KEYFRAME_ADD_CAPABILITY_ID,
+            KEYFRAME_BEHAVIOR_SET_CAPABILITY_ID,
+            KEYFRAME_DELETE_CAPABILITY_ID,
+            KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID,
+            KEYFRAME_TEMPORAL_EASE_SET_CAPABILITY_ID,
+            KEYFRAME_VALUE_SET_CAPABILITY_ID,
+        }:
+            recovery_hint = (
+                "Read the exact-time keyframe details with fresh locators and "
+                "inspect the Undo stack before retrying."
             )
         else:
             recovery_hint = "Inspect the project bit depth and Undo stack before retrying."
@@ -602,6 +622,12 @@ class HttpBridge(Backend, NativeInvokeBackend):
             PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID,
             PROJECT_ITEM_LABEL_SET_CAPABILITY_ID,
             COMPOSITION_DUPLICATE_CAPABILITY_ID,
+            KEYFRAME_ADD_CAPABILITY_ID,
+            KEYFRAME_BEHAVIOR_SET_CAPABILITY_ID,
+            KEYFRAME_DELETE_CAPABILITY_ID,
+            KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID,
+            KEYFRAME_TEMPORAL_EASE_SET_CAPABILITY_ID,
+            KEYFRAME_VALUE_SET_CAPABILITY_ID,
         }
         try:
             raw = await self._native_post(

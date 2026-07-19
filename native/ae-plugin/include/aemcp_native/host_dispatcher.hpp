@@ -48,6 +48,20 @@ inline constexpr std::string_view kLayerPropertyKeyframesListCapability =
     "ae.layer.property.keyframes.list";
 inline constexpr std::string_view kLayerPropertySetCapability =
     "ae.layer.property.set";
+inline constexpr std::string_view kLayerPropertyKeyframeDetailsReadCapability =
+    "ae.layer.property.keyframe.details.read";
+inline constexpr std::string_view kLayerPropertyKeyframeAddCapability =
+    "ae.layer.property.keyframe.add";
+inline constexpr std::string_view kLayerPropertyKeyframeValueSetCapability =
+    "ae.layer.property.keyframe.value.set";
+inline constexpr std::string_view kLayerPropertyKeyframeInterpolationSetCapability =
+    "ae.layer.property.keyframe.interpolation.set";
+inline constexpr std::string_view kLayerPropertyKeyframeTemporalEaseSetCapability =
+    "ae.layer.property.keyframe.temporal-ease.set";
+inline constexpr std::string_view kLayerPropertyKeyframeBehaviorSetCapability =
+    "ae.layer.property.keyframe.behavior.set";
+inline constexpr std::string_view kLayerPropertyKeyframeDeleteCapability =
+    "ae.layer.property.keyframe.delete";
 inline constexpr std::string_view kProjectContextReadCapability =
     "ae.project.context.read";
 inline constexpr std::string_view kProjectItemMetadataReadCapability =
@@ -80,7 +94,7 @@ inline constexpr std::string_view kLayerParentSetCapability =
     "ae.layer.parent.set";
 inline constexpr std::string_view kLayerDuplicateCapability =
     "ae.layer.duplicate";
-inline constexpr std::array<std::string_view, 30> kAdvertisedNativeCapabilities{
+inline constexpr std::array<std::string_view, 37> kAdvertisedNativeCapabilities{
     kProjectSummaryCapability,
     kProjectBitDepthReadCapability,
     kProjectBitDepthSetCapability,
@@ -111,6 +125,13 @@ inline constexpr std::array<std::string_view, 30> kAdvertisedNativeCapabilities{
     kLayerOrderSetCapability,
     kLayerParentSetCapability,
     kLayerDuplicateCapability,
+    kLayerPropertyKeyframeDetailsReadCapability,
+    kLayerPropertyKeyframeAddCapability,
+    kLayerPropertyKeyframeValueSetCapability,
+    kLayerPropertyKeyframeInterpolationSetCapability,
+    kLayerPropertyKeyframeTemporalEaseSetCapability,
+    kLayerPropertyKeyframeBehaviorSetCapability,
+    kLayerPropertyKeyframeDeleteCapability,
 };
 // Authenticated broker control-plane operation. This is deliberately omitted
 // from model-facing capability discovery and can only fence native locator
@@ -521,6 +542,8 @@ struct LayerEffectApplied {
 struct LayerPropertySampleTime {
   std::int64_t value{0};
   std::uint64_t scale{1};
+
+  [[nodiscard]] bool operator==(const LayerPropertySampleTime&) const = default;
 };
 
 struct LayerPropertyScalarValue {
@@ -603,6 +626,66 @@ struct LayerPropertyKeyframesPage {
   bool has_more{false};
   std::optional<std::uint64_t> next_offset;
   std::vector<LayerPropertyKeyframeEntry> keyframes;
+};
+
+struct LayerPropertyKeyframeEase {
+  std::string speed;
+  std::string influence;
+
+  [[nodiscard]] bool operator==(const LayerPropertyKeyframeEase&) const = default;
+};
+
+struct LayerPropertyKeyframeDimensionEase {
+  std::uint16_t dimension{0};
+  LayerPropertyKeyframeEase in_ease;
+  LayerPropertyKeyframeEase out_ease;
+
+  [[nodiscard]] bool operator==(
+      const LayerPropertyKeyframeDimensionEase&) const = default;
+};
+
+struct LayerPropertyKeyframeBehavior {
+  bool temporal_continuous{false};
+  bool temporal_auto_bezier{false};
+  bool spatial_continuous{false};
+  bool spatial_auto_bezier{false};
+  bool roving{false};
+
+  [[nodiscard]] bool operator==(const LayerPropertyKeyframeBehavior&) const = default;
+};
+
+struct LayerPropertyKeyframeDetails {
+  ObjectLocator property_locator;
+  LayerPropertySampleTime time;
+  std::string value_type;
+  LayerPropertyValue value;
+  std::uint16_t temporal_dimensionality{0};
+  std::string in_interpolation;
+  std::string out_interpolation;
+  std::vector<LayerPropertyKeyframeDimensionEase> temporal_ease;
+  LayerPropertyKeyframeBehavior behavior;
+
+  [[nodiscard]] bool operator==(const LayerPropertyKeyframeDetails&) const = default;
+};
+
+struct LayerPropertyKeyframeChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  ObjectLocator property_locator;
+  LayerPropertySampleTime time;
+  std::uint64_t keyframe_count_before{0};
+  std::uint64_t keyframe_count_after{0};
+  std::optional<LayerPropertyKeyframeDetails> before;
+  std::optional<LayerPropertyKeyframeDetails> after;
+};
+
+enum class LayerPropertyKeyframeMutationKind {
+  kAdd,
+  kSetValue,
+  kSetInterpolation,
+  kSetTemporalEase,
+  kSetBehavior,
+  kDelete,
 };
 
 struct ProjectItemsQuery {
@@ -722,6 +805,28 @@ struct LayerPropertySetCommand {
   ObjectLocator layer_locator;
   ObjectLocator property_locator;
   LayerPropertyValue value;
+};
+
+struct LayerPropertyKeyframeDetailsQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator property_locator;
+  LayerPropertySampleTime time;
+};
+
+struct LayerPropertyKeyframeMutationCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator layer_locator;
+  ObjectLocator property_locator;
+  LayerPropertySampleTime time;
+  LayerPropertyKeyframeMutationKind kind{LayerPropertyKeyframeMutationKind::kAdd};
+  LayerPropertyValue value;
+  std::string in_interpolation;
+  std::string out_interpolation;
+  std::vector<LayerPropertyKeyframeDimensionEase> temporal_ease;
+  std::string behavior;
+  bool enabled{false};
 };
 
 struct ProjectContextQuery {
@@ -1018,6 +1123,32 @@ struct HostLayerPropertyWriteResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostLayerPropertyKeyframeDetailsResult {
+  bool ok{false};
+  LayerPropertyKeyframeDetails value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerPropertyKeyframeDetailsResult success(
+      LayerPropertyKeyframeDetails value);
+  [[nodiscard]] static HostLayerPropertyKeyframeDetailsResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerPropertyKeyframeWriteResult {
+  bool ok{false};
+  LayerPropertyKeyframeChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerPropertyKeyframeWriteResult success(
+      LayerPropertyKeyframeChanged value);
+  [[nodiscard]] static HostLayerPropertyKeyframeWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostLayerDetailsResult {
   bool ok{false};
   LayerDetails value;
@@ -1165,6 +1296,14 @@ class HostApi {
       const LayerPropertyKeyframesQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertyWriteResult set_layer_property(
       const LayerPropertySetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerPropertyKeyframeDetailsResult
+      read_layer_property_keyframe_details(
+          const LayerPropertyKeyframeDetailsQuery& query,
+          TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerPropertyKeyframeWriteResult
+      mutate_layer_property_keyframe(
+          const LayerPropertyKeyframeMutationCommand& command,
+          TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerDetailsResult read_layer_details(
       const LayerDetailsQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerNameWriteResult set_layer_name(
@@ -1232,7 +1371,14 @@ struct Request {
       CompositionCurrentTime layer_start_time_value = {},
       LayerStretchRatio layer_stretch_value = {},
       std::uint64_t target_stack_index_value = 0,
-      std::string layer_new_name_value = {})
+      std::string layer_new_name_value = {},
+      LayerPropertySampleTime keyframe_time_value = {},
+      std::string keyframe_in_interpolation_value = {},
+      std::string keyframe_out_interpolation_value = {},
+      std::vector<LayerPropertyKeyframeDimensionEase>
+          keyframe_temporal_ease_value = {},
+      std::string keyframe_behavior_value = {},
+      std::optional<bool> keyframe_behavior_enabled_value = std::nullopt)
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -1278,7 +1424,13 @@ struct Request {
         layer_start_time(std::move(layer_start_time_value)),
         layer_stretch(std::move(layer_stretch_value)),
         target_stack_index(target_stack_index_value),
-        layer_new_name(std::move(layer_new_name_value)) {}
+        layer_new_name(std::move(layer_new_name_value)),
+        keyframe_time(std::move(keyframe_time_value)),
+        keyframe_in_interpolation(std::move(keyframe_in_interpolation_value)),
+        keyframe_out_interpolation(std::move(keyframe_out_interpolation_value)),
+        keyframe_temporal_ease(std::move(keyframe_temporal_ease_value)),
+        keyframe_behavior(std::move(keyframe_behavior_value)),
+        keyframe_behavior_enabled(keyframe_behavior_enabled_value) {}
 
   std::string request_id;
   std::string capability_id;
@@ -1328,6 +1480,12 @@ struct Request {
   LayerStretchRatio layer_stretch;
   std::uint64_t target_stack_index{0};
   std::string layer_new_name;
+  LayerPropertySampleTime keyframe_time;
+  std::string keyframe_in_interpolation;
+  std::string keyframe_out_interpolation;
+  std::vector<LayerPropertyKeyframeDimensionEase> keyframe_temporal_ease;
+  std::string keyframe_behavior;
+  std::optional<bool> keyframe_behavior_enabled;
 };
 
 enum class EnqueueCode {
@@ -1379,6 +1537,8 @@ struct Completion {
   LayerPropertiesPage layer_properties_result;
   LayerPropertyKeyframesPage layer_property_keyframes_result;
   LayerPropertyChanged layer_property_change_result;
+  LayerPropertyKeyframeDetails layer_property_keyframe_details_result;
+  LayerPropertyKeyframeChanged layer_property_keyframe_change_result;
   ProjectContext project_context_result;
   ProjectItemMetadata project_item_metadata_result;
   CompositionSettings composition_settings_result;

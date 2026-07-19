@@ -18,8 +18,8 @@ namespace aemcp::native::rpc {
 
 inline constexpr std::size_t kFramePrefixBytes = 4;
 inline constexpr std::size_t kMaxFrameBytes = 524'288;
-inline constexpr std::size_t kMaxJsonDepth = 16;
-inline constexpr std::size_t kMaxJsonNodes = 12'288;
+inline constexpr std::size_t kMaxJsonDepth = 32;
+inline constexpr std::size_t kMaxJsonNodes = 32'768;
 inline constexpr std::size_t kMaxStringScalars = 8'192;
 inline constexpr std::uint64_t kMaxSafeInteger = 9'007'199'254'740'991ULL;
 
@@ -104,6 +104,12 @@ struct InvokeParams {
   LayerStretchRatio layer_stretch;
   std::uint64_t target_stack_index{0};
   std::string layer_new_name;
+  LayerPropertySampleTime keyframe_time;
+  std::string keyframe_in_interpolation;
+  std::string keyframe_out_interpolation;
+  std::vector<LayerPropertyKeyframeDimensionEase> keyframe_temporal_ease;
+  std::string keyframe_behavior;
+  std::optional<bool> keyframe_behavior_enabled;
 };
 
 struct CancelParams {
@@ -272,6 +278,23 @@ struct ParsedRequest {
     std::string_view idempotency_key);
 [[nodiscard]] std::string digest_layer_property_set_postcondition(
     const LayerPropertyChanged& value);
+[[nodiscard]] std::string digest_layer_property_keyframe_details_postcondition(
+    const LayerPropertyKeyframeDetails& value);
+[[nodiscard]] std::string digest_layer_property_keyframe_write_arguments(
+    std::string_view capability_id,
+    const ObjectLocator& layer_locator,
+    const ObjectLocator& property_locator,
+    const LayerPropertySampleTime& time,
+    const LayerPropertyValue& value,
+    std::string_view in_interpolation,
+    std::string_view out_interpolation,
+    const std::vector<LayerPropertyKeyframeDimensionEase>& temporal_ease,
+    std::string_view behavior,
+    const std::optional<bool>& behavior_enabled,
+    std::string_view idempotency_key);
+[[nodiscard]] std::string digest_layer_property_keyframe_write_postcondition(
+    std::string_view capability_id,
+    const LayerPropertyKeyframeChanged& value);
 
 class FrameDecoder final {
  public:
@@ -476,6 +499,13 @@ struct CapabilitiesSuccess {
   bool include_layer_order_set{false};
   bool include_layer_parent_set{false};
   bool include_layer_duplicate{false};
+  bool include_layer_property_keyframe_details_read{false};
+  bool include_layer_property_keyframe_add{false};
+  bool include_layer_property_keyframe_value_set{false};
+  bool include_layer_property_keyframe_interpolation_set{false};
+  bool include_layer_property_keyframe_temporal_ease_set{false};
+  bool include_layer_property_keyframe_behavior_set{false};
+  bool include_layer_property_keyframe_delete{false};
   std::string project_context_read_contract_digest;
   std::string project_item_metadata_read_contract_digest;
   std::string composition_settings_read_contract_digest;
@@ -492,6 +522,13 @@ struct CapabilitiesSuccess {
   std::string layer_order_set_contract_digest;
   std::string layer_parent_set_contract_digest;
   std::string layer_duplicate_contract_digest;
+  std::string layer_property_keyframe_details_read_contract_digest;
+  std::string layer_property_keyframe_add_contract_digest;
+  std::string layer_property_keyframe_value_set_contract_digest;
+  std::string layer_property_keyframe_interpolation_set_contract_digest;
+  std::string layer_property_keyframe_temporal_ease_set_contract_digest;
+  std::string layer_property_keyframe_behavior_set_contract_digest;
+  std::string layer_property_keyframe_delete_contract_digest;
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -697,6 +734,31 @@ struct LayerPropertySetSuccess {
   bool replayed{false};
 };
 
+struct LayerPropertyKeyframeDetailsSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  LayerPropertyKeyframeDetails value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+struct LayerPropertyKeyframeWriteSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  std::string capability_id;
+  LayerPropertyKeyframeChanged value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
 enum class CancelState {
   kQueuedCancelled,
   kRunningCancelRequested,
@@ -822,6 +884,12 @@ struct ErrorResponse {
     const LayerPropertyKeyframesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_property_set_success(
     const LayerPropertySetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t>
+    encode_layer_property_keyframe_details_success(
+        const LayerPropertyKeyframeDetailsSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t>
+    encode_layer_property_keyframe_write_success(
+        const LayerPropertyKeyframeWriteSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_cancel_success(
     const CancelSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_graph_invalidate_success(

@@ -362,6 +362,17 @@ std::string required_string(
   return *result;
 }
 
+bool required_bool(
+    const JsonValue::Object& object, std::string_view name, CodecErrorKind kind) {
+  const JsonValue* value = member(object, name);
+  const bool* result = value == nullptr ? nullptr : std::get_if<bool>(&value->value);
+  if (result == nullptr) {
+    if (kind == CodecErrorKind::kInvalidArgument) invalid_argument("invalid boolean field");
+    invalid_request("invalid boolean field");
+  }
+  return *result;
+}
+
 std::uint64_t required_uint(
     const JsonValue::Object& object, std::string_view name, CodecErrorKind kind,
     std::uint64_t minimum, std::uint64_t maximum) {
@@ -598,6 +609,14 @@ CompositionCurrentTime parse_layer_exact_time_input(
   return time;
 }
 
+LayerPropertySampleTime parse_keyframe_exact_time_input(
+    const JsonValue& value,
+    std::string_view field_name) {
+  const CompositionCurrentTime parsed = parse_layer_exact_time_input(
+      value, field_name, false);
+  return {parsed.value, parsed.scale};
+}
+
 LayerStretchRatio parse_layer_stretch_input(const JsonValue& value) {
   const JsonValue::Object* object = object_of(value);
   if (object == nullptr
@@ -692,6 +711,62 @@ LayerPropertyValue parse_layer_property_value(const JsonValue& value) {
   invalid_argument("unsupported primitive property value kind");
 }
 
+LayerPropertyKeyframeEase parse_keyframe_ease(
+    const JsonValue& value,
+    std::string_view field_name) {
+  const JsonValue::Object* object = object_of(value);
+  if (object == nullptr
+      || !exact_keys(*object, {"speed", "influence"}, {"speed", "influence"})) {
+    invalid_argument(std::string(field_name) + " must be a closed keyframe ease");
+  }
+  LayerPropertyKeyframeEase result{
+      required_string(*object, "speed", CodecErrorKind::kInvalidArgument),
+      required_string(*object, "influence", CodecErrorKind::kInvalidArgument)};
+  if (!valid_decimal_string(result.speed)
+      || !valid_decimal_string(result.influence)) {
+    invalid_argument(std::string(field_name) + " must contain finite decimals");
+  }
+  double influence = 0;
+  std::istringstream stream{result.influence};
+  stream.imbue(std::locale::classic());
+  stream >> std::noskipws >> influence;
+  if (!stream || stream.peek() != std::char_traits<char>::eof()
+      || influence < 0.0 || influence > 100.0) {
+    invalid_argument(std::string(field_name) + " influence must be within 0..100");
+  }
+  return result;
+}
+
+std::vector<LayerPropertyKeyframeDimensionEase> parse_keyframe_ease_dimensions(
+    const JsonValue& value) {
+  const JsonValue::Array* dimensions = array_of(value);
+  if (dimensions == nullptr || dimensions->empty() || dimensions->size() > 4) {
+    invalid_argument("keyframe temporal ease dimensions must contain 1..4 items");
+  }
+  std::vector<LayerPropertyKeyframeDimensionEase> result;
+  result.reserve(dimensions->size());
+  for (std::size_t index = 0; index < dimensions->size(); ++index) {
+    const JsonValue::Object* item = object_of((*dimensions)[index]);
+    if (item == nullptr
+        || !exact_keys(
+            *item,
+            {"dimension", "inEase", "outEase"},
+            {"dimension", "inEase", "outEase"})) {
+      invalid_argument("keyframe temporal ease dimension is not closed");
+    }
+    const std::uint64_t dimension = required_uint(
+        *item, "dimension", CodecErrorKind::kInvalidArgument, 0, 3);
+    if (dimension != index) {
+      invalid_argument("keyframe temporal ease dimensions must be contiguous and zero-based");
+    }
+    result.push_back({
+        static_cast<std::uint16_t>(dimension),
+        parse_keyframe_ease(*member(*item, "inEase"), "inEase"),
+        parse_keyframe_ease(*member(*item, "outEase"), "outEase")});
+  }
+  return result;
+}
+
 std::string locator_json(const ObjectLocator& locator) {
   if (!valid_output_locator(locator)) invalid_argument("invalid output locator");
   // RFC 8785 key order.
@@ -768,6 +843,132 @@ std::string canonical_layer_stretch_input(const LayerStretchRatio& value) {
   }
   return "{\"den\":" + std::to_string(value.denominator)
       + ",\"num\":" + std::to_string(value.numerator) + "}";
+}
+
+std::string canonical_keyframe_time_input(const LayerPropertySampleTime& value) {
+  if (value.value < std::numeric_limits<std::int32_t>::min()
+      || value.value > std::numeric_limits<std::int32_t>::max()
+      || value.scale < 1
+      || value.scale > std::numeric_limits<std::uint32_t>::max()) {
+    invalid_argument("invalid keyframe exact time");
+  }
+  return "{\"scale\":" + std::to_string(value.scale)
+      + ",\"value\":" + std::to_string(value.value) + "}";
+}
+
+std::string canonical_keyframe_ease(
+    const LayerPropertyKeyframeEase& value) {
+  if (!valid_decimal_string(value.speed)
+      || !valid_decimal_string(value.influence)) {
+    invalid_argument("invalid keyframe ease decimal");
+  }
+  double influence = 0;
+  std::istringstream stream{value.influence};
+  stream.imbue(std::locale::classic());
+  stream >> std::noskipws >> influence;
+  if (!stream || stream.peek() != std::char_traits<char>::eof()
+      || influence < 0.0 || influence > 100.0) {
+    invalid_argument("keyframe influence must be within 0..100");
+  }
+  return "{\"influence\":" + json_string(value.influence)
+      + ",\"speed\":" + json_string(value.speed) + "}";
+}
+
+std::string canonical_keyframe_ease_dimensions(
+    const std::vector<LayerPropertyKeyframeDimensionEase>& dimensions) {
+  if (dimensions.empty() || dimensions.size() > 4) {
+    invalid_argument("invalid keyframe ease dimensionality");
+  }
+  std::string result = "[";
+  for (std::size_t index = 0; index < dimensions.size(); ++index) {
+    const auto& dimension = dimensions[index];
+    if (dimension.dimension != index) {
+      invalid_argument("keyframe ease dimensions must be contiguous and zero-based");
+    }
+    if (index != 0) result.push_back(',');
+    result += "{\"dimension\":" + std::to_string(dimension.dimension)
+        + ",\"inEase\":" + canonical_keyframe_ease(dimension.in_ease)
+        + ",\"outEase\":" + canonical_keyframe_ease(dimension.out_ease) + "}";
+  }
+  result.push_back(']');
+  return result;
+}
+
+bool keyframe_write_capability(std::string_view capability_id) {
+  return capability_id == kLayerPropertyKeyframeAddCapability
+      || capability_id == kLayerPropertyKeyframeValueSetCapability
+      || capability_id == kLayerPropertyKeyframeInterpolationSetCapability
+      || capability_id == kLayerPropertyKeyframeTemporalEaseSetCapability
+      || capability_id == kLayerPropertyKeyframeBehaviorSetCapability
+      || capability_id == kLayerPropertyKeyframeDeleteCapability;
+}
+
+std::string canonical_keyframe_write_arguments(
+    std::string_view capability_id,
+    const ObjectLocator& layer_locator,
+    const ObjectLocator& property_locator,
+    const LayerPropertySampleTime& time,
+    const LayerPropertyValue& value,
+    std::string_view in_interpolation,
+    std::string_view out_interpolation,
+    const std::vector<LayerPropertyKeyframeDimensionEase>& temporal_ease,
+    std::string_view behavior,
+    const std::optional<bool>& behavior_enabled,
+    std::string_view idempotency_key) {
+  if (!keyframe_write_capability(capability_id)
+      || !valid_output_locator(layer_locator) || layer_locator.kind != "layer"
+      || !valid_output_locator(property_locator) || property_locator.kind != "stream"
+      || !same_locator_scope(property_locator, layer_locator)
+      || !valid_idempotency_key(idempotency_key)) {
+    invalid_argument("invalid keyframe write arguments");
+  }
+  std::vector<std::string> members{
+      "\"idempotencyKey\":" + json_string(idempotency_key),
+      "\"layerLocator\":" + locator_json(layer_locator),
+      "\"propertyLocator\":" + locator_json(property_locator),
+      "\"time\":" + canonical_keyframe_time_input(time),
+  };
+  if (capability_id == kLayerPropertyKeyframeAddCapability
+      || capability_id == kLayerPropertyKeyframeValueSetCapability) {
+    if (std::holds_alternative<std::monostate>(value)) {
+      invalid_argument("keyframe write value is required");
+    }
+    members.push_back("\"value\":" + canonical_layer_property_value(value));
+  } else if (capability_id == kLayerPropertyKeyframeInterpolationSetCapability) {
+    const auto valid = [](std::string_view interpolation) {
+      return interpolation == "linear" || interpolation == "bezier"
+          || interpolation == "hold";
+    };
+    if (!valid(in_interpolation) || !valid(out_interpolation)) {
+      invalid_argument("invalid keyframe interpolation");
+    }
+    members.push_back("\"inInterpolation\":" + json_string(in_interpolation));
+    members.push_back("\"outInterpolation\":" + json_string(out_interpolation));
+  } else if (capability_id == kLayerPropertyKeyframeTemporalEaseSetCapability) {
+    members.push_back(
+        "\"dimensions\":" + canonical_keyframe_ease_dimensions(temporal_ease));
+  } else if (capability_id == kLayerPropertyKeyframeBehaviorSetCapability) {
+    constexpr std::array<std::string_view, 5> behaviors = {
+        "temporal-continuous", "temporal-auto-bezier", "spatial-continuous",
+        "spatial-auto-bezier", "roving"};
+    if (std::find(behaviors.begin(), behaviors.end(), behavior) == behaviors.end()
+        || !behavior_enabled.has_value()) {
+      invalid_argument("invalid keyframe behavior mutation");
+    }
+    members.push_back("\"behavior\":" + json_string(behavior));
+    members.push_back(
+        "\"enabled\":" + std::string(*behavior_enabled ? "true" : "false"));
+  }
+  // RFC 8785/JCS orders object member names lexicographically by their UTF-16
+  // code units. These contract keys are ASCII, so bytewise ordering is exact.
+  std::sort(members.begin(), members.end());
+  std::string result = "{";
+  for (std::size_t index = 0; index < members.size(); ++index) {
+    if (index != 0) result.push_back(',');
+    result += members[index];
+  }
+  result.push_back('}');
+  return result;
 }
 
 std::string nullable_locator_json(const std::optional<ObjectLocator>& value);
@@ -959,6 +1160,22 @@ std::string canonical_request(const ParsedRequest& request) {
             + ",\"propertyLocator\":" + locator_json(*value.property_locator)
             + ",\"value\":" + canonical_layer_property_value(value.property_value)
             + "}";
+      } else if (value.capability_id == kLayerPropertyKeyframeDetailsReadCapability) {
+        arguments = "{\"propertyLocator\":" + locator_json(*value.property_locator)
+            + ",\"time\":" + canonical_keyframe_time_input(value.keyframe_time) + "}";
+      } else if (keyframe_write_capability(value.capability_id)) {
+        arguments = canonical_keyframe_write_arguments(
+            value.capability_id,
+            *value.layer_locator,
+            *value.property_locator,
+            value.keyframe_time,
+            value.property_value,
+            value.keyframe_in_interpolation,
+            value.keyframe_out_interpolation,
+            value.keyframe_temporal_ease,
+            value.keyframe_behavior,
+            value.keyframe_behavior_enabled,
+            value.idempotency_key);
       }
       params = "{\"arguments\":" + arguments + ",\"capabilityId\":"
           + json_string(value.capability_id)
@@ -1805,6 +2022,119 @@ ParsedRequest classify_request(const JsonValue& root) {
             *result.property_locator,
             result.property_value,
             result.idempotency_key);
+      } else if (capability == kLayerPropertyKeyframeDetailsReadCapability) {
+        if (!exact_keys(
+                *arguments,
+                {"propertyLocator", "time"},
+                {"propertyLocator", "time"})) {
+          invalid_argument("keyframe details arguments are not closed");
+        }
+        result.property_locator = parse_locator(
+            *member(*arguments, "propertyLocator"), "stream");
+        result.keyframe_time = parse_keyframe_exact_time_input(
+            *member(*arguments, "time"), "time");
+      } else if (keyframe_write_capability(capability)) {
+        const bool value_write = capability == kLayerPropertyKeyframeAddCapability
+            || capability == kLayerPropertyKeyframeValueSetCapability;
+        const bool interpolation_write =
+            capability == kLayerPropertyKeyframeInterpolationSetCapability;
+        const bool ease_write =
+            capability == kLayerPropertyKeyframeTemporalEaseSetCapability;
+        const bool behavior_write =
+            capability == kLayerPropertyKeyframeBehaviorSetCapability;
+        const bool closed = value_write
+            ? exact_keys(
+                *arguments,
+                {"layerLocator", "propertyLocator", "time", "value", "idempotencyKey"},
+                {"layerLocator", "propertyLocator", "time", "value", "idempotencyKey"})
+            : interpolation_write
+                ? exact_keys(
+                    *arguments,
+                    {"layerLocator", "propertyLocator", "time", "inInterpolation",
+                     "outInterpolation", "idempotencyKey"},
+                    {"layerLocator", "propertyLocator", "time", "inInterpolation",
+                     "outInterpolation", "idempotencyKey"})
+                : ease_write
+                    ? exact_keys(
+                        *arguments,
+                        {"layerLocator", "propertyLocator", "time", "dimensions",
+                         "idempotencyKey"},
+                        {"layerLocator", "propertyLocator", "time", "dimensions",
+                         "idempotencyKey"})
+                    : behavior_write
+                        ? exact_keys(
+                            *arguments,
+                            {"layerLocator", "propertyLocator", "time", "behavior",
+                             "enabled", "idempotencyKey"},
+                            {"layerLocator", "propertyLocator", "time", "behavior",
+                             "enabled", "idempotencyKey"})
+                        : exact_keys(
+                            *arguments,
+                            {"layerLocator", "propertyLocator", "time", "idempotencyKey"},
+                            {"layerLocator", "propertyLocator", "time", "idempotencyKey"});
+        if (!closed) {
+          invalid_argument("keyframe write arguments are not closed");
+        }
+        result.layer_locator = parse_locator(
+            *member(*arguments, "layerLocator"), "layer");
+        result.property_locator = parse_locator(
+            *member(*arguments, "propertyLocator"), "stream");
+        if (!same_locator_scope(*result.layer_locator, *result.property_locator)) {
+          invalid_argument("layer and property locators must share one context");
+        }
+        result.keyframe_time = parse_keyframe_exact_time_input(
+            *member(*arguments, "time"), "time");
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid keyframe idempotency key");
+        }
+        if (value_write) {
+          result.property_value = parse_layer_property_value(
+              *member(*arguments, "value"));
+        } else if (interpolation_write) {
+          result.keyframe_in_interpolation = required_string(
+              *arguments, "inInterpolation", CodecErrorKind::kInvalidArgument);
+          result.keyframe_out_interpolation = required_string(
+              *arguments, "outInterpolation", CodecErrorKind::kInvalidArgument);
+          const auto valid = [](std::string_view interpolation) {
+            return interpolation == "linear" || interpolation == "bezier"
+                || interpolation == "hold";
+          };
+          if (!valid(result.keyframe_in_interpolation)
+              || !valid(result.keyframe_out_interpolation)) {
+            invalid_argument("invalid keyframe interpolation");
+          }
+        } else if (ease_write) {
+          result.keyframe_temporal_ease = parse_keyframe_ease_dimensions(
+              *member(*arguments, "dimensions"));
+        } else if (behavior_write) {
+          result.keyframe_behavior = required_string(
+              *arguments, "behavior", CodecErrorKind::kInvalidArgument);
+          constexpr std::array<std::string_view, 5> behaviors = {
+              "temporal-continuous", "temporal-auto-bezier", "spatial-continuous",
+              "spatial-auto-bezier", "roving"};
+          if (std::find(
+                  behaviors.begin(), behaviors.end(), result.keyframe_behavior)
+              == behaviors.end()) {
+            invalid_argument("invalid keyframe behavior");
+          }
+          result.keyframe_behavior_enabled = required_bool(
+              *arguments, "enabled", CodecErrorKind::kInvalidArgument);
+        }
+        result.arguments_fingerprint_sha256 =
+            digest_layer_property_keyframe_write_arguments(
+                capability,
+                *result.layer_locator,
+                *result.property_locator,
+                result.keyframe_time,
+                result.property_value,
+                result.keyframe_in_interpolation,
+                result.keyframe_out_interpolation,
+                result.keyframe_temporal_ease,
+                result.keyframe_behavior,
+                result.keyframe_behavior_enabled,
+                result.idempotency_key);
       } else {
         invalid_argument("invoke is not in the compile-time allowlist");
       }
@@ -3108,6 +3438,114 @@ std::string canonical_layer_property_keyframes_value(
       + ",\"valueType\":" + json_string(page.value_type) + "}";
 }
 
+bool keyframe_value_matches_type(
+    std::string_view value_type,
+    const LayerPropertyValue& value) {
+  if (value_type == "one-d") {
+    return std::holds_alternative<LayerPropertyScalarValue>(value);
+  }
+  if (value_type == "color") {
+    return std::holds_alternative<LayerPropertyColorValue>(value);
+  }
+  const auto* vector = std::get_if<LayerPropertyVectorValue>(&value);
+  if (vector == nullptr) return false;
+  if (value_type == "two-d" || value_type == "two-d-spatial") {
+    return vector->components.size() == 2;
+  }
+  if (value_type == "three-d" || value_type == "three-d-spatial") {
+    return vector->components.size() == 3;
+  }
+  return false;
+}
+
+std::string canonical_keyframe_details_value(
+    const LayerPropertyKeyframeDetails& value) {
+  const auto known_interpolation = [](std::string_view interpolation) {
+    return interpolation == "none" || interpolation == "linear"
+        || interpolation == "bezier" || interpolation == "hold";
+  };
+  if (!valid_output_locator(value.property_locator)
+      || value.property_locator.kind != "stream"
+      || value.time.value < std::numeric_limits<std::int32_t>::min()
+      || value.time.value > std::numeric_limits<std::int32_t>::max()
+      || value.time.scale < 1
+      || value.time.scale > std::numeric_limits<std::uint32_t>::max()
+      || value.temporal_dimensionality < 1 || value.temporal_dimensionality > 4
+      || value.temporal_ease.size() != value.temporal_dimensionality
+      || !keyframe_value_matches_type(value.value_type, value.value)
+      || !known_interpolation(value.in_interpolation)
+      || !known_interpolation(value.out_interpolation)) {
+    invalid_argument("invalid keyframe details value");
+  }
+  const std::string time = "{\"scale\":" + std::to_string(value.time.scale)
+      + ",\"secondsRational\":"
+      + json_string(canonical_seconds_rational(value.time.value, value.time.scale))
+      + ",\"value\":" + std::to_string(value.time.value) + "}";
+  const std::string behaviors = "{\"roving\":"
+      + std::string(value.behavior.roving ? "true" : "false")
+      + ",\"spatialAutoBezier\":"
+      + std::string(value.behavior.spatial_auto_bezier ? "true" : "false")
+      + ",\"spatialContinuous\":"
+      + std::string(value.behavior.spatial_continuous ? "true" : "false")
+      + ",\"temporalAutoBezier\":"
+      + std::string(value.behavior.temporal_auto_bezier ? "true" : "false")
+      + ",\"temporalContinuous\":"
+      + std::string(value.behavior.temporal_continuous ? "true" : "false") + "}";
+  return "{\"behaviors\":" + behaviors
+      + ",\"inInterpolation\":" + json_string(value.in_interpolation)
+      + ",\"outInterpolation\":" + json_string(value.out_interpolation)
+      + ",\"propertyLocator\":" + locator_json(value.property_locator)
+      + ",\"temporalDimensionality\":"
+      + std::to_string(value.temporal_dimensionality)
+      + ",\"temporalEaseDimensions\":"
+      + canonical_keyframe_ease_dimensions(value.temporal_ease)
+      + ",\"time\":" + time
+      + ",\"value\":" + canonical_layer_property_value(value.value)
+      + ",\"valueType\":" + json_string(value.value_type) + "}";
+}
+
+std::string canonical_keyframe_changed_value(
+    const LayerPropertyKeyframeChanged& value) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || !valid_output_locator(value.property_locator)
+      || value.property_locator.kind != "stream"
+      || !same_locator_scope(value.property_locator, value.layer_locator)
+      || value.keyframe_count_before > kMaxSafeInteger
+      || value.keyframe_count_after > kMaxSafeInteger
+      || (!value.before.has_value() && !value.after.has_value())) {
+    invalid_argument("invalid keyframe mutation result");
+  }
+  const auto bound = [&](const std::optional<LayerPropertyKeyframeDetails>& details) {
+    if (!details.has_value()) return true;
+    const __int128 left = static_cast<__int128>(details->time.value)
+        * static_cast<__int128>(value.time.scale);
+    const __int128 right = static_cast<__int128>(value.time.value)
+        * static_cast<__int128>(details->time.scale);
+    return details->property_locator == value.property_locator && left == right;
+  };
+  if (!bound(value.before) || !bound(value.after)) {
+    invalid_argument("keyframe mutation snapshots are not bound to the target");
+  }
+  const std::string before = value.before.has_value()
+      ? canonical_keyframe_details_value(*value.before) : "null";
+  const std::string after = value.after.has_value()
+      ? canonical_keyframe_details_value(*value.after) : "null";
+  const std::string time = "{\"scale\":" + std::to_string(value.time.scale)
+      + ",\"secondsRational\":"
+      + json_string(canonical_seconds_rational(value.time.value, value.time.scale))
+      + ",\"value\":" + std::to_string(value.time.value) + "}";
+  return "{\"afterKeyframe\":" + after
+      + ",\"beforeKeyframe\":" + before
+      + ",\"changed\":true,\"keyframeCountAfter\":"
+      + std::to_string(value.keyframe_count_after)
+      + ",\"keyframeCountBefore\":"
+      + std::to_string(value.keyframe_count_before)
+      + ",\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"propertyLocator\":" + locator_json(value.property_locator)
+      + ",\"time\":" + time + "}";
+}
+
 std::uint32_t read_be32(Bytes bytes) {
   return (static_cast<std::uint32_t>(bytes[0]) << 24U)
       | (static_cast<std::uint32_t>(bytes[1]) << 16U)
@@ -3637,6 +4075,51 @@ std::string digest_layer_property_set_postcondition(
   return sha256_hex(
       "{\"capabilityId\":\"ae.layer.property.set\",\"capabilityVersion\":1,\"value\":"
       + canonical_layer_property_changed_value(value) + "}");
+}
+
+std::string digest_layer_property_keyframe_details_postcondition(
+    const LayerPropertyKeyframeDetails& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.property.keyframe.details.read\","
+      "\"capabilityVersion\":1,\"value\":"
+      + canonical_keyframe_details_value(value) + "}");
+}
+
+std::string digest_layer_property_keyframe_write_arguments(
+    std::string_view capability_id,
+    const ObjectLocator& layer_locator,
+    const ObjectLocator& property_locator,
+    const LayerPropertySampleTime& time,
+    const LayerPropertyValue& value,
+    std::string_view in_interpolation,
+    std::string_view out_interpolation,
+    const std::vector<LayerPropertyKeyframeDimensionEase>& temporal_ease,
+    std::string_view behavior,
+    const std::optional<bool>& behavior_enabled,
+    std::string_view idempotency_key) {
+  return sha256_hex(canonical_keyframe_write_arguments(
+      capability_id,
+      layer_locator,
+      property_locator,
+      time,
+      value,
+      in_interpolation,
+      out_interpolation,
+      temporal_ease,
+      behavior,
+      behavior_enabled,
+      idempotency_key));
+}
+
+std::string digest_layer_property_keyframe_write_postcondition(
+    std::string_view capability_id,
+    const LayerPropertyKeyframeChanged& value) {
+  if (!keyframe_write_capability(capability_id)) {
+    invalid_argument("invalid keyframe postcondition capability");
+  }
+  return sha256_hex("{\"capabilityId\":" + json_string(capability_id)
+      + ",\"capabilityVersion\":1,\"value\":"
+      + canonical_keyframe_changed_value(value) + "}");
 }
 
 std::vector<ParsedRequest> FrameDecoder::push(std::span<const std::uint8_t> chunk) {
@@ -4663,6 +5146,275 @@ LayerDetails synthetic_layer_timeline_details(
       {0, 1, "0"}, {5, 1, "5"}, {0, 1, "0"}, {1, 1, "1"}};
 }
 
+enum class KeyframeDescriptorKind {
+  kDetails,
+  kAdd,
+  kValueSet,
+  kInterpolationSet,
+  kTemporalEaseSet,
+  kBehaviorSet,
+  kDelete,
+};
+
+std::string keyframe_primitive_value_schema() {
+  static constexpr std::string_view decimal =
+      R"({"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"})";
+  return "{\"oneOf\":[{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"kind\",\"value\"],\"properties\":{\"kind\":{\"const\":\"scalar\"},"
+      "\"value\":" + std::string(decimal) + "}},{\"type\":\"object\","
+      "\"additionalProperties\":false,\"required\":[\"kind\",\"components\"],"
+      "\"properties\":{\"kind\":{\"const\":\"vector\"},\"components\":{\"type\":\"array\","
+      "\"minItems\":2,\"maxItems\":3,\"items\":" + std::string(decimal)
+      + "}}},{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"kind\",\"alpha\",\"red\",\"green\",\"blue\"],"
+      "\"properties\":{\"kind\":{\"const\":\"color\"},\"alpha\":"
+      + std::string(decimal) + ",\"red\":" + std::string(decimal)
+      + ",\"green\":" + std::string(decimal) + ",\"blue\":"
+      + std::string(decimal) + "}}]}";
+}
+
+std::string keyframe_ease_schema() {
+  static constexpr std::string_view decimal =
+      R"({"type":"string","minLength":1,"maxLength":32,"pattern":"^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"})";
+  return "{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"speed\",\"influence\"],\"properties\":{\"speed\":"
+      + std::string(decimal) + ",\"influence\":" + std::string(decimal)
+      + "},\"x-invariant\":\"speed-and-influence-are-finite-and-influence-is-within-0-to-100\"}";
+}
+
+std::string keyframe_ease_dimension_schema() {
+  return "{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"dimension\",\"inEase\",\"outEase\"],\"properties\":{"
+      "\"dimension\":{\"type\":\"integer\",\"minimum\":0,\"maximum\":3},"
+      "\"inEase\":" + keyframe_ease_schema()
+      + ",\"outEase\":" + keyframe_ease_schema() + "}}";
+}
+
+std::string keyframe_details_schema() {
+  const std::string stream = layer_timeline_locator_schema(R"({"const":"stream"})");
+  return "{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"propertyLocator\",\"time\",\"temporalDimensionality\","
+      "\"valueType\",\"value\",\"inInterpolation\",\"outInterpolation\","
+      "\"temporalEaseDimensions\",\"behaviors\"],\"properties\":{"
+      "\"propertyLocator\":" + stream + ",\"time\":"
+      + layer_timeline_exact_time_schema()
+      + ",\"temporalDimensionality\":{\"type\":\"integer\",\"minimum\":1,\"maximum\":4},"
+      "\"valueType\":{\"enum\":[\"one-d\",\"two-d\",\"two-d-spatial\","
+      "\"three-d\",\"three-d-spatial\",\"color\"]},\"value\":"
+      + keyframe_primitive_value_schema()
+      + ",\"inInterpolation\":{\"enum\":[\"none\",\"linear\",\"bezier\",\"hold\"]},"
+      "\"outInterpolation\":{\"enum\":[\"none\",\"linear\",\"bezier\",\"hold\"]},"
+      "\"temporalEaseDimensions\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,"
+      "\"items\":" + keyframe_ease_dimension_schema() + "},\"behaviors\":{"
+      "\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"temporalContinuous\",\"temporalAutoBezier\","
+      "\"spatialContinuous\",\"spatialAutoBezier\",\"roving\"],\"properties\":{"
+      "\"temporalContinuous\":{\"type\":\"boolean\"},"
+      "\"temporalAutoBezier\":{\"type\":\"boolean\"},"
+      "\"spatialContinuous\":{\"type\":\"boolean\"},"
+      "\"spatialAutoBezier\":{\"type\":\"boolean\"},"
+      "\"roving\":{\"type\":\"boolean\"}}}},"
+      "\"x-invariant\":\"value-matches-valueType-and-temporal-ease-dimensions-match-temporalDimensionality\"}";
+}
+
+std::string keyframe_mutation_result_schema() {
+  const std::string details = keyframe_details_schema();
+  const std::string nullable = "{\"oneOf\":[{\"type\":\"null\"}," + details + "]}";
+  return "{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"changed\",\"layerLocator\",\"propertyLocator\",\"time\","
+      "\"keyframeCountBefore\",\"keyframeCountAfter\",\"beforeKeyframe\","
+      "\"afterKeyframe\"],\"properties\":{\"changed\":{\"const\":true},"
+      "\"layerLocator\":" + layer_timeline_locator_schema(R"({"const":"layer"})")
+      + ",\"propertyLocator\":"
+      + layer_timeline_locator_schema(R"({"const":"stream"})")
+      + ",\"time\":" + layer_timeline_exact_time_schema()
+      + ",\"keyframeCountBefore\":{\"type\":\"integer\",\"minimum\":0,"
+      "\"maximum\":9007199254740991},\"keyframeCountAfter\":{\"type\":\"integer\","
+      "\"minimum\":0,\"maximum\":9007199254740991},\"beforeKeyframe\":"
+      + nullable + ",\"afterKeyframe\":" + nullable
+      + "},\"x-invariant\":\"before-and-after-keyframes-are-bound-to-propertyLocator-and-time\"}";
+}
+
+std::string keyframe_descriptor(
+    const CapabilitiesSuccess& response,
+    KeyframeDescriptorKind kind) {
+  const ObjectLocator layer = synthetic_layer_timeline_locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const ObjectLocator property = synthetic_layer_timeline_locator(
+      "stream", "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+  const LayerPropertyKeyframeDetails details{
+      property,
+      {1, 1},
+      "one-d",
+      LayerPropertyScalarValue{"50"},
+      1,
+      "linear",
+      "linear",
+      {{0, {"0", "33.333"}, {"0", "33.333"}}},
+      {false, false, false, false, false}};
+  std::string id;
+  std::string summary;
+  std::string side_effect;
+  std::string preconditions;
+  std::string requirement;
+  std::string input;
+  std::string arguments;
+  std::string positive;
+  std::string digest;
+  std::string_view configured;
+  bool mutating = kind != KeyframeDescriptorKind::kDetails;
+  const std::string common = "\"layerLocator\":" + locator_json(layer)
+      + ",\"propertyLocator\":" + locator_json(property)
+      + ",\"time\":{\"scale\":1,\"value\":1},"
+        "\"idempotencyKey\":\"synthetic-keyframe-0001\"";
+  const std::string write_prefix = "{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"layerLocator\",\"propertyLocator\",\"time\","
+      "\"idempotencyKey\"";
+  const std::string write_properties = "\"properties\":{\"layerLocator\":"
+      + layer_timeline_locator_schema(R"({"const":"layer"})")
+      + ",\"propertyLocator\":"
+      + layer_timeline_locator_schema(R"({"const":"stream"})")
+      + ",\"time\":" + layer_timeline_time_input_schema(false)
+      + ",\"idempotencyKey\":" + layer_timeline_idempotency_schema();
+  switch (kind) {
+    case KeyframeDescriptorKind::kDetails:
+      id = kLayerPropertyKeyframeDetailsReadCapability;
+      summary = "Read one After Effects property keyframe by exact composition time.";
+      side_effect = "Reads one native keyframe without changing After Effects state.";
+      preconditions = R"(["An After Effects project must be open.","propertyLocator must identify a keyframed primitive leaf stream.","A keyframe must exist at the exact requested composition time."])";
+      requirement = "aemcp.requirement.native.layer-property-keyframe-details-read";
+      digest = "254ec7933e9628b6c4fba4cc60e183331e4edc9f723c0ccb3f1e37619b7c5249";
+      configured = response.layer_property_keyframe_details_read_contract_digest;
+      input = "{\"type\":\"object\",\"additionalProperties\":false,"
+          "\"required\":[\"propertyLocator\",\"time\"],\"properties\":{"
+          "\"propertyLocator\":"
+          + layer_timeline_locator_schema(R"({"const":"stream"})")
+          + ",\"time\":" + layer_timeline_time_input_schema(false) + "}}";
+      arguments = "{\"propertyLocator\":" + locator_json(property)
+          + ",\"time\":{\"scale\":1,\"value\":1}}";
+      positive = canonical_keyframe_details_value(details);
+      break;
+    case KeyframeDescriptorKind::kAdd:
+    case KeyframeDescriptorKind::kValueSet:
+      id = kind == KeyframeDescriptorKind::kAdd
+          ? std::string(kLayerPropertyKeyframeAddCapability)
+          : std::string(kLayerPropertyKeyframeValueSetCapability);
+      summary = kind == KeyframeDescriptorKind::kAdd
+          ? "Add one After Effects property keyframe at exact composition time."
+          : "Set one After Effects property keyframe value.";
+      side_effect = kind == KeyframeDescriptorKind::kAdd
+          ? "Adds one native keyframe and creates one After Effects Undo step."
+          : "Changes one native keyframe value and creates one After Effects Undo step.";
+      preconditions = kind == KeyframeDescriptorKind::kAdd
+          ? R"(["Both locators must be current and identify one keyframeable primitive leaf stream.","No keyframe may exist at the exact requested composition time.","value must match the property value type."])"
+          : R"(["Both locators must be current and identify one keyframed primitive leaf stream.","A keyframe must exist at the exact requested composition time.","value must match the property value type and differ from the current value."])";
+      requirement = kind == KeyframeDescriptorKind::kAdd
+          ? "aemcp.requirement.native.layer-property-keyframe-add"
+          : "aemcp.requirement.native.layer-property-keyframe-value-set";
+      digest = "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e";
+      configured = kind == KeyframeDescriptorKind::kAdd
+          ? response.layer_property_keyframe_add_contract_digest
+          : response.layer_property_keyframe_value_set_contract_digest;
+      input = write_prefix + ",\"value\"]," + write_properties
+          + ",\"value\":" + keyframe_primitive_value_schema()
+          + "},\"x-invariant\":\"layerLocator-and-propertyLocator-share-one-current-context\"}";
+      arguments = "{" + common + ",\"value\":{\"kind\":\"scalar\",\"value\":\"50\"}}";
+      positive = canonical_keyframe_changed_value(
+          {true, layer, property, {1, 1}, 0, 1, std::nullopt, details});
+      break;
+    case KeyframeDescriptorKind::kInterpolationSet:
+      id = kLayerPropertyKeyframeInterpolationSetCapability;
+      summary = "Set incoming and outgoing interpolation for one After Effects property keyframe.";
+      side_effect = "Changes one native keyframe interpolation and creates one After Effects Undo step.";
+      preconditions = R"(["Both locators must be current and identify one keyframed primitive leaf stream.","A keyframe must exist at the exact requested composition time.","The requested interpolation pair must differ from the current pair."])";
+      requirement = "aemcp.requirement.native.layer-property-keyframe-interpolation-set";
+      digest = "42e8e12224bd1653fa8ca9f775c97553d61c0c2e60b3b2dcf76a8fc68deb2a20";
+      configured = response.layer_property_keyframe_interpolation_set_contract_digest;
+      input = write_prefix + ",\"inInterpolation\",\"outInterpolation\"],"
+          + write_properties + ",\"inInterpolation\":{\"enum\":[\"linear\",\"bezier\",\"hold\"]},"
+          "\"outInterpolation\":{\"enum\":[\"linear\",\"bezier\",\"hold\"]}},"
+          "\"x-invariant\":\"layerLocator-and-propertyLocator-share-one-current-context\"}";
+      arguments = "{" + common + ",\"inInterpolation\":\"bezier\","
+          "\"outInterpolation\":\"bezier\"}";
+      positive = canonical_keyframe_changed_value(
+          {true, layer, property, {1, 1}, 1, 1, details, details});
+      break;
+    case KeyframeDescriptorKind::kTemporalEaseSet:
+      id = kLayerPropertyKeyframeTemporalEaseSetCapability;
+      summary = "Set typed temporal ease dimensions for one After Effects property keyframe.";
+      side_effect = "Changes one native keyframe temporal ease and creates one After Effects Undo step.";
+      preconditions = R"(["Both locators must be current and identify one keyframed primitive leaf stream.","A keyframe must exist at the exact requested composition time.","dimensions must cover the property's temporal dimensions in zero-based order and differ from current ease."])";
+      requirement = "aemcp.requirement.native.layer-property-keyframe-temporal-ease-set";
+      digest = "a73d70029c9a470b57d20fe54517cb36bb7fe249847c49da294f1db2d1c4bc8f";
+      configured = response.layer_property_keyframe_temporal_ease_set_contract_digest;
+      input = write_prefix + ",\"dimensions\"]," + write_properties
+          + ",\"dimensions\":{\"type\":\"array\",\"minItems\":1,\"maxItems\":4,"
+          "\"items\":" + keyframe_ease_dimension_schema()
+          + ",\"x-invariant\":\"dimensions-are-contiguous-and-zero-based\"}},"
+          "\"x-invariant\":\"layerLocator-and-propertyLocator-share-one-current-context\"}";
+      arguments = "{" + common + ",\"dimensions\":[{\"dimension\":0,"
+          "\"inEase\":{\"influence\":\"33.333\",\"speed\":\"0\"},"
+          "\"outEase\":{\"influence\":\"33.333\",\"speed\":\"0\"}}]}";
+      positive = canonical_keyframe_changed_value(
+          {true, layer, property, {1, 1}, 1, 1, details, details});
+      break;
+    case KeyframeDescriptorKind::kBehaviorSet:
+      id = kLayerPropertyKeyframeBehaviorSetCapability;
+      summary = "Set one behavior flag on an After Effects property keyframe.";
+      side_effect = "Changes one native keyframe behavior and creates one After Effects Undo step.";
+      preconditions = R"(["Both locators must be current and identify one keyframed primitive leaf stream.","A keyframe must exist at the exact requested composition time.","The requested behavior state must be supported and differ from current state."])";
+      requirement = "aemcp.requirement.native.layer-property-keyframe-behavior-set";
+      digest = "e2ff59d765613db12468d2140d8c937fd1ceb5def9f632877b18b664b6d6bf5c";
+      configured = response.layer_property_keyframe_behavior_set_contract_digest;
+      input = write_prefix + ",\"behavior\",\"enabled\"]," + write_properties
+          + ",\"behavior\":{\"enum\":[\"temporal-continuous\",\"temporal-auto-bezier\","
+          "\"spatial-continuous\",\"spatial-auto-bezier\",\"roving\"]},"
+          "\"enabled\":{\"type\":\"boolean\"}},\"x-invariant\":"
+          "\"layerLocator-and-propertyLocator-share-one-current-context\"}";
+      arguments = "{" + common + ",\"behavior\":\"temporal-continuous\","
+          "\"enabled\":true}";
+      positive = canonical_keyframe_changed_value(
+          {true, layer, property, {1, 1}, 1, 1, details, details});
+      break;
+    case KeyframeDescriptorKind::kDelete:
+      id = kLayerPropertyKeyframeDeleteCapability;
+      summary = "Delete one After Effects property keyframe at exact composition time.";
+      side_effect = "Deletes one native keyframe and creates one After Effects Undo step.";
+      preconditions = R"(["Both locators must be current and identify one keyframed primitive leaf stream.","A keyframe must exist at the exact requested composition time."])";
+      requirement = "aemcp.requirement.native.layer-property-keyframe-delete";
+      digest = "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9";
+      configured = response.layer_property_keyframe_delete_contract_digest;
+      input = write_prefix + "]," + write_properties
+          + "},\"x-invariant\":\"layerLocator-and-propertyLocator-share-one-current-context\"}";
+      arguments = "{" + common + "}";
+      positive = canonical_keyframe_changed_value(
+          {true, layer, property, {1, 1}, 1, 0, details, std::nullopt});
+      break;
+  }
+  if (response.detail == CapabilityDetail::kFull && configured != digest) {
+    invalid_argument("keyframe authoring contract digest does not match the compiled descriptor");
+  }
+  return package_descriptor(response, {
+      id,
+      summary,
+      side_effect,
+      preconditions,
+      "aemcp.contract." + id + ".input.v1",
+      "aemcp.contract." + id + ".result.v1",
+      requirement,
+      input,
+      kind == KeyframeDescriptorKind::kDetails
+          ? keyframe_details_schema() : keyframe_mutation_result_schema(),
+      arguments,
+      "aemcp-example-keyframe-stale",
+      "STALE_LOCATOR",
+      "refresh-locator",
+      mutating,
+      "aemcp-example-keyframe-positive",
+      positive},
+      configured);
+}
+
 enum class LayerTimelineDescriptorKind {
   kDetails,
   kName,
@@ -5263,7 +6015,35 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_layer_duplicate) {
     if (needs_comma) items.push_back(',');
     items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kDuplicate);
+    needs_comma = true;
   }
+  const auto append_keyframe = [&](bool include, KeyframeDescriptorKind kind) {
+    if (!include) return;
+    if (needs_comma) items.push_back(',');
+    items += keyframe_descriptor(response, kind);
+    needs_comma = true;
+  };
+  append_keyframe(
+      response.include_layer_property_keyframe_details_read,
+      KeyframeDescriptorKind::kDetails);
+  append_keyframe(
+      response.include_layer_property_keyframe_add,
+      KeyframeDescriptorKind::kAdd);
+  append_keyframe(
+      response.include_layer_property_keyframe_value_set,
+      KeyframeDescriptorKind::kValueSet);
+  append_keyframe(
+      response.include_layer_property_keyframe_interpolation_set,
+      KeyframeDescriptorKind::kInterpolationSet);
+  append_keyframe(
+      response.include_layer_property_keyframe_temporal_ease_set,
+      KeyframeDescriptorKind::kTemporalEaseSet);
+  append_keyframe(
+      response.include_layer_property_keyframe_behavior_set,
+      KeyframeDescriptorKind::kBehaviorSet);
+  append_keyframe(
+      response.include_layer_property_keyframe_delete,
+      KeyframeDescriptorKind::kDelete);
   items.push_back(']');
   const bool complete_full_registry = response.detail == CapabilityDetail::kFull
       && response.include_project_summary
@@ -5295,7 +6075,14 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
       && response.include_layer_stretch_set
       && response.include_layer_order_set
       && response.include_layer_parent_set
-      && response.include_layer_duplicate;
+      && response.include_layer_duplicate
+      && response.include_layer_property_keyframe_details_read
+      && response.include_layer_property_keyframe_add
+      && response.include_layer_property_keyframe_value_set
+      && response.include_layer_property_keyframe_interpolation_set
+      && response.include_layer_property_keyframe_temporal_ease_set
+      && response.include_layer_property_keyframe_behavior_set
+      && response.include_layer_property_keyframe_delete;
   if (complete_full_registry) {
     const std::string encoded_digest = sha256_hex(
         canonical_json(JsonParser(items).parse()));
@@ -6074,6 +6861,36 @@ std::vector<std::uint8_t> encode_layer_property_set_success(
   return frame_output(std::move(json));
 }
 
+std::vector<std::uint8_t> encode_layer_property_keyframe_details_success(
+    const LayerPropertyKeyframeDetailsSuccess& response) {
+  return encode_native_value_success(
+      response,
+      kLayerPropertyKeyframeDetailsReadCapability,
+      "layer-property-keyframe-details-read",
+      response.value.property_locator,
+      canonical_keyframe_details_value(response.value),
+      digest_layer_property_keyframe_details_postcondition(response.value),
+      false);
+}
+
+std::vector<std::uint8_t> encode_layer_property_keyframe_write_success(
+    const LayerPropertyKeyframeWriteSuccess& response) {
+  if (!keyframe_write_capability(response.capability_id)) {
+    invalid_argument("invalid keyframe write success capability");
+  }
+  std::string postcondition_kind = response.capability_id.substr(3);
+  std::replace(postcondition_kind.begin(), postcondition_kind.end(), '.', '-');
+  return encode_native_value_success(
+      response,
+      response.capability_id,
+      postcondition_kind,
+      response.value.property_locator,
+      canonical_keyframe_changed_value(response.value),
+      digest_layer_property_keyframe_write_postcondition(
+          response.capability_id, response.value),
+      true);
+}
+
 std::vector<std::uint8_t> encode_cancel_success(const CancelSuccess& response) {
   require_request_id(response.request_id);
   require_request_id(response.target_request_id);
@@ -6177,7 +6994,10 @@ std::vector<std::uint8_t> encode_error_response(const ErrorResponse& response) {
     const bool property_locator_precondition = response.details.has_value()
         && response.details->capability_id.has_value()
         && (*response.details->capability_id == kLayerPropertySetCapability
-          || *response.details->capability_id == kLayerPropertyKeyframesListCapability)
+          || *response.details->capability_id == kLayerPropertyKeyframesListCapability
+          || *response.details->capability_id
+            == kLayerPropertyKeyframeDetailsReadCapability
+          || keyframe_write_capability(*response.details->capability_id))
         && response.details->field.has_value()
         && *response.details->field == "params.arguments.propertyLocator";
     if (response.code != RpcErrorCode::kPreconditionFailed
