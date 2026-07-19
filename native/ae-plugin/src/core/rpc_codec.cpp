@@ -3518,10 +3518,12 @@ std::string canonical_keyframe_changed_value(
   }
   const auto bound = [&](const std::optional<LayerPropertyKeyframeDetails>& details) {
     if (!details.has_value()) return true;
-    const __int128 left = static_cast<__int128>(details->time.value)
-        * static_cast<__int128>(value.time.scale);
-    const __int128 right = static_cast<__int128>(value.time.value)
-        * static_cast<__int128>(details->time.scale);
+    // canonical_keyframe_time_input narrows each value to int32 and each scale
+    // to uint32, so both signed cross-products fit exactly inside int64.
+    const std::int64_t left = static_cast<std::int64_t>(details->time.value)
+        * static_cast<std::int64_t>(value.time.scale);
+    const std::int64_t right = static_cast<std::int64_t>(value.time.value)
+        * static_cast<std::int64_t>(details->time.scale);
     return details->property_locator == value.property_locator && left == right;
   };
   if (!bound(value.before) || !bound(value.after)) {

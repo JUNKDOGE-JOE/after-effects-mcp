@@ -6852,20 +6852,22 @@ class AegpHostApi final : public HostApi {
       const A_Time& actual,
       const LayerPropertySampleTime& requested) noexcept {
     if (actual.scale <= 0 || requested.scale == 0) return false;
-    return static_cast<__int128>(actual.value)
-            * static_cast<__int128>(requested.scale)
-        == static_cast<__int128>(requested.value)
-            * static_cast<__int128>(actual.scale);
+    // AE's A_Time fields and validated wire times are bounded to 32-bit
+    // values/scales, so their signed cross-products fit exactly in int64.
+    return static_cast<std::int64_t>(actual.value)
+            * static_cast<std::int64_t>(requested.scale)
+        == static_cast<std::int64_t>(requested.value)
+            * static_cast<std::int64_t>(actual.scale);
   }
 
   [[nodiscard]] static bool keyframe_time_equal(
       const LayerPropertySampleTime& actual,
       const LayerPropertySampleTime& requested) noexcept {
     if (actual.scale == 0 || requested.scale == 0) return false;
-    return static_cast<__int128>(actual.value)
-            * static_cast<__int128>(requested.scale)
-        == static_cast<__int128>(requested.value)
-            * static_cast<__int128>(actual.scale);
+    return static_cast<std::int64_t>(actual.value)
+            * static_cast<std::int64_t>(requested.scale)
+        == static_cast<std::int64_t>(requested.value)
+            * static_cast<std::int64_t>(actual.scale);
   }
 
   [[nodiscard]] static std::optional<AEGP_KeyframeIndex> find_keyframe_at_time(
