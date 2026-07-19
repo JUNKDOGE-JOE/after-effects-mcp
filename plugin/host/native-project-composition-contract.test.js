@@ -377,6 +377,62 @@ test('#157 read tampering is safe and write tampering remains side-effect-sensit
     ), false);
 });
 
+test('#157 interpolation accepts only AE bezier in-ease influence normalization', () => {
+    const vector = keyframeCases()['ae.layer.property.keyframe.interpolation.set'];
+    const contract = packageContracts.getContract(
+        'ae.layer.property.keyframe.interpolation.set',
+    );
+    const normalized = structuredClone(vector.value);
+    normalized.beforeKeyframe.temporalEaseDimensions[0].inEase.influence =
+        '16.666666666999998';
+    normalized.beforeKeyframe.temporalEaseDimensions[0].outEase.influence =
+        '16.666666666999998';
+    normalized.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '0';
+    normalized.afterKeyframe.temporalEaseDimensions[0].outEase.influence =
+        '16.666666666999998';
+
+    assert.equal(
+        contract.validValue(normalized, vector.arguments, HOST, SESSION),
+        true,
+    );
+
+    const drifts = {
+        value(value) { value.afterKeyframe.value = { kind: 'scalar', value: '2' }; },
+        count(value) { value.keyframeCountAfter += 1; },
+        inSpeed(value) { value.afterKeyframe.temporalEaseDimensions[0].inEase.speed = '1'; },
+        outSpeed(value) { value.afterKeyframe.temporalEaseDimensions[0].outEase.speed = '1'; },
+        outInfluence(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].outEase.influence = '1';
+        },
+        inInfluenceNonzero(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '1';
+        },
+        dimension(value) { value.afterKeyframe.temporalEaseDimensions[0].dimension = 1; },
+    };
+    for (const [name, mutate] of Object.entries(drifts)) {
+        const drift = structuredClone(normalized);
+        mutate(drift);
+        assert.equal(
+            contract.validValue(drift, vector.arguments, HOST, SESSION),
+            false,
+            name,
+        );
+    }
+
+    const nonBezier = structuredClone(normalized);
+    nonBezier.afterKeyframe.inInterpolation = 'linear';
+    assert.equal(
+        contract.validValue(
+            nonBezier,
+            { ...vector.arguments, inInterpolation: 'linear' },
+            HOST,
+            SESSION,
+        ),
+        false,
+        'nonBezier',
+    );
+});
+
 test('#155 layer contracts bind locators, readbacks, replay, and nullable parent refresh', () => {
     const vectors = cases();
     const writes = [

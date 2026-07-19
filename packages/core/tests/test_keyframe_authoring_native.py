@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from pydantic import ValidationError
 
 from ae_mcp import schemas
 from ae_mcp.annotations import VERB_ANNOTATIONS
@@ -493,6 +494,127 @@ async def test_write_rejects_unrelated_keyframe_state_change_after_dispatch():
             deadline_unix_ms=deadline(),
         )
     assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+
+
+@pytest.mark.asyncio
+async def test_interpolation_accepts_ae_ease_normalization():
+    backend = PackageBackend()
+    original_value = backend._value
+
+    def normalized_value(request: N.NativeInvokeRequest) -> dict[str, Any]:
+        value = original_value(request)
+        if request.capability_id == K.KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID:
+            value["beforeKeyframe"]["temporalEaseDimensions"] = [
+                dimension(
+                    in_influence="16.666666666999998",
+                    out_influence="16.666666666999998",
+                )
+            ]
+            value["afterKeyframe"]["temporalEaseDimensions"] = [
+                dimension(
+                    in_influence="0",
+                    out_influence="16.666666666999998",
+                )
+            ]
+        return value
+
+    backend._value = normalized_value  # type: ignore[method-assign]
+    execution = await K.invoke_keyframe_interpolation_set(
+        backend,
+        request_id="keyframe-interpolation-normalized-ease-1",
+        layer_locator=locator("layer", LAYER),
+        property_locator=locator("stream", STREAM),
+        time={"value": 12, "scale": 24},
+        in_interpolation="bezier",
+        out_interpolation="hold",
+        idempotency_key="keyframe-interpolation-normalized-ease-0001",
+        deadline_unix_ms=deadline(),
+    )
+    assert execution.value.before_keyframe is not None
+    assert execution.value.after_keyframe is not None
+    assert (
+        execution.value.before_keyframe.temporal_ease_dimensions[0].in_ease.influence
+        == "16.666666666999998"
+    )
+    assert (
+        execution.value.after_keyframe.temporal_ease_dimensions[0].in_ease.influence
+        == "0"
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "drift",
+    [
+        "value",
+        "count",
+        "in_speed",
+        "out_speed",
+        "out_influence",
+        "in_influence_nonzero",
+        "non_bezier",
+        "dimension",
+    ],
+)
+async def test_interpolation_rejects_unrelated_state_drift(drift: str):
+    backend = PackageBackend()
+    original_value = backend._value
+
+    def tampered_value(request: N.NativeInvokeRequest) -> dict[str, Any]:
+        value = original_value(request)
+        if request.capability_id == K.KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID:
+            value["beforeKeyframe"]["temporalEaseDimensions"] = [
+                dimension(
+                    in_influence="16.666666666999998",
+                    out_influence="16.666666666999998",
+                )
+            ]
+            value["afterKeyframe"]["temporalEaseDimensions"] = [
+                dimension(
+                    in_influence="0",
+                    out_influence="16.666666666999998",
+                )
+            ]
+            if drift == "value":
+                value["afterKeyframe"]["value"] = {"kind": "scalar", "value": "2"}
+            elif drift == "count":
+                value["keyframeCountAfter"] += 1
+            elif drift == "in_speed":
+                value["afterKeyframe"]["temporalEaseDimensions"][0]["inEase"][
+                    "speed"
+                ] = "1"
+            elif drift == "out_speed":
+                value["afterKeyframe"]["temporalEaseDimensions"][0]["outEase"][
+                    "speed"
+                ] = "1"
+            elif drift == "out_influence":
+                value["afterKeyframe"]["temporalEaseDimensions"][0]["outEase"][
+                    "influence"
+                ] = "1"
+            elif drift == "in_influence_nonzero":
+                value["afterKeyframe"]["temporalEaseDimensions"][0]["inEase"][
+                    "influence"
+                ] = "1"
+            elif drift == "dimension":
+                value["afterKeyframe"]["temporalEaseDimensions"][0]["dimension"] = 1
+        return value
+
+    backend._value = tampered_value  # type: ignore[method-assign]
+    expected_error = ValidationError if drift == "dimension" else N.NativeBackendError
+    with pytest.raises(expected_error) as raised:
+        await K.invoke_keyframe_interpolation_set(
+            backend,
+            request_id=f"keyframe-interpolation-{drift}-drift-1",
+            layer_locator=locator("layer", LAYER),
+            property_locator=locator("stream", STREAM),
+            time={"value": 12, "scale": 24},
+            in_interpolation="linear" if drift == "non_bezier" else "bezier",
+            out_interpolation="hold",
+            idempotency_key=f"keyframe-interpolation-{drift}-drift-0001",
+            deadline_unix_ms=deadline(),
+        )
+    if drift != "dimension":
+        assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
 
 
 @pytest.mark.asyncio

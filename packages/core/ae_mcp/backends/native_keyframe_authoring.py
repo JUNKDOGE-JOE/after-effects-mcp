@@ -776,6 +776,40 @@ def _details_equal_except(
     return before.model_dump(exclude=excluded) == after.model_dump(exclude=excluded)
 
 
+def _interpolation_ease_normalization_allowed(
+    before: KeyframeDetails,
+    after: KeyframeDetails,
+    requested_in_interpolation: str,
+) -> bool:
+    before_ease = before.temporal_ease_dimensions
+    after_ease = after.temporal_ease_dimensions
+    if len(before_ease) != len(after_ease):
+        return False
+    for before_dimension, after_dimension in zip(before_ease, after_ease):
+        in_influence_changed = Decimal(before_dimension.in_ease.influence) != Decimal(
+            after_dimension.in_ease.influence
+        )
+        if (
+            before_dimension.dimension != after_dimension.dimension
+            or Decimal(before_dimension.in_ease.speed)
+            != Decimal(after_dimension.in_ease.speed)
+            or Decimal(before_dimension.out_ease.speed)
+            != Decimal(after_dimension.out_ease.speed)
+            or Decimal(before_dimension.out_ease.influence)
+            != Decimal(after_dimension.out_ease.influence)
+            or (
+                in_influence_changed
+                and (
+                    requested_in_interpolation != "bezier"
+                    or after.in_interpolation != "bezier"
+                    or Decimal(after_dimension.in_ease.influence) != 0
+                )
+            )
+        ):
+            return False
+    return True
+
+
 async def invoke_keyframe_add(
     backend: NativeInvokeBackend,
     *,
@@ -930,11 +964,17 @@ async def invoke_keyframe_interpolation_set(
         == (after.in_interpolation, after.out_interpolation)
         or after.in_interpolation != arguments.in_interpolation
         or after.out_interpolation != arguments.out_interpolation
+        or not _interpolation_ease_normalization_allowed(
+            before,
+            after,
+            arguments.in_interpolation,
+        )
         or not _details_equal_except(
             before,
             after,
             "in_interpolation",
             "out_interpolation",
+            "temporal_ease_dimensions",
         )
     ):
         raise _possibly_side_effecting(

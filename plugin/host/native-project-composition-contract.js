@@ -723,6 +723,24 @@ function keyframeDetailsEqualExcept(left, right, excluded) {
     return JSON.stringify(canonicalize(leftValue)) === JSON.stringify(canonicalize(rightValue));
 }
 
+function interpolationEaseNormalizationAllowed(before, after, requestedInInterpolation) {
+    const beforeEase = before.temporalEaseDimensions;
+    const afterEase = after.temporalEaseDimensions;
+    return beforeEase.length === afterEase.length && beforeEase.every(function (item, index) {
+        const other = afterEase[index];
+        const inInfluenceChanged = Number(item.inEase.influence)
+            !== Number(other.inEase.influence);
+        return item.dimension === other.dimension
+            && Number(item.inEase.speed) === Number(other.inEase.speed)
+            && Number(item.outEase.speed) === Number(other.outEase.speed)
+            && Number(item.outEase.influence) === Number(other.outEase.influence)
+            && (!inInfluenceChanged
+                || (requestedInInterpolation === 'bezier'
+                    && after.inInterpolation === 'bezier'
+                    && Number(other.inEase.influence) === 0));
+    });
+}
+
 function validKeyframeWriteValue(kind, value, argumentsValue, hostInstanceId, sessionId) {
     if (!validKeyframeMutation(value, argumentsValue, hostInstanceId, sessionId)) return false;
     const before = value.beforeKeyframe;
@@ -748,8 +766,13 @@ function validKeyframeWriteValue(kind, value, argumentsValue, hostInstanceId, se
                 || before.outInterpolation !== after.outInterpolation)
             && after.inInterpolation === argumentsValue.inInterpolation
             && after.outInterpolation === argumentsValue.outInterpolation
+            && interpolationEaseNormalizationAllowed(
+                before, after, argumentsValue.inInterpolation,
+            )
             && keyframeDetailsEqualExcept(
-                before, after, ['inInterpolation', 'outInterpolation'],
+                before, after, [
+                    'inInterpolation', 'outInterpolation', 'temporalEaseDimensions',
+                ],
             );
     }
     if (kind === 'ease') {
