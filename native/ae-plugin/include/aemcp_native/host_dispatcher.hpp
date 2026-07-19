@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <deque>
+#include <memory>
 #include <mutex>
 #include <numeric>
 #include <optional>
@@ -63,7 +64,23 @@ inline constexpr std::string_view kProjectItemLabelSetCapability =
     "ae.project.item.label.set";
 inline constexpr std::string_view kCompositionDuplicateCapability =
     "ae.composition.duplicate";
-inline constexpr std::array<std::string_view, 22> kAdvertisedNativeCapabilities{
+inline constexpr std::string_view kLayerDetailsReadCapability =
+    "ae.layer.details.read";
+inline constexpr std::string_view kLayerNameSetCapability =
+    "ae.layer.name.set";
+inline constexpr std::string_view kLayerRangeSetCapability =
+    "ae.layer.range.set";
+inline constexpr std::string_view kLayerStartTimeSetCapability =
+    "ae.layer.start-time.set";
+inline constexpr std::string_view kLayerStretchSetCapability =
+    "ae.layer.stretch.set";
+inline constexpr std::string_view kLayerOrderSetCapability =
+    "ae.layer.order.set";
+inline constexpr std::string_view kLayerParentSetCapability =
+    "ae.layer.parent.set";
+inline constexpr std::string_view kLayerDuplicateCapability =
+    "ae.layer.duplicate";
+inline constexpr std::array<std::string_view, 30> kAdvertisedNativeCapabilities{
     kProjectSummaryCapability,
     kProjectBitDepthReadCapability,
     kProjectBitDepthSetCapability,
@@ -86,6 +103,14 @@ inline constexpr std::array<std::string_view, 22> kAdvertisedNativeCapabilities{
     kProjectItemCommentSetCapability,
     kProjectItemLabelSetCapability,
     kCompositionDuplicateCapability,
+    kLayerDetailsReadCapability,
+    kLayerNameSetCapability,
+    kLayerRangeSetCapability,
+    kLayerStartTimeSetCapability,
+    kLayerStretchSetCapability,
+    kLayerOrderSetCapability,
+    kLayerParentSetCapability,
+    kLayerDuplicateCapability,
 };
 // Authenticated broker control-plane operation. This is deliberately omitted
 // from model-facing capability discovery and can only fence native locator
@@ -234,7 +259,103 @@ struct CompositionCurrentTime {
   std::int32_t value{0};
   std::uint32_t scale{1};
   std::string seconds_rational{"0"};
+
+  [[nodiscard]] bool operator==(const CompositionCurrentTime&) const = default;
 };
+
+struct LayerStretchRatio {
+  std::int32_t numerator{1};
+  std::int32_t denominator{1};
+  std::string rational{"1"};
+
+  [[nodiscard]] bool operator==(const LayerStretchRatio&) const = default;
+};
+
+struct LayerDetails {
+  ObjectLocator layer_locator;
+  ObjectLocator composition_locator;
+  std::uint64_t stack_index{0};
+  std::string name;
+  std::string type;
+  bool video_enabled{false};
+  bool is_three_d{false};
+  bool locked{false};
+  std::optional<ObjectLocator> parent_locator;
+  std::optional<ObjectLocator> source_item_locator;
+  CompositionCurrentTime in_point;
+  CompositionCurrentTime duration;
+  CompositionCurrentTime start_time;
+  LayerStretchRatio stretch;
+};
+
+struct LayerNameChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  std::string before_name;
+  std::string after_name;
+};
+
+struct LayerRangeChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  CompositionCurrentTime before_in_point;
+  CompositionCurrentTime before_duration;
+  CompositionCurrentTime after_in_point;
+  CompositionCurrentTime after_duration;
+};
+
+struct LayerStartTimeChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  CompositionCurrentTime before_start_time;
+  CompositionCurrentTime after_start_time;
+};
+
+struct LayerStretchChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  LayerStretchRatio before_stretch;
+  LayerStretchRatio after_stretch;
+};
+
+struct LayerOrderChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  std::uint64_t before_stack_index{0};
+  std::uint64_t after_stack_index{0};
+};
+
+struct LayerParentChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  std::optional<ObjectLocator> before_parent_locator;
+  std::optional<ObjectLocator> after_parent_locator;
+};
+
+struct LayerDuplicated {
+  bool changed{true};
+  ObjectLocator source_layer_locator;
+  ObjectLocator new_layer_locator;
+  ObjectLocator composition_locator;
+  std::uint64_t layer_count_before{0};
+  std::uint64_t layer_count_after{0};
+  LayerDetails new_layer;
+  // Internal verification evidence. The public wire result intentionally keeps
+  // the frozen shape and exposes only new_layer; Core obtains the fresh source
+  // through ae.layer.details.read after graph invalidation.
+  std::optional<LayerDetails> source_layer;
+};
+
+using LayerTimelineResult = std::variant<
+    std::monostate,
+    LayerDetails,
+    LayerNameChanged,
+    LayerRangeChanged,
+    LayerStartTimeChanged,
+    LayerStretchChanged,
+    LayerOrderChanged,
+    LayerParentChanged,
+    LayerDuplicated>;
 
 struct CompositionTimeRead {
   ObjectLocator composition_locator;
@@ -504,6 +625,41 @@ struct CompositionTimeQuery {
   std::string host_instance_id;
   std::string session_id;
   ObjectLocator composition_locator;
+};
+
+struct LayerDetailsQuery {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator layer_locator;
+};
+
+struct LayerNameSetCommand : LayerDetailsQuery {
+  std::string name;
+};
+
+struct LayerRangeSetCommand : LayerDetailsQuery {
+  CompositionCurrentTime in_point;
+  CompositionCurrentTime duration;
+};
+
+struct LayerStartTimeSetCommand : LayerDetailsQuery {
+  CompositionCurrentTime start_time;
+};
+
+struct LayerStretchSetCommand : LayerDetailsQuery {
+  LayerStretchRatio stretch;
+};
+
+struct LayerOrderSetCommand : LayerDetailsQuery {
+  std::uint64_t target_stack_index{0};
+};
+
+struct LayerParentSetCommand : LayerDetailsQuery {
+  std::optional<ObjectLocator> parent_layer_locator;
+};
+
+struct LayerDuplicateCommand : LayerDetailsQuery {
+  std::string new_name;
 };
 
 struct CompositionTimeSetCommand {
@@ -862,6 +1018,95 @@ struct HostLayerPropertyWriteResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostLayerDetailsResult {
+  bool ok{false};
+  LayerDetails value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerDetailsResult success(LayerDetails value);
+  [[nodiscard]] static HostLayerDetailsResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerNameWriteResult {
+  bool ok{false};
+  LayerNameChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerNameWriteResult success(LayerNameChanged value);
+  [[nodiscard]] static HostLayerNameWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerRangeWriteResult {
+  bool ok{false};
+  LayerRangeChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerRangeWriteResult success(LayerRangeChanged value);
+  [[nodiscard]] static HostLayerRangeWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerStartTimeWriteResult {
+  bool ok{false};
+  LayerStartTimeChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerStartTimeWriteResult success(LayerStartTimeChanged value);
+  [[nodiscard]] static HostLayerStartTimeWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerStretchWriteResult {
+  bool ok{false};
+  LayerStretchChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerStretchWriteResult success(LayerStretchChanged value);
+  [[nodiscard]] static HostLayerStretchWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerOrderWriteResult {
+  bool ok{false};
+  LayerOrderChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerOrderWriteResult success(LayerOrderChanged value);
+  [[nodiscard]] static HostLayerOrderWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerParentWriteResult {
+  bool ok{false};
+  LayerParentChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerParentWriteResult success(LayerParentChanged value);
+  [[nodiscard]] static HostLayerParentWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerDuplicateResult {
+  bool ok{false};
+  LayerDuplicated value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerDuplicateResult success(LayerDuplicated value);
+  [[nodiscard]] static HostLayerDuplicateResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostProjectGraphInvalidationResult {
   bool ok{false};
   ProjectGraphInvalidation value;
@@ -920,6 +1165,22 @@ class HostApi {
       const LayerPropertyKeyframesQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertyWriteResult set_layer_property(
       const LayerPropertySetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerDetailsResult read_layer_details(
+      const LayerDetailsQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerNameWriteResult set_layer_name(
+      const LayerNameSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerRangeWriteResult set_layer_range(
+      const LayerRangeSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerStartTimeWriteResult set_layer_start_time(
+      const LayerStartTimeSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerStretchWriteResult set_layer_stretch(
+      const LayerStretchSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerOrderWriteResult set_layer_order(
+      const LayerOrderSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerParentWriteResult set_layer_parent(
+      const LayerParentSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerDuplicateResult duplicate_layer(
+      const LayerDuplicateCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint work_deadline);
 };
@@ -964,7 +1225,14 @@ struct Request {
       CompositionCurrentTime work_area_duration_value = {},
       std::string item_text_value = {},
       std::uint8_t item_label_id_value = 0,
-      std::string duplicate_new_name_value = {})
+      std::string duplicate_new_name_value = {},
+      std::optional<ObjectLocator> layer_parent_locator_value = std::nullopt,
+      CompositionCurrentTime layer_in_point_value = {},
+      CompositionCurrentTime layer_duration_value = {},
+      CompositionCurrentTime layer_start_time_value = {},
+      LayerStretchRatio layer_stretch_value = {},
+      std::uint64_t target_stack_index_value = 0,
+      std::string layer_new_name_value = {})
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -1003,7 +1271,14 @@ struct Request {
         work_area_duration(std::move(work_area_duration_value)),
         item_text(std::move(item_text_value)),
         item_label_id(item_label_id_value),
-        duplicate_new_name(std::move(duplicate_new_name_value)) {}
+        duplicate_new_name(std::move(duplicate_new_name_value)),
+        layer_parent_locator(std::move(layer_parent_locator_value)),
+        layer_in_point(std::move(layer_in_point_value)),
+        layer_duration(std::move(layer_duration_value)),
+        layer_start_time(std::move(layer_start_time_value)),
+        layer_stretch(std::move(layer_stretch_value)),
+        target_stack_index(target_stack_index_value),
+        layer_new_name(std::move(layer_new_name_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -1046,6 +1321,13 @@ struct Request {
   std::string item_text;
   std::uint8_t item_label_id{0};
   std::string duplicate_new_name;
+  std::optional<ObjectLocator> layer_parent_locator;
+  CompositionCurrentTime layer_in_point;
+  CompositionCurrentTime layer_duration;
+  CompositionCurrentTime layer_start_time;
+  LayerStretchRatio layer_stretch;
+  std::uint64_t target_stack_index{0};
+  std::string layer_new_name;
 };
 
 enum class EnqueueCode {
@@ -1104,6 +1386,7 @@ struct Completion {
   ProjectItemTextChanged project_item_text_change_result;
   ProjectItemLabelChanged project_item_label_change_result;
   CompositionDuplicated composition_duplicate_result;
+  std::shared_ptr<LayerTimelineResult> layer_timeline_result;
   ProjectGraphInvalidation project_graph_invalidation_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;

@@ -39,6 +39,17 @@ from ae_mcp.backends.native_project_composition import (
     invoke_project_item_metadata_read,
     invoke_project_item_name_set,
 )
+from ae_mcp.backends.native_layer_timeline import (
+    invoke_layer_details_read,
+    invoke_layer_duplicate,
+    invoke_layer_name_set,
+    invoke_layer_order_set,
+    invoke_layer_parent_set,
+    invoke_layer_range_set,
+    invoke_layer_start_time_set,
+    invoke_layer_stretch_set,
+    stretch_percent_to_ratio,
+)
 from ae_mcp.handlers import register
 
 
@@ -64,6 +75,14 @@ _PROJECT_ITEM_NAME_SET_TIMEOUT_MS = 10_000
 _PROJECT_ITEM_COMMENT_SET_TIMEOUT_MS = 10_000
 _PROJECT_ITEM_LABEL_SET_TIMEOUT_MS = 10_000
 _COMPOSITION_DUPLICATE_TIMEOUT_MS = 10_000
+_LAYER_DETAILS_READ_TIMEOUT_MS = 10_000
+_LAYER_NAME_SET_TIMEOUT_MS = 10_000
+_LAYER_RANGE_SET_TIMEOUT_MS = 10_000
+_LAYER_START_TIME_SET_TIMEOUT_MS = 10_000
+_LAYER_STRETCH_SET_TIMEOUT_MS = 10_000
+_LAYER_ORDER_SET_TIMEOUT_MS = 10_000
+_LAYER_PARENT_SET_TIMEOUT_MS = 10_000
+_LAYER_DUPLICATE_TIMEOUT_MS = 10_000
 
 
 def _backend() -> NativeInvokeBackend:
@@ -1056,7 +1075,7 @@ async def _run_set_layer_property_value(
 
 
 def _project_package_write_response(execution: Any) -> dict[str, Any]:
-    """Public response shared only by the five #150 native writes."""
+    """Public response shared by verified native capability-package writes."""
 
     implementation = execution.implementation
     audit = execution.audit_fields()
@@ -1376,6 +1395,230 @@ async def _run_duplicate_composition(
     return _project_package_write_response(execution)
 
 
+async def _run_get_layer_details(
+    args: schemas.AeGetLayerDetailsArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_DETAILS_READ_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_details_read(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.getLayerDetails native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_rename_layer(
+    args: schemas.AeRenameLayerArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_NAME_SET_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_name_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            name=args.name,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.renameLayer native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_range(
+    args: schemas.AeSetLayerRangeArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_RANGE_SET_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_range_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            in_point=args.in_point.model_dump(mode="json", by_alias=True),
+            duration=args.duration.model_dump(mode="json", by_alias=True),
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.setLayerRange native AEGP write; wait for exact timing readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_start_time(
+    args: schemas.AeSetLayerStartTimeArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_START_TIME_SET_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_start_time_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            start_time=args.start_time.model_dump(mode="json", by_alias=True),
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.setLayerStartTime native AEGP write; wait for exact timing readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_stretch(
+    args: schemas.AeSetLayerStretchArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_STRETCH_SET_TIMEOUT_MS
+    stretch = stretch_percent_to_ratio(args.stretch_percent)
+
+    async def _call():
+        return await invoke_layer_stretch_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            stretch=stretch,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.setLayerStretch native AEGP write; wait for exact ratio readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_reorder_layer(
+    args: schemas.AeReorderLayerArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_ORDER_SET_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_order_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            target_stack_index=args.target_stack_index,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.reorderLayer native AEGP write; wait for stack readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_parent(
+    args: schemas.AeSetLayerParentArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_PARENT_SET_TIMEOUT_MS
+    parent = (
+        args.parent_layer_locator.model_dump(mode="json", by_alias=True)
+        if args.parent_layer_locator is not None
+        else None
+    )
+
+    async def _call():
+        return await invoke_layer_parent_set(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            parent_layer_locator=parent,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.setLayerParent native AEGP write; wait for hierarchy readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_duplicate_layer(
+    args: schemas.AeDuplicateLayerArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_DUPLICATE_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_duplicate(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            new_name=args.new_name,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg="ae.duplicateLayer native AEGP write; wait for fresh locator readback...",
+    )
+    return _project_package_write_response(execution)
+
+
 register(
     "ae.getProjectContext",
     schemas.AeGetProjectContextArgs,
@@ -1415,6 +1658,46 @@ register(
     "ae.duplicateComposition",
     schemas.AeDuplicateCompositionArgs,
     _run_duplicate_composition,
+)
+register(
+    "ae.getLayerDetails",
+    schemas.AeGetLayerDetailsArgs,
+    _run_get_layer_details,
+)
+register(
+    "ae.renameLayer",
+    schemas.AeRenameLayerArgs,
+    _run_rename_layer,
+)
+register(
+    "ae.setLayerRange",
+    schemas.AeSetLayerRangeArgs,
+    _run_set_layer_range,
+)
+register(
+    "ae.setLayerStartTime",
+    schemas.AeSetLayerStartTimeArgs,
+    _run_set_layer_start_time,
+)
+register(
+    "ae.setLayerStretch",
+    schemas.AeSetLayerStretchArgs,
+    _run_set_layer_stretch,
+)
+register(
+    "ae.reorderLayer",
+    schemas.AeReorderLayerArgs,
+    _run_reorder_layer,
+)
+register(
+    "ae.setLayerParent",
+    schemas.AeSetLayerParentArgs,
+    _run_set_layer_parent,
+)
+register(
+    "ae.duplicateLayer",
+    schemas.AeDuplicateLayerArgs,
+    _run_duplicate_layer,
 )
 register(
     "ae.projectSummary",
@@ -1489,8 +1772,10 @@ register(
 
 
 __all__ = [
+    "_run_duplicate_layer",
     "_run_duplicate_composition",
     "_run_get_composition_settings",
+    "_run_get_layer_details",
     "_run_get_project_context",
     "_run_get_project_item_metadata",
     "_run_get_composition_time",
@@ -1503,11 +1788,17 @@ __all__ = [
     "_run_list_layer_property_keyframes",
     "_run_list_project_items",
     "_run_project_summary",
+    "_run_rename_layer",
     "_run_rename_project_item",
+    "_run_reorder_layer",
     "_run_set_composition_work_area",
     "_run_set_project_item_comment",
     "_run_set_project_item_label",
     "_run_set_project_bit_depth",
     "_run_set_composition_time",
     "_run_set_layer_property_value",
+    "_run_set_layer_parent",
+    "_run_set_layer_range",
+    "_run_set_layer_start_time",
+    "_run_set_layer_stretch",
 ]

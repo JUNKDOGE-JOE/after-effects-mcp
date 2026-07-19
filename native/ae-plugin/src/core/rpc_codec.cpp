@@ -572,6 +572,57 @@ CompositionCurrentTime parse_exact_time_input(
   return time;
 }
 
+CompositionCurrentTime parse_layer_exact_time_input(
+    const JsonValue& value,
+    std::string_view field_name,
+    bool require_positive) {
+  const JsonValue::Object* object = object_of(value);
+  if (object == nullptr
+      || !exact_keys(*object, {"value", "scale"}, {"value", "scale"})) {
+    invalid_argument(std::string(field_name) + " must be a closed exact time pair");
+  }
+  CompositionCurrentTime time;
+  time.value = static_cast<std::int32_t>(required_int(
+      *object,
+      "value",
+      CodecErrorKind::kInvalidArgument,
+      require_positive ? 1 : std::numeric_limits<std::int32_t>::min(),
+      std::numeric_limits<std::int32_t>::max()));
+  time.scale = static_cast<std::uint32_t>(required_uint(
+      *object,
+      "scale",
+      CodecErrorKind::kInvalidArgument,
+      1,
+      std::numeric_limits<std::uint32_t>::max()));
+  time.seconds_rational = canonical_seconds_rational(time.value, time.scale);
+  return time;
+}
+
+LayerStretchRatio parse_layer_stretch_input(const JsonValue& value) {
+  const JsonValue::Object* object = object_of(value);
+  if (object == nullptr
+      || !exact_keys(*object, {"num", "den"}, {"num", "den"})) {
+    invalid_argument("stretch must be a closed signed ratio");
+  }
+  LayerStretchRatio stretch;
+  stretch.numerator = static_cast<std::int32_t>(required_int(
+      *object,
+      "num",
+      CodecErrorKind::kInvalidArgument,
+      std::numeric_limits<std::int32_t>::min(),
+      std::numeric_limits<std::int32_t>::max()));
+  stretch.denominator = static_cast<std::int32_t>(required_uint(
+      *object,
+      "den",
+      CodecErrorKind::kInvalidArgument,
+      1,
+      std::numeric_limits<std::int32_t>::max()));
+  if (stretch.numerator == 0) invalid_argument("stretch numerator must be nonzero");
+  stretch.rational = canonical_seconds_rational(
+      stretch.numerator, static_cast<std::uint32_t>(stretch.denominator));
+  return stretch;
+}
+
 bool valid_output_locator(const ObjectLocator& locator) {
   return (locator.kind == "project" || locator.kind == "item"
           || locator.kind == "composition" || locator.kind == "layer"
@@ -699,6 +750,28 @@ std::string canonical_project_item_text_set_arguments(
   return "{" + members[0] + "," + members[1] + "," + members[2] + "}";
 }
 
+std::string canonical_layer_time_input(const CompositionCurrentTime& value) {
+  if (value.scale == 0
+      || value.seconds_rational
+          != canonical_seconds_rational(value.value, value.scale)) {
+    invalid_argument("invalid exact layer time");
+  }
+  return "{\"scale\":" + std::to_string(value.scale)
+      + ",\"value\":" + std::to_string(value.value) + "}";
+}
+
+std::string canonical_layer_stretch_input(const LayerStretchRatio& value) {
+  if (value.numerator == 0 || value.denominator <= 0
+      || value.rational != canonical_seconds_rational(
+          value.numerator, static_cast<std::uint32_t>(value.denominator))) {
+    invalid_argument("invalid exact layer stretch");
+  }
+  return "{\"den\":" + std::to_string(value.denominator)
+      + ",\"num\":" + std::to_string(value.numerator) + "}";
+}
+
+std::string nullable_locator_json(const std::optional<ObjectLocator>& value);
+
 std::string canonical_request(const ParsedRequest& request) {
   std::string params;
   switch (request.method) {
@@ -808,6 +881,40 @@ std::string canonical_request(const ParsedRequest& request) {
             + locator_json(*value.composition_locator)
             + ",\"idempotencyKey\":" + json_string(value.idempotency_key)
             + ",\"newName\":" + json_string(value.duplicate_new_name) + "}";
+      } else if (value.capability_id == "ae.layer.details.read") {
+        arguments = "{\"layerLocator\":" + locator_json(*value.layer_locator) + "}";
+      } else if (value.capability_id == "ae.layer.name.set") {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"name\":" + json_string(value.layer_new_name) + "}";
+      } else if (value.capability_id == "ae.layer.range.set") {
+        arguments = "{\"duration\":" + canonical_layer_time_input(value.layer_duration)
+            + ",\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"inPoint\":" + canonical_layer_time_input(value.layer_in_point)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator) + "}";
+      } else if (value.capability_id == "ae.layer.start-time.set") {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"startTime\":" + canonical_layer_time_input(value.layer_start_time)
+            + "}";
+      } else if (value.capability_id == "ae.layer.stretch.set") {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"stretch\":" + canonical_layer_stretch_input(value.layer_stretch)
+            + "}";
+      } else if (value.capability_id == "ae.layer.order.set") {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"targetStackIndex\":" + std::to_string(value.target_stack_index) + "}";
+      } else if (value.capability_id == "ae.layer.parent.set") {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"parentLayerLocator\":"
+            + nullable_locator_json(value.layer_parent_locator) + "}";
+      } else if (value.capability_id == "ae.layer.duplicate") {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"newName\":" + json_string(value.layer_new_name) + "}";
       } else if (value.capability_id == "ae.composition.create") {
         arguments = canonical_composition_create_arguments(
             value.composition_create_name,
@@ -1083,6 +1190,17 @@ ParsedRequest classify_request(const JsonValue& root) {
       InvokeParams result;
       result.capability_id = capability;
       result.capability_version = 1;
+      const auto parse_layer_locator = [&] {
+        result.layer_locator = parse_locator(
+            *member(*arguments, "layerLocator"), "layer");
+      };
+      const auto parse_layer_idempotency_key = [&] {
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid layer mutation idempotency key");
+        }
+      };
       if (capability == "ae.project.summary") {
         if (!arguments->empty()) {
           invalid_argument("project summary arguments must be empty");
@@ -1310,6 +1428,140 @@ ParsedRequest classify_request(const JsonValue& root) {
             *result.composition_locator,
             result.duplicate_new_name,
             result.idempotency_key);
+      } else if (capability == "ae.layer.details.read") {
+        if (!exact_keys(*arguments, {"layerLocator"}, {"layerLocator"})) {
+          invalid_argument("layer details arguments are not closed");
+        }
+        parse_layer_locator();
+      } else if (capability == "ae.layer.name.set") {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "name", "idempotencyKey"},
+                {"layerLocator", "name", "idempotencyKey"})) {
+          invalid_argument("layer name arguments are not closed");
+        }
+        parse_layer_locator();
+        result.layer_new_name = required_string(
+            *arguments, "name", CodecErrorKind::kInvalidArgument);
+        const std::size_t scalars = validate_utf8_and_count(result.layer_new_name);
+        if (scalars < 1 || scalars > 255
+            || result.layer_new_name.find('\0') != std::string::npos) {
+          invalid_argument("invalid layer name");
+        }
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"name\":" + json_string(result.layer_new_name) + "}");
+      } else if (capability == "ae.layer.range.set") {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "inPoint", "duration", "idempotencyKey"},
+                {"layerLocator", "inPoint", "duration", "idempotencyKey"})) {
+          invalid_argument("layer range arguments are not closed");
+        }
+        parse_layer_locator();
+        result.layer_in_point = parse_layer_exact_time_input(
+            *member(*arguments, "inPoint"), "inPoint", false);
+        result.layer_duration = parse_layer_exact_time_input(
+            *member(*arguments, "duration"), "duration", true);
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"duration\":" + canonical_layer_time_input(result.layer_duration)
+            + ",\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"inPoint\":" + canonical_layer_time_input(result.layer_in_point)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator) + "}");
+      } else if (capability == "ae.layer.start-time.set") {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "startTime", "idempotencyKey"},
+                {"layerLocator", "startTime", "idempotencyKey"})) {
+          invalid_argument("layer start time arguments are not closed");
+        }
+        parse_layer_locator();
+        result.layer_start_time = parse_layer_exact_time_input(
+            *member(*arguments, "startTime"), "startTime", false);
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"startTime\":" + canonical_layer_time_input(result.layer_start_time)
+            + "}");
+      } else if (capability == "ae.layer.stretch.set") {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "stretch", "idempotencyKey"},
+                {"layerLocator", "stretch", "idempotencyKey"})) {
+          invalid_argument("layer stretch arguments are not closed");
+        }
+        parse_layer_locator();
+        result.layer_stretch = parse_layer_stretch_input(
+            *member(*arguments, "stretch"));
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"stretch\":" + canonical_layer_stretch_input(result.layer_stretch)
+            + "}");
+      } else if (capability == "ae.layer.order.set") {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "targetStackIndex", "idempotencyKey"},
+                {"layerLocator", "targetStackIndex", "idempotencyKey"})) {
+          invalid_argument("layer order arguments are not closed");
+        }
+        parse_layer_locator();
+        result.target_stack_index = required_uint(
+            *arguments, "targetStackIndex", CodecErrorKind::kInvalidArgument,
+            1, kMaxSafeInteger);
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"targetStackIndex\":" + std::to_string(result.target_stack_index) + "}");
+      } else if (capability == "ae.layer.parent.set") {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "parentLayerLocator", "idempotencyKey"},
+                {"layerLocator", "parentLayerLocator", "idempotencyKey"})) {
+          invalid_argument("layer parent arguments are not closed");
+        }
+        parse_layer_locator();
+        const JsonValue* parent = member(*arguments, "parentLayerLocator");
+        if (!std::holds_alternative<std::nullptr_t>(parent->value)) {
+          result.layer_parent_locator = parse_locator(*parent, "layer");
+          if (!same_locator_scope(*result.layer_parent_locator, *result.layer_locator)
+              || result.layer_parent_locator->object_id
+                  == result.layer_locator->object_id) {
+            invalid_argument("parent layer locator must be a distinct layer in the same context");
+          }
+        }
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"parentLayerLocator\":"
+            + nullable_locator_json(result.layer_parent_locator) + "}");
+      } else if (capability == "ae.layer.duplicate") {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "newName", "idempotencyKey"},
+                {"layerLocator", "newName", "idempotencyKey"})) {
+          invalid_argument("layer duplicate arguments are not closed");
+        }
+        parse_layer_locator();
+        result.layer_new_name = required_string(
+            *arguments, "newName", CodecErrorKind::kInvalidArgument);
+        const std::size_t scalars = validate_utf8_and_count(result.layer_new_name);
+        if (scalars < 1 || scalars > 255
+            || result.layer_new_name.find('\0') != std::string::npos) {
+          invalid_argument("invalid duplicate layer name");
+        }
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"newName\":" + json_string(result.layer_new_name) + "}");
       } else if (capability == "ae.composition.create") {
         if (!exact_keys(
                 *arguments,
@@ -2124,6 +2376,180 @@ std::string canonical_composition_duplicate_value(const CompositionDuplicated& v
       + locator_json(value.source_composition_locator)
       + ",\"sourceSettings\":"
       + canonical_composition_settings_snapshot(value.source_settings) + "}";
+}
+
+std::string canonical_layer_stretch(const LayerStretchRatio& value) {
+  if (value.numerator == 0 || value.denominator <= 0
+      || value.rational != canonical_seconds_rational(
+          value.numerator, static_cast<std::uint32_t>(value.denominator))) {
+    invalid_argument("invalid layer stretch result");
+  }
+  return "{\"denominator\":" + std::to_string(value.denominator)
+      + ",\"numerator\":" + std::to_string(value.numerator)
+      + ",\"rational\":" + json_string(value.rational) + "}";
+}
+
+bool valid_layer_type(std::string_view value) {
+  static constexpr std::array<std::string_view, 9> kTypes{
+      "av", "camera", "light", "text", "shape", "model3d", "null",
+      "adjustment", "unknown"};
+  return std::find(kTypes.begin(), kTypes.end(), value) != kTypes.end();
+}
+
+std::string canonical_layer_details_value(const LayerDetails& value) {
+  if (!valid_output_locator(value.layer_locator)
+      || !valid_output_locator(value.composition_locator)
+      || value.layer_locator.kind != "layer"
+      || value.composition_locator.kind != "composition"
+      || !same_locator_scope(value.layer_locator, value.composition_locator)
+      || value.stack_index < 1 || value.stack_index > kMaxSafeInteger
+      || validate_utf8_and_count(value.name) > 1024
+      || !valid_layer_type(value.type)
+      || (value.parent_locator.has_value()
+          && (!valid_output_locator(*value.parent_locator)
+              || value.parent_locator->kind != "layer"
+              || !same_locator_scope(*value.parent_locator, value.layer_locator)))
+      || (value.source_item_locator.has_value()
+          && (!valid_output_locator(*value.source_item_locator)
+              || (value.source_item_locator->kind != "item"
+                  && value.source_item_locator->kind != "composition")
+              || !same_locator_scope(*value.source_item_locator, value.layer_locator)))
+      || value.duration.value <= 0) {
+    invalid_argument("invalid layer details result");
+  }
+  return "{\"compositionLocator\":" + locator_json(value.composition_locator)
+      + ",\"duration\":" + canonical_current_time(value.duration)
+      + ",\"inPoint\":" + canonical_current_time(value.in_point)
+      + ",\"isThreeD\":" + (value.is_three_d ? "true" : "false")
+      + ",\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"locked\":" + (value.locked ? "true" : "false")
+      + ",\"name\":" + json_string(value.name)
+      + ",\"parentLocator\":" + nullable_locator_json(value.parent_locator)
+      + ",\"sourceItemLocator\":" + nullable_locator_json(value.source_item_locator)
+      + ",\"stackIndex\":" + std::to_string(value.stack_index)
+      + ",\"startTime\":" + canonical_current_time(value.start_time)
+      + ",\"stretch\":" + canonical_layer_stretch(value.stretch)
+      + ",\"type\":" + json_string(value.type)
+      + ",\"videoEnabled\":" + (value.video_enabled ? "true" : "false") + "}";
+}
+
+std::string canonical_layer_name_set_value(const LayerNameChanged& value) {
+  const std::size_t before_length = validate_utf8_and_count(value.before_name);
+  const std::size_t after_length = validate_utf8_and_count(value.after_name);
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer" || before_length > 1024
+      || after_length < 1 || after_length > 255
+      || value.before_name == value.after_name) {
+    invalid_argument("invalid layer name mutation result");
+  }
+  return "{\"afterName\":" + json_string(value.after_name)
+      + ",\"beforeName\":" + json_string(value.before_name)
+      + ",\"changed\":true,\"layerLocator\":"
+      + locator_json(value.layer_locator) + "}";
+}
+
+std::string canonical_layer_range_set_value(const LayerRangeChanged& value) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer" || value.after_duration.value <= 0
+      || (composition_times_equal(value.before_in_point, value.after_in_point)
+          && composition_times_equal(value.before_duration, value.after_duration))) {
+    invalid_argument("invalid layer range mutation result");
+  }
+  return "{\"afterDuration\":" + canonical_current_time(value.after_duration)
+      + ",\"afterInPoint\":" + canonical_current_time(value.after_in_point)
+      + ",\"beforeDuration\":" + canonical_current_time(value.before_duration)
+      + ",\"beforeInPoint\":" + canonical_current_time(value.before_in_point)
+      + ",\"changed\":true,\"layerLocator\":"
+      + locator_json(value.layer_locator) + "}";
+}
+
+std::string canonical_layer_start_time_set_value(
+    const LayerStartTimeChanged& value) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || composition_times_equal(value.before_start_time, value.after_start_time)) {
+    invalid_argument("invalid layer start-time mutation result");
+  }
+  return "{\"afterStartTime\":" + canonical_current_time(value.after_start_time)
+      + ",\"beforeStartTime\":" + canonical_current_time(value.before_start_time)
+      + ",\"changed\":true,\"layerLocator\":"
+      + locator_json(value.layer_locator) + "}";
+}
+
+std::string canonical_layer_stretch_set_value(const LayerStretchChanged& value) {
+  const std::string before = canonical_layer_stretch(value.before_stretch);
+  const std::string after = canonical_layer_stretch(value.after_stretch);
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || value.before_stretch == value.after_stretch) {
+    invalid_argument("invalid layer stretch mutation result");
+  }
+  return "{\"afterStretch\":" + after + ",\"beforeStretch\":" + before
+      + ",\"changed\":true,\"layerLocator\":"
+      + locator_json(value.layer_locator) + "}";
+}
+
+std::string canonical_layer_order_set_value(const LayerOrderChanged& value) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || value.before_stack_index < 1 || value.before_stack_index > kMaxSafeInteger
+      || value.after_stack_index < 1 || value.after_stack_index > kMaxSafeInteger
+      || value.before_stack_index == value.after_stack_index) {
+    invalid_argument("invalid layer order mutation result");
+  }
+  return "{\"afterStackIndex\":" + std::to_string(value.after_stack_index)
+      + ",\"beforeStackIndex\":" + std::to_string(value.before_stack_index)
+      + ",\"changed\":true,\"layerLocator\":"
+      + locator_json(value.layer_locator) + "}";
+}
+
+std::string canonical_layer_parent_set_value(const LayerParentChanged& value) {
+  const auto valid_parent = [&](const std::optional<ObjectLocator>& locator) {
+    return !locator.has_value()
+        || (valid_output_locator(*locator) && locator->kind == "layer"
+            && same_locator_scope(*locator, value.layer_locator)
+            && locator->object_id != value.layer_locator.object_id);
+  };
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || !valid_parent(value.before_parent_locator)
+      || !valid_parent(value.after_parent_locator)
+      || value.before_parent_locator == value.after_parent_locator) {
+    invalid_argument("invalid layer parent mutation result");
+  }
+  return "{\"afterParentLocator\":"
+      + nullable_locator_json(value.after_parent_locator)
+      + ",\"beforeParentLocator\":"
+      + nullable_locator_json(value.before_parent_locator)
+      + ",\"changed\":true,\"layerLocator\":"
+      + locator_json(value.layer_locator) + "}";
+}
+
+std::string canonical_layer_duplicate_value(const LayerDuplicated& value) {
+  if (!value.changed
+      || !valid_output_locator(value.source_layer_locator)
+      || !valid_output_locator(value.new_layer_locator)
+      || !valid_output_locator(value.composition_locator)
+      || value.source_layer_locator.kind != "layer"
+      || value.new_layer_locator.kind != "layer"
+      || value.composition_locator.kind != "composition"
+      || value.source_layer_locator.object_id == value.new_layer_locator.object_id
+      || !same_locator_scope(value.source_layer_locator, value.new_layer_locator)
+      || !same_locator_scope(value.source_layer_locator, value.composition_locator)
+      || value.layer_count_before >= kMaxSafeInteger
+      || value.layer_count_after != value.layer_count_before + 1
+      || value.new_layer.layer_locator != value.new_layer_locator
+      || value.new_layer.composition_locator != value.composition_locator
+      || value.new_layer.stack_index > value.layer_count_after) {
+    invalid_argument("invalid layer duplicate result");
+  }
+  return "{\"changed\":true,\"compositionLocator\":"
+      + locator_json(value.composition_locator)
+      + ",\"layerCountAfter\":" + std::to_string(value.layer_count_after)
+      + ",\"layerCountBefore\":" + std::to_string(value.layer_count_before)
+      + ",\"newLayer\":" + canonical_layer_details_value(value.new_layer)
+      + ",\"newLayerLocator\":" + locator_json(value.new_layer_locator)
+      + ",\"sourceLayerLocator\":" + locator_json(value.source_layer_locator) + "}";
 }
 
 std::string canonical_composition_create_arguments(
@@ -2953,6 +3379,56 @@ std::string digest_composition_duplicate_postcondition(
   return sha256_hex(
       "{\"capabilityId\":\"ae.composition.duplicate\",\"capabilityVersion\":1,\"value\":"
       + canonical_composition_duplicate_value(value) + "}");
+}
+
+std::string digest_layer_details_postcondition(const LayerDetails& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.details.read\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_details_value(value) + "}");
+}
+
+std::string digest_layer_name_set_postcondition(const LayerNameChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.name.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_name_set_value(value) + "}");
+}
+
+std::string digest_layer_range_set_postcondition(const LayerRangeChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.range.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_range_set_value(value) + "}");
+}
+
+std::string digest_layer_start_time_set_postcondition(
+    const LayerStartTimeChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.start-time.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_start_time_set_value(value) + "}");
+}
+
+std::string digest_layer_stretch_set_postcondition(
+    const LayerStretchChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.stretch.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_stretch_set_value(value) + "}");
+}
+
+std::string digest_layer_order_set_postcondition(const LayerOrderChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.order.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_order_set_value(value) + "}");
+}
+
+std::string digest_layer_parent_set_postcondition(const LayerParentChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.parent.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_parent_set_value(value) + "}");
+}
+
+std::string digest_layer_duplicate_postcondition(const LayerDuplicated& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.duplicate\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_duplicate_value(value) + "}");
 }
 
 std::string digest_composition_create_arguments(
@@ -4097,6 +4573,381 @@ std::string composition_duplicate_descriptor(const CapabilitiesSuccess& response
       "aemcp-example-composition-duplicate", fresh_source_positive_value},
       response.composition_duplicate_contract_digest);
 }
+
+std::string layer_timeline_locator_schema(std::string_view kind_json) {
+  static constexpr std::string_view uuid =
+      R"({"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"})";
+  return "{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"kind\",\"hostInstanceId\",\"sessionId\",\"projectId\","
+      "\"generation\",\"objectId\"],\"properties\":{\"kind\":"
+      + std::string(kind_json) + ",\"hostInstanceId\":" + std::string(uuid)
+      + ",\"sessionId\":" + std::string(uuid) + ",\"projectId\":"
+      + std::string(uuid)
+      + ",\"generation\":{\"type\":\"integer\",\"minimum\":1,"
+        "\"maximum\":9007199254740991},\"objectId\":"
+      + std::string(uuid) + "}}";
+}
+
+std::string layer_timeline_exact_time_schema() {
+  return R"({"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}})";
+}
+
+std::string layer_timeline_time_input_schema(bool positive) {
+  return "{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"value\",\"scale\"],\"properties\":{\"value\":{"
+      "\"type\":\"integer\",\"minimum\":"
+      + std::string(positive ? "1" : "-2147483648")
+      + ",\"maximum\":2147483647},\"scale\":{\"type\":\"integer\","
+        "\"minimum\":1,\"maximum\":4294967295}}}";
+}
+
+std::string layer_timeline_stretch_schema() {
+  return R"({"type":"object","additionalProperties":false,"required":["numerator","denominator","rational"],"properties":{"numerator":{"type":"integer","minimum":-2147483648,"maximum":2147483647,"not":{"const":0}},"denominator":{"type":"integer","minimum":1,"maximum":2147483647},"rational":{"type":"string","minLength":1,"maxLength":29,"pattern":"^-?[1-9][0-9]*(?:/[1-9][0-9]*)?$"}},"x-invariant":"rational-is-the-reduced-canonical-form-of-numerator-over-denominator"})";
+}
+
+std::string layer_timeline_stretch_input_schema() {
+  return R"({"type":"object","additionalProperties":false,"required":["num","den"],"properties":{"num":{"type":"integer","minimum":-2147483648,"maximum":2147483647,"not":{"const":0}},"den":{"type":"integer","minimum":1,"maximum":2147483647}}})";
+}
+
+std::string layer_timeline_idempotency_schema() {
+  return R"({"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"})";
+}
+
+std::string layer_timeline_layer_details_schema() {
+  const std::string layer = layer_timeline_locator_schema(R"({"const":"layer"})");
+  const std::string composition = layer_timeline_locator_schema(
+      R"({"const":"composition"})");
+  const std::string item = layer_timeline_locator_schema(
+      R"({"enum":["item","composition"]})");
+  const std::string nullable_layer = "{\"oneOf\":[{\"type\":\"null\"},"
+      + layer + "]}";
+  const std::string nullable_item = "{\"oneOf\":[{\"type\":\"null\"},"
+      + item + "]}";
+  const std::string time = layer_timeline_exact_time_schema();
+  return "{\"type\":\"object\",\"additionalProperties\":false,"
+      "\"required\":[\"layerLocator\",\"compositionLocator\",\"stackIndex\","
+      "\"name\",\"type\",\"videoEnabled\",\"isThreeD\",\"locked\","
+      "\"parentLocator\",\"sourceItemLocator\",\"inPoint\",\"duration\","
+      "\"startTime\",\"stretch\"],\"properties\":{\"layerLocator\":"
+      + layer + ",\"compositionLocator\":" + composition
+      + ",\"stackIndex\":{\"type\":\"integer\",\"minimum\":1,"
+        "\"maximum\":9007199254740991},\"name\":{\"type\":\"string\","
+        "\"maxLength\":1024},\"type\":{\"enum\":[\"av\",\"camera\","
+        "\"light\",\"text\",\"shape\",\"model3d\",\"null\",\"adjustment\","
+        "\"unknown\"]},\"videoEnabled\":{\"type\":\"boolean\"},"
+        "\"isThreeD\":{\"type\":\"boolean\"},\"locked\":{\"type\":\"boolean\"},"
+        "\"parentLocator\":" + nullable_layer + ",\"sourceItemLocator\":"
+      + nullable_item + ",\"inPoint\":" + time + ",\"duration\":" + time
+      + ",\"startTime\":" + time + ",\"stretch\":"
+      + layer_timeline_stretch_schema()
+      + "},\"x-invariant\":\"all-locators-share-one-current-graph-context\"}";
+}
+
+ObjectLocator synthetic_layer_timeline_locator(
+    std::string kind,
+    std::string object_id,
+    std::string project_id = "44444444-4444-4444-8444-444444444444",
+    std::uint64_t generation = 8) {
+  return {std::move(kind), "22222222-2222-4222-8222-222222222222",
+      "11111111-1111-4111-8111-111111111111", std::move(project_id),
+      generation, std::move(object_id)};
+}
+
+LayerDetails synthetic_layer_timeline_details(
+    ObjectLocator layer,
+    ObjectLocator composition,
+    std::optional<ObjectLocator> source,
+    std::string name) {
+  return {std::move(layer), std::move(composition), 1, std::move(name), "av",
+      true, false, false, std::nullopt, std::move(source),
+      {0, 1, "0"}, {5, 1, "5"}, {0, 1, "0"}, {1, 1, "1"}};
+}
+
+enum class LayerTimelineDescriptorKind {
+  kDetails,
+  kName,
+  kRange,
+  kStartTime,
+  kStretch,
+  kOrder,
+  kParent,
+  kDuplicate,
+};
+
+std::string layer_timeline_descriptor(
+    const CapabilitiesSuccess& response,
+    LayerTimelineDescriptorKind kind) {
+  const std::string layer_schema = layer_timeline_locator_schema(
+      R"({"const":"layer"})");
+  const std::string idempotency_schema = layer_timeline_idempotency_schema();
+  const std::string nullable_layer_schema =
+      "{\"oneOf\":[{\"type\":\"null\"}," + layer_schema + "]}";
+  const ObjectLocator layer = synthetic_layer_timeline_locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const ObjectLocator parent = synthetic_layer_timeline_locator(
+      "layer", "99999999-9999-4999-8999-999999999999");
+  const ObjectLocator composition = synthetic_layer_timeline_locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+  const ObjectLocator source = synthetic_layer_timeline_locator(
+      "item", "77777777-7777-4777-8777-777777777777");
+  const std::string common_input_prefix =
+      "{\"type\":\"object\",\"additionalProperties\":false,";
+  std::string id;
+  std::string summary;
+  std::string side_effect;
+  std::string preconditions;
+  std::string requirement;
+  std::string input;
+  std::string result;
+  std::string arguments;
+  std::string positive;
+  std::string contract_digest;
+  std::string_view configured_digest;
+  bool mutating = kind != LayerTimelineDescriptorKind::kDetails;
+  switch (kind) {
+    case LayerTimelineDescriptorKind::kDetails: {
+      id = "ae.layer.details.read";
+      summary = "Read one After Effects layer and its exact timeline state.";
+      side_effect = "Reads layer state without changing After Effects state.";
+      preconditions = R"(["An After Effects project must be open.","layerLocator must come from a current native layer listing."])";
+      requirement = "aemcp.requirement.native.layer-details-read";
+      contract_digest = "b1b7a5f313bbf72eb6b33ac4a0507f9f925ef6873d53fd07d93d861164ac15d9";
+      configured_digest = response.layer_details_read_contract_digest;
+      input = common_input_prefix
+          + "\"required\":[\"layerLocator\"],\"properties\":{\"layerLocator\":"
+          + layer_schema + "}}";
+      result = layer_timeline_layer_details_schema();
+      arguments = "{\"layerLocator\":" + locator_json(layer) + "}";
+      positive = canonical_layer_details_value(synthetic_layer_timeline_details(
+          layer, composition, source, "SYNTHETIC_LAYER"));
+      break;
+    }
+    case LayerTimelineDescriptorKind::kName: {
+      id = "ae.layer.name.set";
+      summary = "Rename one After Effects layer.";
+      side_effect = "Changes one layer name and creates one After Effects Undo step.";
+      preconditions = R"(["layerLocator must be current.","name must differ from the current name."])";
+      requirement = "aemcp.requirement.native.layer-name-set";
+      contract_digest = "a68fb7f75f050faf4e77c81c3fa9f53ad501016af0eeb065493716ff94fd5929";
+      configured_digest = response.layer_name_set_contract_digest;
+      input = common_input_prefix
+          + "\"required\":[\"layerLocator\",\"name\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema
+          + ",\"name\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":255},"
+            "\"idempotencyKey\":" + idempotency_schema + "}}";
+      result = common_input_prefix
+          + "\"required\":[\"changed\",\"layerLocator\",\"beforeName\",\"afterName\"],"
+            "\"properties\":{\"changed\":{\"const\":true},\"layerLocator\":"
+          + layer_schema + ",\"beforeName\":{\"type\":\"string\",\"maxLength\":1024},"
+            "\"afterName\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":255}},"
+            "\"x-invariant\":\"afterName-equals-request-and-differs-from-beforeName\"}";
+      arguments = "{\"idempotencyKey\":\"synthetic-layer-name-0001\","
+          "\"layerLocator\":" + locator_json(layer)
+          + ",\"name\":\"SYNTHETIC_RENAMED\"}";
+      positive = canonical_layer_name_set_value(
+          {true, layer, "SYNTHETIC_LAYER", "SYNTHETIC_RENAMED"});
+      break;
+    }
+    case LayerTimelineDescriptorKind::kRange: {
+      id = "ae.layer.range.set";
+      summary = "Set one layer in point and duration using exact rational time.";
+      side_effect = "Changes one layer range and creates one After Effects Undo step.";
+      preconditions = R"(["layerLocator must be current.","The range must fit the composition and differ from the current range."])";
+      requirement = "aemcp.requirement.native.layer-range-set";
+      contract_digest = "0b90618916f0df612726017ef80795b72829f367cbf46cad23b33beb129230e2";
+      configured_digest = response.layer_range_set_contract_digest;
+      const std::string time = layer_timeline_exact_time_schema();
+      input = common_input_prefix
+          + "\"required\":[\"layerLocator\",\"inPoint\",\"duration\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema
+          + ",\"inPoint\":" + layer_timeline_time_input_schema(false)
+          + ",\"duration\":" + layer_timeline_time_input_schema(true)
+          + ",\"idempotencyKey\":" + idempotency_schema + "}}";
+      result = common_input_prefix
+          + "\"required\":[\"changed\",\"layerLocator\",\"beforeInPoint\","
+            "\"beforeDuration\",\"afterInPoint\",\"afterDuration\"],"
+            "\"properties\":{\"changed\":{\"const\":true},\"layerLocator\":"
+          + layer_schema + ",\"beforeInPoint\":" + time
+          + ",\"beforeDuration\":" + time + ",\"afterInPoint\":" + time
+          + ",\"afterDuration\":" + time
+          + "},\"x-invariant\":\"after-range-equals-request-and-differs-from-before-range\"}";
+      arguments = "{\"duration\":{\"scale\":1,\"value\":4},"
+          "\"idempotencyKey\":\"synthetic-layer-range-0001\","
+          "\"inPoint\":{\"scale\":1,\"value\":1},\"layerLocator\":"
+          + locator_json(layer) + "}";
+      positive = canonical_layer_range_set_value(
+          {true, layer, {0, 1, "0"}, {5, 1, "5"}, {1, 1, "1"}, {4, 1, "4"}});
+      break;
+    }
+    case LayerTimelineDescriptorKind::kStartTime: {
+      id = "ae.layer.start-time.set";
+      summary = "Set one layer start time using exact rational time.";
+      side_effect = "Changes one layer start time and creates one After Effects Undo step.";
+      preconditions = R"(["layerLocator must be current.","startTime must differ from the current start time."])";
+      requirement = "aemcp.requirement.native.layer-start-time-set";
+      contract_digest = "c0c09292b98f5fecfb69a487f2014aed6ce2b67d47f07231beea36d916e07e27";
+      configured_digest = response.layer_start_time_set_contract_digest;
+      const std::string time = layer_timeline_exact_time_schema();
+      input = common_input_prefix
+          + "\"required\":[\"layerLocator\",\"startTime\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema
+          + ",\"startTime\":" + layer_timeline_time_input_schema(false)
+          + ",\"idempotencyKey\":" + idempotency_schema + "}}";
+      result = common_input_prefix
+          + "\"required\":[\"changed\",\"layerLocator\",\"beforeStartTime\","
+            "\"afterStartTime\"],\"properties\":{\"changed\":{\"const\":true},"
+            "\"layerLocator\":" + layer_schema + ",\"beforeStartTime\":" + time
+          + ",\"afterStartTime\":" + time
+          + "},\"x-invariant\":\"afterStartTime-equals-request-and-differs-from-beforeStartTime\"}";
+      arguments = "{\"idempotencyKey\":\"synthetic-layer-start-0001\","
+          "\"layerLocator\":" + locator_json(layer)
+          + ",\"startTime\":{\"scale\":1,\"value\":1}}";
+      positive = canonical_layer_start_time_set_value(
+          {true, layer, {0, 1, "0"}, {1, 1, "1"}});
+      break;
+    }
+    case LayerTimelineDescriptorKind::kStretch: {
+      id = "ae.layer.stretch.set";
+      summary = "Set one layer stretch as an exact signed ratio.";
+      side_effect = "Changes one layer stretch and creates one After Effects Undo step.";
+      preconditions = R"(["layerLocator must be current.","stretch must be nonzero and differ from the current stretch."])";
+      requirement = "aemcp.requirement.native.layer-stretch-set";
+      contract_digest = "0545a85e87d8907f94597ba36e3021fd3fa6dfe1262ff0e81eb30551f5e3bbb8";
+      configured_digest = response.layer_stretch_set_contract_digest;
+      const std::string stretch = layer_timeline_stretch_schema();
+      input = common_input_prefix
+          + "\"required\":[\"layerLocator\",\"stretch\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema
+          + ",\"stretch\":" + layer_timeline_stretch_input_schema()
+          + ",\"idempotencyKey\":" + idempotency_schema + "}}";
+      result = common_input_prefix
+          + "\"required\":[\"changed\",\"layerLocator\",\"beforeStretch\","
+            "\"afterStretch\"],\"properties\":{\"changed\":{\"const\":true},"
+            "\"layerLocator\":" + layer_schema + ",\"beforeStretch\":" + stretch
+          + ",\"afterStretch\":" + stretch
+          + "},\"x-invariant\":\"afterStretch-equals-request-and-differs-from-beforeStretch\"}";
+      arguments = "{\"idempotencyKey\":\"synthetic-layer-stretch-0001\","
+          "\"layerLocator\":" + locator_json(layer)
+          + ",\"stretch\":{\"den\":1,\"num\":2}}";
+      positive = canonical_layer_stretch_set_value(
+          {true, layer, {1, 1, "1"}, {2, 1, "2"}});
+      break;
+    }
+    case LayerTimelineDescriptorKind::kOrder: {
+      id = "ae.layer.order.set";
+      summary = "Move one layer to an explicit composition stack index.";
+      side_effect = "Changes one layer stack position and creates one After Effects Undo step.";
+      preconditions = R"(["layerLocator must be current.","targetStackIndex must exist and differ from the current stack index."])";
+      requirement = "aemcp.requirement.native.layer-order-set";
+      contract_digest = "e977b89201314e2e4ee1b6e7a09efadd06f012b2b97e3087b0d9c4bd8102d162";
+      configured_digest = response.layer_order_set_contract_digest;
+      const std::string index_schema =
+          R"({"type":"integer","minimum":1,"maximum":9007199254740991})";
+      input = common_input_prefix
+          + "\"required\":[\"layerLocator\",\"targetStackIndex\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema
+          + ",\"targetStackIndex\":" + index_schema
+          + ",\"idempotencyKey\":" + idempotency_schema + "}}";
+      result = common_input_prefix
+          + "\"required\":[\"changed\",\"layerLocator\",\"beforeStackIndex\","
+            "\"afterStackIndex\"],\"properties\":{\"changed\":{\"const\":true},"
+            "\"layerLocator\":" + layer_schema + ",\"beforeStackIndex\":"
+          + index_schema + ",\"afterStackIndex\":" + index_schema
+          + "},\"x-invariant\":\"afterStackIndex-equals-request-and-differs-from-beforeStackIndex\"}";
+      arguments = "{\"idempotencyKey\":\"synthetic-layer-order-0001\","
+          "\"layerLocator\":" + locator_json(layer) + ",\"targetStackIndex\":2}";
+      positive = canonical_layer_order_set_value({true, layer, 1, 2});
+      break;
+    }
+    case LayerTimelineDescriptorKind::kParent: {
+      id = "ae.layer.parent.set";
+      summary = "Set or clear one layer parent.";
+      side_effect = "Changes one layer parent and creates one After Effects Undo step.";
+      preconditions = R"(["Both locators must be current and in the same composition.","A layer cannot parent itself and the requested parent must differ from the current parent."])";
+      requirement = "aemcp.requirement.native.layer-parent-set";
+      contract_digest = "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c";
+      configured_digest = response.layer_parent_set_contract_digest;
+      input = common_input_prefix
+          + "\"required\":[\"layerLocator\",\"parentLayerLocator\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema
+          + ",\"parentLayerLocator\":" + nullable_layer_schema
+          + ",\"idempotencyKey\":" + idempotency_schema + "}}";
+      result = common_input_prefix
+          + "\"required\":[\"changed\",\"layerLocator\",\"beforeParentLocator\","
+            "\"afterParentLocator\"],\"properties\":{\"changed\":{\"const\":true},"
+            "\"layerLocator\":" + layer_schema + ",\"beforeParentLocator\":"
+          + nullable_layer_schema + ",\"afterParentLocator\":" + nullable_layer_schema
+          + "},\"x-invariant\":\"afterParentLocator-equals-request-and-differs-from-beforeParentLocator\"}";
+      arguments = "{\"idempotencyKey\":\"synthetic-layer-parent-0001\","
+          "\"layerLocator\":" + locator_json(layer)
+          + ",\"parentLayerLocator\":" + locator_json(parent) + "}";
+      positive = canonical_layer_parent_set_value({true, layer, std::nullopt, parent});
+      break;
+    }
+    case LayerTimelineDescriptorKind::kDuplicate: {
+      id = "ae.layer.duplicate";
+      summary = "Duplicate one layer with an explicit new name.";
+      side_effect = "Adds one layer and creates one After Effects Undo step.";
+      preconditions = R"(["layerLocator must be current."])";
+      requirement = "aemcp.requirement.native.layer-duplicate";
+      contract_digest = "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75";
+      configured_digest = response.layer_duplicate_contract_digest;
+      input = common_input_prefix
+          + "\"required\":[\"layerLocator\",\"newName\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema
+          + ",\"newName\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":255},"
+            "\"idempotencyKey\":" + idempotency_schema + "}}";
+      const std::string composition_schema = layer_timeline_locator_schema(
+          R"({"const":"composition"})");
+      result = common_input_prefix
+          + "\"required\":[\"changed\",\"sourceLayerLocator\",\"newLayerLocator\","
+            "\"compositionLocator\",\"layerCountBefore\",\"layerCountAfter\","
+            "\"newLayer\"],\"properties\":{\"changed\":{\"const\":true},"
+            "\"sourceLayerLocator\":" + layer_schema + ",\"newLayerLocator\":"
+          + layer_schema + ",\"compositionLocator\":" + composition_schema
+          + ",\"layerCountBefore\":{\"type\":\"integer\",\"minimum\":0,"
+            "\"maximum\":9007199254740991},\"layerCountAfter\":{\"type\":\"integer\","
+            "\"minimum\":1,\"maximum\":9007199254740991},\"newLayer\":"
+          + layer_timeline_layer_details_schema()
+          + "},\"x-invariant\":\"fresh-locators-share-one-post-mutation-generation;"
+            "new-layer-locator-matches-newLayer;layerCountAfter-equals-layerCountBefore-plus-one\"}";
+      arguments = "{\"idempotencyKey\":\"synthetic-layer-duplicate-0001\","
+          "\"layerLocator\":" + locator_json(layer)
+          + ",\"newName\":\"SYNTHETIC_COPY\"}";
+      const std::string fresh_project = "55555555-5555-4555-8555-555555555555";
+      const ObjectLocator fresh_source = synthetic_layer_timeline_locator(
+          "layer", layer.object_id, fresh_project, 9);
+      const ObjectLocator fresh_layer = synthetic_layer_timeline_locator(
+          "layer", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", fresh_project, 9);
+      const ObjectLocator fresh_composition = synthetic_layer_timeline_locator(
+          "composition", composition.object_id, fresh_project, 9);
+      const ObjectLocator fresh_item = synthetic_layer_timeline_locator(
+          "item", source.object_id, fresh_project, 9);
+      positive = canonical_layer_duplicate_value({true, fresh_source, fresh_layer,
+          fresh_composition, 1, 2, synthetic_layer_timeline_details(
+              fresh_layer, fresh_composition, fresh_item, "SYNTHETIC_COPY"),
+          std::nullopt});
+      break;
+    }
+  }
+  if (response.detail == CapabilityDetail::kFull
+      && configured_digest != contract_digest) {
+    invalid_argument(id + " contract digest does not match the compiled descriptor");
+  }
+  const std::string stem = id.substr(3);
+  std::string example_stem = stem;
+  std::replace(example_stem.begin(), example_stem.end(), '.', '-');
+  return replace_descriptor_text(package_descriptor(response, {
+      id, summary, side_effect, preconditions,
+      "aemcp.contract." + id + ".input.v1",
+      "aemcp.contract." + id + ".result.v1", requirement,
+      input, result, arguments, "aemcp-example-" + example_stem + "-stale",
+      "STALE_LOCATOR", "refresh-locator", mutating,
+      "aemcp-example-" + example_stem, positive}, configured_digest),
+      "Synthetic failure exercises the documented recovery path.",
+      "Synthetic failure exercises stale-locator recovery.");
+}
+
 std::string project_item_text_descriptor(
     const CapabilitiesSuccess& response, bool name) {
   return name ? project_item_name_descriptor(response)
@@ -4372,6 +5223,46 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   if (response.include_composition_duplicate) {
     if (needs_comma) items.push_back(',');
     items += composition_duplicate_descriptor(response);
+    needs_comma = true;
+  }
+  if (response.include_layer_details_read) {
+    if (needs_comma) items.push_back(',');
+    items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kDetails);
+    needs_comma = true;
+  }
+  if (response.include_layer_name_set) {
+    if (needs_comma) items.push_back(',');
+    items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kName);
+    needs_comma = true;
+  }
+  if (response.include_layer_range_set) {
+    if (needs_comma) items.push_back(',');
+    items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kRange);
+    needs_comma = true;
+  }
+  if (response.include_layer_start_time_set) {
+    if (needs_comma) items.push_back(',');
+    items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kStartTime);
+    needs_comma = true;
+  }
+  if (response.include_layer_stretch_set) {
+    if (needs_comma) items.push_back(',');
+    items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kStretch);
+    needs_comma = true;
+  }
+  if (response.include_layer_order_set) {
+    if (needs_comma) items.push_back(',');
+    items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kOrder);
+    needs_comma = true;
+  }
+  if (response.include_layer_parent_set) {
+    if (needs_comma) items.push_back(',');
+    items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kParent);
+    needs_comma = true;
+  }
+  if (response.include_layer_duplicate) {
+    if (needs_comma) items.push_back(',');
+    items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kDuplicate);
   }
   items.push_back(']');
   const bool complete_full_registry = response.detail == CapabilityDetail::kFull
@@ -4396,11 +5287,22 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
       && response.include_project_item_name_set
       && response.include_project_item_comment_set
       && response.include_project_item_label_set
-      && response.include_composition_duplicate;
-  if (complete_full_registry
-      && sha256_hex(canonical_json(JsonParser(items).parse()))
-          != response.capabilities_digest) {
-    invalid_argument("capabilities digest does not match the encoded full registry");
+      && response.include_composition_duplicate
+      && response.include_layer_details_read
+      && response.include_layer_name_set
+      && response.include_layer_range_set
+      && response.include_layer_start_time_set
+      && response.include_layer_stretch_set
+      && response.include_layer_order_set
+      && response.include_layer_parent_set
+      && response.include_layer_duplicate;
+  if (complete_full_registry) {
+    const std::string encoded_digest = sha256_hex(
+        canonical_json(JsonParser(items).parse()));
+    if (encoded_digest != response.capabilities_digest) {
+      invalid_argument("capabilities digest does not match the encoded full registry: "
+          + encoded_digest);
+    }
   }
   std::string json = "{\"kind\":\"response\",\"method\":\"capabilities\",\"ok\":true,"
       "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
@@ -4830,6 +5732,102 @@ std::vector<std::uint8_t> encode_composition_duplicate_success(
       response.value.source_composition_locator,
       canonical_composition_duplicate_value(response.value),
       digest_composition_duplicate_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_details_success(
+    const LayerDetailsSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.details.read",
+      "layer-details-read",
+      response.value.layer_locator,
+      canonical_layer_details_value(response.value),
+      digest_layer_details_postcondition(response.value),
+      false);
+}
+
+std::vector<std::uint8_t> encode_layer_name_set_success(
+    const LayerNameSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.name.set",
+      "layer-name-set",
+      response.value.layer_locator,
+      canonical_layer_name_set_value(response.value),
+      digest_layer_name_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_range_set_success(
+    const LayerRangeSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.range.set",
+      "layer-range-set",
+      response.value.layer_locator,
+      canonical_layer_range_set_value(response.value),
+      digest_layer_range_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_start_time_set_success(
+    const LayerStartTimeSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.start-time.set",
+      "layer-start-time-set",
+      response.value.layer_locator,
+      canonical_layer_start_time_set_value(response.value),
+      digest_layer_start_time_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_stretch_set_success(
+    const LayerStretchSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.stretch.set",
+      "layer-stretch-set",
+      response.value.layer_locator,
+      canonical_layer_stretch_set_value(response.value),
+      digest_layer_stretch_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_order_set_success(
+    const LayerOrderSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.order.set",
+      "layer-order-set",
+      response.value.layer_locator,
+      canonical_layer_order_set_value(response.value),
+      digest_layer_order_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_parent_set_success(
+    const LayerParentSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.parent.set",
+      "layer-parent-set",
+      response.value.layer_locator,
+      canonical_layer_parent_set_value(response.value),
+      digest_layer_parent_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_duplicate_success(
+    const LayerDuplicateSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.duplicate",
+      "layer-duplicate",
+      response.value.source_layer_locator,
+      canonical_layer_duplicate_value(response.value),
+      digest_layer_duplicate_postcondition(response.value),
       true);
 }
 

@@ -30,6 +30,14 @@ using aemcp::native::rpc::ProjectItemNameSetSuccess;
 using aemcp::native::rpc::ProjectItemCommentSetSuccess;
 using aemcp::native::rpc::ProjectItemLabelSetSuccess;
 using aemcp::native::rpc::CompositionDuplicateSuccess;
+using aemcp::native::rpc::LayerDetailsSuccess;
+using aemcp::native::rpc::LayerNameSetSuccess;
+using aemcp::native::rpc::LayerRangeSetSuccess;
+using aemcp::native::rpc::LayerStartTimeSetSuccess;
+using aemcp::native::rpc::LayerStretchSetSuccess;
+using aemcp::native::rpc::LayerOrderSetSuccess;
+using aemcp::native::rpc::LayerParentSetSuccess;
+using aemcp::native::rpc::LayerDuplicateSuccess;
 using aemcp::native::rpc::CompositionCreateSuccess;
 using aemcp::native::rpc::CompositionLayerCreateSuccess;
 using aemcp::native::rpc::LayerEffectApplySuccess;
@@ -72,6 +80,14 @@ using aemcp::native::rpc::digest_composition_selected_layers_postcondition;
 using aemcp::native::rpc::digest_composition_time_postcondition;
 using aemcp::native::rpc::digest_composition_time_set_postcondition;
 using aemcp::native::rpc::digest_composition_create_postcondition;
+using aemcp::native::rpc::digest_layer_details_postcondition;
+using aemcp::native::rpc::digest_layer_name_set_postcondition;
+using aemcp::native::rpc::digest_layer_range_set_postcondition;
+using aemcp::native::rpc::digest_layer_start_time_set_postcondition;
+using aemcp::native::rpc::digest_layer_stretch_set_postcondition;
+using aemcp::native::rpc::digest_layer_order_set_postcondition;
+using aemcp::native::rpc::digest_layer_parent_set_postcondition;
+using aemcp::native::rpc::digest_layer_duplicate_postcondition;
 using aemcp::native::rpc::composition_create_persistent_diagnostic_fields;
 using aemcp::native::rpc::project_context_persistent_diagnostic_fields;
 using aemcp::native::rpc::project_item_metadata_persistent_diagnostic_fields;
@@ -108,6 +124,14 @@ using aemcp::native::rpc::encode_project_item_name_set_success;
 using aemcp::native::rpc::encode_project_item_comment_set_success;
 using aemcp::native::rpc::encode_project_item_label_set_success;
 using aemcp::native::rpc::encode_composition_duplicate_success;
+using aemcp::native::rpc::encode_layer_details_success;
+using aemcp::native::rpc::encode_layer_name_set_success;
+using aemcp::native::rpc::encode_layer_range_set_success;
+using aemcp::native::rpc::encode_layer_start_time_set_success;
+using aemcp::native::rpc::encode_layer_stretch_set_success;
+using aemcp::native::rpc::encode_layer_order_set_success;
+using aemcp::native::rpc::encode_layer_parent_set_success;
+using aemcp::native::rpc::encode_layer_duplicate_success;
 using aemcp::native::rpc::encode_composition_create_success;
 using aemcp::native::rpc::encode_composition_layer_create_success;
 using aemcp::native::rpc::encode_layer_effect_apply_success;
@@ -162,8 +186,24 @@ constexpr std::string_view kProjectItemLabelSetContractDigest =
     "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f";
 constexpr std::string_view kCompositionDuplicateContractDigest =
     "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3";
+constexpr std::string_view kLayerDetailsContractDigest =
+    "b1b7a5f313bbf72eb6b33ac4a0507f9f925ef6873d53fd07d93d861164ac15d9";
+constexpr std::string_view kLayerNameContractDigest =
+    "a68fb7f75f050faf4e77c81c3fa9f53ad501016af0eeb065493716ff94fd5929";
+constexpr std::string_view kLayerRangeContractDigest =
+    "0b90618916f0df612726017ef80795b72829f367cbf46cad23b33beb129230e2";
+constexpr std::string_view kLayerStartTimeContractDigest =
+    "c0c09292b98f5fecfb69a487f2014aed6ce2b67d47f07231beea36d916e07e27";
+constexpr std::string_view kLayerStretchContractDigest =
+    "0545a85e87d8907f94597ba36e3021fd3fa6dfe1262ff0e81eb30551f5e3bbb8";
+constexpr std::string_view kLayerOrderContractDigest =
+    "e977b89201314e2e4ee1b6e7a09efadd06f012b2b97e3087b0d9c4bd8102d162";
+constexpr std::string_view kLayerParentContractDigest =
+    "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c";
+constexpr std::string_view kLayerDuplicateContractDigest =
+    "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75";
 constexpr std::string_view kCapabilitiesRegistryDigest =
-    "12640c0306641fd32553828d86a4c87728a2c964fe0d288c06a7107fcf9cfdd9";
+    "53e3b7974e797b088aa1dd25d600a2506f59fed0d11c34ca8249e87dcf3ee4a1";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -1651,6 +1691,202 @@ void project_composition_package_parses_and_serializes_all_eight_contracts() {
   }, "project item name result with oversized old name");
 }
 
+void layer_timeline_package_parses_and_serializes_all_eight_contracts() {
+  const std::string layer_json = locator_json(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const std::string parent_json = locator_json(
+      "layer", "99999999-9999-4999-8999-999999999999");
+  const std::array<std::tuple<std::string, std::string, std::string, std::string>, 8>
+      requests{{
+          {"invoke-layer-details-read-1", "ae.layer.details.read",
+              "{\"layerLocator\":" + layer_json + "}",
+              "7f0cec54d090e9689bec73271d13dc754cba93546319f43ef27963d2a4c9e39d"},
+          {"invoke-layer-name-set-1", "ae.layer.name.set",
+              "{\"layerLocator\":" + layer_json
+                  + ",\"name\":\"SYNTHETIC_RENAMED\","
+                    "\"idempotencyKey\":\"synthetic-layer-name-0001\"}",
+              "f0ff24eea0d779683b686bf2bb3f3abb2d8d8b6acfe02abc19b2533d1f522096"},
+          {"invoke-layer-range-set-1", "ae.layer.range.set",
+              "{\"layerLocator\":" + layer_json
+                  + ",\"inPoint\":{\"value\":1,\"scale\":1},"
+                    "\"duration\":{\"value\":4,\"scale\":1},"
+                    "\"idempotencyKey\":\"synthetic-layer-range-0001\"}",
+              "211b8b14052e62faf235d47ca7da53b0e5511e8ec2447213cfba588b62fe3f76"},
+          {"invoke-layer-start-time-set-1", "ae.layer.start-time.set",
+              "{\"layerLocator\":" + layer_json
+                  + ",\"startTime\":{\"value\":1,\"scale\":1},"
+                    "\"idempotencyKey\":\"synthetic-layer-start-0001\"}",
+              "e80d97cbfa2c6bfed81278737bec246f9b7f22438fa0dec30048aa0f1f13ac88"},
+          {"invoke-layer-stretch-set-1", "ae.layer.stretch.set",
+              "{\"layerLocator\":" + layer_json
+                  + ",\"stretch\":{\"num\":2,\"den\":1},"
+                    "\"idempotencyKey\":\"synthetic-layer-stretch-0001\"}",
+              "144f206172feb3ef66bc5012ed0c13ea4aa70dcf6e64623acd4701d96a0315b2"},
+          {"invoke-layer-order-set-1", "ae.layer.order.set",
+              "{\"layerLocator\":" + layer_json
+                  + ",\"targetStackIndex\":2,"
+                    "\"idempotencyKey\":\"synthetic-layer-order-0001\"}",
+              "35703073b41cc6907e21f51873de59f2471b9ff7d8b349c8d0fe17baa0bfe02e"},
+          {"invoke-layer-parent-set-1", "ae.layer.parent.set",
+              "{\"layerLocator\":" + layer_json
+                  + ",\"parentLayerLocator\":" + parent_json
+                  + ",\"idempotencyKey\":\"synthetic-layer-parent-0001\"}",
+              "1f3cb8b19c4f269cdc3b102ecf99796ad03097fd9c91531a313beb2f446a5cf5"},
+          {"invoke-layer-duplicate-1", "ae.layer.duplicate",
+              "{\"layerLocator\":" + layer_json
+                  + ",\"newName\":\"SYNTHETIC_COPY\","
+                    "\"idempotencyKey\":\"synthetic-layer-duplicate-0001\"}",
+              "f1df007516f70e5f837f24a467d5d4849d223ccf0bf1ad466a9908772d78782b"},
+      }};
+  for (const auto& [request_id, capability_id, arguments, expected_digest] : requests) {
+    const ParsedRequest parsed = decode_request_frame(frame(package150_invoke_json(
+        request_id, capability_id, arguments)));
+    require(parsed.method == RpcMethod::kInvoke
+            && std::get<InvokeParams>(parsed.params).capability_id == capability_id,
+        "layer timeline parser lost typed capability: " + capability_id);
+    require(parsed.request_fingerprint_sha256 == expected_digest,
+        "layer timeline request fingerprint drifted: " + capability_id);
+  }
+  const ParsedRequest stretch_request = decode_request_frame(frame(package150_invoke_json(
+      "invoke-layer-stretch-set-1", "ae.layer.stretch.set",
+      std::get<2>(requests[4]))));
+  const auto& stretch_params = std::get<InvokeParams>(stretch_request.params);
+  require(stretch_params.layer_stretch.numerator == 2
+          && stretch_params.layer_stretch.denominator == 1
+          && stretch_params.layer_stretch.rational == "2",
+      "layer stretch parser lost its exact signed ratio");
+
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(package150_invoke_json(
+        "layer-details-extra", "ae.layer.details.read",
+        "{\"layerLocator\":" + layer_json + ",\"extra\":true}")));
+  }, "INVALID_ARGUMENT", "layer details unknown argument");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(package150_invoke_json(
+        "layer-stretch-zero", "ae.layer.stretch.set",
+        "{\"layerLocator\":" + layer_json
+            + ",\"stretch\":{\"num\":0,\"den\":1},"
+              "\"idempotencyKey\":\"synthetic-layer-stretch-0001\"}")));
+  }, "INVALID_ARGUMENT", "zero layer stretch");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(package150_invoke_json(
+        "layer-parent-self", "ae.layer.parent.set",
+        "{\"layerLocator\":" + layer_json + ",\"parentLayerLocator\":"
+            + layer_json
+            + ",\"idempotencyKey\":\"synthetic-layer-parent-0001\"}")));
+  }, "INVALID_ARGUMENT", "self layer parent");
+  expect_codec_error([&] {
+    (void)decode_request_frame(frame(package150_invoke_json(
+        "layer-duplicate-missing-name", "ae.layer.duplicate",
+        "{\"layerLocator\":" + layer_json
+            + ",\"idempotencyKey\":\"synthetic-layer-duplicate-0001\"}")));
+  }, "INVALID_ARGUMENT", "layer duplicate without explicit name");
+
+  const auto layer = locator("layer", "88888888-8888-4888-8888-888888888888");
+  const auto composition = locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+  const auto source = locator("item", "77777777-7777-4777-8777-777777777777");
+  const auto parent = locator("layer", "99999999-9999-4999-8999-999999999999");
+  const aemcp::native::LayerDetails details{
+      layer, composition, 1, "SYNTHETIC_LAYER", "av", true, false, false,
+      std::nullopt, source, {0, 1, "0"}, {5, 1, "5"}, {0, 1, "0"},
+      {1, 1, "1"}};
+  const aemcp::native::LayerNameChanged name{
+      true, layer, "SYNTHETIC_LAYER", "SYNTHETIC_RENAMED"};
+  const aemcp::native::LayerRangeChanged range{
+      true, layer, {0, 1, "0"}, {5, 1, "5"}, {1, 1, "1"}, {4, 1, "4"}};
+  const aemcp::native::LayerStartTimeChanged start{
+      true, layer, {0, 1, "0"}, {1, 1, "1"}};
+  const aemcp::native::LayerStretchChanged stretch{
+      true, layer, {1, 1, "1"}, {2, 1, "2"}};
+  const aemcp::native::LayerOrderChanged order{true, layer, 1, 2};
+  const aemcp::native::LayerParentChanged parent_change{
+      true, layer, std::nullopt, parent};
+
+  auto fresh = [](aemcp::native::ObjectLocator value) {
+    value.project_id = "55555555-5555-4555-8555-555555555555";
+    value.generation = 9;
+    return value;
+  };
+  const auto fresh_source_layer = fresh(layer);
+  auto fresh_new_layer = fresh(layer);
+  fresh_new_layer.object_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const auto fresh_composition = fresh(composition);
+  const auto fresh_source_item = fresh(source);
+  const aemcp::native::LayerDetails copied_details{
+      fresh_new_layer, fresh_composition, 1, "SYNTHETIC_COPY", "av", true,
+      false, false, std::nullopt, fresh_source_item, {0, 1, "0"},
+      {5, 1, "5"}, {0, 1, "0"}, {1, 1, "1"}};
+  const aemcp::native::LayerDuplicated duplicated{
+      true, fresh_source_layer, fresh_new_layer, fresh_composition, 1, 2,
+      copied_details, std::nullopt};
+
+  require(digest_layer_details_postcondition(details)
+              == "c27e6206d8e817cf572ec68833d7bee7f039377682b9e238b5e041a2c365b972",
+      "layer details postcondition drifted from the protocol fixture");
+  require(digest_layer_name_set_postcondition(name)
+              == "45773dba6579be584663e16eb83e56fa44002d193454f73ce16f8008fa929185",
+      "layer name postcondition drifted from the protocol fixture");
+  require(digest_layer_range_set_postcondition(range)
+              == "37bab85488a04aba9353053a71020344198bdd07f2382e0bbaf262ad86167533",
+      "layer range postcondition drifted from the protocol fixture");
+  require(digest_layer_start_time_set_postcondition(start)
+              == "a3b9f1f8cefc47bd52649652cbf34a93e2dfb6044409afdc5be6d8f27ad7d5c0",
+      "layer start postcondition drifted from the protocol fixture");
+  require(digest_layer_stretch_set_postcondition(stretch)
+              == "bf2ccc8c82c5048b97a89e573d69b18befe38485acb885dc0b396d69213ba5eb",
+      "layer stretch postcondition drifted from the protocol fixture");
+  require(digest_layer_order_set_postcondition(order)
+              == "7df224d5c496122d5b0d937c580fb0f92b67eab47a75b7d3ceeade9badd01fb6",
+      "layer order postcondition drifted from the protocol fixture");
+  require(digest_layer_parent_set_postcondition(parent_change)
+              == "8d0973ba11c31b52a41925c226e7bf72d5a4addcdc027cc85781d63a5dda3166",
+      "layer parent postcondition drifted from the protocol fixture");
+  require(digest_layer_duplicate_postcondition(duplicated)
+              == "11feec12d79b03a39fa0e5f582e58ed61010bfbf812dd57ff9ed470fb632ed62",
+      "layer duplicate postcondition drifted from the protocol fixture");
+
+  const auto success = [](auto value, std::string request_id, std::string digest) {
+    using Success = aemcp::native::rpc::NativeValueSuccess<decltype(value)>;
+    return Success{std::move(request_id), std::string(kSession), std::string(kHost),
+        std::move(value), 1'900'000'000'000ULL, 1'900'000'000'025ULL,
+        std::string(kDigest), std::move(digest), false};
+  };
+  const std::array<std::string, 8> encoded{{
+      body(encode_layer_details_success(success(
+          details, "layer-details", digest_layer_details_postcondition(details)))),
+      body(encode_layer_name_set_success(success(
+          name, "layer-name", digest_layer_name_set_postcondition(name)))),
+      body(encode_layer_range_set_success(success(
+          range, "layer-range", digest_layer_range_set_postcondition(range)))),
+      body(encode_layer_start_time_set_success(success(
+          start, "layer-start", digest_layer_start_time_set_postcondition(start)))),
+      body(encode_layer_stretch_set_success(success(
+          stretch, "layer-stretch", digest_layer_stretch_set_postcondition(stretch)))),
+      body(encode_layer_order_set_success(success(
+          order, "layer-order", digest_layer_order_set_postcondition(order)))),
+      body(encode_layer_parent_set_success(success(
+          parent_change, "layer-parent", digest_layer_parent_set_postcondition(parent_change)))),
+      body(encode_layer_duplicate_success(success(
+          duplicated, "layer-duplicate", digest_layer_duplicate_postcondition(duplicated)))),
+  }};
+  for (std::size_t index = 0; index < encoded.size(); ++index) {
+    require(encoded[index].find("\"capabilityId\":\"" + std::get<1>(requests[index])
+                + "\"") != std::string::npos,
+        "layer timeline encoder emitted the wrong capability branch");
+  }
+  auto bad_duplicate = duplicated;
+  bad_duplicate.new_layer.layer_locator = fresh_source_layer;
+  expect_argument_error([&] {
+    (void)encode_layer_duplicate_success(success(
+        bad_duplicate, "layer-duplicate-bad", std::string(kDigest)));
+  }, "layer duplicate with mismatched nested locator");
+  auto bad_digest = success(name, "layer-name-bad-digest", std::string(kDigest));
+  expect_argument_error([&] {
+    (void)encode_layer_name_set_success(bad_digest);
+  }, "layer name result with unbound postcondition digest");
+}
+
 void framing_fragmentation_and_multiple_frames_work() {
   const auto first = frame(hello_json());
   const auto second = frame("{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
@@ -1932,6 +2168,30 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kProjectItemLabelSetContractDigest);
   capabilities.composition_duplicate_contract_digest =
       std::string(kCompositionDuplicateContractDigest);
+  capabilities.include_layer_details_read = true;
+  capabilities.include_layer_name_set = true;
+  capabilities.include_layer_range_set = true;
+  capabilities.include_layer_start_time_set = true;
+  capabilities.include_layer_stretch_set = true;
+  capabilities.include_layer_order_set = true;
+  capabilities.include_layer_parent_set = true;
+  capabilities.include_layer_duplicate = true;
+  capabilities.layer_details_read_contract_digest =
+      std::string(kLayerDetailsContractDigest);
+  capabilities.layer_name_set_contract_digest =
+      std::string(kLayerNameContractDigest);
+  capabilities.layer_range_set_contract_digest =
+      std::string(kLayerRangeContractDigest);
+  capabilities.layer_start_time_set_contract_digest =
+      std::string(kLayerStartTimeContractDigest);
+  capabilities.layer_stretch_set_contract_digest =
+      std::string(kLayerStretchContractDigest);
+  capabilities.layer_order_set_contract_digest =
+      std::string(kLayerOrderContractDigest);
+  capabilities.layer_parent_set_contract_digest =
+      std::string(kLayerParentContractDigest);
+  capabilities.layer_duplicate_contract_digest =
+      std::string(kLayerDuplicateContractDigest);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -2045,6 +2305,22 @@ void response_helpers_are_bounded_and_typed() {
           == std::string::npos
       && capabilities_body.find("aemcp-example-project-item-label-stale")
           == std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.details.read\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.name.set\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.range.set\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.start-time.set\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.stretch.set\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.order.set\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.parent.set\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.layer.duplicate\"")
+          != std::string::npos
       && capabilities_body.find("\"beforeName\":\"\"") == std::string::npos,
       "full capability serializer omitted the closed contract");
   capabilities.capabilities_digest = std::string(kDigest);
@@ -2052,6 +2328,14 @@ void response_helpers_are_bounded_and_typed() {
     (void)encode_capabilities_success(capabilities);
   }, "full capability registry digest drift");
   capabilities.include_composition_duplicate = false;
+  capabilities.include_layer_details_read = false;
+  capabilities.include_layer_name_set = false;
+  capabilities.include_layer_range_set = false;
+  capabilities.include_layer_start_time_set = false;
+  capabilities.include_layer_stretch_set = false;
+  capabilities.include_layer_order_set = false;
+  capabilities.include_layer_parent_set = false;
+  capabilities.include_layer_duplicate = false;
   const std::string filtered_capabilities_body = body(
       encode_capabilities_success(capabilities));
   require(filtered_capabilities_body.find(std::string(kDigest)) != std::string::npos,
@@ -2255,6 +2539,7 @@ int main() {
   invalidate_graph_requests_and_results_are_closed_and_deterministic();
   project_graph_invokes_and_results_are_closed_and_deterministic();
   project_composition_package_parses_and_serializes_all_eight_contracts();
+  layer_timeline_package_parses_and_serializes_all_eight_contracts();
   framing_fragmentation_and_multiple_frames_work();
   strict_json_and_frame_limits_fail_closed();
   negative_contract_vectors_are_classified();

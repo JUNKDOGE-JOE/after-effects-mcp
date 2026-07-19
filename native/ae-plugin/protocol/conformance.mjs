@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 export const LIMITS = Object.freeze({
   maxFrameBytes: 524288,
   maxJsonDepth: 16,
-  maxJsonNodes: 8192,
+  maxJsonNodes: 12288,
   maxStringLength: 8192,
   defaultDeadlineMs: 5000,
   maximumDeadlineMs: 30000,
@@ -161,6 +161,46 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.composition.duplicate.input.v1',
     resultContractId: 'aemcp.contract.ae.composition.duplicate.result.v1',
   }),
+  Object.freeze({
+    id: 'ae.layer.details.read', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.details.read.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.details.read.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.name.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.name.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.name.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.range.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.range.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.range.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.start-time.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.start-time.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.start-time.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.stretch.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.stretch.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.stretch.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.order.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.order.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.order.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.parent.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.parent.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.parent.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.duplicate', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.duplicate.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.duplicate.result.v1',
+  }),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -237,6 +277,13 @@ function isTimeInput(value, minimum) {
   return exactKeys(value, new Set(['value', 'scale']), ['value', 'scale'])
     && Number.isInteger(value.value) && value.value >= minimum && value.value <= 2147483647
     && Number.isInteger(value.scale) && value.scale >= 1 && value.scale <= 4294967295;
+}
+
+function isLayerStretchInput(value) {
+  return exactKeys(value, new Set(['num', 'den']), ['num', 'den'])
+    && Number.isInteger(value.num) && value.num >= -2147483648
+    && value.num <= 2147483647 && value.num !== 0
+    && Number.isInteger(value.den) && value.den >= 1 && value.den <= 2147483647;
 }
 
 function isIdempotencyKey(value) {
@@ -948,6 +995,82 @@ export function classifyRequest(message) {
           || !isIdempotencyKey(args.idempotencyKey)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.layer.details.read') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['layerLocator']), ['layerLocator'])
+          || !isLocatorShape(args.layerLocator, ['layer'])) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.name.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['layerLocator', 'name', 'idempotencyKey']),
+        ['layerLocator', 'name', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isBoundedScalarString(args.name, 1, 255)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.range.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set([
+        'layerLocator', 'inPoint', 'duration', 'idempotencyKey',
+      ]), ['layerLocator', 'inPoint', 'duration', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isTimeInput(args.inPoint, -2147483648)
+          || !isTimeInput(args.duration, 1)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.start-time.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['layerLocator', 'startTime', 'idempotencyKey']),
+        ['layerLocator', 'startTime', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isTimeInput(args.startTime, -2147483648)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.stretch.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['layerLocator', 'stretch', 'idempotencyKey']),
+        ['layerLocator', 'stretch', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isLayerStretchInput(args.stretch)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.order.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set([
+        'layerLocator', 'targetStackIndex', 'idempotencyKey',
+      ]), ['layerLocator', 'targetStackIndex', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !Number.isSafeInteger(args.targetStackIndex) || args.targetStackIndex < 1
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.parent.set') {
+      const args = params.arguments;
+      const parent = args.parentLayerLocator;
+      if (!exactKeys(args, new Set([
+        'layerLocator', 'parentLayerLocator', 'idempotencyKey',
+      ]), ['layerLocator', 'parentLayerLocator', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || (parent !== null && (!isLocatorShape(parent, ['layer'])
+            || !sameLocatorContext(args.layerLocator, parent)
+            || parent.objectId === args.layerLocator.objectId))
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.duplicate') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['layerLocator', 'newName', 'idempotencyKey']),
+        ['layerLocator', 'newName', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isBoundedScalarString(args.newName, 1, 255)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else {
       const args = params.arguments;
       if (!exactKeys(
@@ -1085,7 +1208,8 @@ export function validateFailureExchange(
         || capabilityId === 'ae.layer.effect.apply'
         || capabilityId === 'ae.layer.properties.list'
         || capabilityId === 'ae.layer.property.keyframes.list'
-        || capabilityId === 'ae.layer.property.set')) {
+        || capabilityId === 'ae.layer.property.set'
+        || LAYER_TIMELINE_SPECS.some((spec) => spec.id === capabilityId))) {
     const expectedFields = capabilityId === 'ae.project.items.list'
       ? new Set(['params.arguments.projectLocator'])
       : capabilityId === 'ae.composition.layers.list'
@@ -1102,6 +1226,13 @@ export function validateFailureExchange(
             ? new Set(['params.arguments.propertyLocator'])
           : capabilityId === 'ae.layer.effect.apply'
             ? new Set(['params.arguments.layerLocator'])
+          : LAYER_TIMELINE_SPECS.some((spec) => spec.id === capabilityId)
+            ? new Set([
+              'params.arguments.layerLocator',
+              ...(capabilityId === 'ae.layer.parent.set'
+                && request.params.arguments.parentLayerLocator !== null
+                ? ['params.arguments.parentLayerLocator'] : []),
+            ])
           : new Set([
             'params.arguments.layerLocator',
             ...(request.params.arguments.parentPropertyLocator
@@ -2430,6 +2561,154 @@ export function projectCompositionDescriptors(schema) {
   });
 }
 
+const LAYER_TIMELINE_SPECS = Object.freeze([
+  Object.freeze({ id: 'ae.layer.details.read', schema: 'layerDetailsRead',
+    summary: 'Read one After Effects layer and its exact timeline state.', risk: 'read',
+    sideEffectSummary: 'Reads layer state without changing After Effects state.',
+    preconditions: ['An After Effects project must be open.',
+      'layerLocator must come from a current native layer listing.'],
+    requirementId: 'aemcp.requirement.native.layer-details-read' }),
+  Object.freeze({ id: 'ae.layer.name.set', schema: 'layerNameSet',
+    summary: 'Rename one After Effects layer.', risk: 'write',
+    sideEffectSummary: 'Changes one layer name and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must be current.', 'name must differ from the current name.'],
+    requirementId: 'aemcp.requirement.native.layer-name-set' }),
+  Object.freeze({ id: 'ae.layer.range.set', schema: 'layerRangeSet',
+    summary: 'Set one layer in point and duration using exact rational time.', risk: 'write',
+    sideEffectSummary: 'Changes one layer range and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must be current.',
+      'The range must fit the composition and differ from the current range.'],
+    requirementId: 'aemcp.requirement.native.layer-range-set' }),
+  Object.freeze({ id: 'ae.layer.start-time.set', schema: 'layerStartTimeSet',
+    summary: 'Set one layer start time using exact rational time.', risk: 'write',
+    sideEffectSummary: 'Changes one layer start time and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must be current.', 'startTime must differ from the current start time.'],
+    requirementId: 'aemcp.requirement.native.layer-start-time-set' }),
+  Object.freeze({ id: 'ae.layer.stretch.set', schema: 'layerStretchSet',
+    summary: 'Set one layer stretch as an exact signed ratio.', risk: 'write',
+    sideEffectSummary: 'Changes one layer stretch and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must be current.', 'stretch must be nonzero and differ from the current stretch.'],
+    requirementId: 'aemcp.requirement.native.layer-stretch-set' }),
+  Object.freeze({ id: 'ae.layer.order.set', schema: 'layerOrderSet',
+    summary: 'Move one layer to an explicit composition stack index.', risk: 'write',
+    sideEffectSummary: 'Changes one layer stack position and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must be current.',
+      'targetStackIndex must exist and differ from the current stack index.'],
+    requirementId: 'aemcp.requirement.native.layer-order-set' }),
+  Object.freeze({ id: 'ae.layer.parent.set', schema: 'layerParentSet',
+    summary: 'Set or clear one layer parent.', risk: 'write',
+    sideEffectSummary: 'Changes one layer parent and creates one After Effects Undo step.',
+    preconditions: ['Both locators must be current and in the same composition.',
+      'A layer cannot parent itself and the requested parent must differ from the current parent.'],
+    requirementId: 'aemcp.requirement.native.layer-parent-set' }),
+  Object.freeze({ id: 'ae.layer.duplicate', schema: 'layerDuplicate',
+    summary: 'Duplicate one layer with an explicit new name.', risk: 'write',
+    sideEffectSummary: 'Adds one layer and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must be current.'],
+    requirementId: 'aemcp.requirement.native.layer-duplicate' }),
+]);
+
+function layerTimelineExample(spec) {
+  const layerLocator = syntheticDescriptorLocator(
+    'layer', '88888888-8888-4888-8888-888888888888',
+  );
+  const parentLayerLocator = syntheticDescriptorLocator(
+    'layer', '99999999-9999-4999-8999-999999999999',
+  );
+  const compositionLocator = syntheticDescriptorLocator(
+    'composition', '66666666-6666-4666-8666-666666666666',
+  );
+  const sourceItemLocator = syntheticDescriptorLocator(
+    'item', '77777777-7777-4777-8777-777777777777',
+  );
+  const exactTime = (value, scale = 1) => ({
+    value, scale, secondsRational: canonicalSecondsRational(value, scale),
+  });
+  const details = (locator = layerLocator, name = 'SYNTHETIC_LAYER') => ({
+    layerLocator: locator, compositionLocator, stackIndex: 1, name, type: 'av',
+    videoEnabled: true, isThreeD: false, locked: false,
+    parentLocator: null, sourceItemLocator,
+    inPoint: exactTime(0), duration: exactTime(5), startTime: exactTime(0),
+    stretch: { numerator: 1, denominator: 1, rational: '1' },
+  });
+  const fresh = (locator) => ({
+    ...locator, projectId: '55555555-5555-4555-8555-555555555555', generation: 9,
+  });
+  const newLayerLocator = fresh(syntheticDescriptorLocator(
+    'layer', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  ));
+  const entries = {
+    'ae.layer.details.read': { arguments: { layerLocator }, value: details(),
+      errorCode: 'STALE_LOCATOR', action: 'refresh-locator' },
+    'ae.layer.name.set': { arguments: { layerLocator, name: 'SYNTHETIC_RENAMED',
+      idempotencyKey: 'synthetic-layer-name-0001' }, value: { changed: true, layerLocator,
+      beforeName: 'SYNTHETIC_LAYER', afterName: 'SYNTHETIC_RENAMED' } },
+    'ae.layer.range.set': { arguments: { layerLocator, inPoint: { value: 1, scale: 1 },
+      duration: { value: 4, scale: 1 }, idempotencyKey: 'synthetic-layer-range-0001' },
+      value: { changed: true, layerLocator, beforeInPoint: exactTime(0),
+        beforeDuration: exactTime(5), afterInPoint: exactTime(1), afterDuration: exactTime(4) } },
+    'ae.layer.start-time.set': { arguments: { layerLocator,
+      startTime: { value: 1, scale: 1 }, idempotencyKey: 'synthetic-layer-start-0001' },
+      value: { changed: true, layerLocator, beforeStartTime: exactTime(0),
+        afterStartTime: exactTime(1) } },
+    'ae.layer.stretch.set': { arguments: { layerLocator,
+      stretch: { num: 2, den: 1 }, idempotencyKey: 'synthetic-layer-stretch-0001' },
+      value: { changed: true, layerLocator,
+        beforeStretch: { numerator: 1, denominator: 1, rational: '1' },
+        afterStretch: { numerator: 2, denominator: 1, rational: '2' } } },
+    'ae.layer.order.set': { arguments: { layerLocator, targetStackIndex: 2,
+      idempotencyKey: 'synthetic-layer-order-0001' }, value: { changed: true, layerLocator,
+      beforeStackIndex: 1, afterStackIndex: 2 } },
+    'ae.layer.parent.set': { arguments: { layerLocator, parentLayerLocator,
+      idempotencyKey: 'synthetic-layer-parent-0001' }, value: { changed: true, layerLocator,
+      beforeParentLocator: null, afterParentLocator: parentLayerLocator } },
+    'ae.layer.duplicate': { arguments: { layerLocator, newName: 'SYNTHETIC_COPY',
+      idempotencyKey: 'synthetic-layer-duplicate-0001' }, value: { changed: true,
+      sourceLayerLocator: fresh(layerLocator), newLayerLocator,
+      compositionLocator: fresh(compositionLocator), layerCountBefore: 1, layerCountAfter: 2,
+      newLayer: { ...details(newLayerLocator, 'SYNTHETIC_COPY'),
+        compositionLocator: fresh(compositionLocator),
+        sourceItemLocator: fresh(sourceItemLocator) } } },
+  };
+  const entry = entries[spec.id];
+  return { errorCode: 'STALE_LOCATOR', action: 'refresh-locator', ...entry };
+}
+
+export function layerTimelineDescriptors(schema) {
+  return LAYER_TIMELINE_SPECS.map((spec) => {
+    const registration = INVOKE_REGISTRY.find((candidate) => candidate.id === spec.id);
+    const example = layerTimelineExample(spec);
+    const inputSchema = structuredClone(schema.$defs[`${spec.schema}InputSchemaContract`].const);
+    const resultSchema = structuredClone(schema.$defs[`${spec.schema}ResultSchemaContract`].const);
+    const stem = spec.id.replace(/^ae\./u, '').replaceAll('.', '-');
+    return {
+      detail: 'full', id: spec.id, version: 1, schemaVersion: 1,
+      summary: spec.summary, risk: spec.risk,
+      mutability: spec.risk === 'read' ? 'read-only' : 'mutating',
+      idempotency: spec.risk === 'read' ? 'idempotent' : 'idempotency-key',
+      cancellation: 'before-dispatch',
+      undo: spec.risk === 'read' ? 'not-applicable' : 'ae-undo-group',
+      sideEffectSummary: spec.sideEffectSummary,
+      preconditions: [...spec.preconditions],
+      compatibility: { status: 'unverified', intendedPlatforms: ['macos-arm64', 'windows-x64'] },
+      inputContractId: registration.inputContractId,
+      resultContractId: registration.resultContractId,
+      contractDigest: sha256Jcs({ inputSchema, resultSchema }), inputSchema, resultSchema,
+      requirements: [{ id: spec.requirementId, contractVersion: 1 }],
+      examples: [
+        { id: `aemcp-example-${stem}`, kind: 'positive',
+          summary: 'Synthetic success demonstrates the typed result contract.',
+          arguments: structuredClone(example.arguments),
+          expected: { outcome: 'succeeded', value: structuredClone(example.value) } },
+        { id: `aemcp-example-${stem}-stale`, kind: 'negative',
+          summary: 'Synthetic failure exercises stale-locator recovery.',
+          arguments: structuredClone(example.arguments),
+          expected: { errorCode: example.errorCode, recoveryAction: example.action } },
+      ],
+    };
+  });
+}
+
 export function nativeCapabilityRegistry(schema) {
   return [
     projectSummaryDescriptor(schema),
@@ -2447,6 +2726,7 @@ export function nativeCapabilityRegistry(schema) {
     layerPropertyKeyframesListDescriptor(schema),
     layerPropertySetDescriptor(schema),
     ...projectCompositionDescriptors(schema),
+    ...layerTimelineDescriptors(schema),
   ];
 }
 
@@ -2671,6 +2951,26 @@ function validatePositiveRatio(value) {
   return canonicalPositiveRatio(value?.numerator, value?.denominator) === value?.rational;
 }
 
+function canonicalSignedRatio(numerator, denominator) {
+  if (!Number.isInteger(numerator) || numerator === 0
+      || numerator < -2147483648 || numerator > 2147483647
+      || !Number.isInteger(denominator) || denominator < 1
+      || denominator > 2147483647) return null;
+  const absolute = numerator < 0 ? -BigInt(numerator) : BigInt(numerator);
+  let left = absolute;
+  let right = BigInt(denominator);
+  while (right !== 0n) [left, right] = [right, left % right];
+  const reducedNumerator = BigInt(numerator) / left;
+  const reducedDenominator = BigInt(denominator) / left;
+  return reducedDenominator === 1n
+    ? String(reducedNumerator)
+    : `${String(reducedNumerator)}/${String(reducedDenominator)}`;
+}
+
+function validateSignedRatio(value) {
+  return canonicalSignedRatio(value?.numerator, value?.denominator) === value?.rational;
+}
+
 function validateSettingsSnapshot(value) {
   return isPlainObject(value)
     && validateExactTime(value.duration)
@@ -2778,6 +3078,101 @@ function validateProjectCompositionResult(request, result, helloContext, schema)
       || !validateSettingsSnapshot(value.newSettings)
       || value.newSettings.name !== args.newName) return false;
   return true;
+}
+
+function validateLayerTimelineResult(request, result, helloContext, schema) {
+  const capabilityId = request.params.capabilityId;
+  const spec = LAYER_TIMELINE_SPECS.find((candidate) => candidate.id === capabilityId);
+  if (spec === undefined) return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  const expectedKind = spec.schema.replace(/([A-Z])/gu, '-$1').toLowerCase();
+  if (result.evidence.postcondition.kind !== expectedKind) return false;
+  const hostId = helloContext.response.result.host.instanceId;
+  const locatorValid = (locator, kinds, context = locatorContext(locator)) => (
+    isLocatorShape(locator, kinds)
+    && locator.hostInstanceId === hostId
+    && locator.sessionId === request.sessionId
+    && validateLocator(locator, context, schema)
+  );
+  const nullableLocatorValid = (locator, kinds, context) => locator === null
+    || locatorValid(locator, kinds, context);
+  const detailsValid = (details, context) => (
+    locatorValid(details.layerLocator, ['layer'], context)
+    && locatorValid(details.compositionLocator, ['composition'], context)
+    && nullableLocatorValid(details.parentLocator, ['layer'], context)
+    && nullableLocatorValid(details.sourceItemLocator, ['item', 'composition'], context)
+    && validateExactTime(details.inPoint)
+    && validateExactTime(details.duration)
+    && details.duration.value > 0
+    && validateExactTime(details.startTime)
+    && validateSignedRatio(details.stretch)
+  );
+
+  if (capabilityId === 'ae.layer.details.read') {
+    const context = locatorContext(value.layerLocator);
+    return jsonDeepEqual(value.layerLocator, args.layerLocator)
+      && locatorValid(value.layerLocator, ['layer'], context)
+      && detailsValid(value, context);
+  }
+
+  if (capabilityId === 'ae.layer.duplicate') {
+    const context = locatorContext(value.newLayerLocator);
+    return value.changed === true
+      && value.sourceLayerLocator.objectId === args.layerLocator.objectId
+      && value.sourceLayerLocator.objectId !== value.newLayerLocator.objectId
+      && value.sourceLayerLocator.generation > args.layerLocator.generation
+      && value.sourceLayerLocator.projectId !== args.layerLocator.projectId
+      && sameLocatorContext(value.sourceLayerLocator, value.newLayerLocator)
+      && sameLocatorContext(value.sourceLayerLocator, value.compositionLocator)
+      && locatorValid(value.sourceLayerLocator, ['layer'], context)
+      && locatorValid(value.newLayerLocator, ['layer'], context)
+      && locatorValid(value.compositionLocator, ['composition'], context)
+      && value.layerCountAfter === value.layerCountBefore + 1
+      && jsonDeepEqual(value.newLayerLocator, value.newLayer.layerLocator)
+      && jsonDeepEqual(value.compositionLocator, value.newLayer.compositionLocator)
+      && value.newLayer.stackIndex <= value.layerCountAfter
+      && value.newLayer.name === args.newName
+      && detailsValid(value.newLayer, context);
+  }
+
+  const context = locatorContext(value.layerLocator);
+  if (value.changed !== true
+      || !jsonDeepEqual(value.layerLocator, args.layerLocator)
+      || !locatorValid(value.layerLocator, ['layer'], context)) return false;
+  if (capabilityId === 'ae.layer.name.set') {
+    return value.afterName === args.name && value.beforeName !== value.afterName;
+  }
+  if (capabilityId === 'ae.layer.range.set') {
+    return validateExactTime(value.beforeInPoint) && validateExactTime(value.beforeDuration)
+      && validateExactTime(value.afterInPoint) && validateExactTime(value.afterDuration)
+      && compositionTimesEqual(value.afterInPoint, args.inPoint)
+      && compositionTimesEqual(value.afterDuration, args.duration)
+      && (!compositionTimesEqual(value.beforeInPoint, value.afterInPoint)
+        || !compositionTimesEqual(value.beforeDuration, value.afterDuration));
+  }
+  if (capabilityId === 'ae.layer.start-time.set') {
+    return validateExactTime(value.beforeStartTime) && validateExactTime(value.afterStartTime)
+      && compositionTimesEqual(value.afterStartTime, args.startTime)
+      && !compositionTimesEqual(value.beforeStartTime, value.afterStartTime);
+  }
+  if (capabilityId === 'ae.layer.stretch.set') {
+    return validateSignedRatio(value.beforeStretch) && validateSignedRatio(value.afterStretch)
+      && BigInt(value.afterStretch.numerator) * BigInt(args.stretch.den)
+        === BigInt(args.stretch.num) * BigInt(value.afterStretch.denominator)
+      && BigInt(value.beforeStretch.numerator) * BigInt(value.afterStretch.denominator)
+        !== BigInt(value.afterStretch.numerator) * BigInt(value.beforeStretch.denominator);
+  }
+  if (capabilityId === 'ae.layer.order.set') {
+    return value.afterStackIndex === args.targetStackIndex
+      && value.beforeStackIndex !== value.afterStackIndex;
+  }
+  const parentValid = (locator) => locator === null
+    || locatorValid(locator, ['layer'], context);
+  return parentValid(value.beforeParentLocator)
+    && parentValid(value.afterParentLocator)
+    && jsonDeepEqual(value.afterParentLocator, args.parentLayerLocator)
+    && !jsonDeepEqual(value.beforeParentLocator, value.afterParentLocator);
 }
 
 function validateNavigationResult(request, result, helloContext, schema) {
@@ -3392,7 +3787,7 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set', 'ae.composition.work-area.set', 'ae.project.item.name.set', 'ae.project.item.comment.set', 'ae.project.item.label.set', 'ae.composition.duplicate']
+            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set', 'ae.composition.work-area.set', 'ae.project.item.name.set', 'ae.project.item.comment.set', 'ae.project.item.label.set', 'ae.composition.duplicate', 'ae.layer.name.set', 'ae.layer.range.set', 'ae.layer.start-time.set', 'ae.layer.stretch.set', 'ae.layer.order.set', 'ae.layer.parent.set', 'ae.layer.duplicate']
               .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
@@ -3408,6 +3803,7 @@ export function validateTranscript(context, request, messages) {
     && validateLayerPropertyKeyframesResult(request, result, helloContext, schema)
     && validateLayerPropertySetResult(request, result, helloContext, schema)
     && validateProjectCompositionResult(request, result, helloContext, schema)
+    && validateLayerTimelineResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest
     && evidence.postcondition.digest === resultDigest;

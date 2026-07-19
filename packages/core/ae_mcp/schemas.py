@@ -7,6 +7,8 @@ LLM reads them in the tool-picker.
 
 from __future__ import annotations
 
+from decimal import Decimal, InvalidOperation
+from fractions import Fraction
 from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
 from pydantic import (
@@ -14,6 +16,7 @@ from pydantic import (
     ConfigDict,
     Field,
     constr,
+    field_validator,
     model_validator,
 )
 
@@ -216,6 +219,173 @@ class AeListSelectedLayersArgs(_StrictModel):
             "(default 25, max 50)."
         ),
     )
+
+
+class AeGetLayerDetailsArgs(_StrictModel):
+    """ae.getLayerDetails — read exact native timing and hierarchy for one layer."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Fresh layer locator returned by ae_listCompositionLayers.",
+    )
+
+
+class _AeLayerWriteArgs(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Fresh layer locator returned by ae_listCompositionLayers.",
+    )
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+        description="Stable key for this one layer write intent; use a new key for a new intent.",
+    )
+
+
+def _valid_layer_name(value: str, *, field: str) -> str:
+    if not value or "\x00" in value or any(
+        0xD800 <= ord(character) <= 0xDFFF for character in value
+    ):
+        raise ValueError(f"{field} must contain 1-255 non-NUL Unicode scalar values")
+    return value
+
+
+class AeRenameLayerArgs(_AeLayerWriteArgs):
+    """ae.renameLayer — rename one layer with native readback and Undo."""
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=r"^[^\u0000]+$",
+        description="Exact new layer name (1-255 Unicode scalar values).",
+    )
+
+    @model_validator(mode="after")
+    def _valid_name(self) -> "AeRenameLayerArgs":
+        _valid_layer_name(self.name, field="name")
+        return self
+
+
+class AeSetLayerRangeArgs(_AeLayerWriteArgs):
+    """ae.setLayerRange — set exact comp-time in point and positive duration."""
+
+    in_point: "AeCompositionTimeInput" = Field(
+        ...,
+        description="Exact composition-time layer in point as value/scale.",
+    )
+    duration: "AePositiveCompositionTimeInput" = Field(
+        ...,
+        description="Exact positive layer duration as value/scale.",
+    )
+
+
+class AeSetLayerStartTimeArgs(_AeLayerWriteArgs):
+    """ae.setLayerStartTime — set the layer source offset in composition time."""
+
+    start_time: "AeCompositionTimeInput" = Field(
+        ...,
+        description="Exact layer start/source offset in composition time as value/scale.",
+    )
+
+
+_LAYER_STRETCH_DECIMAL = r"^-?(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,6})?$"
+
+
+class AeSetLayerStretchArgs(_AeLayerWriteArgs):
+    """ae.setLayerStretch — set an exact non-zero layer stretch percentage."""
+
+    stretch_percent: str = Field(
+        ...,
+        min_length=1,
+        max_length=12,
+        pattern=_LAYER_STRETCH_DECIMAL,
+        description=(
+            "Exact decimal percentage in [-9900, 9900], excluding zero; negative "
+            "values reverse playback. Up to six fractional digits are accepted when "
+            "the reduced value fits After Effects' signed 32-bit ratio."
+        ),
+    )
+
+    @field_validator("stretch_percent")
+    @classmethod
+    def _valid_stretch(cls, stretch_percent: str) -> str:
+        try:
+            value = Decimal(stretch_percent)
+        except InvalidOperation as error:
+            raise ValueError("stretch_percent must be a finite decimal") from error
+        if not value.is_finite() or value == 0 or abs(value) > Decimal("9900"):
+            raise ValueError("stretch_percent must be non-zero and within [-9900, 9900]")
+        ratio = Fraction(value) / 100
+        if (
+            ratio.numerator < -2_147_483_648
+            or ratio.numerator > 2_147_483_647
+            or ratio.denominator > 2_147_483_647
+        ):
+            raise ValueError(
+                "stretch_percent must be exactly representable as a signed 32-bit AEGP ratio"
+            )
+        return stretch_percent
+
+
+class AeReorderLayerArgs(_AeLayerWriteArgs):
+    """ae.reorderLayer — move one layer to a one-based composition stack index."""
+
+    target_stack_index: int = Field(
+        ...,
+        ge=1,
+        le=1_000_000,
+        description="Requested one-based stack index in the layer's current composition.",
+    )
+
+
+class AeSetLayerParentArgs(_AeLayerWriteArgs):
+    """ae.setLayerParent — set or clear one same-composition layer parent."""
+
+    parent_layer_locator: Optional[AeLayerLocator] = Field(
+        ...,
+        description="Fresh same-composition parent locator, or null to clear parenting.",
+    )
+
+    @model_validator(mode="after")
+    def _valid_parent_context(self) -> "AeSetLayerParentArgs":
+        parent = self.parent_layer_locator
+        if parent is None:
+            return self
+        layer = self.layer_locator
+        if (
+            parent.host_instance_id != layer.host_instance_id
+            or parent.session_id != layer.session_id
+            or parent.project_id != layer.project_id
+            or parent.generation != layer.generation
+        ):
+            raise ValueError("parent_layer_locator must share the layer's current context")
+        if parent.object_id == layer.object_id:
+            raise ValueError("a layer cannot parent itself")
+        return self
+
+
+class AeDuplicateLayerArgs(_AeLayerWriteArgs):
+    """ae.duplicateLayer — duplicate one layer and return fresh native locators."""
+
+    new_name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        pattern=r"^[^\u0000]+$",
+        description="Required exact name for the duplicate (1-255 Unicode scalar values).",
+    )
+
+    @model_validator(mode="after")
+    def _valid_duplicate_name(self) -> "AeDuplicateLayerArgs":
+        _valid_layer_name(self.new_name, field="new_name")
+        return self
 
 
 class AeGetCompositionTimeArgs(_StrictModel):

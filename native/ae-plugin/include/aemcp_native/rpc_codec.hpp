@@ -19,7 +19,7 @@ namespace aemcp::native::rpc {
 inline constexpr std::size_t kFramePrefixBytes = 4;
 inline constexpr std::size_t kMaxFrameBytes = 524'288;
 inline constexpr std::size_t kMaxJsonDepth = 16;
-inline constexpr std::size_t kMaxJsonNodes = 8'192;
+inline constexpr std::size_t kMaxJsonNodes = 12'288;
 inline constexpr std::size_t kMaxStringScalars = 8'192;
 inline constexpr std::uint64_t kMaxSafeInteger = 9'007'199'254'740'991ULL;
 
@@ -97,6 +97,13 @@ struct InvokeParams {
   std::string item_text;
   std::uint8_t item_label_id{0};
   std::string duplicate_new_name;
+  std::optional<ObjectLocator> layer_parent_locator;
+  CompositionCurrentTime layer_in_point;
+  CompositionCurrentTime layer_duration;
+  CompositionCurrentTime layer_start_time;
+  LayerStretchRatio layer_stretch;
+  std::uint64_t target_stack_index{0};
+  std::string layer_new_name;
 };
 
 struct CancelParams {
@@ -193,6 +200,22 @@ struct ParsedRequest {
     std::string_view idempotency_key);
 [[nodiscard]] std::string digest_composition_duplicate_postcondition(
     const CompositionDuplicated& value);
+[[nodiscard]] std::string digest_layer_details_postcondition(
+    const LayerDetails& value);
+[[nodiscard]] std::string digest_layer_name_set_postcondition(
+    const LayerNameChanged& value);
+[[nodiscard]] std::string digest_layer_range_set_postcondition(
+    const LayerRangeChanged& value);
+[[nodiscard]] std::string digest_layer_start_time_set_postcondition(
+    const LayerStartTimeChanged& value);
+[[nodiscard]] std::string digest_layer_stretch_set_postcondition(
+    const LayerStretchChanged& value);
+[[nodiscard]] std::string digest_layer_order_set_postcondition(
+    const LayerOrderChanged& value);
+[[nodiscard]] std::string digest_layer_parent_set_postcondition(
+    const LayerParentChanged& value);
+[[nodiscard]] std::string digest_layer_duplicate_postcondition(
+    const LayerDuplicated& value);
 [[nodiscard]] std::string digest_composition_create_arguments(
     std::string_view name,
     std::uint32_t width,
@@ -372,7 +395,7 @@ class RpcSessionFrontDoor final {
 };
 
 struct NegotiatedLimits {
-  std::uint32_t max_frame_bytes{131'072};
+  std::uint32_t max_frame_bytes{kMaxFrameBytes};
   std::uint16_t max_in_flight{8};
   std::uint16_t max_queue_depth{32};
   std::uint32_t max_deadline_ms{30'000};
@@ -445,6 +468,14 @@ struct CapabilitiesSuccess {
   bool include_project_item_comment_set{false};
   bool include_project_item_label_set{false};
   bool include_composition_duplicate{false};
+  bool include_layer_details_read{false};
+  bool include_layer_name_set{false};
+  bool include_layer_range_set{false};
+  bool include_layer_start_time_set{false};
+  bool include_layer_stretch_set{false};
+  bool include_layer_order_set{false};
+  bool include_layer_parent_set{false};
+  bool include_layer_duplicate{false};
   std::string project_context_read_contract_digest;
   std::string project_item_metadata_read_contract_digest;
   std::string composition_settings_read_contract_digest;
@@ -453,6 +484,14 @@ struct CapabilitiesSuccess {
   std::string project_item_comment_set_contract_digest;
   std::string project_item_label_set_contract_digest;
   std::string composition_duplicate_contract_digest;
+  std::string layer_details_read_contract_digest;
+  std::string layer_name_set_contract_digest;
+  std::string layer_range_set_contract_digest;
+  std::string layer_start_time_set_contract_digest;
+  std::string layer_stretch_set_contract_digest;
+  std::string layer_order_set_contract_digest;
+  std::string layer_parent_set_contract_digest;
+  std::string layer_duplicate_contract_digest;
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -577,6 +616,14 @@ using ProjectItemNameSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
 using ProjectItemCommentSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
 using ProjectItemLabelSetSuccess = NativeValueSuccess<ProjectItemLabelChanged>;
 using CompositionDuplicateSuccess = NativeValueSuccess<CompositionDuplicated>;
+using LayerDetailsSuccess = NativeValueSuccess<LayerDetails>;
+using LayerNameSetSuccess = NativeValueSuccess<LayerNameChanged>;
+using LayerRangeSetSuccess = NativeValueSuccess<LayerRangeChanged>;
+using LayerStartTimeSetSuccess = NativeValueSuccess<LayerStartTimeChanged>;
+using LayerStretchSetSuccess = NativeValueSuccess<LayerStretchChanged>;
+using LayerOrderSetSuccess = NativeValueSuccess<LayerOrderChanged>;
+using LayerParentSetSuccess = NativeValueSuccess<LayerParentChanged>;
+using LayerDuplicateSuccess = NativeValueSuccess<LayerDuplicated>;
 
 struct CompositionCreateSuccess {
   std::string request_id;
@@ -747,6 +794,22 @@ struct ErrorResponse {
     const ProjectItemLabelSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_duplicate_success(
     const CompositionDuplicateSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_details_success(
+    const LayerDetailsSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_name_set_success(
+    const LayerNameSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_range_set_success(
+    const LayerRangeSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_start_time_set_success(
+    const LayerStartTimeSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_stretch_set_success(
+    const LayerStretchSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_order_set_success(
+    const LayerOrderSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_parent_set_success(
+    const LayerParentSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_duplicate_success(
+    const LayerDuplicateSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_create_success(
     const CompositionCreateSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_layer_create_success(

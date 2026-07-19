@@ -85,6 +85,14 @@ _NATIVE_AEGP_HANDLERS = frozenset(
         "ae.listLayerProperties",
         "ae.listLayerPropertyKeyframes",
         "ae.setLayerPropertyValue",
+        "ae.getLayerDetails",
+        "ae.renameLayer",
+        "ae.setLayerRange",
+        "ae.setLayerStartTime",
+        "ae.setLayerStretch",
+        "ae.reorderLayer",
+        "ae.setLayerParent",
+        "ae.duplicateLayer",
     }
 )
 

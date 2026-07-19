@@ -74,6 +74,21 @@ bool valid_positive_ratio(const CompositionPositiveRatio& value) {
           value.numerator, static_cast<std::uint32_t>(value.denominator));
 }
 
+bool valid_layer_stretch(const LayerStretchRatio& value) {
+  return value.numerator != 0 && value.denominator > 0
+      && value.rational == canonical_seconds_rational(
+          value.numerator, static_cast<std::uint32_t>(value.denominator));
+}
+
+bool has_layer_timeline_arguments(const Request& request) {
+  return request.layer_parent_locator.has_value()
+      || has_nondefault_time(request.layer_in_point)
+      || has_nondefault_time(request.layer_duration)
+      || has_nondefault_time(request.layer_start_time)
+      || request.layer_stretch != LayerStretchRatio{}
+      || request.target_stack_index != 0 || !request.layer_new_name.empty();
+}
+
 bool valid_composition_create_request(const Request& request) {
   return !request.composition_create_name.empty()
       && request.composition_create_name.size() <= 1024
@@ -231,6 +246,55 @@ bool valid_composition_settings(const CompositionSettings& value) {
       && valid_composition_time(value.display_start_time);
 }
 
+bool valid_layer_type(std::string_view value) {
+  return value == "av" || value == "camera" || value == "light"
+      || value == "text" || value == "shape" || value == "model3d"
+      || value == "null" || value == "adjustment" || value == "unknown";
+}
+
+bool valid_layer_details(const LayerDetails& value) {
+  if (!valid_locator(value.layer_locator) || value.layer_locator.kind != "layer"
+      || !valid_locator(value.composition_locator)
+      || value.composition_locator.kind != "composition"
+      || !same_locator_context(value.layer_locator, value.composition_locator)
+      || value.stack_index < 1 || !valid_bounded_text(value.name, 4096, true)
+      || !valid_layer_type(value.type) || !valid_composition_time(value.in_point)
+      || !valid_composition_time(value.duration) || value.duration.value <= 0
+      || !valid_composition_time(value.start_time)
+      || !valid_layer_stretch(value.stretch)) {
+    return false;
+  }
+  if (value.parent_locator.has_value()
+      && (!valid_locator(*value.parent_locator)
+        || value.parent_locator->kind != "layer"
+        || !same_locator_context(value.layer_locator, *value.parent_locator))) {
+    return false;
+  }
+  return !value.source_item_locator.has_value()
+      || (valid_item_locator(*value.source_item_locator)
+        && same_locator_context(value.layer_locator, *value.source_item_locator));
+}
+
+bool duplicated_layer_stable_semantics_match(
+    const LayerDetails& source, const LayerDetails& duplicate) {
+  const auto ratios_equal = [](const LayerStretchRatio& left,
+                               const LayerStretchRatio& right) {
+    return static_cast<std::int64_t>(left.numerator) * right.denominator
+        == static_cast<std::int64_t>(right.numerator) * left.denominator;
+  };
+  return source.composition_locator == duplicate.composition_locator
+      && source.type == duplicate.type
+      && source.video_enabled == duplicate.video_enabled
+      && source.is_three_d == duplicate.is_three_d
+      && source.locked == duplicate.locked
+      && source.parent_locator == duplicate.parent_locator
+      && source.source_item_locator == duplicate.source_item_locator
+      && composition_times_equal(source.in_point, duplicate.in_point)
+      && composition_times_equal(source.duration, duplicate.duration)
+      && composition_times_equal(source.start_time, duplicate.start_time)
+      && ratios_equal(source.stretch, duplicate.stretch);
+}
+
 bool composition_settings_equivalent(
     const CompositionSettings& left, const CompositionSettings& right) {
   const auto ratios_equal = [](const CompositionPositiveRatio& lhs,
@@ -277,6 +341,47 @@ bool rebind_creation_replay_session(Completion& replay, const Request& request) 
   if (replay.capability_id == kLayerEffectApplyCapability) {
     ObjectLocator& layer = replay.layer_effect_apply_result.layer_locator;
     return layer.kind == "layer" && rebind(layer);
+  }
+  if (replay.capability_id == kLayerDuplicateCapability) {
+    if (!replay.layer_timeline_result) return false;
+    replay.layer_timeline_result = std::make_shared<LayerTimelineResult>(
+        *replay.layer_timeline_result);
+    auto* duplicated_value = std::get_if<LayerDuplicated>(
+        replay.layer_timeline_result.get());
+    if (duplicated_value == nullptr) return false;
+    LayerDuplicated& duplicated = *duplicated_value;
+    LayerDetails& details = duplicated.new_layer;
+    if (!duplicated.source_layer.has_value()) return false;
+    LayerDetails& source_details = *duplicated.source_layer;
+    if (duplicated.source_layer_locator.kind != "layer"
+        || duplicated.new_layer_locator.kind != "layer"
+        || duplicated.composition_locator.kind != "composition"
+        || !rebind(duplicated.source_layer_locator)
+        || !rebind(duplicated.new_layer_locator)
+        || !rebind(duplicated.composition_locator)
+        || !rebind(source_details.layer_locator)
+        || !rebind(source_details.composition_locator)
+        || !rebind(details.layer_locator)
+        || !rebind(details.composition_locator)) {
+      return false;
+    }
+    if (source_details.parent_locator.has_value()
+        && !rebind(*source_details.parent_locator)) return false;
+    if (source_details.source_item_locator.has_value()
+        && !rebind(*source_details.source_item_locator)) return false;
+    if (details.parent_locator.has_value()
+        && !rebind(*details.parent_locator)) return false;
+    if (details.source_item_locator.has_value()
+        && !rebind(*details.source_item_locator)) return false;
+    return duplicated.source_layer_locator == source_details.layer_locator
+        && duplicated.composition_locator == source_details.composition_locator
+        && duplicated.new_layer_locator == details.layer_locator
+        && duplicated.composition_locator == details.composition_locator
+        && duplicated_layer_stable_semantics_match(source_details, details)
+        && same_locator_context(
+            duplicated.source_layer_locator, duplicated.new_layer_locator)
+        && same_locator_context(
+            duplicated.composition_locator, duplicated.new_layer_locator);
   }
   if (replay.capability_id != kCompositionLayerCreateCapability) return false;
 
@@ -760,6 +865,33 @@ HostLayerPropertyWriteResult HostLayerPropertyWriteResult::failure(
   return result;
 }
 
+#define AEMCP_DEFINE_HOST_RESULT(ResultType, ValueType)                        \
+  ResultType ResultType::success(ValueType value) {                           \
+    ResultType result;                                                        \
+    result.ok = true;                                                         \
+    result.value = std::move(value);                                          \
+    return result;                                                            \
+  }                                                                           \
+  ResultType ResultType::failure(                                             \
+      std::string code, std::string detail, std::string field) {              \
+    ResultType result;                                                        \
+    result.error_code = std::move(code);                                      \
+    result.message = std::move(detail);                                       \
+    result.error_field = std::move(field);                                    \
+    return result;                                                            \
+  }
+
+AEMCP_DEFINE_HOST_RESULT(HostLayerDetailsResult, LayerDetails)
+AEMCP_DEFINE_HOST_RESULT(HostLayerNameWriteResult, LayerNameChanged)
+AEMCP_DEFINE_HOST_RESULT(HostLayerRangeWriteResult, LayerRangeChanged)
+AEMCP_DEFINE_HOST_RESULT(HostLayerStartTimeWriteResult, LayerStartTimeChanged)
+AEMCP_DEFINE_HOST_RESULT(HostLayerStretchWriteResult, LayerStretchChanged)
+AEMCP_DEFINE_HOST_RESULT(HostLayerOrderWriteResult, LayerOrderChanged)
+AEMCP_DEFINE_HOST_RESULT(HostLayerParentWriteResult, LayerParentChanged)
+AEMCP_DEFINE_HOST_RESULT(HostLayerDuplicateResult, LayerDuplicated)
+
+#undef AEMCP_DEFINE_HOST_RESULT
+
 HostProjectGraphInvalidationResult HostProjectGraphInvalidationResult::success(
     ProjectGraphInvalidation value) {
   HostProjectGraphInvalidationResult result;
@@ -900,6 +1032,54 @@ HostLayerPropertyWriteResult HostApi::set_layer_property(
       "NATIVE_UNSUPPORTED", "layer property writes are unavailable");
 }
 
+HostLayerDetailsResult HostApi::read_layer_details(
+    const LayerDetailsQuery&, TimePoint) {
+  return HostLayerDetailsResult::failure(
+      "NATIVE_UNSUPPORTED", "layer detail reads are unavailable");
+}
+
+HostLayerNameWriteResult HostApi::set_layer_name(
+    const LayerNameSetCommand&, TimePoint) {
+  return HostLayerNameWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer name writes are unavailable");
+}
+
+HostLayerRangeWriteResult HostApi::set_layer_range(
+    const LayerRangeSetCommand&, TimePoint) {
+  return HostLayerRangeWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer range writes are unavailable");
+}
+
+HostLayerStartTimeWriteResult HostApi::set_layer_start_time(
+    const LayerStartTimeSetCommand&, TimePoint) {
+  return HostLayerStartTimeWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer start-time writes are unavailable");
+}
+
+HostLayerStretchWriteResult HostApi::set_layer_stretch(
+    const LayerStretchSetCommand&, TimePoint) {
+  return HostLayerStretchWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer stretch writes are unavailable");
+}
+
+HostLayerOrderWriteResult HostApi::set_layer_order(
+    const LayerOrderSetCommand&, TimePoint) {
+  return HostLayerOrderWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer order writes are unavailable");
+}
+
+HostLayerParentWriteResult HostApi::set_layer_parent(
+    const LayerParentSetCommand&, TimePoint) {
+  return HostLayerParentWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer parent writes are unavailable");
+}
+
+HostLayerDuplicateResult HostApi::duplicate_layer(
+    const LayerDuplicateCommand&, TimePoint) {
+  return HostLayerDuplicateResult::failure(
+      "NATIVE_UNSUPPORTED", "layer duplication is unavailable");
+}
+
 HostProjectGraphInvalidationResult HostApi::invalidate_project_graph(TimePoint) {
   return HostProjectGraphInvalidationResult::failure(
       "NATIVE_UNSUPPORTED", "project graph invalidation is unavailable");
@@ -978,13 +1158,29 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kProjectItemLabelSetCapability;
   const bool composition_duplicate =
       request.capability_id == kCompositionDuplicateCapability;
+  const bool layer_details_read =
+      request.capability_id == kLayerDetailsReadCapability;
+  const bool layer_name_set = request.capability_id == kLayerNameSetCapability;
+  const bool layer_range_set = request.capability_id == kLayerRangeSetCapability;
+  const bool layer_start_time_set =
+      request.capability_id == kLayerStartTimeSetCapability;
+  const bool layer_stretch_set =
+      request.capability_id == kLayerStretchSetCapability;
+  const bool layer_order_set = request.capability_id == kLayerOrderSetCapability;
+  const bool layer_parent_set = request.capability_id == kLayerParentSetCapability;
+  const bool layer_duplicate = request.capability_id == kLayerDuplicateCapability;
+  const bool layer_timeline = layer_details_read || layer_name_set || layer_range_set
+      || layer_start_time_set || layer_stretch_set || layer_order_set
+      || layer_parent_set || layer_duplicate;
   const bool mutation = project_bit_depth_set || composition_time_set
       || composition_create
       || composition_layer_create
       || layer_effect_apply
       || layer_property_set || composition_work_area_set
       || project_item_name_set || project_item_comment_set
-      || project_item_label_set || composition_duplicate;
+      || project_item_label_set || composition_duplicate || layer_name_set
+      || layer_range_set || layer_start_time_set || layer_stretch_set
+      || layer_order_set || layer_parent_set || layer_duplicate;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
@@ -997,6 +1193,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !composition_settings_read && !composition_work_area_set
       && !project_item_name_set && !project_item_comment_set
       && !project_item_label_set && !composition_duplicate
+      && !layer_timeline
       && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
@@ -1021,6 +1218,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || request.item_locator.has_value()
           || !request.item_text.empty() || request.item_label_id != 0
           || !request.duplicate_new_name.empty()
+          || has_layer_timeline_arguments(request)
           || has_nondefault_time(request.work_area_start)
           || has_nondefault_time(request.work_area_duration)
           || has_composition_create_arguments(request))) {
@@ -1308,6 +1506,140 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "composition duplicate arguments failed closed validation",
         "params.arguments.newName"};
   }
+  if (layer_timeline
+      && (request.target_depth != 0 || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value()
+          || request.composition_locator.has_value()
+          || request.parent_property_locator.has_value()
+          || request.property_locator.has_value()
+          || !std::holds_alternative<std::monostate>(request.property_value)
+          || request.item_locator.has_value()
+          || !request.layer_locator.has_value()
+          || !valid_locator(*request.layer_locator)
+          || request.layer_locator->kind != "layer"
+          || !valid_uuid(request.host_instance_id)
+          || !valid_uuid(request.session_id))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "layer timeline arguments failed closed validation",
+        "params.arguments.layerLocator"};
+  }
+  if (layer_timeline
+      && (request.layer_locator->host_instance_id != request.host_instance_id
+          || request.layer_locator->session_id != request.session_id)) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "STALE_LOCATOR",
+        "layerLocator belongs to another host or native session",
+        "params.arguments.layerLocator"};
+  }
+  if (layer_details_read
+      && (!request.idempotency_key.empty()
+          || !request.arguments_fingerprint_sha256.empty()
+          || has_layer_timeline_arguments(request))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "layer detail read accepts only layerLocator",
+        "params.arguments"};
+  }
+  if (layer_timeline && !layer_details_read
+      && (!valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "layer write requires a valid idempotency key and argument digest",
+        "params.arguments.idempotencyKey"};
+  }
+  if (layer_name_set
+      && (!valid_bounded_text(request.layer_new_name, 1020, false)
+          || request.layer_parent_locator.has_value()
+          || has_nondefault_time(request.layer_in_point)
+          || has_nondefault_time(request.layer_duration)
+          || has_nondefault_time(request.layer_start_time)
+          || request.layer_stretch != LayerStretchRatio{}
+          || request.target_stack_index != 0)) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer name arguments failed closed validation", "params.arguments.name"};
+  }
+  if (layer_range_set
+      && (!valid_composition_time(request.layer_in_point)
+          || !valid_composition_time(request.layer_duration)
+          || request.layer_duration.value <= 0
+          || request.layer_parent_locator.has_value()
+          || has_nondefault_time(request.layer_start_time)
+          || request.layer_stretch != LayerStretchRatio{}
+          || request.target_stack_index != 0 || !request.layer_new_name.empty())) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer range arguments failed closed validation", "params.arguments"};
+  }
+  if (layer_start_time_set
+      && (!valid_composition_time(request.layer_start_time)
+          || request.layer_parent_locator.has_value()
+          || has_nondefault_time(request.layer_in_point)
+          || has_nondefault_time(request.layer_duration)
+          || request.layer_stretch != LayerStretchRatio{}
+          || request.target_stack_index != 0 || !request.layer_new_name.empty())) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer start-time arguments failed closed validation",
+        "params.arguments.startTime"};
+  }
+  if (layer_stretch_set
+      && (!valid_layer_stretch(request.layer_stretch)
+          || request.layer_parent_locator.has_value()
+          || has_nondefault_time(request.layer_in_point)
+          || has_nondefault_time(request.layer_duration)
+          || has_nondefault_time(request.layer_start_time)
+          || request.target_stack_index != 0 || !request.layer_new_name.empty())) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer stretch arguments failed closed validation", "params.arguments.stretch"};
+  }
+  if (layer_order_set
+      && (request.target_stack_index < 1
+          || request.layer_parent_locator.has_value()
+          || has_nondefault_time(request.layer_in_point)
+          || has_nondefault_time(request.layer_duration)
+          || has_nondefault_time(request.layer_start_time)
+          || request.layer_stretch != LayerStretchRatio{}
+          || !request.layer_new_name.empty())) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer order arguments failed closed validation",
+        "params.arguments.targetStackIndex"};
+  }
+  if (layer_parent_set
+      && (has_nondefault_time(request.layer_in_point)
+          || has_nondefault_time(request.layer_duration)
+          || has_nondefault_time(request.layer_start_time)
+          || request.layer_stretch != LayerStretchRatio{}
+          || request.target_stack_index != 0 || !request.layer_new_name.empty()
+          || (request.layer_parent_locator.has_value()
+            && (!valid_locator(*request.layer_parent_locator)
+              || request.layer_parent_locator->kind != "layer"
+              || !same_locator_context(
+                  *request.layer_locator, *request.layer_parent_locator))))) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer parent arguments failed closed validation",
+        "params.arguments.parentLayerLocator"};
+  }
+  if (layer_duplicate
+      && (!valid_bounded_text(request.layer_new_name, 1020, false)
+          || request.layer_parent_locator.has_value()
+          || has_nondefault_time(request.layer_in_point)
+          || has_nondefault_time(request.layer_duration)
+          || has_nondefault_time(request.layer_start_time)
+          || request.layer_stretch != LayerStretchRatio{}
+          || request.target_stack_index != 0)) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer duplicate arguments failed closed validation",
+        "params.arguments.newName"};
+  }
+  if (!layer_timeline && has_layer_timeline_arguments(request)) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer timeline arguments are not accepted by this capability",
+        "params.arguments"};
+  }
   if (!composition_layer_create
       && (!request.layer_create_kind.empty()
           || !request.layer_create_name.empty()
@@ -1406,7 +1738,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
     }
   }
   if ((layer_properties_list || layer_property_keyframes_list
-          || layer_property_set || layer_effect_apply)
+          || layer_property_set || layer_effect_apply || layer_timeline)
       && (request.project_locator.has_value()
           || request.composition_locator.has_value()
           || (layer_property_keyframes_list
@@ -1448,7 +1780,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "unrelated layer property arguments are not accepted by the keyframe read",
           "params.arguments"};
     }
-  } else if (layer_properties_list || layer_property_set || layer_effect_apply) {
+  } else if (layer_properties_list || layer_property_set || layer_effect_apply
+      || layer_timeline) {
     const ObjectLocator& layer = *request.layer_locator;
     if (!valid_locator(layer) || layer.kind != "layer") {
       return {
@@ -1545,7 +1878,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       const bool same_arguments = existing->second.arguments_fingerprint_sha256
           == request.arguments_fingerprint_sha256;
       if ((composition_create || composition_layer_create || layer_effect_apply
-              || composition_duplicate)
+              || composition_duplicate || layer_duplicate)
           && same_arguments
           && existing->second.state == IdempotencyState::kSucceeded
           && existing->second.replay_completion.has_value()) {
@@ -2507,6 +2840,350 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
               completion.layer_effect_apply_result = std::move(host_result.value);
             }
           }
+        } else if (request.capability_id == kLayerDetailsReadCapability
+            || request.capability_id == kLayerNameSetCapability
+            || request.capability_id == kLayerRangeSetCapability
+            || request.capability_id == kLayerStartTimeSetCapability
+            || request.capability_id == kLayerStretchSetCapability
+            || request.capability_id == kLayerOrderSetCapability
+            || request.capability_id == kLayerParentSetCapability
+            || request.capability_id == kLayerDuplicateCapability) {
+          completion = [&]() -> Completion {
+            Completion completion;
+            if (request.capability_id == kLayerDetailsReadCapability) {
+              HostLayerDetailsResult host_result = host.read_layer_details(
+              LayerDetailsQuery{
+                  request.host_instance_id,
+                  request.session_id,
+                  *request.layer_locator},
+              std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = expired(request, true);
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (host_result.value.layer_locator != *request.layer_locator
+              || !valid_layer_details(host_result.value)) {
+            completion = failure_for(
+                request,
+                "CAPABILITY_FAILED",
+                "native layer details were not bound to the requested layer");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.ok = true;
+            completion.layer_timeline_result = std::make_shared<LayerTimelineResult>(
+                std::move(host_result.value));
+            }
+          } else if (request.capability_id == kLayerNameSetCapability) {
+          HostLayerNameWriteResult host_result = host.set_layer_name(
+              LayerNameSetCommand{
+                  {request.host_instance_id, request.session_id, *request.layer_locator},
+                  request.layer_new_name},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect layer name");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || host_result.value.layer_locator != *request.layer_locator
+              || host_result.value.before_name == host_result.value.after_name
+              || host_result.value.after_name != request.layer_new_name) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write did not verify the requested layer name");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.layer_timeline_result = std::make_shared<LayerTimelineResult>(
+                std::move(host_result.value));
+          }
+        } else if (request.capability_id == kLayerRangeSetCapability) {
+          HostLayerRangeWriteResult host_result = host.set_layer_range(
+              LayerRangeSetCommand{
+                  {request.host_instance_id, request.session_id, *request.layer_locator},
+                  request.layer_in_point,
+                  request.layer_duration},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect layer range");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else {
+            const LayerRangeChanged& value = host_result.value;
+            const bool verified = value.changed
+                && value.layer_locator == *request.layer_locator
+                && valid_composition_time(value.before_in_point)
+                && valid_composition_time(value.before_duration)
+                && valid_composition_time(value.after_in_point)
+                && valid_composition_time(value.after_duration)
+                && (!composition_times_equal(value.before_in_point, value.after_in_point)
+                  || !composition_times_equal(value.before_duration, value.after_duration))
+                && composition_times_equal(value.after_in_point, request.layer_in_point)
+                && composition_times_equal(value.after_duration, request.layer_duration);
+            if (!verified) {
+              completion = failure_for(
+                  request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                  "native write did not verify the requested layer range");
+            } else {
+              completion.request_id = request.request_id;
+              completion.capability_id = request.capability_id;
+              completion.route_id = request.route_id;
+              completion.session_generation = request.session_generation;
+              completion.idempotency_key = request.idempotency_key;
+              completion.ok = true;
+              completion.layer_timeline_result = std::make_shared<LayerTimelineResult>(
+                  std::move(host_result.value));
+            }
+          }
+        } else if (request.capability_id == kLayerStartTimeSetCapability) {
+          HostLayerStartTimeWriteResult host_result = host.set_layer_start_time(
+              LayerStartTimeSetCommand{
+                  {request.host_instance_id, request.session_id, *request.layer_locator},
+                  request.layer_start_time},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect layer start time");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || host_result.value.layer_locator != *request.layer_locator
+              || !valid_composition_time(host_result.value.before_start_time)
+              || !valid_composition_time(host_result.value.after_start_time)
+              || composition_times_equal(
+                  host_result.value.before_start_time,
+                  host_result.value.after_start_time)
+              || !composition_times_equal(
+                  host_result.value.after_start_time, request.layer_start_time)) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write did not verify the requested layer start time");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.layer_timeline_result = std::make_shared<LayerTimelineResult>(
+                std::move(host_result.value));
+          }
+        } else if (request.capability_id == kLayerStretchSetCapability) {
+          HostLayerStretchWriteResult host_result = host.set_layer_stretch(
+              LayerStretchSetCommand{
+                  {request.host_instance_id, request.session_id, *request.layer_locator},
+                  request.layer_stretch},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect layer stretch");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || host_result.value.layer_locator != *request.layer_locator
+              || !valid_layer_stretch(host_result.value.before_stretch)
+              || !valid_layer_stretch(host_result.value.after_stretch)
+              || host_result.value.before_stretch == host_result.value.after_stretch
+              || host_result.value.after_stretch != request.layer_stretch) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write did not verify the requested layer stretch");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.layer_timeline_result = std::make_shared<LayerTimelineResult>(
+                std::move(host_result.value));
+          }
+        } else if (request.capability_id == kLayerOrderSetCapability) {
+          HostLayerOrderWriteResult host_result = host.set_layer_order(
+              LayerOrderSetCommand{
+                  {request.host_instance_id, request.session_id, *request.layer_locator},
+                  request.target_stack_index},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect layer order");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || host_result.value.layer_locator != *request.layer_locator
+              || host_result.value.before_stack_index < 1
+              || host_result.value.before_stack_index
+                  == host_result.value.after_stack_index
+              || host_result.value.after_stack_index != request.target_stack_index) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write did not verify the requested layer order");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.layer_timeline_result = std::make_shared<LayerTimelineResult>(
+                std::move(host_result.value));
+          }
+        } else if (request.capability_id == kLayerParentSetCapability) {
+          HostLayerParentWriteResult host_result = host.set_layer_parent(
+              LayerParentSetCommand{
+                  {request.host_instance_id, request.session_id, *request.layer_locator},
+                  request.layer_parent_locator},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect layer parent");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else {
+            const LayerParentChanged& value = host_result.value;
+            const auto valid_optional_parent = [&](const std::optional<ObjectLocator>& parent) {
+              return !parent.has_value()
+                  || (valid_locator(*parent) && parent->kind == "layer"
+                    && same_locator_context(value.layer_locator, *parent));
+            };
+            const bool verified = value.changed
+                && value.layer_locator == *request.layer_locator
+                && valid_optional_parent(value.before_parent_locator)
+                && valid_optional_parent(value.after_parent_locator)
+                && value.before_parent_locator != value.after_parent_locator
+                && value.after_parent_locator == request.layer_parent_locator;
+            if (!verified) {
+              completion = failure_for(
+                  request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                  "native write did not verify the requested layer parent");
+            } else {
+              completion.request_id = request.request_id;
+              completion.capability_id = request.capability_id;
+              completion.route_id = request.route_id;
+              completion.session_generation = request.session_generation;
+              completion.idempotency_key = request.idempotency_key;
+              completion.ok = true;
+              completion.layer_timeline_result = std::make_shared<LayerTimelineResult>(
+                  std::move(host_result.value));
+            }
+          }
+        } else if (request.capability_id == kLayerDuplicateCapability) {
+          HostLayerDuplicateResult host_result = host.duplicate_layer(
+              LayerDuplicateCommand{
+                  {request.host_instance_id, request.session_id, *request.layer_locator},
+                  request.layer_new_name},
+              request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native write completed after its deadline; inspect composition layers");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else {
+            const LayerDuplicated& value = host_result.value;
+            const bool verified = value.changed
+                && value.layer_count_after == value.layer_count_before + 1
+                && value.source_layer.has_value()
+                && valid_layer_details(*value.source_layer)
+                && valid_layer_details(value.new_layer)
+                && value.source_layer_locator.kind == "layer"
+                && value.new_layer_locator.kind == "layer"
+                && value.composition_locator.kind == "composition"
+                && value.source_layer_locator.host_instance_id
+                    == request.host_instance_id
+                && value.source_layer_locator.session_id == request.session_id
+                && value.source_layer_locator.object_id
+                    == request.layer_locator->object_id
+                && value.source_layer_locator.generation
+                    > request.layer_locator->generation
+                && value.source_layer_locator.project_id
+                    != request.layer_locator->project_id
+                && value.new_layer_locator.object_id
+                    != value.source_layer_locator.object_id
+                && same_locator_context(
+                    value.source_layer_locator, value.new_layer_locator)
+                && same_locator_context(
+                    value.composition_locator, value.new_layer_locator)
+                && value.new_layer.layer_locator == value.new_layer_locator
+                && value.new_layer.composition_locator == value.composition_locator
+                && value.new_layer.name == request.layer_new_name
+                && value.source_layer->layer_locator
+                    == value.source_layer_locator
+                && value.source_layer->composition_locator
+                    == value.composition_locator
+                && duplicated_layer_stable_semantics_match(
+                    *value.source_layer, value.new_layer);
+            if (!verified) {
+              completion = failure_for(
+                  request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                  "native write did not verify the duplicated layer");
+            } else {
+              completion.request_id = request.request_id;
+              completion.capability_id = request.capability_id;
+              completion.route_id = request.route_id;
+              completion.session_generation = request.session_generation;
+              completion.idempotency_key = request.idempotency_key;
+              completion.ok = true;
+              completion.layer_timeline_result = std::make_shared<LayerTimelineResult>(
+                  std::move(host_result.value));
+            }
+          }
+            }
+            return completion;
+          }();
         } else if (request.capability_id == kLayerPropertiesListCapability) {
           HostLayerPropertiesResult host_result = host.list_layer_properties(
               LayerPropertiesQuery{
@@ -2671,7 +3348,14 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 || request.capability_id == kProjectItemNameSetCapability
                 || request.capability_id == kProjectItemCommentSetCapability
                 || request.capability_id == kProjectItemLabelSetCapability
-                || request.capability_id == kCompositionDuplicateCapability)
+                || request.capability_id == kCompositionDuplicateCapability
+                || request.capability_id == kLayerNameSetCapability
+                || request.capability_id == kLayerRangeSetCapability
+                || request.capability_id == kLayerStartTimeSetCapability
+                || request.capability_id == kLayerStretchSetCapability
+                || request.capability_id == kLayerOrderSetCapability
+                || request.capability_id == kLayerParentSetCapability
+                || request.capability_id == kLayerDuplicateCapability)
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
             "native host adapter raised an exception");
       }
@@ -2881,7 +3565,14 @@ void HostDispatcher::finish_idempotency_locked(
           && request.capability_id != kProjectItemNameSetCapability
           && request.capability_id != kProjectItemCommentSetCapability
           && request.capability_id != kProjectItemLabelSetCapability
-          && request.capability_id != kCompositionDuplicateCapability)
+          && request.capability_id != kCompositionDuplicateCapability
+          && request.capability_id != kLayerNameSetCapability
+          && request.capability_id != kLayerRangeSetCapability
+          && request.capability_id != kLayerStartTimeSetCapability
+          && request.capability_id != kLayerStretchSetCapability
+          && request.capability_id != kLayerOrderSetCapability
+          && request.capability_id != kLayerParentSetCapability
+          && request.capability_id != kLayerDuplicateCapability)
       || request.idempotency_key.empty()) {
     return;
   }
@@ -2892,7 +3583,8 @@ void HostDispatcher::finish_idempotency_locked(
     if (request.capability_id == kCompositionCreateCapability
         || request.capability_id == kCompositionLayerCreateCapability
         || request.capability_id == kLayerEffectApplyCapability
-        || request.capability_id == kCompositionDuplicateCapability) {
+        || request.capability_id == kCompositionDuplicateCapability
+        || request.capability_id == kLayerDuplicateCapability) {
       entry->second.replay_completion = completion;
     }
     return;

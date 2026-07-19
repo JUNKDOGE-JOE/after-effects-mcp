@@ -8,7 +8,7 @@ const path = require('path');
 
 const projectCompositionContracts = require('./native-project-composition-contract');
 
-const MAX_FRAME_BYTES = 131072;
+const MAX_FRAME_BYTES = 524288;
 const MAX_BUFFERED_BYTES = MAX_FRAME_BYTES * 8;
 const MAX_ENDPOINT_ENTRIES = 128;
 const AUTH_PENDING_BYTES = 57;

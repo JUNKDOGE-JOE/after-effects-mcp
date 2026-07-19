@@ -481,6 +481,67 @@ class FakeHost final : public HostApi {
         package_settings(duplicate, command.new_name)});
   }
 
+  [[nodiscard]] aemcp::native::HostLayerDetailsResult read_layer_details(
+      const aemcp::native::LayerDetailsQuery& query, TimePoint) override {
+    return aemcp::native::HostLayerDetailsResult::success(
+        package_layer_details(query.layer_locator));
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerNameWriteResult set_layer_name(
+      const aemcp::native::LayerNameSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerNameWriteResult::success(
+        {true, command.layer_locator, "Before", command.name});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerRangeWriteResult set_layer_range(
+      const aemcp::native::LayerRangeSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerRangeWriteResult::success({
+        true, command.layer_locator,
+        {0, 1, "0"}, {5, 1, "5"}, command.in_point, command.duration});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerStartTimeWriteResult set_layer_start_time(
+      const aemcp::native::LayerStartTimeSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerStartTimeWriteResult::success(
+        {true, command.layer_locator, {0, 1, "0"}, command.start_time});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerStretchWriteResult set_layer_stretch(
+      const aemcp::native::LayerStretchSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerStretchWriteResult::success(
+        {true, command.layer_locator, {1, 1, "1"}, command.stretch});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerOrderWriteResult set_layer_order(
+      const aemcp::native::LayerOrderSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerOrderWriteResult::success(
+        {true, command.layer_locator, 1, command.target_stack_index});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerParentWriteResult set_layer_parent(
+      const aemcp::native::LayerParentSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerParentWriteResult::success(
+        {true, command.layer_locator, std::nullopt, command.parent_layer_locator});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerDuplicateResult duplicate_layer(
+      const aemcp::native::LayerDuplicateCommand& command, TimePoint) override {
+    auto source = command.layer_locator;
+    source.project_id = "55555555-5555-4555-8555-555555555555";
+    source.generation += 1;
+    auto duplicate = source;
+    duplicate.object_id = "99999999-9999-4999-8999-999999999999";
+    auto composition = duplicate;
+    composition.kind = "composition";
+    composition.object_id = "66666666-6666-4666-8666-666666666666";
+    auto details = package_layer_details(duplicate, composition);
+    details.name = command.new_name;
+    auto source_details = package_layer_details(source, composition);
+    return aemcp::native::HostLayerDuplicateResult::success({
+        true, source, duplicate, composition, 2, 3,
+        std::move(details), std::move(source_details)});
+  }
+
   [[nodiscard]] HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint) override {
     ++project_graph_invalidation_calls;
@@ -526,6 +587,27 @@ class FakeHost final : public HostApi {
     value.work_area_start = {0, 1, "0"};
     value.work_area_duration = {5, 1, "5"};
     value.display_start_time = {0, 1, "0"};
+    return value;
+  }
+
+  [[nodiscard]] static aemcp::native::LayerDetails package_layer_details(
+      aemcp::native::ObjectLocator layer,
+      std::optional<aemcp::native::ObjectLocator> composition_override = std::nullopt) {
+    auto composition = composition_override.value_or(layer);
+    composition.kind = "composition";
+    composition.object_id = "66666666-6666-4666-8666-666666666666";
+    aemcp::native::LayerDetails value;
+    value.layer_locator = std::move(layer);
+    value.composition_locator = std::move(composition);
+    value.stack_index = 1;
+    value.name = "Fixture Layer";
+    value.type = "text";
+    value.video_enabled = true;
+    value.locked = false;
+    value.in_point = {0, 1, "0"};
+    value.duration = {5, 1, "5"};
+    value.start_time = {0, 1, "0"};
+    value.stretch = {1, 1, "1"};
     return value;
   }
 
@@ -640,7 +722,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "12640c0306641fd32553828d86a4c87728a2c964fe0d288c06a7107fcf9cfdd9",
+      "53e3b7974e797b088aa1dd25d600a2506f59fed0d11c34ca8249e87dcf3ee4a1",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -663,6 +745,14 @@ NativeRpcRuntimeInfo runtime() {
       "957985628474caa9c9cef3de76a2839e59691232b062b776ff800a79dd3cc35c",
       "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f",
       "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3",
+      "b1b7a5f313bbf72eb6b33ac4a0507f9f925ef6873d53fd07d93d861164ac15d9",
+      "a68fb7f75f050faf4e77c81c3fa9f53ad501016af0eeb065493716ff94fd5929",
+      "0b90618916f0df612726017ef80795b72829f367cbf46cad23b33beb129230e2",
+      "c0c09292b98f5fecfb69a487f2014aed6ce2b67d47f07231beea36d916e07e27",
+      "0545a85e87d8907f94597ba36e3021fd3fa6dfe1262ff0e81eb30551f5e3bbb8",
+      "e977b89201314e2e4ee1b6e7a09efadd06f012b2b97e3087b0d9c4bd8102d162",
+      "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c",
+      "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75",
   };
 }
 
@@ -681,7 +771,8 @@ AuthenticatedConnection connection(int socket_fd, std::string route, std::uint32
 }
 
 std::vector<std::uint8_t> frame(std::string_view json) {
-  require(!json.empty() && json.size() <= 131'072, "test JSON frame size is invalid");
+  require(!json.empty() && json.size() <= aemcp::native::rpc::kMaxFrameBytes,
+          "test JSON frame size is invalid");
   std::vector<std::uint8_t> output(json.size() + 4);
   const auto size = static_cast<std::uint32_t>(json.size());
   output[0] = static_cast<std::uint8_t>(size >> 24U);
@@ -733,7 +824,8 @@ std::string read_body(int socket_fd) {
       | (static_cast<std::uint32_t>(prefix[1]) << 16U)
       | (static_cast<std::uint32_t>(prefix[2]) << 8U)
       | static_cast<std::uint32_t>(prefix[3]);
-  require(size > 0 && size <= 131'072, "response frame prefix is invalid");
+  require(size > 0 && size <= aemcp::native::rpc::kMaxFrameBytes,
+          "response frame prefix is invalid");
   std::vector<std::uint8_t> body(size);
   read_exact(socket_fd, body.data(), body.size());
   return std::string(reinterpret_cast<const char*>(body.data()), body.size());
@@ -847,6 +939,18 @@ std::string package150_invoke_json(
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
         "\"params\":{\"capabilityId\":\"" + std::string(capability_id)
       + "\",\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
+}
+
+std::string layer_timeline_invoke_json(
+    std::string_view request_id,
+    std::string_view capability_id,
+    std::string_view additional_arguments = {}) {
+  return package150_invoke_json(
+      request_id,
+      capability_id,
+      graph_locator_json("layer", "88888888-8888-4888-8888-888888888888")
+          .insert(0, "{\"layerLocator\":")
+          + std::string(additional_arguments) + "}");
 }
 
 std::string project_items_invoke_json(std::string_view request_id) {
@@ -1934,6 +2038,97 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   (void)dispatcher.shutdown();
 }
 
+void layer_timeline_package_crosses_the_authenticated_wire_boundary() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcConnectionHandler handler(
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
+  std::array<int, 2> sockets{};
+  require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0,
+      "package-155 socketpair failed");
+  const AuthenticatedConnection authenticated = connection(
+      sockets[1], "route-package-155", 11);
+  std::thread worker([&] { handler.serve(authenticated); });
+
+  send_json(sockets[0], hello_json());
+  require_contains(read_body(sockets[0]), "\"ok\":true", "package-155 hello");
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-layer-duplicate", "ae.layer.duplicate"));
+  const std::string capabilities = read_body(sockets[0]);
+  require_contains(capabilities, "\"id\":\"ae.layer.duplicate\"",
+      "package-155 capabilities");
+  require_contains(capabilities,
+      "\"contractDigest\":\"334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75\"",
+      "package-155 capabilities");
+
+  struct Case {
+    std::string request_id;
+    std::string capability_id;
+    std::string additional_arguments;
+    std::string expected_kind;
+  };
+  const std::string parent_locator = graph_locator_json(
+      "layer", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  const std::array<Case, 8> cases{{
+      {"wire-layer-details", "ae.layer.details.read", {}, "layer-details-read"},
+      {"wire-layer-name", "ae.layer.name.set",
+          ",\"name\":\"After\",\"idempotencyKey\":\"wire-layer-name-0001\"",
+          "layer-name-set"},
+      {"wire-layer-range", "ae.layer.range.set",
+          ",\"inPoint\":{\"value\":1,\"scale\":1},\"duration\":{\"value\":4,\"scale\":1},"
+          "\"idempotencyKey\":\"wire-layer-range-0001\"", "layer-range-set"},
+      {"wire-layer-start", "ae.layer.start-time.set",
+          ",\"startTime\":{\"value\":2,\"scale\":1},"
+          "\"idempotencyKey\":\"wire-layer-start-0001\"", "layer-start-time-set"},
+      {"wire-layer-stretch", "ae.layer.stretch.set",
+          ",\"stretch\":{\"num\":-2,\"den\":1},"
+          "\"idempotencyKey\":\"wire-layer-stretch-0001\"", "layer-stretch-set"},
+      {"wire-layer-order", "ae.layer.order.set",
+          ",\"targetStackIndex\":2,\"idempotencyKey\":\"wire-layer-order-0001\"",
+          "layer-order-set"},
+      {"wire-layer-parent", "ae.layer.parent.set",
+          ",\"parentLayerLocator\":" + parent_locator
+              + ",\"idempotencyKey\":\"wire-layer-parent-0001\"",
+          "layer-parent-set"},
+      {"wire-layer-duplicate", "ae.layer.duplicate",
+          ",\"newName\":\"Fixture Layer Copy\","
+          "\"idempotencyKey\":\"wire-layer-duplicate-0001\"", "layer-duplicate"},
+  }};
+  FakeHost host;
+  for (const Case& item : cases) {
+    send_json(sockets[0], layer_timeline_invoke_json(
+        item.request_id, item.capability_id, item.additional_arguments));
+    require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+        item.capability_id + " progress");
+    wait_until([&] { return dispatcher.queued() == 1; },
+        item.capability_id + " queued invoke");
+    const auto batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1 && batch.completions[0].ok,
+        item.capability_id + " dispatcher result failed");
+    const std::string response = read_body(sockets[0]);
+    require_contains(response, "\"capabilityId\":\"" + item.capability_id + "\"",
+        item.capability_id + " response");
+    require_contains(response, "\"kind\":\"" + item.expected_kind + "\"",
+        item.capability_id + " response");
+    require_contains(response,
+        "\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":",
+        item.capability_id + " response");
+    wait_until([&] {
+      return !observer.terminal(item.request_id).request_id.empty();
+    }, item.capability_id + " terminal audit");
+    const TerminalRecord terminal = observer.terminal(item.request_id);
+    require(terminal.ok && terminal.request_digest.size() == 64
+            && terminal.postcondition_digest.size() == 64,
+        item.capability_id + " terminal evidence was not verified");
+  }
+
+  finish_connection(sockets[0], sockets[1], worker);
+  (void)dispatcher.shutdown();
+}
+
 void project_composition_package_emits_eight_verified_terminals() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
@@ -2235,6 +2430,7 @@ void construction_failure_is_contained_by_noexcept_boundary() {
 int main() {
   hello_capabilities_invoke_cancel_and_fencing_work();
   project_composition_package_emits_eight_verified_terminals();
+  layer_timeline_package_crosses_the_authenticated_wire_boundary();
   invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced();
   invalid_postcondition_becomes_structured_failure();
   construction_failure_is_contained_by_noexcept_boundary();
