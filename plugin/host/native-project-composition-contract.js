@@ -776,13 +776,23 @@ function validKeyframeWriteValue(kind, value, argumentsValue, hostInstanceId, se
             );
     }
     if (kind === 'ease') {
+        // After Effects retains per-keyframe temporal ease only for bezier
+        // interpolation, so the native write promotes non-bezier sides to
+        // bezier inside the same Undo group. Accept exactly that coupling:
+        // after must be bezier on both sides and nothing except the ease
+        // dimensions and the two interpolation fields may change.
         return !keyframeEaseDimensionsEqual(
             before.temporalEaseDimensions, after.temporalEaseDimensions,
         )
             && keyframeEaseDimensionsEqual(
                 after.temporalEaseDimensions, argumentsValue.dimensions,
             )
-            && keyframeDetailsEqualExcept(before, after, ['temporalEaseDimensions']);
+            && after.inInterpolation === 'bezier'
+            && after.outInterpolation === 'bezier'
+            && keyframeDetailsEqualExcept(
+                before, after,
+                ['temporalEaseDimensions', 'inInterpolation', 'outInterpolation'],
+            );
     }
     const member = {
         'temporal-continuous': 'temporalContinuous',

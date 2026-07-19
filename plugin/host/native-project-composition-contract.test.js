@@ -294,7 +294,11 @@ function keyframeCases() {
     const before = details();
     const valueAfter = details({ value: { kind: 'scalar', value: '2' } });
     const interpolationAfter = details({ inInterpolation: 'bezier', outInterpolation: 'hold' });
-    const easeAfter = details({ temporalEaseDimensions: ease('5', '50') });
+    const easeAfter = details({
+        inInterpolation: 'bezier',
+        outInterpolation: 'bezier',
+        temporalEaseDimensions: ease('5', '50'),
+    });
     const behaviorAfter = details({
         behaviors: { ...before.behaviors, spatialContinuous: true },
     });
@@ -431,6 +435,40 @@ test('#157 interpolation accepts only AE bezier in-ease influence normalization'
         false,
         'nonBezier',
     );
+});
+
+test('#157 temporal ease accepts only the AE bezier promotion coupling', () => {
+    const vector = keyframeCases()['ae.layer.property.keyframe.temporal-ease.set'];
+    const contract = packageContracts.getContract(
+        'ae.layer.property.keyframe.temporal-ease.set',
+    );
+    assert.equal(
+        contract.validValue(vector.value, vector.arguments, HOST, SESSION),
+        true,
+    );
+
+    const drifts = {
+        noPromotion(value) {
+            value.afterKeyframe.inInterpolation = 'linear';
+            value.afterKeyframe.outInterpolation = 'linear';
+        },
+        outNotBezier(value) { value.afterKeyframe.outInterpolation = 'hold'; },
+        value(value) { value.afterKeyframe.value = { kind: 'scalar', value: '2' }; },
+        count(value) { value.keyframeCountAfter += 1; },
+        behavior(value) { value.afterKeyframe.behaviors.roving = true; },
+        easeMismatch(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '51';
+        },
+    };
+    for (const [name, mutate] of Object.entries(drifts)) {
+        const drift = structuredClone(vector.value);
+        mutate(drift);
+        assert.equal(
+            contract.validValue(drift, vector.arguments, HOST, SESSION),
+            false,
+            name,
+        );
+    }
 });
 
 test('#155 layer contracts bind locators, readbacks, replay, and nullable parent refresh', () => {

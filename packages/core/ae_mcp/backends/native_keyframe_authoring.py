@@ -1012,6 +1012,31 @@ def _ease_equal(
     return True
 
 
+def _temporal_ease_coupling_allowed(
+    before: KeyframeDetails,
+    after: KeyframeDetails,
+) -> bool:
+    """Accept only the After Effects bezier promotion beside an ease write.
+
+    After Effects retains per-keyframe temporal ease only when both sides use
+    bezier interpolation, so the native write promotes non-bezier sides to
+    bezier inside the same Undo group.  Accept exactly that coupling: the
+    after state must be bezier on both sides, and nothing except the ease
+    dimensions and the two interpolation fields may change.
+    """
+    return (
+        after.in_interpolation == "bezier"
+        and after.out_interpolation == "bezier"
+        and _details_equal_except(
+            before,
+            after,
+            "temporal_ease_dimensions",
+            "in_interpolation",
+            "out_interpolation",
+        )
+    )
+
+
 async def invoke_keyframe_temporal_ease_set(
     backend: NativeInvokeBackend,
     *,
@@ -1052,11 +1077,7 @@ async def invoke_keyframe_temporal_ease_set(
             after.temporal_ease_dimensions,
         )
         or not _ease_equal(after.temporal_ease_dimensions, arguments.dimensions)
-        or not _details_equal_except(
-            before,
-            after,
-            "temporal_ease_dimensions",
-        )
+        or not _temporal_ease_coupling_allowed(before, after)
     ):
         raise _possibly_side_effecting(
             "Native keyframe temporal-ease readback did not match the request.",

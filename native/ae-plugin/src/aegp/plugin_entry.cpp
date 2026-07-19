@@ -5500,6 +5500,18 @@ class AegpHostApi final : public HostApi {
             "INVALID_ARGUMENT", "temporal ease already matches the keyframe",
             "params.arguments.dimensions");
       }
+      if (before->in_interpolation != "bezier"
+          || before->out_interpolation != "bezier") {
+        AEGP_KeyInterpolationMask valid = AEGP_KeyInterpMask_NONE;
+        if (stream_suite->AEGP_GetValidInterpolations(
+                resolved->stream.get(), &valid) != A_Err_NONE
+            || (valid & AEGP_KeyInterpMask_BEZIER) == 0) {
+          return HostLayerPropertyKeyframeWriteResult::failure(
+              "PRECONDITION_FAILED",
+              "the property does not support bezier temporal ease",
+              "params.arguments.dimensions");
+        }
+      }
     } else if (command.kind
         == aemcp::native::LayerPropertyKeyframeMutationKind::kSetBehavior) {
       const auto flag = behavior_flag(command.behavior);
@@ -5561,11 +5573,21 @@ class AegpHostApi final : public HostApi {
           resolved->stream.get(), *before_index, desired_in, desired_out);
     } else if (command.kind
         == aemcp::native::LayerPropertyKeyframeMutationKind::kSetTemporalEase) {
+      // After Effects only retains per-keyframe temporal ease when both sides
+      // use bezier interpolation; the same ease call on a linear keyframe
+      // leaves no observable state. Promote non-bezier sides inside this Undo
+      // group, mirroring Easy Ease, so the readback can prove the request.
+      if (before->in_interpolation != "bezier"
+          || before->out_interpolation != "bezier") {
+        mutation_error = keyframe_suite->AEGP_SetKeyframeInterpolation(
+            resolved->stream.get(), *before_index, AEGP_KeyInterp_BEZIER,
+            AEGP_KeyInterp_BEZIER);
+      }
       for (const auto& [dimension, ease] : desired_ease) {
+        if (mutation_error != A_Err_NONE) break;
         mutation_error = keyframe_suite->AEGP_SetKeyframeTemporalEase(
             resolved->stream.get(), *before_index, dimension,
             &ease.first, &ease.second);
-        if (mutation_error != A_Err_NONE) break;
       }
     } else if (command.kind
         == aemcp::native::LayerPropertyKeyframeMutationKind::kSetBehavior) {
@@ -5613,6 +5635,9 @@ class AegpHostApi final : public HostApi {
             && after->out_interpolation == command.out_interpolation;
       } else if (command.kind
           == aemcp::native::LayerPropertyKeyframeMutationKind::kSetTemporalEase) {
+        requested_state_valid = requested_state_valid
+            && after->in_interpolation == "bezier"
+            && after->out_interpolation == "bezier";
         for (const auto& dimension : command.temporal_ease) {
           requested_state_valid = requested_state_valid
               && keyframe_dimension_ease_equal(

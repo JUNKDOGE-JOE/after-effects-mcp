@@ -259,7 +259,11 @@ class PackageBackend(N.NativeInvokeBackend):
             return self._mutation(
                 request,
                 before=details(),
-                after=details(dimensions=arguments["dimensions"]),
+                after=details(
+                    in_interpolation="bezier",
+                    out_interpolation="bezier",
+                    dimensions=arguments["dimensions"],
+                ),
             )
         if capability == K.KEYFRAME_BEHAVIOR_SET_CAPABILITY_ID:
             flag = arguments["behavior"].replace("-", " ").title().replace(" ", "")
@@ -615,6 +619,97 @@ async def test_interpolation_rejects_unrelated_state_drift(drift: str):
         )
     if drift != "dimension":
         assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+
+
+@pytest.mark.asyncio
+async def test_temporal_ease_accepts_ae_bezier_promotion():
+    backend = PackageBackend()
+    execution = await K.invoke_keyframe_temporal_ease_set(
+        backend,
+        request_id="keyframe-ease-promotion-1",
+        layer_locator=locator("layer", LAYER),
+        property_locator=locator("stream", STREAM),
+        time={"value": 12, "scale": 24},
+        dimensions=(
+            {
+                "dimension": 0,
+                "inEase": ease("10", "25"),
+                "outEase": ease("20", "75"),
+            },
+        ),
+        idempotency_key="keyframe-ease-promotion-0001",
+        deadline_unix_ms=deadline(),
+    )
+    before = execution.value.before_keyframe
+    after = execution.value.after_keyframe
+    assert before is not None
+    assert after is not None
+    assert before.in_interpolation == "linear"
+    assert before.out_interpolation == "linear"
+    assert after.in_interpolation == "bezier"
+    assert after.out_interpolation == "bezier"
+    assert after.temporal_ease_dimensions[0].in_ease.speed == "10"
+    assert after.temporal_ease_dimensions[0].in_ease.influence == "25"
+    assert after.temporal_ease_dimensions[0].out_ease.speed == "20"
+    assert after.temporal_ease_dimensions[0].out_ease.influence == "75"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "drift",
+    [
+        "no_promotion",
+        "out_not_bezier",
+        "value",
+        "count",
+        "behavior",
+        "ease_mismatch",
+    ],
+)
+async def test_temporal_ease_rejects_coupling_drift(drift: str):
+    backend = PackageBackend()
+    original_value = backend._value
+
+    def tampered_value(request: N.NativeInvokeRequest) -> dict[str, Any]:
+        value = original_value(request)
+        if request.capability_id == K.KEYFRAME_TEMPORAL_EASE_SET_CAPABILITY_ID:
+            if drift == "no_promotion":
+                value["afterKeyframe"]["inInterpolation"] = "linear"
+                value["afterKeyframe"]["outInterpolation"] = "linear"
+            elif drift == "out_not_bezier":
+                value["afterKeyframe"]["outInterpolation"] = "hold"
+            elif drift == "value":
+                value["afterKeyframe"]["value"] = {"kind": "scalar", "value": "2"}
+            elif drift == "count":
+                value["keyframeCountAfter"] += 1
+            elif drift == "behavior":
+                value["afterKeyframe"]["behaviors"]["roving"] = True
+            elif drift == "ease_mismatch":
+                value["afterKeyframe"]["temporalEaseDimensions"][0]["inEase"][
+                    "influence"
+                ] = "51"
+        return value
+
+    backend._value = tampered_value  # type: ignore[method-assign]
+    with pytest.raises(N.NativeBackendError) as raised:
+        await K.invoke_keyframe_temporal_ease_set(
+            backend,
+            request_id=f"keyframe-ease-{drift}-drift-1",
+            layer_locator=locator("layer", LAYER),
+            property_locator=locator("stream", STREAM),
+            time={"value": 12, "scale": 24},
+            dimensions=(
+                {
+                    "dimension": 0,
+                    "inEase": ease("10", "25"),
+                    "outEase": ease("20", "75"),
+                },
+            ),
+            idempotency_key=f"keyframe-ease-{drift}-drift-0001",
+            deadline_unix_ms=deadline(),
+        )
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
 
 
 @pytest.mark.asyncio
