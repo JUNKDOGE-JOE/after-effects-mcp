@@ -109,8 +109,19 @@ def _locator(value: Any, kind: str) -> dict[str, Any]:
 def _time(value: Any) -> dict[str, Any]:
     checked = mapping(value, "keyframe time is invalid")
     require(
-        checked.get("value") == 1
-        and checked.get("scale") == 1
+        set(checked) == {"value", "scale", "secondsRational"},
+        "keyframe time shape is not closed",
+    )
+    raw_value = checked.get("value")
+    raw_scale = checked.get("scale")
+    require(
+        isinstance(raw_value, int)
+        and not isinstance(raw_value, bool)
+        and -(2**31) <= raw_value <= (2**31) - 1
+        and isinstance(raw_scale, int)
+        and not isinstance(raw_scale, bool)
+        and 1 <= raw_scale <= (2**32) - 1
+        and raw_value * TIME["scale"] == TIME["value"] * raw_scale
         and checked.get("secondsRational") == "1",
         "keyframe time is not the exact requested time",
     )

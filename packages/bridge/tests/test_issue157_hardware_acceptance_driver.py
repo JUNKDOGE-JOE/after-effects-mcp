@@ -111,7 +111,9 @@ class FakeAe:
         dimensions = 2 if spatial else 1
         return {
             "propertyLocator": self.locator("stream", target),
-            "time": {"value": 1, "scale": 1, "secondsRational": "1"},
+            # AE returns the exact requested second in its native comp-time
+            # scale; the representation need not preserve the request's 1/1.
+            "time": {"value": 24576, "scale": 24576, "secondsRational": "1"},
             "temporalDimensionality": dimensions,
             "valueType": "two-d-spatial" if spatial else "one-d",
             "value": copy.deepcopy(value),
@@ -711,6 +713,21 @@ def test_only_a_passing_candidate_run_is_eligible_evidence(
     summary = json.loads(evidence.summary_path.read_text(encoding="utf-8"))
     assert summary["candidateRun"] is True
     assert summary["candidateEvidence"] is eligible
+
+
+def test_keyframe_time_accepts_native_comp_scale_and_rejects_drift() -> None:
+    assert package._time(
+        {"value": 24576, "scale": 24576, "secondsRational": "1"}
+    )["secondsRational"] == "1"
+
+    with pytest.raises(runtime_module.AcceptanceFailure, match="exact requested time"):
+        package._time(
+            {"value": 24575, "scale": 24576, "secondsRational": "24575/24576"}
+        )
+    with pytest.raises(runtime_module.AcceptanceFailure, match="exact requested time"):
+        package._time(
+            {"value": 24576, "scale": 24576, "secondsRational": "24576/24576"}
+        )
 
 
 def test_identity_binds_generation_and_canonical_stable_launcher(tmp_path: Path):
