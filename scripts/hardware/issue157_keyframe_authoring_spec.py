@@ -36,8 +36,8 @@ SPEC = PackageSpec(
     t5_target_calls=28,
     t6_target_calls=28,
     tools=(
-        ToolCase("details", DETAILS, "ae.layer.property.keyframe.details.read", "read", 10),
-        ToolCase("add", ADD, "ae.layer.property.keyframe.add", "write", 3),
+        ToolCase("details", DETAILS, "ae.layer.property.keyframe.details.read", "read", 8),
+        ToolCase("add", ADD, "ae.layer.property.keyframe.add", "write", 5),
         ToolCase("value", VALUE, "ae.layer.property.keyframe.value.set", "write"),
         ToolCase(
             "interpolation", INTERPOLATION,
@@ -71,9 +71,13 @@ SPEC = PackageSpec(
 )
 
 TIME = {"value": 1, "scale": 1}
+SEED_START_TIME = {"value": 0, "scale": 1}
+SEED_END_TIME = {"value": 2, "scale": 1}
+SCALAR_0 = {"kind": "scalar", "value": "0"}
 SCALAR_40 = {"kind": "scalar", "value": "40"}
 SCALAR_50 = {"kind": "scalar", "value": "50"}
 SCALAR_65 = {"kind": "scalar", "value": "65"}
+SCALAR_80 = {"kind": "scalar", "value": "80"}
 DETAIL_FIELDS = {
     "propertyLocator", "time", "temporalDimensionality", "valueType", "value",
     "inInterpolation", "outInterpolation", "temporalEaseDimensions", "behaviors",
@@ -106,7 +110,7 @@ def _locator(value: Any, kind: str) -> dict[str, Any]:
     return locator
 
 
-def _time(value: Any) -> dict[str, Any]:
+def _time(value: Any, expected: Mapping[str, Any] = TIME) -> dict[str, Any]:
     checked = mapping(value, "keyframe time is invalid")
     require(
         set(checked) == {"value", "scale", "secondsRational"},
@@ -114,6 +118,11 @@ def _time(value: Any) -> dict[str, Any]:
     )
     raw_value = checked.get("value")
     raw_scale = checked.get("scale")
+    expected_seconds = expected["value"] // expected["scale"]
+    require(
+        expected["value"] == expected_seconds * expected["scale"],
+        "expected keyframe time is not an integral second",
+    )
     require(
         isinstance(raw_value, int)
         and not isinstance(raw_value, bool)
@@ -121,19 +130,24 @@ def _time(value: Any) -> dict[str, Any]:
         and isinstance(raw_scale, int)
         and not isinstance(raw_scale, bool)
         and 1 <= raw_scale <= (2**32) - 1
-        and raw_value * TIME["scale"] == TIME["value"] * raw_scale
-        and checked.get("secondsRational") == "1",
+        and raw_value * expected["scale"] == expected["value"] * raw_scale
+        and checked.get("secondsRational") == str(expected_seconds),
         "keyframe time is not the exact requested time",
     )
     return checked
 
 
-def _detail(value: Any, property_locator: Mapping[str, Any]) -> dict[str, Any]:
+def _detail(
+    value: Any,
+    property_locator: Mapping[str, Any],
+    *,
+    expected_time: Mapping[str, Any] = TIME,
+) -> dict[str, Any]:
     detail = mapping(value, "keyframe details are invalid")
     require(set(detail) == DETAIL_FIELDS, "keyframe details shape is not closed")
     require("keyframeIndex" not in detail, "keyframe index leaked into public identity")
     require(_locator(detail["propertyLocator"], "stream") == dict(property_locator), "property drift")
-    _time(detail["time"])
+    _time(detail["time"], expected_time)
     require(detail.get("valueType") == "one-d", "opacity keyframe must be one-d")
     scalar = mapping(detail.get("value"), "keyframe scalar is invalid")
     require(set(scalar) == {"kind", "value"} and scalar["kind"] == "scalar", "bad scalar")
@@ -147,12 +161,17 @@ def _detail(value: Any, property_locator: Mapping[str, Any]) -> dict[str, Any]:
     return detail
 
 
-def _spatial_detail(value: Any, property_locator: Mapping[str, Any]) -> dict[str, Any]:
+def _spatial_detail(
+    value: Any,
+    property_locator: Mapping[str, Any],
+    *,
+    expected_time: Mapping[str, Any] = TIME,
+) -> dict[str, Any]:
     detail = mapping(value, "spatial keyframe details are invalid")
     require(set(detail) == DETAIL_FIELDS, "spatial keyframe details shape is not closed")
     require("keyframeIndex" not in detail, "keyframe index leaked into public identity")
     require(_locator(detail["propertyLocator"], "stream") == dict(property_locator), "property drift")
-    _time(detail["time"])
+    _time(detail["time"], expected_time)
     value_type = detail.get("valueType")
     require(value_type in {"two-d-spatial", "three-d-spatial"}, "position keyframe is not spatial")
     dimensions = 2 if value_type == "two-d-spatial" else 3
@@ -189,33 +208,39 @@ def _mutation(
     operation: str,
     spatial: bool = False,
     expected_add_value: Mapping[str, Any] | None = None,
+    expected_time: Mapping[str, Any] = TIME,
 ) -> dict[str, Any]:
     changed = mapping(value, f"{operation} mutation is invalid")
     require(set(changed) == MUTATION_FIELDS, f"{operation} mutation shape is not closed")
     require(changed.get("changed") is True, f"{operation} did not report changed=true")
     require(_locator(changed["layerLocator"], "layer") == dict(layer), "layer drift")
     require(_locator(changed["propertyLocator"], "stream") == dict(prop), "property drift")
-    _time(changed["time"])
+    _time(changed["time"], expected_time)
     before = changed.get("beforeKeyframe")
     after = changed.get("afterKeyframe")
     count_before = changed.get("keyframeCountBefore")
     count_after = changed.get("keyframeCountAfter")
     require(isinstance(count_before, int) and isinstance(count_after, int), "bad keyframe counts")
-    validator = _spatial_detail if spatial else _detail
+
+    def validate(detail: Any) -> dict[str, Any]:
+        if spatial:
+            return _spatial_detail(detail, prop, expected_time=expected_time)
+        return _detail(detail, prop, expected_time=expected_time)
+
     if operation == "add":
         require(before is None and count_after == count_before + 1, "add count/state mismatch")
-        checked_after = validator(after, prop)
+        checked_after = validate(after)
         require(
             expected_add_value is None or checked_after["value"] == dict(expected_add_value),
             "add value mismatch",
         )
     elif operation == "delete":
         require(after is None and count_after + 1 == count_before, "delete count/state mismatch")
-        validator(before, prop)
+        validate(before)
     else:
         require(count_after == count_before, f"{operation} changed keyframe count")
-        validator(before, prop)
-        validator(after, prop)
+        validate(before)
+        validate(after)
     return changed
 
 
@@ -492,12 +517,13 @@ class Issue157Package:
         phase: str,
         property_locator: Mapping[str, Any] | None = None,
         spatial: bool = False,
+        time: Mapping[str, Any] = TIME,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         target = dict(property_locator) if property_locator is not None else fixture.opacity
         arguments = {
             "layer_locator": fixture.layer,
             "property_locator": target,
-            "time": TIME,
+            "time": time,
             "idempotency_key": self.runtime.intent(operation),
             **dict(extras),
         }
@@ -509,6 +535,7 @@ class Issue157Package:
             operation=operation,
             spatial=spatial,
             expected_add_value=extras.get("value") if operation == "add" else None,
+            expected_time=time,
         )
         return payload, changed
 
@@ -549,7 +576,33 @@ class Issue157Package:
     async def _accept(self, session: PublicSession) -> tuple[dict[str, Any], str]:
         phase = f"{self.runtime.mode}-package"
         fixture = await self._create_fixture(session, phase=phase)
-        await self._details(session, fixture, phase=phase, missing=True)
+        # After Effects retains per-keyframe temporal-ease speed only when the
+        # keyframe has an adjacent keyframe on both sides; on an isolated
+        # keyframe AE applies the influence but normalizes speed back to 0
+        # (verified on the candidate build through the public tool and through
+        # ExtendScript), which the strict native/host/Core readback rightly
+        # rejects as POSSIBLY_SIDE_EFFECTING_FAILURE. Seed the two neighbor
+        # keys through the public ADD tool before any matrix write so the ease
+        # write proves exact speed retention. Seeding through ExtendScript
+        # instead would advance the native project generation and invalidate
+        # every locator the driver already holds (reproduced on candidate
+        # fb96659: the first post-seed write was rejected PRECONDITION_FAILED
+        # with zero side effects). The neighbors are fixture preconditions,
+        # not tested operations: they receive no Undo checkpoint, and each
+        # write Undo still reverts only its own write group.
+        for seed_time, seed_value in (
+            (SEED_START_TIME, SCALAR_0),
+            (SEED_END_TIME, SCALAR_80),
+        ):
+            await self._write(
+                session,
+                fixture,
+                ADD,
+                "add",
+                {"value": seed_value},
+                phase=f"{phase}-seed-neighbors",
+                time=seed_time,
+            )
         _payload, added = await self._write(session, fixture, ADD, "add", {"value": SCALAR_40}, phase=phase)
         await self._undo_and_read(session, fixture, tool=ADD, before=None, phase=phase)
         _seed_payload, seed = await self._write(session, fixture, ADD, "add", {"value": SCALAR_40}, phase=phase)
@@ -578,45 +631,38 @@ class Issue157Package:
             ),
             (DELETE, "delete", {}, lambda after: after is None),
         ):
-            if tool == EASE:
-                # After Effects retains per-keyframe temporal-ease speed only
-                # when both adjacent segments exist; on an isolated keyframe AE
-                # applies the influence but normalizes speed back to 0 (verified
-                # on the candidate build through the public tool and through
-                # ExtendScript), which the strict native/host/Core readback
-                # rightly rejects as POSSIBLY_SIDE_EFFECTING_FAILURE. Seed the
-                # two neighbor keys through the operator checkpoint so the ease
-                # write proves exact speed retention without spending public
-                # calls; the neighbors are fixture preconditions, not tested
-                # operations, and the ease Undo still reverts only the ease
-                # write group.
+            _payload, changed = await self._write(
+                session, fixture, tool, operation, extras, phase=phase
+            )
+            if tool is not VALUE:
+                # Every later loop write starts from the baseline keyframe, so
+                # its own beforeKeyframe proves the previous write's Undo. The
+                # INTERPOLATION beforeKeyframe is AE state at the same exact
+                # time through the same public surface; requiring it to equal
+                # the baseline verifies the VALUE Undo without spending a
+                # dedicated details readback.
+                require(
+                    _semantic(changed["beforeKeyframe"]) == _semantic(baseline),
+                    f"{tool} did not start from the baseline keyframe",
+                )
+                if tool is INTERPOLATION:
+                    self.runtime.mark_tool_passed(VALUE, undo_verified=True)
+            require(assertion(changed.get("afterKeyframe")), f"{tool} target field mismatch")
+            if tool is VALUE:
                 await self.runtime.checkpoint(
-                    "seed-temporal-ease-neighbors",
+                    f"undo-{tool}",
                     {
-                        "instruction": (
-                            "Add two neighbor keyframes on the fixture opacity property "
-                            "(value 0 at 0s and value 80 at 2s) through the After "
-                            "Effects GUI or ExtendScript; do not save a copy."
-                        ),
+                        "instruction": "Execute exactly one real After Effects Undo; do not save a copy.",
                         "fixturePath": self.runtime.fixture.path,
-                        "compositionName": self.fixture_name,
-                        "layerName": "KEYFRAME_TARGET",
-                        "propertyMatchName": "ADBE Opacity",
-                        "neighbors": [
-                            {"timeSeconds": 0, "value": 0},
-                            {"timeSeconds": 2, "value": 80},
-                        ],
                         "activeFixtureCount": 1,
                         "saveAsCopies": 0,
                     },
                 )
-            _payload, changed = await self._write(
-                session, fixture, tool, operation, extras, phase=phase
-            )
-            require(assertion(changed.get("afterKeyframe")), f"{tool} target field mismatch")
-            await self._undo_and_read(
-                session, fixture, tool=tool, before=baseline, phase=phase
-            )
+                self.runtime.mark_tool_passed(VALUE, undo_executed=True)
+            else:
+                await self._undo_and_read(
+                    session, fixture, tool=tool, before=baseline, phase=phase
+                )
         _position_seed_payload, position_seed = await self._write(
             session,
             fixture,

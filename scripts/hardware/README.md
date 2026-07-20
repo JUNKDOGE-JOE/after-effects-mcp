@@ -36,8 +36,9 @@ without another retry. After the formal-AE restart, the new host instance starts
 one new pairing epoch under the same rule.
 
 T5/T6 each use exactly 28 public calls: all seven package tools, scalar and
-spatial behavior paths, real Undo and independent readback for all six writes,
-one formal-AE restart, fresh Opacity/Position locator reacquisition, and archival
+spatial behavior paths, a real Undo for all six writes with post-Undo state
+verification, one formal-AE restart, fresh Opacity/Position locator
+reacquisition, and archival
 of the single active fixture. Every public call,
 including support and expected-error calls, is counted by one ledger; the
 runner aborts before dispatching call 31. Package #157 has no new native suite,
@@ -50,13 +51,19 @@ After Effects retains per-keyframe temporal-ease speed only when the keyframe
 has an adjacent keyframe on both sides; on an isolated keyframe AE applies the
 influence but normalizes speed back to 0. The strict native/host/Core readback
 rightly rejects that partial application as `POSSIBLY_SIDE_EFFECTING_FAILURE`,
-so before the `ae_setLayerPropertyKeyframeTemporalEase` write the runner emits
-one `seed-temporal-ease-neighbors` checkpoint. Completing it requires adding
-the two declared neighbor keyframes on the fixture opacity property through
-the After Effects GUI or ExtendScript without saving a copy. The neighbors are
-fixture preconditions, not tested operations: they cost no public calls, and
-the ease Undo checkpoint still executes exactly one Undo that reverts only the
-bezier promotion and the ease write group. If any write returns
+so the driver seeds the two neighbor keys (0 at 0s, 80 at 2s) through the
+public `ae_addLayerPropertyKeyframe` tool before any matrix write. Seeding
+through ExtendScript or the GUI instead would advance the native project
+generation and invalidate every locator the driver already holds; the first
+post-seed write is then correctly rejected as `PRECONDITION_FAILED`. The
+neighbor seeds are fixture preconditions, not tested operations: they receive
+no Undo checkpoint, they are counted in the five `add` invocations, and each
+write Undo still reverts only its own write group. Within the 28-call budget,
+the INTERPOLATION write's own `beforeKeyframe` — AE state at the same exact
+time through the same public surface — must equal the baseline, which verifies
+the VALUE Undo without a dedicated details readback; every other write keeps
+its independent post-Undo details readback, and the missing-keyframe error
+contract is proven by the post-Undo-ADD probe. If any write returns
 `POSSIBLY_SIDE_EFFECTING_FAILURE`, the driver exits with status 3 without
 retrying, including when the session layer wraps the failure in an exception
 group; inspect AE state and the native audit trail before deciding how to

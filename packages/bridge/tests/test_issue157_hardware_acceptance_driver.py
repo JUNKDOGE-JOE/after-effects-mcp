@@ -74,10 +74,10 @@ class FakeAe:
         self.request = 0
         self.opacity_value = {"kind": "scalar", "value": "100"}
         self.position_value = {"kind": "two-d", "x": "320", "y": "180"}
-        self.keyframe: dict[str, Any] | None = None
-        self.position_keyframe: dict[str, Any] | None = None
+        self.keyframes: dict[str, dict[int, dict[str, Any]]] = {OPACITY: {}, POSITION: {}}
         self.undo_stack: list[tuple[str, Any]] = []
         self.calls: list[str] = []
+        self.add_times: list[int] = []
         self.contracts = {
             case.capability_id: hashlib.sha256(case.capability_id.encode()).hexdigest()
             for case in (*package.SPEC.tools, *package.SPEC.support_tools)
@@ -90,30 +90,45 @@ class FakeAe:
             kind, object_id, self.host, self.session, generation=self.generation
         )
 
-    def _keyframe(self, target: str) -> dict[str, Any] | None:
-        return self.position_keyframe if target == POSITION else self.keyframe
+    @staticmethod
+    def _seconds(time_argument: dict[str, Any]) -> int:
+        value = time_argument["value"]
+        scale = time_argument["scale"]
+        assert value % scale == 0
+        return value // scale
 
-    def _set_keyframe(self, target: str, value: dict[str, Any] | None) -> None:
-        if target == POSITION:
-            self.position_keyframe = value
+    def _keyframe(self, target: str, seconds: int = 1) -> dict[str, Any] | None:
+        return self.keyframes[target].get(seconds)
+
+    def _set_keyframe(
+        self, target: str, value: dict[str, Any] | None, seconds: int = 1
+    ) -> None:
+        if value is None:
+            self.keyframes[target].pop(seconds, None)
         else:
-            self.keyframe = value
+            self.keyframes[target][seconds] = value
 
-    def detail(self, target: str = OPACITY) -> dict[str, Any]:
-        keyframe = self._keyframe(target)
+    def detail(self, target: str = OPACITY, seconds: int = 1) -> dict[str, Any]:
+        keyframe = self._keyframe(target, seconds)
         assert keyframe is not None
         result = copy.deepcopy(keyframe)
         result["propertyLocator"] = self.locator("stream", target)
         return result
 
-    def initial_detail(self, value: dict[str, Any], target: str = OPACITY) -> dict[str, Any]:
+    def initial_detail(
+        self, value: dict[str, Any], target: str = OPACITY, seconds: int = 1
+    ) -> dict[str, Any]:
         spatial = target == POSITION
         dimensions = 2 if spatial else 1
         return {
             "propertyLocator": self.locator("stream", target),
             # AE returns the exact requested second in its native comp-time
             # scale; the representation need not preserve the request's 1/1.
-            "time": {"value": 24576, "scale": 24576, "secondsRational": "1"},
+            "time": {
+                "value": seconds * 24576,
+                "scale": 24576,
+                "secondsRational": str(seconds),
+            },
             "temporalDimensionality": dimensions,
             "valueType": "two-d-spatial" if spatial else "one-d",
             "value": copy.deepcopy(value),
@@ -141,8 +156,8 @@ class FakeAe:
         if kind == "property":
             self.opacity_value = value
         else:
-            target, keyframe = value
-            self._set_keyframe(target, keyframe)
+            target, seconds, keyframe = value
+            self._set_keyframe(target, keyframe, seconds)
 
     def restart(self) -> None:
         self.host = HOST_2
@@ -238,17 +253,27 @@ class FakeAe:
             ]
         return {"hasMore": False, "properties": properties}
 
-    def _mutation(self, before: dict[str, Any] | None, target: str) -> dict[str, Any]:
-        keyframe = self._keyframe(target)
+    def _mutation(
+        self,
+        before: dict[str, Any] | None,
+        target: str,
+        seconds: int,
+        count_before: int,
+    ) -> dict[str, Any]:
+        keyframe = self._keyframe(target, seconds)
         return {
             "changed": True,
             "layerLocator": self.locator("layer", LAYER),
             "propertyLocator": self.locator("stream", target),
-            "time": {"value": 1, "scale": 1, "secondsRational": "1"},
-            "keyframeCountBefore": int(before is not None),
-            "keyframeCountAfter": int(keyframe is not None),
+            "time": {
+                "value": seconds * 24576,
+                "scale": 24576,
+                "secondsRational": str(seconds),
+            },
+            "keyframeCountBefore": count_before,
+            "keyframeCountAfter": len(self.keyframes[target]),
             "beforeKeyframe": before,
-            "afterKeyframe": self.detail(target) if keyframe is not None else None,
+            "afterKeyframe": self.detail(target, seconds) if keyframe is not None else None,
         }
 
     async def call(
@@ -296,7 +321,8 @@ class FakeAe:
             }
         elif tool == package.DETAILS:
             target = arguments["property_locator"]["objectId"]
-            if self._keyframe(target) is None:
+            seconds = self._seconds(arguments["time"])
+            if self._keyframe(target, seconds) is None:
                 return True, {
                     "ok": False,
                     "error": {
@@ -307,14 +333,19 @@ class FakeAe:
                         },
                     },
                 }
-            value = self.detail(target)
+            value = self.detail(target, seconds)
         else:
             target = arguments["property_locator"]["objectId"]
-            keyframe = self._keyframe(target)
-            before = self.detail(target) if keyframe is not None else None
-            self.undo_stack.append(("keyframe", (target, copy.deepcopy(keyframe))))
+            seconds = self._seconds(arguments["time"])
+            keyframe = self._keyframe(target, seconds)
+            before = self.detail(target, seconds) if keyframe is not None else None
+            count_before = len(self.keyframes[target])
+            self.undo_stack.append(("keyframe", (target, seconds, copy.deepcopy(keyframe))))
             if tool == package.ADD:
-                self._set_keyframe(target, self.initial_detail(arguments["value"], target))
+                self.add_times.append(seconds)
+                self._set_keyframe(
+                    target, self.initial_detail(arguments["value"], target, seconds), seconds
+                )
             elif tool == package.VALUE:
                 assert keyframe is not None
                 keyframe["value"] = copy.deepcopy(arguments["value"])
@@ -340,8 +371,8 @@ class FakeAe:
                 }[arguments["behavior"]]
                 keyframe["behaviors"][field] = arguments["enabled"]
             elif tool == package.DELETE:
-                self._set_keyframe(target, None)
-            value = self._mutation(before, target)
+                self._set_keyframe(target, None, seconds)
+            value = self._mutation(before, target, seconds, count_before)
         return self._success(tool, case.capability_id, value, write=case.kind == "write")
 
 
@@ -651,7 +682,7 @@ async def test_pairing_retry_failure_is_fail_closed_without_effective_call(
     assert fake.checkpoints.count("pair-native") == 1
     assert not runner.fixture.path.exists()
     assert runner.aep_lifecycle.created == 0
-    assert fake.keyframe is None
+    assert not fake.keyframes[OPACITY]
 
 
 @pytest.mark.asyncio
@@ -671,34 +702,42 @@ async def test_t5_runs_seven_tools_in_28_calls_with_real_undo_and_restart(tmp_pa
         for tool, row in runner.matrix.items()
         if tool != package.DETAILS
     )
-    assert runner.matrix[package.ADD]["invocations"] == 3
+    assert runner.matrix[package.ADD]["invocations"] == 5
     assert runner.matrix[package.BEHAVIOR]["invocations"] == 2
     assert runner.matrix[package.BEHAVIOR]["undo"]["executed"] == 2
-    assert runner.matrix[package.DETAILS]["invocations"] == 10
-    assert fake.calls.count(package.DETAILS) == 10
-    assert fake.position_keyframe is not None
-    assert fake.position_keyframe["behaviors"]["spatialContinuous"] is False
+    assert runner.matrix[package.DETAILS]["invocations"] == 8
+    assert fake.calls.count(package.DETAILS) == 8
+    position_keyframe = fake.keyframes[POSITION][1]
+    assert position_keyframe is not None
+    assert position_keyframe["behaviors"]["spatialContinuous"] is False
     assert not runner.fixture.path.exists()
 
 
 @pytest.mark.asyncio
-async def test_t5_seeds_ease_neighbors_before_the_temporal_ease_write(tmp_path: Path):
+async def test_t5_seeds_ease_neighbors_through_public_adds_before_the_matrix(tmp_path: Path):
     fake = FakeAe()
     runner, _evidence = make_runtime(tmp_path, "t5", fake)
     await package.Issue157Package(
         runner, fixture_name="Issue157 Keyframe Authoring Fixture"
     ).run()
-    # AE retains temporal-ease speed only with adjacent segments; the operator
-    # checkpoint seeds the two neighbor keys without spending public calls.
-    assert fake.checkpoints.count("seed-temporal-ease-neighbors") == 1
+    # AE retains temporal-ease speed only with adjacent segments; the two
+    # neighbor keys are seeded through the public ADD tool before the matrix
+    # baseline so no ExtendScript checkpoint can advance the native project
+    # generation and invalidate the driver's locators.
+    assert "seed-temporal-ease-neighbors" not in fake.checkpoints
+    assert fake.add_times[:2] == [0, 2]
+    assert fake.add_times[2:] == [1, 1, 1]
     timeline = fake.timeline
+    add_calls = [index for index, entry in enumerate(timeline) if entry == f"call:{package.ADD}"]
+    assert timeline.index(f"call:{package.EASE}") > add_calls[1]
+    # The ease write still runs after the interpolation Undo and is followed
+    # by exactly one Undo checkpoint of its own.
     interpolation_undo_at = timeline.index(
         "checkpoint:undo-ae_setLayerPropertyKeyframeInterpolation"
     )
-    seed_at = timeline.index("checkpoint:seed-temporal-ease-neighbors")
     ease_write_at = timeline.index(f"call:{package.EASE}")
     ease_undo_at = timeline.index("checkpoint:undo-ae_setLayerPropertyKeyframeTemporalEase")
-    assert interpolation_undo_at < seed_at < ease_write_at < ease_undo_at
+    assert interpolation_undo_at < ease_write_at < ease_undo_at
     assert runner.ledger.total == 28
 
 
@@ -748,6 +787,20 @@ def test_keyframe_time_accepts_native_comp_scale_and_rejects_drift() -> None:
     with pytest.raises(runtime_module.AcceptanceFailure, match="exact requested time"):
         package._time(
             {"value": 24576, "scale": 24576, "secondsRational": "24576/24576"}
+        )
+
+
+def test_keyframe_time_accepts_seed_seconds_in_native_comp_scale() -> None:
+    assert package._time(
+        {"value": 0, "scale": 24576, "secondsRational": "0"}, package.SEED_START_TIME
+    )["secondsRational"] == "0"
+    assert package._time(
+        {"value": 49152, "scale": 24576, "secondsRational": "2"}, package.SEED_END_TIME
+    )["secondsRational"] == "2"
+    with pytest.raises(runtime_module.AcceptanceFailure, match="exact requested time"):
+        package._time(
+            {"value": 24576, "scale": 24576, "secondsRational": "1"},
+            package.SEED_END_TIME,
         )
 
 
