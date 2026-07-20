@@ -15,9 +15,23 @@ from capability_package_runtime import (
     EvidenceLog,
     FixturePolicy,
     LiveSessionFactory,
+    PossiblySideEffectingStop,
     stdin_checkpoint,
 )
 from issue157_keyframe_authoring_spec import SPEC, Issue157Package
+
+
+def _group_leaf(error: BaseException, leaf_type: type) -> BaseException | None:
+    """Return the first ``leaf_type`` leaf inside an exception group, if any."""
+    if isinstance(error, leaf_type):
+        return error
+    exceptions = getattr(error, "exceptions", None)
+    if isinstance(exceptions, (list, tuple)):
+        for child in exceptions:
+            found = _group_leaf(child, leaf_type)
+            if found is not None:
+                return found
+    return None
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -100,9 +114,18 @@ async def _run(arguments: argparse.Namespace) -> int:
         details = await package.run()
         passed = True
         return 0
+    except PossiblySideEffectingStop as error:
+        details = {"stopReason": "possibly-side-effecting", "message": str(error)}
+        return 3
     except AcceptanceFailure as error:
         details = {"failure": str(error)}
         return 2
+    except BaseException as error:  # noqa: BLE001 - unwrap anyio TaskGroup wrapping
+        leaf = _group_leaf(error, PossiblySideEffectingStop)
+        if leaf is None:
+            raise
+        details = {"stopReason": "possibly-side-effecting", "message": str(leaf)}
+        return 3
     finally:
         evidence.finish(
             passed=passed,

@@ -459,6 +459,13 @@ test('#157 temporal ease accepts only the AE bezier promotion coupling', () => {
         easeMismatch(value) {
             value.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '51';
         },
+        speedNormalized(value) {
+            // After Effects drops temporal-ease speed to 0 when the keyframe
+            // has no adjacent segment, while still applying the influence; the
+            // contract must refuse that partial application.
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.speed = '0';
+            value.afterKeyframe.temporalEaseDimensions[0].outEase.speed = '0';
+        },
     };
     for (const [name, mutate] of Object.entries(drifts)) {
         const drift = structuredClone(vector.value);

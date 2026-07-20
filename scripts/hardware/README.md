@@ -46,6 +46,22 @@ The RuntimeManager current record, generation launcher and canonical
 `$HOME/.ae-mcp/bin/ae-mcp` launcher must all report the same locked launcher
 SHA-256; an alternate `--launcher` path is rejected.
 
+After Effects retains per-keyframe temporal-ease speed only when the keyframe
+has an adjacent keyframe on both sides; on an isolated keyframe AE applies the
+influence but normalizes speed back to 0. The strict native/host/Core readback
+rightly rejects that partial application as `POSSIBLY_SIDE_EFFECTING_FAILURE`,
+so before the `ae_setLayerPropertyKeyframeTemporalEase` write the runner emits
+one `seed-temporal-ease-neighbors` checkpoint. Completing it requires adding
+the two declared neighbor keyframes on the fixture opacity property through
+the After Effects GUI or ExtendScript without saving a copy. The neighbors are
+fixture preconditions, not tested operations: they cost no public calls, and
+the ease Undo checkpoint still executes exactly one Undo that reverts only the
+bezier promotion and the ease write group. If any write returns
+`POSSIBLY_SIDE_EFFECTING_FAILURE`, the driver exits with status 3 without
+retrying, including when the session layer wraps the failure in an exception
+group; inspect AE state and the native audit trail before deciding how to
+recover.
+
 ```sh
 PYTHONDONTWRITEBYTECODE=1 uv run --frozen python \
   scripts/hardware/issue157_keyframe_authoring_acceptance.py \

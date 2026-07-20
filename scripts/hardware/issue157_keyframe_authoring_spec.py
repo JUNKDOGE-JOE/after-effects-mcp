@@ -578,6 +578,38 @@ class Issue157Package:
             ),
             (DELETE, "delete", {}, lambda after: after is None),
         ):
+            if tool == EASE:
+                # After Effects retains per-keyframe temporal-ease speed only
+                # when both adjacent segments exist; on an isolated keyframe AE
+                # applies the influence but normalizes speed back to 0 (verified
+                # on the candidate build through the public tool and through
+                # ExtendScript), which the strict native/host/Core readback
+                # rightly rejects as POSSIBLY_SIDE_EFFECTING_FAILURE. Seed the
+                # two neighbor keys through the operator checkpoint so the ease
+                # write proves exact speed retention without spending public
+                # calls; the neighbors are fixture preconditions, not tested
+                # operations, and the ease Undo still reverts only the ease
+                # write group.
+                await self.runtime.checkpoint(
+                    "seed-temporal-ease-neighbors",
+                    {
+                        "instruction": (
+                            "Add two neighbor keyframes on the fixture opacity property "
+                            "(value 0 at 0s and value 80 at 2s) through the After "
+                            "Effects GUI or ExtendScript; do not save a copy."
+                        ),
+                        "fixturePath": self.runtime.fixture.path,
+                        "compositionName": self.fixture_name,
+                        "layerName": "KEYFRAME_TARGET",
+                        "propertyMatchName": "ADBE Opacity",
+                        "neighbors": [
+                            {"timeSeconds": 0, "value": 0},
+                            {"timeSeconds": 2, "value": 80},
+                        ],
+                        "activeFixtureCount": 1,
+                        "saveAsCopies": 0,
+                    },
+                )
             _payload, changed = await self._write(
                 session, fixture, tool, operation, extras, phase=phase
             )

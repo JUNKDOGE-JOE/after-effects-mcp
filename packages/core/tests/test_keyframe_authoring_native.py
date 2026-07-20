@@ -664,6 +664,7 @@ async def test_temporal_ease_accepts_ae_bezier_promotion():
         "count",
         "behavior",
         "ease_mismatch",
+        "speed_normalized",
     ],
 )
 async def test_temporal_ease_rejects_coupling_drift(drift: str):
@@ -688,6 +689,17 @@ async def test_temporal_ease_rejects_coupling_drift(drift: str):
                 value["afterKeyframe"]["temporalEaseDimensions"][0]["inEase"][
                     "influence"
                 ] = "51"
+            elif drift == "speed_normalized":
+                # After Effects drops temporal-ease speed to 0 when the keyframe
+                # has no adjacent keyframe segment, while still applying the
+                # influence.  The strict readback must refuse that partial
+                # application instead of reporting success.
+                value["afterKeyframe"]["temporalEaseDimensions"][0]["inEase"][
+                    "speed"
+                ] = "0"
+                value["afterKeyframe"]["temporalEaseDimensions"][0]["outEase"][
+                    "speed"
+                ] = "0"
         return value
 
     backend._value = tampered_value  # type: ignore[method-assign]

@@ -682,6 +682,27 @@ async def test_t5_runs_seven_tools_in_28_calls_with_real_undo_and_restart(tmp_pa
 
 
 @pytest.mark.asyncio
+async def test_t5_seeds_ease_neighbors_before_the_temporal_ease_write(tmp_path: Path):
+    fake = FakeAe()
+    runner, _evidence = make_runtime(tmp_path, "t5", fake)
+    await package.Issue157Package(
+        runner, fixture_name="Issue157 Keyframe Authoring Fixture"
+    ).run()
+    # AE retains temporal-ease speed only with adjacent segments; the operator
+    # checkpoint seeds the two neighbor keys without spending public calls.
+    assert fake.checkpoints.count("seed-temporal-ease-neighbors") == 1
+    timeline = fake.timeline
+    interpolation_undo_at = timeline.index(
+        "checkpoint:undo-ae_setLayerPropertyKeyframeInterpolation"
+    )
+    seed_at = timeline.index("checkpoint:seed-temporal-ease-neighbors")
+    ease_write_at = timeline.index(f"call:{package.EASE}")
+    ease_undo_at = timeline.index("checkpoint:undo-ae_setLayerPropertyKeyframeTemporalEase")
+    assert interpolation_undo_at < seed_at < ease_write_at < ease_undo_at
+    assert runner.ledger.total == 28
+
+
+@pytest.mark.asyncio
 async def test_pairing_is_scoped_to_each_native_host_epoch(tmp_path: Path):
     fake = EpochPairingFake()
     runner, _evidence = make_runtime(tmp_path, "t5", fake)
