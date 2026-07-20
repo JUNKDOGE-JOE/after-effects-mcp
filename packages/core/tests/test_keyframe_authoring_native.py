@@ -627,6 +627,116 @@ async def test_value_set_rejects_non_slope_drift(drift: str):
     assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
 
 
+def _hold_side_zeroing_value(
+    value: dict[str, Any], *, hold_side: str
+) -> dict[str, Any]:
+    """Probe shapes on the 3-key fixture: switching one side to hold zeroes
+    exactly that side's speed (in 40 -> 0 for hold/linear, out for
+    bezier/hold) while influence and everything else stay."""
+    value["keyframeCountBefore"] = 3
+    value["keyframeCountAfter"] = 3
+    value["beforeKeyframe"]["temporalEaseDimensions"] = [
+        dimension(
+            in_speed="40",
+            in_influence="16.666666666999998",
+            out_speed="40",
+            out_influence="16.666666666999998",
+        )
+    ]
+    value["afterKeyframe"]["temporalEaseDimensions"] = [
+        dimension(
+            in_speed="0" if hold_side == "in" else "40",
+            in_influence="16.666666666999998",
+            out_speed="0" if hold_side == "out" else "40",
+            out_influence="16.666666666999998",
+        )
+    ]
+    return value
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("hold_side", "in_interpolation", "out_interpolation"),
+    [("out", "bezier", "hold"), ("in", "hold", "linear")],
+)
+async def test_interpolation_accepts_ae_hold_side_speed_zeroing(
+    hold_side: str, in_interpolation: str, out_interpolation: str
+):
+    backend = PackageBackend()
+    original_value = backend._value
+
+    def zeroed_value(request: N.NativeInvokeRequest) -> dict[str, Any]:
+        value = original_value(request)
+        if request.capability_id == K.KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID:
+            value = _hold_side_zeroing_value(value, hold_side=hold_side)
+        return value
+
+    backend._value = zeroed_value  # type: ignore[method-assign]
+    execution = await K.invoke_keyframe_interpolation_set(
+        backend,
+        request_id=f"keyframe-interpolation-hold-zero-{hold_side}-1",
+        layer_locator=locator("layer", LAYER),
+        property_locator=locator("stream", STREAM),
+        time={"value": 12, "scale": 24},
+        in_interpolation=in_interpolation,
+        out_interpolation=out_interpolation,
+        idempotency_key=f"keyframe-interpolation-hold-zero-{hold_side}-0001",
+        deadline_unix_ms=deadline(),
+    )
+    after = execution.value.after_keyframe
+    assert after is not None
+    zeroed = after.temporal_ease_dimensions[0]
+    if hold_side == "in":
+        assert zeroed.in_ease.speed == "0"
+        assert zeroed.out_ease.speed == "40"
+    else:
+        assert zeroed.out_ease.speed == "0"
+        assert zeroed.in_ease.speed == "40"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "drift",
+    ["hold_speed_nonzero", "hold_influence", "linear_side_speed", "value", "behavior"],
+)
+async def test_interpolation_rejects_non_hold_side_drift(drift: str):
+    backend = PackageBackend()
+    original_value = backend._value
+
+    def tampered_value(request: N.NativeInvokeRequest) -> dict[str, Any]:
+        value = original_value(request)
+        if request.capability_id == K.KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID:
+            value = _hold_side_zeroing_value(value, hold_side="in")
+            after = value["afterKeyframe"]
+            if drift == "hold_speed_nonzero":
+                after["temporalEaseDimensions"][0]["inEase"]["speed"] = "7"
+            elif drift == "hold_influence":
+                after["temporalEaseDimensions"][0]["inEase"]["influence"] = "25"
+            elif drift == "linear_side_speed":
+                # Only the hold side may zero: the still-linear side keeps 40.
+                after["temporalEaseDimensions"][0]["outEase"]["speed"] = "0"
+            elif drift == "value":
+                after["value"] = {"kind": "scalar", "value": "2"}
+            elif drift == "behavior":
+                after["behaviors"]["roving"] = True
+        return value
+
+    backend._value = tampered_value  # type: ignore[method-assign]
+    with pytest.raises(N.NativeBackendError) as raised:
+        await K.invoke_keyframe_interpolation_set(
+            backend,
+            request_id=f"keyframe-interpolation-drift-{drift}-1",
+            layer_locator=locator("layer", LAYER),
+            property_locator=locator("stream", STREAM),
+            time={"value": 12, "scale": 24},
+            in_interpolation="hold",
+            out_interpolation="linear",
+            idempotency_key=f"keyframe-interpolation-drift-{drift}-0001",
+            deadline_unix_ms=deadline(),
+        )
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+
+
 @pytest.mark.asyncio
 async def test_interpolation_accepts_ae_ease_normalization():
     backend = PackageBackend()

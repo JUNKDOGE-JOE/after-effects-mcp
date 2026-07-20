@@ -730,9 +730,21 @@ function interpolationEaseNormalizationAllowed(before, after, requestedInInterpo
         const other = afterEase[index];
         const inInfluenceChanged = Number(item.inEase.influence)
             !== Number(other.inEase.influence);
+        // AE stores no temporal-ease speed on a hold segment: switching one
+        // side to hold zeroes exactly that side's speed while the influence
+        // stays (verified on the 3-key fixture through the public tool for
+        // both bezier/hold and hold/linear writes).
+        const inSpeedAllowed = Number(item.inEase.speed) === Number(other.inEase.speed)
+            || (before.inInterpolation !== 'hold'
+                && after.inInterpolation === 'hold'
+                && Number(other.inEase.speed) === 0);
+        const outSpeedAllowed = Number(item.outEase.speed) === Number(other.outEase.speed)
+            || (before.outInterpolation !== 'hold'
+                && after.outInterpolation === 'hold'
+                && Number(other.outEase.speed) === 0);
         return item.dimension === other.dimension
-            && Number(item.inEase.speed) === Number(other.inEase.speed)
-            && Number(item.outEase.speed) === Number(other.outEase.speed)
+            && inSpeedAllowed
+            && outSpeedAllowed
             && Number(item.outEase.influence) === Number(other.outEase.influence)
             && (!inInfluenceChanged
                 || (requestedInInterpolation === 'bezier'

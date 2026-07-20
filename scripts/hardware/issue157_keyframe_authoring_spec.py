@@ -681,13 +681,16 @@ class Issue157Package:
             fixture,
             BEHAVIOR,
             "behavior",
-            {"behavior": "spatial-continuous", "enabled": True},
+            # AE marks position keyframes spatially continuous by default, so
+            # the writable change direction is disabling it; enabling would be
+            # a no-op the native precondition rightly rejects INVALID_ARGUMENT.
+            {"behavior": "spatial-continuous", "enabled": False},
             phase=phase,
             property_locator=fixture.position,
             spatial=True,
         )
         require(
-            spatial_behavior["afterKeyframe"]["behaviors"]["spatialContinuous"] is True,
+            spatial_behavior["afterKeyframe"]["behaviors"]["spatialContinuous"] is False,
             "spatial behavior target field mismatch",
         )
         await self._undo_and_read(

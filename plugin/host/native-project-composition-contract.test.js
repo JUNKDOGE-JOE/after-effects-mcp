@@ -437,6 +437,75 @@ test('#157 interpolation accepts only AE bezier in-ease influence normalization'
     );
 });
 
+test('#157 interpolation accepts only AE hold-side speed zeroing', () => {
+    const contract = packageContracts.getContract(
+        'ae.layer.property.keyframe.interpolation.set',
+    );
+    const vector = keyframeCases()['ae.layer.property.keyframe.interpolation.set'];
+    // Probe shapes on the 3-key fixture (1s key between 0 at 0s and 80 at 2s,
+    // linear ease speeds 40/40): switching one side to hold zeroes exactly
+    // that side's speed while influence and everything else stay.
+    const segmentEase = function (inSpeed, outSpeed) {
+        return [{
+            dimension: 0,
+            inEase: { speed: inSpeed, influence: '16.666666666999998' },
+            outEase: { speed: outSpeed, influence: '16.666666666999998' },
+        }];
+    };
+    const bezierHold = structuredClone(vector.value);
+    bezierHold.keyframeCountBefore = 3;
+    bezierHold.keyframeCountAfter = 3;
+    bezierHold.beforeKeyframe.temporalEaseDimensions = segmentEase('40', '40');
+    bezierHold.afterKeyframe.inInterpolation = 'bezier';
+    bezierHold.afterKeyframe.outInterpolation = 'hold';
+    bezierHold.afterKeyframe.temporalEaseDimensions = segmentEase('40', '0');
+    assert.equal(
+        contract.validValue(bezierHold, vector.arguments, HOST, SESSION),
+        true,
+        'bezier/hold zeroes the out speed only',
+    );
+
+    const holdLinear = structuredClone(bezierHold);
+    holdLinear.afterKeyframe.inInterpolation = 'hold';
+    holdLinear.afterKeyframe.outInterpolation = 'linear';
+    holdLinear.afterKeyframe.temporalEaseDimensions = segmentEase('0', '40');
+    const holdLinearArguments = {
+        ...vector.arguments,
+        inInterpolation: 'hold',
+        outInterpolation: 'linear',
+    };
+    assert.equal(
+        contract.validValue(holdLinear, holdLinearArguments, HOST, SESSION),
+        true,
+        'hold/linear zeroes the in speed only',
+    );
+
+    const drifts = {
+        holdSpeedNonzero(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.speed = '7';
+        },
+        holdInfluence(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '25';
+        },
+        linearSideSpeed(value) {
+            // Only the hold side may zero: the still-linear side must keep 40.
+            value.afterKeyframe.temporalEaseDimensions[0].outEase.speed = '0';
+        },
+        value(value) { value.afterKeyframe.value = { kind: 'scalar', value: '2' }; },
+        behavior(value) { value.afterKeyframe.behaviors.roving = true; },
+        dimension(value) { value.afterKeyframe.temporalEaseDimensions[0].dimension = 1; },
+    };
+    for (const [name, mutate] of Object.entries(drifts)) {
+        const drift = structuredClone(holdLinear);
+        mutate(drift);
+        assert.equal(
+            contract.validValue(drift, holdLinearArguments, HOST, SESSION),
+            false,
+            name,
+        );
+    }
+});
+
 test('#157 value set accepts only AE linear-key ease speed recomputation', () => {
     const vector = keyframeCases()['ae.layer.property.keyframe.value.set'];
     const contract = packageContracts.getContract(

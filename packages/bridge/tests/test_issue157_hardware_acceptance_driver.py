@@ -145,7 +145,9 @@ class FakeAe:
             "behaviors": {
                 "temporalContinuous": False,
                 "temporalAutoBezier": False,
-                "spatialContinuous": False,
+                # AE marks spatial property keyframes spatially continuous by
+                # default (verified through the public ADD readback).
+                "spatialContinuous": spatial,
                 "spatialAutoBezier": False,
                 "roving": False,
             },
@@ -709,7 +711,8 @@ async def test_t5_runs_seven_tools_in_28_calls_with_real_undo_and_restart(tmp_pa
     assert fake.calls.count(package.DETAILS) == 8
     position_keyframe = fake.keyframes[POSITION][1]
     assert position_keyframe is not None
-    assert position_keyframe["behaviors"]["spatialContinuous"] is False
+    # The spatial-continuous write disables the AE default; the Undo restores it.
+    assert position_keyframe["behaviors"]["spatialContinuous"] is True
     assert not runner.fixture.path.exists()
 
 

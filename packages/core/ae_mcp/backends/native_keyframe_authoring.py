@@ -789,12 +789,28 @@ def _interpolation_ease_normalization_allowed(
         in_influence_changed = Decimal(before_dimension.in_ease.influence) != Decimal(
             after_dimension.in_ease.influence
         )
+        # AE stores no temporal-ease speed on a hold segment: switching one
+        # side to hold zeroes exactly that side's speed while the influence
+        # stays (verified on the 3-key fixture through the public tool for
+        # both bezier/hold and hold/linear writes).
+        in_speed_allowed = Decimal(before_dimension.in_ease.speed) == Decimal(
+            after_dimension.in_ease.speed
+        ) or (
+            before.in_interpolation != "hold"
+            and after.in_interpolation == "hold"
+            and Decimal(after_dimension.in_ease.speed) == 0
+        )
+        out_speed_allowed = Decimal(before_dimension.out_ease.speed) == Decimal(
+            after_dimension.out_ease.speed
+        ) or (
+            before.out_interpolation != "hold"
+            and after.out_interpolation == "hold"
+            and Decimal(after_dimension.out_ease.speed) == 0
+        )
         if (
             before_dimension.dimension != after_dimension.dimension
-            or Decimal(before_dimension.in_ease.speed)
-            != Decimal(after_dimension.in_ease.speed)
-            or Decimal(before_dimension.out_ease.speed)
-            != Decimal(after_dimension.out_ease.speed)
+            or not in_speed_allowed
+            or not out_speed_allowed
             or Decimal(before_dimension.out_ease.influence)
             != Decimal(after_dimension.out_ease.influence)
             or (
