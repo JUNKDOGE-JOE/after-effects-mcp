@@ -437,6 +437,96 @@ test('#157 interpolation accepts only AE bezier in-ease influence normalization'
     );
 });
 
+test('#157 value set accepts only AE linear-key ease speed recomputation', () => {
+    const vector = keyframeCases()['ae.layer.property.keyframe.value.set'];
+    const contract = packageContracts.getContract(
+        'ae.layer.property.keyframe.value.set',
+    );
+    assert.equal(
+        contract.validValue(vector.value, vector.arguments, HOST, SESSION),
+        true,
+        'isolated key without drift',
+    );
+
+    // The exact T5 call-11 shape on candidate b7d852b: the 1s keyframe sits
+    // between neighbours 0 at 0s and 80 at 2s, so changing the value 40 -> 65
+    // makes After Effects recompute the linear ease speeds as the new slopes
+    // (in 40 -> 65, out 40 -> 15) while influence, interpolation and
+    // behaviors stay exactly equal.
+    const recomputed = structuredClone(vector.value);
+    recomputed.keyframeCountBefore = 3;
+    recomputed.keyframeCountAfter = 3;
+    recomputed.beforeKeyframe.value = { kind: 'scalar', value: '40' };
+    recomputed.afterKeyframe.value = { kind: 'scalar', value: '65' };
+    recomputed.beforeKeyframe.temporalEaseDimensions = [{
+        dimension: 0,
+        inEase: { speed: '40', influence: '16.666666666999998' },
+        outEase: { speed: '40', influence: '16.666666666999998' },
+    }];
+    recomputed.afterKeyframe.temporalEaseDimensions = [{
+        dimension: 0,
+        inEase: { speed: '65', influence: '16.666666666999998' },
+        outEase: { speed: '15', influence: '16.666666666999998' },
+    }];
+    const recomputedArguments = {
+        ...vector.arguments,
+        value: { kind: 'scalar', value: '65' },
+    };
+    assert.equal(
+        contract.validValue(recomputed, recomputedArguments, HOST, SESSION),
+        true,
+        'AE slope recomputation',
+    );
+
+    const steady = structuredClone(recomputed);
+    steady.afterKeyframe.temporalEaseDimensions =
+        structuredClone(steady.beforeKeyframe.temporalEaseDimensions);
+    assert.equal(
+        contract.validValue(steady, recomputedArguments, HOST, SESSION),
+        true,
+        'steady speeds stay accepted',
+    );
+
+    const drifts = {
+        inInfluence(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '25';
+        },
+        outInfluence(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].outEase.influence = '25';
+        },
+        interpolation(value) { value.afterKeyframe.inInterpolation = 'bezier'; },
+        behavior(value) { value.afterKeyframe.behaviors.roving = true; },
+        dimension(value) { value.afterKeyframe.temporalEaseDimensions[0].dimension = 1; },
+        valueMismatch(value) {
+            value.afterKeyframe.value = { kind: 'scalar', value: '66' };
+        },
+        count(value) { value.keyframeCountAfter = 4; },
+        isolatedSpeed(value) {
+            // An isolated keyframe has no segment whose slope After Effects
+            // could recompute, so speed drift is not AE-attributable.
+            value.keyframeCountBefore = 1;
+            value.keyframeCountAfter = 1;
+        },
+        bezierSpeed(value) {
+            // AE only recomputes ease speeds automatically for linear keys;
+            // user-authored bezier ease must not drift on a value write.
+            value.beforeKeyframe.inInterpolation = 'bezier';
+            value.beforeKeyframe.outInterpolation = 'bezier';
+            value.afterKeyframe.inInterpolation = 'bezier';
+            value.afterKeyframe.outInterpolation = 'bezier';
+        },
+    };
+    for (const [name, mutate] of Object.entries(drifts)) {
+        const drift = structuredClone(recomputed);
+        mutate(drift);
+        assert.equal(
+            contract.validValue(drift, recomputedArguments, HOST, SESSION),
+            false,
+            name,
+        );
+    }
+});
+
 test('#157 temporal ease accepts only the AE bezier promotion coupling', () => {
     const vector = keyframeCases()['ae.layer.property.keyframe.temporal-ease.set'];
     const contract = packageContracts.getContract(

@@ -810,6 +810,52 @@ def _interpolation_ease_normalization_allowed(
     return True
 
 
+def _value_ease_speed_recomputation_allowed(
+    before: KeyframeDetails,
+    after: KeyframeDetails,
+    keyframe_count: int,
+) -> bool:
+    """Allow the one derived-ease drift an After Effects value write causes.
+
+    After Effects recomputes the temporal ease speed of a linear keyframe as
+    the slope to its temporal neighbours whenever the keyframe value changes
+    (speed = |value delta| / time delta per side). Neighbour times and values
+    are not part of the mutation value, so the exact slope is underdetermined
+    here; the check therefore releases only the two AE-derived speed fields,
+    and only for the shape After Effects actually recomputes (a multi-key
+    property whose before/after interpolations are linear), while influence,
+    dimension order, and every other field stay exactly equal.
+    """
+    before_ease = before.temporal_ease_dimensions
+    after_ease = after.temporal_ease_dimensions
+    if len(before_ease) != len(after_ease):
+        return False
+    drift_allowed = (
+        keyframe_count >= 2
+        and before.in_interpolation == "linear"
+        and before.out_interpolation == "linear"
+        and after.in_interpolation == "linear"
+        and after.out_interpolation == "linear"
+    )
+    for before_dimension, after_dimension in zip(before_ease, after_ease):
+        if (
+            before_dimension.dimension != after_dimension.dimension
+            or Decimal(before_dimension.in_ease.influence)
+            != Decimal(after_dimension.in_ease.influence)
+            or Decimal(before_dimension.out_ease.influence)
+            != Decimal(after_dimension.out_ease.influence)
+        ):
+            return False
+        if not drift_allowed and (
+            Decimal(before_dimension.in_ease.speed)
+            != Decimal(after_dimension.in_ease.speed)
+            or Decimal(before_dimension.out_ease.speed)
+            != Decimal(after_dimension.out_ease.speed)
+        ):
+            return False
+    return True
+
+
 async def invoke_keyframe_add(
     backend: NativeInvokeBackend,
     *,
@@ -907,6 +953,12 @@ async def invoke_keyframe_value_set(
             changed.before_keyframe,
             changed.after_keyframe,
             "value",
+            "temporal_ease_dimensions",
+        )
+        or not _value_ease_speed_recomputation_allowed(
+            changed.before_keyframe,
+            changed.after_keyframe,
+            changed.keyframe_count_before,
         )
     ):
         raise _possibly_side_effecting(

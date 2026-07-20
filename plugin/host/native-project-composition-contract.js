@@ -741,6 +741,35 @@ function interpolationEaseNormalizationAllowed(before, after, requestedInInterpo
     });
 }
 
+function valueEaseSpeedRecomputationAllowed(before, after, keyframeCount) {
+    // After Effects recomputes the temporal ease speed of a linear keyframe
+    // as the slope to its temporal neighbours whenever the keyframe value
+    // changes (speed = |value delta| / time delta per side). Neighbour times
+    // and values are not part of the mutation value, so the exact slope is
+    // underdetermined here; the contract therefore releases only the two
+    // AE-derived speed fields, and only for the shape After Effects actually
+    // recomputes (a multi-key property whose before/after interpolations are
+    // linear), while influence, dimension order, and every other field stay
+    // exactly equal.
+    const beforeEase = before.temporalEaseDimensions;
+    const afterEase = after.temporalEaseDimensions;
+    if (beforeEase.length !== afterEase.length) return false;
+    const driftAllowed = keyframeCount >= 2
+        && before.inInterpolation === 'linear'
+        && before.outInterpolation === 'linear'
+        && after.inInterpolation === 'linear'
+        && after.outInterpolation === 'linear';
+    return beforeEase.every(function (item, index) {
+        const other = afterEase[index];
+        return item.dimension === other.dimension
+            && Number(item.inEase.influence) === Number(other.inEase.influence)
+            && Number(item.outEase.influence) === Number(other.outEase.influence)
+            && (driftAllowed
+                || (Number(item.inEase.speed) === Number(other.inEase.speed)
+                    && Number(item.outEase.speed) === Number(other.outEase.speed)));
+    });
+}
+
 function validKeyframeWriteValue(kind, value, argumentsValue, hostInstanceId, sessionId) {
     if (!validKeyframeMutation(value, argumentsValue, hostInstanceId, sessionId)) return false;
     const before = value.beforeKeyframe;
@@ -759,7 +788,12 @@ function validKeyframeWriteValue(kind, value, argumentsValue, hostInstanceId, se
     if (kind === 'value') {
         return !keyframeSamplesEqual(before.value, after.value)
             && keyframeSamplesEqual(after.value, argumentsValue.value)
-            && keyframeDetailsEqualExcept(before, after, ['value']);
+            && keyframeDetailsEqualExcept(before, after, [
+                'value', 'temporalEaseDimensions',
+            ])
+            && valueEaseSpeedRecomputationAllowed(
+                before, after, value.keyframeCountBefore,
+            );
     }
     if (kind === 'interpolation') {
         return (before.inInterpolation !== after.inInterpolation

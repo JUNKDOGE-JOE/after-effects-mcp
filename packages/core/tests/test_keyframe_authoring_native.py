@@ -500,6 +500,133 @@ async def test_write_rejects_unrelated_keyframe_state_change_after_dispatch():
     assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
 
 
+def _middle_key_slope_value(value: dict[str, Any]) -> dict[str, Any]:
+    """Shape the T5 call-11 readback: 0 at 0s, 40 -> 65 at 1s, 80 at 2s.
+
+    After Effects recomputes the linear ease speeds of the middle keyframe as
+    the new slopes (in 40 -> 65, out 40 -> 15) while influence, interpolation
+    and behaviors stay exactly equal.
+    """
+    value["keyframeCountBefore"] = 3
+    value["keyframeCountAfter"] = 3
+    value["beforeKeyframe"] = details(
+        value="40",
+        dimensions=[
+            dimension(
+                in_speed="40",
+                in_influence="16.666666666999998",
+                out_speed="40",
+                out_influence="16.666666666999998",
+            )
+        ],
+    )
+    value["afterKeyframe"] = details(
+        value="65",
+        dimensions=[
+            dimension(
+                in_speed="65",
+                in_influence="16.666666666999998",
+                out_speed="15",
+                out_influence="16.666666666999998",
+            )
+        ],
+    )
+    return value
+
+
+@pytest.mark.asyncio
+async def test_value_set_accepts_ae_linear_ease_speed_recomputation():
+    backend = PackageBackend()
+    original_value = backend._value
+
+    def recomputed_value(request: N.NativeInvokeRequest) -> dict[str, Any]:
+        value = original_value(request)
+        if request.capability_id == K.KEYFRAME_VALUE_SET_CAPABILITY_ID:
+            value = _middle_key_slope_value(value)
+        return value
+
+    backend._value = recomputed_value  # type: ignore[method-assign]
+    execution = await K.invoke_keyframe_value_set(
+        backend,
+        request_id="keyframe-value-recomputed-ease-1",
+        layer_locator=locator("layer", LAYER),
+        property_locator=locator("stream", STREAM),
+        time={"value": 12, "scale": 24},
+        value={"kind": "scalar", "value": "65"},
+        idempotency_key="keyframe-value-recomputed-ease-0001",
+        deadline_unix_ms=deadline(),
+    )
+    after = execution.value.after_keyframe
+    assert after is not None
+    # Exact AE-reported slopes: |65 - 0| / 1s in, |80 - 65| / 1s out.
+    assert after.temporal_ease_dimensions[0].in_ease.speed == "65"
+    assert after.temporal_ease_dimensions[0].out_ease.speed == "15"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "drift",
+    [
+        "in_influence",
+        "out_influence",
+        "interpolation",
+        "behavior",
+        "value_mismatch",
+        "count",
+        "isolated_speed",
+        "bezier_speed",
+    ],
+)
+async def test_value_set_rejects_non_slope_drift(drift: str):
+    backend = PackageBackend()
+    original_value = backend._value
+
+    def tampered_value(request: N.NativeInvokeRequest) -> dict[str, Any]:
+        value = original_value(request)
+        if request.capability_id == K.KEYFRAME_VALUE_SET_CAPABILITY_ID:
+            value = _middle_key_slope_value(value)
+            after = value["afterKeyframe"]
+            if drift == "in_influence":
+                after["temporalEaseDimensions"][0]["inEase"]["influence"] = "25"
+            elif drift == "out_influence":
+                after["temporalEaseDimensions"][0]["outEase"]["influence"] = "25"
+            elif drift == "interpolation":
+                after["inInterpolation"] = "bezier"
+            elif drift == "behavior":
+                after["behaviors"]["roving"] = True
+            elif drift == "value_mismatch":
+                after["value"] = {"kind": "scalar", "value": "66"}
+            elif drift == "count":
+                value["keyframeCountAfter"] = 4
+            elif drift == "isolated_speed":
+                # An isolated keyframe has no segment whose slope After
+                # Effects could recompute, so speed drift is not attributable.
+                value["keyframeCountBefore"] = 1
+                value["keyframeCountAfter"] = 1
+            elif drift == "bezier_speed":
+                # AE only recomputes ease speeds automatically for linear
+                # keys; user-authored bezier ease must not drift.
+                value["beforeKeyframe"]["inInterpolation"] = "bezier"
+                value["beforeKeyframe"]["outInterpolation"] = "bezier"
+                after["inInterpolation"] = "bezier"
+                after["outInterpolation"] = "bezier"
+        return value
+
+    backend._value = tampered_value  # type: ignore[method-assign]
+    with pytest.raises(N.NativeBackendError) as raised:
+        await K.invoke_keyframe_value_set(
+            backend,
+            request_id=f"keyframe-value-drift-{drift}-1",
+            layer_locator=locator("layer", LAYER),
+            property_locator=locator("stream", STREAM),
+            time={"value": 12, "scale": 24},
+            value={"kind": "scalar", "value": "65"},
+            idempotency_key=f"keyframe-value-drift-{drift}-0001",
+            deadline_unix_ms=deadline(),
+        )
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+
+
 @pytest.mark.asyncio
 async def test_interpolation_accepts_ae_ease_normalization():
     backend = PackageBackend()
