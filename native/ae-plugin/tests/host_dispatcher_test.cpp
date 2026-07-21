@@ -8,9 +8,15 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <mutex>
+#if defined(__APPLE__)
+#include <pthread.h>
+#endif
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -1321,7 +1327,7 @@ void project_composition_package_dispatches_all_eight_capabilities() {
               .source_composition_locator.object_id
           != composition.object_id,
       "duplicate result did not reissue the source composition locator");
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 30);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 37);
   const std::array<std::string_view, 8> package_capabilities{
       aemcp::native::kProjectContextReadCapability,
       aemcp::native::kProjectItemMetadataReadCapability,
@@ -1453,6 +1459,136 @@ void layer_timeline_package_dispatches_all_eight_capabilities() {
           && duplicated.source_layer->type == duplicated.new_layer.type
           && duplicated.source_layer_locator.generation > layer.generation,
       "package-155 duplicate result lost its fresh locator/count evidence");
+}
+
+void keyframe_authoring_package_admits_all_seven_closed_capabilities() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(8, 8, 16ms));
+  const ObjectLocator layer = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const ObjectLocator property = FakeHost::locator(
+      "stream", "cccccccc-cccc-4ccc-8ccc-cccccccccccc");
+  const auto base = [&](std::string request_id, std::string capability_id) {
+    Request value;
+    value.request_id = std::move(request_id);
+    value.capability_id = std::move(capability_id);
+    value.deadline = clock.now() + 1s;
+    value.route_id = "package-157";
+    value.session_generation = 1;
+    value.host_instance_id = "22222222-2222-4222-8222-222222222222";
+    value.session_id = "11111111-1111-4111-8111-111111111111";
+    value.property_locator = property;
+    value.keyframe_time = {1, 2};
+    return value;
+  };
+  const auto prepare_write = [&](Request& value, char digest) {
+    value.layer_locator = layer;
+    value.idempotency_key = std::string("package-157-intent-") + digest;
+    value.arguments_fingerprint_sha256 = std::string(64, digest);
+  };
+  const auto enqueue = [&](Request value) {
+    const std::string capability = value.capability_id;
+    const auto admission = dispatcher.enqueue(std::move(value));
+    require(admission.code == EnqueueCode::kAccepted,
+        "package-157 request was rejected: " + capability + " / "
+          + admission.error_field);
+  };
+
+  enqueue(base("keyframe-details", std::string(
+      aemcp::native::kLayerPropertyKeyframeDetailsReadCapability)));
+
+  Request add = base("keyframe-add", std::string(
+      aemcp::native::kLayerPropertyKeyframeAddCapability));
+  prepare_write(add, '1');
+  add.property_value = aemcp::native::LayerPropertyScalarValue{"10"};
+  enqueue(std::move(add));
+
+  Request value_set = base("keyframe-value", std::string(
+      aemcp::native::kLayerPropertyKeyframeValueSetCapability));
+  prepare_write(value_set, '2');
+  value_set.property_value = aemcp::native::LayerPropertyScalarValue{"20"};
+  enqueue(std::move(value_set));
+
+  Request interpolation = base("keyframe-interpolation", std::string(
+      aemcp::native::kLayerPropertyKeyframeInterpolationSetCapability));
+  prepare_write(interpolation, '3');
+  interpolation.keyframe_in_interpolation = "bezier";
+  interpolation.keyframe_out_interpolation = "linear";
+  enqueue(std::move(interpolation));
+
+  Request ease = base("keyframe-ease", std::string(
+      aemcp::native::kLayerPropertyKeyframeTemporalEaseSetCapability));
+  prepare_write(ease, '4');
+  ease.keyframe_temporal_ease.push_back(
+      {0, {"0", "33"}, {"0", "67"}});
+  enqueue(std::move(ease));
+
+  Request behavior = base("keyframe-behavior", std::string(
+      aemcp::native::kLayerPropertyKeyframeBehaviorSetCapability));
+  prepare_write(behavior, '5');
+  behavior.keyframe_behavior = "temporal-continuous";
+  behavior.keyframe_behavior_enabled = true;
+  enqueue(std::move(behavior));
+
+  Request deletion = base("keyframe-delete", std::string(
+      aemcp::native::kLayerPropertyKeyframeDeleteCapability));
+  prepare_write(deletion, '6');
+  enqueue(std::move(deletion));
+
+  Request missing_property = base("keyframe-missing-property", std::string(
+      aemcp::native::kLayerPropertyKeyframeDetailsReadCapability));
+  missing_property.property_locator.reset();
+  const auto rejected = dispatcher.enqueue(std::move(missing_property));
+  require(rejected.code == EnqueueCode::kInvalidRequest
+          && rejected.error_code == "INVALID_ARGUMENT",
+      "package-157 read admitted a missing property locator");
+
+  const std::array<std::string_view, 7> package_capabilities{
+      aemcp::native::kLayerPropertyKeyframeDetailsReadCapability,
+      aemcp::native::kLayerPropertyKeyframeAddCapability,
+      aemcp::native::kLayerPropertyKeyframeValueSetCapability,
+      aemcp::native::kLayerPropertyKeyframeInterpolationSetCapability,
+      aemcp::native::kLayerPropertyKeyframeTemporalEaseSetCapability,
+      aemcp::native::kLayerPropertyKeyframeBehaviorSetCapability,
+      aemcp::native::kLayerPropertyKeyframeDeleteCapability,
+  };
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 37);
+  for (const std::string_view expected : package_capabilities) {
+    require(std::find(
+                aemcp::native::kAdvertisedNativeCapabilities.begin(),
+                aemcp::native::kAdvertisedNativeCapabilities.end(), expected)
+            != aemcp::native::kAdvertisedNativeCapabilities.end(),
+        "package-157 capability is missing from load advertisement");
+  }
+  require(dispatcher.shutdown().size() == 7,
+      "package-157 admission test did not retain exactly seven queued requests");
+}
+
+void keyframe_value_owner_lifetime_is_bound_to_the_sdk_write() {
+  const std::filesystem::path source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "aegp" / "plugin_entry.cpp";
+  std::ifstream input(source_path, std::ios::binary);
+  require(input.good(), "could not open plugin_entry.cpp lifecycle contract source");
+  const std::string source{
+      std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  const std::size_t owner = source.find(
+      "StreamValueOwner desired_value_owner(stream_suite.get());");
+  const std::size_t mutable_borrow = source.find(
+      "desired_value_owner.mutable_value()", owner);
+  const std::size_t first_write = source.find(
+      "desired_value_owner.borrow()", mutable_borrow);
+  const std::size_t second_write = source.find(
+      "desired_value_owner.borrow()", first_write + 1U);
+  require(owner != std::string::npos && mutable_borrow != std::string::npos
+          && first_write != std::string::npos && second_write != std::string::npos
+          && owner < mutable_borrow && mutable_borrow < first_write
+          && first_write < second_write,
+      "keyframe SDK writes are no longer lexically bound to their value owner");
+  require(source.find("AEGP_StreamValue2 desired_value{};", owner)
+              == std::string::npos,
+      "keyframe SDK write reintroduced a shallow stream-value lifetime copy");
 }
 
 void layer_duplicate_rejects_an_unrelated_layer_result() {
@@ -2379,8 +2515,33 @@ void wrong_thread_is_state_preserving() {
   require(dispatcher.enqueue(request(clock, "queued")).code == EnqueueCode::kAccepted,
       "setup enqueue failed");
   aemcp::native::DrainBatch worker_batch;
+#if defined(__APPLE__)
+  struct DrainContext {
+    HostDispatcher* dispatcher;
+    FakeHost* host;
+    aemcp::native::DrainBatch* batch;
+  } context{&dispatcher, &host, &worker_batch};
+  const auto drain_on_non_owner = [](void* raw) -> void* {
+    auto& value = *static_cast<DrainContext*>(raw);
+    *value.batch = value.dispatcher->drain(*value.host);
+    return nullptr;
+  };
+  pthread_attr_t attributes;
+  require(::pthread_attr_init(&attributes) == 0,
+      "wrong-thread drain pthread attributes failed");
+  require(::pthread_attr_setstacksize(&attributes, 2U * 1024U * 1024U) == 0,
+      "wrong-thread drain pthread stack size failed");
+  pthread_t worker{};
+  const int create_result = ::pthread_create(
+      &worker, &attributes, drain_on_non_owner, &context);
+  (void)::pthread_attr_destroy(&attributes);
+  require(create_result == 0, "wrong-thread drain pthread create failed");
+  require(::pthread_join(worker, nullptr) == 0,
+      "wrong-thread drain pthread join failed");
+#else
   std::thread worker([&] { worker_batch = dispatcher.drain(host); });
   worker.join();
+#endif
   require(worker_batch.wrong_thread, "worker drain was not rejected");
   require(dispatcher.queued() == 1 && host.calls == 0, "wrong-thread drain changed state");
   bool shutdown_rejected = false;
@@ -2617,6 +2778,8 @@ int main() {
   project_epoch_fences_reused_aegp_handles();
   project_composition_package_dispatches_all_eight_capabilities();
   layer_timeline_package_dispatches_all_eight_capabilities();
+  keyframe_authoring_package_admits_all_seven_closed_capabilities();
+  keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
   layer_duplicate_rejects_an_unrelated_layer_result();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();

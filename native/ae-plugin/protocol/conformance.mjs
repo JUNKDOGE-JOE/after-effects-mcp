@@ -2,8 +2,8 @@ import crypto from 'node:crypto';
 
 export const LIMITS = Object.freeze({
   maxFrameBytes: 524288,
-  maxJsonDepth: 16,
-  maxJsonNodes: 12288,
+  maxJsonDepth: 32,
+  maxJsonNodes: 32768,
   maxStringLength: 8192,
   defaultDeadlineMs: 5000,
   maximumDeadlineMs: 30000,
@@ -120,6 +120,41 @@ export const INVOKE_REGISTRY = Object.freeze([
     version: 1,
     inputContractId: 'aemcp.contract.ae.layer.property.set.input.v1',
     resultContractId: 'aemcp.contract.ae.layer.property.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.property.keyframe.details.read', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.property.keyframe.details.read.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.property.keyframe.details.read.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.property.keyframe.add', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.property.keyframe.add.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.property.keyframe.add.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.property.keyframe.value.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.property.keyframe.value.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.property.keyframe.value.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.property.keyframe.interpolation.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.property.keyframe.interpolation.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.property.keyframe.interpolation.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.property.keyframe.temporal-ease.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.property.keyframe.temporal-ease.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.property.keyframe.temporal-ease.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.property.keyframe.behavior.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.property.keyframe.behavior.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.property.keyframe.behavior.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.property.keyframe.delete', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.property.keyframe.delete.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.property.keyframe.delete.result.v1',
   }),
   Object.freeze({
     id: 'ae.project.context.read', version: 1,
@@ -294,6 +329,35 @@ function isIdempotencyKey(value) {
 function sameLocatorContext(left, right) {
   return ['hostInstanceId', 'sessionId', 'projectId', 'generation']
     .every((field) => left?.[field] === right?.[field]);
+}
+
+const KEYFRAME_WRITE_CAPABILITIES = new Set([
+  'ae.layer.property.keyframe.add',
+  'ae.layer.property.keyframe.value.set',
+  'ae.layer.property.keyframe.interpolation.set',
+  'ae.layer.property.keyframe.temporal-ease.set',
+  'ae.layer.property.keyframe.behavior.set',
+  'ae.layer.property.keyframe.delete',
+]);
+
+function isKeyframeTimeInput(value) {
+  return isTimeInput(value, -2147483648);
+}
+
+function isKeyframeEase(value) {
+  return exactKeys(value, new Set(['speed', 'influence']), ['speed', 'influence'])
+    && validateDecimalWireValue(value.speed)
+    && validateDecimalWireValue(value.influence)
+    && Number(value.influence) >= 0 && Number(value.influence) <= 100;
+}
+
+function isKeyframeEaseDimension(value, expectedDimension) {
+  return exactKeys(
+    value,
+    new Set(['dimension', 'inEase', 'outEase']),
+    ['dimension', 'inEase', 'outEase'],
+  ) && value.dimension === expectedDimension
+    && isKeyframeEase(value.inEase) && isKeyframeEase(value.outEase);
 }
 
 function resolveSchemaRef(root, reference) {
@@ -933,6 +997,47 @@ export function classifyRequest(message) {
           || !Number.isSafeInteger(args.limit) || args.limit < 1 || args.limit > 25) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.layer.property.keyframe.details.read') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['propertyLocator', 'time']), ['propertyLocator', 'time'])
+          || !isLocatorShape(args.propertyLocator, ['stream'])
+          || !isKeyframeTimeInput(args.time)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (KEYFRAME_WRITE_CAPABILITIES.has(params.capabilityId)) {
+      const args = params.arguments;
+      const common = ['layerLocator', 'propertyLocator', 'time', 'idempotencyKey'];
+      const extras = params.capabilityId === 'ae.layer.property.keyframe.add'
+          || params.capabilityId === 'ae.layer.property.keyframe.value.set'
+        ? ['value']
+        : params.capabilityId === 'ae.layer.property.keyframe.interpolation.set'
+          ? ['inInterpolation', 'outInterpolation']
+          : params.capabilityId === 'ae.layer.property.keyframe.temporal-ease.set'
+            ? ['dimensions']
+            : params.capabilityId === 'ae.layer.property.keyframe.behavior.set'
+              ? ['behavior', 'enabled'] : [];
+      if (!exactKeys(args, new Set([...common, ...extras]), [...common, ...extras])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isLocatorShape(args.propertyLocator, ['stream'])
+          || !sameLocatorContext(args.layerLocator, args.propertyLocator)
+          || !isKeyframeTimeInput(args.time)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+      if ((extras.includes('value') && !validatePrimitivePropertyValue(args.value))
+          || (extras.includes('inInterpolation')
+            && (!['linear', 'bezier', 'hold'].includes(args.inInterpolation)
+              || !['linear', 'bezier', 'hold'].includes(args.outInterpolation)))
+          || (extras.includes('dimensions')
+            && (!Array.isArray(args.dimensions) || args.dimensions.length < 1
+              || args.dimensions.length > 4
+              || !args.dimensions.every(isKeyframeEaseDimension)))
+          || (extras.includes('behavior')
+            && (!['temporal-continuous', 'temporal-auto-bezier', 'spatial-continuous',
+              'spatial-auto-bezier', 'roving'].includes(args.behavior)
+              || typeof args.enabled !== 'boolean'))) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else if (params.capabilityId === 'ae.project.context.read') {
       const args = params.arguments;
       if (!exactKeys(args, new Set(['selectionOffset', 'selectionLimit']),
@@ -1157,8 +1262,9 @@ export function validateErrorPolicy(error, schema) {
   if (!expected) return false;
   const [retryable, sideEffect, action] = expected;
   const propertyPrecondition = error.code === 'PRECONDITION_FAILED'
-    && ['ae.layer.property.set', 'ae.layer.property.keyframes.list']
-      .includes(error.details?.capabilityId)
+    && (['ae.layer.property.set', 'ae.layer.property.keyframes.list',
+      'ae.layer.property.keyframe.details.read'].includes(error.details?.capabilityId)
+      || KEYFRAME_WRITE_CAPABILITIES.has(error.details?.capabilityId))
     && error.details?.field === 'params.arguments.propertyLocator'
     && error.recovery?.action === 'change-arguments';
   if (error.retryable !== retryable || error.sideEffect !== sideEffect
@@ -1209,6 +1315,8 @@ export function validateFailureExchange(
         || capabilityId === 'ae.layer.properties.list'
         || capabilityId === 'ae.layer.property.keyframes.list'
         || capabilityId === 'ae.layer.property.set'
+        || capabilityId === 'ae.layer.property.keyframe.details.read'
+        || KEYFRAME_WRITE_CAPABILITIES.has(capabilityId)
         || LAYER_TIMELINE_SPECS.some((spec) => spec.id === capabilityId))) {
     const expectedFields = capabilityId === 'ae.project.items.list'
       ? new Set(['params.arguments.projectLocator'])
@@ -1217,12 +1325,13 @@ export function validateFailureExchange(
           || capabilityId === 'ae.composition.time.read'
           || capabilityId === 'ae.composition.layer.create'
         ? new Set(['params.arguments.compositionLocator'])
-        : capabilityId === 'ae.layer.property.set'
+        : capabilityId === 'ae.layer.property.set' || KEYFRAME_WRITE_CAPABILITIES.has(capabilityId)
           ? new Set([
             'params.arguments.layerLocator',
             'params.arguments.propertyLocator',
           ])
           : capabilityId === 'ae.layer.property.keyframes.list'
+              || capabilityId === 'ae.layer.property.keyframe.details.read'
             ? new Set(['params.arguments.propertyLocator'])
           : capabilityId === 'ae.layer.effect.apply'
             ? new Set(['params.arguments.layerLocator'])
@@ -2709,6 +2818,244 @@ export function layerTimelineDescriptors(schema) {
   });
 }
 
+const KEYFRAME_AUTHORING_SPECS = Object.freeze([
+  Object.freeze({ id: 'ae.layer.property.keyframe.details.read', kind: 'details',
+    summary: 'Read one After Effects property keyframe by exact composition time.',
+    sideEffectSummary: 'Reads one native keyframe without changing After Effects state.',
+    preconditions: ['An After Effects project must be open.',
+      'propertyLocator must identify a keyframed primitive leaf stream.',
+      'A keyframe must exist at the exact requested composition time.'],
+    requirementId: 'aemcp.requirement.native.layer-property-keyframe-details-read' }),
+  Object.freeze({ id: 'ae.layer.property.keyframe.add', kind: 'value',
+    summary: 'Add one After Effects property keyframe at exact composition time.',
+    sideEffectSummary: 'Adds one native keyframe and creates one After Effects Undo step.',
+    preconditions: ['Both locators must be current and identify one keyframeable primitive leaf stream.',
+      'No keyframe may exist at the exact requested composition time.',
+      'value must match the property value type.'],
+    requirementId: 'aemcp.requirement.native.layer-property-keyframe-add' }),
+  Object.freeze({ id: 'ae.layer.property.keyframe.value.set', kind: 'value',
+    summary: 'Set one After Effects property keyframe value.',
+    sideEffectSummary: 'Changes one native keyframe value and creates one After Effects Undo step.',
+    preconditions: ['Both locators must be current and identify one keyframed primitive leaf stream.',
+      'A keyframe must exist at the exact requested composition time.',
+      'value must match the property value type and differ from the current value.'],
+    requirementId: 'aemcp.requirement.native.layer-property-keyframe-value-set' }),
+  Object.freeze({ id: 'ae.layer.property.keyframe.interpolation.set', kind: 'interpolation',
+    summary: 'Set incoming and outgoing interpolation for one After Effects property keyframe.',
+    sideEffectSummary: 'Changes one native keyframe interpolation and creates one After Effects Undo step.',
+    preconditions: ['Both locators must be current and identify one keyframed primitive leaf stream.',
+      'A keyframe must exist at the exact requested composition time.',
+      'The requested interpolation pair must differ from the current pair.'],
+    requirementId: 'aemcp.requirement.native.layer-property-keyframe-interpolation-set' }),
+  Object.freeze({ id: 'ae.layer.property.keyframe.temporal-ease.set', kind: 'ease',
+    summary: 'Set typed temporal ease dimensions for one After Effects property keyframe.',
+    sideEffectSummary: 'Changes one native keyframe temporal ease and creates one After Effects Undo step.',
+    preconditions: ['Both locators must be current and identify one keyframed primitive leaf stream.',
+      'A keyframe must exist at the exact requested composition time.',
+      "dimensions must cover the property's temporal dimensions in zero-based order and differ from current ease."],
+    requirementId: 'aemcp.requirement.native.layer-property-keyframe-temporal-ease-set' }),
+  Object.freeze({ id: 'ae.layer.property.keyframe.behavior.set', kind: 'behavior',
+    summary: 'Set one behavior flag on an After Effects property keyframe.',
+    sideEffectSummary: 'Changes one native keyframe behavior and creates one After Effects Undo step.',
+    preconditions: ['Both locators must be current and identify one keyframed primitive leaf stream.',
+      'A keyframe must exist at the exact requested composition time.',
+      'The requested behavior state must be supported and differ from current state.'],
+    requirementId: 'aemcp.requirement.native.layer-property-keyframe-behavior-set' }),
+  Object.freeze({ id: 'ae.layer.property.keyframe.delete', kind: 'delete',
+    summary: 'Delete one After Effects property keyframe at exact composition time.',
+    sideEffectSummary: 'Deletes one native keyframe and creates one After Effects Undo step.',
+    preconditions: ['Both locators must be current and identify one keyframed primitive leaf stream.',
+      'A keyframe must exist at the exact requested composition time.'],
+    requirementId: 'aemcp.requirement.native.layer-property-keyframe-delete' }),
+]);
+
+function keyframeLocatorSchema(kind) {
+  return {
+    type: 'object', additionalProperties: false,
+    required: ['kind', 'hostInstanceId', 'sessionId', 'projectId', 'generation', 'objectId'],
+    properties: {
+      kind: { const: kind }, hostInstanceId: { type: 'string', pattern: UUID.source },
+      sessionId: { type: 'string', pattern: UUID.source },
+      projectId: { type: 'string', pattern: UUID.source },
+      generation: { type: 'integer', minimum: 1, maximum: Number.MAX_SAFE_INTEGER },
+      objectId: { type: 'string', pattern: UUID.source },
+    },
+  };
+}
+
+function keyframeTimeInputSchema() {
+  return { type: 'object', additionalProperties: false, required: ['value', 'scale'],
+    properties: { value: { type: 'integer', minimum: -2147483648, maximum: 2147483647 },
+      scale: { type: 'integer', minimum: 1, maximum: 4294967295 } } };
+}
+
+function keyframeExactTimeSchema() {
+  const result = keyframeTimeInputSchema();
+  result.required.push('secondsRational');
+  result.properties.secondsRational = { type: 'string', minLength: 1, maxLength: 28,
+    pattern: '^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$' };
+  return result;
+}
+
+function keyframeDecimalSchema() {
+  return { type: 'string', minLength: 1, maxLength: 32,
+    pattern: '^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$' };
+}
+
+function keyframePrimitiveSchema() {
+  return { oneOf: [
+    { type: 'object', additionalProperties: false, required: ['kind', 'value'],
+      properties: { kind: { const: 'scalar' }, value: keyframeDecimalSchema() } },
+    { type: 'object', additionalProperties: false, required: ['kind', 'components'],
+      properties: { kind: { const: 'vector' }, components: { type: 'array', minItems: 2,
+        maxItems: 3, items: keyframeDecimalSchema() } } },
+    { type: 'object', additionalProperties: false,
+      required: ['kind', 'alpha', 'red', 'green', 'blue'], properties: {
+        kind: { const: 'color' }, alpha: keyframeDecimalSchema(), red: keyframeDecimalSchema(),
+        green: keyframeDecimalSchema(), blue: keyframeDecimalSchema(),
+      } },
+  ] };
+}
+
+function keyframeEaseSchema() {
+  return { type: 'object', additionalProperties: false, required: ['speed', 'influence'],
+    properties: { speed: keyframeDecimalSchema(), influence: keyframeDecimalSchema() },
+    'x-invariant': 'speed-and-influence-are-finite-and-influence-is-within-0-to-100' };
+}
+
+function keyframeEaseDimensionSchema() {
+  return { type: 'object', additionalProperties: false,
+    required: ['dimension', 'inEase', 'outEase'], properties: {
+      dimension: { type: 'integer', minimum: 0, maximum: 3 },
+      inEase: keyframeEaseSchema(), outEase: keyframeEaseSchema(),
+    } };
+}
+
+function keyframeDetailsSchema() {
+  return { type: 'object', additionalProperties: false,
+    required: ['propertyLocator', 'time', 'temporalDimensionality', 'valueType', 'value',
+      'inInterpolation', 'outInterpolation', 'temporalEaseDimensions', 'behaviors'],
+    properties: {
+      propertyLocator: keyframeLocatorSchema('stream'), time: keyframeExactTimeSchema(),
+      temporalDimensionality: { type: 'integer', minimum: 1, maximum: 4 },
+      valueType: { enum: ['one-d', 'two-d', 'two-d-spatial', 'three-d',
+        'three-d-spatial', 'color'] }, value: keyframePrimitiveSchema(),
+      inInterpolation: { enum: ['none', 'linear', 'bezier', 'hold'] },
+      outInterpolation: { enum: ['none', 'linear', 'bezier', 'hold'] },
+      temporalEaseDimensions: { type: 'array', minItems: 1, maxItems: 4,
+        items: keyframeEaseDimensionSchema() },
+      behaviors: { type: 'object', additionalProperties: false,
+        required: ['temporalContinuous', 'temporalAutoBezier', 'spatialContinuous',
+          'spatialAutoBezier', 'roving'], properties: {
+          temporalContinuous: { type: 'boolean' }, temporalAutoBezier: { type: 'boolean' },
+          spatialContinuous: { type: 'boolean' }, spatialAutoBezier: { type: 'boolean' },
+          roving: { type: 'boolean' },
+        } },
+    },
+    'x-invariant': 'value-matches-valueType-and-temporal-ease-dimensions-match-temporalDimensionality' };
+}
+
+function keyframeMutationSchema() {
+  const details = keyframeDetailsSchema();
+  return { type: 'object', additionalProperties: false,
+    required: ['changed', 'layerLocator', 'propertyLocator', 'time', 'keyframeCountBefore',
+      'keyframeCountAfter', 'beforeKeyframe', 'afterKeyframe'], properties: {
+      changed: { const: true }, layerLocator: keyframeLocatorSchema('layer'),
+      propertyLocator: keyframeLocatorSchema('stream'), time: keyframeExactTimeSchema(),
+      keyframeCountBefore: { type: 'integer', minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+      keyframeCountAfter: { type: 'integer', minimum: 0, maximum: Number.MAX_SAFE_INTEGER },
+      beforeKeyframe: { oneOf: [{ type: 'null' }, details] },
+      afterKeyframe: { oneOf: [{ type: 'null' }, details] },
+    }, 'x-invariant': 'before-and-after-keyframes-are-bound-to-propertyLocator-and-time' };
+}
+
+function keyframeInputSchema(spec) {
+  if (spec.kind === 'details') {
+    return { type: 'object', additionalProperties: false, required: ['propertyLocator', 'time'],
+      properties: { propertyLocator: keyframeLocatorSchema('stream'),
+        time: keyframeTimeInputSchema() } };
+  }
+  const properties = { layerLocator: keyframeLocatorSchema('layer'),
+    propertyLocator: keyframeLocatorSchema('stream'), time: keyframeTimeInputSchema(),
+    idempotencyKey: { type: 'string', minLength: 16, maxLength: 64,
+      pattern: '^[A-Za-z0-9][A-Za-z0-9._:-]*$' } };
+  if (spec.kind === 'value') properties.value = keyframePrimitiveSchema();
+  if (spec.kind === 'interpolation') {
+    properties.inInterpolation = { enum: ['linear', 'bezier', 'hold'] };
+    properties.outInterpolation = { enum: ['linear', 'bezier', 'hold'] };
+  }
+  if (spec.kind === 'ease') properties.dimensions = { type: 'array', minItems: 1,
+    maxItems: 4, items: keyframeEaseDimensionSchema(),
+    'x-invariant': 'dimensions-are-contiguous-and-zero-based' };
+  if (spec.kind === 'behavior') {
+    properties.behavior = { enum: ['temporal-continuous', 'temporal-auto-bezier',
+      'spatial-continuous', 'spatial-auto-bezier', 'roving'] };
+    properties.enabled = { type: 'boolean' };
+  }
+  return { type: 'object', additionalProperties: false, required: Object.keys(properties),
+    properties, 'x-invariant': 'layerLocator-and-propertyLocator-share-one-current-context' };
+}
+
+function keyframeDescriptorExample(spec) {
+  const layerLocator = syntheticDescriptorLocator('layer', '88888888-8888-4888-8888-888888888888');
+  const propertyLocator = syntheticDescriptorLocator('stream', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc');
+  const time = { value: 1, scale: 1 };
+  const details = { propertyLocator, time: { ...time, secondsRational: '1' },
+    temporalDimensionality: 1, valueType: 'one-d', value: { kind: 'scalar', value: '50' },
+    inInterpolation: 'linear', outInterpolation: 'linear',
+    temporalEaseDimensions: [{ dimension: 0, inEase: { speed: '0', influence: '33.333' },
+      outEase: { speed: '0', influence: '33.333' } }],
+    behaviors: { temporalContinuous: false, temporalAutoBezier: false,
+      spatialContinuous: false, spatialAutoBezier: false, roving: false } };
+  if (spec.kind === 'details') return { arguments: { propertyLocator, time }, value: details };
+  const argumentsValue = { layerLocator, propertyLocator, time,
+    idempotencyKey: 'synthetic-keyframe-0001' };
+  if (spec.kind === 'value') argumentsValue.value = { kind: 'scalar', value: '50' };
+  if (spec.kind === 'interpolation') Object.assign(argumentsValue,
+    { inInterpolation: 'bezier', outInterpolation: 'bezier' });
+  if (spec.kind === 'ease') argumentsValue.dimensions = structuredClone(details.temporalEaseDimensions);
+  if (spec.kind === 'behavior') Object.assign(argumentsValue,
+    { behavior: 'temporal-continuous', enabled: true });
+  const value = { changed: true, layerLocator, propertyLocator,
+    time: { ...time, secondsRational: '1' }, keyframeCountBefore: 1,
+    keyframeCountAfter: 1, beforeKeyframe: details, afterKeyframe: details };
+  if (spec.kind === 'value') Object.assign(value,
+    { keyframeCountBefore: 0, keyframeCountAfter: 1, beforeKeyframe: null });
+  if (spec.kind === 'delete') Object.assign(value,
+    { keyframeCountBefore: 1, keyframeCountAfter: 0, afterKeyframe: null });
+  return { arguments: argumentsValue, value };
+}
+
+export function keyframeAuthoringDescriptors() {
+  return KEYFRAME_AUTHORING_SPECS.map((spec) => {
+    const registration = INVOKE_REGISTRY.find((candidate) => candidate.id === spec.id);
+    const example = keyframeDescriptorExample(spec);
+    const inputSchema = keyframeInputSchema(spec);
+    const resultSchema = spec.kind === 'details' ? keyframeDetailsSchema() : keyframeMutationSchema();
+    return { detail: 'full', id: spec.id, version: 1, schemaVersion: 1,
+      summary: spec.summary, risk: spec.kind === 'details' ? 'read' : 'write',
+      mutability: spec.kind === 'details' ? 'read-only' : 'mutating',
+      idempotency: spec.kind === 'details' ? 'idempotent' : 'idempotency-key',
+      cancellation: 'before-dispatch',
+      undo: spec.kind === 'details' ? 'not-applicable' : 'ae-undo-group',
+      sideEffectSummary: spec.sideEffectSummary, preconditions: [...spec.preconditions],
+      compatibility: { status: 'unverified', intendedPlatforms: ['macos-arm64', 'windows-x64'] },
+      inputContractId: registration.inputContractId, resultContractId: registration.resultContractId,
+      contractDigest: sha256Jcs({ inputSchema, resultSchema }), inputSchema, resultSchema,
+      requirements: [{ id: spec.requirementId, contractVersion: 1 }],
+      examples: [
+        { id: 'aemcp-example-keyframe-positive', kind: 'positive',
+          summary: 'Synthetic success demonstrates the typed result contract.',
+          arguments: structuredClone(example.arguments),
+          expected: { outcome: 'succeeded', value: structuredClone(example.value) } },
+        { id: 'aemcp-example-keyframe-stale', kind: 'negative',
+          summary: 'Synthetic failure exercises the documented recovery path.',
+          arguments: structuredClone(example.arguments),
+          expected: { errorCode: 'STALE_LOCATOR', recoveryAction: 'refresh-locator' } },
+      ] };
+  });
+}
+
 export function nativeCapabilityRegistry(schema) {
   return [
     projectSummaryDescriptor(schema),
@@ -2727,6 +3074,7 @@ export function nativeCapabilityRegistry(schema) {
     layerPropertySetDescriptor(schema),
     ...projectCompositionDescriptors(schema),
     ...layerTimelineDescriptors(schema),
+    ...keyframeAuthoringDescriptors(schema),
   ];
 }
 
@@ -3334,6 +3682,94 @@ function validateLayerPropertyKeyframesResult(request, result, helloContext, sch
   return true;
 }
 
+const KEYFRAME_BEHAVIOR_FIELD = Object.freeze({
+  'temporal-continuous': 'temporalContinuous',
+  'temporal-auto-bezier': 'temporalAutoBezier',
+  'spatial-continuous': 'spatialContinuous',
+  'spatial-auto-bezier': 'spatialAutoBezier',
+  roving: 'roving',
+});
+
+function validateKeyframeDetailsValue(details, propertyLocator, time, context, schema) {
+  if (!schemaAccepts(schema?.$defs?.keyframeDetailsValue, details, schema)
+      || !jsonDeepEqual(details.propertyLocator, propertyLocator)
+      || !compositionTimesEqual(details.time, time)
+      || canonicalSecondsRational(details.time?.value, details.time?.scale)
+        !== details.time?.secondsRational
+      || !validateLocator(details.propertyLocator, context, schema)
+      || !validateSampledPropertyValue({ valueType: details.valueType, value: details.value })
+      || details.temporalEaseDimensions.length !== details.temporalDimensionality) return false;
+  return details.temporalEaseDimensions.every((dimension, index) => (
+    dimension.dimension === index
+      && isKeyframeEase(dimension.inEase)
+      && isKeyframeEase(dimension.outEase)
+  ));
+}
+
+function validateKeyframeAuthoringResult(request, result, helloContext, schema) {
+  const capabilityId = request.params.capabilityId;
+  const detailsRead = capabilityId === 'ae.layer.property.keyframe.details.read';
+  if (!detailsRead && !KEYFRAME_WRITE_CAPABILITIES.has(capabilityId)) return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  if (result.evidence.postcondition.kind !== capabilityId.replace(/^ae\./u, '').replaceAll('.', '-')) {
+    return false;
+  }
+  if (detailsRead) {
+    const context = locatorContext(value.propertyLocator);
+    return value.propertyLocator.hostInstanceId === helloContext.response.result.host.instanceId
+      && value.propertyLocator.sessionId === request.sessionId
+      && validateKeyframeDetailsValue(value, args.propertyLocator, args.time, context, schema);
+  }
+
+  if (value.changed !== true
+      || !jsonDeepEqual(value.layerLocator, args.layerLocator)
+      || !jsonDeepEqual(value.propertyLocator, args.propertyLocator)
+      || !compositionTimesEqual(value.time, args.time)
+      || canonicalSecondsRational(value.time?.value, value.time?.scale)
+        !== value.time?.secondsRational) return false;
+  const context = locatorContext(value.layerLocator);
+  if (value.layerLocator.hostInstanceId !== helloContext.response.result.host.instanceId
+      || value.layerLocator.sessionId !== request.sessionId
+      || !validateLocator(value.layerLocator, context, schema)
+      || !validateLocator(value.propertyLocator, context, schema)) return false;
+  const detailsValid = (details) => details === null
+    || validateKeyframeDetailsValue(details, value.propertyLocator, value.time, context, schema);
+  if (!detailsValid(value.beforeKeyframe) || !detailsValid(value.afterKeyframe)) return false;
+
+  if (capabilityId === 'ae.layer.property.keyframe.add') {
+    return value.beforeKeyframe === null && value.afterKeyframe !== null
+      && value.keyframeCountAfter === value.keyframeCountBefore + 1
+      && primitivePropertyValuesEqual(value.afterKeyframe.value, args.value);
+  }
+  if (capabilityId === 'ae.layer.property.keyframe.delete') {
+    return value.beforeKeyframe !== null && value.afterKeyframe === null
+      && value.keyframeCountBefore === value.keyframeCountAfter + 1;
+  }
+  if (value.beforeKeyframe === null || value.afterKeyframe === null
+      || value.keyframeCountBefore !== value.keyframeCountAfter) return false;
+  if (capabilityId === 'ae.layer.property.keyframe.value.set') {
+    return primitivePropertyValuesEqual(value.afterKeyframe.value, args.value)
+      && !primitivePropertyValuesEqual(value.beforeKeyframe.value, value.afterKeyframe.value);
+  }
+  if (capabilityId === 'ae.layer.property.keyframe.interpolation.set') {
+    return value.afterKeyframe.inInterpolation === args.inInterpolation
+      && value.afterKeyframe.outInterpolation === args.outInterpolation
+      && (value.beforeKeyframe.inInterpolation !== value.afterKeyframe.inInterpolation
+        || value.beforeKeyframe.outInterpolation !== value.afterKeyframe.outInterpolation);
+  }
+  if (capabilityId === 'ae.layer.property.keyframe.temporal-ease.set') {
+    return jsonDeepEqual(value.afterKeyframe.temporalEaseDimensions, args.dimensions)
+      && !jsonDeepEqual(
+        value.beforeKeyframe.temporalEaseDimensions,
+        value.afterKeyframe.temporalEaseDimensions,
+      );
+  }
+  const field = KEYFRAME_BEHAVIOR_FIELD[args.behavior];
+  return typeof field === 'string' && value.afterKeyframe.behaviors[field] === args.enabled
+    && value.beforeKeyframe.behaviors[field] !== value.afterKeyframe.behaviors[field];
+}
+
 function validateCompositionTimeSetResult(request, result, helloContext, schema) {
   if (request.params.capabilityId !== 'ae.composition.time.set') return true;
   const args = request.params.arguments;
@@ -3787,7 +4223,7 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set', 'ae.composition.work-area.set', 'ae.project.item.name.set', 'ae.project.item.comment.set', 'ae.project.item.label.set', 'ae.composition.duplicate', 'ae.layer.name.set', 'ae.layer.range.set', 'ae.layer.start-time.set', 'ae.layer.stretch.set', 'ae.layer.order.set', 'ae.layer.parent.set', 'ae.layer.duplicate']
+            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set', 'ae.composition.work-area.set', 'ae.project.item.name.set', 'ae.project.item.comment.set', 'ae.project.item.label.set', 'ae.composition.duplicate', 'ae.layer.name.set', 'ae.layer.range.set', 'ae.layer.start-time.set', 'ae.layer.stretch.set', 'ae.layer.order.set', 'ae.layer.parent.set', 'ae.layer.duplicate', 'ae.layer.property.keyframe.add', 'ae.layer.property.keyframe.value.set', 'ae.layer.property.keyframe.interpolation.set', 'ae.layer.property.keyframe.temporal-ease.set', 'ae.layer.property.keyframe.behavior.set', 'ae.layer.property.keyframe.delete']
               .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
@@ -3802,6 +4238,7 @@ export function validateTranscript(context, request, messages) {
     && validateLayerEffectApplyResult(request, result, helloContext, schema)
     && validateLayerPropertyKeyframesResult(request, result, helloContext, schema)
     && validateLayerPropertySetResult(request, result, helloContext, schema)
+    && validateKeyframeAuthoringResult(request, result, helloContext, schema)
     && validateProjectCompositionResult(request, result, helloContext, schema)
     && validateLayerTimelineResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true

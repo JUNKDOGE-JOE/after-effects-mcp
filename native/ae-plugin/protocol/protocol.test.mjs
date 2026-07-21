@@ -22,6 +22,7 @@ import {
   encodeFrame,
   materializeDeadline,
   nativeCapabilityRegistry,
+  keyframeAuthoringDescriptors,
   layerTimelineDescriptors,
   projectCompositionDescriptors,
   postconditionDigest,
@@ -188,8 +189,8 @@ test('schema locks strict framing, bounded defaults, rate limits, and native pro
     byteOrder: 'big-endian',
     encoding: 'utf-8',
     maxFrameBytes: 524288,
-    maxJsonDepth: 16,
-    maxJsonNodes: 12288,
+    maxJsonDepth: 32,
+    maxJsonNodes: 32768,
     maxStringLength: 8192,
     stringLengthUnit: 'unicode-scalar-values',
     duplicateObjectKeys: 'reject',
@@ -386,23 +387,23 @@ test('strict framing handles UTF-8, fragments, multiple frames, and malformed JS
     assert.throws(() => decodeFrame(Buffer.from(seed.hex, 'hex')), { code: seed.expectedErrorCode }, seed.name);
   }
   assert.throws(() => decodeFrame(frameFromText('{"a":1,"a":2}')), { code: 'INVALID_REQUEST' });
-  assert.throws(() => strictParseJson(`${'['.repeat(17)}0${']'.repeat(17)}`), { code: 'INVALID_REQUEST' });
-  assert.throws(() => strictParseJson(`[${'0,'.repeat(12288)}0]`), { code: 'INVALID_REQUEST' });
+  assert.throws(() => strictParseJson(`${'['.repeat(33)}0${']'.repeat(33)}`), { code: 'INVALID_REQUEST' });
+  assert.throws(() => strictParseJson(`[${'0,'.repeat(32768)}0]`), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson(JSON.stringify('x'.repeat(8193))), { code: 'INVALID_REQUEST' });
   assert.throws(() => strictParseJson('{"n":9007199254740993}'), { code: 'INVALID_REQUEST' });
 });
 
 test('input and output codecs enforce the same exact JSON limits', () => {
-  const depth16 = Array.from({ length: 15 }).reduce((value) => [value], 0);
-  const depth17 = [depth16];
-  assert.equal(assertJsonLimits(depth16), true);
-  assert.doesNotThrow(() => encodeFrame(depth16));
-  assert.throws(() => assertJsonLimits(depth17), { code: 'INVALID_REQUEST' });
-  assert.throws(() => encodeFrame(depth17), { code: 'INVALID_REQUEST' });
+  const depth32 = Array.from({ length: 31 }).reduce((value) => [value], 0);
+  const depth33 = [depth32];
+  assert.equal(assertJsonLimits(depth32), true);
+  assert.doesNotThrow(() => encodeFrame(depth32));
+  assert.throws(() => assertJsonLimits(depth33), { code: 'INVALID_REQUEST' });
+  assert.throws(() => encodeFrame(depth33), { code: 'INVALID_REQUEST' });
 
-  const nodes12288 = Array.from({ length: 12287 }, () => 0);
-  assert.equal(assertJsonLimits(nodes12288), true);
-  assert.throws(() => assertJsonLimits([...nodes12288, 0]), { code: 'INVALID_REQUEST' });
+  const nodes32768 = Array.from({ length: 32767 }, () => 0);
+  assert.equal(assertJsonLimits(nodes32768), true);
+  assert.throws(() => assertJsonLimits([...nodes32768, 0]), { code: 'INVALID_REQUEST' });
   assert.doesNotThrow(() => encodeFrame('x'.repeat(8192)));
   assert.throws(() => encodeFrame('x'.repeat(8193)), { code: 'INVALID_REQUEST' });
   assert.throws(() => encodeFrame({ ['x'.repeat(8193)]: true }), { code: 'INVALID_REQUEST' });
@@ -452,6 +453,41 @@ test('RFC 8785 canonicalization covers Unicode and the safe numeric subset', () 
   assert.equal(canonicalize({ accent: 'é', emoji: '😀' }), '{"accent":"é","emoji":"😀"}');
   assert.equal(canonicalize({ '\ue000': 1, '😀': 2 }), '{"😀":2,"\ue000":1}',
     'RFC 8785 sorts property names by UTF-16 code units, not Unicode code points');
+});
+
+test('keyframe write argument fingerprints match the cross-language JCS vectors', () => {
+  const locator = (kind, objectId) => ({
+    kind,
+    hostInstanceId: HOST,
+    sessionId: SESSION,
+    projectId: '44444444-4444-4444-8444-444444444444',
+    generation: 8,
+    objectId,
+  });
+  const common = {
+    idempotencyKey: 'synthetic-keyframe-0001',
+    layerLocator: locator('layer', '88888888-8888-4888-8888-888888888888'),
+    propertyLocator: locator('stream', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'),
+    time: { value: 1, scale: 2 },
+  };
+  assert.equal(sha256Jcs({
+    ...common,
+    inInterpolation: 'bezier',
+    outInterpolation: 'hold',
+  }), 'a8fea9f4e84c865ff0922670b5bcc6a96b9ab56987507565b67f4bb2803573ba');
+  assert.equal(sha256Jcs({
+    ...common,
+    dimensions: [{
+      dimension: 0,
+      inEase: { speed: '0', influence: '33' },
+      outEase: { speed: '1', influence: '67' },
+    }],
+  }), 'a71cd2b9726d538d8ced25917fadacf9ed917ce58067299eed1c4cc01c0fcbc9');
+  assert.equal(sha256Jcs({
+    ...common,
+    behavior: 'temporal-continuous',
+    enabled: true,
+  }), 'b17ceeb349ace335f9cb6bdf883af411acd510e43198b57e2ce3ff737150f7be');
 });
 
 test('fixed-seed framing property fuzz round-trips chunks and rejects EOF truncation', () => {
@@ -648,7 +684,7 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 30);
+  assert.equal(nativeCapabilityRegistry(schema).length, 37);
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -840,6 +876,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const layerPropertyDescriptor = layerPropertySetDescriptor(schema);
   const projectCompositionCapabilities = projectCompositionDescriptors(schema);
   const layerTimelineCapabilities = layerTimelineDescriptors(schema);
+  const keyframeAuthoringCapabilities = keyframeAuthoringDescriptors(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -925,6 +962,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     layerPropertyDescriptor,
     ...projectCompositionCapabilities,
     ...layerTimelineCapabilities,
+    ...keyframeAuthoringCapabilities,
   ]), capabilityDigest(nativeCapabilityRegistry(schema)));
   assert.equal(projectCompositionCapabilities.length, 8);
   for (const descriptor of projectCompositionCapabilities) {
@@ -944,7 +982,126 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
       resultSchema: timelineDescriptor.resultSchema,
     }));
   }
+  assert.equal(keyframeAuthoringCapabilities.length, 7);
+  for (const keyframeDescriptor of keyframeAuthoringCapabilities) {
+    assert.equal(validateCapabilityDescriptor(keyframeDescriptor, schema), true,
+      keyframeDescriptor.id);
+    assert.equal(keyframeDescriptor.contractDigest, sha256Jcs({
+      inputSchema: keyframeDescriptor.inputSchema,
+      resultSchema: keyframeDescriptor.resultSchema,
+    }));
+  }
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
+});
+
+test('keyframe authoring matrix binds all seven strict typed contracts', () => {
+  const matrix = golden('keyframe-authoring-matrix.json');
+  const descriptors = keyframeAuthoringDescriptors(schema);
+  assert.equal(capabilityDigest(nativeCapabilityRegistry(schema)), matrix.expectedRegistryDigest);
+  assert.deepEqual(descriptors.map(({ id }) => id), matrix.cases.map(({ capabilityId }) => capabilityId));
+
+  const layerLocator = {
+    kind: 'layer', hostInstanceId: HOST, sessionId: SESSION, projectId: PROJECT,
+    generation: 8, objectId: '88888888-8888-4888-8888-888888888888',
+  };
+  const propertyLocator = {
+    kind: 'stream', hostInstanceId: HOST, sessionId: SESSION, projectId: PROJECT,
+    generation: 8, objectId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  };
+  const time = { value: 1, scale: 1 };
+  const exactTime = { ...time, secondsRational: '1' };
+  const details = (overrides = {}) => ({
+    propertyLocator, time: exactTime, temporalDimensionality: 1, valueType: 'one-d',
+    value: { kind: 'scalar', value: '50' }, inInterpolation: 'linear',
+    outInterpolation: 'linear',
+    temporalEaseDimensions: [{ dimension: 0, inEase: { speed: '0', influence: '33.333' },
+      outEase: { speed: '0', influence: '33.333' } }],
+    behaviors: { temporalContinuous: false, temporalAutoBezier: false,
+      spatialContinuous: false, spatialAutoBezier: false, roving: false },
+    ...overrides,
+  });
+  const common = { layerLocator, propertyLocator, time };
+  const argsById = {
+    'ae.layer.property.keyframe.details.read': { propertyLocator, time },
+    'ae.layer.property.keyframe.add': { ...common, idempotencyKey: 'synthetic-keyframe-add-0001',
+      value: { kind: 'scalar', value: '50' } },
+    'ae.layer.property.keyframe.value.set': { ...common,
+      idempotencyKey: 'synthetic-keyframe-value-0001', value: { kind: 'scalar', value: '50' } },
+    'ae.layer.property.keyframe.interpolation.set': { ...common,
+      idempotencyKey: 'synthetic-keyframe-interp-0001', inInterpolation: 'bezier',
+      outInterpolation: 'bezier' },
+    'ae.layer.property.keyframe.temporal-ease.set': { ...common,
+      idempotencyKey: 'synthetic-keyframe-ease-0001', dimensions: [{ dimension: 0,
+        inEase: { speed: '0', influence: '50' }, outEase: { speed: '0', influence: '50' } }] },
+    'ae.layer.property.keyframe.behavior.set': { ...common,
+      idempotencyKey: 'synthetic-keyframe-behavior-0001', behavior: 'temporal-continuous',
+      enabled: true },
+    'ae.layer.property.keyframe.delete': { ...common,
+      idempotencyKey: 'synthetic-keyframe-delete-0001' },
+  };
+  const before = details({ value: { kind: 'scalar', value: '25' } });
+  const after = details();
+  const mutation = (beforeKeyframe, afterKeyframe, keyframeCountBefore = 1,
+    keyframeCountAfter = 1) => ({ changed: true, layerLocator, propertyLocator,
+    time: exactTime, keyframeCountBefore, keyframeCountAfter, beforeKeyframe, afterKeyframe });
+  const valuesById = {
+    'ae.layer.property.keyframe.details.read': after,
+    'ae.layer.property.keyframe.add': mutation(null, after, 0, 1),
+    'ae.layer.property.keyframe.value.set': mutation(before, after),
+    'ae.layer.property.keyframe.interpolation.set': mutation(
+      details(), details({ inInterpolation: 'bezier', outInterpolation: 'bezier' }),
+    ),
+    'ae.layer.property.keyframe.temporal-ease.set': mutation(details(), details({
+      temporalEaseDimensions: argsById['ae.layer.property.keyframe.temporal-ease.set'].dimensions,
+    })),
+    'ae.layer.property.keyframe.behavior.set': mutation(details(), details({
+      behaviors: { ...details().behaviors, temporalContinuous: true },
+    })),
+    'ae.layer.property.keyframe.delete': mutation(after, null, 1, 0),
+  };
+  const base = golden('invoke-layer-property-set.json');
+  const hello = golden('hello.json');
+  const now = 1900000000000;
+  for (const entry of matrix.cases) {
+    const descriptor = descriptors.find(({ id }) => id === entry.capabilityId);
+    assert.equal(descriptor.contractDigest, entry.contractDigest, entry.capabilityId);
+    const request = structuredClone(base.request);
+    request.requestId = `invoke-${entry.capabilityId.replaceAll('.', '-')}-1`;
+    request.params = { capabilityId: entry.capabilityId, capabilityVersion: 1,
+      arguments: argsById[entry.capabilityId] };
+    assert.equal(validateRequestComposite(request, schema).ok, true, entry.capabilityId);
+    assert.deepEqual(classifyRequest(request), { ok: true }, entry.capabilityId);
+    assert.equal(schemaAccepts(descriptor.inputSchema, request.params.arguments,
+      descriptor.inputSchema), true, entry.capabilityId);
+    assert.equal(schemaAccepts(descriptor.resultSchema, valuesById[entry.capabilityId],
+      descriptor.resultSchema), true, entry.capabilityId);
+    const response = structuredClone(base.response);
+    response.requestId = request.requestId;
+    response.result.capabilityId = entry.capabilityId;
+    response.result.value = valuesById[entry.capabilityId];
+    Object.assign(response.result.evidence, {
+      requestId: request.requestId, capabilityId: entry.capabilityId,
+      effect: entry.mutating ? 'committed' : 'none', requestDigest: sha256Jcs(request),
+    });
+    if (entry.mutating) response.result.evidence.undo = { available: true, verified: false };
+    else delete response.result.evidence.undo;
+    response.result.evidence.postcondition.kind = entry.postconditionKind;
+    response.result.evidence.postcondition.digest = postconditionDigest(response.result);
+    const events = base.events.map((event) => ({ ...event, requestId: request.requestId }));
+    assert.equal(validateTranscript({ hello, descriptor, schema, brokerSendUnixMs: now,
+      effectiveDeadlineUnixMs: request.deadlineUnixMs, terminalObservedUnixMs: now + 30 },
+    request, [...events, response]), true, entry.capabilityId);
+
+    const extra = structuredClone(request);
+    extra.params.arguments.unexpected = true;
+    assert.deepEqual(classifyRequest(extra), { ok: false, errorCode: 'INVALID_ARGUMENT' });
+  }
+  const badEase = structuredClone(argsById['ae.layer.property.keyframe.temporal-ease.set']);
+  badEase.dimensions[0].dimension = 1;
+  const badRequest = structuredClone(base.request);
+  badRequest.params = { capabilityId: 'ae.layer.property.keyframe.temporal-ease.set',
+    capabilityVersion: 1, arguments: badEase };
+  assert.deepEqual(classifyRequest(badRequest), { ok: false, errorCode: 'INVALID_ARGUMENT' });
 });
 
 test('v1 capability discovery is single-page, fail-closed, and never replayed', () => {
@@ -952,7 +1109,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 30);
+  assert.equal(exchange.response.result.items.length, 37);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);

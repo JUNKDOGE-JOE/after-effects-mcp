@@ -113,6 +113,21 @@ Run the package in one continuous window:
 7. Quit and relaunch AE once; verify a new host/session and repeat the package smoke.
 8. Emit one machine-readable evidence bundle and a redacted completion summary.
 
+Before candidate freeze, run a non-evidentiary hardware preflight for the
+actual prepared session. It must prove that exact Core/CEP/native/protocol
+components can be deployed, the formal AE path and GUI/pairing are available,
+the driver can create/reset/archive its one fixture, and any locator assumption
+needed by the package survives its planned Undo flow. Mark the output
+`candidateEvidence=false`; repair failures at T0-T2 and do not count them as
+T4/T5 candidate attempts.
+
+One ledger must count every public MCP dispatch, including setup/support reads,
+expected-error probes, recovery calls, and package rows. Put stress, repeated
+calls, parameter combinations, and the broad error matrix in T2. T5/T6 should
+normally invoke each package tool only once or twice and stay at or below 30
+total public calls; abort before dispatching call 31 unless the frozen brief
+documents a risk that lower tiers cannot falsify.
+
 If a write returns `POSSIBLY_SIDE_EFFECTING_FAILURE`, stop retries and reconcile AE state plus audit first.
 
 Commit the package acceptance driver with the package and use the same driver for candidate and clean-`main` runs. The driver must call the public MCP surface, support the package's real dynamic locators and generation changes, create a fresh intent key for each new write while reusing that key for reconciliation, and bind its evidence to separately verified Core/CEP/native/protocol identities. A hashed test plan is explicit authorization for the disposable fixture only; it does not prove the production approval/elicitation path unless the package explicitly exercises that path. Temporary `/private/tmp` clients are not acceptance assets.

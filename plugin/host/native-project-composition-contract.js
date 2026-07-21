@@ -1,6 +1,6 @@
 'use strict';
 
-// Closed CEP-side verification for the #150 and #155 capability packages.
+// Closed CEP-side verification for the #150, #155, and #157 capability packages.
 // This is not a route resolver: it only validates the named native contracts.
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -552,6 +552,306 @@ function validLayerDuplicateValue(value, argumentsValue, hostInstanceId, session
     return true;
 }
 
+const KEYFRAME_VALUE_TYPES = Object.freeze([
+    'one-d', 'two-d', 'two-d-spatial', 'three-d', 'three-d-spatial', 'color',
+]);
+const KEYFRAME_INTERPOLATIONS = Object.freeze(['none', 'linear', 'bezier', 'hold']);
+const KEYFRAME_SET_INTERPOLATIONS = Object.freeze(['linear', 'bezier', 'hold']);
+const KEYFRAME_BEHAVIORS = Object.freeze([
+    'temporal-continuous', 'temporal-auto-bezier', 'spatial-continuous',
+    'spatial-auto-bezier', 'roving',
+]);
+
+function validDecimalString(value) {
+    if (typeof value !== 'string' || value.length === 0 || value.length > 32
+        || !/^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/.test(value)) {
+        return false;
+    }
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed) || (parsed === 0 && value[0] === '-')) return false;
+    if (parsed !== 0) return true;
+    return !/[1-9]/.test(value.split(/[eE]/, 1)[0]);
+}
+
+function validKeyframeSample(value, valueType) {
+    if (valueType === 'one-d') {
+        return exactKeys(value, ['kind', 'value'])
+            && value.kind === 'scalar' && validDecimalString(value.value);
+    }
+    if (['two-d', 'two-d-spatial', 'three-d', 'three-d-spatial'].includes(valueType)) {
+        const expectedLength = valueType.startsWith('two-') ? 2 : 3;
+        return exactKeys(value, ['kind', 'components'])
+            && value.kind === 'vector' && Array.isArray(value.components)
+            && value.components.length === expectedLength
+            && value.components.every(validDecimalString);
+    }
+    return valueType === 'color'
+        && exactKeys(value, ['kind', 'alpha', 'red', 'green', 'blue'])
+        && value.kind === 'color'
+        && ['alpha', 'red', 'green', 'blue'].every(function (key) {
+            return validDecimalString(value[key]);
+        });
+}
+
+function validAnyKeyframeSample(value) {
+    return KEYFRAME_VALUE_TYPES.some(function (valueType) {
+        return validKeyframeSample(value, valueType);
+    });
+}
+
+function keyframeSamplesEqual(left, right) {
+    if (!left || !right || left.kind !== right.kind) return false;
+    const equalDecimal = function (a, b) { return Number(a) === Number(b); };
+    if (left.kind === 'scalar') return equalDecimal(left.value, right.value);
+    if (left.kind === 'vector') {
+        return left.components.length === right.components.length
+            && left.components.every(function (item, index) {
+                return equalDecimal(item, right.components[index]);
+            });
+    }
+    return ['alpha', 'red', 'green', 'blue'].every(function (key) {
+        return equalDecimal(left[key], right[key]);
+    });
+}
+
+function validKeyframeEase(value) {
+    return exactKeys(value, ['speed', 'influence'])
+        && validDecimalString(value.speed) && validDecimalString(value.influence)
+        && Number(value.influence) >= 0 && Number(value.influence) <= 100;
+}
+
+function validKeyframeEaseDimensions(value, expectedLength) {
+    return Array.isArray(value) && value.length >= 1 && value.length <= 4
+        && (expectedLength === undefined || value.length === expectedLength)
+        && value.every(function (item, index) {
+            return exactKeys(item, ['dimension', 'inEase', 'outEase'])
+                && item.dimension === index
+                && validKeyframeEase(item.inEase) && validKeyframeEase(item.outEase);
+        });
+}
+
+function keyframeEaseDimensionsEqual(left, right) {
+    return Array.isArray(left) && Array.isArray(right) && left.length === right.length
+        && left.every(function (item, index) {
+            const other = right[index];
+            return item.dimension === other.dimension
+                && Number(item.inEase.speed) === Number(other.inEase.speed)
+                && Number(item.inEase.influence) === Number(other.inEase.influence)
+                && Number(item.outEase.speed) === Number(other.outEase.speed)
+                && Number(item.outEase.influence) === Number(other.outEase.influence);
+        });
+}
+
+function validKeyframeBehaviors(value) {
+    return exactKeys(value, [
+        'temporalContinuous', 'temporalAutoBezier', 'spatialContinuous',
+        'spatialAutoBezier', 'roving',
+    ]) && Object.values(value).every(function (member) { return typeof member === 'boolean'; });
+}
+
+function validKeyframeDetails(value, propertyLocator, time, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'propertyLocator', 'time', 'temporalDimensionality', 'valueType', 'value',
+        'inInterpolation', 'outInterpolation', 'temporalEaseDimensions', 'behaviors',
+    ])
+        && validLocator(value.propertyLocator, ['stream'])
+        && boundToSession(value.propertyLocator, hostInstanceId, sessionId)
+        && sameLocator(value.propertyLocator, propertyLocator)
+        && validTime(value.time, true, -2147483648) && timesEqual(value.time, time)
+        && Number.isInteger(value.temporalDimensionality)
+        && value.temporalDimensionality >= 1 && value.temporalDimensionality <= 4
+        && KEYFRAME_VALUE_TYPES.includes(value.valueType)
+        && validKeyframeSample(value.value, value.valueType)
+        && KEYFRAME_INTERPOLATIONS.includes(value.inInterpolation)
+        && KEYFRAME_INTERPOLATIONS.includes(value.outInterpolation)
+        && validKeyframeEaseDimensions(
+            value.temporalEaseDimensions, value.temporalDimensionality,
+        )
+        && validKeyframeBehaviors(value.behaviors);
+}
+
+function validKeyframeTargetArguments(value) {
+    return exactKeys(value, ['propertyLocator', 'time'])
+        && validLocator(value.propertyLocator, ['stream'])
+        && validTime(value.time, false, -2147483648);
+}
+
+function validKeyframeWriteArguments(value, extraKeys, extraValidator) {
+    return exactKeys(value, [
+        'layerLocator', 'propertyLocator', 'time', 'idempotencyKey',
+    ].concat(extraKeys))
+        && validLocator(value.layerLocator, ['layer'])
+        && validLocator(value.propertyLocator, ['stream'])
+        && sameContext(value.layerLocator, value.propertyLocator)
+        && validTime(value.time, false, -2147483648)
+        && validIdempotencyKey(value.idempotencyKey)
+        && extraValidator(value);
+}
+
+function validKeyframeMutation(value, argumentsValue, hostInstanceId, sessionId) {
+    if (!exactKeys(value, [
+        'changed', 'layerLocator', 'propertyLocator', 'time', 'keyframeCountBefore',
+        'keyframeCountAfter', 'beforeKeyframe', 'afterKeyframe',
+    ]) || value.changed !== true
+        || !validLocator(value.layerLocator, ['layer'])
+        || !validLocator(value.propertyLocator, ['stream'])
+        || !boundToSession(value.layerLocator, hostInstanceId, sessionId)
+        || !sameLocator(value.layerLocator, argumentsValue.layerLocator)
+        || !sameLocator(value.propertyLocator, argumentsValue.propertyLocator)
+        || !sameContext(value.layerLocator, value.propertyLocator)
+        || !validTime(value.time, true, -2147483648)
+        || !timesEqual(value.time, argumentsValue.time)
+        || !Number.isSafeInteger(value.keyframeCountBefore) || value.keyframeCountBefore < 0
+        || !Number.isSafeInteger(value.keyframeCountAfter) || value.keyframeCountAfter < 0) {
+        return false;
+    }
+    for (const snapshot of [value.beforeKeyframe, value.afterKeyframe]) {
+        if (snapshot !== null && !validKeyframeDetails(
+            snapshot, value.propertyLocator, value.time, hostInstanceId, sessionId,
+        )) return false;
+    }
+    return value.beforeKeyframe !== null || value.afterKeyframe !== null;
+}
+
+function keyframeDetailsEqualExcept(left, right, excluded) {
+    const leftValue = { ...left };
+    const rightValue = { ...right };
+    for (const key of excluded) {
+        delete leftValue[key];
+        delete rightValue[key];
+    }
+    return JSON.stringify(canonicalize(leftValue)) === JSON.stringify(canonicalize(rightValue));
+}
+
+function interpolationEaseNormalizationAllowed(before, after, requestedInInterpolation) {
+    const beforeEase = before.temporalEaseDimensions;
+    const afterEase = after.temporalEaseDimensions;
+    return beforeEase.length === afterEase.length && beforeEase.every(function (item, index) {
+        const other = afterEase[index];
+        const inInfluenceChanged = Number(item.inEase.influence)
+            !== Number(other.inEase.influence);
+        // AE stores no temporal-ease speed on a hold segment: switching one
+        // side to hold zeroes exactly that side's speed while the influence
+        // stays (verified on the 3-key fixture through the public tool for
+        // both bezier/hold and hold/linear writes).
+        const inSpeedAllowed = Number(item.inEase.speed) === Number(other.inEase.speed)
+            || (before.inInterpolation !== 'hold'
+                && after.inInterpolation === 'hold'
+                && Number(other.inEase.speed) === 0);
+        const outSpeedAllowed = Number(item.outEase.speed) === Number(other.outEase.speed)
+            || (before.outInterpolation !== 'hold'
+                && after.outInterpolation === 'hold'
+                && Number(other.outEase.speed) === 0);
+        return item.dimension === other.dimension
+            && inSpeedAllowed
+            && outSpeedAllowed
+            && Number(item.outEase.influence) === Number(other.outEase.influence)
+            && (!inInfluenceChanged
+                || (requestedInInterpolation === 'bezier'
+                    && after.inInterpolation === 'bezier'
+                    && Number(other.inEase.influence) === 0));
+    });
+}
+
+function valueEaseSpeedRecomputationAllowed(before, after, keyframeCount) {
+    // After Effects recomputes the temporal ease speed of a linear keyframe
+    // as the slope to its temporal neighbours whenever the keyframe value
+    // changes (speed = |value delta| / time delta per side). Neighbour times
+    // and values are not part of the mutation value, so the exact slope is
+    // underdetermined here; the contract therefore releases only the two
+    // AE-derived speed fields, and only for the shape After Effects actually
+    // recomputes (a multi-key property whose before/after interpolations are
+    // linear), while influence, dimension order, and every other field stay
+    // exactly equal.
+    const beforeEase = before.temporalEaseDimensions;
+    const afterEase = after.temporalEaseDimensions;
+    if (beforeEase.length !== afterEase.length) return false;
+    const driftAllowed = keyframeCount >= 2
+        && before.inInterpolation === 'linear'
+        && before.outInterpolation === 'linear'
+        && after.inInterpolation === 'linear'
+        && after.outInterpolation === 'linear';
+    return beforeEase.every(function (item, index) {
+        const other = afterEase[index];
+        return item.dimension === other.dimension
+            && Number(item.inEase.influence) === Number(other.inEase.influence)
+            && Number(item.outEase.influence) === Number(other.outEase.influence)
+            && (driftAllowed
+                || (Number(item.inEase.speed) === Number(other.inEase.speed)
+                    && Number(item.outEase.speed) === Number(other.outEase.speed)));
+    });
+}
+
+function validKeyframeWriteValue(kind, value, argumentsValue, hostInstanceId, sessionId) {
+    if (!validKeyframeMutation(value, argumentsValue, hostInstanceId, sessionId)) return false;
+    const before = value.beforeKeyframe;
+    const after = value.afterKeyframe;
+    if (kind === 'add') {
+        return before === null && after !== null
+            && value.keyframeCountAfter === value.keyframeCountBefore + 1
+            && keyframeSamplesEqual(after.value, argumentsValue.value);
+    }
+    if (kind === 'delete') {
+        return before !== null && after === null
+            && value.keyframeCountBefore === value.keyframeCountAfter + 1;
+    }
+    if (before === null || after === null
+        || value.keyframeCountBefore !== value.keyframeCountAfter) return false;
+    if (kind === 'value') {
+        return !keyframeSamplesEqual(before.value, after.value)
+            && keyframeSamplesEqual(after.value, argumentsValue.value)
+            && keyframeDetailsEqualExcept(before, after, [
+                'value', 'temporalEaseDimensions',
+            ])
+            && valueEaseSpeedRecomputationAllowed(
+                before, after, value.keyframeCountBefore,
+            );
+    }
+    if (kind === 'interpolation') {
+        return (before.inInterpolation !== after.inInterpolation
+                || before.outInterpolation !== after.outInterpolation)
+            && after.inInterpolation === argumentsValue.inInterpolation
+            && after.outInterpolation === argumentsValue.outInterpolation
+            && interpolationEaseNormalizationAllowed(
+                before, after, argumentsValue.inInterpolation,
+            )
+            && keyframeDetailsEqualExcept(
+                before, after, [
+                    'inInterpolation', 'outInterpolation', 'temporalEaseDimensions',
+                ],
+            );
+    }
+    if (kind === 'ease') {
+        // After Effects retains per-keyframe temporal ease only for bezier
+        // interpolation, so the native write promotes non-bezier sides to
+        // bezier inside the same Undo group. Accept exactly that coupling:
+        // after must be bezier on both sides and nothing except the ease
+        // dimensions and the two interpolation fields may change.
+        return !keyframeEaseDimensionsEqual(
+            before.temporalEaseDimensions, after.temporalEaseDimensions,
+        )
+            && keyframeEaseDimensionsEqual(
+                after.temporalEaseDimensions, argumentsValue.dimensions,
+            )
+            && after.inInterpolation === 'bezier'
+            && after.outInterpolation === 'bezier'
+            && keyframeDetailsEqualExcept(
+                before, after,
+                ['temporalEaseDimensions', 'inInterpolation', 'outInterpolation'],
+            );
+    }
+    const member = {
+        'temporal-continuous': 'temporalContinuous',
+        'temporal-auto-bezier': 'temporalAutoBezier',
+        'spatial-continuous': 'spatialContinuous',
+        'spatial-auto-bezier': 'spatialAutoBezier',
+        roving: 'roving',
+    }[argumentsValue.behavior];
+    return before.behaviors[member] !== after.behaviors[member]
+        && after.behaviors[member] === argumentsValue.enabled
+        && keyframeDetailsEqualExcept(before, after, ['behaviors']);
+}
+
 const CONTRACTS = Object.freeze({
     'ae.project.context.read': Object.freeze({
         digest: 'ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca',
@@ -748,6 +1048,143 @@ const CONTRACTS = Object.freeze({
         validArguments: validLayerDuplicateArguments,
         validValue: validLayerDuplicateValue,
         locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.property.keyframe.details.read': Object.freeze({
+        digest: '254ec7933e9628b6c4fba4cc60e183331e4edc9f723c0ccb3f1e37619b7c5249',
+        mutating: false,
+        postconditionKind: 'layer-property-keyframe-details-read',
+        validArguments: validKeyframeTargetArguments,
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validKeyframeDetails(
+                value, argumentsValue.propertyLocator, argumentsValue.time,
+                hostInstanceId, sessionId,
+            );
+        },
+        locatorFields: Object.freeze([['propertyLocator', 'ae_listLayerProperties']]),
+    }),
+    'ae.layer.property.keyframe.add': Object.freeze({
+        digest: '9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-property-keyframe-add',
+        validArguments: function (value) {
+            return validKeyframeWriteArguments(value, ['value'], function (input) {
+                return validAnyKeyframeSample(input.value);
+            });
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validKeyframeWriteValue(
+                'add', value, argumentsValue, hostInstanceId, sessionId,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listLayerProperties'],
+            ['propertyLocator', 'ae_listLayerProperties'],
+        ]),
+    }),
+    'ae.layer.property.keyframe.value.set': Object.freeze({
+        digest: '9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-property-keyframe-value-set',
+        validArguments: function (value) {
+            return validKeyframeWriteArguments(value, ['value'], function (input) {
+                return validAnyKeyframeSample(input.value);
+            });
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validKeyframeWriteValue(
+                'value', value, argumentsValue, hostInstanceId, sessionId,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listLayerProperties'],
+            ['propertyLocator', 'ae_listLayerProperties'],
+        ]),
+    }),
+    'ae.layer.property.keyframe.interpolation.set': Object.freeze({
+        digest: '42e8e12224bd1653fa8ca9f775c97553d61c0c2e60b3b2dcf76a8fc68deb2a20',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-property-keyframe-interpolation-set',
+        validArguments: function (value) {
+            return validKeyframeWriteArguments(
+                value, ['inInterpolation', 'outInterpolation'], function (input) {
+                    return KEYFRAME_SET_INTERPOLATIONS.includes(input.inInterpolation)
+                        && KEYFRAME_SET_INTERPOLATIONS.includes(input.outInterpolation);
+                },
+            );
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validKeyframeWriteValue(
+                'interpolation', value, argumentsValue, hostInstanceId, sessionId,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listLayerProperties'],
+            ['propertyLocator', 'ae_listLayerProperties'],
+        ]),
+    }),
+    'ae.layer.property.keyframe.temporal-ease.set': Object.freeze({
+        digest: 'a73d70029c9a470b57d20fe54517cb36bb7fe249847c49da294f1db2d1c4bc8f',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-property-keyframe-temporal-ease-set',
+        validArguments: function (value) {
+            return validKeyframeWriteArguments(value, ['dimensions'], function (input) {
+                return validKeyframeEaseDimensions(input.dimensions);
+            });
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validKeyframeWriteValue(
+                'ease', value, argumentsValue, hostInstanceId, sessionId,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listLayerProperties'],
+            ['propertyLocator', 'ae_listLayerProperties'],
+        ]),
+    }),
+    'ae.layer.property.keyframe.behavior.set': Object.freeze({
+        digest: 'e2ff59d765613db12468d2140d8c937fd1ceb5def9f632877b18b664b6d6bf5c',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-property-keyframe-behavior-set',
+        validArguments: function (value) {
+            return validKeyframeWriteArguments(
+                value, ['behavior', 'enabled'], function (input) {
+                    return KEYFRAME_BEHAVIORS.includes(input.behavior)
+                        && typeof input.enabled === 'boolean';
+                },
+            );
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validKeyframeWriteValue(
+                'behavior', value, argumentsValue, hostInstanceId, sessionId,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listLayerProperties'],
+            ['propertyLocator', 'ae_listLayerProperties'],
+        ]),
+    }),
+    'ae.layer.property.keyframe.delete': Object.freeze({
+        digest: 'a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-property-keyframe-delete',
+        validArguments: function (value) {
+            return validKeyframeWriteArguments(value, [], function () { return true; });
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validKeyframeWriteValue(
+                'delete', value, argumentsValue, hostInstanceId, sessionId,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listLayerProperties'],
+            ['propertyLocator', 'ae_listLayerProperties'],
+        ]),
     }),
 });
 

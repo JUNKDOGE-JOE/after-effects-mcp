@@ -98,6 +98,17 @@ std::string recovery_hint(RpcErrorCode code) {
   }
 }
 
+bool keyframe_property_capability(std::string_view capability_id) {
+  return capability_id == kLayerPropertyKeyframesListCapability
+      || capability_id == kLayerPropertyKeyframeDetailsReadCapability
+      || capability_id == kLayerPropertyKeyframeAddCapability
+      || capability_id == kLayerPropertyKeyframeValueSetCapability
+      || capability_id == kLayerPropertyKeyframeInterpolationSetCapability
+      || capability_id == kLayerPropertyKeyframeTemporalEaseSetCapability
+      || capability_id == kLayerPropertyKeyframeBehaviorSetCapability
+      || capability_id == kLayerPropertyKeyframeDeleteCapability;
+}
+
 rpc::ErrorResponse error_for(
     const ParsedRequest& request,
     const std::string& session_id,
@@ -130,7 +141,7 @@ rpc::ErrorResponse error_for(
       && field == "params.arguments.propertyLocator";
   const bool keyframe_property_precondition =
       mapped == RpcErrorCode::kPreconditionFailed
-      && capability_id == kLayerPropertyKeyframesListCapability
+      && keyframe_property_capability(capability_id)
       && field == "params.arguments.propertyLocator";
   const bool property_precondition =
       set_property_precondition || keyframe_property_precondition;
@@ -182,6 +193,15 @@ bool valid_digest(std::string_view value) {
     return (character >= '0' && character <= '9')
         || (character >= 'a' && character <= 'f');
   });
+}
+
+bool keyframe_write_capability(std::string_view capability_id) {
+  return capability_id == kLayerPropertyKeyframeAddCapability
+      || capability_id == kLayerPropertyKeyframeValueSetCapability
+      || capability_id == kLayerPropertyKeyframeInterpolationSetCapability
+      || capability_id == kLayerPropertyKeyframeTemporalEaseSetCapability
+      || capability_id == kLayerPropertyKeyframeBehaviorSetCapability
+      || capability_id == kLayerPropertyKeyframeDeleteCapability;
 }
 
 bool valid_timing_evidence(
@@ -239,7 +259,14 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.layer_effect_apply_contract_digest.size() != 64
       || runtime_.layer_properties_list_contract_digest.size() != 64
       || runtime_.layer_property_keyframes_list_contract_digest.size() != 64
-      || runtime_.layer_property_set_contract_digest.size() != 64) {
+      || runtime_.layer_property_set_contract_digest.size() != 64
+      || runtime_.layer_property_keyframe_details_read_contract_digest.size() != 64
+      || runtime_.layer_property_keyframe_add_contract_digest.size() != 64
+      || runtime_.layer_property_keyframe_value_set_contract_digest.size() != 64
+      || runtime_.layer_property_keyframe_interpolation_set_contract_digest.size() != 64
+      || runtime_.layer_property_keyframe_temporal_ease_set_contract_digest.size() != 64
+      || runtime_.layer_property_keyframe_behavior_set_contract_digest.size() != 64
+      || runtime_.layer_property_keyframe_delete_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
 }
@@ -440,6 +467,16 @@ void NativeRpcConnectionHandler::serve(
             } else if (completion.capability_id == kLayerPropertySetCapability) {
               postcondition_digest = rpc::digest_layer_property_set_postcondition(
                   completion.layer_property_change_result);
+            } else if (completion.capability_id
+                == kLayerPropertyKeyframeDetailsReadCapability) {
+              postcondition_digest =
+                  rpc::digest_layer_property_keyframe_details_postcondition(
+                      completion.layer_property_keyframe_details_result);
+            } else if (keyframe_write_capability(completion.capability_id)) {
+              postcondition_digest =
+                  rpc::digest_layer_property_keyframe_write_postcondition(
+                      completion.capability_id,
+                      completion.layer_property_keyframe_change_result);
             } else {
               evidence_valid = false;
             }
@@ -455,6 +492,7 @@ void NativeRpcConnectionHandler::serve(
               || completion.capability_id == kCompositionLayerCreateCapability
               || completion.capability_id == kLayerEffectApplyCapability
               || completion.capability_id == kLayerPropertySetCapability
+              || keyframe_write_capability(completion.capability_id)
               || completion.capability_id == kCompositionWorkAreaSetCapability
               || completion.capability_id == kProjectItemNameSetCapability
               || completion.capability_id == kProjectItemCommentSetCapability
@@ -747,6 +785,32 @@ void NativeRpcConnectionHandler::serve(
                 postcondition_digest,
                 false,
             });
+          } else if (completion.capability_id
+              == kLayerPropertyKeyframeDetailsReadCapability) {
+            response = rpc::encode_layer_property_keyframe_details_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.layer_property_keyframe_details_result,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                false,
+            });
+          } else if (keyframe_write_capability(completion.capability_id)) {
+            response = rpc::encode_layer_property_keyframe_write_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.capability_id,
+                completion.layer_property_keyframe_change_result,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                completion.replayed,
+            });
           } else {
             response = rpc::encode_layer_property_set_success({
                 completion.request_id,
@@ -913,6 +977,20 @@ void NativeRpcConnectionHandler::serve(
           const bool include_layer_order = includes("ae.layer.order.set");
           const bool include_layer_parent = includes("ae.layer.parent.set");
           const bool include_layer_duplicate = includes("ae.layer.duplicate");
+          const bool include_keyframe_details =
+              includes(kLayerPropertyKeyframeDetailsReadCapability);
+          const bool include_keyframe_add =
+              includes(kLayerPropertyKeyframeAddCapability);
+          const bool include_keyframe_value_set =
+              includes(kLayerPropertyKeyframeValueSetCapability);
+          const bool include_keyframe_interpolation_set =
+              includes(kLayerPropertyKeyframeInterpolationSetCapability);
+          const bool include_keyframe_temporal_ease_set =
+              includes(kLayerPropertyKeyframeTemporalEaseSetCapability);
+          const bool include_keyframe_behavior_set =
+              includes(kLayerPropertyKeyframeBehaviorSetCapability);
+          const bool include_keyframe_delete =
+              includes(kLayerPropertyKeyframeDeleteCapability);
           const std::size_t selected = static_cast<std::size_t>(include_summary)
               + static_cast<std::size_t>(include_bit_depth_read)
               + static_cast<std::size_t>(include_bit_depth_set)
@@ -942,7 +1020,14 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_layer_stretch)
               + static_cast<std::size_t>(include_layer_order)
               + static_cast<std::size_t>(include_layer_parent)
-              + static_cast<std::size_t>(include_layer_duplicate);
+              + static_cast<std::size_t>(include_layer_duplicate)
+              + static_cast<std::size_t>(include_keyframe_details)
+              + static_cast<std::size_t>(include_keyframe_add)
+              + static_cast<std::size_t>(include_keyframe_value_set)
+              + static_cast<std::size_t>(include_keyframe_interpolation_set)
+              + static_cast<std::size_t>(include_keyframe_temporal_ease_set)
+              + static_cast<std::size_t>(include_keyframe_behavior_set)
+              + static_cast<std::size_t>(include_keyframe_delete);
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                     request,
@@ -1005,6 +1090,13 @@ void NativeRpcConnectionHandler::serve(
                   include_layer_order,
                   include_layer_parent,
                   include_layer_duplicate,
+                  include_keyframe_details,
+                  include_keyframe_add,
+                  include_keyframe_value_set,
+                  include_keyframe_interpolation_set,
+                  include_keyframe_temporal_ease_set,
+                  include_keyframe_behavior_set,
+                  include_keyframe_delete,
                   runtime_.project_context_read_contract_digest,
                   runtime_.project_item_metadata_read_contract_digest,
                   runtime_.composition_settings_read_contract_digest,
@@ -1021,6 +1113,13 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.layer_order_set_contract_digest,
                   runtime_.layer_parent_set_contract_digest,
                   runtime_.layer_duplicate_contract_digest,
+                  runtime_.layer_property_keyframe_details_read_contract_digest,
+                  runtime_.layer_property_keyframe_add_contract_digest,
+                  runtime_.layer_property_keyframe_value_set_contract_digest,
+                  runtime_.layer_property_keyframe_interpolation_set_contract_digest,
+                  runtime_.layer_property_keyframe_temporal_ease_set_contract_digest,
+                  runtime_.layer_property_keyframe_behavior_set_contract_digest,
+                  runtime_.layer_property_keyframe_delete_contract_digest,
               }))) {
             connected = false;
             break;
@@ -1121,6 +1220,12 @@ void NativeRpcConnectionHandler::serve(
               invoke.layer_stretch,
               invoke.target_stack_index,
               invoke.layer_new_name,
+              invoke.keyframe_time,
+              invoke.keyframe_in_interpolation,
+              invoke.keyframe_out_interpolation,
+              invoke.keyframe_temporal_ease,
+              invoke.keyframe_behavior,
+              invoke.keyframe_behavior_enabled,
           };
         }
         const std::string dispatched_capability = dispatch_request.capability_id;

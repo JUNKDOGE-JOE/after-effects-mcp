@@ -3,6 +3,84 @@
 These scripts call the same public MCP tools that a model sees. They do not
 call Core handlers, the CEP HTTP bridge, or the native socket directly.
 
+## Capability package #157
+
+`issue157_keyframe_authoring_acceptance.py` is the thin CLI and
+`issue157_keyframe_authoring_spec.py` owns the package-specific matrix,
+fixture recipe, target-field assertions, Undo semantics, and interaction
+order. Stable exact-identity, public-MCP, evidence, call-budget, checkpoint,
+and `.aep` lifecycle mechanics are shared by `capability_package_runtime.py`;
+the shared code does not infer package semantics.
+
+Run `preflight` before candidate freeze. It emits `candidateEvidence=false`,
+uses exactly seven public calls, proves the deployed base launcher/CEP/native
+identity and its existing support-tool contracts, creates/saves/archives one
+disposable fixture, and verifies that the
+Opacity property locator remains valid across a native property write and a
+real AE Undo. It does not require or advertise the seven unbuilt package
+capabilities. A preflight failure is T0-T2 work, not T4/T5 evidence.
+Before the first Save, one public `ae_listProjectItems(offset=0, limit=1)` read
+proves readiness and completes pairing. Only after that read succeeds does the
+runner save the still-empty project, before composition creation or any locator
+acquisition. Later archival saves the populated project in place. This avoids
+both an abandoned AEP after pairing failure and locators invalidated by AE's
+first-save project-generation advance while keeping `saveAsCopies=0`.
+
+If the first call in a native-host epoch returns `NATIVE_PAIRING_REQUIRED` with
+`sideEffect=not-started`, the runner emits one `pair-native` checkpoint and
+retries the identical request once. The failed handshake is excluded from the
+seven effective `publicCalls` and reported separately as `handshakeAttempts`.
+Neither the short-lived fingerprint nor any token is written to evidence. A
+rejection or a second pairing-required response in that epoch fails closed
+without another retry. After the formal-AE restart, the new host instance starts
+one new pairing epoch under the same rule.
+
+T5/T6 each use exactly 28 public calls: all seven package tools, scalar and
+spatial behavior paths, a real Undo for all six writes with post-Undo state
+verification, one formal-AE restart, fresh Opacity/Position locator
+reacquisition, and archival
+of the single active fixture. Every public call,
+including support and expected-error calls, is counted by one ledger; the
+runner aborts before dispatching call 31. Package #157 has no new native suite,
+lifecycle, or main-thread primitive, so it deliberately has no T4 mode.
+The RuntimeManager current record, generation launcher and canonical
+`$HOME/.ae-mcp/bin/ae-mcp` launcher must all report the same locked launcher
+SHA-256; an alternate `--launcher` path is rejected.
+
+After Effects retains per-keyframe temporal-ease speed only when the keyframe
+has an adjacent keyframe on both sides; on an isolated keyframe AE applies the
+influence but normalizes speed back to 0. The strict native/host/Core readback
+rightly rejects that partial application as `POSSIBLY_SIDE_EFFECTING_FAILURE`,
+so the driver seeds the two neighbor keys (0 at 0s, 80 at 2s) through the
+public `ae_addLayerPropertyKeyframe` tool before any matrix write. Seeding
+through ExtendScript or the GUI instead would advance the native project
+generation and invalidate every locator the driver already holds; the first
+post-seed write is then correctly rejected as `PRECONDITION_FAILED`. The
+neighbor seeds are fixture preconditions, not tested operations: they receive
+no Undo checkpoint, they are counted in the five `add` invocations, and each
+write Undo still reverts only its own write group. Within the 28-call budget,
+the INTERPOLATION write's own `beforeKeyframe` — AE state at the same exact
+time through the same public surface — must equal the baseline, which verifies
+the VALUE Undo without a dedicated details readback; every other write keeps
+its independent post-Undo details readback, and the missing-keyframe error
+contract is proven by the post-Undo-ADD probe. If any write returns
+`POSSIBLY_SIDE_EFFECTING_FAILURE`, the driver exits with status 3 without
+retrying, including when the session layer wraps the failure in an exception
+group; inspect AE state and the native audit trail before deciding how to
+recover.
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 uv run --frozen python \
+  scripts/hardware/issue157_keyframe_authoring_acceptance.py \
+  --mode preflight \
+  --expected-sha 0123456789abcdef0123456789abcdef01234567 \
+  --fixture-path '/absolute/local/active/issue157-keyframes.aep' \
+  --recovery-archive-root '/absolute/local/recovery/ae-mcp-fixtures' \
+  --native-receipt /absolute/candidate/native/build-receipt.json \
+  --native-manifest /absolute/candidate/native-plugin-manifest.json \
+  --evidence-dir '/absolute/private/evidence/issue157-preflight'
+```
+
 ## Capability package #155
 
 `issue155_layer_timeline_acceptance.py` is the frozen driver for the Layer

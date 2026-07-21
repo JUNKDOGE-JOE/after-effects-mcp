@@ -211,7 +211,12 @@ function cases() {
 
 test('all sixteen frozen #150/#155 contracts accept their closed valid shapes', () => {
     const vectors = cases();
-    assert.deepEqual(Object.keys(packageContracts.CONTRACTS), Object.keys(vectors));
+    assert.deepEqual(
+        Object.keys(packageContracts.CONTRACTS).filter(function (capabilityId) {
+            return !capabilityId.startsWith('ae.layer.property.keyframe.');
+        }),
+        Object.keys(vectors),
+    );
     for (const [capabilityId, vector] of Object.entries(vectors)) {
         const contract = packageContracts.getContract(capabilityId);
         assert.match(contract.digest, /^[0-9a-f]{64}$/);
@@ -230,6 +235,404 @@ test('all sixteen frozen #150/#155 contracts accept their closed valid shapes', 
             contract.validValue({ ...vector.value, extra: true }, vector.arguments, HOST, SESSION),
             false,
             capabilityId + ' open value',
+        );
+    }
+});
+
+function keyframeCases() {
+    const layer = locator('layer', SOURCE, 8);
+    const property = locator('stream', CREATED, 8);
+    const targetTime = { value: 24, scale: 24 };
+    const ease = function (speed, influence) {
+        return [{
+            dimension: 0,
+            inEase: { speed, influence },
+            outEase: { speed, influence },
+        }];
+    };
+    const details = function (overrides) {
+        return {
+            propertyLocator: property,
+            time: time(24, 24),
+            temporalDimensionality: 1,
+            valueType: 'one-d',
+            value: { kind: 'scalar', value: '1' },
+            inInterpolation: 'linear',
+            outInterpolation: 'linear',
+            temporalEaseDimensions: ease('0', '33'),
+            behaviors: {
+                temporalContinuous: false,
+                temporalAutoBezier: false,
+                spatialContinuous: false,
+                spatialAutoBezier: false,
+                roving: false,
+            },
+            ...overrides,
+        };
+    };
+    const write = function (extra) {
+        return {
+            layerLocator: layer,
+            propertyLocator: property,
+            time: targetTime,
+            idempotencyKey: 'issue157-host-contract-0001',
+            ...extra,
+        };
+    };
+    const mutation = function (beforeKeyframe, afterKeyframe, beforeCount, afterCount) {
+        return {
+            changed: true,
+            layerLocator: layer,
+            propertyLocator: property,
+            time: time(24, 24),
+            keyframeCountBefore: beforeCount,
+            keyframeCountAfter: afterCount,
+            beforeKeyframe,
+            afterKeyframe,
+        };
+    };
+    const before = details();
+    const valueAfter = details({ value: { kind: 'scalar', value: '2' } });
+    const interpolationAfter = details({ inInterpolation: 'bezier', outInterpolation: 'hold' });
+    const easeAfter = details({
+        inInterpolation: 'bezier',
+        outInterpolation: 'bezier',
+        temporalEaseDimensions: ease('5', '50'),
+    });
+    const behaviorAfter = details({
+        behaviors: { ...before.behaviors, spatialContinuous: true },
+    });
+    return {
+        'ae.layer.property.keyframe.details.read': {
+            arguments: { propertyLocator: property, time: targetTime }, value: before,
+        },
+        'ae.layer.property.keyframe.add': {
+            arguments: write({ value: { kind: 'scalar', value: '1' } }),
+            value: mutation(null, before, 0, 1),
+        },
+        'ae.layer.property.keyframe.value.set': {
+            arguments: write({ value: { kind: 'scalar', value: '2' } }),
+            value: mutation(before, valueAfter, 1, 1),
+        },
+        'ae.layer.property.keyframe.interpolation.set': {
+            arguments: write({ inInterpolation: 'bezier', outInterpolation: 'hold' }),
+            value: mutation(before, interpolationAfter, 1, 1),
+        },
+        'ae.layer.property.keyframe.temporal-ease.set': {
+            arguments: write({ dimensions: ease('5.0', '50.0') }),
+            value: mutation(before, easeAfter, 1, 1),
+        },
+        'ae.layer.property.keyframe.behavior.set': {
+            arguments: write({ behavior: 'spatial-continuous', enabled: true }),
+            value: mutation(before, behaviorAfter, 1, 1),
+        },
+        'ae.layer.property.keyframe.delete': {
+            arguments: write({}), value: mutation(before, null, 1, 0),
+        },
+    };
+}
+
+test('seven #157 contracts bind checked-in registry metadata and closed typed values', () => {
+    const matrix = JSON.parse(fs.readFileSync(path.join(
+        __dirname,
+        '../../native/ae-plugin/protocol/fixtures/keyframe-authoring-matrix.json',
+    ), 'utf8'));
+    const capabilities = JSON.parse(fs.readFileSync(path.join(
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
+    ), 'utf8')).response.result.items;
+    const vectors = keyframeCases();
+    assert.deepEqual(Object.keys(vectors), matrix.cases.map(function (item) {
+        return item.capabilityId;
+    }));
+    for (const entry of matrix.cases) {
+        const contract = packageContracts.getContract(entry.capabilityId);
+        const descriptor = capabilities.find(function (item) {
+            return item.id === entry.capabilityId;
+        });
+        const vector = vectors[entry.capabilityId];
+        assert.equal(contract.digest, entry.contractDigest, entry.capabilityId);
+        assert.equal(contract.postconditionKind, entry.postconditionKind, entry.capabilityId);
+        assert.equal(contract.mutating, entry.mutating, entry.capabilityId);
+        assert.equal(descriptor.contractDigest, entry.contractDigest, entry.capabilityId);
+        assert.equal(contract.validArguments(vector.arguments), true, entry.capabilityId);
+        assert.equal(
+            contract.validValue(vector.value, vector.arguments, HOST, SESSION),
+            true,
+            entry.capabilityId,
+        );
+        assert.equal(contract.validArguments({ ...vector.arguments, extra: true }), false);
+        assert.equal(contract.validValue(
+            { ...vector.value, extra: true }, vector.arguments, HOST, SESSION,
+        ), false);
+    }
+});
+
+test('#157 read tampering is safe and write tampering remains side-effect-sensitive', () => {
+    const vectors = keyframeCases();
+    const read = vectors['ae.layer.property.keyframe.details.read'];
+    const write = vectors['ae.layer.property.keyframe.add'];
+    assert.equal(packageContracts.getContract(
+        'ae.layer.property.keyframe.details.read',
+    ).validValue(
+        { ...read.value, temporalDimensionality: 2 }, read.arguments, HOST, SESSION,
+    ), false);
+    assert.equal(packageContracts.getContract('ae.layer.property.keyframe.add').validValue(
+        { ...write.value, keyframeCountAfter: 2 }, write.arguments, HOST, SESSION,
+    ), false);
+});
+
+test('#157 interpolation accepts only AE bezier in-ease influence normalization', () => {
+    const vector = keyframeCases()['ae.layer.property.keyframe.interpolation.set'];
+    const contract = packageContracts.getContract(
+        'ae.layer.property.keyframe.interpolation.set',
+    );
+    const normalized = structuredClone(vector.value);
+    normalized.beforeKeyframe.temporalEaseDimensions[0].inEase.influence =
+        '16.666666666999998';
+    normalized.beforeKeyframe.temporalEaseDimensions[0].outEase.influence =
+        '16.666666666999998';
+    normalized.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '0';
+    normalized.afterKeyframe.temporalEaseDimensions[0].outEase.influence =
+        '16.666666666999998';
+
+    assert.equal(
+        contract.validValue(normalized, vector.arguments, HOST, SESSION),
+        true,
+    );
+
+    const drifts = {
+        value(value) { value.afterKeyframe.value = { kind: 'scalar', value: '2' }; },
+        count(value) { value.keyframeCountAfter += 1; },
+        inSpeed(value) { value.afterKeyframe.temporalEaseDimensions[0].inEase.speed = '1'; },
+        outSpeed(value) { value.afterKeyframe.temporalEaseDimensions[0].outEase.speed = '1'; },
+        outInfluence(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].outEase.influence = '1';
+        },
+        inInfluenceNonzero(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '1';
+        },
+        dimension(value) { value.afterKeyframe.temporalEaseDimensions[0].dimension = 1; },
+    };
+    for (const [name, mutate] of Object.entries(drifts)) {
+        const drift = structuredClone(normalized);
+        mutate(drift);
+        assert.equal(
+            contract.validValue(drift, vector.arguments, HOST, SESSION),
+            false,
+            name,
+        );
+    }
+
+    const nonBezier = structuredClone(normalized);
+    nonBezier.afterKeyframe.inInterpolation = 'linear';
+    assert.equal(
+        contract.validValue(
+            nonBezier,
+            { ...vector.arguments, inInterpolation: 'linear' },
+            HOST,
+            SESSION,
+        ),
+        false,
+        'nonBezier',
+    );
+});
+
+test('#157 interpolation accepts only AE hold-side speed zeroing', () => {
+    const contract = packageContracts.getContract(
+        'ae.layer.property.keyframe.interpolation.set',
+    );
+    const vector = keyframeCases()['ae.layer.property.keyframe.interpolation.set'];
+    // Probe shapes on the 3-key fixture (1s key between 0 at 0s and 80 at 2s,
+    // linear ease speeds 40/40): switching one side to hold zeroes exactly
+    // that side's speed while influence and everything else stay.
+    const segmentEase = function (inSpeed, outSpeed) {
+        return [{
+            dimension: 0,
+            inEase: { speed: inSpeed, influence: '16.666666666999998' },
+            outEase: { speed: outSpeed, influence: '16.666666666999998' },
+        }];
+    };
+    const bezierHold = structuredClone(vector.value);
+    bezierHold.keyframeCountBefore = 3;
+    bezierHold.keyframeCountAfter = 3;
+    bezierHold.beforeKeyframe.temporalEaseDimensions = segmentEase('40', '40');
+    bezierHold.afterKeyframe.inInterpolation = 'bezier';
+    bezierHold.afterKeyframe.outInterpolation = 'hold';
+    bezierHold.afterKeyframe.temporalEaseDimensions = segmentEase('40', '0');
+    assert.equal(
+        contract.validValue(bezierHold, vector.arguments, HOST, SESSION),
+        true,
+        'bezier/hold zeroes the out speed only',
+    );
+
+    const holdLinear = structuredClone(bezierHold);
+    holdLinear.afterKeyframe.inInterpolation = 'hold';
+    holdLinear.afterKeyframe.outInterpolation = 'linear';
+    holdLinear.afterKeyframe.temporalEaseDimensions = segmentEase('0', '40');
+    const holdLinearArguments = {
+        ...vector.arguments,
+        inInterpolation: 'hold',
+        outInterpolation: 'linear',
+    };
+    assert.equal(
+        contract.validValue(holdLinear, holdLinearArguments, HOST, SESSION),
+        true,
+        'hold/linear zeroes the in speed only',
+    );
+
+    const drifts = {
+        holdSpeedNonzero(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.speed = '7';
+        },
+        holdInfluence(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '25';
+        },
+        linearSideSpeed(value) {
+            // Only the hold side may zero: the still-linear side must keep 40.
+            value.afterKeyframe.temporalEaseDimensions[0].outEase.speed = '0';
+        },
+        value(value) { value.afterKeyframe.value = { kind: 'scalar', value: '2' }; },
+        behavior(value) { value.afterKeyframe.behaviors.roving = true; },
+        dimension(value) { value.afterKeyframe.temporalEaseDimensions[0].dimension = 1; },
+    };
+    for (const [name, mutate] of Object.entries(drifts)) {
+        const drift = structuredClone(holdLinear);
+        mutate(drift);
+        assert.equal(
+            contract.validValue(drift, holdLinearArguments, HOST, SESSION),
+            false,
+            name,
+        );
+    }
+});
+
+test('#157 value set accepts only AE linear-key ease speed recomputation', () => {
+    const vector = keyframeCases()['ae.layer.property.keyframe.value.set'];
+    const contract = packageContracts.getContract(
+        'ae.layer.property.keyframe.value.set',
+    );
+    assert.equal(
+        contract.validValue(vector.value, vector.arguments, HOST, SESSION),
+        true,
+        'isolated key without drift',
+    );
+
+    // The exact T5 call-11 shape on candidate b7d852b: the 1s keyframe sits
+    // between neighbours 0 at 0s and 80 at 2s, so changing the value 40 -> 65
+    // makes After Effects recompute the linear ease speeds as the new slopes
+    // (in 40 -> 65, out 40 -> 15) while influence, interpolation and
+    // behaviors stay exactly equal.
+    const recomputed = structuredClone(vector.value);
+    recomputed.keyframeCountBefore = 3;
+    recomputed.keyframeCountAfter = 3;
+    recomputed.beforeKeyframe.value = { kind: 'scalar', value: '40' };
+    recomputed.afterKeyframe.value = { kind: 'scalar', value: '65' };
+    recomputed.beforeKeyframe.temporalEaseDimensions = [{
+        dimension: 0,
+        inEase: { speed: '40', influence: '16.666666666999998' },
+        outEase: { speed: '40', influence: '16.666666666999998' },
+    }];
+    recomputed.afterKeyframe.temporalEaseDimensions = [{
+        dimension: 0,
+        inEase: { speed: '65', influence: '16.666666666999998' },
+        outEase: { speed: '15', influence: '16.666666666999998' },
+    }];
+    const recomputedArguments = {
+        ...vector.arguments,
+        value: { kind: 'scalar', value: '65' },
+    };
+    assert.equal(
+        contract.validValue(recomputed, recomputedArguments, HOST, SESSION),
+        true,
+        'AE slope recomputation',
+    );
+
+    const steady = structuredClone(recomputed);
+    steady.afterKeyframe.temporalEaseDimensions =
+        structuredClone(steady.beforeKeyframe.temporalEaseDimensions);
+    assert.equal(
+        contract.validValue(steady, recomputedArguments, HOST, SESSION),
+        true,
+        'steady speeds stay accepted',
+    );
+
+    const drifts = {
+        inInfluence(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '25';
+        },
+        outInfluence(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].outEase.influence = '25';
+        },
+        interpolation(value) { value.afterKeyframe.inInterpolation = 'bezier'; },
+        behavior(value) { value.afterKeyframe.behaviors.roving = true; },
+        dimension(value) { value.afterKeyframe.temporalEaseDimensions[0].dimension = 1; },
+        valueMismatch(value) {
+            value.afterKeyframe.value = { kind: 'scalar', value: '66' };
+        },
+        count(value) { value.keyframeCountAfter = 4; },
+        isolatedSpeed(value) {
+            // An isolated keyframe has no segment whose slope After Effects
+            // could recompute, so speed drift is not AE-attributable.
+            value.keyframeCountBefore = 1;
+            value.keyframeCountAfter = 1;
+        },
+        bezierSpeed(value) {
+            // AE only recomputes ease speeds automatically for linear keys;
+            // user-authored bezier ease must not drift on a value write.
+            value.beforeKeyframe.inInterpolation = 'bezier';
+            value.beforeKeyframe.outInterpolation = 'bezier';
+            value.afterKeyframe.inInterpolation = 'bezier';
+            value.afterKeyframe.outInterpolation = 'bezier';
+        },
+    };
+    for (const [name, mutate] of Object.entries(drifts)) {
+        const drift = structuredClone(recomputed);
+        mutate(drift);
+        assert.equal(
+            contract.validValue(drift, recomputedArguments, HOST, SESSION),
+            false,
+            name,
+        );
+    }
+});
+
+test('#157 temporal ease accepts only the AE bezier promotion coupling', () => {
+    const vector = keyframeCases()['ae.layer.property.keyframe.temporal-ease.set'];
+    const contract = packageContracts.getContract(
+        'ae.layer.property.keyframe.temporal-ease.set',
+    );
+    assert.equal(
+        contract.validValue(vector.value, vector.arguments, HOST, SESSION),
+        true,
+    );
+
+    const drifts = {
+        noPromotion(value) {
+            value.afterKeyframe.inInterpolation = 'linear';
+            value.afterKeyframe.outInterpolation = 'linear';
+        },
+        outNotBezier(value) { value.afterKeyframe.outInterpolation = 'hold'; },
+        value(value) { value.afterKeyframe.value = { kind: 'scalar', value: '2' }; },
+        count(value) { value.keyframeCountAfter += 1; },
+        behavior(value) { value.afterKeyframe.behaviors.roving = true; },
+        easeMismatch(value) {
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.influence = '51';
+        },
+        speedNormalized(value) {
+            // After Effects drops temporal-ease speed to 0 when the keyframe
+            // has no adjacent segment, while still applying the influence; the
+            // contract must refuse that partial application.
+            value.afterKeyframe.temporalEaseDimensions[0].inEase.speed = '0';
+            value.afterKeyframe.temporalEaseDimensions[0].outEase.speed = '0';
+        },
+    };
+    for (const [name, mutate] of Object.entries(drifts)) {
+        const drift = structuredClone(vector.value);
+        mutate(drift);
+        assert.equal(
+            contract.validValue(drift, vector.arguments, HOST, SESSION),
+            false,
+            name,
         );
     }
 });

@@ -539,7 +539,7 @@ async function readyNativeClient(t, protocolOptions) {
     return { client, protocol };
 }
 
-test('CEP client negotiates and verifies all sixteen frozen #150/#155 native contracts', {
+test('CEP client negotiates the complete #150/#155/#157 registry and verifies frozen #150/#155 vectors', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const { client, protocol } = await readyNativeClient(t, {
@@ -566,8 +566,8 @@ test('CEP client negotiates and verifies all sixteen frozen #150/#155 native con
     }
     assert.deepEqual(
         client.status().projectCompositionContractDigests,
-        Object.fromEntries(Array.from(PROJECT_COMPOSITION_VECTORS).map(function (entry) {
-            return [entry[0], projectCompositionContracts.getContract(entry[0]).digest];
+        Object.fromEntries(Object.entries(projectCompositionContracts.CONTRACTS).map(function (entry) {
+            return [entry[0], entry[1].digest];
         })),
     );
     assert.deepEqual(

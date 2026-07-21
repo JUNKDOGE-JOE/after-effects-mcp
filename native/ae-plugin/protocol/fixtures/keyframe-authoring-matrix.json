@@ -1,0 +1,17 @@
+{
+  "_fixture": {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": false,
+    "compatibilityEvidence": false
+  },
+  "expectedRegistryDigest": "c5d12ffb9e1a90b9e7341144e22ecda41bacac5500f4cedebfee50d1acc17af1",
+  "cases": [
+    { "capabilityId": "ae.layer.property.keyframe.details.read", "contractDigest": "254ec7933e9628b6c4fba4cc60e183331e4edc9f723c0ccb3f1e37619b7c5249", "postconditionKind": "layer-property-keyframe-details-read", "mutating": false },
+    { "capabilityId": "ae.layer.property.keyframe.add", "contractDigest": "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e", "postconditionKind": "layer-property-keyframe-add", "mutating": true },
+    { "capabilityId": "ae.layer.property.keyframe.value.set", "contractDigest": "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e", "postconditionKind": "layer-property-keyframe-value-set", "mutating": true },
+    { "capabilityId": "ae.layer.property.keyframe.interpolation.set", "contractDigest": "42e8e12224bd1653fa8ca9f775c97553d61c0c2e60b3b2dcf76a8fc68deb2a20", "postconditionKind": "layer-property-keyframe-interpolation-set", "mutating": true },
+    { "capabilityId": "ae.layer.property.keyframe.temporal-ease.set", "contractDigest": "a73d70029c9a470b57d20fe54517cb36bb7fe249847c49da294f1db2d1c4bc8f", "postconditionKind": "layer-property-keyframe-temporal-ease-set", "mutating": true },
+    { "capabilityId": "ae.layer.property.keyframe.behavior.set", "contractDigest": "e2ff59d765613db12468d2140d8c937fd1ceb5def9f632877b18b664b6d6bf5c", "postconditionKind": "layer-property-keyframe-behavior-set", "mutating": true },
+    { "capabilityId": "ae.layer.property.keyframe.delete", "contractDigest": "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9", "postconditionKind": "layer-property-keyframe-delete", "mutating": true }
+  ]
+}

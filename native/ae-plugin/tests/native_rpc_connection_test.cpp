@@ -1,6 +1,7 @@
 #include "aemcp_native/native_rpc_connection.hpp"
 
 #include <poll.h>
+#include <pthread.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -722,7 +723,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "53e3b7974e797b088aa1dd25d600a2506f59fed0d11c34ca8249e87dcf3ee4a1",
+      "c5d12ffb9e1a90b9e7341144e22ecda41bacac5500f4cedebfee50d1acc17af1",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -753,6 +754,13 @@ NativeRpcRuntimeInfo runtime() {
       "e977b89201314e2e4ee1b6e7a09efadd06f012b2b97e3087b0d9c4bd8102d162",
       "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c",
       "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75",
+      "254ec7933e9628b6c4fba4cc60e183331e4edc9f723c0ccb3f1e37619b7c5249",
+      "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e",
+      "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e",
+      "42e8e12224bd1653fa8ca9f775c97553d61c0c2e60b3b2dcf76a8fc68deb2a20",
+      "a73d70029c9a470b57d20fe54517cb36bb7fe249847c49da294f1db2d1c4bc8f",
+      "e2ff59d765613db12468d2140d8c937fd1ceb5def9f632877b18b664b6d6bf5c",
+      "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9",
   };
 }
 
@@ -2257,15 +2265,32 @@ void invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced() {
               "dispatch.wake", "invalidate-graph-1", "scheduled"),
       "invalidateGraph did not emit its queued and wake audit events");
 
-  bool wrong_thread = false;
-  std::size_t wrong_thread_completions = 0;
-  std::thread non_owner([&] {
-    const auto batch = dispatcher.drain(host);
-    wrong_thread = batch.wrong_thread;
-    wrong_thread_completions = batch.completions.size();
-  });
-  non_owner.join();
-  require(wrong_thread && wrong_thread_completions == 0
+  struct WrongThreadDrain {
+    HostDispatcher* dispatcher;
+    FakeHost* host;
+    bool wrong_thread{false};
+    std::size_t completions{0};
+  } wrong_thread_drain{&dispatcher, &host};
+  const auto drain_on_non_owner = [](void* opaque) -> void* {
+    auto& context = *static_cast<WrongThreadDrain*>(opaque);
+    const auto batch = context.dispatcher->drain(*context.host);
+    context.wrong_thread = batch.wrong_thread;
+    context.completions = batch.completions.size();
+    return nullptr;
+  };
+  pthread_attr_t attributes;
+  require(::pthread_attr_init(&attributes) == 0,
+      "failed to initialize wrong-thread test attributes");
+  require(::pthread_attr_setstacksize(&attributes, 2U * 1024U * 1024U) == 0,
+      "failed to provide the portable dispatcher test a bounded stack");
+  pthread_t non_owner{};
+  const int create_result = ::pthread_create(
+      &non_owner, &attributes, drain_on_non_owner, &wrong_thread_drain);
+  (void)::pthread_attr_destroy(&attributes);
+  require(create_result == 0, "failed to create wrong-thread dispatcher test");
+  require(::pthread_join(non_owner, nullptr) == 0,
+      "failed to join wrong-thread dispatcher test");
+  require(wrong_thread_drain.wrong_thread && wrong_thread_drain.completions == 0
           && host.project_graph_invalidation_calls == 0
           && dispatcher.queued() == 1,
       "non-owner dispatcher drain reached invalidateGraph HostApi");
@@ -2280,6 +2305,7 @@ void invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced() {
   require(host.project_graph_invalidation_calls == 1
           && host.project_graph_invalidation_thread == owner_thread,
       "invalidateGraph HostApi call did not run exactly once on the owner thread");
+
 
   const std::string acknowledgement = read_body(sockets[0]);
   require_contains(
@@ -2302,6 +2328,7 @@ void invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced() {
           && terminal.postcondition_digest.empty(),
       "invalidateGraph terminal audit did not preserve its request-only evidence");
 
+
   send_json(sockets[0], request);
   const std::string duplicate = read_body(sockets[0]);
   require_contains(
@@ -2315,6 +2342,7 @@ void invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced() {
           && idle_signal.calls() == 1
           && !wait_readable(sockets[0], 100ms),
       "duplicate invalidateGraph reached HostApi or emitted extra work");
+
 
   finish_connection(sockets[0], sockets[1], worker);
   (void)dispatcher.shutdown();

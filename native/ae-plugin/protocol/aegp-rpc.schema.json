@@ -7,8 +7,8 @@
     "byteOrder": "big-endian",
     "encoding": "utf-8",
     "maxFrameBytes": 524288,
-    "maxJsonDepth": 16,
-    "maxJsonNodes": 12288,
+    "maxJsonDepth": 32,
+    "maxJsonNodes": 32768,
     "maxStringLength": 8192,
     "stringLengthUnit": "unicode-scalar-values",
     "duplicateObjectKeys": "reject"
@@ -707,6 +707,116 @@
         }
       },
       "x-invariant": "both-locators-must-share-one-host-session-project-generation"
+    },
+    "keyframeTimeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "scale"],
+      "properties": {
+        "value": { "type": "integer", "minimum": -2147483648, "maximum": 2147483647 },
+        "scale": { "type": "integer", "minimum": 1, "maximum": 4294967295 }
+      }
+    },
+    "keyframeEase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["speed", "influence"],
+      "properties": {
+        "speed": { "$ref": "#/$defs/decimalString" },
+        "influence": { "$ref": "#/$defs/decimalString" }
+      },
+      "x-invariant": "speed-and-influence-are-finite-and-influence-is-within-0-to-100"
+    },
+    "keyframeEaseDimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["dimension", "inEase", "outEase"],
+      "properties": {
+        "dimension": { "type": "integer", "minimum": 0, "maximum": 3 },
+        "inEase": { "$ref": "#/$defs/keyframeEase" },
+        "outEase": { "$ref": "#/$defs/keyframeEase" }
+      }
+    },
+    "keyframeDetailsArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["propertyLocator", "time"],
+      "properties": {
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "time": { "$ref": "#/$defs/keyframeTimeInput" }
+      }
+    },
+    "keyframeValueArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "value"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "time": { "$ref": "#/$defs/keyframeTimeInput" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" },
+        "value": { "$ref": "#/$defs/layerPropertyPrimitiveValue" }
+      },
+      "x-invariant": "layerLocator-and-propertyLocator-share-one-current-context"
+    },
+    "keyframeInterpolationArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "inInterpolation", "outInterpolation"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "time": { "$ref": "#/$defs/keyframeTimeInput" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" },
+        "inInterpolation": { "enum": ["linear", "bezier", "hold"] },
+        "outInterpolation": { "enum": ["linear", "bezier", "hold"] }
+      },
+      "x-invariant": "layerLocator-and-propertyLocator-share-one-current-context"
+    },
+    "keyframeTemporalEaseArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "dimensions"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "time": { "$ref": "#/$defs/keyframeTimeInput" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" },
+        "dimensions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/keyframeEaseDimension" },
+          "x-invariant": "dimensions-are-contiguous-and-zero-based"
+        }
+      },
+      "x-invariant": "layerLocator-and-propertyLocator-share-one-current-context"
+    },
+    "keyframeBehaviorArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "behavior", "enabled"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "time": { "$ref": "#/$defs/keyframeTimeInput" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" },
+        "behavior": { "enum": ["temporal-continuous", "temporal-auto-bezier", "spatial-continuous", "spatial-auto-bezier", "roving"] },
+        "enabled": { "type": "boolean" }
+      },
+      "x-invariant": "layerLocator-and-propertyLocator-share-one-current-context"
+    },
+    "keyframeDeleteArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "time": { "$ref": "#/$defs/keyframeTimeInput" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      },
+      "x-invariant": "layerLocator-and-propertyLocator-share-one-current-context"
     },
     "projectItemsListInputSchemaContract": {
       "const": {
@@ -1543,6 +1653,117 @@
         "x-invariant": "beforeValue-must-differ-from-afterValue-and-values-must-match-valueType"
       }
     },
+    "keyframeInputSchemaContract": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "additionalProperties", "required", "properties"],
+          "properties": {
+            "type": { "const": "object" }, "additionalProperties": { "const": false },
+            "required": { "const": ["propertyLocator", "time"] },
+            "properties": {
+              "type": "object", "additionalProperties": true,
+              "required": ["propertyLocator", "time"]
+            }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "additionalProperties", "required", "properties", "x-invariant"],
+          "properties": {
+            "type": { "const": "object" }, "additionalProperties": { "const": false },
+            "required": { "const": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "value"] },
+            "properties": {
+              "type": "object", "additionalProperties": true,
+              "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "value"]
+            },
+            "x-invariant": { "const": "layerLocator-and-propertyLocator-share-one-current-context" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "additionalProperties", "required", "properties", "x-invariant"],
+          "properties": {
+            "type": { "const": "object" }, "additionalProperties": { "const": false },
+            "required": { "const": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "inInterpolation", "outInterpolation"] },
+            "properties": {
+              "type": "object", "additionalProperties": true,
+              "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "inInterpolation", "outInterpolation"]
+            },
+            "x-invariant": { "const": "layerLocator-and-propertyLocator-share-one-current-context" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "additionalProperties", "required", "properties", "x-invariant"],
+          "properties": {
+            "type": { "const": "object" }, "additionalProperties": { "const": false },
+            "required": { "const": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "dimensions"] },
+            "properties": {
+              "type": "object", "additionalProperties": true,
+              "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "dimensions"]
+            },
+            "x-invariant": { "const": "layerLocator-and-propertyLocator-share-one-current-context" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "additionalProperties", "required", "properties", "x-invariant"],
+          "properties": {
+            "type": { "const": "object" }, "additionalProperties": { "const": false },
+            "required": { "const": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "behavior", "enabled"] },
+            "properties": {
+              "type": "object", "additionalProperties": true,
+              "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey", "behavior", "enabled"]
+            },
+            "x-invariant": { "const": "layerLocator-and-propertyLocator-share-one-current-context" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "additionalProperties", "required", "properties", "x-invariant"],
+          "properties": {
+            "type": { "const": "object" }, "additionalProperties": { "const": false },
+            "required": { "const": ["layerLocator", "propertyLocator", "time", "idempotencyKey"] },
+            "properties": {
+              "type": "object", "additionalProperties": true,
+              "required": ["layerLocator", "propertyLocator", "time", "idempotencyKey"]
+            },
+            "x-invariant": { "const": "layerLocator-and-propertyLocator-share-one-current-context" }
+          }
+        }
+      ]
+    },
+    "keyframeResultSchemaContract": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "additionalProperties", "required", "properties", "x-invariant"],
+          "properties": {
+            "type": { "const": "object" }, "additionalProperties": { "const": false },
+            "required": { "const": ["propertyLocator", "time", "temporalDimensionality", "valueType", "value", "inInterpolation", "outInterpolation", "temporalEaseDimensions", "behaviors"] },
+            "properties": {
+              "type": "object", "additionalProperties": true,
+              "required": ["propertyLocator", "time", "temporalDimensionality", "valueType", "value", "inInterpolation", "outInterpolation", "temporalEaseDimensions", "behaviors"]
+            },
+            "x-invariant": { "const": "value-matches-valueType-and-temporal-ease-dimensions-match-temporalDimensionality" }
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["type", "additionalProperties", "required", "properties", "x-invariant"],
+          "properties": {
+            "type": { "const": "object" }, "additionalProperties": { "const": false },
+            "required": { "const": ["changed", "layerLocator", "propertyLocator", "time", "keyframeCountBefore", "keyframeCountAfter", "beforeKeyframe", "afterKeyframe"] },
+            "properties": {
+              "type": "object", "additionalProperties": true,
+              "required": ["changed", "layerLocator", "propertyLocator", "time", "keyframeCountBefore", "keyframeCountAfter", "beforeKeyframe", "afterKeyframe"]
+            },
+            "x-invariant": { "const": "before-and-after-keyframes-are-bound-to-propertyLocator-and-time" }
+          }
+        }
+      ]
+    },
     "projectSummaryInvokeParams": {
       "type": "object",
       "additionalProperties": false,
@@ -1681,6 +1902,69 @@
         "capabilityId": { "const": "ae.layer.property.set" },
         "capabilityVersion": { "const": 1 },
         "arguments": { "$ref": "#/$defs/layerPropertySetArguments" }
+      }
+    },
+    "keyframeDetailsInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.details.read" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/keyframeDetailsArguments" }
+      }
+    },
+    "keyframeAddInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.add" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/keyframeValueArguments" }
+      }
+    },
+    "keyframeValueSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.value.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/keyframeValueArguments" }
+      }
+    },
+    "keyframeInterpolationSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.interpolation.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/keyframeInterpolationArguments" }
+      }
+    },
+    "keyframeTemporalEaseSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.temporal-ease.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/keyframeTemporalEaseArguments" }
+      }
+    },
+    "keyframeBehaviorSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.behavior.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/keyframeBehaviorArguments" }
+      }
+    },
+    "keyframeDeleteInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.delete" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/keyframeDeleteArguments" }
       }
     },
     "projectContextReadInvokeParams": {
@@ -1851,6 +2135,13 @@
         { "$ref": "#/$defs/layerPropertiesListInvokeParams" },
         { "$ref": "#/$defs/layerPropertyKeyframesListInvokeParams" },
         { "$ref": "#/$defs/layerPropertySetInvokeParams" },
+        { "$ref": "#/$defs/keyframeDetailsInvokeParams" },
+        { "$ref": "#/$defs/keyframeAddInvokeParams" },
+        { "$ref": "#/$defs/keyframeValueSetInvokeParams" },
+        { "$ref": "#/$defs/keyframeInterpolationSetInvokeParams" },
+        { "$ref": "#/$defs/keyframeTemporalEaseSetInvokeParams" },
+        { "$ref": "#/$defs/keyframeBehaviorSetInvokeParams" },
+        { "$ref": "#/$defs/keyframeDeleteInvokeParams" },
         { "$ref": "#/$defs/projectContextReadInvokeParams" },
         { "$ref": "#/$defs/projectItemMetadataReadInvokeParams" },
         { "$ref": "#/$defs/compositionSettingsReadInvokeParams" },
@@ -2130,6 +2421,12 @@
         { "$ref": "#/$defs/layerPropertiesListArguments" },
         { "$ref": "#/$defs/layerPropertyKeyframesListArguments" },
         { "$ref": "#/$defs/layerPropertySetArguments" },
+        { "$ref": "#/$defs/keyframeDetailsArguments" },
+        { "$ref": "#/$defs/keyframeValueArguments" },
+        { "$ref": "#/$defs/keyframeInterpolationArguments" },
+        { "$ref": "#/$defs/keyframeTemporalEaseArguments" },
+        { "$ref": "#/$defs/keyframeBehaviorArguments" },
+        { "$ref": "#/$defs/keyframeDeleteArguments" },
         { "$ref": "#/$defs/projectContextReadArguments" },
         { "$ref": "#/$defs/projectItemMetadataReadArguments" },
         { "$ref": "#/$defs/compositionSettingsReadArguments" },
@@ -2163,6 +2460,8 @@
         { "$ref": "#/$defs/layerPropertiesListValue" },
         { "$ref": "#/$defs/layerPropertyKeyframesListValue" },
         { "$ref": "#/$defs/layerPropertySetValue" },
+        { "$ref": "#/$defs/keyframeDetailsValue" },
+        { "$ref": "#/$defs/keyframeMutationValue" },
         { "$ref": "#/$defs/projectContextReadValue" },
         { "$ref": "#/$defs/projectItemMetadataReadValue" },
         { "$ref": "#/$defs/compositionSettingsReadValue" },
@@ -2227,6 +2526,7 @@
         { "$ref": "#/$defs/layerPropertiesListInputSchemaContract" },
         { "$ref": "#/$defs/layerPropertyKeyframesListInputSchemaContract" },
         { "$ref": "#/$defs/layerPropertySetInputSchemaContract" },
+        { "$ref": "#/$defs/keyframeInputSchemaContract" },
         { "$ref": "#/$defs/projectContextReadInputSchemaContract" },
         { "$ref": "#/$defs/projectItemMetadataReadInputSchemaContract" },
         { "$ref": "#/$defs/compositionSettingsReadInputSchemaContract" },
@@ -2260,6 +2560,7 @@
         { "$ref": "#/$defs/layerPropertiesListResultSchemaContract" },
         { "$ref": "#/$defs/layerPropertyKeyframesListResultSchemaContract" },
         { "$ref": "#/$defs/layerPropertySetResultSchemaContract" },
+        { "$ref": "#/$defs/keyframeResultSchemaContract" },
         { "$ref": "#/$defs/projectContextReadResultSchemaContract" },
         { "$ref": "#/$defs/projectItemMetadataReadResultSchemaContract" },
         { "$ref": "#/$defs/compositionSettingsReadResultSchemaContract" },
@@ -2369,7 +2670,7 @@
           "type": "array",
           "maxItems": 16,
           "uniqueItems": true,
-          "items": { "type": "string", "minLength": 1, "maxLength": 96 }
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
         },
         "compatibility": { "$ref": "#/$defs/compatibility" },
         "inputContractId": { "$ref": "#/$defs/contractId" },
@@ -3161,6 +3462,57 @@
       },
       "x-invariant": "beforeValue-must-differ-from-afterValue-and-values-must-match-valueType"
     },
+    "keyframeExactTime": {
+      "$ref": "#/$defs/compositionCurrentTime"
+    },
+    "keyframeBehaviors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["temporalContinuous", "temporalAutoBezier", "spatialContinuous", "spatialAutoBezier", "roving"],
+      "properties": {
+        "temporalContinuous": { "type": "boolean" },
+        "temporalAutoBezier": { "type": "boolean" },
+        "spatialContinuous": { "type": "boolean" },
+        "spatialAutoBezier": { "type": "boolean" },
+        "roving": { "type": "boolean" }
+      }
+    },
+    "keyframeDetailsValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["propertyLocator", "time", "temporalDimensionality", "valueType", "value", "inInterpolation", "outInterpolation", "temporalEaseDimensions", "behaviors"],
+      "properties": {
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "time": { "$ref": "#/$defs/keyframeExactTime" },
+        "temporalDimensionality": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "valueType": { "enum": ["one-d", "two-d", "two-d-spatial", "three-d", "three-d-spatial", "color"] },
+        "value": { "$ref": "#/$defs/layerPropertyPrimitiveValue" },
+        "inInterpolation": { "enum": ["none", "linear", "bezier", "hold"] },
+        "outInterpolation": { "enum": ["none", "linear", "bezier", "hold"] },
+        "temporalEaseDimensions": {
+          "type": "array", "minItems": 1, "maxItems": 4,
+          "items": { "$ref": "#/$defs/keyframeEaseDimension" }
+        },
+        "behaviors": { "$ref": "#/$defs/keyframeBehaviors" }
+      },
+      "x-invariant": "value-matches-valueType-and-temporal-ease-dimensions-match-temporalDimensionality"
+    },
+    "keyframeMutationValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["changed", "layerLocator", "propertyLocator", "time", "keyframeCountBefore", "keyframeCountAfter", "beforeKeyframe", "afterKeyframe"],
+      "properties": {
+        "changed": { "const": true },
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "propertyLocator": { "$ref": "#/$defs/streamLocator" },
+        "time": { "$ref": "#/$defs/keyframeExactTime" },
+        "keyframeCountBefore": { "$ref": "#/$defs/safeNonnegativeInteger" },
+        "keyframeCountAfter": { "$ref": "#/$defs/safeNonnegativeInteger" },
+        "beforeKeyframe": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/keyframeDetailsValue" }] },
+        "afterKeyframe": { "oneOf": [{ "type": "null" }, { "$ref": "#/$defs/keyframeDetailsValue" }] }
+      },
+      "x-invariant": "before-and-after-keyframes-are-bound-to-propertyLocator-and-time"
+    },
     "layerPropertyEntryValue": {
       "type": "object",
       "additionalProperties": false,
@@ -3438,6 +3790,76 @@
         "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
     },
+    "keyframeDetailsInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.details.read" },
+        "capabilityVersion": { "const": 1 }, "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" }, "value": { "$ref": "#/$defs/keyframeDetailsValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "keyframeAddInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.add" },
+        "capabilityVersion": { "const": 1 }, "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" }, "value": { "$ref": "#/$defs/keyframeMutationValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "keyframeValueSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.value.set" },
+        "capabilityVersion": { "const": 1 }, "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" }, "value": { "$ref": "#/$defs/keyframeMutationValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "keyframeInterpolationSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.interpolation.set" },
+        "capabilityVersion": { "const": 1 }, "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" }, "value": { "$ref": "#/$defs/keyframeMutationValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "keyframeTemporalEaseSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.temporal-ease.set" },
+        "capabilityVersion": { "const": 1 }, "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" }, "value": { "$ref": "#/$defs/keyframeMutationValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "keyframeBehaviorSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.behavior.set" },
+        "capabilityVersion": { "const": 1 }, "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" }, "value": { "$ref": "#/$defs/keyframeMutationValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "keyframeDeleteInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.layer.property.keyframe.delete" },
+        "capabilityVersion": { "const": 1 }, "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" }, "value": { "$ref": "#/$defs/keyframeMutationValue" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
     "projectContextReadInvokeResult": {
       "type": "object", "additionalProperties": false,
       "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
@@ -3598,6 +4020,13 @@
         { "$ref": "#/$defs/layerPropertiesListInvokeResult" },
         { "$ref": "#/$defs/layerPropertyKeyframesListInvokeResult" },
         { "$ref": "#/$defs/layerPropertySetInvokeResult" },
+        { "$ref": "#/$defs/keyframeDetailsInvokeResult" },
+        { "$ref": "#/$defs/keyframeAddInvokeResult" },
+        { "$ref": "#/$defs/keyframeValueSetInvokeResult" },
+        { "$ref": "#/$defs/keyframeInterpolationSetInvokeResult" },
+        { "$ref": "#/$defs/keyframeTemporalEaseSetInvokeResult" },
+        { "$ref": "#/$defs/keyframeBehaviorSetInvokeResult" },
+        { "$ref": "#/$defs/keyframeDeleteInvokeResult" },
         { "$ref": "#/$defs/projectContextReadInvokeResult" },
         { "$ref": "#/$defs/projectItemMetadataReadInvokeResult" },
         { "$ref": "#/$defs/compositionSettingsReadInvokeResult" },
@@ -3900,7 +4329,16 @@
             "properties": {
               "result": {
                 "properties": {
-                  "capabilityId": { "enum": ["ae.project.bit-depth.set", "ae.layer.property.set"] }
+                  "capabilityId": { "enum": [
+                    "ae.project.bit-depth.set",
+                    "ae.layer.property.set",
+                    "ae.layer.property.keyframe.add",
+                    "ae.layer.property.keyframe.value.set",
+                    "ae.layer.property.keyframe.interpolation.set",
+                    "ae.layer.property.keyframe.temporal-ease.set",
+                    "ae.layer.property.keyframe.behavior.set",
+                    "ae.layer.property.keyframe.delete"
+                  ] }
                 },
                 "required": ["capabilityId"]
               }
