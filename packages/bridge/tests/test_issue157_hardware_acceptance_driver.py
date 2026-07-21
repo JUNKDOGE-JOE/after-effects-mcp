@@ -119,7 +119,6 @@ class FakeAe:
         self, value: dict[str, Any], target: str = OPACITY, seconds: int = 1
     ) -> dict[str, Any]:
         spatial = target == POSITION
-        dimensions = 2 if spatial else 1
         return {
             "propertyLocator": self.locator("stream", target),
             # AE returns the exact requested second in its native comp-time
@@ -129,7 +128,9 @@ class FakeAe:
                 "scale": 24576,
                 "secondsRational": str(seconds),
             },
-            "temporalDimensionality": dimensions,
+            # AE exposes one temporal ease dimension for a spatial Position
+            # stream even though its value has two spatial components.
+            "temporalDimensionality": 1,
             "valueType": "two-d-spatial" if spatial else "one-d",
             "value": copy.deepcopy(value),
             "inInterpolation": "linear",
@@ -140,7 +141,7 @@ class FakeAe:
                     "inEase": {"speed": "0", "influence": "33.333"},
                     "outEase": {"speed": "0", "influence": "33.333"},
                 }
-                for dimension in range(dimensions)
+                for dimension in range(1)
             ],
             "behaviors": {
                 "temporalContinuous": False,
@@ -817,6 +818,17 @@ def test_spatial_detail_uses_the_public_vector_value_contract() -> None:
         "kind": "vector",
         "components": ["320", "180"],
     }
+    assert checked["temporalDimensionality"] == 1
+    assert [item["dimension"] for item in checked["temporalEaseDimensions"]] == [0]
+
+    wrong_temporal_shape = copy.deepcopy(detail)
+    wrong_temporal_shape["temporalDimensionality"] = 2
+    wrong_temporal_shape["temporalEaseDimensions"].append(
+        copy.deepcopy(wrong_temporal_shape["temporalEaseDimensions"][0])
+    )
+    wrong_temporal_shape["temporalEaseDimensions"][1]["dimension"] = 1
+    with pytest.raises(runtime_module.AcceptanceFailure, match="temporal dimensionality"):
+        package._spatial_detail(wrong_temporal_shape, locator)
 
     legacy = copy.deepcopy(detail)
     legacy["value"] = {"kind": "two-d", "x": "320", "y": "180"}

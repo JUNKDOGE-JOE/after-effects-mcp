@@ -185,12 +185,15 @@ def _spatial_detail(
         and all(isinstance(component, str) and component for component in components),
         "position keyframe value shape is invalid",
     )
-    require(detail.get("temporalDimensionality") == dimensions, "position dimensionality mismatch")
+    require(
+        detail.get("temporalDimensionality") == 1,
+        "position temporal dimensionality mismatch",
+    )
     ease = detail.get("temporalEaseDimensions")
-    require(isinstance(ease, list) and len(ease) == dimensions, "position ease dimensions are invalid")
+    require(isinstance(ease, list) and len(ease) == 1, "position ease dimensions are invalid")
     require(
         [mapping(item, "position ease dimension is invalid").get("dimension") for item in ease]
-        == list(range(dimensions)),
+        == [0],
         "position ease dimensions are not contiguous",
     )
     require(set(mapping(detail.get("behaviors"), "behaviors are invalid")) == BEHAVIOR_FIELDS, "bad behaviors")
