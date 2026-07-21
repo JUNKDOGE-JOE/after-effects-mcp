@@ -176,10 +176,13 @@ def _spatial_detail(
     require(value_type in {"two-d-spatial", "three-d-spatial"}, "position keyframe is not spatial")
     dimensions = 2 if value_type == "two-d-spatial" else 3
     typed = mapping(detail.get("value"), "position keyframe value is invalid")
-    expected_value_fields = {"kind", "x", "y"} | ({"z"} if dimensions == 3 else set())
+    components = typed.get("components")
     require(
-        set(typed) == expected_value_fields
-        and typed.get("kind") == ("two-d" if dimensions == 2 else "three-d"),
+        set(typed) == {"kind", "components"}
+        and typed.get("kind") == "vector"
+        and isinstance(components, list)
+        and len(components) == dimensions
+        and all(isinstance(component, str) and component for component in components),
         "position keyframe value shape is invalid",
     )
     require(detail.get("temporalDimensionality") == dimensions, "position dimensionality mismatch")

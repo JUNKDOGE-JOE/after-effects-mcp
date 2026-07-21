@@ -73,7 +73,7 @@ class FakeAe:
         self.generation = 1
         self.request = 0
         self.opacity_value = {"kind": "scalar", "value": "100"}
-        self.position_value = {"kind": "two-d", "x": "320", "y": "180"}
+        self.position_value = {"kind": "vector", "components": ["320", "180"]}
         self.keyframes: dict[str, dict[int, dict[str, Any]]] = {OPACITY: {}, POSITION: {}}
         self.undo_stack: list[tuple[str, Any]] = []
         self.calls: list[str] = []
@@ -805,6 +805,23 @@ def test_keyframe_time_accepts_seed_seconds_in_native_comp_scale() -> None:
             {"value": 24576, "scale": 24576, "secondsRational": "1"},
             package.SEED_END_TIME,
         )
+
+
+def test_spatial_detail_uses_the_public_vector_value_contract() -> None:
+    fake = FakeAe()
+    locator = fake.locator("stream", POSITION)
+    detail = fake.initial_detail(fake.position_value, POSITION)
+
+    checked = package._spatial_detail(detail, locator)
+    assert checked["value"] == {
+        "kind": "vector",
+        "components": ["320", "180"],
+    }
+
+    legacy = copy.deepcopy(detail)
+    legacy["value"] = {"kind": "two-d", "x": "320", "y": "180"}
+    with pytest.raises(runtime_module.AcceptanceFailure, match="value shape"):
+        package._spatial_detail(legacy, locator)
 
 
 def test_identity_binds_generation_and_canonical_stable_launcher(tmp_path: Path):
