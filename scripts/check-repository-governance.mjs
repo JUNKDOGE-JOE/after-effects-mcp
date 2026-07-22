@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 export const GOVERNANCE_PATH = 'AGENTS.md';
 export const INVENTORY_PATH = 'docs/checkpoints/2026-07-16-worktree-audit.md';
-export const GOVERNANCE_SHA256 = '20dbc057da24f10c8b7ad96f24555d288fde6e8129f5edf59aedd5ff0b911861';
+export const GOVERNANCE_SHA256 = '9547d8e792f861dbae1db1588622004334e38d271eaee1d8c40b25e2592fe6a1';
 export const SUPPORTING_WORKFLOW_PATHS = [
   '.github/ISSUE_TEMPLATE/capability-package.md',
   '.github/pull_request_template.md',
@@ -38,6 +38,13 @@ const REQUIRED_RULES = [
   'no more than two concentrated review rounds by default',
   'fully local, non-evictable storage',
   'The WIP limit is one dependent native capability package.',
+  'complete a zero-evidence hardware preflight',
+  'A failure before the first public MCP tool call is a T0-T2 environment or runner failure',
+  'fail fast on every locked external input and identity prerequisite',
+  'the runner must move it to recovery and clear the active slot before exit',
+  'Complete each short-lived pairing handshake as one continuous automation action',
+  'Do not use Finder, file double-click, or LaunchServices',
+  'a machine-generated per-tool summary',
 ];
 
 export const FINAL_WORKTREES = [
