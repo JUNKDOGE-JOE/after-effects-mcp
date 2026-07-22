@@ -6683,11 +6683,16 @@ class AegpHostApi final : public HostApi {
           "STALE_LOCATOR", "layerLocator does not identify a current layer",
           "params.arguments.layerLocator");
     }
+    std::string diagnostic;
     const auto value = read_layer_compositing_value(
-        layer_suite.get(), *resolved, query.host_instance_id, query.session_id);
+        layer_suite.get(), *resolved, query.host_instance_id, query.session_id,
+        &diagnostic);
     if (!value.has_value() || value->layer_locator != query.layer_locator) {
       return HostLayerCompositingReadResult::failure(
-          "CAPABILITY_FAILED", "could not read complete layer compositing state");
+          "CAPABILITY_FAILED",
+          diagnostic.empty()
+              ? "could not read complete layer compositing state"
+              : "could not read complete layer compositing state: " + diagnostic);
     }
     return HostLayerCompositingReadResult::success(*value);
   }
@@ -6723,10 +6728,9 @@ class AegpHostApi final : public HostApi {
           "STALE_LOCATOR", "layerLocator does not identify a current layer",
           "params.arguments.layerLocator");
     }
-    const auto before = read_layer_compositing_value(
-        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
-    const auto before_enabled = before.has_value()
-        ? compositing_switch_value(*before, command.switch_name) : std::nullopt;
+    const auto before_enabled = flag.has_value()
+        ? read_layer_switch_value(layer_suite.get(), resolved->layer, *flag)
+        : std::nullopt;
     if (!flag.has_value() || !before_enabled.has_value()) {
       return HostLayerSwitchWriteResult::failure(
           "CAPABILITY_FAILED", "could not validate layer switch mutation");
@@ -6748,10 +6752,8 @@ class AegpHostApi final : public HostApi {
     const A_Err set_error = layer_suite->AEGP_SetLayerFlag(
         resolved->layer, *flag, command.enabled ? TRUE : FALSE);
     const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
-    const auto after = read_layer_compositing_value(
-        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
-    const auto after_enabled = after.has_value()
-        ? compositing_switch_value(*after, command.switch_name) : std::nullopt;
+    const auto after_enabled = read_layer_switch_value(
+        layer_suite.get(), resolved->layer, *flag);
     if (set_error != A_Err_NONE || end_error != A_Err_NONE
         || !after_enabled.has_value() || *after_enabled != command.enabled) {
       return HostLayerSwitchWriteResult::failure(
@@ -6794,13 +6796,13 @@ class AegpHostApi final : public HostApi {
           "STALE_LOCATOR", "layerLocator does not identify a current layer",
           "params.arguments.layerLocator");
     }
-    const auto before = read_layer_compositing_value(
-        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
-    if (!target.has_value() || !before.has_value()) {
+    const auto before_quality = read_layer_quality_value(
+        layer_suite.get(), resolved->layer);
+    if (!target.has_value() || !before_quality.has_value()) {
       return HostLayerQualityWriteResult::failure(
           "CAPABILITY_FAILED", "could not validate layer quality mutation");
     }
-    if (before->quality == command.quality) {
+    if (*before_quality == command.quality) {
       return HostLayerQualityWriteResult::failure(
           "INVALID_ARGUMENT", "layer quality already matches the requested value",
           "params.arguments.quality");
@@ -6816,16 +6818,16 @@ class AegpHostApi final : public HostApi {
     }
     const A_Err set_error = layer_suite->AEGP_SetLayerQuality(resolved->layer, *target);
     const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
-    const auto after = read_layer_compositing_value(
-        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
+    const auto after_quality = read_layer_quality_value(
+        layer_suite.get(), resolved->layer);
     if (set_error != A_Err_NONE || end_error != A_Err_NONE
-        || !after.has_value() || after->quality != command.quality) {
+        || !after_quality.has_value() || *after_quality != command.quality) {
       return HostLayerQualityWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "layer quality may have changed but readback or Undo close failed");
     }
     return HostLayerQualityWriteResult::success(
-        {true, command.layer_locator, before->quality, after->quality});
+        {true, command.layer_locator, *before_quality, *after_quality});
   }
 
   [[nodiscard]] HostLayerBlendingModeWriteResult set_layer_blending_mode(
@@ -6860,15 +6862,21 @@ class AegpHostApi final : public HostApi {
           "params.arguments.layerLocator");
     }
     AEGP_LayerTransferMode transfer{};
-    const auto before = read_layer_compositing_value(
-        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
-    if (!target.has_value() || !before.has_value()
+    if (!target.has_value()
         || layer_suite->AEGP_GetLayerTransferMode(resolved->layer, &transfer)
             != A_Err_NONE) {
       return HostLayerBlendingModeWriteResult::failure(
           "CAPABILITY_FAILED", "could not validate layer blending-mode mutation");
     }
-    if (before->blending_mode == command.mode) {
+    const auto before_mode = layer_blending_mode_name(transfer.mode);
+    const auto before_matte = layer_track_matte_name(transfer.track_matte);
+    const bool before_preserve_alpha =
+        (transfer.flags & AEGP_TransferFlag_PRESERVE_ALPHA) != 0;
+    if (!before_mode.has_value() || !before_matte.has_value()) {
+      return HostLayerBlendingModeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not classify current layer transfer mode");
+    }
+    if (*before_mode == command.mode) {
       return HostLayerBlendingModeWriteResult::failure(
           "INVALID_ARGUMENT", "layer blending mode already matches the requested value",
           "params.arguments.mode");
@@ -6886,19 +6894,27 @@ class AegpHostApi final : public HostApi {
     const A_Err set_error = layer_suite->AEGP_SetLayerTransferMode(
         resolved->layer, &transfer);
     const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
-    const auto after = read_layer_compositing_value(
-        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
+    AEGP_LayerTransferMode after_transfer{};
+    const A_Err readback_error = layer_suite->AEGP_GetLayerTransferMode(
+        resolved->layer, &after_transfer);
+    const auto after_mode = readback_error == A_Err_NONE
+        ? layer_blending_mode_name(after_transfer.mode) : std::nullopt;
+    const auto after_matte = readback_error == A_Err_NONE
+        ? layer_track_matte_name(after_transfer.track_matte) : std::nullopt;
+    const bool after_preserve_alpha =
+        (after_transfer.flags & AEGP_TransferFlag_PRESERVE_ALPHA) != 0;
     if (set_error != A_Err_NONE || end_error != A_Err_NONE
-        || !after.has_value() || after->blending_mode != command.mode
-        || after->preserve_alpha != before->preserve_alpha
-        || after->track_matte != before->track_matte) {
+        || readback_error != A_Err_NONE || !after_mode.has_value()
+        || !after_matte.has_value() || *after_mode != command.mode
+        || after_preserve_alpha != before_preserve_alpha
+        || *after_matte != *before_matte) {
       return HostLayerBlendingModeWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "layer blending mode may have changed but readback, preserved fields, or Undo close failed");
     }
     return HostLayerBlendingModeWriteResult::success({
-        true, command.layer_locator, before->blending_mode, after->blending_mode,
-        after->preserve_alpha, after->track_matte});
+        true, command.layer_locator, *before_mode, *after_mode,
+        after_preserve_alpha, *after_matte});
   }
 
  private:
@@ -6928,17 +6944,16 @@ class AegpHostApi final : public HostApi {
     return std::nullopt;
   }
 
-  [[nodiscard]] static std::optional<bool> compositing_switch_value(
-      const LayerCompositingState& value,
-      std::string_view name) {
-    if (name == "visibility") return value.visibility_enabled;
-    if (name == "solo") return value.solo;
-    if (name == "locked") return value.locked;
-    if (name == "shy") return value.shy;
-    if (name == "motion-blur") return value.motion_blur;
-    if (name == "three-d") return value.three_d;
-    if (name == "adjustment") return value.adjustment;
-    return std::nullopt;
+  [[nodiscard]] static std::optional<bool> read_layer_switch_value(
+      const AEGP_LayerSuite9* layer_suite,
+      AEGP_LayerH layer,
+      AEGP_LayerFlags flag) {
+    if (layer_suite == nullptr || layer == nullptr) return std::nullopt;
+    AEGP_LayerFlags flags = 0;
+    if (layer_suite->AEGP_GetLayerFlags(layer, &flags) != A_Err_NONE) {
+      return std::nullopt;
+    }
+    return (flags & flag) != 0;
   }
 
   [[nodiscard]] static std::optional<std::string> layer_quality_name(
@@ -6955,6 +6970,17 @@ class AegpHostApi final : public HostApi {
     if (quality == "draft") return AEGP_LayerQual_DRAFT;
     if (quality == "best") return AEGP_LayerQual_BEST;
     return std::nullopt;
+  }
+
+  [[nodiscard]] static std::optional<std::string> read_layer_quality_value(
+      const AEGP_LayerSuite9* layer_suite,
+      AEGP_LayerH layer) {
+    if (layer_suite == nullptr || layer == nullptr) return std::nullopt;
+    AEGP_LayerQuality quality = AEGP_LayerQual_NONE;
+    if (layer_suite->AEGP_GetLayerQuality(layer, &quality) != A_Err_NONE) {
+      return std::nullopt;
+    }
+    return layer_quality_name(quality);
   }
 
   [[nodiscard]] static std::optional<std::string> layer_blending_mode_name(
@@ -7040,22 +7066,47 @@ class AegpHostApi final : public HostApi {
           const AEGP_LayerSuite9* layer_suite,
           const ResolvedLayer& resolved,
           std::string_view host,
-          std::string_view session) {
-    if (layer_suite == nullptr) return std::nullopt;
+          std::string_view session,
+          std::string* diagnostic = nullptr) {
+    const auto fail = [diagnostic](std::string message) {
+      if (diagnostic != nullptr) *diagnostic = std::move(message);
+      return std::optional<LayerCompositingState>{};
+    };
+    if (layer_suite == nullptr) return fail("layer suite is unavailable");
     AEGP_LayerFlags flags = 0;
     AEGP_LayerQuality quality = AEGP_LayerQual_NONE;
     AEGP_LayerTransferMode transfer{};
-    if (layer_suite->AEGP_GetLayerFlags(resolved.layer, &flags) != A_Err_NONE
-        || layer_suite->AEGP_GetLayerQuality(resolved.layer, &quality) != A_Err_NONE
-        || layer_suite->AEGP_GetLayerTransferMode(resolved.layer, &transfer)
-            != A_Err_NONE) {
-      return std::nullopt;
+    const A_Err flags_error = layer_suite->AEGP_GetLayerFlags(resolved.layer, &flags);
+    if (flags_error != A_Err_NONE) {
+      return fail("AEGP_GetLayerFlags failed with error "
+          + std::to_string(static_cast<long>(flags_error)));
+    }
+    const A_Err quality_error =
+        layer_suite->AEGP_GetLayerQuality(resolved.layer, &quality);
+    if (quality_error != A_Err_NONE) {
+      return fail("AEGP_GetLayerQuality failed with error "
+          + std::to_string(static_cast<long>(quality_error)));
+    }
+    const A_Err transfer_error =
+        layer_suite->AEGP_GetLayerTransferMode(resolved.layer, &transfer);
+    if (transfer_error != A_Err_NONE) {
+      return fail("AEGP_GetLayerTransferMode failed with error "
+          + std::to_string(static_cast<long>(transfer_error)));
     }
     const auto quality_name = layer_quality_name(quality);
     const auto mode_name = layer_blending_mode_name(transfer.mode);
     const auto matte_name = layer_track_matte_name(transfer.track_matte);
-    if (!quality_name.has_value() || !mode_name.has_value() || !matte_name.has_value()) {
-      return std::nullopt;
+    if (!quality_name.has_value()) {
+      return fail("unsupported layer quality value "
+          + std::to_string(static_cast<long>(quality)));
+    }
+    if (!mode_name.has_value()) {
+      return fail("unsupported transfer mode value "
+          + std::to_string(static_cast<long>(transfer.mode)));
+    }
+    if (!matte_name.has_value()) {
+      return fail("unsupported track matte value "
+          + std::to_string(static_cast<long>(transfer.track_matte)));
     }
     return LayerCompositingState{
         graph_.layer_locator(

@@ -1726,6 +1726,45 @@ void keyframe_value_owner_lifetime_is_bound_to_the_sdk_write() {
       "keyframe SDK write reintroduced a shallow stream-value lifetime copy");
 }
 
+void layer_compositing_writes_read_back_only_their_owned_sdk_fields() {
+  const std::filesystem::path source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "aegp" / "plugin_entry.cpp";
+  std::ifstream input(source_path, std::ios::binary);
+  require(input.good(), "could not open plugin_entry.cpp layer-switch contract source");
+  const std::string source{
+      std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  const std::size_t setter = source.find("HostLayerSwitchWriteResult set_layer_switch(");
+  const std::size_t quality_setter = source.find(
+      "HostLayerQualityWriteResult set_layer_quality(", setter);
+  const std::size_t blending_setter = source.find(
+      "HostLayerBlendingModeWriteResult set_layer_blending_mode(", quality_setter);
+  const std::size_t private_section = source.find("\n private:", blending_setter);
+  require(setter != std::string::npos && quality_setter != std::string::npos
+          && blending_setter != std::string::npos && private_section != std::string::npos,
+      "could not isolate the layer-switch SDK write implementation");
+  const std::string_view switch_implementation(
+      source.data() + setter, quality_setter - setter);
+  const std::string_view quality_implementation(
+      source.data() + quality_setter, blending_setter - quality_setter);
+  const std::string_view blending_implementation(
+      source.data() + blending_setter, private_section - blending_setter);
+  require(switch_implementation.find("read_layer_switch_value") != std::string_view::npos
+          && switch_implementation.find("read_layer_compositing_value")
+              == std::string_view::npos,
+      "layer-switch verification depends on unrelated quality or transfer-mode reads");
+  require(quality_implementation.find("read_layer_quality_value")
+              != std::string_view::npos
+          && quality_implementation.find("read_layer_compositing_value")
+              == std::string_view::npos,
+      "layer-quality verification depends on unrelated flags or transfer-mode reads");
+  require(blending_implementation.find("AEGP_GetLayerTransferMode")
+              != std::string_view::npos
+          && blending_implementation.find("read_layer_compositing_value")
+              == std::string_view::npos,
+      "layer blending verification depends on unrelated flags or quality reads");
+}
+
 void layer_duplicate_rejects_an_unrelated_layer_result() {
   FakeClock clock;
   HostDispatcher dispatcher(
@@ -2916,6 +2955,7 @@ int main() {
   layer_compositing_package_dispatches_all_four_native_capabilities();
   keyframe_authoring_package_admits_all_seven_closed_capabilities();
   keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
+  layer_compositing_writes_read_back_only_their_owned_sdk_fields();
   layer_duplicate_rejects_an_unrelated_layer_result();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();
