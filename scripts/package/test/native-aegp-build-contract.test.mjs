@@ -172,16 +172,18 @@ test('native standard transform writes reacquire canonical layer streams before 
   }
 
   const setter = PLUGIN_ENTRY.slice(setterStart, setterEnd);
-  const directStream = setter.indexOf('AEGP_GetNewLayerStream(');
+  const undoGroup = setter.indexOf('AEGP_StartUndoGroup(');
+  const directStream = setter.indexOf('AEGP_GetNewLayerStream(', undoGroup);
   const identityCheck = setter.indexOf('direct_unique_id', directStream);
-  const undoGroup = setter.indexOf('AEGP_StartUndoGroup(', identityCheck);
   const mutation = setter.indexOf('AEGP_SetStreamValue(', undoGroup);
+  const finish = setter.indexOf('undo_group.finish()', mutation);
   assert.ok(
-    directStream !== -1
+    undoGroup !== -1
+      && directStream > undoGroup
       && identityCheck > directStream
-      && undoGroup > identityCheck
-      && mutation > undoGroup,
-    'standard transform stream identity must be revalidated before the Undo-bound write',
+      && mutation > identityCheck
+      && finish > mutation,
+    'standard transform mutation stream lifetime must stay inside the Undo group',
   );
 });
 

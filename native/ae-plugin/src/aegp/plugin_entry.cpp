@@ -814,6 +814,28 @@ class StreamValueOwner final {
   bool initialized_{false};
 };
 
+class UndoGroupOwner final {
+ public:
+  explicit UndoGroupOwner(const AEGP_UtilitySuite6* suite) : suite_(suite) {}
+  ~UndoGroupOwner() {
+    if (active_ && suite_ != nullptr) {
+      (void)suite_->AEGP_EndUndoGroup();
+    }
+  }
+  UndoGroupOwner(const UndoGroupOwner&) = delete;
+  UndoGroupOwner& operator=(const UndoGroupOwner&) = delete;
+  void mark_started() noexcept { active_ = true; }
+  [[nodiscard]] A_Err finish() noexcept {
+    if (!active_ || suite_ == nullptr) return A_Err_NONE;
+    active_ = false;
+    return suite_->AEGP_EndUndoGroup();
+  }
+
+ private:
+  const AEGP_UtilitySuite6* suite_{nullptr};
+  bool active_{false};
+};
+
 class ProjectGraphRegistry final {
  public:
   static_assert(
@@ -5901,27 +5923,8 @@ class AegpHostApi final : public HostApi {
       return HostLayerPropertyWriteResult::failure(
           "CAPABILITY_FAILED", "could not read bounded property match name");
     }
-    if (const auto direct_layer_stream = standard_layer_stream_for_match_name(
-            std::string_view(match_name.data())); direct_layer_stream.has_value()) {
-      AEGP_StreamRefH direct_stream = nullptr;
-      if (stream_suite->AEGP_GetNewLayerStream(
-              plugin_id_, layer, *direct_layer_stream, &direct_stream) != A_Err_NONE
-          || direct_stream == nullptr) {
-        return HostLayerPropertyWriteResult::failure(
-            "CAPABILITY_FAILED", "could not reacquire the standard layer property");
-      }
-      StreamRefOwner direct_owner(stream_suite.get(), direct_stream);
-      std::int32_t direct_unique_id = 0;
-      if (stream_address->unique_ids.empty()
-          || stream_suite->AEGP_GetUniqueStreamID(
-              direct_owner.get(), &direct_unique_id) != A_Err_NONE
-          || direct_unique_id != stream_address->unique_ids.back()) {
-        return HostLayerPropertyWriteResult::failure(
-            "STALE_LOCATOR", "standard layer property identity changed",
-            "params.arguments.propertyLocator");
-      }
-      property_stream = std::move(direct_owner);
-    }
+    const auto direct_layer_stream = standard_layer_stream_for_match_name(
+        std::string_view(match_name.data()));
     AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
     AEGP_StreamType type = AEGP_StreamType_NO_DATA;
     A_long keyframe_count = 0;
@@ -5951,27 +5954,6 @@ class AegpHostApi final : public HostApi {
           "property is not a supported primitive scalar, vector, or color stream",
           "params.arguments.propertyLocator");
     }
-    StreamValueOwner before_owner(stream_suite.get());
-    if (stream_suite->AEGP_GetNewStreamValue(
-            plugin_id_, property_stream.get(), AEGP_LTimeMode_CompTime,
-            &sample_time, FALSE, before_owner.out()) != A_Err_NONE) {
-      return HostLayerPropertyWriteResult::failure(
-          "CAPABILITY_FAILED", "could not sample the property before mutation");
-    }
-    before_owner.mark_initialized();
-    const auto before_value = primitive_stream_value(type, before_owner.value());
-    AEGP_StreamValue2 desired = before_owner.value();
-    if (!before_value.has_value()
-        || !assign_primitive_stream_value(type, command.value, desired)) {
-      return HostLayerPropertyWriteResult::failure(
-          "INVALID_ARGUMENT", "value does not match the target property's primitive type",
-          "params.arguments.value");
-    }
-    if (primitive_stream_values_equal(type, before_owner.value(), desired)) {
-      return HostLayerPropertyWriteResult::failure(
-          "INVALID_ARGUMENT", "value already matches the property's sampled value",
-          "params.arguments.value");
-    }
     if (budget_expired()) {
       return HostLayerPropertyWriteResult::failure(
           "DEADLINE_EXCEEDED", "layer property mutation budget elapsed");
@@ -5982,21 +5964,79 @@ class AegpHostApi final : public HostApi {
       return HostLayerPropertyWriteResult::failure(
           "CAPABILITY_FAILED", "could not start the After Effects undo group");
     }
-    const A_Err set_error = stream_suite->AEGP_SetStreamValue(
-        plugin_id_, property_stream.get(), &desired);
-    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
-    StreamValueOwner after_owner(stream_suite.get());
-    const A_Err readback_error = stream_suite->AEGP_GetNewStreamValue(
-        plugin_id_, property_stream.get(), AEGP_LTimeMode_CompTime,
-        &sample_time, FALSE, after_owner.out());
-    if (readback_error == A_Err_NONE) after_owner.mark_initialized();
-    const auto after_value = readback_error == A_Err_NONE
-        ? primitive_stream_value(type, after_owner.value())
-        : std::nullopt;
+    UndoGroupOwner undo_group(utility_suite.get());
+    undo_group.mark_started();
+
+    std::optional<aemcp::native::LayerPropertyValue> before_value;
+    std::optional<aemcp::native::LayerPropertyValue> after_value;
+    AEGP_StreamValue2 desired{};
+    A_Err set_error = A_Err_NONE;
+    A_Err readback_error = A_Err_NONE;
+    {
+      AEGP_StreamRefH direct_stream = nullptr;
+      StreamRefOwner direct_owner(stream_suite.get(), nullptr);
+      AEGP_StreamRefH mutation_stream = property_stream.get();
+      if (direct_layer_stream.has_value()) {
+        if (stream_suite->AEGP_GetNewLayerStream(
+                plugin_id_, layer, *direct_layer_stream, &direct_stream) != A_Err_NONE
+            || direct_stream == nullptr) {
+          return HostLayerPropertyWriteResult::failure(
+              "CAPABILITY_FAILED", "could not reacquire the standard layer property");
+        }
+        direct_owner = StreamRefOwner(stream_suite.get(), direct_stream);
+        std::int32_t direct_unique_id = 0;
+        if (stream_address->unique_ids.empty()
+            || stream_suite->AEGP_GetUniqueStreamID(
+                direct_owner.get(), &direct_unique_id) != A_Err_NONE
+            || direct_unique_id != stream_address->unique_ids.back()) {
+          return HostLayerPropertyWriteResult::failure(
+              "STALE_LOCATOR", "standard layer property identity changed",
+              "params.arguments.propertyLocator");
+        }
+        mutation_stream = direct_owner.get();
+      }
+
+      StreamValueOwner before_owner(stream_suite.get());
+      if (stream_suite->AEGP_GetNewStreamValue(
+              plugin_id_, mutation_stream, AEGP_LTimeMode_CompTime,
+              &sample_time, FALSE, before_owner.out()) != A_Err_NONE) {
+        return HostLayerPropertyWriteResult::failure(
+            "CAPABILITY_FAILED", "could not sample the property before mutation");
+      }
+      before_owner.mark_initialized();
+      before_value = primitive_stream_value(type, before_owner.value());
+      desired = before_owner.value();
+      if (!before_value.has_value()
+          || !assign_primitive_stream_value(type, command.value, desired)) {
+        return HostLayerPropertyWriteResult::failure(
+            "INVALID_ARGUMENT", "value does not match the target property's primitive type",
+            "params.arguments.value");
+      }
+      if (primitive_stream_values_equal(type, before_owner.value(), desired)) {
+        return HostLayerPropertyWriteResult::failure(
+            "INVALID_ARGUMENT", "value already matches the property's sampled value",
+            "params.arguments.value");
+      }
+      set_error = stream_suite->AEGP_SetStreamValue(
+          plugin_id_, mutation_stream, &desired);
+
+      StreamValueOwner after_owner(stream_suite.get());
+      readback_error = stream_suite->AEGP_GetNewStreamValue(
+          plugin_id_, mutation_stream, AEGP_LTimeMode_CompTime,
+          &sample_time, FALSE, after_owner.out());
+      if (readback_error == A_Err_NONE) after_owner.mark_initialized();
+      after_value = readback_error == A_Err_NONE
+          ? primitive_stream_value(type, after_owner.value())
+          : std::nullopt;
+      if (readback_error == A_Err_NONE
+          && !primitive_stream_values_equal(type, desired, after_owner.value())) {
+        after_value.reset();
+      }
+    }
+    const A_Err end_error = undo_group.finish();
     if (set_error != A_Err_NONE || end_error != A_Err_NONE
         || readback_error != A_Err_NONE
-        || !after_value.has_value()
-        || !primitive_stream_values_equal(type, desired, after_owner.value())) {
+        || !before_value.has_value() || !after_value.has_value()) {
       return HostLayerPropertyWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "property may have changed but native readback or Undo validation failed");
