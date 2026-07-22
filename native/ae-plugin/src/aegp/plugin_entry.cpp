@@ -95,6 +95,10 @@ using aemcp::native::HostLayerStretchWriteResult;
 using aemcp::native::HostLayerOrderWriteResult;
 using aemcp::native::HostLayerParentWriteResult;
 using aemcp::native::HostLayerDuplicateResult;
+using aemcp::native::HostLayerCompositingReadResult;
+using aemcp::native::HostLayerSwitchWriteResult;
+using aemcp::native::HostLayerQualityWriteResult;
+using aemcp::native::HostLayerBlendingModeWriteResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
 using aemcp::native::NativeEndpointDescriptor;
@@ -125,6 +129,7 @@ using aemcp::native::LayerParentChanged;
 using aemcp::native::LayerRangeChanged;
 using aemcp::native::LayerStartTimeChanged;
 using aemcp::native::LayerStretchChanged;
+using aemcp::native::LayerCompositingState;
 using aemcp::native::LayerPropertyKeyframeDetails;
 using aemcp::native::LayerPropertyKeyframeChanged;
 using aemcp::native::LayerPropertySampleTime;
@@ -162,6 +167,10 @@ using aemcp::native::kLayerStretchSetCapability;
 using aemcp::native::kLayerOrderSetCapability;
 using aemcp::native::kLayerParentSetCapability;
 using aemcp::native::kLayerDuplicateCapability;
+using aemcp::native::kLayerCompositingReadCapability;
+using aemcp::native::kLayerSwitchSetCapability;
+using aemcp::native::kLayerQualitySetCapability;
+using aemcp::native::kLayerBlendingModeSetCapability;
 using aemcp::native::kLayerPropertyKeyframeDetailsReadCapability;
 using aemcp::native::kLayerPropertyKeyframeAddCapability;
 using aemcp::native::kLayerPropertyKeyframeValueSetCapability;
@@ -177,7 +186,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "c5d12ffb9e1a90b9e7341144e22ecda41bacac5500f4cedebfee50d1acc17af1";
+    "7d2598ef2570828a4c1b616cf036b67fd966599aadad1530114e2d655b8646a4";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -238,6 +247,14 @@ constexpr std::string_view kLayerParentSetContractDigest =
     "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c";
 constexpr std::string_view kLayerDuplicateContractDigest =
     "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75";
+constexpr std::string_view kLayerCompositingReadContractDigest =
+    "407554b3f18f8758a8eb997d2b407e74dcca8edbd394e07cb2168a9548a7d99d";
+constexpr std::string_view kLayerSwitchSetContractDigest =
+    "505c9f16f34ded8d154e844e3078fe214cff6e5ebd83e42fc454f5b69a830d77";
+constexpr std::string_view kLayerQualitySetContractDigest =
+    "ca09062a5ed2a07fd8277eaef9bbc030f752b4da7baf4448896f1d6daad2c465";
+constexpr std::string_view kLayerBlendingModeSetContractDigest =
+    "098113d1426d0124a678ac659fabe1d2a52610f1a6f78075e4389cc04ebfdbcf";
 constexpr std::string_view kLayerPropertyKeyframeDetailsReadContractDigest =
     "254ec7933e9628b6c4fba4cc60e183331e4edc9f723c0ccb3f1e37619b7c5249";
 constexpr std::string_view kLayerPropertyKeyframeAddContractDigest =
@@ -6638,6 +6655,252 @@ class AegpHostApi final : public HostApi {
     return HostLayerDuplicateResult::success(std::move(result));
   }
 
+  [[nodiscard]] HostLayerCompositingReadResult read_layer_compositing(
+      const aemcp::native::LayerDetailsQuery& query,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr) {
+      return HostLayerCompositingReadResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer compositing suites are unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), query.layer_locator, query.host_instance_id,
+        query.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerCompositingReadResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto value = read_layer_compositing_value(
+        layer_suite.get(), *resolved, query.host_instance_id, query.session_id);
+    if (!value.has_value() || value->layer_locator != query.layer_locator) {
+      return HostLayerCompositingReadResult::failure(
+          "CAPABILITY_FAILED", "could not read complete layer compositing state");
+    }
+    return HostLayerCompositingReadResult::success(*value);
+  }
+
+  [[nodiscard]] HostLayerSwitchWriteResult set_layer_switch(
+      const aemcp::native::LayerSwitchSetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerSwitchWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer switch suites are unavailable");
+    }
+    const auto flag = layer_switch_flag(command.switch_name);
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerSwitchWriteResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto before = read_layer_compositing_value(
+        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
+    const auto before_enabled = before.has_value()
+        ? compositing_switch_value(*before, command.switch_name) : std::nullopt;
+    if (!flag.has_value() || !before_enabled.has_value()) {
+      return HostLayerSwitchWriteResult::failure(
+          "CAPABILITY_FAILED", "could not validate layer switch mutation");
+    }
+    if (*before_enabled == command.enabled) {
+      return HostLayerSwitchWriteResult::failure(
+          "INVALID_ARGUMENT", "layer switch already matches the requested value",
+          "params.arguments.enabled");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerSwitchWriteResult::failure(
+          "DEADLINE_EXCEEDED", "layer switch mutation budget elapsed");
+    }
+    static constexpr char kUndoLabel[] = "ae-mcp: Set layer switch";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerSwitchWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = layer_suite->AEGP_SetLayerFlag(
+        resolved->layer, *flag, command.enabled ? TRUE : FALSE);
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = read_layer_compositing_value(
+        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
+    const auto after_enabled = after.has_value()
+        ? compositing_switch_value(*after, command.switch_name) : std::nullopt;
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after_enabled.has_value() || *after_enabled != command.enabled) {
+      return HostLayerSwitchWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer switch may have changed but readback or Undo close failed");
+    }
+    return HostLayerSwitchWriteResult::success(
+        {true, command.layer_locator, command.switch_name,
+         *before_enabled, *after_enabled});
+  }
+
+  [[nodiscard]] HostLayerQualityWriteResult set_layer_quality(
+      const aemcp::native::LayerQualitySetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerQualityWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer quality suites are unavailable");
+    }
+    const auto target = layer_quality_value(command.quality);
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerQualityWriteResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    const auto before = read_layer_compositing_value(
+        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
+    if (!target.has_value() || !before.has_value()) {
+      return HostLayerQualityWriteResult::failure(
+          "CAPABILITY_FAILED", "could not validate layer quality mutation");
+    }
+    if (before->quality == command.quality) {
+      return HostLayerQualityWriteResult::failure(
+          "INVALID_ARGUMENT", "layer quality already matches the requested value",
+          "params.arguments.quality");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerQualityWriteResult::failure(
+          "DEADLINE_EXCEEDED", "layer quality mutation budget elapsed");
+    }
+    static constexpr char kUndoLabel[] = "ae-mcp: Set layer quality";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerQualityWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = layer_suite->AEGP_SetLayerQuality(resolved->layer, *target);
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = read_layer_compositing_value(
+        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value() || after->quality != command.quality) {
+      return HostLayerQualityWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer quality may have changed but readback or Undo close failed");
+    }
+    return HostLayerQualityWriteResult::success(
+        {true, command.layer_locator, before->quality, after->quality});
+  }
+
+  [[nodiscard]] HostLayerBlendingModeWriteResult set_layer_blending_mode(
+      const aemcp::native::LayerBlendingModeSetCommand& command,
+      TimePoint work_deadline) override {
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostLayerBlendingModeWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer blending suites are unavailable");
+    }
+    const auto target = layer_blending_mode_value(command.mode);
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(), layer_suite.get(),
+        memory_suite.get(), command.layer_locator, command.host_instance_id,
+        command.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerBlendingModeWriteResult::failure(
+          "STALE_LOCATOR", "layerLocator does not identify a current layer",
+          "params.arguments.layerLocator");
+    }
+    AEGP_LayerTransferMode transfer{};
+    const auto before = read_layer_compositing_value(
+        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
+    if (!target.has_value() || !before.has_value()
+        || layer_suite->AEGP_GetLayerTransferMode(resolved->layer, &transfer)
+            != A_Err_NONE) {
+      return HostLayerBlendingModeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not validate layer blending-mode mutation");
+    }
+    if (before->blending_mode == command.mode) {
+      return HostLayerBlendingModeWriteResult::failure(
+          "INVALID_ARGUMENT", "layer blending mode already matches the requested value",
+          "params.arguments.mode");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerBlendingModeWriteResult::failure(
+          "DEADLINE_EXCEEDED", "layer blending-mode mutation budget elapsed");
+    }
+    transfer.mode = *target;
+    static constexpr char kUndoLabel[] = "ae-mcp: Set layer blending mode";
+    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+      return HostLayerBlendingModeWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    const A_Err set_error = layer_suite->AEGP_SetLayerTransferMode(
+        resolved->layer, &transfer);
+    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const auto after = read_layer_compositing_value(
+        layer_suite.get(), *resolved, command.host_instance_id, command.session_id);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value() || after->blending_mode != command.mode
+        || after->preserve_alpha != before->preserve_alpha
+        || after->track_matte != before->track_matte) {
+      return HostLayerBlendingModeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "layer blending mode may have changed but readback, preserved fields, or Undo close failed");
+    }
+    return HostLayerBlendingModeWriteResult::success({
+        true, command.layer_locator, before->blending_mode, after->blending_mode,
+        after->preserve_alpha, after->track_matte});
+  }
+
  private:
   struct OpenProject {
     AEGP_ProjectH project{nullptr};
@@ -6652,6 +6915,163 @@ class AegpHostApi final : public HostApi {
     AEGP_CompH composition{nullptr};
     AEGP_LayerH layer{nullptr};
   };
+
+  [[nodiscard]] static std::optional<AEGP_LayerFlags> layer_switch_flag(
+      std::string_view name) {
+    if (name == "visibility") return AEGP_LayerFlag_VIDEO_ACTIVE;
+    if (name == "solo") return AEGP_LayerFlag_SOLO;
+    if (name == "locked") return AEGP_LayerFlag_LOCKED;
+    if (name == "shy") return AEGP_LayerFlag_SHY;
+    if (name == "motion-blur") return AEGP_LayerFlag_MOTION_BLUR;
+    if (name == "three-d") return AEGP_LayerFlag_LAYER_IS_3D;
+    if (name == "adjustment") return AEGP_LayerFlag_ADJUSTMENT_LAYER;
+    return std::nullopt;
+  }
+
+  [[nodiscard]] static std::optional<bool> compositing_switch_value(
+      const LayerCompositingState& value,
+      std::string_view name) {
+    if (name == "visibility") return value.visibility_enabled;
+    if (name == "solo") return value.solo;
+    if (name == "locked") return value.locked;
+    if (name == "shy") return value.shy;
+    if (name == "motion-blur") return value.motion_blur;
+    if (name == "three-d") return value.three_d;
+    if (name == "adjustment") return value.adjustment;
+    return std::nullopt;
+  }
+
+  [[nodiscard]] static std::optional<std::string> layer_quality_name(
+      AEGP_LayerQuality quality) {
+    if (quality == AEGP_LayerQual_WIREFRAME) return "wireframe";
+    if (quality == AEGP_LayerQual_DRAFT) return "draft";
+    if (quality == AEGP_LayerQual_BEST) return "best";
+    return std::nullopt;
+  }
+
+  [[nodiscard]] static std::optional<AEGP_LayerQuality> layer_quality_value(
+      std::string_view quality) {
+    if (quality == "wireframe") return AEGP_LayerQual_WIREFRAME;
+    if (quality == "draft") return AEGP_LayerQual_DRAFT;
+    if (quality == "best") return AEGP_LayerQual_BEST;
+    return std::nullopt;
+  }
+
+  [[nodiscard]] static std::optional<std::string> layer_blending_mode_name(
+      PF_TransferMode mode) {
+    switch (mode) {
+      case PF_Xfer_COPY: return "normal";
+      case PF_Xfer_DISSOLVE: return "dissolve";
+      case PF_Xfer_ADD: return "add";
+      case PF_Xfer_MULTIPLY: return "multiply";
+      case PF_Xfer_SCREEN: return "screen";
+      case PF_Xfer_OVERLAY: return "overlay";
+      case PF_Xfer_SOFT_LIGHT: return "soft-light";
+      case PF_Xfer_HARD_LIGHT: return "hard-light";
+      case PF_Xfer_DARKEN: return "darken";
+      case PF_Xfer_LIGHTEN: return "lighten";
+      case PF_Xfer_DIFFERENCE2: return "difference";
+      case PF_Xfer_HUE: return "hue";
+      case PF_Xfer_SATURATION: return "saturation";
+      case PF_Xfer_COLOR: return "color";
+      case PF_Xfer_LUMINOSITY: return "luminosity";
+      case PF_Xfer_COLOR_DODGE2: return "color-dodge";
+      case PF_Xfer_COLOR_BURN2: return "color-burn";
+      case PF_Xfer_EXCLUSION: return "exclusion";
+      case PF_Xfer_LINEAR_DODGE: return "linear-dodge";
+      case PF_Xfer_LINEAR_BURN: return "linear-burn";
+      case PF_Xfer_LINEAR_LIGHT: return "linear-light";
+      case PF_Xfer_VIVID_LIGHT: return "vivid-light";
+      case PF_Xfer_PIN_LIGHT: return "pin-light";
+      case PF_Xfer_HARD_MIX: return "hard-mix";
+      case PF_Xfer_LIGHTER_COLOR: return "lighter-color";
+      case PF_Xfer_DARKER_COLOR: return "darker-color";
+      case PF_Xfer_SUBTRACT: return "subtract";
+      case PF_Xfer_DIVIDE: return "divide";
+      default: return std::nullopt;
+    }
+  }
+
+  [[nodiscard]] static std::optional<PF_TransferMode> layer_blending_mode_value(
+      std::string_view mode) {
+    if (mode == "normal") return PF_Xfer_COPY;
+    if (mode == "dissolve") return PF_Xfer_DISSOLVE;
+    if (mode == "add") return PF_Xfer_ADD;
+    if (mode == "multiply") return PF_Xfer_MULTIPLY;
+    if (mode == "screen") return PF_Xfer_SCREEN;
+    if (mode == "overlay") return PF_Xfer_OVERLAY;
+    if (mode == "soft-light") return PF_Xfer_SOFT_LIGHT;
+    if (mode == "hard-light") return PF_Xfer_HARD_LIGHT;
+    if (mode == "darken") return PF_Xfer_DARKEN;
+    if (mode == "lighten") return PF_Xfer_LIGHTEN;
+    if (mode == "difference") return PF_Xfer_DIFFERENCE2;
+    if (mode == "hue") return PF_Xfer_HUE;
+    if (mode == "saturation") return PF_Xfer_SATURATION;
+    if (mode == "color") return PF_Xfer_COLOR;
+    if (mode == "luminosity") return PF_Xfer_LUMINOSITY;
+    if (mode == "color-dodge") return PF_Xfer_COLOR_DODGE2;
+    if (mode == "color-burn") return PF_Xfer_COLOR_BURN2;
+    if (mode == "exclusion") return PF_Xfer_EXCLUSION;
+    if (mode == "linear-dodge") return PF_Xfer_LINEAR_DODGE;
+    if (mode == "linear-burn") return PF_Xfer_LINEAR_BURN;
+    if (mode == "linear-light") return PF_Xfer_LINEAR_LIGHT;
+    if (mode == "vivid-light") return PF_Xfer_VIVID_LIGHT;
+    if (mode == "pin-light") return PF_Xfer_PIN_LIGHT;
+    if (mode == "hard-mix") return PF_Xfer_HARD_MIX;
+    if (mode == "lighter-color") return PF_Xfer_LIGHTER_COLOR;
+    if (mode == "darker-color") return PF_Xfer_DARKER_COLOR;
+    if (mode == "subtract") return PF_Xfer_SUBTRACT;
+    if (mode == "divide") return PF_Xfer_DIVIDE;
+    return std::nullopt;
+  }
+
+  [[nodiscard]] static std::optional<std::string> layer_track_matte_name(
+      AEGP_TrackMatte matte) {
+    if (matte == AEGP_TrackMatte_NO_TRACK_MATTE) return "none";
+    if (matte == AEGP_TrackMatte_ALPHA) return "alpha";
+    if (matte == AEGP_TrackMatte_NOT_ALPHA) return "inverted-alpha";
+    if (matte == AEGP_TrackMatte_LUMA) return "luma";
+    if (matte == AEGP_TrackMatte_NOT_LUMA) return "inverted-luma";
+    return std::nullopt;
+  }
+
+  [[nodiscard]] std::optional<LayerCompositingState>
+      read_layer_compositing_value(
+          const AEGP_LayerSuite9* layer_suite,
+          const ResolvedLayer& resolved,
+          std::string_view host,
+          std::string_view session) {
+    if (layer_suite == nullptr) return std::nullopt;
+    AEGP_LayerFlags flags = 0;
+    AEGP_LayerQuality quality = AEGP_LayerQual_NONE;
+    AEGP_LayerTransferMode transfer{};
+    if (layer_suite->AEGP_GetLayerFlags(resolved.layer, &flags) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerQuality(resolved.layer, &quality) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerTransferMode(resolved.layer, &transfer)
+            != A_Err_NONE) {
+      return std::nullopt;
+    }
+    const auto quality_name = layer_quality_name(quality);
+    const auto mode_name = layer_blending_mode_name(transfer.mode);
+    const auto matte_name = layer_track_matte_name(transfer.track_matte);
+    if (!quality_name.has_value() || !mode_name.has_value() || !matte_name.has_value()) {
+      return std::nullopt;
+    }
+    return LayerCompositingState{
+        graph_.layer_locator(
+            resolved.composition_item_id, resolved.layer_id, host, session),
+        (flags & AEGP_LayerFlag_VIDEO_ACTIVE) != 0,
+        (flags & AEGP_LayerFlag_SOLO) != 0,
+        (flags & AEGP_LayerFlag_LOCKED) != 0,
+        (flags & AEGP_LayerFlag_SHY) != 0,
+        (flags & AEGP_LayerFlag_MOTION_BLUR) != 0,
+        (flags & AEGP_LayerFlag_LAYER_IS_3D) != 0,
+        (flags & AEGP_LayerFlag_ADJUSTMENT_LAYER) != 0,
+        *quality_name,
+        *mode_name,
+        (transfer.flags & AEGP_TransferFlag_PRESERVE_ALPHA) != 0,
+        *matte_name};
+  }
 
   struct ResolvedProperty {
     ResolvedLayer layer;
@@ -7374,6 +7794,10 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kLayerOrderSetContractDigest),
             std::string(kLayerParentSetContractDigest),
             std::string(kLayerDuplicateContractDigest),
+            std::string(kLayerCompositingReadContractDigest),
+            std::string(kLayerSwitchSetContractDigest),
+            std::string(kLayerQualitySetContractDigest),
+            std::string(kLayerBlendingModeSetContractDigest),
             std::string(kLayerPropertyKeyframeDetailsReadContractDigest),
             std::string(kLayerPropertyKeyframeAddContractDigest),
             std::string(kLayerPropertyKeyframeValueSetContractDigest),
@@ -7684,6 +8108,34 @@ void log_completion(
              << value.layer_count_before << ",\"layerCountAfter\":"
              << value.layer_count_after << ",\"projectGeneration\":"
              << value.new_layer_locator.generation;
+    } else if (completion.capability_id == kLayerCompositingReadCapability
+        && completion.layer_compositing_result != nullptr) {
+      const auto& value = std::get<LayerCompositingState>(
+          *completion.layer_compositing_result);
+      output << ",\"result\":{\"quality\":\"" << json_escape(value.quality)
+             << "\",\"blendingMode\":\"" << json_escape(value.blending_mode)
+             << "\",\"projectGeneration\":" << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerSwitchSetCapability
+        && completion.layer_compositing_result != nullptr) {
+      const auto& value = std::get<aemcp::native::LayerSwitchChanged>(
+          *completion.layer_compositing_result);
+      output << ",\"result\":{\"changed\":true,\"switch\":\""
+             << json_escape(value.switch_name) << "\",\"projectGeneration\":"
+             << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerQualitySetCapability
+        && completion.layer_compositing_result != nullptr) {
+      const auto& value = std::get<aemcp::native::LayerQualityChanged>(
+          *completion.layer_compositing_result);
+      output << ",\"result\":{\"changed\":true,\"afterQuality\":\""
+             << json_escape(value.after_quality) << "\",\"projectGeneration\":"
+             << value.layer_locator.generation;
+    } else if (completion.capability_id == kLayerBlendingModeSetCapability
+        && completion.layer_compositing_result != nullptr) {
+      const auto& value = std::get<aemcp::native::LayerBlendingModeChanged>(
+          *completion.layer_compositing_result);
+      output << ",\"result\":{\"changed\":true,\"afterMode\":\""
+             << json_escape(value.after_mode) << "\",\"projectGeneration\":"
+             << value.layer_locator.generation;
     } else if (completion.capability_id == kProjectSummaryCapability) {
       output << ",\"result\":{\"projectOpen\":"
              << (completion.result.project_open ? "true" : "false")

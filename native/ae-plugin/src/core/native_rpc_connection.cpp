@@ -256,6 +256,10 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.layer_order_set_contract_digest.size() != 64
       || runtime_.layer_parent_set_contract_digest.size() != 64
       || runtime_.layer_duplicate_contract_digest.size() != 64
+      || runtime_.layer_compositing_read_contract_digest.size() != 64
+      || runtime_.layer_switch_set_contract_digest.size() != 64
+      || runtime_.layer_quality_set_contract_digest.size() != 64
+      || runtime_.layer_blending_mode_set_contract_digest.size() != 64
       || runtime_.layer_effect_apply_contract_digest.size() != 64
       || runtime_.layer_properties_list_contract_digest.size() != 64
       || runtime_.layer_property_keyframes_list_contract_digest.size() != 64
@@ -445,6 +449,46 @@ void NativeRpcConnectionHandler::serve(
                 postcondition_digest = rpc::digest_layer_duplicate_postcondition(
                     std::get<LayerDuplicated>(*completion.layer_timeline_result));
               }
+            } else if (completion.capability_id == kLayerCompositingReadCapability) {
+              if (completion.layer_compositing_result == nullptr
+                  || !std::holds_alternative<LayerCompositingState>(
+                      *completion.layer_compositing_result)) {
+                evidence_valid = false;
+              } else {
+                postcondition_digest = rpc::digest_layer_compositing_postcondition(
+                    std::get<LayerCompositingState>(
+                        *completion.layer_compositing_result));
+              }
+            } else if (completion.capability_id == kLayerSwitchSetCapability) {
+              if (completion.layer_compositing_result == nullptr
+                  || !std::holds_alternative<LayerSwitchChanged>(
+                      *completion.layer_compositing_result)) {
+                evidence_valid = false;
+              } else {
+                postcondition_digest = rpc::digest_layer_switch_set_postcondition(
+                    std::get<LayerSwitchChanged>(
+                        *completion.layer_compositing_result));
+              }
+            } else if (completion.capability_id == kLayerQualitySetCapability) {
+              if (completion.layer_compositing_result == nullptr
+                  || !std::holds_alternative<LayerQualityChanged>(
+                      *completion.layer_compositing_result)) {
+                evidence_valid = false;
+              } else {
+                postcondition_digest = rpc::digest_layer_quality_set_postcondition(
+                    std::get<LayerQualityChanged>(
+                        *completion.layer_compositing_result));
+              }
+            } else if (completion.capability_id == kLayerBlendingModeSetCapability) {
+              if (completion.layer_compositing_result == nullptr
+                  || !std::holds_alternative<LayerBlendingModeChanged>(
+                      *completion.layer_compositing_result)) {
+                evidence_valid = false;
+              } else {
+                postcondition_digest = rpc::digest_layer_blending_mode_set_postcondition(
+                    std::get<LayerBlendingModeChanged>(
+                        *completion.layer_compositing_result));
+              }
             } else if (completion.capability_id == kCompositionCreateCapability) {
               postcondition_digest = rpc::digest_composition_create_postcondition(
                   completion.composition_create_result);
@@ -504,7 +548,10 @@ void NativeRpcConnectionHandler::serve(
               || completion.capability_id == kLayerStretchSetCapability
               || completion.capability_id == kLayerOrderSetCapability
               || completion.capability_id == kLayerParentSetCapability
-              || completion.capability_id == kLayerDuplicateCapability;
+              || completion.capability_id == kLayerDuplicateCapability
+              || completion.capability_id == kLayerSwitchSetCapability
+              || completion.capability_id == kLayerQualitySetCapability
+              || completion.capability_id == kLayerBlendingModeSetCapability;
           completion.error_code = mutating
               ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
               : graph_invalidation ? "NATIVE_UNAVAILABLE" : "CAPABILITY_FAILED";
@@ -721,6 +768,29 @@ void NativeRpcConnectionHandler::serve(
             response = rpc::encode_layer_duplicate_success({
                 completion.request_id, connection.session_id, runtime_.host_instance_id,
                 std::get<LayerDuplicated>(*completion.layer_timeline_result),
+                started_at, completed_at, request_digest, postcondition_digest,
+                completion.replayed});
+          } else if (completion.capability_id == kLayerCompositingReadCapability) {
+            response = rpc::encode_layer_compositing_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                std::get<LayerCompositingState>(*completion.layer_compositing_result),
+                started_at, completed_at, request_digest, postcondition_digest, false});
+          } else if (completion.capability_id == kLayerSwitchSetCapability) {
+            response = rpc::encode_layer_switch_set_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                std::get<LayerSwitchChanged>(*completion.layer_compositing_result),
+                started_at, completed_at, request_digest, postcondition_digest,
+                completion.replayed});
+          } else if (completion.capability_id == kLayerQualitySetCapability) {
+            response = rpc::encode_layer_quality_set_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                std::get<LayerQualityChanged>(*completion.layer_compositing_result),
+                started_at, completed_at, request_digest, postcondition_digest,
+                completion.replayed});
+          } else if (completion.capability_id == kLayerBlendingModeSetCapability) {
+            response = rpc::encode_layer_blending_mode_set_success({
+                completion.request_id, connection.session_id, runtime_.host_instance_id,
+                std::get<LayerBlendingModeChanged>(*completion.layer_compositing_result),
                 started_at, completed_at, request_digest, postcondition_digest,
                 completion.replayed});
           } else if (completion.capability_id == kCompositionCreateCapability) {
@@ -977,6 +1047,12 @@ void NativeRpcConnectionHandler::serve(
           const bool include_layer_order = includes("ae.layer.order.set");
           const bool include_layer_parent = includes("ae.layer.parent.set");
           const bool include_layer_duplicate = includes("ae.layer.duplicate");
+          const bool include_layer_compositing =
+              includes(kLayerCompositingReadCapability);
+          const bool include_layer_switch = includes(kLayerSwitchSetCapability);
+          const bool include_layer_quality = includes(kLayerQualitySetCapability);
+          const bool include_layer_blending_mode =
+              includes(kLayerBlendingModeSetCapability);
           const bool include_keyframe_details =
               includes(kLayerPropertyKeyframeDetailsReadCapability);
           const bool include_keyframe_add =
@@ -1021,6 +1097,10 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_layer_order)
               + static_cast<std::size_t>(include_layer_parent)
               + static_cast<std::size_t>(include_layer_duplicate)
+              + static_cast<std::size_t>(include_layer_compositing)
+              + static_cast<std::size_t>(include_layer_switch)
+              + static_cast<std::size_t>(include_layer_quality)
+              + static_cast<std::size_t>(include_layer_blending_mode)
               + static_cast<std::size_t>(include_keyframe_details)
               + static_cast<std::size_t>(include_keyframe_add)
               + static_cast<std::size_t>(include_keyframe_value_set)
@@ -1090,6 +1170,10 @@ void NativeRpcConnectionHandler::serve(
                   include_layer_order,
                   include_layer_parent,
                   include_layer_duplicate,
+                  include_layer_compositing,
+                  include_layer_switch,
+                  include_layer_quality,
+                  include_layer_blending_mode,
                   include_keyframe_details,
                   include_keyframe_add,
                   include_keyframe_value_set,
@@ -1113,6 +1197,10 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.layer_order_set_contract_digest,
                   runtime_.layer_parent_set_contract_digest,
                   runtime_.layer_duplicate_contract_digest,
+                  runtime_.layer_compositing_read_contract_digest,
+                  runtime_.layer_switch_set_contract_digest,
+                  runtime_.layer_quality_set_contract_digest,
+                  runtime_.layer_blending_mode_set_contract_digest,
                   runtime_.layer_property_keyframe_details_read_contract_digest,
                   runtime_.layer_property_keyframe_add_contract_digest,
                   runtime_.layer_property_keyframe_value_set_contract_digest,
@@ -1226,6 +1314,10 @@ void NativeRpcConnectionHandler::serve(
               invoke.keyframe_temporal_ease,
               invoke.keyframe_behavior,
               invoke.keyframe_behavior_enabled,
+              invoke.layer_switch_name,
+              invoke.layer_switch_enabled,
+              invoke.layer_quality,
+              invoke.layer_blending_mode,
           };
         }
         const std::string dispatched_capability = dispatch_request.capability_id;

@@ -110,6 +110,10 @@ struct InvokeParams {
   std::vector<LayerPropertyKeyframeDimensionEase> keyframe_temporal_ease;
   std::string keyframe_behavior;
   std::optional<bool> keyframe_behavior_enabled;
+  std::string layer_switch_name;
+  std::optional<bool> layer_switch_enabled;
+  std::string layer_quality;
+  std::string layer_blending_mode;
 };
 
 struct CancelParams {
@@ -222,6 +226,14 @@ struct ParsedRequest {
     const LayerParentChanged& value);
 [[nodiscard]] std::string digest_layer_duplicate_postcondition(
     const LayerDuplicated& value);
+[[nodiscard]] std::string digest_layer_compositing_postcondition(
+    const LayerCompositingState& value);
+[[nodiscard]] std::string digest_layer_switch_set_postcondition(
+    const LayerSwitchChanged& value);
+[[nodiscard]] std::string digest_layer_quality_set_postcondition(
+    const LayerQualityChanged& value);
+[[nodiscard]] std::string digest_layer_blending_mode_set_postcondition(
+    const LayerBlendingModeChanged& value);
 [[nodiscard]] std::string digest_composition_create_arguments(
     std::string_view name,
     std::uint32_t width,
@@ -499,6 +511,10 @@ struct CapabilitiesSuccess {
   bool include_layer_order_set{false};
   bool include_layer_parent_set{false};
   bool include_layer_duplicate{false};
+  bool include_layer_compositing_read{false};
+  bool include_layer_switch_set{false};
+  bool include_layer_quality_set{false};
+  bool include_layer_blending_mode_set{false};
   bool include_layer_property_keyframe_details_read{false};
   bool include_layer_property_keyframe_add{false};
   bool include_layer_property_keyframe_value_set{false};
@@ -522,6 +538,10 @@ struct CapabilitiesSuccess {
   std::string layer_order_set_contract_digest;
   std::string layer_parent_set_contract_digest;
   std::string layer_duplicate_contract_digest;
+  std::string layer_compositing_read_contract_digest;
+  std::string layer_switch_set_contract_digest;
+  std::string layer_quality_set_contract_digest;
+  std::string layer_blending_mode_set_contract_digest;
   std::string layer_property_keyframe_details_read_contract_digest;
   std::string layer_property_keyframe_add_contract_digest;
   std::string layer_property_keyframe_value_set_contract_digest;
@@ -661,6 +681,10 @@ using LayerStretchSetSuccess = NativeValueSuccess<LayerStretchChanged>;
 using LayerOrderSetSuccess = NativeValueSuccess<LayerOrderChanged>;
 using LayerParentSetSuccess = NativeValueSuccess<LayerParentChanged>;
 using LayerDuplicateSuccess = NativeValueSuccess<LayerDuplicated>;
+using LayerCompositingSuccess = NativeValueSuccess<LayerCompositingState>;
+using LayerSwitchSetSuccess = NativeValueSuccess<LayerSwitchChanged>;
+using LayerQualitySetSuccess = NativeValueSuccess<LayerQualityChanged>;
+using LayerBlendingModeSetSuccess = NativeValueSuccess<LayerBlendingModeChanged>;
 
 struct CompositionCreateSuccess {
   std::string request_id;
@@ -872,6 +896,14 @@ struct ErrorResponse {
     const LayerParentSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_duplicate_success(
     const LayerDuplicateSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_compositing_success(
+    const LayerCompositingSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_switch_set_success(
+    const LayerSwitchSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_quality_set_success(
+    const LayerQualitySetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_blending_mode_set_success(
+    const LayerBlendingModeSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_create_success(
     const CompositionCreateSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_layer_create_success(

@@ -206,16 +206,77 @@ function cases() {
             value: vector.response.result.value,
         };
     }
+    const layer = locator('layer', SOURCE, 8);
+    vectors['ae.layer.compositing.read'] = {
+        arguments: { layerLocator: layer },
+        value: {
+            layerLocator: layer,
+            visibilityEnabled: true,
+            solo: false,
+            locked: false,
+            shy: false,
+            motionBlur: false,
+            threeD: false,
+            adjustment: false,
+            quality: 'best',
+            blendingMode: 'normal',
+            preserveAlpha: false,
+            trackMatte: 'none',
+        },
+    };
+    vectors['ae.layer.switch.set'] = {
+        arguments: {
+            layerLocator: layer,
+            switch: 'solo',
+            enabled: true,
+            idempotencyKey: 'issue162-switch-0001',
+        },
+        value: {
+            changed: true,
+            layerLocator: layer,
+            switch: 'solo',
+            beforeEnabled: false,
+            afterEnabled: true,
+        },
+    };
+    vectors['ae.layer.quality.set'] = {
+        arguments: {
+            layerLocator: layer,
+            quality: 'draft',
+            idempotencyKey: 'issue162-quality-0001',
+        },
+        value: {
+            changed: true,
+            layerLocator: layer,
+            beforeQuality: 'best',
+            afterQuality: 'draft',
+        },
+    };
+    vectors['ae.layer.blending-mode.set'] = {
+        arguments: {
+            layerLocator: layer,
+            mode: 'multiply',
+            idempotencyKey: 'issue162-blend-0001',
+        },
+        value: {
+            changed: true,
+            layerLocator: layer,
+            beforeMode: 'normal',
+            afterMode: 'multiply',
+            preserveAlpha: false,
+            trackMatte: 'none',
+        },
+    };
     return vectors;
 }
 
-test('all sixteen frozen #150/#155 contracts accept their closed valid shapes', () => {
+test('all twenty frozen #150/#155/#162 contracts accept their closed valid shapes', () => {
     const vectors = cases();
     assert.deepEqual(
         Object.keys(packageContracts.CONTRACTS).filter(function (capabilityId) {
             return !capabilityId.startsWith('ae.layer.property.keyframe.');
-        }),
-        Object.keys(vectors),
+        }).sort(),
+        Object.keys(vectors).sort(),
     );
     for (const [capabilityId, vector] of Object.entries(vectors)) {
         const contract = packageContracts.getContract(capabilityId);
@@ -237,6 +298,31 @@ test('all sixteen frozen #150/#155 contracts accept their closed valid shapes', 
             capabilityId + ' open value',
         );
     }
+});
+
+test('#162 compositing contracts reject generic, no-op, and unrelated readbacks', () => {
+    const vectors = cases();
+    const read = vectors['ae.layer.compositing.read'];
+    const switched = vectors['ae.layer.switch.set'];
+    const quality = vectors['ae.layer.quality.set'];
+    const blend = vectors['ae.layer.blending-mode.set'];
+
+    assert.equal(packageContracts.getContract('ae.layer.compositing.read').validValue(
+        { ...read.value, layerLocator: { ...read.value.layerLocator, objectId: CREATED } },
+        read.arguments, HOST, SESSION,
+    ), false);
+    assert.equal(packageContracts.getContract('ae.layer.switch.set').validArguments(
+        { ...switched.arguments, switch: 'arbitrary-sdk-flag' },
+    ), false);
+    assert.equal(packageContracts.getContract('ae.layer.switch.set').validValue(
+        { ...switched.value, beforeEnabled: true }, switched.arguments, HOST, SESSION,
+    ), false);
+    assert.equal(packageContracts.getContract('ae.layer.quality.set').validValue(
+        { ...quality.value, afterQuality: 'wireframe' }, quality.arguments, HOST, SESSION,
+    ), false);
+    assert.equal(packageContracts.getContract('ae.layer.blending-mode.set').validValue(
+        { ...blend.value, afterMode: 'screen' }, blend.arguments, HOST, SESSION,
+    ), false);
 });
 
 function keyframeCases() {

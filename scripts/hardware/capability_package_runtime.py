@@ -147,6 +147,7 @@ class PackageSpec:
     tools: tuple[ToolCase, ...]
     native_novelty: bool
     support_tools: tuple[ToolCase, ...] = ()
+    t4_target_calls: int = 3
     t5_target_calls: int = 26
     t6_target_calls: int = 26
 
@@ -156,15 +157,11 @@ class PackageSpec:
         require(5 <= len(self.tools) <= 15, "capability package must contain 5..15 tools")
         names = [case.tool for case in self.tools]
         keys = [case.key for case in self.tools]
-        capabilities = [case.capability_id for case in self.tools]
         all_names = names + [case.tool for case in self.support_tools]
         require(len(set(names)) == len(names), "package tool names must be unique")
         require(len(set(all_names)) == len(all_names), "package/support tool names must be unique")
         require(len(set(keys)) == len(keys), "package case keys must be unique")
-        require(
-            len(set(capabilities)) == len(capabilities),
-            "package capability IDs must be unique",
-        )
+        require(0 < self.t4_target_calls <= 5, "T4 call target must be 1..5")
         require(0 < self.t5_target_calls <= 30, "T5 call target must be 1..30")
         require(0 < self.t6_target_calls <= 30, "T6 call target must be 1..30")
 
@@ -178,7 +175,9 @@ class PackageSpec:
 
     @property
     def required_capability_ids(self) -> tuple[str, ...]:
-        return tuple(case.capability_id for case in (*self.tools, *self.support_tools))
+        return tuple(dict.fromkeys(
+            case.capability_id for case in (*self.tools, *self.support_tools)
+        ))
 
 
 @dataclasses.dataclass(frozen=True)
@@ -222,7 +221,7 @@ class AepLifecycleCounters:
 class CallLedger:
     """Count every public tool dispatch, including support and error probes."""
 
-    HARD_LIMITS = {"preflight": 7, "t4": 3, "t5": 30, "t6": 30}
+    HARD_LIMITS = {"preflight": 7, "t4": 5, "t5": 30, "t6": 30}
 
     def __init__(self, mode: str, spec: PackageSpec) -> None:
         require(mode in self.HARD_LIMITS, f"unsupported hardware mode {mode}")
@@ -230,7 +229,7 @@ class CallLedger:
         self.hard_limit = self.HARD_LIMITS[mode]
         self.target = {
             "preflight": 7,
-            "t4": 3,
+            "t4": spec.t4_target_calls,
             "t5": spec.t5_target_calls,
             "t6": spec.t6_target_calls,
         }[mode]

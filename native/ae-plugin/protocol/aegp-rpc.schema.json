@@ -562,6 +562,39 @@
         "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
       }
     },
+    "layerCompositingReadArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator"],
+      "properties": { "layerLocator": { "$ref": "#/$defs/layerLocator" } }
+    },
+    "layerSwitchSetArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "switch", "enabled", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "switch": { "enum": ["visibility","solo","locked","shy","motion-blur","three-d","adjustment"] },
+        "enabled": { "type": "boolean" },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "layerQualitySetArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "quality", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "quality": { "enum": ["wireframe","draft","best"] },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
+    "layerBlendingModeSetArguments": {
+      "type": "object", "additionalProperties": false,
+      "required": ["layerLocator", "mode", "idempotencyKey"],
+      "properties": {
+        "layerLocator": { "$ref": "#/$defs/layerLocator" },
+        "mode": { "enum": ["normal","dissolve","add","multiply","screen","overlay","soft-light","hard-light","darken","lighten","difference","hue","saturation","color","luminosity","color-dodge","color-burn","exclusion","linear-dodge","linear-burn","linear-light","vivid-light","pin-light","hard-mix","lighter-color","darker-color","subtract","divide"] },
+        "idempotencyKey": { "$ref": "#/$defs/idempotencyKey" }
+      }
+    },
     "positiveRatioInput": {
       "type": "object",
       "additionalProperties": false,
@@ -2119,6 +2152,34 @@
         "arguments": { "$ref": "#/$defs/layerDuplicateArguments" }
       }
     },
+    "layerCompositingReadInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": { "capabilityId": { "const": "ae.layer.compositing.read" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerCompositingReadArguments" } }
+    },
+    "layerSwitchSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": { "capabilityId": { "const": "ae.layer.switch.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerSwitchSetArguments" } }
+    },
+    "layerQualitySetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": { "capabilityId": { "const": "ae.layer.quality.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerQualitySetArguments" } }
+    },
+    "layerBlendingModeSetInvokeParams": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": { "capabilityId": { "const": "ae.layer.blending-mode.set" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/layerBlendingModeSetArguments" } }
+    },
     "invokeParams": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeParams" },
@@ -2157,7 +2218,11 @@
         { "$ref": "#/$defs/layerStretchSetInvokeParams" },
         { "$ref": "#/$defs/layerOrderSetInvokeParams" },
         { "$ref": "#/$defs/layerParentSetInvokeParams" },
-        { "$ref": "#/$defs/layerDuplicateInvokeParams" }
+        { "$ref": "#/$defs/layerDuplicateInvokeParams" },
+        { "$ref": "#/$defs/layerCompositingReadInvokeParams" },
+        { "$ref": "#/$defs/layerSwitchSetInvokeParams" },
+        { "$ref": "#/$defs/layerQualitySetInvokeParams" },
+        { "$ref": "#/$defs/layerBlendingModeSetInvokeParams" }
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
     },
@@ -2442,7 +2507,11 @@
         { "$ref": "#/$defs/layerStretchSetArguments" },
         { "$ref": "#/$defs/layerOrderSetArguments" },
         { "$ref": "#/$defs/layerParentSetArguments" },
-        { "$ref": "#/$defs/layerDuplicateArguments" }
+        { "$ref": "#/$defs/layerDuplicateArguments" },
+        { "$ref": "#/$defs/layerCompositingReadArguments" },
+        { "$ref": "#/$defs/layerSwitchSetArguments" },
+        { "$ref": "#/$defs/layerQualitySetArguments" },
+        { "$ref": "#/$defs/layerBlendingModeSetArguments" }
       ]
     },
     "capabilityValue": {
@@ -2477,7 +2546,11 @@
         { "$ref": "#/$defs/layerStretchSetValue" },
         { "$ref": "#/$defs/layerOrderSetValue" },
         { "$ref": "#/$defs/layerParentSetValue" },
-        { "$ref": "#/$defs/layerDuplicateValue" }
+        { "$ref": "#/$defs/layerDuplicateValue" },
+        { "$ref": "#/$defs/layerCompositingReadValue" },
+        { "$ref": "#/$defs/layerSwitchSetValue" },
+        { "$ref": "#/$defs/layerQualitySetValue" },
+        { "$ref": "#/$defs/layerBlendingModeSetValue" }
       ]
     },
     "projectContextReadInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"selectionLimit":{"maximum":50,"minimum":1,"type":"integer"},"selectionOffset":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["selectionOffset","selectionLimit"],"type":"object"} },
@@ -2512,6 +2585,14 @@
     "layerParentSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeParentLocator","afterParentLocator"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeParentLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]},"afterParentLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]}},"x-invariant":"afterParentLocator-equals-request-and-differs-from-beforeParentLocator"} },
     "layerDuplicateInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","newName","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"newName":{"type":"string","minLength":1,"maxLength":255},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
     "layerDuplicateResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","sourceLayerLocator","newLayerLocator","compositionLocator","layerCountBefore","layerCountAfter","newLayer"],"properties":{"changed":{"const":true},"sourceLayerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"newLayerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"layerCountBefore":{"type":"integer","minimum":0,"maximum":9007199254740991},"layerCountAfter":{"type":"integer","minimum":1,"maximum":9007199254740991},"newLayer":{"type":"object","additionalProperties":false,"required":["layerLocator","compositionLocator","stackIndex","name","type","videoEnabled","isThreeD","locked","parentLocator","sourceItemLocator","inPoint","duration","startTime","stretch"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"compositionLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"composition"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"stackIndex":{"type":"integer","minimum":1,"maximum":9007199254740991},"name":{"type":"string","maxLength":1024},"type":{"enum":["av","camera","light","text","shape","model3d","null","adjustment","unknown"]},"videoEnabled":{"type":"boolean"},"isThreeD":{"type":"boolean"},"locked":{"type":"boolean"},"parentLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]},"sourceItemLocator":{"oneOf":[{"type":"null"},{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"enum":["item","composition"]},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}]},"inPoint":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"duration":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"startTime":{"type":"object","additionalProperties":false,"required":["value","scale","secondsRational"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295},"secondsRational":{"type":"string","minLength":1,"maxLength":28,"pattern":"^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"}}},"stretch":{"type":"object","additionalProperties":false,"required":["numerator","denominator","rational"],"properties":{"numerator":{"type":"integer","minimum":-2147483648,"maximum":2147483647,"not":{"const":0}},"denominator":{"type":"integer","minimum":1,"maximum":2147483647},"rational":{"type":"string","minLength":1,"maxLength":29,"pattern":"^-?[1-9][0-9]*(?:/[1-9][0-9]*)?$"}},"x-invariant":"rational-is-the-reduced-canonical-form-of-numerator-over-denominator"}},"x-invariant":"all-locators-share-one-current-graph-context"}},"x-invariant":"fresh-locators-share-one-post-mutation-generation;new-layer-locator-matches-newLayer;layerCountAfter-equals-layerCountBefore-plus-one"} },
+    "layerCompositingReadInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}}}} },
+    "layerCompositingReadResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","visibilityEnabled","solo","locked","shy","motionBlur","threeD","adjustment","quality","blendingMode","preserveAlpha","trackMatte"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"visibilityEnabled":{"type":"boolean"},"solo":{"type":"boolean"},"locked":{"type":"boolean"},"shy":{"type":"boolean"},"motionBlur":{"type":"boolean"},"threeD":{"type":"boolean"},"adjustment":{"type":"boolean"},"quality":{"enum":["wireframe","draft","best"]},"blendingMode":{"enum":["normal","dissolve","add","multiply","screen","overlay","soft-light","hard-light","darken","lighten","difference","hue","saturation","color","luminosity","color-dodge","color-burn","exclusion","linear-dodge","linear-burn","linear-light","vivid-light","pin-light","hard-mix","lighter-color","darker-color","subtract","divide"]},"preserveAlpha":{"type":"boolean"},"trackMatte":{"enum":["none","alpha","inverted-alpha","luma","inverted-luma"]}}} },
+    "layerSwitchSetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","switch","enabled","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"switch":{"enum":["visibility","solo","locked","shy","motion-blur","three-d","adjustment"]},"enabled":{"type":"boolean"},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerSwitchSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","switch","beforeEnabled","afterEnabled"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"switch":{"enum":["visibility","solo","locked","shy","motion-blur","three-d","adjustment"]},"beforeEnabled":{"type":"boolean"},"afterEnabled":{"type":"boolean"}},"x-invariant":"switch-equals-request;afterEnabled-equals-request-and-differs-from-beforeEnabled"} },
+    "layerQualitySetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","quality","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"quality":{"enum":["wireframe","draft","best"]},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerQualitySetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeQuality","afterQuality"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeQuality":{"enum":["wireframe","draft","best"]},"afterQuality":{"enum":["wireframe","draft","best"]}},"x-invariant":"afterQuality-equals-request-and-differs-from-beforeQuality"} },
+    "layerBlendingModeSetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","mode","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"mode":{"enum":["normal","dissolve","add","multiply","screen","overlay","soft-light","hard-light","darken","lighten","difference","hue","saturation","color","luminosity","color-dodge","color-burn","exclusion","linear-dodge","linear-burn","linear-light","vivid-light","pin-light","hard-mix","lighter-color","darker-color","subtract","divide"]},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
+    "layerBlendingModeSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeMode","afterMode","preserveAlpha","trackMatte"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeMode":{"enum":["normal","dissolve","add","multiply","screen","overlay","soft-light","hard-light","darken","lighten","difference","hue","saturation","color","luminosity","color-dodge","color-burn","exclusion","linear-dodge","linear-burn","linear-light","vivid-light","pin-light","hard-mix","lighter-color","darker-color","subtract","divide"]},"afterMode":{"enum":["normal","dissolve","add","multiply","screen","overlay","soft-light","hard-light","darken","lighten","difference","hue","saturation","color","luminosity","color-dodge","color-burn","exclusion","linear-dodge","linear-burn","linear-light","vivid-light","pin-light","hard-mix","lighter-color","darker-color","subtract","divide"]},"preserveAlpha":{"type":"boolean"},"trackMatte":{"enum":["none","alpha","inverted-alpha","luma","inverted-luma"]}},"x-invariant":"afterMode-equals-request;preserveAlpha-and-trackMatte-are-preserved"} },
     "capabilityInputSchemaContract": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInputSchemaContract" },
@@ -2542,7 +2623,10 @@
         { "$ref": "#/$defs/layerStretchSetInputSchemaContract" },
         { "$ref": "#/$defs/layerOrderSetInputSchemaContract" },
         { "$ref": "#/$defs/layerParentSetInputSchemaContract" },
-        { "$ref": "#/$defs/layerDuplicateInputSchemaContract" }
+        { "$ref": "#/$defs/layerDuplicateInputSchemaContract" },
+        { "$ref": "#/$defs/layerSwitchSetInputSchemaContract" },
+        { "$ref": "#/$defs/layerQualitySetInputSchemaContract" },
+        { "$ref": "#/$defs/layerBlendingModeSetInputSchemaContract" }
       ]
     },
     "capabilityResultSchemaContract": {
@@ -2576,7 +2660,11 @@
         { "$ref": "#/$defs/layerStretchSetResultSchemaContract" },
         { "$ref": "#/$defs/layerOrderSetResultSchemaContract" },
         { "$ref": "#/$defs/layerParentSetResultSchemaContract" },
-        { "$ref": "#/$defs/layerDuplicateResultSchemaContract" }
+        { "$ref": "#/$defs/layerDuplicateResultSchemaContract" },
+        { "$ref": "#/$defs/layerCompositingReadResultSchemaContract" },
+        { "$ref": "#/$defs/layerSwitchSetResultSchemaContract" },
+        { "$ref": "#/$defs/layerQualitySetResultSchemaContract" },
+        { "$ref": "#/$defs/layerBlendingModeSetResultSchemaContract" }
       ]
     },
     "positiveCapabilityExample": {
@@ -3270,6 +3358,268 @@
         "newLayer": { "$ref": "#/$defs/layerDetailsValue" }
       },
       "x-invariant": "fresh-locators-share-one-post-mutation-generation;new-layer-locator-matches-newLayer;layerCountAfter-equals-layerCountBefore-plus-one"
+    },
+    "layerCompositingReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator",
+        "visibilityEnabled",
+        "solo",
+        "locked",
+        "shy",
+        "motionBlur",
+        "threeD",
+        "adjustment",
+        "quality",
+        "blendingMode",
+        "preserveAlpha",
+        "trackMatte"
+      ],
+      "properties": {
+        "layerLocator": {
+          "$ref": "#/$defs/layerLocator"
+        },
+        "visibilityEnabled": {
+          "type": "boolean"
+        },
+        "solo": {
+          "type": "boolean"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "shy": {
+          "type": "boolean"
+        },
+        "motionBlur": {
+          "type": "boolean"
+        },
+        "threeD": {
+          "type": "boolean"
+        },
+        "adjustment": {
+          "type": "boolean"
+        },
+        "quality": {
+          "enum": [
+            "wireframe",
+            "draft",
+            "best"
+          ]
+        },
+        "blendingMode": {
+          "enum": [
+            "normal",
+            "dissolve",
+            "add",
+            "multiply",
+            "screen",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "darken",
+            "lighten",
+            "difference",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity",
+            "color-dodge",
+            "color-burn",
+            "exclusion",
+            "linear-dodge",
+            "linear-burn",
+            "linear-light",
+            "vivid-light",
+            "pin-light",
+            "hard-mix",
+            "lighter-color",
+            "darker-color",
+            "subtract",
+            "divide"
+          ]
+        },
+        "preserveAlpha": {
+          "type": "boolean"
+        },
+        "trackMatte": {
+          "enum": [
+            "none",
+            "alpha",
+            "inverted-alpha",
+            "luma",
+            "inverted-luma"
+          ]
+        }
+      }
+    },
+    "layerSwitchSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "layerLocator",
+        "switch",
+        "beforeEnabled",
+        "afterEnabled"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "layerLocator": {
+          "$ref": "#/$defs/layerLocator"
+        },
+        "switch": {
+          "enum": [
+            "visibility",
+            "solo",
+            "locked",
+            "shy",
+            "motion-blur",
+            "three-d",
+            "adjustment"
+          ]
+        },
+        "beforeEnabled": {
+          "type": "boolean"
+        },
+        "afterEnabled": {
+          "type": "boolean"
+        }
+      },
+      "x-invariant": "switch-equals-request;afterEnabled-equals-request-and-differs-from-beforeEnabled"
+    },
+    "layerQualitySetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "layerLocator",
+        "beforeQuality",
+        "afterQuality"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "layerLocator": {
+          "$ref": "#/$defs/layerLocator"
+        },
+        "beforeQuality": {
+          "enum": [
+            "wireframe",
+            "draft",
+            "best"
+          ]
+        },
+        "afterQuality": {
+          "enum": [
+            "wireframe",
+            "draft",
+            "best"
+          ]
+        }
+      },
+      "x-invariant": "afterQuality-equals-request-and-differs-from-beforeQuality"
+    },
+    "layerBlendingModeSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "layerLocator",
+        "beforeMode",
+        "afterMode",
+        "preserveAlpha",
+        "trackMatte"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "layerLocator": {
+          "$ref": "#/$defs/layerLocator"
+        },
+        "beforeMode": {
+          "enum": [
+            "normal",
+            "dissolve",
+            "add",
+            "multiply",
+            "screen",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "darken",
+            "lighten",
+            "difference",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity",
+            "color-dodge",
+            "color-burn",
+            "exclusion",
+            "linear-dodge",
+            "linear-burn",
+            "linear-light",
+            "vivid-light",
+            "pin-light",
+            "hard-mix",
+            "lighter-color",
+            "darker-color",
+            "subtract",
+            "divide"
+          ]
+        },
+        "afterMode": {
+          "enum": [
+            "normal",
+            "dissolve",
+            "add",
+            "multiply",
+            "screen",
+            "overlay",
+            "soft-light",
+            "hard-light",
+            "darken",
+            "lighten",
+            "difference",
+            "hue",
+            "saturation",
+            "color",
+            "luminosity",
+            "color-dodge",
+            "color-burn",
+            "exclusion",
+            "linear-dodge",
+            "linear-burn",
+            "linear-light",
+            "vivid-light",
+            "pin-light",
+            "hard-mix",
+            "lighter-color",
+            "darker-color",
+            "subtract",
+            "divide"
+          ]
+        },
+        "preserveAlpha": {
+          "type": "boolean"
+        },
+        "trackMatte": {
+          "enum": [
+            "none",
+            "alpha",
+            "inverted-alpha",
+            "luma",
+            "inverted-luma"
+          ]
+        }
+      },
+      "x-invariant": "afterMode-equals-request;preserveAlpha-and-trackMatte-are-preserved"
     },
     "positiveRatioValue": {
       "type": "object",
@@ -4004,6 +4354,34 @@
         "value": { "$ref": "#/$defs/layerDuplicateValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" }
       }
     },
+    "layerCompositingReadInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": { "capabilityId": { "const": "ae.layer.compositing.read" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerCompositingReadValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" } }
+    },
+    "layerSwitchSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": { "capabilityId": { "const": "ae.layer.switch.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerSwitchSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" } }
+    },
+    "layerQualitySetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": { "capabilityId": { "const": "ae.layer.quality.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerQualitySetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" } }
+    },
+    "layerBlendingModeSetInvokeResult": {
+      "type": "object", "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": { "capabilityId": { "const": "ae.layer.blending-mode.set" }, "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/layerBlendingModeSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" } }
+    },
     "invokeResult": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeResult" },
@@ -4042,7 +4420,11 @@
         { "$ref": "#/$defs/layerStretchSetInvokeResult" },
         { "$ref": "#/$defs/layerOrderSetInvokeResult" },
         { "$ref": "#/$defs/layerParentSetInvokeResult" },
-        { "$ref": "#/$defs/layerDuplicateInvokeResult" }
+        { "$ref": "#/$defs/layerDuplicateInvokeResult" },
+        { "$ref": "#/$defs/layerCompositingReadInvokeResult" },
+        { "$ref": "#/$defs/layerSwitchSetInvokeResult" },
+        { "$ref": "#/$defs/layerQualitySetInvokeResult" },
+        { "$ref": "#/$defs/layerBlendingModeSetInvokeResult" }
       ]
     },
     "cancelResult": {
@@ -4337,7 +4719,10 @@
                     "ae.layer.property.keyframe.interpolation.set",
                     "ae.layer.property.keyframe.temporal-ease.set",
                     "ae.layer.property.keyframe.behavior.set",
-                    "ae.layer.property.keyframe.delete"
+                    "ae.layer.property.keyframe.delete",
+                    "ae.layer.switch.set",
+                    "ae.layer.quality.set",
+                    "ae.layer.blending-mode.set"
                   ] }
                 },
                 "required": ["capabilityId"]

@@ -889,6 +889,44 @@ class Package155Host final : public HostApi {
   }
 };
 
+class Package162Host final : public HostApi {
+ public:
+  [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
+    return HostReadResult::success({true, "fixture.aep", 3});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerCompositingReadResult
+  read_layer_compositing(
+      const aemcp::native::LayerDetailsQuery& query, TimePoint) override {
+    return aemcp::native::HostLayerCompositingReadResult::success({
+        query.layer_locator, true, false, false, false, false, false, false,
+        "best", "normal", false, "none"});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerSwitchWriteResult set_layer_switch(
+      const aemcp::native::LayerSwitchSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerSwitchWriteResult::success({
+        true, command.layer_locator, command.switch_name,
+        !command.enabled, command.enabled});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerQualityWriteResult set_layer_quality(
+      const aemcp::native::LayerQualitySetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerQualityWriteResult::success({
+        true, command.layer_locator,
+        command.quality == "best" ? "draft" : "best", command.quality});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerBlendingModeWriteResult
+  set_layer_blending_mode(
+      const aemcp::native::LayerBlendingModeSetCommand& command, TimePoint) override {
+    return aemcp::native::HostLayerBlendingModeWriteResult::success({
+        true, command.layer_locator,
+        command.mode == "normal" ? "multiply" : "normal", command.mode,
+        false, "none"});
+  }
+};
+
 class BlockingHost final : public HostApi {
  public:
   explicit BlockingHost(std::thread::id expected_thread)
@@ -1327,7 +1365,7 @@ void project_composition_package_dispatches_all_eight_capabilities() {
               .source_composition_locator.object_id
           != composition.object_id,
       "duplicate result did not reissue the source composition locator");
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 37);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 41);
   const std::array<std::string_view, 8> package_capabilities{
       aemcp::native::kProjectContextReadCapability,
       aemcp::native::kProjectItemMetadataReadCapability,
@@ -1461,6 +1499,103 @@ void layer_timeline_package_dispatches_all_eight_capabilities() {
       "package-155 duplicate result lost its fresh locator/count evidence");
 }
 
+void layer_compositing_package_dispatches_all_four_native_capabilities() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(4, 4, 16ms));
+  Package162Host host;
+  const ObjectLocator layer = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const auto base = [&](std::string id, std::string capability) {
+    Request value;
+    value.request_id = std::move(id);
+    value.capability_id = std::move(capability);
+    value.deadline = clock.now() + 1s;
+    value.route_id = "package-162";
+    value.session_generation = 1;
+    value.host_instance_id = "22222222-2222-4222-8222-222222222222";
+    value.session_id = "11111111-1111-4111-8111-111111111111";
+    value.layer_locator = layer;
+    value.layer_switch_name.clear();
+    value.layer_switch_enabled.reset();
+    value.layer_quality.clear();
+    value.layer_blending_mode.clear();
+    return value;
+  };
+  const auto prepare_write = [&](Request& value, char digest) {
+    value.idempotency_key = std::string("package-162-intent-") + digest;
+    value.arguments_fingerprint_sha256 = std::string(64, digest);
+  };
+  const auto enqueue = [&](Request value) {
+    const std::string capability = value.capability_id;
+    if (capability == aemcp::native::kLayerCompositingReadCapability) {
+      require(value.idempotency_key.empty()
+              && value.arguments_fingerprint_sha256.empty()
+              && !value.parent_property_locator.has_value()
+              && !value.property_locator.has_value()
+              && std::holds_alternative<std::monostate>(value.property_value)
+              && value.layer_switch_name.empty()
+              && !value.layer_switch_enabled.has_value()
+              && value.layer_quality.empty()
+              && value.layer_blending_mode.empty(),
+          "package-162 read test fixture contains write arguments");
+    }
+    const auto admission = dispatcher.enqueue(std::move(value));
+    require(admission.code == EnqueueCode::kAccepted,
+        "package-162 request was rejected: " + capability + " / "
+          + admission.error_field + " / " + admission.message);
+  };
+
+  enqueue(base("compositing-read", std::string(
+      aemcp::native::kLayerCompositingReadCapability)));
+
+  Request switch_set = base("switch-set", std::string(
+      aemcp::native::kLayerSwitchSetCapability));
+  prepare_write(switch_set, '1');
+  switch_set.layer_switch_name = "solo";
+  switch_set.layer_switch_enabled = true;
+  enqueue(std::move(switch_set));
+
+  Request quality_set = base("quality-set", std::string(
+      aemcp::native::kLayerQualitySetCapability));
+  prepare_write(quality_set, '2');
+  quality_set.layer_quality = "draft";
+  enqueue(std::move(quality_set));
+
+  Request blend_set = base("blend-set", std::string(
+      aemcp::native::kLayerBlendingModeSetCapability));
+  prepare_write(blend_set, '3');
+  blend_set.layer_blending_mode = "multiply";
+  enqueue(std::move(blend_set));
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 4 && batch.remaining == 0,
+      "package-162 dispatcher did not complete all four native requests");
+  for (const auto& completion : batch.completions) {
+    require(completion.ok && completion.layer_compositing_result != nullptr,
+        "package-162 dispatcher branch failed closed unexpectedly");
+  }
+  require(std::holds_alternative<aemcp::native::LayerCompositingState>(
+              *batch.completions[0].layer_compositing_result)
+          && std::holds_alternative<aemcp::native::LayerSwitchChanged>(
+              *batch.completions[1].layer_compositing_result)
+          && std::holds_alternative<aemcp::native::LayerQualityChanged>(
+              *batch.completions[2].layer_compositing_result)
+          && std::holds_alternative<aemcp::native::LayerBlendingModeChanged>(
+              *batch.completions[3].layer_compositing_result),
+      "package-162 completion variants drifted from capability identities");
+
+  Request generic_switch = base("generic-switch", std::string(
+      aemcp::native::kLayerSwitchSetCapability));
+  prepare_write(generic_switch, '4');
+  generic_switch.layer_switch_name = "arbitrary-sdk-flag";
+  generic_switch.layer_switch_enabled = true;
+  const auto rejected = dispatcher.enqueue(std::move(generic_switch));
+  require(rejected.code == EnqueueCode::kInvalidRequest
+          && rejected.error_field == "params.arguments.switch",
+      "package-162 dispatcher admitted a generic SDK flag");
+}
+
 void keyframe_authoring_package_admits_all_seven_closed_capabilities() {
   FakeClock clock;
   HostDispatcher dispatcher(
@@ -1553,7 +1688,7 @@ void keyframe_authoring_package_admits_all_seven_closed_capabilities() {
       aemcp::native::kLayerPropertyKeyframeBehaviorSetCapability,
       aemcp::native::kLayerPropertyKeyframeDeleteCapability,
   };
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 37);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 41);
   for (const std::string_view expected : package_capabilities) {
     require(std::find(
                 aemcp::native::kAdvertisedNativeCapabilities.begin(),
@@ -2778,6 +2913,7 @@ int main() {
   project_epoch_fences_reused_aegp_handles();
   project_composition_package_dispatches_all_eight_capabilities();
   layer_timeline_package_dispatches_all_eight_capabilities();
+  layer_compositing_package_dispatches_all_four_native_capabilities();
   keyframe_authoring_package_admits_all_seven_closed_capabilities();
   keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
   layer_duplicate_rejects_an_unrelated_layer_result();

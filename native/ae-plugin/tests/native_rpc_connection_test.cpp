@@ -543,6 +543,41 @@ class FakeHost final : public HostApi {
         std::move(details), std::move(source_details)});
   }
 
+  [[nodiscard]] aemcp::native::HostLayerCompositingReadResult
+  read_layer_compositing(
+      const aemcp::native::LayerDetailsQuery& query, TimePoint) override {
+    ++layer_compositing_read_calls;
+    return aemcp::native::HostLayerCompositingReadResult::success({
+        query.layer_locator, true, false, false, false, false, false, false,
+        "best", "normal", false, "none"});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerSwitchWriteResult set_layer_switch(
+      const aemcp::native::LayerSwitchSetCommand& command, TimePoint) override {
+    ++layer_compositing_write_calls;
+    return aemcp::native::HostLayerSwitchWriteResult::success({
+        true, command.layer_locator, command.switch_name,
+        !command.enabled, command.enabled});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerQualityWriteResult set_layer_quality(
+      const aemcp::native::LayerQualitySetCommand& command, TimePoint) override {
+    ++layer_compositing_write_calls;
+    return aemcp::native::HostLayerQualityWriteResult::success({
+        true, command.layer_locator,
+        command.quality == "best" ? "draft" : "best", command.quality});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerBlendingModeWriteResult
+  set_layer_blending_mode(
+      const aemcp::native::LayerBlendingModeSetCommand& command, TimePoint) override {
+    ++layer_compositing_write_calls;
+    return aemcp::native::HostLayerBlendingModeWriteResult::success({
+        true, command.layer_locator,
+        command.mode == "normal" ? "multiply" : "normal", command.mode,
+        false, "none"});
+  }
+
   [[nodiscard]] HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint) override {
     ++project_graph_invalidation_calls;
@@ -633,6 +668,8 @@ class FakeHost final : public HostApi {
   int layer_properties_calls{0};
   int layer_property_keyframes_calls{0};
   int layer_property_write_calls{0};
+  int layer_compositing_read_calls{0};
+  int layer_compositing_write_calls{0};
   int project_graph_invalidation_calls{0};
   std::thread::id project_graph_invalidation_thread;
   aemcp::native::LayerPropertySetCommand observed_property_command;
@@ -723,7 +760,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "c5d12ffb9e1a90b9e7341144e22ecda41bacac5500f4cedebfee50d1acc17af1",
+      "7d2598ef2570828a4c1b616cf036b67fd966599aadad1530114e2d655b8646a4",
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -754,6 +791,10 @@ NativeRpcRuntimeInfo runtime() {
       "e977b89201314e2e4ee1b6e7a09efadd06f012b2b97e3087b0d9c4bd8102d162",
       "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c",
       "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75",
+      "407554b3f18f8758a8eb997d2b407e74dcca8edbd394e07cb2168a9548a7d99d",
+      "505c9f16f34ded8d154e844e3078fe214cff6e5ebd83e42fc454f5b69a830d77",
+      "ca09062a5ed2a07fd8277eaef9bbc030f752b4da7baf4448896f1d6daad2c465",
+      "098113d1426d0124a678ac659fabe1d2a52610f1a6f78075e4389cc04ebfdbcf",
       "254ec7933e9628b6c4fba4cc60e183331e4edc9f723c0ccb3f1e37619b7c5249",
       "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e",
       "9eab679678002ba67260c70dcd46c3f93f0ed2dfbc8c272a17ec57c37451c68e",
@@ -2137,6 +2178,93 @@ void layer_timeline_package_crosses_the_authenticated_wire_boundary() {
   (void)dispatcher.shutdown();
 }
 
+void layer_compositing_package_crosses_the_authenticated_wire_boundary() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcConnectionHandler handler(
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
+  std::array<int, 2> sockets{};
+  require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0,
+      "package-162 socketpair failed");
+  const AuthenticatedConnection authenticated = connection(
+      sockets[1], "route-package-162", 12);
+  std::thread worker([&] { handler.serve(authenticated); });
+
+  send_json(sockets[0], hello_json());
+  require_contains(read_body(sockets[0]), "\"ok\":true", "package-162 hello");
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-layer-compositing", "ae.layer.compositing.read"));
+  const std::string capabilities = read_body(sockets[0]);
+  require_contains(capabilities, "\"id\":\"ae.layer.compositing.read\"",
+      "package-162 capabilities");
+  require_contains(capabilities,
+      "\"contractDigest\":\"407554b3f18f8758a8eb997d2b407e74dcca8edbd394e07cb2168a9548a7d99d\"",
+      "package-162 capabilities");
+
+  struct Case {
+    std::string request_id;
+    std::string capability_id;
+    std::string arguments;
+    std::string expected_kind;
+  };
+  const std::string layer = graph_locator_json(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const std::array<Case, 4> cases{{
+      {"wire-compositing-read", "ae.layer.compositing.read",
+          "{\"layerLocator\":" + layer + "}", "layer-compositing-read"},
+      {"wire-switch-set", "ae.layer.switch.set",
+          "{\"layerLocator\":" + layer
+              + ",\"switch\":\"solo\",\"enabled\":true,"
+                "\"idempotencyKey\":\"wire-switch-intent-0001\"}",
+          "layer-switch-set"},
+      {"wire-quality-set", "ae.layer.quality.set",
+          "{\"layerLocator\":" + layer
+              + ",\"quality\":\"draft\","
+                "\"idempotencyKey\":\"wire-quality-intent-0001\"}",
+          "layer-quality-set"},
+      {"wire-blend-set", "ae.layer.blending-mode.set",
+          "{\"layerLocator\":" + layer
+              + ",\"mode\":\"multiply\","
+                "\"idempotencyKey\":\"wire-blend-intent-0001\"}",
+          "layer-blending-mode-set"},
+  }};
+  FakeHost host;
+  for (const Case& item : cases) {
+    send_json(sockets[0], package150_invoke_json(
+        item.request_id, item.capability_id, item.arguments));
+    require_contains(read_body(sockets[0]), "\"event\":\"progress\"",
+        item.capability_id + " progress");
+    wait_until([&] { return dispatcher.queued() == 1; },
+        item.capability_id + " queued invoke");
+    const auto batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1 && batch.completions[0].ok,
+        item.capability_id + " dispatcher result failed");
+    const std::string response = read_body(sockets[0]);
+    require_contains(response, "\"capabilityId\":\"" + item.capability_id + "\"",
+        item.capability_id + " response");
+    require_contains(response, "\"kind\":\"" + item.expected_kind + "\"",
+        item.capability_id + " response");
+    require_contains(response, "\"engine\":\"native-aegp\"",
+        item.capability_id + " response");
+    wait_until([&] {
+      return !observer.terminal(item.request_id).request_id.empty();
+    }, item.capability_id + " terminal audit");
+    const TerminalRecord terminal = observer.terminal(item.request_id);
+    require(terminal.ok && terminal.request_digest.size() == 64
+            && terminal.postcondition_digest.size() == 64,
+        item.capability_id + " terminal evidence was not verified");
+  }
+  require(host.layer_compositing_read_calls == 1
+          && host.layer_compositing_write_calls == 3,
+      "package-162 wire path did not reach exactly one read and three writes");
+
+  finish_connection(sockets[0], sockets[1], worker);
+  (void)dispatcher.shutdown();
+}
+
 void project_composition_package_emits_eight_verified_terminals() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
@@ -2459,6 +2587,7 @@ int main() {
   hello_capabilities_invoke_cancel_and_fencing_work();
   project_composition_package_emits_eight_verified_terminals();
   layer_timeline_package_crosses_the_authenticated_wire_boundary();
+  layer_compositing_package_crosses_the_authenticated_wire_boundary();
   invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced();
   invalid_postcondition_becomes_structured_failure();
   construction_failure_is_contained_by_noexcept_boundary();
