@@ -175,16 +175,29 @@ test('native standard transform writes reacquire canonical layer streams before 
   const undoGroup = setter.indexOf('AEGP_StartUndoGroup(');
   const directStream = setter.indexOf('AEGP_GetNewLayerStream(', undoGroup);
   const identityCheck = setter.indexOf('direct_unique_id', directStream);
-  const mutation = setter.indexOf('AEGP_SetStreamValue(', undoGroup);
-  const finish = setter.indexOf('undo_group.finish()', mutation);
+  const insert = setter.indexOf('AEGP_InsertKeyframe(', undoGroup);
+  const mutation = setter.indexOf('AEGP_SetKeyframeValue(', insert);
+  const remove = setter.indexOf('AEGP_DeleteKeyframe(', mutation);
+  const countAfter = setter.indexOf('keyframe_count_after', remove);
+  const timeVaryingAfter = setter.indexOf('time_varying_after', countAfter);
+  const readback = setter.indexOf('AEGP_GetNewStreamValue(', timeVaryingAfter);
+  const finish = setter.indexOf('undo_group.finish()', readback);
   assert.ok(
     undoGroup !== -1
       && directStream > undoGroup
       && identityCheck > directStream
-      && mutation > identityCheck
-      && finish > mutation,
-    'standard transform mutation stream lifetime must stay inside the Undo group',
+      && insert > identityCheck
+      && mutation > insert
+      && remove > mutation
+      && countAfter > remove
+      && timeVaryingAfter > countAfter
+      && readback > timeVaryingAfter
+      && finish > readback,
+    'standard transform mutation must leave a verified static value inside one Undo group',
   );
+  assert.doesNotMatch(setter, /AEGP_SetStreamValue\(/u);
+  assert.match(setter, /keyframe_count_after != 0/u);
+  assert.match(setter, /time_varying_after != FALSE/u);
 });
 
 test('native layer-parent adapter distinguishes stale, cross-composition, and self-parent failures', () => {

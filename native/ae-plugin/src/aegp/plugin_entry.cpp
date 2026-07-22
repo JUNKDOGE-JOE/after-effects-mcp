@@ -5970,8 +5970,13 @@ class AegpHostApi final : public HostApi {
     std::optional<aemcp::native::LayerPropertyValue> before_value;
     std::optional<aemcp::native::LayerPropertyValue> after_value;
     AEGP_StreamValue2 desired{};
+    A_Err insert_error = A_Err_NONE;
     A_Err set_error = A_Err_NONE;
+    A_Err delete_error = A_Err_NONE;
+    A_Err invariant_error = A_Err_NONE;
     A_Err readback_error = A_Err_NONE;
+    A_long keyframe_count_after = AEGP_NumKF_NO_DATA;
+    A_Boolean time_varying_after = TRUE;
     {
       AEGP_StreamRefH direct_stream = nullptr;
       StreamRefOwner direct_owner(stream_suite.get(), nullptr);
@@ -6017,8 +6022,29 @@ class AegpHostApi final : public HostApi {
             "INVALID_ARGUMENT", "value already matches the property's sampled value",
             "params.arguments.value");
       }
-      set_error = stream_suite->AEGP_SetStreamValue(
-          plugin_id_, mutation_stream, &desired);
+      // AEGP_SetStreamValue changes the value but does not create an AE host
+      // Undo item when invoked from the idle dispatcher.  The keyframe APIs
+      // are explicitly UNDOABLE in the SDK.  Insert one temporary keyframe,
+      // set its value, then delete the sole keyframe so the property remains
+      // static while the entire operation belongs to this one Undo group.
+      AEGP_KeyframeIndex temporary_keyframe = 0;
+      insert_error = keyframe_suite->AEGP_InsertKeyframe(
+          mutation_stream, AEGP_LTimeMode_CompTime, &sample_time,
+          &temporary_keyframe);
+      if (insert_error == A_Err_NONE) {
+        set_error = keyframe_suite->AEGP_SetKeyframeValue(
+            mutation_stream, temporary_keyframe, &desired);
+        delete_error = keyframe_suite->AEGP_DeleteKeyframe(
+            mutation_stream, temporary_keyframe);
+      }
+      if (insert_error == A_Err_NONE && delete_error == A_Err_NONE) {
+        if (keyframe_suite->AEGP_GetStreamNumKFs(
+                mutation_stream, &keyframe_count_after) != A_Err_NONE
+            || stream_suite->AEGP_IsStreamTimevarying(
+                mutation_stream, &time_varying_after) != A_Err_NONE) {
+          invariant_error = A_Err_GENERIC;
+        }
+      }
 
       StreamValueOwner after_owner(stream_suite.get());
       readback_error = stream_suite->AEGP_GetNewStreamValue(
@@ -6034,12 +6060,15 @@ class AegpHostApi final : public HostApi {
       }
     }
     const A_Err end_error = undo_group.finish();
-    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+    if (insert_error != A_Err_NONE || set_error != A_Err_NONE
+        || delete_error != A_Err_NONE || invariant_error != A_Err_NONE
+        || keyframe_count_after != 0 || time_varying_after != FALSE
+        || end_error != A_Err_NONE
         || readback_error != A_Err_NONE
         || !before_value.has_value() || !after_value.has_value()) {
       return HostLayerPropertyWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "property may have changed but native readback or Undo validation failed");
+          "property may have changed but static-value, keyframe, or Undo validation failed");
     }
     aemcp::native::LayerPropertyChanged changed;
     changed.changed = true;
