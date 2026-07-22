@@ -91,13 +91,26 @@ class FakeAe:
         self.session = SESSION_2
 
     def success(
-        self, capability_id: str, value: dict[str, Any], *, write: bool,
+        self,
+        capability_id: str,
+        value: dict[str, Any],
+        *,
+        write: bool,
+        semantic_projection: str | None = None,
     ) -> tuple[bool, dict[str, Any]]:
         self.request += 1
         request_id = f"mcp-{self.request:032x}"
-        digest = runtime_module.json_hash({
+        semantic_digest = runtime_module.json_hash({
             "capabilityId": capability_id, "capabilityVersion": 1, "value": value,
         })
+        native_digest = (
+            runtime_module.json_hash({
+                "capabilityId": capability_id,
+                "capabilityVersion": 1,
+                "nativeRequest": self.request,
+            })
+            if semantic_projection else semantic_digest
+        )
         effect = "committed" if write else "none"
         evidence: dict[str, Any] = {
             "engine": "native-aegp", "hostInstanceId": self.host,
@@ -106,9 +119,35 @@ class FakeAe:
             "effect": effect, "requestDigest": "a" * 64,
             "postcondition": {
                 "verified": True, "kind": "fixture",
-                "algorithm": "sha256-rfc8785-jcs-v1", "digest": digest,
+                "algorithm": "sha256-rfc8785-jcs-v1", "digest": native_digest,
             },
         }
+        if semantic_projection == "read":
+            projection_input = {
+                "kind": "core-layer-transform-projection-v1",
+                "sourcePostconditionDigests": [native_digest],
+                "value": value,
+            }
+            evidence["semanticProjection"] = {
+                "verified": True,
+                "kind": projection_input["kind"],
+                "algorithm": "sha256-rfc8785-jcs-v1",
+                "digest": runtime_module.json_hash(projection_input),
+                "sourcePostconditionDigests": [native_digest],
+            }
+        elif semantic_projection == "write":
+            projection_input = {
+                "kind": "core-layer-transform-write-projection-v1",
+                "sourcePostconditionDigest": native_digest,
+                "value": value,
+            }
+            evidence["semanticProjection"] = {
+                "verified": True,
+                "kind": projection_input["kind"],
+                "algorithm": "sha256-rfc8785-jcs-v1",
+                "digest": runtime_module.json_hash(projection_input),
+                "sourcePostconditionDigest": native_digest,
+            }
         if write:
             evidence["undo"] = {"available": True, "verified": False}
         payload = {
@@ -124,10 +163,12 @@ class FakeAe:
             "audit": {
                 "requestId": request_id, "capabilityId": capability_id,
                 "contractDigest": self.contracts[capability_id], "effect": effect,
-                "requestDigest": "a" * 64, "postconditionDigest": digest,
+                "requestDigest": "a" * 64, "postconditionDigest": native_digest,
             },
             "evidence": evidence,
         }
+        if semantic_projection:
+            payload["implementation"]["semanticAdapter"] = "core-layer-transform-v1"
         if write:
             payload["replayed"] = False
         return False, payload
@@ -181,7 +222,17 @@ class FakeAe:
                 "layerLocator": self.locator("layer", LAYER),
                 "before": before, "after": copy.deepcopy(desired),
             }
-        return self.success(case.capability_id, value, write=case.kind == "write")
+        semantic_projection = None
+        if tool == package.READ:
+            semantic_projection = "read"
+        elif tool in {item[0] for item in (*package.WRITES, package.ORIENTATION)}:
+            semantic_projection = "write"
+        return self.success(
+            case.capability_id,
+            value,
+            write=case.kind == "write",
+            semantic_projection=semantic_projection,
+        )
 
 
 def make_runtime(tmp_path: Path, mode: str, fake: FakeAe):
@@ -243,6 +294,45 @@ def test_package_is_seven_tools_over_two_existing_native_contracts_without_t4() 
     }
     assert package.SPEC.native_novelty is False
     assert package.SPEC.t5_target_calls == package.SPEC.t6_target_calls == 26
+
+
+def test_semantic_projection_is_bound_to_the_audited_native_result(tmp_path: Path) -> None:
+    fake = FakeAe()
+    runner, _evidence = make_runtime(tmp_path, "preflight", fake)
+    runner.contract_digests.update(fake.contracts)
+    runner.expected_host_instance_id = fake.host
+    value = fake.read_state()
+    _is_error, payload = fake.success(
+        "ae.layer.properties.list",
+        value,
+        write=False,
+        semantic_projection="read",
+    )
+    runner._validate_native_success(
+        payload,
+        tool=package.READ,
+        capability_id="ae.layer.properties.list",
+        write=False,
+    )
+
+    tampered = copy.deepcopy(payload)
+    projection = tampered["evidence"]["semanticProjection"]
+    projection["sourcePostconditionDigests"] = ["0" * 64]
+    projection["digest"] = runtime_module.json_hash({
+        "kind": projection["kind"],
+        "sourcePostconditionDigests": projection["sourcePostconditionDigests"],
+        "value": value,
+    })
+    with pytest.raises(
+        runtime_module.AcceptanceFailure,
+        match="not bound to the audited native result",
+    ):
+        runner._validate_native_success(
+            tampered,
+            tool=package.READ,
+            capability_id="ae.layer.properties.list",
+            write=False,
+        )
 
 
 @pytest.mark.asyncio

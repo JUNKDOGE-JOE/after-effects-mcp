@@ -651,13 +651,68 @@ class AcceptanceRuntime:
             and audit.get("contractDigest") == expected_contract,
             f"{tool} audit/evidence mismatch",
         )
-        digest = json_hash(
-            {"capabilityId": capability_id, "capabilityVersion": 1, "value": value}
-        )
         require(postcondition.get("verified") is True, f"{tool} postcondition was not verified")
         require(postcondition.get("algorithm") == "sha256-rfc8785-jcs-v1", f"{tool} digest algorithm mismatch")
-        require(postcondition.get("digest") == digest, f"{tool} postcondition digest mismatch")
-        require(audit.get("postconditionDigest") == digest, f"{tool} audit digest mismatch")
+        native_digest = postcondition.get("digest")
+        require(
+            isinstance(native_digest, str) and len(native_digest) == 64,
+            f"{tool} native postcondition digest is invalid",
+        )
+        require(audit.get("postconditionDigest") == native_digest, f"{tool} audit digest mismatch")
+        semantic_projection = evidence.get("semanticProjection")
+        if semantic_projection is None:
+            digest = json_hash(
+                {"capabilityId": capability_id, "capabilityVersion": 1, "value": value}
+            )
+            require(native_digest == digest, f"{tool} postcondition digest mismatch")
+        else:
+            projection = mapping(
+                semantic_projection, f"{tool} semantic projection is invalid"
+            )
+            require(
+                implementation.get("semanticAdapter") == "core-layer-transform-v1",
+                f"{tool} semantic adapter is invalid",
+            )
+            require(projection.get("verified") is True, f"{tool} semantic projection was not verified")
+            require(
+                projection.get("algorithm") == "sha256-rfc8785-jcs-v1",
+                f"{tool} semantic projection algorithm mismatch",
+            )
+            kind = projection.get("kind")
+            if kind == "core-layer-transform-projection-v1":
+                source_digests = projection.get("sourcePostconditionDigests")
+                require(
+                    isinstance(source_digests, list)
+                    and source_digests
+                    and all(isinstance(item, str) and len(item) == 64 for item in source_digests),
+                    f"{tool} semantic projection source digests are invalid",
+                )
+                require(
+                    source_digests[-1] == native_digest,
+                    f"{tool} semantic projection is not bound to the audited native result",
+                )
+                projection_input = {
+                    "kind": kind,
+                    "sourcePostconditionDigests": source_digests,
+                    "value": value,
+                }
+            elif kind == "core-layer-transform-write-projection-v1":
+                source_digest = projection.get("sourcePostconditionDigest")
+                require(
+                    source_digest == native_digest,
+                    f"{tool} semantic projection is not bound to the audited native result",
+                )
+                projection_input = {
+                    "kind": kind,
+                    "sourcePostconditionDigest": source_digest,
+                    "value": value,
+                }
+            else:
+                raise AcceptanceFailure(f"{tool} semantic projection kind is unsupported")
+            require(
+                projection.get("digest") == json_hash(projection_input),
+                f"{tool} semantic projection digest mismatch",
+            )
         require(audit.get("requestDigest") == evidence.get("requestDigest"), f"{tool} request digest mismatch")
         expected_effect = "committed" if write else "none"
         require(
