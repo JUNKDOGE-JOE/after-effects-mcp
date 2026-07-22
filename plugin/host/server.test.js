@@ -696,7 +696,10 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         });
         assert.strictEqual(capabilities.status, 200);
         assert.strictEqual(capabilities.body.result.sessionId, '11111111-1111-4111-8111-111111111111');
-        assert.strictEqual(capabilities.body.result.items.length, 37);
+        assert.strictEqual(
+            capabilities.body.result.items.length,
+            nativeCapabilitiesFixture.items.length,
+        );
         assert.deepStrictEqual(
             capabilities.body.result.items.map((item) => item.id),
             nativeCapabilitiesFixture.items.map((item) => item.id),
@@ -986,7 +989,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
     }
 });
 
-test('native invoke HTTP gate accepts all #150/#155/#157 contracts and rejects closed-shape drift', async () => {
+test('native invoke HTTP gate accepts all #150/#155/#157/#162 contracts and rejects closed-shape drift', async () => {
     const nativeClient = fakeNativeClient();
     nativeClient.authorize();
     const { server, srv, port } = await startNativeApp(nativeClient);
