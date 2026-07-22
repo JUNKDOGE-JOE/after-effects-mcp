@@ -273,6 +273,17 @@ constexpr std::int64_t kMaximumProjectItems = 100000;
 constexpr A_long kMaximumLayerEffects = 4096;
 static_assert(kSourceCommit.size() == 40);
 
+[[nodiscard]] std::optional<AEGP_LayerStream> standard_layer_stream_for_match_name(
+    std::string_view match_name) noexcept {
+  if (match_name == "ADBE Anchor Point") return AEGP_LayerStream_ANCHORPOINT;
+  if (match_name == "ADBE Position") return AEGP_LayerStream_POSITION;
+  if (match_name == "ADBE Scale") return AEGP_LayerStream_SCALE;
+  if (match_name == "ADBE Rotate Z") return AEGP_LayerStream_ROTATE_Z;
+  if (match_name == "ADBE Opacity") return AEGP_LayerStream_OPACITY;
+  if (match_name == "ADBE Orientation") return AEGP_LayerStream_ORIENTATION;
+  return std::nullopt;
+}
+
 constexpr bool exact_nonnegative_fraction_leq(
     std::uint64_t left_numerator,
     std::uint64_t left_denominator,
@@ -5882,6 +5893,34 @@ class AegpHostApi final : public HostApi {
             "params.arguments.propertyLocator");
       }
       property_stream = std::move(next_owner);
+    }
+    std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> match_name{};
+    if (dynamic_suite->AEGP_GetMatchName(property_stream.get(), match_name.data())
+            != A_Err_NONE
+        || std::find(match_name.begin(), match_name.end(), '\0') == match_name.end()) {
+      return HostLayerPropertyWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read bounded property match name");
+    }
+    if (const auto direct_layer_stream = standard_layer_stream_for_match_name(
+            std::string_view(match_name.data())); direct_layer_stream.has_value()) {
+      AEGP_StreamRefH direct_stream = nullptr;
+      if (stream_suite->AEGP_GetNewLayerStream(
+              plugin_id_, layer, *direct_layer_stream, &direct_stream) != A_Err_NONE
+          || direct_stream == nullptr) {
+        return HostLayerPropertyWriteResult::failure(
+            "CAPABILITY_FAILED", "could not reacquire the standard layer property");
+      }
+      StreamRefOwner direct_owner(stream_suite.get(), direct_stream);
+      std::int32_t direct_unique_id = 0;
+      if (stream_address->unique_ids.empty()
+          || stream_suite->AEGP_GetUniqueStreamID(
+              direct_owner.get(), &direct_unique_id) != A_Err_NONE
+          || direct_unique_id != stream_address->unique_ids.back()) {
+        return HostLayerPropertyWriteResult::failure(
+            "STALE_LOCATOR", "standard layer property identity changed",
+            "params.arguments.propertyLocator");
+      }
+      property_stream = std::move(direct_owner);
     }
     AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
     AEGP_StreamType type = AEGP_StreamType_NO_DATA;

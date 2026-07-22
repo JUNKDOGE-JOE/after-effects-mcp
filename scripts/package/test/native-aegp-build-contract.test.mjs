@@ -143,6 +143,48 @@ test('native composition-create diagnostics use the redacted serializer', () => 
   );
 });
 
+test('native standard transform writes reacquire canonical layer streams before mutation', () => {
+  const helperStart = PLUGIN_ENTRY.indexOf(
+    'standard_layer_stream_for_match_name(',
+  );
+  const setterStart = PLUGIN_ENTRY.indexOf(
+    'HostLayerPropertyWriteResult set_layer_property(',
+  );
+  const setterEnd = PLUGIN_ENTRY.indexOf(
+    'HostLayerDetailsResult read_layer_details(',
+    setterStart,
+  );
+  assert.notEqual(helperStart, -1);
+  assert.notEqual(setterStart, -1);
+  assert.notEqual(setterEnd, -1);
+
+  const helper = PLUGIN_ENTRY.slice(helperStart, setterStart);
+  for (const [matchName, sdkStream] of [
+    ['ADBE Anchor Point', 'AEGP_LayerStream_ANCHORPOINT'],
+    ['ADBE Position', 'AEGP_LayerStream_POSITION'],
+    ['ADBE Scale', 'AEGP_LayerStream_SCALE'],
+    ['ADBE Rotate Z', 'AEGP_LayerStream_ROTATE_Z'],
+    ['ADBE Opacity', 'AEGP_LayerStream_OPACITY'],
+    ['ADBE Orientation', 'AEGP_LayerStream_ORIENTATION'],
+  ]) {
+    assert.match(helper, new RegExp(`${matchName.replaceAll(' ', '\\s+')}`));
+    assert.match(helper, new RegExp(sdkStream));
+  }
+
+  const setter = PLUGIN_ENTRY.slice(setterStart, setterEnd);
+  const directStream = setter.indexOf('AEGP_GetNewLayerStream(');
+  const identityCheck = setter.indexOf('direct_unique_id', directStream);
+  const undoGroup = setter.indexOf('AEGP_StartUndoGroup(', identityCheck);
+  const mutation = setter.indexOf('AEGP_SetStreamValue(', undoGroup);
+  assert.ok(
+    directStream !== -1
+      && identityCheck > directStream
+      && undoGroup > identityCheck
+      && mutation > undoGroup,
+    'standard transform stream identity must be revalidated before the Undo-bound write',
+  );
+});
+
 test('native layer-parent adapter distinguishes stale, cross-composition, and self-parent failures', () => {
   const start = PLUGIN_ENTRY.indexOf('HostLayerParentWriteResult set_layer_parent(');
   const end = PLUGIN_ENTRY.indexOf('HostLayerDuplicateResult duplicate_layer(', start);
