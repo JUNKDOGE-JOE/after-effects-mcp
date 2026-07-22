@@ -45,6 +45,7 @@ def _property(
     value: N.LayerPropertyPrimitiveValue | None,
     *,
     time_varying: bool | None = False,
+    hidden: bool = False,
 ) -> N.LayerProperty:
     is_group = value is None
     if isinstance(value, N.LayerPropertyScalarValue):
@@ -62,7 +63,7 @@ def _property(
         match_name=match_name,
         grouping_type="named-group" if is_group else "leaf",
         child_count=7 if is_group else 0,
-        hidden=False,
+        hidden=hidden,
         disabled=False,
         modified=False,
         can_vary_over_time=None if is_group else True,
@@ -107,7 +108,10 @@ def _page(
     )
 
 
-def _tree(*, dimensions: int = 2, time_varying: str | None = None):
+def _tree(
+    *, dimensions: int = 2, time_varying: str | None = None,
+    hidden_orientation: bool = False,
+):
     root = _property(1, "ADBE Transform Group", None)
     # Use the stable test locator as the group parent.
     root = root.model_copy(update={"property_locator": TRANSFORM_LOCATOR})
@@ -127,6 +131,7 @@ def _tree(*, dimensions: int = 2, time_varying: str | None = None):
             match_name,
             value,
             time_varying=match_name == time_varying,
+            hidden=hidden_orientation and match_name == "ADBE Orientation",
         )
         for index, (match_name, value) in enumerate(fields, 1)
     )
@@ -135,6 +140,15 @@ def _tree(*, dimensions: int = 2, time_varying: str | None = None):
 
 async def _install_tree(monkeypatch, *, dimensions: int = 2, time_varying: str | None = None):
     root, children = _tree(dimensions=dimensions, time_varying=time_varying)
+
+    async def _list(*_args, parent_property_locator=None, **_kwargs):
+        return root if parent_property_locator is None else children
+
+    monkeypatch.setattr(LT, "invoke_layer_properties_list", _list)
+
+
+async def _install_hidden_2d_tree(monkeypatch):
+    root, children = _tree(dimensions=3, hidden_orientation=True)
 
     async def _list(*_args, parent_property_locator=None, **_kwargs):
         return root if parent_property_locator is None else children
@@ -162,6 +176,53 @@ async def test_transform_read_projects_ai_friendly_values_and_binds_source_evide
     }
     assert len(result.projection_digest) == 64
     assert len(result.source_postcondition_digests) == 2
+
+
+@pytest.mark.asyncio
+async def test_hidden_ae26_3d_streams_project_as_2d(monkeypatch):
+    await _install_hidden_2d_tree(monkeypatch)
+    result = await LT.read_layer_transform(
+        object(), layer_locator=LAYER_LOCATOR, deadline_unix_ms=10_000,
+    )
+
+    assert result.value["dimensions"] == 2
+    assert result.value["anchorPoint"] == ["10", "20"]
+    assert result.value["position"] == ["10", "20"]
+    assert result.value["scalePercent"] == ["100", "100"]
+    assert result.value["orientationDegrees"] is None
+
+
+@pytest.mark.asyncio
+async def test_hidden_ae26_3d_stream_write_preserves_native_z(monkeypatch):
+    await _install_hidden_2d_tree(monkeypatch)
+    captured: dict[str, Any] = {}
+
+    async def _set(_backend, **kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(
+            value=N.LayerPropertySetValue(
+                changed=True,
+                layer_locator=LAYER_LOCATOR,
+                property_locator=kwargs["property_locator"],
+                value_type="three-d-spatial",
+                before_value=_vector("10", "20", "30"),
+                after_value=kwargs["value"],
+            ),
+            evidence=SimpleNamespace(
+                postcondition=SimpleNamespace(digest="e" * 64),
+            ),
+        )
+
+    monkeypatch.setattr(LT, "invoke_layer_property_set", _set)
+    result = await LT.set_layer_transform(
+        object(), layer_locator=LAYER_LOCATOR, field="position",
+        value={"kind": "vector", "components": ["50", "60"]},
+        idempotency_key="issue165-position-ae26", deadline_unix_ms=10_000,
+    )
+
+    assert captured["value"].components == ("50", "60", "30")
+    assert result.value["before"] == ["10", "20"]
+    assert result.value["after"] == ["50", "60"]
 
 
 @pytest.mark.asyncio

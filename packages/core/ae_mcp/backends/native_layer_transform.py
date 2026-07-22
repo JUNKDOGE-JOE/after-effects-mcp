@@ -51,6 +51,7 @@ class TransformDiscovery:
     layer_locator: NativeLocator
     layer_name: str
     dimensions: Literal[2, 3]
+    native_dimensions: Literal[2, 3]
     properties: Mapping[TransformField, LayerProperty]
     executions: tuple[LayerPropertiesListExecution, ...]
 
@@ -229,9 +230,9 @@ async def discover_layer_transform(
     anchor = _sampled_vector(required["anchor-point"], "anchor-point")
     position = _sampled_vector(required["position"], "position")
     scale = _sampled_vector(required["scale"], "scale")
-    dimensions = len(position.components)
-    if dimensions not in {2, 3} or any(
-        len(value.components) != dimensions for value in (anchor, scale)
+    native_dimensions = len(position.components)
+    if native_dimensions not in {2, 3} or any(
+        len(value.components) != native_dimensions for value in (anchor, scale)
     ):
         raise _error(
             "NATIVE_CONTRACT_MISMATCH",
@@ -245,16 +246,27 @@ async def discover_layer_transform(
         prop for prop in child_tuple
         if prop.match_name == _FIELD_MATCH_NAMES["orientation"]
     )
-    if dimensions == 3:
+    if native_dimensions == 3:
         if len(orientation_matches) != 1:
             raise _error(
                 "NATIVE_CONTRACT_MISMATCH",
                 "A 3D layer did not expose exactly one Orientation stream.",
                 hint="Refresh the layer locator after enabling the 3D switch.",
             )
-        _sampled_vector(orientation_matches[0], "orientation")
-        required["orientation"] = orientation_matches[0]
-    elif len(orientation_matches) > 1:
+        orientation = orientation_matches[0]
+        _sampled_vector(orientation, "orientation")
+        dimensions: Literal[2, 3] = 2 if orientation.hidden else 3
+        if dimensions == 3:
+            required["orientation"] = orientation
+    elif orientation_matches and not orientation_matches[0].hidden:
+        raise _error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "A 2D transform exposed a visible Orientation stream.",
+            hint="Refresh the layer locator and inspect the native property tree.",
+        )
+    else:
+        dimensions = 2
+    if len(orientation_matches) > 1:
         raise _error(
             "NATIVE_CONTRACT_MISMATCH",
             "Layer exposed duplicate Orientation streams.",
@@ -266,16 +278,24 @@ async def discover_layer_transform(
         layer_locator=last.value.layer_locator,
         layer_name=last.value.layer_name,
         dimensions=dimensions,
+        native_dimensions=native_dimensions,
         properties=required,
         executions=tuple(executions),
     )
 
 
-def _semantic_value(value: LayerPropertyPrimitiveValue) -> str | list[str]:
+def _semantic_value(
+    value: LayerPropertyPrimitiveValue,
+    *,
+    dimensions: Literal[2, 3] | None = None,
+) -> str | list[str]:
     if isinstance(value, LayerPropertyScalarValue):
         return value.value
     if isinstance(value, LayerPropertyVectorValue):
-        return list(value.components)
+        components = value.components
+        if dimensions == 2 and len(components) == 3:
+            components = components[:2]
+        return list(components)
     raise TypeError("transform projection accepted a non scalar/vector value")
 
 
@@ -297,9 +317,15 @@ async def read_layer_transform(
         "layerLocator": discovery.layer_locator.model_dump(mode="json", by_alias=True),
         "layerName": discovery.layer_name,
         "dimensions": discovery.dimensions,
-        "anchorPoint": _semantic_value(props["anchor-point"].value),
-        "position": _semantic_value(props["position"].value),
-        "scalePercent": _semantic_value(props["scale"].value),
+        "anchorPoint": _semantic_value(
+            props["anchor-point"].value, dimensions=discovery.dimensions,
+        ),
+        "position": _semantic_value(
+            props["position"].value, dimensions=discovery.dimensions,
+        ),
+        "scalePercent": _semantic_value(
+            props["scale"].value, dimensions=discovery.dimensions,
+        ),
         "rotationDegrees": _semantic_value(props["rotation"].value),
         "opacityPercent": _semantic_value(props["opacity"].value),
         "orientationDegrees": (
@@ -351,13 +377,18 @@ async def set_layer_transform(
     requested: LayerPropertyPrimitiveValue
     if field in _VECTOR_FIELDS:
         requested = LayerPropertyVectorValue.model_validate(value)
-        _sampled_vector(prop, field)
+        sampled = _sampled_vector(prop, field)
         if len(requested.components) != discovery.dimensions:
             raise _error(
                 "INVALID_ARGUMENT",
                 f"{field} requires exactly {discovery.dimensions} components for this layer.",
                 hint="Call ae_getLayerTransform and match its reported dimensions.",
                 field=field,
+            )
+        if discovery.dimensions == 2 and discovery.native_dimensions == 3:
+            requested = LayerPropertyVectorValue(
+                kind="vector",
+                components=(*requested.components, sampled.components[2]),
             )
     else:
         requested = LayerPropertyScalarValue.model_validate(value)
@@ -377,8 +408,12 @@ async def set_layer_transform(
         "changed": True,
         "field": field,
         "layerLocator": changed.layer_locator.model_dump(mode="json", by_alias=True),
-        "before": _semantic_value(changed.before_value),
-        "after": _semantic_value(changed.after_value),
+        "before": _semantic_value(
+            changed.before_value, dimensions=discovery.dimensions,
+        ),
+        "after": _semantic_value(
+            changed.after_value, dimensions=discovery.dimensions,
+        ),
     }
     projection_digest = _sha256_closed_json({
         "kind": "core-layer-transform-write-projection-v1",
