@@ -6986,7 +6986,11 @@ class AegpHostApi final : public HostApi {
   [[nodiscard]] static std::optional<std::string> layer_blending_mode_name(
       PF_TransferMode mode) {
     switch (mode) {
-      case PF_Xfer_COPY: return "normal";
+      // AEGP reports a timeline layer's user-visible Normal mode as
+      // PF_Xfer_IN_FRONT. PF_Xfer_COPY can still appear in legacy/synthetic
+      // contexts, so accept both while always writing the host-native value.
+      case PF_Xfer_COPY:
+      case PF_Xfer_IN_FRONT: return "normal";
       case PF_Xfer_DISSOLVE: return "dissolve";
       case PF_Xfer_ADD: return "add";
       case PF_Xfer_MULTIPLY: return "multiply";
@@ -7020,7 +7024,7 @@ class AegpHostApi final : public HostApi {
 
   [[nodiscard]] static std::optional<PF_TransferMode> layer_blending_mode_value(
       std::string_view mode) {
-    if (mode == "normal") return PF_Xfer_COPY;
+    if (mode == "normal") return PF_Xfer_IN_FRONT;
     if (mode == "dissolve") return PF_Xfer_DISSOLVE;
     if (mode == "add") return PF_Xfer_ADD;
     if (mode == "multiply") return PF_Xfer_MULTIPLY;

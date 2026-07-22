@@ -1763,6 +1763,11 @@ void layer_compositing_writes_read_back_only_their_owned_sdk_fields() {
           && blending_implementation.find("read_layer_compositing_value")
               == std::string_view::npos,
       "layer blending verification depends on unrelated flags or quality reads");
+  require(source.find("case PF_Xfer_IN_FRONT: return \"normal\";")
+              != std::string::npos
+          && source.find("if (mode == \"normal\") return PF_Xfer_IN_FRONT;")
+              != std::string::npos,
+      "layer Normal mode no longer matches the AEGP timeline transfer value");
 }
 
 void layer_duplicate_rejects_an_unrelated_layer_result() {
