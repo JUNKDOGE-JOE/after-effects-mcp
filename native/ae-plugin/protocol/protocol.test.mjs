@@ -23,6 +23,7 @@ import {
   materializeDeadline,
   nativeCapabilityRegistry,
   keyframeAuthoringDescriptors,
+  layerCompositingDescriptors,
   layerTimelineDescriptors,
   projectCompositionDescriptors,
   postconditionDigest,
@@ -684,7 +685,7 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 37);
+  assert.equal(nativeCapabilityRegistry(schema).length, 41);
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -876,6 +877,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const layerPropertyDescriptor = layerPropertySetDescriptor(schema);
   const projectCompositionCapabilities = projectCompositionDescriptors(schema);
   const layerTimelineCapabilities = layerTimelineDescriptors(schema);
+  const layerCompositingCapabilities = layerCompositingDescriptors(schema);
   const keyframeAuthoringCapabilities = keyframeAuthoringDescriptors(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
@@ -962,6 +964,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     layerPropertyDescriptor,
     ...projectCompositionCapabilities,
     ...layerTimelineCapabilities,
+    ...layerCompositingCapabilities,
     ...keyframeAuthoringCapabilities,
   ]), capabilityDigest(nativeCapabilityRegistry(schema)));
   assert.equal(projectCompositionCapabilities.length, 8);
@@ -980,6 +983,15 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     assert.equal(timelineDescriptor.contractDigest, sha256Jcs({
       inputSchema: timelineDescriptor.inputSchema,
       resultSchema: timelineDescriptor.resultSchema,
+    }));
+  }
+  assert.equal(layerCompositingCapabilities.length, 4);
+  for (const compositingDescriptor of layerCompositingCapabilities) {
+    assert.equal(validateCapabilityDescriptor(compositingDescriptor, schema), true,
+      compositingDescriptor.id);
+    assert.equal(compositingDescriptor.contractDigest, sha256Jcs({
+      inputSchema: compositingDescriptor.inputSchema,
+      resultSchema: compositingDescriptor.resultSchema,
     }));
   }
   assert.equal(keyframeAuthoringCapabilities.length, 7);
@@ -1104,12 +1116,42 @@ test('keyframe authoring matrix binds all seven strict typed contracts', () => {
   assert.deepEqual(classifyRequest(badRequest), { ok: false, errorCode: 'INVALID_ARGUMENT' });
 });
 
+test('layer compositing matrix binds four native contracts to ten public tools', () => {
+  const matrix = golden('layer-compositing-matrix.json');
+  const descriptors = layerCompositingDescriptors(schema);
+  assert.equal(capabilityDigest(nativeCapabilityRegistry(schema)), matrix.expectedRegistryDigest);
+  assert.deepEqual(
+    descriptors.map(({ id }) => id),
+    matrix.cases.map(({ capabilityId }) => capabilityId),
+  );
+  assert.equal(matrix.publicTools.length, 10);
+  assert.deepEqual(
+    matrix.publicTools.filter(({ capabilityId }) => capabilityId === 'ae.layer.switch.set')
+      .map(({ fixedSwitch }) => fixedSwitch),
+    ['visibility', 'solo', 'locked', 'shy', 'motion-blur', 'three-d', 'adjustment'],
+  );
+  assert.equal(new Set(matrix.publicTools.map(({ tool }) => tool)).size, 10);
+  assert.deepEqual(matrix.acceptance, {
+    maximumPublicCalls: 26,
+    activeFixtureCount: 1,
+    saveAsCopies: 0,
+    writeUndoRequired: true,
+    blendingPreserves: ['preserveAlpha', 'trackMatte'],
+  });
+  for (const [index, descriptor] of descriptors.entries()) {
+    const expected = matrix.cases[index];
+    assert.equal(descriptor.contractDigest, expected.contractDigest);
+    assert.equal(descriptor.mutability === 'mutating', expected.mutating);
+    assert.match(expected.postconditionKind, /^layer-(?:compositing-read|switch-set|quality-set|blending-mode-set)$/u);
+  }
+});
+
 test('v1 capability discovery is single-page, fail-closed, and never replayed', () => {
   const hello = golden('hello.json');
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 37);
+  assert.equal(exchange.response.result.items.length, 41);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);

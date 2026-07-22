@@ -50,6 +50,13 @@ from ae_mcp.backends.native_layer_timeline import (
     invoke_layer_stretch_set,
     stretch_percent_to_ratio,
 )
+from ae_mcp.backends.native_layer_compositing import (
+    LayerSwitch,
+    invoke_layer_blending_mode_set,
+    invoke_layer_compositing_read,
+    invoke_layer_quality_set,
+    invoke_layer_switch_set,
+)
 from ae_mcp.backends.native_keyframe_authoring import (
     invoke_keyframe_add,
     invoke_keyframe_behavior_set,
@@ -92,6 +99,8 @@ _LAYER_STRETCH_SET_TIMEOUT_MS = 10_000
 _LAYER_ORDER_SET_TIMEOUT_MS = 10_000
 _LAYER_PARENT_SET_TIMEOUT_MS = 10_000
 _LAYER_DUPLICATE_TIMEOUT_MS = 10_000
+_LAYER_COMPOSITING_READ_TIMEOUT_MS = 10_000
+_LAYER_COMPOSITING_WRITE_TIMEOUT_MS = 10_000
 _KEYFRAME_DETAILS_READ_TIMEOUT_MS = 10_000
 _KEYFRAME_WRITE_TIMEOUT_MS = 10_000
 
@@ -1434,6 +1443,121 @@ async def _run_get_layer_details(
     return _native_read_response(execution)
 
 
+async def _run_get_layer_compositing_state(
+    args: schemas.AeGetLayerCompositingStateArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_COMPOSITING_READ_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_compositing_read(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx, _call(), start_msg="ae.getLayerCompositingState native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_set_layer_switch(
+    args: Any, ctx: Any, *, switch: LayerSwitch, label: str,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_COMPOSITING_WRITE_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_switch_set(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            switch=switch, enabled=args.enabled, idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call, cancellation=cancellation, ctx=ctx,
+        start_msg=f"{label} native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_visibility(args: schemas.AeSetLayerVisibilityArgs, ctx: Any) -> dict[str, Any]:
+    return await _run_set_layer_switch(args, ctx, switch="visibility", label="ae.setLayerVisibility")
+
+
+async def _run_set_layer_solo(args: schemas.AeSetLayerSoloArgs, ctx: Any) -> dict[str, Any]:
+    return await _run_set_layer_switch(args, ctx, switch="solo", label="ae.setLayerSolo")
+
+
+async def _run_set_layer_locked(args: schemas.AeSetLayerLockedArgs, ctx: Any) -> dict[str, Any]:
+    return await _run_set_layer_switch(args, ctx, switch="locked", label="ae.setLayerLocked")
+
+
+async def _run_set_layer_shy(args: schemas.AeSetLayerShyArgs, ctx: Any) -> dict[str, Any]:
+    return await _run_set_layer_switch(args, ctx, switch="shy", label="ae.setLayerShy")
+
+
+async def _run_set_layer_motion_blur(args: schemas.AeSetLayerMotionBlurArgs, ctx: Any) -> dict[str, Any]:
+    return await _run_set_layer_switch(args, ctx, switch="motion-blur", label="ae.setLayerMotionBlur")
+
+
+async def _run_set_layer_three_d(args: schemas.AeSetLayerThreeDArgs, ctx: Any) -> dict[str, Any]:
+    return await _run_set_layer_switch(args, ctx, switch="three-d", label="ae.setLayerThreeD")
+
+
+async def _run_set_layer_adjustment(args: schemas.AeSetLayerAdjustmentArgs, ctx: Any) -> dict[str, Any]:
+    return await _run_set_layer_switch(args, ctx, switch="adjustment", label="ae.setLayerAdjustment")
+
+
+async def _run_set_layer_quality(
+    args: schemas.AeSetLayerQualityArgs, ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_COMPOSITING_WRITE_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_quality_set(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            quality=args.quality, idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call, cancellation=cancellation, ctx=ctx,
+        start_msg="ae.setLayerQuality native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_blending_mode(
+    args: schemas.AeSetLayerBlendingModeArgs, ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_COMPOSITING_WRITE_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_blending_mode_set(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            mode=args.mode, idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call, cancellation=cancellation, ctx=ctx,
+        start_msg="ae.setLayerBlendingMode native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
 async def _run_rename_layer(
     args: schemas.AeRenameLayerArgs,
     ctx: Any,
@@ -1906,6 +2030,16 @@ register(
     schemas.AeGetLayerDetailsArgs,
     _run_get_layer_details,
 )
+register("ae.getLayerCompositingState", schemas.AeGetLayerCompositingStateArgs, _run_get_layer_compositing_state)
+register("ae.setLayerVisibility", schemas.AeSetLayerVisibilityArgs, _run_set_layer_visibility)
+register("ae.setLayerSolo", schemas.AeSetLayerSoloArgs, _run_set_layer_solo)
+register("ae.setLayerLocked", schemas.AeSetLayerLockedArgs, _run_set_layer_locked)
+register("ae.setLayerShy", schemas.AeSetLayerShyArgs, _run_set_layer_shy)
+register("ae.setLayerMotionBlur", schemas.AeSetLayerMotionBlurArgs, _run_set_layer_motion_blur)
+register("ae.setLayerThreeD", schemas.AeSetLayerThreeDArgs, _run_set_layer_three_d)
+register("ae.setLayerAdjustment", schemas.AeSetLayerAdjustmentArgs, _run_set_layer_adjustment)
+register("ae.setLayerQuality", schemas.AeSetLayerQualityArgs, _run_set_layer_quality)
+register("ae.setLayerBlendingMode", schemas.AeSetLayerBlendingModeArgs, _run_set_layer_blending_mode)
 register(
     "ae.renameLayer",
     schemas.AeRenameLayerArgs,
@@ -2053,6 +2187,7 @@ __all__ = [
     "_run_duplicate_composition",
     "_run_get_composition_settings",
     "_run_get_layer_details",
+    "_run_get_layer_compositing_state",
     "_run_get_project_context",
     "_run_get_project_item_metadata",
     "_run_get_composition_time",
@@ -2078,6 +2213,15 @@ __all__ = [
     "_run_set_layer_range",
     "_run_set_layer_start_time",
     "_run_set_layer_stretch",
+    "_run_set_layer_visibility",
+    "_run_set_layer_solo",
+    "_run_set_layer_locked",
+    "_run_set_layer_shy",
+    "_run_set_layer_motion_blur",
+    "_run_set_layer_three_d",
+    "_run_set_layer_adjustment",
+    "_run_set_layer_quality",
+    "_run_set_layer_blending_mode",
     "_run_get_layer_property_keyframe_details",
     "_run_add_layer_property_keyframe",
     "_run_set_layer_property_keyframe_value",

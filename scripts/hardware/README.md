@@ -3,6 +3,41 @@
 These scripts call the same public MCP tools that a model sees. They do not
 call Core handlers, the CEP HTTP bridge, or the native socket directly.
 
+## Capability package #162
+
+`issue162_layer_compositing_acceptance.py` is a thin wrapper around the shared
+CLI/runtime; `issue162_layer_compositing_spec.py` contains only the ten-tool
+matrix, one solid-layer recipe, semantic assertions, Undo steps, and restart
+reacquisition. Seven fixed public switch tools intentionally share one closed
+native capability, while the model never receives a generic SDK flag.
+
+Run `preflight` before candidate freeze. It uses three public calls to prove
+the exact deployed identity, create one disposable composition/solid fixture,
+read compositing state, and archive the fixture without candidate evidence.
+Because #162 is the first real-machine write use of LayerSuite9 flag/quality/
+transfer setters, `t4` is one four-call non-candidate smoke: two previously
+verified fixture-support writes, one visibility write, one real AE Undo, and
+one compositing read that verifies restoration. It does not restart AE or run
+the package matrix.
+
+T5/T6 each use exactly 24 public calls: two fixture-support writes, one baseline
+read, nine package writes, nine post-Undo reads, two restart locator reads, and
+one final compositing read. They keep one `ephemeral-validation` fixture,
+produce no Save As copies, restart only the explicit formal AE application,
+and archive the fixture after structured evidence is complete.
+
+```sh
+PYTHONDONTWRITEBYTECODE=1 uv run --frozen python \
+  scripts/hardware/issue162_layer_compositing_acceptance.py \
+  --mode preflight \
+  --expected-sha 0123456789abcdef0123456789abcdef01234567 \
+  --fixture-path '/absolute/local/active/issue162-layer-compositing.aep' \
+  --recovery-archive-root '/absolute/local/recovery/ae-mcp-fixtures' \
+  --native-receipt /absolute/candidate/native/build-receipt.json \
+  --native-manifest /absolute/candidate/native-plugin-manifest.json \
+  --evidence-dir '/absolute/private/evidence/issue162-preflight'
+```
+
 ## Capability package #157
 
 `issue157_keyframe_authoring_acceptance.py` is the thin CLI and

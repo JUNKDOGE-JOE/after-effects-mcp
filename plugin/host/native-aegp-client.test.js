@@ -539,7 +539,7 @@ async function readyNativeClient(t, protocolOptions) {
     return { client, protocol };
 }
 
-test('CEP client negotiates the complete #150/#155/#157 registry and verifies frozen #150/#155 vectors', {
+test('CEP client negotiates the complete #150/#155/#157/#162 registry and verifies frozen package vectors', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const { client, protocol } = await readyNativeClient(t, {

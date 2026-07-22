@@ -233,6 +233,17 @@ class AeGetLayerDetailsArgs(_StrictModel):
     )
 
 
+class AeGetLayerCompositingStateArgs(_StrictModel):
+    """Read native layer switches, quality, and blending state."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Fresh layer locator returned by ae_listCompositionLayers.",
+    )
+
+
 class _AeLayerWriteArgs(_StrictModel):
     model_config = ConfigDict(extra="forbid", strict=True)
 
@@ -247,6 +258,62 @@ class _AeLayerWriteArgs(_StrictModel):
         pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
         description="Stable key for this one layer write intent; use a new key for a new intent.",
     )
+
+
+class _AeLayerBooleanSwitchArgs(_AeLayerWriteArgs):
+    enabled: bool = Field(
+        ...,
+        description="Exact desired switch state. Read current state first; no-op writes are rejected.",
+    )
+
+
+class AeSetLayerVisibilityArgs(_AeLayerBooleanSwitchArgs):
+    """Set the layer video/eyeball switch."""
+
+
+class AeSetLayerSoloArgs(_AeLayerBooleanSwitchArgs):
+    """Set the layer Solo switch."""
+
+
+class AeSetLayerLockedArgs(_AeLayerBooleanSwitchArgs):
+    """Set the layer Lock switch."""
+
+
+class AeSetLayerShyArgs(_AeLayerBooleanSwitchArgs):
+    """Set the layer Shy switch."""
+
+
+class AeSetLayerMotionBlurArgs(_AeLayerBooleanSwitchArgs):
+    """Set the layer Motion Blur switch."""
+
+
+class AeSetLayerThreeDArgs(_AeLayerBooleanSwitchArgs):
+    """Set the layer 3D switch."""
+
+
+class AeSetLayerAdjustmentArgs(_AeLayerBooleanSwitchArgs):
+    """Set the layer Adjustment Layer switch."""
+
+
+class AeSetLayerQualityArgs(_AeLayerWriteArgs):
+    """Set the layer render quality from a closed native enum."""
+
+    quality: Literal["wireframe", "draft", "best"] = Field(
+        ...,
+        description="Exact After Effects layer quality.",
+    )
+
+
+class AeSetLayerBlendingModeArgs(_AeLayerWriteArgs):
+    """Set the layer blending mode while preserving alpha/matte fields."""
+
+    mode: Literal[
+        "normal", "dissolve", "add", "multiply", "screen", "overlay", "soft-light",
+        "hard-light", "darken", "lighten", "difference", "hue", "saturation", "color",
+        "luminosity", "color-dodge", "color-burn", "exclusion", "linear-dodge",
+        "linear-burn", "linear-light", "vivid-light", "pin-light", "hard-mix",
+        "lighter-color", "darker-color", "subtract", "divide",
+    ] = Field(..., description="Exact allowlisted After Effects blending mode.")
 
 
 def _valid_layer_name(value: str, *, field: str) -> str:

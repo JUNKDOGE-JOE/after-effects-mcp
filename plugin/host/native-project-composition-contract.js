@@ -1,6 +1,6 @@
 'use strict';
 
-// Closed CEP-side verification for the #150, #155, and #157 capability packages.
+// Closed CEP-side verification for the #150, #155, #157, and #162 capability packages.
 // This is not a route resolver: it only validates the named native contracts.
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -428,6 +428,78 @@ function validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId
     return validLocator(value.layerLocator, ['layer'])
         && sameLocator(value.layerLocator, argumentsValue.layerLocator)
         && boundToSession(value.layerLocator, hostInstanceId, sessionId);
+}
+
+const LAYER_SWITCHES = Object.freeze([
+    'visibility', 'solo', 'locked', 'shy', 'motion-blur', 'three-d', 'adjustment',
+]);
+const LAYER_QUALITIES = Object.freeze(['wireframe', 'draft', 'best']);
+const LAYER_BLENDING_MODES = Object.freeze([
+    'normal', 'dissolve', 'add', 'multiply', 'screen', 'overlay', 'soft-light',
+    'hard-light', 'darken', 'lighten', 'difference', 'hue', 'saturation', 'color',
+    'luminosity', 'color-dodge', 'color-burn', 'exclusion', 'linear-dodge',
+    'linear-burn', 'linear-light', 'vivid-light', 'pin-light', 'hard-mix',
+    'lighter-color', 'darker-color', 'subtract', 'divide',
+]);
+const LAYER_TRACK_MATTES = Object.freeze([
+    'none', 'alpha', 'inverted-alpha', 'luma', 'inverted-luma',
+]);
+
+function validLayerCompositingValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'layerLocator', 'visibilityEnabled', 'solo', 'locked', 'shy', 'motionBlur',
+        'threeD', 'adjustment', 'quality', 'blendingMode', 'preserveAlpha', 'trackMatte',
+    ]) && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && ['visibilityEnabled', 'solo', 'locked', 'shy', 'motionBlur', 'threeD',
+            'adjustment', 'preserveAlpha'].every(function (key) {
+            return typeof value[key] === 'boolean';
+        })
+        && LAYER_QUALITIES.includes(value.quality)
+        && LAYER_BLENDING_MODES.includes(value.blendingMode)
+        && LAYER_TRACK_MATTES.includes(value.trackMatte);
+}
+
+function validLayerSwitchArguments(value) {
+    return exactKeys(value, ['layerLocator', 'switch', 'enabled', 'idempotencyKey'])
+        && validLocator(value.layerLocator, ['layer'])
+        && LAYER_SWITCHES.includes(value.switch)
+        && typeof value.enabled === 'boolean'
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validLayerSwitchValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'changed', 'layerLocator', 'switch', 'beforeEnabled', 'afterEnabled',
+    ]) && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && value.switch === argumentsValue.switch
+        && typeof value.beforeEnabled === 'boolean'
+        && typeof value.afterEnabled === 'boolean'
+        && value.beforeEnabled !== value.afterEnabled
+        && value.afterEnabled === argumentsValue.enabled;
+}
+
+function validLayerQualityValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, ['changed', 'layerLocator', 'beforeQuality', 'afterQuality'])
+        && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && LAYER_QUALITIES.includes(value.beforeQuality)
+        && LAYER_QUALITIES.includes(value.afterQuality)
+        && value.beforeQuality !== value.afterQuality
+        && value.afterQuality === argumentsValue.quality;
+}
+
+function validLayerBlendingModeValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'changed', 'layerLocator', 'beforeMode', 'afterMode', 'preserveAlpha', 'trackMatte',
+    ]) && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && LAYER_BLENDING_MODES.includes(value.beforeMode)
+        && LAYER_BLENDING_MODES.includes(value.afterMode)
+        && value.beforeMode !== value.afterMode
+        && value.afterMode === argumentsValue.mode
+        && typeof value.preserveAlpha === 'boolean'
+        && LAYER_TRACK_MATTES.includes(value.trackMatte);
 }
 
 function validLayerNameValue(value, argumentsValue, hostInstanceId, sessionId) {
@@ -961,6 +1033,49 @@ const CONTRACTS = Object.freeze({
         postconditionKind: 'layer-details-read',
         validArguments: validLayerLocatorArguments,
         validValue: validLayerDetailsValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.compositing.read': Object.freeze({
+        digest: '407554b3f18f8758a8eb997d2b407e74dcca8edbd394e07cb2168a9548a7d99d',
+        mutating: false,
+        postconditionKind: 'layer-compositing-read',
+        validArguments: validLayerLocatorArguments,
+        validValue: validLayerCompositingValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.switch.set': Object.freeze({
+        digest: '505c9f16f34ded8d154e844e3078fe214cff6e5ebd83e42fc454f5b69a830d77',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-switch-set',
+        validArguments: validLayerSwitchArguments,
+        validValue: validLayerSwitchValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.quality.set': Object.freeze({
+        digest: 'ca09062a5ed2a07fd8277eaef9bbc030f752b4da7baf4448896f1d6daad2c465',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-quality-set',
+        validArguments: function (value) {
+            return validLayerWriteArguments(value, 'quality', function (quality) {
+                return LAYER_QUALITIES.includes(quality);
+            });
+        },
+        validValue: validLayerQualityValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.blending-mode.set': Object.freeze({
+        digest: '098113d1426d0124a678ac659fabe1d2a52610f1a6f78075e4389cc04ebfdbcf',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-blending-mode-set',
+        validArguments: function (value) {
+            return validLayerWriteArguments(value, 'mode', function (mode) {
+                return LAYER_BLENDING_MODES.includes(mode);
+            });
+        },
+        validValue: validLayerBlendingModeValue,
         locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
     }),
     'ae.layer.name.set': Object.freeze({

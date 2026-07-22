@@ -98,6 +98,34 @@ bool has_keyframe_arguments(const Request& request) {
       || request.keyframe_behavior_enabled.has_value();
 }
 
+bool has_layer_compositing_arguments(const Request& request) {
+  return !request.layer_switch_name.empty()
+      || request.layer_switch_enabled.has_value()
+      || !request.layer_quality.empty()
+      || !request.layer_blending_mode.empty();
+}
+
+bool valid_layer_switch_name(std::string_view value) {
+  return value == "visibility" || value == "solo" || value == "locked"
+      || value == "shy" || value == "motion-blur" || value == "three-d"
+      || value == "adjustment";
+}
+
+bool valid_layer_quality(std::string_view value) {
+  return value == "wireframe" || value == "draft" || value == "best";
+}
+
+bool valid_layer_blending_mode(std::string_view value) {
+  static constexpr std::array<std::string_view, 28> modes{
+      "normal", "dissolve", "add", "multiply", "screen", "overlay",
+      "soft-light", "hard-light", "darken", "lighten", "difference", "hue",
+      "saturation", "color", "luminosity", "color-dodge", "color-burn",
+      "exclusion", "linear-dodge", "linear-burn", "linear-light", "vivid-light",
+      "pin-light", "hard-mix", "lighter-color", "darker-color", "subtract",
+      "divide"};
+  return std::find(modes.begin(), modes.end(), value) != modes.end();
+}
+
 bool valid_composition_create_request(const Request& request) {
   return !request.composition_create_name.empty()
       && request.composition_create_name.size() <= 1024
@@ -310,6 +338,15 @@ bool valid_layer_details(const LayerDetails& value) {
   return !value.source_item_locator.has_value()
       || (valid_item_locator(*value.source_item_locator)
         && same_locator_context(value.layer_locator, *value.source_item_locator));
+}
+
+bool valid_layer_compositing_state(const LayerCompositingState& value) {
+  return valid_locator(value.layer_locator) && value.layer_locator.kind == "layer"
+      && valid_layer_quality(value.quality)
+      && valid_layer_blending_mode(value.blending_mode)
+      && (value.track_matte == "none" || value.track_matte == "alpha"
+          || value.track_matte == "inverted-alpha" || value.track_matte == "luma"
+          || value.track_matte == "inverted-luma");
 }
 
 bool duplicated_layer_stable_semantics_match(
@@ -964,6 +1001,10 @@ AEMCP_DEFINE_HOST_RESULT(HostLayerStretchWriteResult, LayerStretchChanged)
 AEMCP_DEFINE_HOST_RESULT(HostLayerOrderWriteResult, LayerOrderChanged)
 AEMCP_DEFINE_HOST_RESULT(HostLayerParentWriteResult, LayerParentChanged)
 AEMCP_DEFINE_HOST_RESULT(HostLayerDuplicateResult, LayerDuplicated)
+AEMCP_DEFINE_HOST_RESULT(HostLayerCompositingReadResult, LayerCompositingState)
+AEMCP_DEFINE_HOST_RESULT(HostLayerSwitchWriteResult, LayerSwitchChanged)
+AEMCP_DEFINE_HOST_RESULT(HostLayerQualityWriteResult, LayerQualityChanged)
+AEMCP_DEFINE_HOST_RESULT(HostLayerBlendingModeWriteResult, LayerBlendingModeChanged)
 
 #undef AEMCP_DEFINE_HOST_RESULT
 
@@ -1168,6 +1209,30 @@ HostLayerDuplicateResult HostApi::duplicate_layer(
       "NATIVE_UNSUPPORTED", "layer duplication is unavailable");
 }
 
+HostLayerCompositingReadResult HostApi::read_layer_compositing(
+    const LayerDetailsQuery&, TimePoint) {
+  return HostLayerCompositingReadResult::failure(
+      "NATIVE_UNSUPPORTED", "layer compositing reads are unavailable");
+}
+
+HostLayerSwitchWriteResult HostApi::set_layer_switch(
+    const LayerSwitchSetCommand&, TimePoint) {
+  return HostLayerSwitchWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer switch writes are unavailable");
+}
+
+HostLayerQualityWriteResult HostApi::set_layer_quality(
+    const LayerQualitySetCommand&, TimePoint) {
+  return HostLayerQualityWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer quality writes are unavailable");
+}
+
+HostLayerBlendingModeWriteResult HostApi::set_layer_blending_mode(
+    const LayerBlendingModeSetCommand&, TimePoint) {
+  return HostLayerBlendingModeWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer blending-mode writes are unavailable");
+}
+
 HostProjectGraphInvalidationResult HostApi::invalidate_project_graph(TimePoint) {
   return HostProjectGraphInvalidationResult::failure(
       "NATIVE_UNSUPPORTED", "project graph invalidation is unavailable");
@@ -1263,6 +1328,14 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   const bool layer_timeline = layer_details_read || layer_name_set || layer_range_set
       || layer_start_time_set || layer_stretch_set || layer_order_set
       || layer_parent_set || layer_duplicate;
+  const bool layer_compositing_read =
+      request.capability_id == kLayerCompositingReadCapability;
+  const bool layer_switch_set = request.capability_id == kLayerSwitchSetCapability;
+  const bool layer_quality_set = request.capability_id == kLayerQualitySetCapability;
+  const bool layer_blending_mode_set =
+      request.capability_id == kLayerBlendingModeSetCapability;
+  const bool layer_compositing = layer_compositing_read || layer_switch_set
+      || layer_quality_set || layer_blending_mode_set;
   const bool mutation = project_bit_depth_set || composition_time_set
       || composition_create
       || composition_layer_create
@@ -1271,7 +1344,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || project_item_name_set || project_item_comment_set
       || project_item_label_set || composition_duplicate || layer_name_set
       || layer_range_set || layer_start_time_set || layer_stretch_set
-      || layer_order_set || layer_parent_set || layer_duplicate;
+      || layer_order_set || layer_parent_set || layer_duplicate
+      || layer_switch_set || layer_quality_set || layer_blending_mode_set;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
@@ -1285,7 +1359,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !composition_settings_read && !composition_work_area_set
       && !project_item_name_set && !project_item_comment_set
       && !project_item_label_set && !composition_duplicate
-      && !layer_timeline
+      && !layer_timeline && !layer_compositing
       && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
@@ -1311,6 +1385,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || !request.item_text.empty() || request.item_label_id != 0
           || !request.duplicate_new_name.empty()
           || has_layer_timeline_arguments(request)
+          || has_layer_compositing_arguments(request)
           || has_keyframe_arguments(request)
           || has_nondefault_time(request.work_area_start)
           || has_nondefault_time(request.work_area_duration)
@@ -1649,7 +1724,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || !valid_locator(*request.layer_locator)
           || request.layer_locator->kind != "layer"
           || !valid_uuid(request.host_instance_id)
-          || !valid_uuid(request.session_id))) {
+          || !valid_uuid(request.session_id)
+          || has_layer_compositing_arguments(request))) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
@@ -1771,6 +1847,68 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "layer timeline arguments are not accepted by this capability",
         "params.arguments"};
   }
+  if (layer_compositing
+      && (request.target_depth != 0 || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value()
+          || request.composition_locator.has_value()
+          || request.parent_property_locator.has_value()
+          || request.property_locator.has_value()
+          || !std::holds_alternative<std::monostate>(request.property_value)
+          || request.item_locator.has_value()
+          || !request.layer_locator.has_value()
+          || !valid_locator(*request.layer_locator)
+          || request.layer_locator->kind != "layer"
+          || request.layer_locator->host_instance_id != request.host_instance_id
+          || request.layer_locator->session_id != request.session_id
+          || !valid_uuid(request.host_instance_id)
+          || !valid_uuid(request.session_id)
+          || has_layer_timeline_arguments(request)
+          || has_keyframe_arguments(request))) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer compositing arguments failed closed validation",
+        "params.arguments.layerLocator"};
+  }
+  if (layer_compositing_read
+      && (!request.idempotency_key.empty()
+          || !request.arguments_fingerprint_sha256.empty()
+          || has_layer_compositing_arguments(request))) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer compositing read accepts only layerLocator", "params.arguments"};
+  }
+  if (layer_compositing && !layer_compositing_read
+      && (!valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256))) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer compositing write requires idempotency and argument digest",
+        "params.arguments.idempotencyKey"};
+  }
+  if (layer_switch_set
+      && (!valid_layer_switch_name(request.layer_switch_name)
+          || !request.layer_switch_enabled.has_value()
+          || !request.layer_quality.empty() || !request.layer_blending_mode.empty())) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer switch arguments failed closed validation", "params.arguments.switch"};
+  }
+  if (layer_quality_set
+      && (!valid_layer_quality(request.layer_quality)
+          || !request.layer_switch_name.empty()
+          || request.layer_switch_enabled.has_value()
+          || !request.layer_blending_mode.empty())) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer quality arguments failed closed validation", "params.arguments.quality"};
+  }
+  if (layer_blending_mode_set
+      && (!valid_layer_blending_mode(request.layer_blending_mode)
+          || !request.layer_switch_name.empty()
+          || request.layer_switch_enabled.has_value() || !request.layer_quality.empty())) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer blending-mode arguments failed closed validation", "params.arguments.mode"};
+  }
+  if (!layer_compositing && has_layer_compositing_arguments(request)) {
+    return {EnqueueCode::kInvalidRequest, "INVALID_ARGUMENT",
+        "layer compositing arguments are not accepted by this capability",
+        "params.arguments"};
+  }
   if (!composition_layer_create
       && (!request.layer_create_kind.empty()
           || !request.layer_create_name.empty()
@@ -1870,6 +2008,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   }
   if ((layer_properties_list || layer_property_keyframes_list
           || layer_property_set || layer_effect_apply || layer_timeline
+          || layer_compositing
           || keyframe_details_read || keyframe_write)
       && (request.project_locator.has_value()
           || request.composition_locator.has_value()
@@ -1913,7 +2052,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           "params.arguments"};
     }
   } else if (layer_properties_list || layer_property_set || layer_effect_apply
-      || layer_timeline || keyframe_write) {
+      || layer_timeline || layer_compositing || keyframe_write) {
     const ObjectLocator& layer = *request.layer_locator;
     if (!valid_locator(layer) || layer.kind != "layer") {
       return {
@@ -3357,6 +3496,140 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
           }
             }
             return completion;
+          }();
+        } else if (request.capability_id == kLayerCompositingReadCapability
+            || request.capability_id == kLayerSwitchSetCapability
+            || request.capability_id == kLayerQualitySetCapability
+            || request.capability_id == kLayerBlendingModeSetCapability) {
+          completion = [&]() -> Completion {
+            Completion result;
+            const auto complete = [&](auto value, bool write) {
+              result.request_id = request.request_id;
+              result.capability_id = request.capability_id;
+              result.route_id = request.route_id;
+              result.session_generation = request.session_generation;
+              if (write) result.idempotency_key = request.idempotency_key;
+              result.ok = true;
+              result.layer_compositing_result =
+                  std::make_shared<LayerCompositingResult>(std::move(value));
+            };
+            const auto fail_host = [&](const auto& host_result) {
+              result = failure_for(
+                  request,
+                  host_result.error_code.empty()
+                      ? "CAPABILITY_FAILED" : host_result.error_code,
+                  host_result.message.empty()
+                      ? "native capability failed" : host_result.message,
+                  host_result.error_field);
+            };
+            if (request.capability_id == kLayerCompositingReadCapability) {
+              auto host_result = host.read_layer_compositing(
+                  LayerDetailsQuery{
+                      request.host_instance_id, request.session_id,
+                      *request.layer_locator},
+                  std::min(request.deadline, idle_deadline));
+              if (clock_.now() > request.deadline) {
+                result = expired(request, true);
+              } else if (!host_result.ok) {
+                fail_host(host_result);
+              } else if (host_result.value.layer_locator != *request.layer_locator
+                  || !valid_layer_compositing_state(host_result.value)) {
+                result = failure_for(
+                    request, "CAPABILITY_FAILED",
+                    "native compositing state was not bound to the requested layer");
+              } else {
+                complete(std::move(host_result.value), false);
+              }
+              return result;
+            }
+            if (request.capability_id == kLayerSwitchSetCapability) {
+              auto host_result = host.set_layer_switch(
+                  LayerSwitchSetCommand{
+                      {request.host_instance_id, request.session_id,
+                       *request.layer_locator},
+                      request.layer_switch_name,
+                      *request.layer_switch_enabled},
+                  request.deadline);
+              if (clock_.now() > request.deadline) {
+                result = failure_for(
+                    request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                    "native write completed after its deadline; inspect layer switches");
+                result.late_result_discarded = true;
+              } else if (!host_result.ok) {
+                fail_host(host_result);
+              } else {
+                const auto& value = host_result.value;
+                if (!value.changed || value.layer_locator != *request.layer_locator
+                    || value.switch_name != request.layer_switch_name
+                    || value.before_enabled == value.after_enabled
+                    || value.after_enabled != *request.layer_switch_enabled) {
+                  result = failure_for(
+                      request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                      "native write did not verify the requested layer switch");
+                } else {
+                  complete(std::move(host_result.value), true);
+                }
+              }
+              return result;
+            }
+            if (request.capability_id == kLayerQualitySetCapability) {
+              auto host_result = host.set_layer_quality(
+                  LayerQualitySetCommand{
+                      {request.host_instance_id, request.session_id,
+                       *request.layer_locator},
+                      request.layer_quality},
+                  request.deadline);
+              if (clock_.now() > request.deadline) {
+                result = failure_for(
+                    request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                    "native write completed after its deadline; inspect layer quality");
+                result.late_result_discarded = true;
+              } else if (!host_result.ok) {
+                fail_host(host_result);
+              } else {
+                const auto& value = host_result.value;
+                if (!value.changed || value.layer_locator != *request.layer_locator
+                    || value.before_quality == value.after_quality
+                    || value.after_quality != request.layer_quality) {
+                  result = failure_for(
+                      request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                      "native write did not verify the requested layer quality");
+                } else {
+                  complete(std::move(host_result.value), true);
+                }
+              }
+              return result;
+            }
+            auto host_result = host.set_layer_blending_mode(
+                LayerBlendingModeSetCommand{
+                    {request.host_instance_id, request.session_id,
+                     *request.layer_locator},
+                    request.layer_blending_mode},
+                request.deadline);
+            if (clock_.now() > request.deadline) {
+              result = failure_for(
+                  request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                  "native write completed after its deadline; inspect layer blending mode");
+              result.late_result_discarded = true;
+            } else if (!host_result.ok) {
+              fail_host(host_result);
+            } else {
+              const auto& value = host_result.value;
+              if (!value.changed || value.layer_locator != *request.layer_locator
+                  || value.before_mode == value.after_mode
+                  || value.after_mode != request.layer_blending_mode
+                  || (value.track_matte != "none" && value.track_matte != "alpha"
+                    && value.track_matte != "inverted-alpha"
+                    && value.track_matte != "luma"
+                    && value.track_matte != "inverted-luma")) {
+                result = failure_for(
+                    request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                    "native write did not verify the requested layer blending mode");
+              } else {
+                complete(std::move(host_result.value), true);
+              }
+            }
+            return result;
           }();
         } else if (request.capability_id == kLayerPropertiesListCapability) {
           HostLayerPropertiesResult host_result = host.list_layer_properties(

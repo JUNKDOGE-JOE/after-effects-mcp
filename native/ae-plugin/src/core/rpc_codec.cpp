@@ -1116,6 +1116,22 @@ std::string canonical_request(const ParsedRequest& request) {
         arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
             + ",\"layerLocator\":" + locator_json(*value.layer_locator)
             + ",\"newName\":" + json_string(value.layer_new_name) + "}";
+      } else if (value.capability_id == kLayerCompositingReadCapability) {
+        arguments = "{\"layerLocator\":" + locator_json(*value.layer_locator) + "}";
+      } else if (value.capability_id == kLayerSwitchSetCapability) {
+        arguments = "{\"enabled\":"
+            + std::string(*value.layer_switch_enabled ? "true" : "false")
+            + ",\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"switch\":" + json_string(value.layer_switch_name) + "}";
+      } else if (value.capability_id == kLayerQualitySetCapability) {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"quality\":" + json_string(value.layer_quality) + "}";
+      } else if (value.capability_id == kLayerBlendingModeSetCapability) {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"mode\":" + json_string(value.layer_blending_mode) + "}";
       } else if (value.capability_id == "ae.composition.create") {
         arguments = canonical_composition_create_arguments(
             value.composition_create_name,
@@ -1779,6 +1795,81 @@ ParsedRequest classify_request(const JsonValue& root) {
             "{\"idempotencyKey\":" + json_string(result.idempotency_key)
             + ",\"layerLocator\":" + locator_json(*result.layer_locator)
             + ",\"newName\":" + json_string(result.layer_new_name) + "}");
+      } else if (capability == kLayerCompositingReadCapability) {
+        if (!exact_keys(*arguments, {"layerLocator"}, {"layerLocator"})) {
+          invalid_argument("layer compositing arguments are not closed");
+        }
+        parse_layer_locator();
+      } else if (capability == kLayerSwitchSetCapability) {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "switch", "enabled", "idempotencyKey"},
+                {"layerLocator", "switch", "enabled", "idempotencyKey"})) {
+          invalid_argument("layer switch arguments are not closed");
+        }
+        parse_layer_locator();
+        result.layer_switch_name = required_string(
+            *arguments, "switch", CodecErrorKind::kInvalidArgument);
+        constexpr std::array<std::string_view, 7> switches{
+            "visibility", "solo", "locked", "shy", "motion-blur", "three-d",
+            "adjustment"};
+        if (std::find(switches.begin(), switches.end(), result.layer_switch_name)
+            == switches.end()) {
+          invalid_argument("invalid layer switch");
+        }
+        result.layer_switch_enabled = required_bool(
+            *arguments, "enabled", CodecErrorKind::kInvalidArgument);
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"enabled\":"
+            + std::string(*result.layer_switch_enabled ? "true" : "false")
+            + ",\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"switch\":" + json_string(result.layer_switch_name) + "}");
+      } else if (capability == kLayerQualitySetCapability) {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "quality", "idempotencyKey"},
+                {"layerLocator", "quality", "idempotencyKey"})) {
+          invalid_argument("layer quality arguments are not closed");
+        }
+        parse_layer_locator();
+        result.layer_quality = required_string(
+            *arguments, "quality", CodecErrorKind::kInvalidArgument);
+        if (result.layer_quality != "wireframe" && result.layer_quality != "draft"
+            && result.layer_quality != "best") {
+          invalid_argument("invalid layer quality");
+        }
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"quality\":" + json_string(result.layer_quality) + "}");
+      } else if (capability == kLayerBlendingModeSetCapability) {
+        if (!exact_keys(
+                *arguments, {"layerLocator", "mode", "idempotencyKey"},
+                {"layerLocator", "mode", "idempotencyKey"})) {
+          invalid_argument("layer blending-mode arguments are not closed");
+        }
+        parse_layer_locator();
+        result.layer_blending_mode = required_string(
+            *arguments, "mode", CodecErrorKind::kInvalidArgument);
+        constexpr std::array<std::string_view, 28> modes{
+            "normal", "dissolve", "add", "multiply", "screen", "overlay",
+            "soft-light", "hard-light", "darken", "lighten", "difference", "hue",
+            "saturation", "color", "luminosity", "color-dodge", "color-burn",
+            "exclusion", "linear-dodge", "linear-burn", "linear-light",
+            "vivid-light", "pin-light", "hard-mix", "lighter-color", "darker-color",
+            "subtract", "divide"};
+        if (std::find(modes.begin(), modes.end(), result.layer_blending_mode)
+            == modes.end()) {
+          invalid_argument("invalid layer blending mode");
+        }
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"mode\":" + json_string(result.layer_blending_mode) + "}");
       } else if (capability == "ae.composition.create") {
         if (!exact_keys(
                 *arguments,
@@ -2882,6 +2973,96 @@ std::string canonical_layer_duplicate_value(const LayerDuplicated& value) {
       + ",\"sourceLayerLocator\":" + locator_json(value.source_layer_locator) + "}";
 }
 
+bool valid_compositing_quality(std::string_view value) {
+  return value == "wireframe" || value == "draft" || value == "best";
+}
+
+bool valid_compositing_blending_mode(std::string_view value) {
+  constexpr std::array<std::string_view, 28> modes{
+      "normal", "dissolve", "add", "multiply", "screen", "overlay",
+      "soft-light", "hard-light", "darken", "lighten", "difference", "hue",
+      "saturation", "color", "luminosity", "color-dodge", "color-burn",
+      "exclusion", "linear-dodge", "linear-burn", "linear-light", "vivid-light",
+      "pin-light", "hard-mix", "lighter-color", "darker-color", "subtract",
+      "divide"};
+  return std::find(modes.begin(), modes.end(), value) != modes.end();
+}
+
+bool valid_compositing_track_matte(std::string_view value) {
+  return value == "none" || value == "alpha" || value == "inverted-alpha"
+      || value == "luma" || value == "inverted-luma";
+}
+
+std::string canonical_layer_compositing_value(const LayerCompositingState& value) {
+  if (!valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || !valid_compositing_quality(value.quality)
+      || !valid_compositing_blending_mode(value.blending_mode)
+      || !valid_compositing_track_matte(value.track_matte)) {
+    invalid_argument("invalid layer compositing result");
+  }
+  return "{\"adjustment\":" + std::string(value.adjustment ? "true" : "false")
+      + ",\"blendingMode\":" + json_string(value.blending_mode)
+      + ",\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"locked\":" + (value.locked ? "true" : "false")
+      + ",\"motionBlur\":" + (value.motion_blur ? "true" : "false")
+      + ",\"preserveAlpha\":" + (value.preserve_alpha ? "true" : "false")
+      + ",\"quality\":" + json_string(value.quality)
+      + ",\"shy\":" + (value.shy ? "true" : "false")
+      + ",\"solo\":" + (value.solo ? "true" : "false")
+      + ",\"threeD\":" + (value.three_d ? "true" : "false")
+      + ",\"trackMatte\":" + json_string(value.track_matte)
+      + ",\"visibilityEnabled\":"
+      + (value.visibility_enabled ? "true" : "false") + "}";
+}
+
+std::string canonical_layer_switch_value(const LayerSwitchChanged& value) {
+  constexpr std::array<std::string_view, 7> switches{
+      "visibility", "solo", "locked", "shy", "motion-blur", "three-d",
+      "adjustment"};
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || std::find(switches.begin(), switches.end(), value.switch_name)
+          == switches.end()
+      || value.before_enabled == value.after_enabled) {
+    invalid_argument("invalid layer switch mutation result");
+  }
+  return "{\"afterEnabled\":" + std::string(value.after_enabled ? "true" : "false")
+      + ",\"beforeEnabled\":" + (value.before_enabled ? "true" : "false")
+      + ",\"changed\":true,\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"switch\":" + json_string(value.switch_name) + "}";
+}
+
+std::string canonical_layer_quality_value(const LayerQualityChanged& value) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || !valid_compositing_quality(value.before_quality)
+      || !valid_compositing_quality(value.after_quality)
+      || value.before_quality == value.after_quality) {
+    invalid_argument("invalid layer quality mutation result");
+  }
+  return "{\"afterQuality\":" + json_string(value.after_quality)
+      + ",\"beforeQuality\":" + json_string(value.before_quality)
+      + ",\"changed\":true,\"layerLocator\":" + locator_json(value.layer_locator) + "}";
+}
+
+std::string canonical_layer_blending_mode_value(
+    const LayerBlendingModeChanged& value) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || !valid_compositing_blending_mode(value.before_mode)
+      || !valid_compositing_blending_mode(value.after_mode)
+      || value.before_mode == value.after_mode
+      || !valid_compositing_track_matte(value.track_matte)) {
+    invalid_argument("invalid layer blending-mode mutation result");
+  }
+  return "{\"afterMode\":" + json_string(value.after_mode)
+      + ",\"beforeMode\":" + json_string(value.before_mode)
+      + ",\"changed\":true,\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"preserveAlpha\":" + (value.preserve_alpha ? "true" : "false")
+      + ",\"trackMatte\":" + json_string(value.track_matte) + "}";
+}
+
 std::string canonical_composition_create_arguments(
     std::string_view name,
     std::uint32_t width,
@@ -3869,6 +4050,32 @@ std::string digest_layer_duplicate_postcondition(const LayerDuplicated& value) {
   return sha256_hex(
       "{\"capabilityId\":\"ae.layer.duplicate\",\"capabilityVersion\":1,\"value\":"
       + canonical_layer_duplicate_value(value) + "}");
+}
+
+std::string digest_layer_compositing_postcondition(
+    const LayerCompositingState& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.compositing.read\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_compositing_value(value) + "}");
+}
+
+std::string digest_layer_switch_set_postcondition(const LayerSwitchChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.switch.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_switch_value(value) + "}");
+}
+
+std::string digest_layer_quality_set_postcondition(const LayerQualityChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.quality.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_quality_value(value) + "}");
+}
+
+std::string digest_layer_blending_mode_set_postcondition(
+    const LayerBlendingModeChanged& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.blending-mode.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_blending_mode_value(value) + "}");
 }
 
 std::string digest_composition_create_arguments(
@@ -5702,6 +5909,152 @@ std::string layer_timeline_descriptor(
       "Synthetic failure exercises stale-locator recovery.");
 }
 
+enum class LayerCompositingDescriptorKind {
+  kRead,
+  kSwitch,
+  kQuality,
+  kBlendingMode,
+};
+
+std::string layer_compositing_descriptor(
+    const CapabilitiesSuccess& response,
+    LayerCompositingDescriptorKind kind) {
+  const std::string layer_schema = layer_timeline_locator_schema(
+      R"({"const":"layer"})");
+  const std::string idempotency_schema = layer_timeline_idempotency_schema();
+  const std::string switches =
+      R"({"enum":["visibility","solo","locked","shy","motion-blur","three-d","adjustment"]})";
+  const std::string qualities = R"({"enum":["wireframe","draft","best"]})";
+  const std::string modes =
+      R"({"enum":["normal","dissolve","add","multiply","screen","overlay","soft-light","hard-light","darken","lighten","difference","hue","saturation","color","luminosity","color-dodge","color-burn","exclusion","linear-dodge","linear-burn","linear-light","vivid-light","pin-light","hard-mix","lighter-color","darker-color","subtract","divide"]})";
+  const std::string mattes =
+      R"({"enum":["none","alpha","inverted-alpha","luma","inverted-luma"]})";
+  const ObjectLocator layer = synthetic_layer_timeline_locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const std::string prefix = "{\"type\":\"object\",\"additionalProperties\":false,";
+  std::string id;
+  std::string summary;
+  std::string side_effect;
+  std::string preconditions;
+  std::string requirement;
+  std::string input;
+  std::string result;
+  std::string arguments;
+  std::string positive;
+  std::string_view configured;
+  bool mutating = kind != LayerCompositingDescriptorKind::kRead;
+  switch (kind) {
+    case LayerCompositingDescriptorKind::kRead:
+      id = "ae.layer.compositing.read";
+      summary = "Read one layer's render switches, quality, and compositing mode.";
+      side_effect = "Reads layer state without changing After Effects state.";
+      preconditions = R"(["layerLocator must identify a current native layer."])";
+      requirement = "aemcp.requirement.native.layer-compositing-read";
+      configured = response.layer_compositing_read_contract_digest;
+      input = prefix + "\"required\":[\"layerLocator\"],\"properties\":{\"layerLocator\":"
+          + layer_schema + "}}";
+      result = prefix
+          + "\"required\":[\"layerLocator\",\"visibilityEnabled\",\"solo\","
+            "\"locked\",\"shy\",\"motionBlur\",\"threeD\",\"adjustment\","
+            "\"quality\",\"blendingMode\",\"preserveAlpha\",\"trackMatte\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema
+          + ",\"visibilityEnabled\":{\"type\":\"boolean\"},"
+            "\"solo\":{\"type\":\"boolean\"},\"locked\":{\"type\":\"boolean\"},"
+            "\"shy\":{\"type\":\"boolean\"},\"motionBlur\":{\"type\":\"boolean\"},"
+            "\"threeD\":{\"type\":\"boolean\"},\"adjustment\":{\"type\":\"boolean\"},"
+            "\"quality\":" + qualities + ",\"blendingMode\":" + modes
+          + ",\"preserveAlpha\":{\"type\":\"boolean\"},\"trackMatte\":" + mattes + "}}";
+      arguments = "{\"layerLocator\":" + locator_json(layer) + "}";
+      positive = canonical_layer_compositing_value({
+          layer, true, false, false, false, false, false, false,
+          "best", "normal", false, "none"});
+      break;
+    case LayerCompositingDescriptorKind::kSwitch:
+      id = "ae.layer.switch.set";
+      summary = "Set one allowlisted layer switch.";
+      side_effect = "Changes one layer switch and creates one After Effects Undo step.";
+      preconditions = R"(["layerLocator must identify a current native layer.","The requested value must differ from current state."])";
+      requirement = "aemcp.requirement.native.layer-switch-set";
+      configured = response.layer_switch_set_contract_digest;
+      input = prefix
+          + "\"required\":[\"layerLocator\",\"switch\",\"enabled\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema + ",\"switch\":"
+          + switches + ",\"enabled\":{\"type\":\"boolean\"},\"idempotencyKey\":"
+          + idempotency_schema + "}}";
+      result = prefix
+          + "\"required\":[\"changed\",\"layerLocator\",\"switch\",\"beforeEnabled\","
+            "\"afterEnabled\"],\"properties\":{\"changed\":{\"const\":true},"
+            "\"layerLocator\":" + layer_schema + ",\"switch\":" + switches
+          + ",\"beforeEnabled\":{\"type\":\"boolean\"},"
+            "\"afterEnabled\":{\"type\":\"boolean\"}},"
+            "\"x-invariant\":\"switch-equals-request;afterEnabled-equals-request-and-differs-from-beforeEnabled\"}";
+      arguments = "{\"enabled\":true,\"idempotencyKey\":\"synthetic-layer-switch-0001\","
+          "\"layerLocator\":" + locator_json(layer) + ",\"switch\":\"solo\"}";
+      positive = canonical_layer_switch_value({true, layer, "solo", false, true});
+      break;
+    case LayerCompositingDescriptorKind::kQuality:
+      id = "ae.layer.quality.set";
+      summary = "Set one layer's rendering quality.";
+      side_effect = "Changes layer quality and creates one After Effects Undo step.";
+      preconditions = R"(["layerLocator must identify a current native layer.","The requested quality must differ from current state."])";
+      requirement = "aemcp.requirement.native.layer-quality-set";
+      configured = response.layer_quality_set_contract_digest;
+      input = prefix
+          + "\"required\":[\"layerLocator\",\"quality\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema + ",\"quality\":"
+          + qualities + ",\"idempotencyKey\":" + idempotency_schema + "}}";
+      result = prefix
+          + "\"required\":[\"changed\",\"layerLocator\",\"beforeQuality\",\"afterQuality\"],"
+            "\"properties\":{\"changed\":{\"const\":true},\"layerLocator\":"
+          + layer_schema + ",\"beforeQuality\":" + qualities + ",\"afterQuality\":"
+          + qualities + "},\"x-invariant\":"
+            "\"afterQuality-equals-request-and-differs-from-beforeQuality\"}";
+      arguments = "{\"idempotencyKey\":\"synthetic-layer-quality-0001\","
+          "\"layerLocator\":" + locator_json(layer) + ",\"quality\":\"draft\"}";
+      positive = canonical_layer_quality_value({true, layer, "best", "draft"});
+      break;
+    case LayerCompositingDescriptorKind::kBlendingMode:
+      id = "ae.layer.blending-mode.set";
+      summary = "Set one layer's allowlisted blending mode while preserving matte and alpha flags.";
+      side_effect = "Changes layer blending mode and creates one After Effects Undo step.";
+      preconditions = R"(["layerLocator must identify a current native layer.","The requested mode must differ from current state."])";
+      requirement = "aemcp.requirement.native.layer-blending-mode-set";
+      configured = response.layer_blending_mode_set_contract_digest;
+      input = prefix
+          + "\"required\":[\"layerLocator\",\"mode\",\"idempotencyKey\"],"
+            "\"properties\":{\"layerLocator\":" + layer_schema + ",\"mode\":"
+          + modes + ",\"idempotencyKey\":" + idempotency_schema + "}}";
+      result = prefix
+          + "\"required\":[\"changed\",\"layerLocator\",\"beforeMode\",\"afterMode\","
+            "\"preserveAlpha\",\"trackMatte\"],\"properties\":{\"changed\":{\"const\":true},"
+            "\"layerLocator\":" + layer_schema + ",\"beforeMode\":" + modes
+          + ",\"afterMode\":" + modes + ",\"preserveAlpha\":{\"type\":\"boolean\"},"
+            "\"trackMatte\":" + mattes + "},\"x-invariant\":"
+            "\"afterMode-equals-request;preserveAlpha-and-trackMatte-are-preserved\"}";
+      arguments = "{\"idempotencyKey\":\"synthetic-layer-blend-0001\","
+          "\"layerLocator\":" + locator_json(layer) + ",\"mode\":\"multiply\"}";
+      positive = canonical_layer_blending_mode_value(
+          {true, layer, "normal", "multiply", false, "none"});
+      break;
+  }
+  const std::string expected_digest = sha256_hex(canonical_json(JsonParser(
+      "{\"inputSchema\":" + input + ",\"resultSchema\":" + result + "}").parse()));
+  if (response.detail == CapabilityDetail::kFull && configured != expected_digest) {
+    invalid_argument(id + " contract digest does not match the compiled descriptor");
+  }
+  std::string example_stem = id.substr(3);
+  std::replace(example_stem.begin(), example_stem.end(), '.', '-');
+  return replace_descriptor_text(package_descriptor(response, {
+      id, summary, side_effect, preconditions,
+      "aemcp.contract." + id + ".input.v1",
+      "aemcp.contract." + id + ".result.v1", requirement,
+      input, result, arguments, "aemcp-example-" + example_stem + "-stale",
+      "STALE_LOCATOR", "refresh-locator", mutating,
+      "aemcp-example-" + example_stem, positive}, configured),
+      "Synthetic failure exercises the documented recovery path.",
+      "Synthetic failure exercises stale-locator recovery.");
+}
+
 std::string project_item_text_descriptor(
     const CapabilitiesSuccess& response, bool name) {
   return name ? project_item_name_descriptor(response)
@@ -6019,6 +6372,24 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
     items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kDuplicate);
     needs_comma = true;
   }
+  const auto append_compositing = [&](bool include, LayerCompositingDescriptorKind kind) {
+    if (!include) return;
+    if (needs_comma) items.push_back(',');
+    items += layer_compositing_descriptor(response, kind);
+    needs_comma = true;
+  };
+  append_compositing(
+      response.include_layer_compositing_read,
+      LayerCompositingDescriptorKind::kRead);
+  append_compositing(
+      response.include_layer_switch_set,
+      LayerCompositingDescriptorKind::kSwitch);
+  append_compositing(
+      response.include_layer_quality_set,
+      LayerCompositingDescriptorKind::kQuality);
+  append_compositing(
+      response.include_layer_blending_mode_set,
+      LayerCompositingDescriptorKind::kBlendingMode);
   const auto append_keyframe = [&](bool include, KeyframeDescriptorKind kind) {
     if (!include) return;
     if (needs_comma) items.push_back(',');
@@ -6078,6 +6449,10 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
       && response.include_layer_order_set
       && response.include_layer_parent_set
       && response.include_layer_duplicate
+      && response.include_layer_compositing_read
+      && response.include_layer_switch_set
+      && response.include_layer_quality_set
+      && response.include_layer_blending_mode_set
       && response.include_layer_property_keyframe_details_read
       && response.include_layer_property_keyframe_add
       && response.include_layer_property_keyframe_value_set
@@ -6617,6 +6992,54 @@ std::vector<std::uint8_t> encode_layer_duplicate_success(
       response.value.source_layer_locator,
       canonical_layer_duplicate_value(response.value),
       digest_layer_duplicate_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_compositing_success(
+    const LayerCompositingSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.compositing.read",
+      "layer-compositing-read",
+      response.value.layer_locator,
+      canonical_layer_compositing_value(response.value),
+      digest_layer_compositing_postcondition(response.value),
+      false);
+}
+
+std::vector<std::uint8_t> encode_layer_switch_set_success(
+    const LayerSwitchSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.switch.set",
+      "layer-switch-set",
+      response.value.layer_locator,
+      canonical_layer_switch_value(response.value),
+      digest_layer_switch_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_quality_set_success(
+    const LayerQualitySetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.quality.set",
+      "layer-quality-set",
+      response.value.layer_locator,
+      canonical_layer_quality_value(response.value),
+      digest_layer_quality_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_blending_mode_set_success(
+    const LayerBlendingModeSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      "ae.layer.blending-mode.set",
+      "layer-blending-mode-set",
+      response.value.layer_locator,
+      canonical_layer_blending_mode_value(response.value),
+      digest_layer_blending_mode_set_postcondition(response.value),
       true);
 }
 

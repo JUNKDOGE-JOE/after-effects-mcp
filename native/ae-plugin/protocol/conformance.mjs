@@ -236,6 +236,26 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.layer.duplicate.input.v1',
     resultContractId: 'aemcp.contract.ae.layer.duplicate.result.v1',
   }),
+  Object.freeze({
+    id: 'ae.layer.compositing.read', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.compositing.read.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.compositing.read.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.switch.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.switch.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.switch.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.quality.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.quality.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.quality.set.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.layer.blending-mode.set', version: 1,
+    inputContractId: 'aemcp.contract.ae.layer.blending-mode.set.input.v1',
+    resultContractId: 'aemcp.contract.ae.layer.blending-mode.set.result.v1',
+  }),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -330,6 +350,21 @@ function sameLocatorContext(left, right) {
   return ['hostInstanceId', 'sessionId', 'projectId', 'generation']
     .every((field) => left?.[field] === right?.[field]);
 }
+
+const LAYER_SWITCHES = Object.freeze([
+  'visibility', 'solo', 'locked', 'shy', 'motion-blur', 'three-d', 'adjustment',
+]);
+const LAYER_QUALITIES = Object.freeze(['wireframe', 'draft', 'best']);
+const LAYER_BLENDING_MODES = Object.freeze([
+  'normal', 'dissolve', 'add', 'multiply', 'screen', 'overlay', 'soft-light',
+  'hard-light', 'darken', 'lighten', 'difference', 'hue', 'saturation', 'color',
+  'luminosity', 'color-dodge', 'color-burn', 'exclusion', 'linear-dodge',
+  'linear-burn', 'linear-light', 'vivid-light', 'pin-light', 'hard-mix',
+  'lighter-color', 'darker-color', 'subtract', 'divide',
+]);
+const LAYER_TRACK_MATTES = Object.freeze([
+  'none', 'alpha', 'inverted-alpha', 'luma', 'inverted-luma',
+]);
 
 const KEYFRAME_WRITE_CAPABILITIES = new Set([
   'ae.layer.property.keyframe.add',
@@ -1176,6 +1211,43 @@ export function classifyRequest(message) {
           || !isIdempotencyKey(args.idempotencyKey)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.layer.compositing.read') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['layerLocator']), ['layerLocator'])
+          || !isLocatorShape(args.layerLocator, ['layer'])) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.switch.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set([
+        'layerLocator', 'switch', 'enabled', 'idempotencyKey',
+      ]), ['layerLocator', 'switch', 'enabled', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !LAYER_SWITCHES.includes(args.switch)
+          || typeof args.enabled !== 'boolean'
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.quality.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set([
+        'layerLocator', 'quality', 'idempotencyKey',
+      ]), ['layerLocator', 'quality', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !LAYER_QUALITIES.includes(args.quality)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.blending-mode.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set([
+        'layerLocator', 'mode', 'idempotencyKey',
+      ]), ['layerLocator', 'mode', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !LAYER_BLENDING_MODES.includes(args.mode)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else {
       const args = params.arguments;
       if (!exactKeys(
@@ -1317,6 +1389,7 @@ export function validateFailureExchange(
         || capabilityId === 'ae.layer.property.set'
         || capabilityId === 'ae.layer.property.keyframe.details.read'
         || KEYFRAME_WRITE_CAPABILITIES.has(capabilityId)
+        || LAYER_COMPOSITING_SPECS.some((spec) => spec.id === capabilityId)
         || LAYER_TIMELINE_SPECS.some((spec) => spec.id === capabilityId))) {
     const expectedFields = capabilityId === 'ae.project.items.list'
       ? new Set(['params.arguments.projectLocator'])
@@ -1334,6 +1407,8 @@ export function validateFailureExchange(
               || capabilityId === 'ae.layer.property.keyframe.details.read'
             ? new Set(['params.arguments.propertyLocator'])
           : capabilityId === 'ae.layer.effect.apply'
+            ? new Set(['params.arguments.layerLocator'])
+          : LAYER_COMPOSITING_SPECS.some((spec) => spec.id === capabilityId)
             ? new Set(['params.arguments.layerLocator'])
           : LAYER_TIMELINE_SPECS.some((spec) => spec.id === capabilityId)
             ? new Set([
@@ -2818,6 +2893,102 @@ export function layerTimelineDescriptors(schema) {
   });
 }
 
+const LAYER_COMPOSITING_SPECS = Object.freeze([
+  Object.freeze({ id: 'ae.layer.compositing.read', schema: 'layerCompositingRead',
+    summary: "Read one layer's render switches, quality, and compositing mode.", risk: 'read',
+    postconditionKind: 'layer-compositing-read',
+    sideEffectSummary: 'Reads layer state without changing After Effects state.',
+    preconditions: ['layerLocator must identify a current native layer.'],
+    requirementId: 'aemcp.requirement.native.layer-compositing-read' }),
+  Object.freeze({ id: 'ae.layer.switch.set', schema: 'layerSwitchSet',
+    summary: 'Set one allowlisted layer switch.', risk: 'write',
+    postconditionKind: 'layer-switch-set',
+    sideEffectSummary: 'Changes one layer switch and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must identify a current native layer.',
+      'The requested value must differ from current state.'],
+    requirementId: 'aemcp.requirement.native.layer-switch-set' }),
+  Object.freeze({ id: 'ae.layer.quality.set', schema: 'layerQualitySet',
+    summary: "Set one layer's rendering quality.", risk: 'write',
+    postconditionKind: 'layer-quality-set',
+    sideEffectSummary: 'Changes layer quality and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must identify a current native layer.',
+      'The requested quality must differ from current state.'],
+    requirementId: 'aemcp.requirement.native.layer-quality-set' }),
+  Object.freeze({ id: 'ae.layer.blending-mode.set', schema: 'layerBlendingModeSet',
+    summary: "Set one layer's allowlisted blending mode while preserving matte and alpha flags.",
+    risk: 'write', postconditionKind: 'layer-blending-mode-set',
+    sideEffectSummary: 'Changes layer blending mode and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must identify a current native layer.',
+      'The requested mode must differ from current state.'],
+    requirementId: 'aemcp.requirement.native.layer-blending-mode-set' }),
+]);
+
+function layerCompositingExample(spec) {
+  const layerLocator = syntheticDescriptorLocator(
+    'layer', '88888888-8888-4888-8888-888888888888',
+  );
+  const entries = {
+    'ae.layer.compositing.read': {
+      arguments: { layerLocator },
+      value: { layerLocator, visibilityEnabled: true, solo: false, locked: false,
+        shy: false, motionBlur: false, threeD: false, adjustment: false,
+        quality: 'best', blendingMode: 'normal', preserveAlpha: false, trackMatte: 'none' },
+    },
+    'ae.layer.switch.set': {
+      arguments: { layerLocator, switch: 'solo', enabled: true,
+        idempotencyKey: 'synthetic-layer-switch-0001' },
+      value: { changed: true, layerLocator, switch: 'solo',
+        beforeEnabled: false, afterEnabled: true },
+    },
+    'ae.layer.quality.set': {
+      arguments: { layerLocator, quality: 'draft',
+        idempotencyKey: 'synthetic-layer-quality-0001' },
+      value: { changed: true, layerLocator, beforeQuality: 'best', afterQuality: 'draft' },
+    },
+    'ae.layer.blending-mode.set': {
+      arguments: { layerLocator, mode: 'multiply',
+        idempotencyKey: 'synthetic-layer-blend-0001' },
+      value: { changed: true, layerLocator, beforeMode: 'normal', afterMode: 'multiply',
+        preserveAlpha: false, trackMatte: 'none' },
+    },
+  };
+  return entries[spec.id];
+}
+
+export function layerCompositingDescriptors(schema) {
+  return LAYER_COMPOSITING_SPECS.map((spec) => {
+    const registration = INVOKE_REGISTRY.find((candidate) => candidate.id === spec.id);
+    const example = layerCompositingExample(spec);
+    const inputSchema = structuredClone(schema.$defs[`${spec.schema}InputSchemaContract`].const);
+    const resultSchema = structuredClone(schema.$defs[`${spec.schema}ResultSchemaContract`].const);
+    const stem = spec.id.replace(/^ae\./u, '').replaceAll('.', '-');
+    return {
+      detail: 'full', id: spec.id, version: 1, schemaVersion: 1,
+      summary: spec.summary, risk: spec.risk,
+      mutability: spec.risk === 'read' ? 'read-only' : 'mutating',
+      idempotency: spec.risk === 'read' ? 'idempotent' : 'idempotency-key',
+      cancellation: 'before-dispatch',
+      undo: spec.risk === 'read' ? 'not-applicable' : 'ae-undo-group',
+      sideEffectSummary: spec.sideEffectSummary, preconditions: [...spec.preconditions],
+      compatibility: { status: 'unverified', intendedPlatforms: ['macos-arm64', 'windows-x64'] },
+      inputContractId: registration.inputContractId,
+      resultContractId: registration.resultContractId,
+      contractDigest: sha256Jcs({ inputSchema, resultSchema }), inputSchema, resultSchema,
+      requirements: [{ id: spec.requirementId, contractVersion: 1 }],
+      examples: [
+        { id: `aemcp-example-${stem}`, kind: 'positive',
+          summary: 'Synthetic success demonstrates the typed result contract.',
+          arguments: structuredClone(example.arguments),
+          expected: { outcome: 'succeeded', value: structuredClone(example.value) } },
+        { id: `aemcp-example-${stem}-stale`, kind: 'negative',
+          summary: 'Synthetic failure exercises stale-locator recovery.',
+          arguments: structuredClone(example.arguments),
+          expected: { errorCode: 'STALE_LOCATOR', recoveryAction: 'refresh-locator' } },
+      ],
+    };
+  });
+}
+
 const KEYFRAME_AUTHORING_SPECS = Object.freeze([
   Object.freeze({ id: 'ae.layer.property.keyframe.details.read', kind: 'details',
     summary: 'Read one After Effects property keyframe by exact composition time.',
@@ -3074,6 +3245,7 @@ export function nativeCapabilityRegistry(schema) {
     layerPropertySetDescriptor(schema),
     ...projectCompositionDescriptors(schema),
     ...layerTimelineDescriptors(schema),
+    ...layerCompositingDescriptors(schema),
     ...keyframeAuthoringDescriptors(schema),
   ];
 }
@@ -3521,6 +3693,44 @@ function validateLayerTimelineResult(request, result, helloContext, schema) {
     && parentValid(value.afterParentLocator)
     && jsonDeepEqual(value.afterParentLocator, args.parentLayerLocator)
     && !jsonDeepEqual(value.beforeParentLocator, value.afterParentLocator);
+}
+
+function validateLayerCompositingResult(request, result, helloContext, schema) {
+  const capabilityId = request.params.capabilityId;
+  const spec = LAYER_COMPOSITING_SPECS.find((candidate) => candidate.id === capabilityId);
+  if (spec === undefined) return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  if (result.evidence.postcondition.kind !== spec.postconditionKind
+      || !jsonDeepEqual(value.layerLocator, args.layerLocator)
+      || value.layerLocator.hostInstanceId !== helloContext.response.result.host.instanceId
+      || value.layerLocator.sessionId !== request.sessionId
+      || !validateLocator(value.layerLocator, locatorContext(value.layerLocator), schema)) return false;
+
+  if (capabilityId === 'ae.layer.compositing.read') {
+    return ['visibilityEnabled', 'solo', 'locked', 'shy', 'motionBlur', 'threeD',
+      'adjustment', 'preserveAlpha'].every((field) => typeof value[field] === 'boolean')
+      && LAYER_QUALITIES.includes(value.quality)
+      && LAYER_BLENDING_MODES.includes(value.blendingMode)
+      && LAYER_TRACK_MATTES.includes(value.trackMatte);
+  }
+  if (value.changed !== true) return false;
+  if (capabilityId === 'ae.layer.switch.set') {
+    return value.switch === args.switch
+      && value.afterEnabled === args.enabled
+      && typeof value.beforeEnabled === 'boolean'
+      && value.beforeEnabled !== value.afterEnabled;
+  }
+  if (capabilityId === 'ae.layer.quality.set') {
+    return value.afterQuality === args.quality
+      && LAYER_QUALITIES.includes(value.beforeQuality)
+      && value.beforeQuality !== value.afterQuality;
+  }
+  return value.afterMode === args.mode
+    && LAYER_BLENDING_MODES.includes(value.beforeMode)
+    && value.beforeMode !== value.afterMode
+    && typeof value.preserveAlpha === 'boolean'
+    && LAYER_TRACK_MATTES.includes(value.trackMatte);
 }
 
 function validateNavigationResult(request, result, helloContext, schema) {
@@ -4223,7 +4433,7 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set', 'ae.composition.work-area.set', 'ae.project.item.name.set', 'ae.project.item.comment.set', 'ae.project.item.label.set', 'ae.composition.duplicate', 'ae.layer.name.set', 'ae.layer.range.set', 'ae.layer.start-time.set', 'ae.layer.stretch.set', 'ae.layer.order.set', 'ae.layer.parent.set', 'ae.layer.duplicate', 'ae.layer.property.keyframe.add', 'ae.layer.property.keyframe.value.set', 'ae.layer.property.keyframe.interpolation.set', 'ae.layer.property.keyframe.temporal-ease.set', 'ae.layer.property.keyframe.behavior.set', 'ae.layer.property.keyframe.delete']
+            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set', 'ae.composition.work-area.set', 'ae.project.item.name.set', 'ae.project.item.comment.set', 'ae.project.item.label.set', 'ae.composition.duplicate', 'ae.layer.name.set', 'ae.layer.range.set', 'ae.layer.start-time.set', 'ae.layer.stretch.set', 'ae.layer.order.set', 'ae.layer.parent.set', 'ae.layer.duplicate', 'ae.layer.switch.set', 'ae.layer.quality.set', 'ae.layer.blending-mode.set', 'ae.layer.property.keyframe.add', 'ae.layer.property.keyframe.value.set', 'ae.layer.property.keyframe.interpolation.set', 'ae.layer.property.keyframe.temporal-ease.set', 'ae.layer.property.keyframe.behavior.set', 'ae.layer.property.keyframe.delete']
               .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
@@ -4241,6 +4451,7 @@ export function validateTranscript(context, request, messages) {
     && validateKeyframeAuthoringResult(request, result, helloContext, schema)
     && validateProjectCompositionResult(request, result, helloContext, schema)
     && validateLayerTimelineResult(request, result, helloContext, schema)
+    && validateLayerCompositingResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest
     && evidence.postcondition.digest === resultDigest;

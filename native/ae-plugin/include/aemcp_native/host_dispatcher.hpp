@@ -94,7 +94,15 @@ inline constexpr std::string_view kLayerParentSetCapability =
     "ae.layer.parent.set";
 inline constexpr std::string_view kLayerDuplicateCapability =
     "ae.layer.duplicate";
-inline constexpr std::array<std::string_view, 37> kAdvertisedNativeCapabilities{
+inline constexpr std::string_view kLayerCompositingReadCapability =
+    "ae.layer.compositing.read";
+inline constexpr std::string_view kLayerSwitchSetCapability =
+    "ae.layer.switch.set";
+inline constexpr std::string_view kLayerQualitySetCapability =
+    "ae.layer.quality.set";
+inline constexpr std::string_view kLayerBlendingModeSetCapability =
+    "ae.layer.blending-mode.set";
+inline constexpr std::array<std::string_view, 41> kAdvertisedNativeCapabilities{
     kProjectSummaryCapability,
     kProjectBitDepthReadCapability,
     kProjectBitDepthSetCapability,
@@ -125,6 +133,10 @@ inline constexpr std::array<std::string_view, 37> kAdvertisedNativeCapabilities{
     kLayerOrderSetCapability,
     kLayerParentSetCapability,
     kLayerDuplicateCapability,
+    kLayerCompositingReadCapability,
+    kLayerSwitchSetCapability,
+    kLayerQualitySetCapability,
+    kLayerBlendingModeSetCapability,
     kLayerPropertyKeyframeDetailsReadCapability,
     kLayerPropertyKeyframeAddCapability,
     kLayerPropertyKeyframeValueSetCapability,
@@ -377,6 +389,52 @@ using LayerTimelineResult = std::variant<
     LayerOrderChanged,
     LayerParentChanged,
     LayerDuplicated>;
+
+struct LayerCompositingState {
+  ObjectLocator layer_locator;
+  bool visibility_enabled{false};
+  bool solo{false};
+  bool locked{false};
+  bool shy{false};
+  bool motion_blur{false};
+  bool three_d{false};
+  bool adjustment{false};
+  std::string quality;
+  std::string blending_mode;
+  bool preserve_alpha{false};
+  std::string track_matte;
+};
+
+struct LayerSwitchChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  std::string switch_name;
+  bool before_enabled{false};
+  bool after_enabled{false};
+};
+
+struct LayerQualityChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  std::string before_quality;
+  std::string after_quality;
+};
+
+struct LayerBlendingModeChanged {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  std::string before_mode;
+  std::string after_mode;
+  bool preserve_alpha{false};
+  std::string track_matte;
+};
+
+using LayerCompositingResult = std::variant<
+    std::monostate,
+    LayerCompositingState,
+    LayerSwitchChanged,
+    LayerQualityChanged,
+    LayerBlendingModeChanged>;
 
 struct CompositionTimeRead {
   ObjectLocator composition_locator;
@@ -743,6 +801,19 @@ struct LayerParentSetCommand : LayerDetailsQuery {
 
 struct LayerDuplicateCommand : LayerDetailsQuery {
   std::string new_name;
+};
+
+struct LayerSwitchSetCommand : LayerDetailsQuery {
+  std::string switch_name;
+  bool enabled{false};
+};
+
+struct LayerQualitySetCommand : LayerDetailsQuery {
+  std::string quality;
+};
+
+struct LayerBlendingModeSetCommand : LayerDetailsQuery {
+  std::string mode;
 };
 
 struct CompositionTimeSetCommand {
@@ -1238,6 +1309,52 @@ struct HostLayerDuplicateResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostLayerCompositingReadResult {
+  bool ok{false};
+  LayerCompositingState value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerCompositingReadResult success(
+      LayerCompositingState value);
+  [[nodiscard]] static HostLayerCompositingReadResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerSwitchWriteResult {
+  bool ok{false};
+  LayerSwitchChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerSwitchWriteResult success(LayerSwitchChanged value);
+  [[nodiscard]] static HostLayerSwitchWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerQualityWriteResult {
+  bool ok{false};
+  LayerQualityChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerQualityWriteResult success(LayerQualityChanged value);
+  [[nodiscard]] static HostLayerQualityWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerBlendingModeWriteResult {
+  bool ok{false};
+  LayerBlendingModeChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+  [[nodiscard]] static HostLayerBlendingModeWriteResult success(
+      LayerBlendingModeChanged value);
+  [[nodiscard]] static HostLayerBlendingModeWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostProjectGraphInvalidationResult {
   bool ok{false};
   ProjectGraphInvalidation value;
@@ -1320,6 +1437,14 @@ class HostApi {
       const LayerParentSetCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerDuplicateResult duplicate_layer(
       const LayerDuplicateCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerCompositingReadResult read_layer_compositing(
+      const LayerDetailsQuery& query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerSwitchWriteResult set_layer_switch(
+      const LayerSwitchSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerQualityWriteResult set_layer_quality(
+      const LayerQualitySetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerBlendingModeWriteResult set_layer_blending_mode(
+      const LayerBlendingModeSetCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint work_deadline);
 };
@@ -1378,7 +1503,11 @@ struct Request {
       std::vector<LayerPropertyKeyframeDimensionEase>
           keyframe_temporal_ease_value = {},
       std::string keyframe_behavior_value = {},
-      std::optional<bool> keyframe_behavior_enabled_value = std::nullopt)
+      std::optional<bool> keyframe_behavior_enabled_value = std::nullopt,
+      std::string layer_switch_name_value = {},
+      std::optional<bool> layer_switch_enabled_value = std::nullopt,
+      std::string layer_quality_value = {},
+      std::string layer_blending_mode_value = {})
       : request_id(std::move(request_id_value)),
         capability_id(std::move(capability_id_value)),
         deadline(deadline_value),
@@ -1430,7 +1559,11 @@ struct Request {
         keyframe_out_interpolation(std::move(keyframe_out_interpolation_value)),
         keyframe_temporal_ease(std::move(keyframe_temporal_ease_value)),
         keyframe_behavior(std::move(keyframe_behavior_value)),
-        keyframe_behavior_enabled(keyframe_behavior_enabled_value) {}
+        keyframe_behavior_enabled(keyframe_behavior_enabled_value),
+        layer_switch_name(std::move(layer_switch_name_value)),
+        layer_switch_enabled(layer_switch_enabled_value),
+        layer_quality(std::move(layer_quality_value)),
+        layer_blending_mode(std::move(layer_blending_mode_value)) {}
 
   std::string request_id;
   std::string capability_id;
@@ -1486,6 +1619,10 @@ struct Request {
   std::vector<LayerPropertyKeyframeDimensionEase> keyframe_temporal_ease;
   std::string keyframe_behavior;
   std::optional<bool> keyframe_behavior_enabled;
+  std::string layer_switch_name;
+  std::optional<bool> layer_switch_enabled;
+  std::string layer_quality;
+  std::string layer_blending_mode;
 };
 
 enum class EnqueueCode {
@@ -1547,6 +1684,7 @@ struct Completion {
   ProjectItemLabelChanged project_item_label_change_result;
   CompositionDuplicated composition_duplicate_result;
   std::shared_ptr<LayerTimelineResult> layer_timeline_result;
+  std::shared_ptr<LayerCompositingResult> layer_compositing_result;
   ProjectGraphInvalidation project_graph_invalidation_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;

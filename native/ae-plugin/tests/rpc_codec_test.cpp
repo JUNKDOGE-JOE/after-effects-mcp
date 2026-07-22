@@ -202,6 +202,14 @@ constexpr std::string_view kLayerParentContractDigest =
     "36414bc469a83ddeadbf9f722e934266b38f26a70352c24f5e4a57800f2bb06c";
 constexpr std::string_view kLayerDuplicateContractDigest =
     "334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75";
+constexpr std::string_view kLayerCompositingContractDigest =
+    "407554b3f18f8758a8eb997d2b407e74dcca8edbd394e07cb2168a9548a7d99d";
+constexpr std::string_view kLayerSwitchContractDigest =
+    "505c9f16f34ded8d154e844e3078fe214cff6e5ebd83e42fc454f5b69a830d77";
+constexpr std::string_view kLayerQualityContractDigest =
+    "ca09062a5ed2a07fd8277eaef9bbc030f752b4da7baf4448896f1d6daad2c465";
+constexpr std::string_view kLayerBlendingModeContractDigest =
+    "098113d1426d0124a678ac659fabe1d2a52610f1a6f78075e4389cc04ebfdbcf";
 constexpr std::string_view kKeyframeDetailsContractDigest =
     "254ec7933e9628b6c4fba4cc60e183331e4edc9f723c0ccb3f1e37619b7c5249";
 constexpr std::string_view kKeyframeAddContractDigest =
@@ -215,7 +223,7 @@ constexpr std::string_view kKeyframeBehaviorContractDigest =
 constexpr std::string_view kKeyframeDeleteContractDigest =
     "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9";
 constexpr std::string_view kCapabilitiesRegistryDigest =
-    "c5d12ffb9e1a90b9e7341144e22ecda41bacac5500f4cedebfee50d1acc17af1";
+    "7d2598ef2570828a4c1b616cf036b67fd966599aadad1530114e2d655b8646a4";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -1911,6 +1919,124 @@ void layer_timeline_package_parses_and_serializes_all_eight_contracts() {
   }, "layer name result with unbound postcondition digest");
 }
 
+void layer_compositing_package_parses_and_serializes_closed_contracts() {
+  const std::string layer_json = locator_json(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const auto decode = [&](std::string_view request_id,
+                          std::string_view capability_id,
+                          const std::string& arguments) {
+    const ParsedRequest request = decode_request_frame(frame(package150_invoke_json(
+        request_id, capability_id, arguments)));
+    require(request.method == RpcMethod::kInvoke,
+        "layer compositing request did not classify as invoke");
+    return std::get<InvokeParams>(request.params);
+  };
+
+  const InvokeParams read = decode(
+      "compositing-read", "ae.layer.compositing.read",
+      "{\"layerLocator\":" + layer_json + "}");
+  require(read.layer_locator.has_value()
+          && read.layer_switch_name.empty()
+          && !read.layer_switch_enabled.has_value(),
+      "layer compositing read leaked write arguments");
+
+  const InvokeParams switched = decode(
+      "switch-set", "ae.layer.switch.set",
+      "{\"layerLocator\":" + layer_json
+          + ",\"switch\":\"solo\",\"enabled\":true,"
+            "\"idempotencyKey\":\"synthetic-switch-intent-0001\"}");
+  require(switched.layer_switch_name == "solo"
+          && switched.layer_switch_enabled == true
+          && switched.arguments_fingerprint_sha256.size() == 64,
+      "layer switch parser lost its fixed enum, boolean, or digest");
+
+  const InvokeParams quality = decode(
+      "quality-set", "ae.layer.quality.set",
+      "{\"layerLocator\":" + layer_json
+          + ",\"quality\":\"draft\","
+            "\"idempotencyKey\":\"synthetic-quality-intent-0001\"}");
+  require(quality.layer_quality == "draft"
+          && quality.arguments_fingerprint_sha256.size() == 64,
+      "layer quality parser lost its enum or digest");
+
+  const InvokeParams blend = decode(
+      "blend-set", "ae.layer.blending-mode.set",
+      "{\"layerLocator\":" + layer_json
+          + ",\"mode\":\"multiply\","
+            "\"idempotencyKey\":\"synthetic-blend-intent-0001\"}");
+  require(blend.layer_blending_mode == "multiply"
+          && blend.arguments_fingerprint_sha256.size() == 64,
+      "layer blending parser lost its enum or digest");
+
+  expect_codec_error([&] {
+    (void)decode("generic-switch", "ae.layer.switch.set",
+        "{\"layerLocator\":" + layer_json
+            + ",\"switch\":\"arbitrary-sdk-flag\",\"enabled\":true,"
+              "\"idempotencyKey\":\"synthetic-switch-intent-0002\"}");
+  }, "INVALID_ARGUMENT", "generic layer SDK flag");
+  expect_codec_error([&] {
+    (void)decode("blend-extra", "ae.layer.blending-mode.set",
+        "{\"layerLocator\":" + layer_json
+            + ",\"mode\":\"multiply\",\"preserveAlpha\":false,"
+              "\"idempotencyKey\":\"synthetic-blend-intent-0002\"}");
+  }, "INVALID_ARGUMENT", "layer blend preserve-alpha escape hatch");
+
+  const auto layer = locator("layer", "88888888-8888-4888-8888-888888888888");
+  const aemcp::native::LayerCompositingState state{
+      layer, true, false, false, false, false, false, false,
+      "best", "normal", false, "none"};
+  const aemcp::native::LayerSwitchChanged switch_change{
+      true, layer, "solo", false, true};
+  const aemcp::native::LayerQualityChanged quality_change{
+      true, layer, "best", "draft"};
+  const aemcp::native::LayerBlendingModeChanged blend_change{
+      true, layer, "normal", "multiply", false, "none"};
+  const auto success = [](auto value, std::string request_id, std::string digest) {
+    using Success = aemcp::native::rpc::NativeValueSuccess<decltype(value)>;
+    return Success{std::move(request_id), std::string(kSession), std::string(kHost),
+        std::move(value), 1'900'000'000'000ULL, 1'900'000'000'025ULL,
+        std::string(kDigest), std::move(digest), false};
+  };
+
+  const std::array<std::string, 4> encoded{{
+      body(encode_layer_compositing_success(success(
+          state, "compositing-read",
+          aemcp::native::rpc::digest_layer_compositing_postcondition(state)))),
+      body(encode_layer_switch_set_success(success(
+          switch_change, "switch-set",
+          aemcp::native::rpc::digest_layer_switch_set_postcondition(switch_change)))),
+      body(encode_layer_quality_set_success(success(
+          quality_change, "quality-set",
+          aemcp::native::rpc::digest_layer_quality_set_postcondition(quality_change)))),
+      body(encode_layer_blending_mode_set_success(success(
+          blend_change, "blend-set",
+          aemcp::native::rpc::digest_layer_blending_mode_set_postcondition(blend_change)))),
+  }};
+  const std::array<std::string_view, 4> capabilities{{
+      aemcp::native::kLayerCompositingReadCapability,
+      aemcp::native::kLayerSwitchSetCapability,
+      aemcp::native::kLayerQualitySetCapability,
+      aemcp::native::kLayerBlendingModeSetCapability,
+  }};
+  for (std::size_t index = 0; index < encoded.size(); ++index) {
+    require(encoded[index].find("\"capabilityId\":\""
+            + std::string(capabilities[index]) + "\"") != std::string::npos,
+        "layer compositing encoder emitted the wrong capability branch");
+  }
+
+  auto invalid_switch = switch_change;
+  invalid_switch.before_enabled = true;
+  expect_argument_error([&] {
+    (void)encode_layer_switch_set_success(success(
+        invalid_switch, "switch-noop", std::string(kDigest)));
+  }, "layer switch no-op result");
+  auto invalid_blend_digest = success(
+      blend_change, "blend-bad-digest", std::string(kDigest));
+  expect_argument_error([&] {
+    (void)encode_layer_blending_mode_set_success(invalid_blend_digest);
+  }, "layer blending result with unbound postcondition digest");
+}
+
 void keyframe_authoring_package_parses_and_serializes_closed_contracts() {
   const std::string layer = locator_json(
       "layer", "88888888-8888-4888-8888-888888888888");
@@ -2374,6 +2500,18 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kLayerParentContractDigest);
   capabilities.layer_duplicate_contract_digest =
       std::string(kLayerDuplicateContractDigest);
+  capabilities.include_layer_compositing_read = true;
+  capabilities.include_layer_switch_set = true;
+  capabilities.include_layer_quality_set = true;
+  capabilities.include_layer_blending_mode_set = true;
+  capabilities.layer_compositing_read_contract_digest =
+      std::string(kLayerCompositingContractDigest);
+  capabilities.layer_switch_set_contract_digest =
+      std::string(kLayerSwitchContractDigest);
+  capabilities.layer_quality_set_contract_digest =
+      std::string(kLayerQualityContractDigest);
+  capabilities.layer_blending_mode_set_contract_digest =
+      std::string(kLayerBlendingModeContractDigest);
   capabilities.include_layer_property_keyframe_details_read = true;
   capabilities.include_layer_property_keyframe_add = true;
   capabilities.include_layer_property_keyframe_value_set = true;
@@ -2574,6 +2712,10 @@ void response_helpers_are_bounded_and_typed() {
   capabilities.include_layer_order_set = false;
   capabilities.include_layer_parent_set = false;
   capabilities.include_layer_duplicate = false;
+  capabilities.include_layer_compositing_read = false;
+  capabilities.include_layer_switch_set = false;
+  capabilities.include_layer_quality_set = false;
+  capabilities.include_layer_blending_mode_set = false;
   const std::string filtered_capabilities_body = body(
       encode_capabilities_success(capabilities));
   require(filtered_capabilities_body.find(std::string(kDigest)) != std::string::npos,
@@ -2792,6 +2934,7 @@ int main() {
   project_graph_invokes_and_results_are_closed_and_deterministic();
   project_composition_package_parses_and_serializes_all_eight_contracts();
   layer_timeline_package_parses_and_serializes_all_eight_contracts();
+  layer_compositing_package_parses_and_serializes_closed_contracts();
   keyframe_authoring_package_parses_and_serializes_closed_contracts();
   framing_fragmentation_and_multiple_frames_work();
   strict_json_and_frame_limits_fail_closed();

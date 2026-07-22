@@ -48,6 +48,10 @@ struct NativeRpcRuntimeInfo {
   std::string layer_order_set_contract_digest;
   std::string layer_parent_set_contract_digest;
   std::string layer_duplicate_contract_digest;
+  std::string layer_compositing_read_contract_digest;
+  std::string layer_switch_set_contract_digest;
+  std::string layer_quality_set_contract_digest;
+  std::string layer_blending_mode_set_contract_digest;
   std::string layer_property_keyframe_details_read_contract_digest;
   std::string layer_property_keyframe_add_contract_digest;
   std::string layer_property_keyframe_value_set_contract_digest;
