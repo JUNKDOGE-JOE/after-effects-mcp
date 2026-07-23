@@ -90,7 +90,7 @@ SPEC = PackageSpec(
     ),
 )
 
-EFFECT_MATCH_NAMES = ("ADBE Gaussian Blur 2", "ADBE Tint")
+EFFECT_MATCH_NAMES = ("CC Ball Action", "CC Bend It")
 LAYER_NAME = "NATIVE_MEDIA_TARGET"
 
 
@@ -207,8 +207,8 @@ class Issue167Package:
         self.runtime.require_fixture_absent()
         await self.runtime.checkpoint("save-fixture", {
             "instruction": (
-                "In formal After Effects, save the empty project once to fixturePath. "
-                "Use Save, never Save As."
+                "In formal After Effects, perform the initial naming save once to "
+                "fixturePath. Do not create a Save As copy."
             ),
             "fixturePath": self.runtime.fixture.path,
             "activeFixtureCount": 1,
@@ -447,7 +447,7 @@ class Issue167Package:
         for index, match_name in enumerate(EFFECT_MATCH_NAMES):
             payload = await self._call(session, "ae_applyLayerEffect", {
                 "layer_locator": current,
-                "match_name": match_name,
+                "effect_match_name": match_name,
                 "idempotency_key": self.runtime.intent(f"fixture-effect-{index}"),
             }, phase=phase)
             current = _locator(native_value(payload)["layerLocator"], "layer")
@@ -804,7 +804,7 @@ class Issue167Package:
         )
         payload = await self._call(session, "ae_applyLayerEffect", {
             "layer_locator": layer,
-            "match_name": EFFECT_MATCH_NAMES[0],
+            "effect_match_name": EFFECT_MATCH_NAMES[0],
             "idempotency_key": self.runtime.intent("t4-fixture-effect"),
         }, phase="t4-setup")
         layer = _locator(native_value(payload)["layerLocator"], "layer")

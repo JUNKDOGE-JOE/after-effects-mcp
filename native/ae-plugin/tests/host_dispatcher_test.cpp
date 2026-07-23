@@ -1801,6 +1801,37 @@ void legacy_effect_metadata_is_utf8_normalized_before_json_evidence() {
       "legacy effect metadata bytes bypass UTF-8 normalization");
 }
 
+void effect_enabled_uses_the_sdk_undoable_dynamic_stream_write() {
+  const std::filesystem::path source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "aegp" / "plugin_entry.cpp";
+  std::ifstream input(source_path, std::ios::binary);
+  require(input.good(), "could not open plugin_entry.cpp effect write source");
+  const std::string source{
+      std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  const std::size_t mutation = source.find(
+      "A_Err mutation_error = A_Err_GENERIC;",
+      source.find("HostNativeMediaResult execute_native_media("));
+  const std::size_t effect_branch = source.find(
+      "if (command.operation == \"effect-enabled\") {", mutation);
+  const std::size_t reorder_branch = source.find(
+      "} else if (command.operation == \"effect-reorder\") {", effect_branch);
+  require(mutation != std::string::npos && effect_branch != std::string::npos
+          && reorder_branch != std::string::npos,
+      "could not isolate the effect-enabled native mutation branch");
+  const std::string_view implementation(
+      source.data() + effect_branch, reorder_branch - effect_branch);
+  require(implementation.find("AEGP_SetDynamicStreamFlag")
+              != std::string_view::npos
+          && implementation.find("AEGP_DynStreamFlag_ACTIVE_EYEBALL")
+              != std::string_view::npos
+          && implementation.find("TRUE, *command.enabled ? TRUE : FALSE")
+              != std::string_view::npos,
+      "effect enabled state is no longer written through the undoable dynamic stream API");
+  require(implementation.find("AEGP_SetEffectFlags") == std::string_view::npos,
+      "effect enabled state regressed to the non-undoable effect flags setter");
+}
+
 void layer_duplicate_rejects_an_unrelated_layer_result() {
   FakeClock clock;
   HostDispatcher dispatcher(
@@ -2993,6 +3024,7 @@ int main() {
   keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
   layer_compositing_writes_read_back_only_their_owned_sdk_fields();
   legacy_effect_metadata_is_utf8_normalized_before_json_evidence();
+  effect_enabled_uses_the_sdk_undoable_dynamic_stream_write();
   layer_duplicate_rejects_an_unrelated_layer_result();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();

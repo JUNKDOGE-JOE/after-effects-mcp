@@ -7257,6 +7257,10 @@ class AegpHostApi final : public HostApi {
         basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
     SuiteLease<AEGP_UtilitySuite6> utility_suite(
         basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_StreamSuite6> stream_suite(
+        basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+    SuiteLease<AEGP_DynamicStreamSuite4> dynamic_suite(
+        basic_, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4);
     const bool effect_operation = command.operation == "effects-layer-list"
         || command.operation == "effect-details"
         || command.operation == "effect-enabled"
@@ -7267,7 +7271,9 @@ class AegpHostApi final : public HostApi {
       if (project_suite.get() == nullptr || item_suite.get() == nullptr
           || comp_suite.get() == nullptr || layer_suite.get() == nullptr
           || memory_suite.get() == nullptr || effect_suite.get() == nullptr
-          || utility_suite.get() == nullptr) {
+          || utility_suite.get() == nullptr
+          || (command.operation == "effect-enabled"
+              && (stream_suite.get() == nullptr || dynamic_suite.get() == nullptr))) {
         return HostNativeMediaResult::failure(
             "NATIVE_UNSUPPORTED", "required native effect suites are unavailable");
       }
@@ -7431,6 +7437,76 @@ class AegpHostApi final : public HostApi {
               "params.arguments.targetIndex");
         }
       }
+      std::optional<StreamRefOwner> effect_root;
+      std::optional<StreamRefOwner> effect_group;
+      std::optional<StreamRefOwner> effect_stream;
+      if (command.operation == "effect-enabled") {
+        AEGP_StreamRefH root_raw = nullptr;
+        if (dynamic_suite->AEGP_GetNewStreamRefForLayer(
+                plugin_id_, resolved->layer, &root_raw) != A_Err_NONE
+            || root_raw == nullptr) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "effect layer property root could not be resolved");
+        }
+        effect_root.emplace(stream_suite.get(), root_raw);
+
+        AEGP_StreamRefH group_raw = nullptr;
+        if (dynamic_suite->AEGP_GetNewStreamRefByMatchname(
+                plugin_id_, effect_root->get(),
+                AEGP_StreamGroupName_EFFECT_PARADE, &group_raw) != A_Err_NONE
+            || group_raw == nullptr) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "effect property group could not be resolved");
+        }
+        effect_group.emplace(stream_suite.get(), group_raw);
+
+        AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
+        A_long group_count = 0;
+        if (dynamic_suite->AEGP_GetStreamGroupingType(
+                effect_group->get(), &grouping) != A_Err_NONE
+            || grouping != AEGP_StreamGroupingType_INDEXED_GROUP
+            || dynamic_suite->AEGP_GetNumStreamsInGroup(
+                effect_group->get(), &group_count) != A_Err_NONE
+            || group_count != count) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED",
+              "effect property group did not match the native effect stack");
+        }
+
+        AEGP_StreamRefH stream_raw = nullptr;
+        if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+                plugin_id_, effect_group->get(),
+                static_cast<A_long>(command.effect_index - 1),
+                &stream_raw) != A_Err_NONE
+            || stream_raw == nullptr) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "target effect property stream could not be resolved");
+        }
+        effect_stream.emplace(stream_suite.get(), stream_raw);
+
+        std::array<A_char, AEGP_MAX_EFFECT_MATCH_NAME_SIZE> expected_match_name{};
+        std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> actual_match_name{};
+        A_long verified_index = -1;
+        if (effect_suite->AEGP_GetEffectMatchName(
+                target_key, expected_match_name.data()) != A_Err_NONE
+            || std::find(
+                expected_match_name.begin(), expected_match_name.end(), '\0')
+                == expected_match_name.end()
+            || dynamic_suite->AEGP_GetMatchName(
+                effect_stream->get(), actual_match_name.data()) != A_Err_NONE
+            || std::find(actual_match_name.begin(), actual_match_name.end(), '\0')
+                == actual_match_name.end()
+            || std::string_view(actual_match_name.data())
+                != std::string_view(expected_match_name.data())
+            || dynamic_suite->AEGP_GetStreamIndexInParent(
+                effect_stream->get(), &verified_index) != A_Err_NONE
+            || verified_index != static_cast<A_long>(command.effect_index - 1)) {
+          return HostNativeMediaResult::failure(
+              "STALE_LOCATOR",
+              "effect property stream no longer matches the requested effect",
+              "params.arguments.effectIndex");
+        }
+      }
       if (utility_suite->AEGP_StartUndoGroup(
               "ae-mcp: Edit native effect stack") != A_Err_NONE) {
         return HostNativeMediaResult::failure(
@@ -7441,10 +7517,9 @@ class AegpHostApi final : public HostApi {
       A_Err mutation_error = A_Err_GENERIC;
       AEGP_EffectRefH duplicate_raw = nullptr;
       if (command.operation == "effect-enabled") {
-        const AEGP_EffectFlags next = *command.enabled
-            ? AEGP_EffectFlags_ACTIVE : AEGP_EffectFlags_NONE;
-        mutation_error = effect_suite->AEGP_SetEffectFlags(
-            target.get(), AEGP_EffectFlags_ACTIVE, next);
+        mutation_error = dynamic_suite->AEGP_SetDynamicStreamFlag(
+            effect_stream->get(), AEGP_DynStreamFlag_ACTIVE_EYEBALL,
+            TRUE, *command.enabled ? TRUE : FALSE);
       } else if (command.operation == "effect-reorder") {
         mutation_error = effect_suite->AEGP_ReorderEffect(
             target.get(), static_cast<A_long>(command.target_index - 1));

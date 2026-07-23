@@ -258,6 +258,8 @@ class _T4Package(package.Issue167Package):
         elif tool == "ae_listInstalledEffects":
             value = {"effects": [{"matchName": package.EFFECT_MATCH_NAMES[0]}]}
         elif tool == "ae_applyLayerEffect":
+            assert _arguments["effect_match_name"] == package.EFFECT_MATCH_NAMES[0]
+            assert "match_name" not in _arguments
             value = {"layerLocator": layer}
         elif tool == "ae_listLayerEffects":
             value = {
@@ -328,6 +330,7 @@ async def test_acceptance_effect_discovery_respects_the_public_page_limit(
         def __init__(self) -> None:
             super().__init__(Runtime(), fixture_name="fixture")
             self.discovery_arguments = None
+            self.apply_arguments = []
 
         async def _call(self, _session, tool: str, arguments, *, phase: str):
             assert phase == "t5-effects"
@@ -342,12 +345,19 @@ async def test_acceptance_effect_discovery_respects_the_public_page_limit(
                     }
                 }
             assert tool == "ae_applyLayerEffect"
+            self.apply_arguments.append(arguments)
             return {"value": {"layerLocator": arguments["layer_locator"]}}
 
     runner = EffectsPackage()
     layer = _locator("layer", "77777777-7777-4777-8777-777777777777")
     assert await runner._apply_effects(object(), layer, phase="t5-effects") == layer
     assert runner.discovery_arguments == {"offset": 0, "limit": 50}
+    assert [
+        arguments["effect_match_name"] for arguments in runner.apply_arguments
+    ] == list(package.EFFECT_MATCH_NAMES)
+    assert all(
+        "match_name" not in arguments for arguments in runner.apply_arguments
+    )
 
 
 @pytest.mark.asyncio
