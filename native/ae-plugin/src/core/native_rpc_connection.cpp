@@ -504,6 +504,9 @@ void NativeRpcConnectionHandler::serve(
                   completion.layer_effect_apply_result);
             } else if (completion.capability_id == kNativeMediaReadCapability
                 || completion.capability_id == kNativeMediaWriteCapability) {
+              completion.native_media_result_json =
+                  rpc::canonicalize_native_media_value(
+                      completion.native_media_result_json);
               postcondition_digest = rpc::digest_native_media_postcondition(
                   completion.capability_id,
                   completion.native_media_result_json);

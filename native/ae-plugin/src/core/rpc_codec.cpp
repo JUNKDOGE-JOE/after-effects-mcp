@@ -4937,6 +4937,14 @@ std::string digest_native_media_arguments(
   return sha256_hex(normalized);
 }
 
+std::string canonicalize_native_media_value(std::string_view value_json) {
+  const JsonValue parsed = JsonParser(value_json).parse();
+  if (object_of(parsed) == nullptr) {
+    invalid_argument("native media value is not an object");
+  }
+  return canonical_json(parsed);
+}
+
 std::string digest_native_media_postcondition(
     std::string_view capability_id,
     std::string_view canonical_value_json) {
@@ -4944,9 +4952,9 @@ std::string digest_native_media_postcondition(
       && capability_id != kNativeMediaWriteCapability) {
     invalid_argument("invalid native media postcondition capability");
   }
-  const JsonValue parsed = JsonParser(canonical_value_json).parse();
-  const std::string normalized = canonical_json(parsed);
-  if (normalized != canonical_value_json || object_of(parsed) == nullptr) {
+  const std::string normalized =
+      canonicalize_native_media_value(canonical_value_json);
+  if (normalized != canonical_value_json) {
     invalid_argument("native media value is not a canonical object");
   }
   return sha256_hex("{\"capabilityId\":" + json_string(capability_id)

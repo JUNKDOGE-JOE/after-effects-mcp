@@ -283,6 +283,8 @@ struct ParsedRequest {
     const LayerEffectApplied& value);
 [[nodiscard]] std::string digest_native_media_arguments(
     std::string_view canonical_arguments_json);
+[[nodiscard]] std::string canonicalize_native_media_value(
+    std::string_view value_json);
 [[nodiscard]] std::string digest_native_media_postcondition(
     std::string_view capability_id,
     std::string_view canonical_value_json);

@@ -101,6 +101,7 @@ using aemcp::native::rpc::composition_duplicate_persistent_diagnostic_fields;
 using aemcp::native::rpc::digest_composition_layer_create_postcondition;
 using aemcp::native::rpc::digest_layer_effect_apply_postcondition;
 using aemcp::native::rpc::digest_native_media_postcondition;
+using aemcp::native::rpc::canonicalize_native_media_value;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
 using aemcp::native::rpc::digest_layer_property_keyframes_postcondition;
 using aemcp::native::rpc::digest_layer_property_set_postcondition;
@@ -3107,6 +3108,23 @@ void native_media_package_parses_all_twenty_two_public_operations() {
 
   const std::string canonical_value =
       "{\"operation\":\"effects-installed-list\",\"returned\":0,\"total\":0}";
+  require(
+      canonicalize_native_media_value(
+          "{\"operation\":\"effects-installed-list\",\"effects\":[],"
+          "\"hasMore\":false,\"limit\":50,\"nextOffset\":null,\"offset\":0,"
+          "\"returned\":0,\"total\":0}")
+          == "{\"effects\":[],\"hasMore\":false,\"limit\":50,"
+             "\"nextOffset\":null,\"offset\":0,"
+             "\"operation\":\"effects-installed-list\",\"returned\":0,\"total\":0}",
+      "native media Host result did not normalize to canonical JSON");
+  bool rejected_non_object_value = false;
+  try {
+    (void)canonicalize_native_media_value("[]");
+  } catch (const std::exception&) {
+    rejected_non_object_value = true;
+  }
+  require(rejected_non_object_value,
+      "native media Host result accepted a non-object root");
   const NativeMediaSuccess success{
       "native-media-success-1",
       std::string(kSession),
