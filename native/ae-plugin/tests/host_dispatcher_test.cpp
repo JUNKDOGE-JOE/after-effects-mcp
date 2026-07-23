@@ -1770,6 +1770,37 @@ void layer_compositing_writes_read_back_only_their_owned_sdk_fields() {
       "layer Normal mode no longer matches the AEGP timeline transfer value");
 }
 
+void legacy_effect_metadata_is_utf8_normalized_before_json_evidence() {
+  const std::filesystem::path source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "aegp" / "plugin_entry.cpp";
+  std::ifstream input(source_path, std::ios::binary);
+  require(input.good(), "could not open plugin_entry.cpp effect metadata source");
+  const std::string source{
+      std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  const std::size_t media = source.find(
+      "HostNativeMediaResult execute_native_media(");
+  require(media != std::string::npos,
+      "could not isolate the native media SDK implementation");
+  const std::string_view implementation(source.data() + media, source.size() - media);
+  const auto occurrences = [&](std::string_view needle) {
+    std::size_t count = 0;
+    std::size_t offset = 0;
+    while ((offset = implementation.find(needle, offset)) != std::string_view::npos) {
+      ++count;
+      offset += needle.size();
+    }
+    return count;
+  };
+  require(occurrences("effect_text_utf8(name, true)") >= 2
+          && occurrences("effect_text_utf8(category, true)") >= 2
+          && occurrences("effect_text_utf8(match_name, false)") >= 2,
+      "installed and applied effect metadata are not normalized at both read paths");
+  require(implementation.find("quoted(name.data())") == std::string_view::npos
+          && implementation.find("quoted(category.data())") == std::string_view::npos,
+      "legacy effect metadata bytes bypass UTF-8 normalization");
+}
+
 void layer_duplicate_rejects_an_unrelated_layer_result() {
   FakeClock clock;
   HostDispatcher dispatcher(
@@ -2961,6 +2992,7 @@ int main() {
   keyframe_authoring_package_admits_all_seven_closed_capabilities();
   keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
   layer_compositing_writes_read_back_only_their_owned_sdk_fields();
+  legacy_effect_metadata_is_utf8_normalized_before_json_evidence();
   layer_duplicate_rejects_an_unrelated_layer_result();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();

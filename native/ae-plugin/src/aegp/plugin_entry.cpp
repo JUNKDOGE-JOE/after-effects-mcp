@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <iomanip>
+#include <iterator>
 #include <limits>
 #include <locale>
 #include <memory>
@@ -386,6 +387,39 @@ std::string cf_string(CFTypeRef value) {
   if (!CFStringGetCString(string, output.data(), maximum, kCFStringEncodingUTF8)) return {};
   output.resize(std::char_traits<char>::length(output.c_str()));
   return output;
+}
+
+template <std::size_t Size>
+std::optional<std::string> effect_text_utf8(
+    const std::array<A_char, Size>& buffer,
+    bool allow_legacy_encoding) {
+  const auto terminator = std::find(buffer.begin(), buffer.end(), '\0');
+  if (terminator == buffer.end()) return std::nullopt;
+  const CFIndex length = static_cast<CFIndex>(
+      std::distance(buffer.begin(), terminator));
+  if (length == 0) return std::string{};
+  const auto convert = [&](CFStringEncoding encoding)
+      -> std::optional<std::string> {
+    CFStringRef value = CFStringCreateWithBytes(
+        kCFAllocatorDefault,
+        reinterpret_cast<const UInt8*>(buffer.data()),
+        length,
+        encoding,
+        false);
+    if (value == nullptr) return std::nullopt;
+    std::string output = cf_string(value);
+    CFRelease(value);
+    if (output.empty()) return std::nullopt;
+    return output;
+  };
+  if (auto utf8 = convert(kCFStringEncodingUTF8); utf8.has_value()) {
+    return utf8;
+  }
+  if (!allow_legacy_encoding) return std::nullopt;
+  if (auto system = convert(CFStringGetSystemEncoding()); system.has_value()) {
+    return system;
+  }
+  return convert(kCFStringEncodingMacRoman);
 }
 
 struct HostIdentity {
@@ -7183,12 +7217,22 @@ class AegpHostApi final : public HostApi {
           return HostNativeMediaResult::failure(
               "CAPABILITY_FAILED", "installed effect metadata was not bounded");
         }
+        const auto display_name = effect_text_utf8(name, true);
+        const auto match_name_utf8 = effect_text_utf8(match_name, false);
+        const auto category_name = effect_text_utf8(category, true);
+        if (!display_name.has_value() || display_name->empty()
+            || !match_name_utf8.has_value() || match_name_utf8->empty()
+            || !category_name.has_value()) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED",
+              "installed effect metadata could not be converted to UTF-8");
+        }
         if (!first) output << ',';
         first = false;
-        output << "{\"category\":" << quoted(category.data())
-               << ",\"displayName\":" << quoted(name.data())
+        output << "{\"category\":" << quoted(*category_name)
+               << ",\"displayName\":" << quoted(*display_name)
                << ",\"installedEffectKey\":" << key
-               << ",\"matchName\":" << quoted(match_name.data()) << "}";
+               << ",\"matchName\":" << quoted(*match_name_utf8) << "}";
       }
       output << "],\"hasMore\":" << (end < static_cast<std::uint64_t>(count) ? "true" : "false")
              << ",\"limit\":" << command.limit
@@ -7270,17 +7314,25 @@ class AegpHostApi final : public HostApi {
             || std::find(category.begin(), category.end(), '\0') == category.end()) {
           return std::nullopt;
         }
+        const auto display_name = effect_text_utf8(name, true);
+        const auto match_name_utf8 = effect_text_utf8(match_name, false);
+        const auto category_name = effect_text_utf8(category, true);
+        if (!display_name.has_value() || display_name->empty()
+            || !match_name_utf8.has_value() || match_name_utf8->empty()
+            || !category_name.has_value()) {
+          return std::nullopt;
+        }
         return std::string("{\"active\":")
             + ((flags & AEGP_EffectFlags_ACTIVE) != 0 ? "true" : "false")
             + ",\"audioOnly\":"
             + ((flags & AEGP_EffectFlags_AUDIO_ONLY) != 0 ? "true" : "false")
             + ",\"audioToo\":"
             + ((flags & AEGP_EffectFlags_AUDIO_TOO) != 0 ? "true" : "false")
-            + ",\"category\":" + quoted(category.data())
-            + ",\"displayName\":" + quoted(name.data())
+            + ",\"category\":" + quoted(*category_name)
+            + ",\"displayName\":" + quoted(*display_name)
             + ",\"effectIndex\":" + std::to_string(zero_index + 1)
             + ",\"installedEffectKey\":" + std::to_string(key)
-            + ",\"matchName\":" + quoted(match_name.data())
+            + ",\"matchName\":" + quoted(*match_name_utf8)
             + ",\"missing\":"
             + ((flags & AEGP_EffectFlags_MISSING) != 0 ? "true" : "false")
             + "}";
