@@ -5970,8 +5970,10 @@ class AegpHostApi final : public HostApi {
     std::optional<aemcp::native::LayerPropertyValue> before_value;
     std::optional<aemcp::native::LayerPropertyValue> after_value;
     AEGP_StreamValue2 desired{};
-    A_Err insert_error = A_Err_NONE;
+    A_Err start_add_error = A_Err_NONE;
+    A_Err add_error = A_Err_NONE;
     A_Err set_error = A_Err_NONE;
+    A_Err end_add_error = A_Err_NONE;
     A_Err delete_error = A_Err_NONE;
     A_Err invariant_error = A_Err_NONE;
     A_Err readback_error = A_Err_NONE;
@@ -6023,21 +6025,38 @@ class AegpHostApi final : public HostApi {
             "params.arguments.value");
       }
       // AEGP_SetStreamValue changes the value but does not create an AE host
-      // Undo item when invoked from the idle dispatcher.  The keyframe APIs
-      // are explicitly UNDOABLE in the SDK.  Insert one temporary keyframe,
-      // set its value, then delete the sole keyframe so the property remains
-      // static while the entire operation belongs to this one Undo group.
-      AEGP_KeyframeIndex temporary_keyframe = 0;
-      insert_error = keyframe_suite->AEGP_InsertKeyframe(
-          mutation_stream, AEGP_LTimeMode_CompTime, &sample_time,
-          &temporary_keyframe);
-      if (insert_error == A_Err_NONE) {
-        set_error = keyframe_suite->AEGP_SetKeyframeValue(
-            mutation_stream, temporary_keyframe, &desired);
-        delete_error = keyframe_suite->AEGP_DeleteKeyframe(
-            mutation_stream, temporary_keyframe);
+      // Undo item when invoked from the idle dispatcher. A direct
+      // Insert/Set/Delete sequence is also folded by AE into a static value
+      // with no visible Undo item. Commit the temporary value through the
+      // SDK's bulk keyframe transaction, whose EndAddKeyframes operation is
+      // explicitly UNDOABLE, before deleting the sole keyframe in this same
+      // Undo group. The final stream must still be static and keyframe-free.
+      AEGP_AddKeyframesInfoH add_info = nullptr;
+      A_long staged_keyframe = 0;
+      start_add_error = keyframe_suite->AEGP_StartAddKeyframes(
+          mutation_stream, &add_info);
+      if (start_add_error == A_Err_NONE && add_info != nullptr) {
+        add_error = keyframe_suite->AEGP_AddKeyframes(
+            add_info, AEGP_LTimeMode_CompTime, &sample_time,
+            &staged_keyframe);
+        if (add_error == A_Err_NONE) {
+          set_error = keyframe_suite->AEGP_SetAddKeyframe(
+              add_info, staged_keyframe, &desired);
+        }
+        const bool commit = add_error == A_Err_NONE && set_error == A_Err_NONE;
+        end_add_error = keyframe_suite->AEGP_EndAddKeyframes(
+            commit ? TRUE : FALSE, add_info);
+        add_info = nullptr;
+        if (commit && end_add_error == A_Err_NONE) {
+          delete_error = keyframe_suite->AEGP_DeleteKeyframe(
+              mutation_stream, 0);
+        }
+      } else if (start_add_error == A_Err_NONE) {
+        start_add_error = A_Err_GENERIC;
       }
-      if (insert_error == A_Err_NONE && delete_error == A_Err_NONE) {
+      if (start_add_error == A_Err_NONE && add_error == A_Err_NONE
+          && set_error == A_Err_NONE && end_add_error == A_Err_NONE
+          && delete_error == A_Err_NONE) {
         if (keyframe_suite->AEGP_GetStreamNumKFs(
                 mutation_stream, &keyframe_count_after) != A_Err_NONE
             || stream_suite->AEGP_IsStreamTimevarying(
@@ -6060,7 +6079,8 @@ class AegpHostApi final : public HostApi {
       }
     }
     const A_Err end_error = undo_group.finish();
-    if (insert_error != A_Err_NONE || set_error != A_Err_NONE
+    if (start_add_error != A_Err_NONE || add_error != A_Err_NONE
+        || set_error != A_Err_NONE || end_add_error != A_Err_NONE
         || delete_error != A_Err_NONE || invariant_error != A_Err_NONE
         || keyframe_count_after != 0 || time_varying_after != FALSE
         || end_error != A_Err_NONE

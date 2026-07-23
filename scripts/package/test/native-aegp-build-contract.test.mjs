@@ -175,9 +175,11 @@ test('native standard transform writes reacquire canonical layer streams before 
   const undoGroup = setter.indexOf('AEGP_StartUndoGroup(');
   const directStream = setter.indexOf('AEGP_GetNewLayerStream(', undoGroup);
   const identityCheck = setter.indexOf('direct_unique_id', directStream);
-  const insert = setter.indexOf('AEGP_InsertKeyframe(', undoGroup);
-  const mutation = setter.indexOf('AEGP_SetKeyframeValue(', insert);
-  const remove = setter.indexOf('AEGP_DeleteKeyframe(', mutation);
+  const startAdd = setter.indexOf('AEGP_StartAddKeyframes(', undoGroup);
+  const add = setter.indexOf('AEGP_AddKeyframes(', startAdd);
+  const mutation = setter.indexOf('AEGP_SetAddKeyframe(', add);
+  const commit = setter.indexOf('AEGP_EndAddKeyframes(', mutation);
+  const remove = setter.indexOf('AEGP_DeleteKeyframe(', commit);
   const countAfter = setter.indexOf('keyframe_count_after', remove);
   const timeVaryingAfter = setter.indexOf('time_varying_after', countAfter);
   const readback = setter.indexOf('AEGP_GetNewStreamValue(', timeVaryingAfter);
@@ -186,9 +188,11 @@ test('native standard transform writes reacquire canonical layer streams before 
     undoGroup !== -1
       && directStream > undoGroup
       && identityCheck > directStream
-      && insert > identityCheck
-      && mutation > insert
-      && remove > mutation
+      && startAdd > identityCheck
+      && add > startAdd
+      && mutation > add
+      && commit > mutation
+      && remove > commit
       && countAfter > remove
       && timeVaryingAfter > countAfter
       && readback > timeVaryingAfter
@@ -196,6 +200,8 @@ test('native standard transform writes reacquire canonical layer streams before 
     'standard transform mutation must leave a verified static value inside one Undo group',
   );
   assert.doesNotMatch(setter, /AEGP_SetStreamValue\(/u);
+  assert.doesNotMatch(setter, /AEGP_InsertKeyframe\(/u);
+  assert.doesNotMatch(setter, /AEGP_SetKeyframeValue\(/u);
   assert.match(setter, /keyframe_count_after != 0/u);
   assert.match(setter, /time_varying_after != FALSE/u);
 });
