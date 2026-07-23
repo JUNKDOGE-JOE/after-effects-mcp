@@ -70,11 +70,11 @@ SPEC = PackageSpec(
     native_novelty=True,
     milestone=True,
     t4_target_calls=11,
-    t5_target_calls=52,
-    t6_target_calls=52,
+    t5_target_calls=56,
+    t6_target_calls=56,
     t4_hard_limit=12,
-    t5_hard_limit=52,
-    t6_hard_limit=52,
+    t5_hard_limit=56,
+    t6_hard_limit=56,
     tools=(*READ_TOOLS, *WRITE_TOOLS),
     support_tools=(
         ToolCase("create-comp", "ae_createComposition", "ae.composition.create", "write"),
@@ -382,6 +382,15 @@ class Issue167Package:
         require(isinstance(items, list), "project item list omitted items")
         return [mapping(item, "project item row is invalid") for item in items]
 
+    async def _refresh_layer(
+        self,
+        session: PublicSession,
+        *,
+        phase: str,
+    ) -> dict[str, Any]:
+        items = await self._project_items(session, phase=phase)
+        return await self._reacquire_layer(session, items, phase=phase)
+
     @staticmethod
     def _one_footage(items: list[dict[str, Any]]) -> dict[str, Any]:
         footage = [item for item in items if item.get("type") == "footage"]
@@ -516,6 +525,10 @@ class Issue167Package:
         }, phase=phase)
         layer = _locator(native_value(payload)["layerLocator"], "layer")
         await self._checkpoint_undo("ae_duplicateLayerEffect")
+        layer = await self._refresh_layer(
+            session,
+            phase=f"{phase}-effect-duplicate-undo-refresh",
+        )
         layer, restored_stack = await self._list_effects(session, layer, phase=phase)
         require(restored_stack == baseline, "effect duplicate Undo failed")
         self.runtime.mark_tool_passed(
@@ -528,6 +541,10 @@ class Issue167Package:
         }, phase=phase)
         layer = _locator(native_value(payload)["layerLocator"], "layer")
         await self._checkpoint_undo("ae_deleteLayerEffect")
+        layer = await self._refresh_layer(
+            session,
+            phase=f"{phase}-effect-delete-undo-refresh",
+        )
         layer, restored_stack = await self._list_effects(session, layer, phase=phase)
         require(restored_stack == baseline, "effect delete Undo failed")
         self.runtime.mark_tool_passed(
@@ -974,8 +991,8 @@ class Issue167Package:
                 f"{case.tool} did not pass the acceptance matrix",
             )
         require(
-            self.runtime.ledger.total == 52,
-            f"#167 {self.runtime.mode} must use exactly 52 public calls",
+            self.runtime.ledger.total == 56,
+            f"#167 {self.runtime.mode} must use exactly 56 public calls",
         )
         return {
             "firstHostInstanceId": first_instance,

@@ -54,8 +54,8 @@ def test_milestone_freeze_is_explicit_and_bounded() -> None:
     assert len(package.SPEC.write_tools) == 14
     assert package.SPEC.t4_target_calls == 11
     assert package.SPEC.t4_hard_limit == 12
-    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 52
-    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 52
+    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 56
+    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 56
     assert len({case.tool for case in package.SPEC.tools}) == 22
 
 
@@ -81,10 +81,10 @@ def test_normal_package_limit_stays_closed_while_milestone_is_explicit() -> None
         tools=_cases(22),
         t4_target_calls=11,
         t4_hard_limit=12,
-        t5_target_calls=52,
-        t5_hard_limit=52,
-        t6_target_calls=52,
-        t6_hard_limit=52,
+        t5_target_calls=56,
+        t5_hard_limit=56,
+        t6_target_calls=56,
+        t6_hard_limit=56,
     )
     assert len(milestone.tools) == 22
 
@@ -420,6 +420,102 @@ async def test_acceptance_effect_discovery_respects_the_public_page_limit(
     assert all(
         "match_name" not in arguments for arguments in runner.apply_arguments
     )
+
+
+@pytest.mark.asyncio
+async def test_structural_effect_undo_reacquires_a_fresh_layer_locator(
+    tmp_path: Path,
+) -> None:
+    class Runtime:
+        fixture = SimpleNamespace(path=tmp_path / "fixture.aep")
+
+        def __init__(self) -> None:
+            self.passed: list[str] = []
+
+        @staticmethod
+        def intent(purpose: str) -> str:
+            return f"issue167-{purpose}"
+
+        def mark_tool_passed(self, tool: str, **_details) -> None:
+            self.passed.append(tool)
+
+    class EffectsPackage(package.Issue167Package):
+        def __init__(self) -> None:
+            super().__init__(Runtime(), fixture_name="fixture")
+            self.generation = 1
+            self.refreshes: list[str] = []
+            self.baseline = [
+                {
+                    "effectIndex": 1,
+                    "installedEffectKey": 7,
+                    "matchName": package.EFFECT_MATCH_NAMES[0],
+                },
+                {
+                    "effectIndex": 2,
+                    "installedEffectKey": 8,
+                    "matchName": package.EFFECT_MATCH_NAMES[1],
+                },
+            ]
+
+        def layer(self):
+            locator = _locator(
+                "layer", "77777777-7777-4777-8777-777777777777"
+            )
+            locator["generation"] = self.generation
+            return locator
+
+        async def _call(self, _session, tool: str, _arguments, *, phase: str):
+            assert phase == "t5-effects"
+            if tool == "ae_setLayerEffectEnabled":
+                return {"value": {"afterEnabled": False}}
+            if tool in {
+                "ae_reorderLayerEffect",
+                "ae_duplicateLayerEffect",
+                "ae_deleteLayerEffect",
+            }:
+                return {"value": {"layerLocator": self.layer()}}
+            raise AssertionError(f"unexpected effect tool {tool}")
+
+        async def _list_effects(self, _session, layer, *, phase: str):
+            assert phase == "t5-effects"
+            assert layer["generation"] == self.generation, "STALE_LOCATOR"
+            return self.layer(), [dict(effect) for effect in self.baseline]
+
+        async def _effect_details(self, _session, _effect, layer, *, phase: str):
+            assert phase == "t5-effects"
+            assert layer["generation"] == self.generation, "STALE_LOCATOR"
+            return {"active": True}
+
+        async def _checkpoint_undo(self, tool: str) -> None:
+            if tool in {"ae_duplicateLayerEffect", "ae_deleteLayerEffect"}:
+                self.generation += 1
+
+        async def _project_items(self, _session, *, phase: str):
+            self.refreshes.append(phase)
+            return [{"type": "composition", "name": "fixture"}]
+
+        async def _reacquire_layer(self, _session, _items, *, phase: str):
+            assert phase == self.refreshes[-1]
+            return self.layer()
+
+    runner = EffectsPackage()
+    restored = await runner._run_effects(
+        object(), runner.layer(), phase="t5-effects"
+    )
+
+    assert restored == runner.layer()
+    assert runner.refreshes == [
+        "t5-effects-effect-duplicate-undo-refresh",
+        "t5-effects-effect-delete-undo-refresh",
+    ]
+    assert runner.runtime.passed == [
+        "ae_listLayerEffects",
+        "ae_getLayerEffectDetails",
+        "ae_setLayerEffectEnabled",
+        "ae_reorderLayerEffect",
+        "ae_duplicateLayerEffect",
+        "ae_deleteLayerEffect",
+    ]
 
 
 @pytest.mark.asyncio
