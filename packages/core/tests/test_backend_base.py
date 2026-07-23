@@ -3,8 +3,8 @@ import pytest
 from ae_mcp.backends.base import ALL_VERBS, Backend, LegacyExtendScriptBackend
 
 
-def test_all_verbs_constant_has_53_entries():
-    assert len(ALL_VERBS) == 53
+def test_all_verbs_constant_has_60_entries():
+    assert len(ALL_VERBS) == 60
     assert "ae.exec" in ALL_VERBS
     assert "ae.ping" in ALL_VERBS
     assert "ae.previewFrame" in ALL_VERBS

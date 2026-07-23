@@ -137,6 +137,13 @@ def _filtered_tool_names() -> set:
             "ae.setLayerAdjustment",
             "ae.setLayerQuality",
             "ae.setLayerBlendingMode",
+            "ae.getLayerTransform",
+            "ae.setLayerAnchorPoint",
+            "ae.setLayerPosition",
+            "ae.setLayerScale",
+            "ae.setLayerRotation",
+            "ae.setLayerOpacity",
+            "ae.setLayerOrientation",
             "ae.renameLayer",
             "ae.setLayerRange",
             "ae.setLayerStartTime",
@@ -187,6 +194,13 @@ def _filtered_tool_names() -> set:
             "ae.setLayerAdjustment",
             "ae.setLayerQuality",
             "ae.setLayerBlendingMode",
+            "ae.getLayerTransform",
+            "ae.setLayerAnchorPoint",
+            "ae.setLayerPosition",
+            "ae.setLayerScale",
+            "ae.setLayerRotation",
+            "ae.setLayerOpacity",
+            "ae.setLayerOrientation",
             "ae.renameLayer",
             "ae.setLayerRange",
             "ae.setLayerStartTime",
@@ -834,6 +848,34 @@ _PROJECT_COMPOSITION_VALIDATION = {
     "ae.setLayerBlendingMode": (
         "ae.layer.blending-mode.set",
         "Use a fresh layer_locator, one allowlisted mode, and stable idempotency_key.",
+    ),
+    "ae.getLayerTransform": (
+        "ae.layer.properties.list",
+        "Copy layer_locator unchanged from ae_listCompositionLayers.",
+    ),
+    "ae.setLayerAnchorPoint": (
+        "ae.layer.property.set",
+        "Use a fresh layer_locator, 2 or 3 finite anchor_point components, and a stable idempotency_key.",
+    ),
+    "ae.setLayerPosition": (
+        "ae.layer.property.set",
+        "Use a fresh layer_locator, 2 or 3 finite position components, and a stable idempotency_key.",
+    ),
+    "ae.setLayerScale": (
+        "ae.layer.property.set",
+        "Use a fresh layer_locator, 2 or 3 finite scale_percent components, and a stable idempotency_key.",
+    ),
+    "ae.setLayerRotation": (
+        "ae.layer.property.set",
+        "Use a fresh layer_locator, finite rotation_degrees, and a stable idempotency_key.",
+    ),
+    "ae.setLayerOpacity": (
+        "ae.layer.property.set",
+        "Use a fresh layer_locator, opacity_percent from 0 to 100, and a stable idempotency_key.",
+    ),
+    "ae.setLayerOrientation": (
+        "ae.layer.property.set",
+        "Use a fresh 3D layer_locator, exactly 3 finite orientation_degrees components, and a stable idempotency_key.",
     ),
     "ae.renameLayer": (
         "ae.layer.name.set",

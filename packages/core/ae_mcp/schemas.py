@@ -316,6 +316,123 @@ class AeSetLayerBlendingModeArgs(_AeLayerWriteArgs):
     ] = Field(..., description="Exact allowlisted After Effects blending mode.")
 
 
+_TRANSFORM_DECIMAL = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+TransformComponents = List[
+    Annotated[str, Field(min_length=1, max_length=32, pattern=_TRANSFORM_DECIMAL)]
+]
+
+
+def _validate_transform_decimal(value: str, *, field: str) -> None:
+    try:
+        decimal_value = Decimal(value)
+        binary_value = float(value)
+    except (InvalidOperation, OverflowError, ValueError) as exc:
+        raise ValueError(f"{field} must be a finite binary64 decimal") from exc
+    if not decimal_value.is_finite() or not math.isfinite(binary_value):
+        raise ValueError(f"{field} must be a finite binary64 decimal")
+    if binary_value == 0 and not decimal_value.is_zero():
+        raise ValueError(f"{field} must not underflow binary64")
+    if binary_value == 0 and value.startswith("-"):
+        raise ValueError(f"{field} must normalize negative zero to 0")
+
+
+def _validate_transform_components(
+    values: TransformComponents,
+    *,
+    field: str,
+) -> TransformComponents:
+    for value in values:
+        _validate_transform_decimal(value, field=field)
+    return values
+
+
+class AeGetLayerTransformArgs(_StrictModel):
+    """ae.getLayerTransform — read the standard transform fields without property locators."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Fresh layer locator returned by ae_listCompositionLayers.",
+    )
+
+
+class AeSetLayerAnchorPointArgs(_AeLayerWriteArgs):
+    """ae.setLayerAnchorPoint — set a static 2D/3D anchor point through native AEGP."""
+
+    anchor_point: TransformComponents = Field(..., min_length=2, max_length=3)
+
+    @field_validator("anchor_point")
+    @classmethod
+    def _finite_anchor(cls, value: TransformComponents) -> TransformComponents:
+        return _validate_transform_components(value, field="anchor_point")
+
+
+class AeSetLayerPositionArgs(_AeLayerWriteArgs):
+    """ae.setLayerPosition — set a static 2D/3D position through native AEGP."""
+
+    position: TransformComponents = Field(..., min_length=2, max_length=3)
+
+    @field_validator("position")
+    @classmethod
+    def _finite_position(cls, value: TransformComponents) -> TransformComponents:
+        return _validate_transform_components(value, field="position")
+
+
+class AeSetLayerScaleArgs(_AeLayerWriteArgs):
+    """ae.setLayerScale — set static 2D/3D scale percentages through native AEGP."""
+
+    scale_percent: TransformComponents = Field(..., min_length=2, max_length=3)
+
+    @field_validator("scale_percent")
+    @classmethod
+    def _finite_scale(cls, value: TransformComponents) -> TransformComponents:
+        return _validate_transform_components(value, field="scale_percent")
+
+
+class AeSetLayerRotationArgs(_AeLayerWriteArgs):
+    """ae.setLayerRotation — set static 2D/Z rotation degrees through native AEGP."""
+
+    rotation_degrees: str = Field(
+        ..., min_length=1, max_length=32, pattern=_TRANSFORM_DECIMAL,
+    )
+
+    @field_validator("rotation_degrees")
+    @classmethod
+    def _finite_rotation(cls, value: str) -> str:
+        _validate_transform_decimal(value, field="rotation_degrees")
+        return value
+
+
+class AeSetLayerOpacityArgs(_AeLayerWriteArgs):
+    """ae.setLayerOpacity — set static opacity in the inclusive 0..100 percent range."""
+
+    opacity_percent: str = Field(
+        ..., min_length=1, max_length=32, pattern=_TRANSFORM_DECIMAL,
+    )
+
+    @field_validator("opacity_percent")
+    @classmethod
+    def _valid_opacity(cls, value: str) -> str:
+        _validate_transform_decimal(value, field="opacity_percent")
+        decimal_value = Decimal(value)
+        if decimal_value < 0 or decimal_value > 100:
+            raise ValueError("opacity_percent must be between 0 and 100 inclusive")
+        return value
+
+
+class AeSetLayerOrientationArgs(_AeLayerWriteArgs):
+    """ae.setLayerOrientation — set static orientation degrees on a 3D layer."""
+
+    orientation_degrees: TransformComponents = Field(
+        ..., min_length=3, max_length=3,
+    )
+
+    @field_validator("orientation_degrees")
+    @classmethod
+    def _finite_orientation(cls, value: TransformComponents) -> TransformComponents:
+        return _validate_transform_components(value, field="orientation_degrees")
+
+
 def _valid_layer_name(value: str, *, field: str) -> str:
     if not value or "\x00" in value or any(
         0xD800 <= ord(character) <= 0xDFFF for character in value
@@ -1901,6 +2018,13 @@ SCHEMAS = {
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.listLayerPropertyKeyframes": AeListLayerPropertyKeyframesArgs,
     "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
+    "ae.getLayerTransform": AeGetLayerTransformArgs,
+    "ae.setLayerAnchorPoint": AeSetLayerAnchorPointArgs,
+    "ae.setLayerPosition": AeSetLayerPositionArgs,
+    "ae.setLayerScale": AeSetLayerScaleArgs,
+    "ae.setLayerRotation": AeSetLayerRotationArgs,
+    "ae.setLayerOpacity": AeSetLayerOpacityArgs,
+    "ae.setLayerOrientation": AeSetLayerOrientationArgs,
     "ae.getLayerPropertyKeyframeDetails": AeGetLayerPropertyKeyframeDetailsArgs,
     "ae.addLayerPropertyKeyframe": AeAddLayerPropertyKeyframeArgs,
     "ae.setLayerPropertyKeyframeValue": AeSetLayerPropertyKeyframeValueArgs,
@@ -1952,4 +2076,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 65, f"expected 65 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 72, f"expected 72 verbs, got {len(SCHEMAS)}"

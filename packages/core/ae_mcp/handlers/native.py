@@ -57,6 +57,13 @@ from ae_mcp.backends.native_layer_compositing import (
     invoke_layer_quality_set,
     invoke_layer_switch_set,
 )
+from ae_mcp.backends.native_layer_transform import (
+    LayerTransformRead,
+    LayerTransformWrite,
+    TransformField,
+    read_layer_transform,
+    set_layer_transform,
+)
 from ae_mcp.backends.native_keyframe_authoring import (
     invoke_keyframe_add,
     invoke_keyframe_behavior_set,
@@ -101,6 +108,7 @@ _LAYER_PARENT_SET_TIMEOUT_MS = 10_000
 _LAYER_DUPLICATE_TIMEOUT_MS = 10_000
 _LAYER_COMPOSITING_READ_TIMEOUT_MS = 10_000
 _LAYER_COMPOSITING_WRITE_TIMEOUT_MS = 10_000
+_LAYER_TRANSFORM_TIMEOUT_MS = 20_000
 _KEYFRAME_DETAILS_READ_TIMEOUT_MS = 10_000
 _KEYFRAME_WRITE_TIMEOUT_MS = 10_000
 
@@ -172,6 +180,80 @@ def _native_read_response(execution: Any) -> dict[str, Any]:
             exclude_none=True,
         ),
     }
+
+
+def _layer_transform_read_response(result: LayerTransformRead) -> dict[str, Any]:
+    response = _native_read_response(result.execution)
+    response["value"] = result.value
+    response["implementation"]["semanticAdapter"] = "core-layer-transform-v1"
+    response["implementation"]["nativeCapabilities"] = [
+        "ae.layer.properties.list",
+    ]
+    response["evidence"]["semanticProjection"] = {
+        "verified": True,
+        "kind": "core-layer-transform-projection-v1",
+        "algorithm": "sha256-rfc8785-jcs-v1",
+        "digest": result.projection_digest,
+        "sourcePostconditionDigests": list(result.source_postcondition_digests),
+    }
+    return response
+
+
+def _layer_transform_write_response(result: LayerTransformWrite) -> dict[str, Any]:
+    execution = result.execution
+    implementation = execution.implementation
+    audit = execution.audit_fields()
+    response = {
+        "ok": True,
+        "replayed": execution.replayed,
+        "value": result.value,
+        "implementation": {
+            "engine": execution.engine,
+            "capabilityId": implementation.capability_id,
+            "capabilityVersion": implementation.capability_version,
+            "contractDigest": implementation.contract_digest,
+            "risk": implementation.risk,
+            "mutability": implementation.mutability,
+            "idempotency": implementation.idempotency,
+            "cancellation": implementation.cancellation,
+            "undo": implementation.undo,
+            "sideEffectSummary": implementation.side_effect_summary,
+            "preconditions": list(implementation.preconditions),
+            "semanticAdapter": "core-layer-transform-v1",
+            "nativeCapabilities": [
+                "ae.layer.properties.list",
+                "ae.layer.property.set",
+            ],
+        },
+        "provenance": {
+            key: audit[key]
+            for key in (
+                "engine", "selectedWireVersion", "pluginVersion",
+                "compiledSdkVersion", "sourceCommit", "hostInstanceId",
+                "sessionId", "sessionGeneration", "capabilitiesDigest",
+            )
+        },
+        "audit": {
+            key: audit[key]
+            for key in (
+                "requestId", "evidenceRequestId", "idempotencyKey", "replayed",
+                "capabilityId", "capabilityVersion", "contractDigest", "effect",
+                "requestDigest", "postconditionAlgorithm", "postconditionDigest",
+                "undoAvailable", "undoVerified", "startedAtUnixMs", "completedAtUnixMs",
+            )
+        },
+        "evidence": execution.evidence.model_dump(
+            mode="json", by_alias=True, exclude_none=True,
+        ),
+    }
+    response["evidence"]["semanticProjection"] = {
+        "verified": True,
+        "kind": "core-layer-transform-write-projection-v1",
+        "algorithm": "sha256-rfc8785-jcs-v1",
+        "digest": result.projection_digest,
+        "sourcePostconditionDigest": execution.evidence.postcondition.digest,
+    }
+    return response
 
 
 async def _run_project_summary(
@@ -1467,6 +1549,124 @@ async def _run_get_layer_compositing_state(
     return _native_read_response(execution)
 
 
+async def _run_get_layer_transform(
+    args: schemas.AeGetLayerTransformArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_TRANSFORM_TIMEOUT_MS
+
+    async def _call():
+        return await read_layer_transform(
+            _backend(),
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        result = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.getLayerTransform native AEGP semantic read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _layer_transform_read_response(result)
+
+
+async def _run_set_layer_transform(
+    args: Any,
+    ctx: Any,
+    *,
+    field: TransformField,
+    value: dict[str, Any],
+    label: str,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_TRANSFORM_TIMEOUT_MS
+
+    async def _call():
+        return await set_layer_transform(
+            _backend(),
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            field=field,
+            value=value,
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    result = await _await_project_package_write(
+        _call,
+        cancellation=cancellation,
+        ctx=ctx,
+        start_msg=f"{label} native AEGP write; wait for verified readback...",
+    )
+    return _layer_transform_write_response(result)
+
+
+async def _run_set_layer_anchor_point(
+    args: schemas.AeSetLayerAnchorPointArgs, ctx: Any,
+) -> dict[str, Any]:
+    return await _run_set_layer_transform(
+        args, ctx, field="anchor-point",
+        value={"kind": "vector", "components": args.anchor_point},
+        label="ae.setLayerAnchorPoint",
+    )
+
+
+async def _run_set_layer_position(
+    args: schemas.AeSetLayerPositionArgs, ctx: Any,
+) -> dict[str, Any]:
+    return await _run_set_layer_transform(
+        args, ctx, field="position",
+        value={"kind": "vector", "components": args.position},
+        label="ae.setLayerPosition",
+    )
+
+
+async def _run_set_layer_scale(
+    args: schemas.AeSetLayerScaleArgs, ctx: Any,
+) -> dict[str, Any]:
+    return await _run_set_layer_transform(
+        args, ctx, field="scale",
+        value={"kind": "vector", "components": args.scale_percent},
+        label="ae.setLayerScale",
+    )
+
+
+async def _run_set_layer_rotation(
+    args: schemas.AeSetLayerRotationArgs, ctx: Any,
+) -> dict[str, Any]:
+    return await _run_set_layer_transform(
+        args, ctx, field="rotation",
+        value={"kind": "scalar", "value": args.rotation_degrees},
+        label="ae.setLayerRotation",
+    )
+
+
+async def _run_set_layer_opacity(
+    args: schemas.AeSetLayerOpacityArgs, ctx: Any,
+) -> dict[str, Any]:
+    return await _run_set_layer_transform(
+        args, ctx, field="opacity",
+        value={"kind": "scalar", "value": args.opacity_percent},
+        label="ae.setLayerOpacity",
+    )
+
+
+async def _run_set_layer_orientation(
+    args: schemas.AeSetLayerOrientationArgs, ctx: Any,
+) -> dict[str, Any]:
+    return await _run_set_layer_transform(
+        args, ctx, field="orientation",
+        value={"kind": "vector", "components": args.orientation_degrees},
+        label="ae.setLayerOrientation",
+    )
+
+
 async def _run_set_layer_switch(
     args: Any, ctx: Any, *, switch: LayerSwitch, label: str,
 ) -> dict[str, Any]:
@@ -2040,6 +2240,13 @@ register("ae.setLayerThreeD", schemas.AeSetLayerThreeDArgs, _run_set_layer_three
 register("ae.setLayerAdjustment", schemas.AeSetLayerAdjustmentArgs, _run_set_layer_adjustment)
 register("ae.setLayerQuality", schemas.AeSetLayerQualityArgs, _run_set_layer_quality)
 register("ae.setLayerBlendingMode", schemas.AeSetLayerBlendingModeArgs, _run_set_layer_blending_mode)
+register("ae.getLayerTransform", schemas.AeGetLayerTransformArgs, _run_get_layer_transform)
+register("ae.setLayerAnchorPoint", schemas.AeSetLayerAnchorPointArgs, _run_set_layer_anchor_point)
+register("ae.setLayerPosition", schemas.AeSetLayerPositionArgs, _run_set_layer_position)
+register("ae.setLayerScale", schemas.AeSetLayerScaleArgs, _run_set_layer_scale)
+register("ae.setLayerRotation", schemas.AeSetLayerRotationArgs, _run_set_layer_rotation)
+register("ae.setLayerOpacity", schemas.AeSetLayerOpacityArgs, _run_set_layer_opacity)
+register("ae.setLayerOrientation", schemas.AeSetLayerOrientationArgs, _run_set_layer_orientation)
 register(
     "ae.renameLayer",
     schemas.AeRenameLayerArgs,
@@ -2188,6 +2395,7 @@ __all__ = [
     "_run_get_composition_settings",
     "_run_get_layer_details",
     "_run_get_layer_compositing_state",
+    "_run_get_layer_transform",
     "_run_get_project_context",
     "_run_get_project_item_metadata",
     "_run_get_composition_time",
@@ -2222,6 +2430,12 @@ __all__ = [
     "_run_set_layer_adjustment",
     "_run_set_layer_quality",
     "_run_set_layer_blending_mode",
+    "_run_set_layer_anchor_point",
+    "_run_set_layer_position",
+    "_run_set_layer_scale",
+    "_run_set_layer_rotation",
+    "_run_set_layer_opacity",
+    "_run_set_layer_orientation",
     "_run_get_layer_property_keyframe_details",
     "_run_add_layer_property_keyframe",
     "_run_set_layer_property_keyframe_value",
