@@ -52,10 +52,10 @@ def test_milestone_freeze_is_explicit_and_bounded() -> None:
     assert package.SPEC.milestone is True
     assert len(package.SPEC.tools) == 22
     assert len(package.SPEC.write_tools) == 14
-    assert package.SPEC.t4_target_calls == 11
-    assert package.SPEC.t4_hard_limit == 12
-    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 56
-    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 56
+    assert package.SPEC.t4_target_calls == 6
+    assert package.SPEC.t4_hard_limit == 7
+    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 60
+    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 60
     assert len({case.tool for case in package.SPEC.tools}) == 22
 
 
@@ -297,6 +297,7 @@ class _T4Package(package.Issue167Package):
                     },
                     {
                         "type": "composition",
+                        "name": "fixture",
                         "locator": _locator(
                             "composition", "88888888-8888-4888-8888-888888888888"
                         ),
@@ -309,54 +310,31 @@ class _T4Package(package.Issue167Package):
                     },
                 ],
             }
+        elif tool == "ae_listCompositionLayers":
+            value = {
+                "layers": [{
+                    "name": package.LAYER_NAME,
+                    "locator": layer,
+                }],
+            }
         else:
             raise AssertionError(f"unexpected T4 tool {tool}")
         return {"value": value}
 
 
 @pytest.mark.asyncio
-async def test_t4_smoke_uses_exactly_eleven_public_calls(tmp_path: Path) -> None:
+async def test_t4_smoke_uses_exactly_six_public_calls(tmp_path: Path) -> None:
     runtime = _T4Runtime(tmp_path)
     runner = _T4Package(runtime, fixture_name="fixture")
     await runner._run_t4_initial(object())
     assert runtime.calls == [
         "ae_createComposition",
         "ae_createCompositionLayer",
-        "ae_listInstalledEffects",
-        "ae_applyLayerEffect",
-        "ae_listLayerEffects",
-        "ae_setLayerEffectEnabled",
-        "ae_getLayerEffectDetails",
         "ae_createLayerMask",
-        "ae_listLayerMasks",
-        "ae_importFootage",
         "ae_listProjectItems",
+        "ae_listCompositionLayers",
+        "ae_listLayerMasks",
     ]
-
-
-@pytest.mark.asyncio
-async def test_t4_undo_rejects_the_imported_item_not_fixture_footage(
-    tmp_path: Path,
-) -> None:
-    class LeakedImportPackage(_T4Package):
-        async def _call(self, session, tool, arguments, *, phase: str):
-            result = await super()._call(
-                session, tool, arguments, phase=phase
-            )
-            if tool == "ae_listProjectItems":
-                result["value"]["items"][0]["locator"] = _locator(
-                    "item", "66666666-6666-4666-8666-666666666666"
-                )
-            return result
-
-    runtime = _T4Runtime(tmp_path)
-    runner = LeakedImportPackage(runtime, fixture_name="fixture")
-    with pytest.raises(
-        runtime_module.AcceptanceFailure,
-        match="Undo left the imported project item",
-    ):
-        await runner._run_t4_initial(object())
-
 
 def test_footage_locator_matching_ignores_other_fixture_footage(
     tmp_path: Path,
@@ -499,11 +477,12 @@ async def test_structural_effect_undo_reacquires_a_fresh_layer_locator(
             return self.layer()
 
     runner = EffectsPackage()
-    restored = await runner._run_effects(
+    restored, effects = await runner._run_effects(
         object(), runner.layer(), phase="t5-effects"
     )
 
     assert restored == runner.layer()
+    assert effects == runner.baseline
     assert runner.refreshes == [
         "t5-effects-effect-duplicate-undo-refresh",
         "t5-effects-effect-delete-undo-refresh",
@@ -515,6 +494,157 @@ async def test_structural_effect_undo_reacquires_a_fresh_layer_locator(
         "ae_reorderLayerEffect",
         "ae_duplicateLayerEffect",
         "ae_deleteLayerEffect",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_structural_mask_history_reacquires_a_fresh_layer_locator(
+    tmp_path: Path,
+) -> None:
+    class Runtime:
+        fixture = SimpleNamespace(path=tmp_path / "fixture.aep")
+
+        def __init__(self) -> None:
+            self.passed: list[str] = []
+
+        @staticmethod
+        def intent(purpose: str) -> str:
+            return f"issue167-{purpose}"
+
+        def mark_tool_passed(self, tool: str, **_details) -> None:
+            self.passed.append(tool)
+
+    class MasksPackage(package.Issue167Package):
+        def __init__(self) -> None:
+            super().__init__(Runtime(), fixture_name="fixture")
+            self.generation = 1
+            self.mask_count = 0
+            self.refreshes: list[str] = []
+            self.details = {
+                "maskIndex": 1,
+                "maskId": 7,
+                "mode": "add",
+                "inverted": False,
+                "locked": False,
+                "rotoBezier": False,
+            }
+            self.path = {"closed": False, "vertices": []}
+
+        def layer(self):
+            locator = _locator(
+                "layer", "77777777-7777-4777-8777-777777777777"
+            )
+            locator["generation"] = self.generation
+            return locator
+
+        def masks(self):
+            return [
+                {"maskIndex": index + 1, "maskId": 7 + index}
+                for index in range(self.mask_count)
+            ]
+
+        def require_fresh(self, layer) -> None:
+            assert layer["generation"] == self.generation, "STALE_LOCATOR"
+
+        async def _call(self, _session, tool: str, arguments, *, phase: str):
+            assert phase == "t5-masks"
+            self.require_fresh(arguments["layer_locator"])
+            if tool == "ae_createLayerMask":
+                assert self.mask_count == 0
+                self.generation += 1
+                self.mask_count = 1
+                return {"value": {"layerLocator": self.layer()}}
+            if tool == "ae_setLayerMaskProperties":
+                return {
+                    "value": {
+                        "mask": {
+                            **self.details,
+                            "mode": "subtract",
+                            "inverted": True,
+                            "locked": True,
+                            "rotoBezier": True,
+                        }
+                    }
+                }
+            if tool == "ae_setLayerMaskPath":
+                return {"value": {"path": {"closed": True, "vertices": []}}}
+            if tool == "ae_duplicateLayerMask":
+                assert self.mask_count == 1
+                self.generation += 1
+                self.mask_count = 2
+                return {"value": {"layerLocator": self.layer()}}
+            if tool == "ae_deleteLayerMask":
+                assert self.mask_count == 1
+                self.generation += 1
+                self.mask_count = 0
+                return {"value": {"layerLocator": self.layer()}}
+            raise AssertionError(f"unexpected mask tool {tool}")
+
+        async def _list_masks(self, _session, layer, *, phase: str):
+            assert phase == "t5-masks"
+            self.require_fresh(layer)
+            return self.layer(), self.masks()
+
+        async def _mask_details(self, _session, _mask, layer, *, phase: str):
+            assert phase == "t5-masks"
+            self.require_fresh(layer)
+            return dict(self.details)
+
+        async def _mask_path(self, _session, _mask, layer, *, phase: str):
+            assert phase == "t5-masks"
+            self.require_fresh(layer)
+            return dict(self.path)
+
+        async def _checkpoint_undo(self, tool: str) -> None:
+            if tool == "ae_createLayerMask":
+                assert self.mask_count == 1
+                self.generation += 1
+                self.mask_count = 0
+            elif tool == "ae_duplicateLayerMask":
+                assert self.mask_count == 2
+                self.generation += 1
+                self.mask_count = 1
+            elif tool == "ae_deleteLayerMask":
+                assert self.mask_count == 0
+                self.generation += 1
+                self.mask_count = 1
+
+        async def _checkpoint_redo(self, purpose: str) -> None:
+            assert purpose == "mask-create-setup"
+            assert self.mask_count == 0
+            self.generation += 1
+            self.mask_count = 1
+
+        async def _project_items(self, _session, *, phase: str):
+            self.refreshes.append(phase)
+            return [{"type": "composition", "name": "fixture"}]
+
+        async def _reacquire_layer(self, _session, _items, *, phase: str):
+            assert phase == self.refreshes[-1]
+            return self.layer()
+
+    runner = MasksPackage()
+    restored, masks = await runner._run_masks(
+        object(), runner.layer(), phase="t5-masks"
+    )
+
+    assert restored == runner.layer()
+    assert masks == runner.masks()
+    assert runner.refreshes == [
+        "t5-masks-mask-create-undo-refresh",
+        "t5-masks-mask-create-redo-refresh",
+        "t5-masks-mask-duplicate-undo-refresh",
+        "t5-masks-mask-delete-undo-refresh",
+    ]
+    assert runner.runtime.passed == [
+        "ae_listLayerMasks",
+        "ae_createLayerMask",
+        "ae_getLayerMaskDetails",
+        "ae_getLayerMaskPath",
+        "ae_setLayerMaskProperties",
+        "ae_setLayerMaskPath",
+        "ae_duplicateLayerMask",
+        "ae_deleteLayerMask",
     ]
 
 

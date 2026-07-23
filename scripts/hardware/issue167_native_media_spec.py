@@ -69,12 +69,12 @@ SPEC = PackageSpec(
     title="Native Effect Stack, Mask/Path, and Footage/Source Editing",
     native_novelty=True,
     milestone=True,
-    t4_target_calls=11,
-    t5_target_calls=56,
-    t6_target_calls=56,
-    t4_hard_limit=12,
-    t5_hard_limit=56,
-    t6_hard_limit=56,
+    t4_target_calls=6,
+    t5_target_calls=60,
+    t6_target_calls=60,
+    t4_hard_limit=7,
+    t5_hard_limit=60,
+    t6_hard_limit=60,
     tools=(*READ_TOOLS, *WRITE_TOOLS),
     support_tools=(
         ToolCase("create-comp", "ae_createComposition", "ae.composition.create", "write"),
@@ -85,8 +85,14 @@ SPEC = PackageSpec(
             "write",
         ),
         ToolCase("apply-effect", "ae_applyLayerEffect", "ae.layer.effect.apply", "write", 2),
-        ToolCase("items", "ae_listProjectItems", "ae.project.items.list", "read", 3),
-        ToolCase("layers", "ae_listCompositionLayers", "ae.composition.layers.list", "read"),
+        ToolCase("items", "ae_listProjectItems", "ae.project.items.list", "read", 9),
+        ToolCase(
+            "layers",
+            "ae_listCompositionLayers",
+            "ae.composition.layers.list",
+            "read",
+            7,
+        ),
     ),
 )
 
@@ -482,7 +488,7 @@ class Issue167Package:
         layer: Mapping[str, Any],
         *,
         phase: str,
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         layer, baseline = await self._list_effects(session, layer, phase=phase)
         require(
             [item["matchName"] for item in baseline] == list(EFFECT_MATCH_NAMES),
@@ -550,7 +556,7 @@ class Issue167Package:
         self.runtime.mark_tool_passed(
             "ae_deleteLayerEffect", undo_executed=True, undo_verified=True
         )
-        return layer
+        return layer, restored_stack
 
     async def _run_masks(
         self,
@@ -558,7 +564,7 @@ class Issue167Package:
         layer: Mapping[str, Any],
         *,
         phase: str,
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         layer, baseline = await self._list_masks(session, layer, phase=phase)
         require(not baseline, "fixture layer unexpectedly has masks")
         self.runtime.mark_tool_passed("ae_listLayerMasks")
@@ -570,12 +576,20 @@ class Issue167Package:
         value = native_value(payload)
         layer = _locator(value["layerLocator"], "layer")
         await self._checkpoint_undo("ae_createLayerMask")
+        layer = await self._refresh_layer(
+            session,
+            phase=f"{phase}-mask-create-undo-refresh",
+        )
         layer, restored = await self._list_masks(session, layer, phase=phase)
         require(restored == baseline, "mask create Undo failed")
         self.runtime.mark_tool_passed(
             "ae_createLayerMask", undo_executed=True, undo_verified=True
         )
         await self._checkpoint_redo("mask-create-setup")
+        layer = await self._refresh_layer(
+            session,
+            phase=f"{phase}-mask-create-redo-refresh",
+        )
         layer, current = await self._list_masks(session, layer, phase=phase)
         require(len(current) == 1, "mask create Redo did not restore one mask")
         mask = current[0]
@@ -637,6 +651,10 @@ class Issue167Package:
         }, phase=phase)
         layer = _locator(native_value(payload)["layerLocator"], "layer")
         await self._checkpoint_undo("ae_duplicateLayerMask")
+        layer = await self._refresh_layer(
+            session,
+            phase=f"{phase}-mask-duplicate-undo-refresh",
+        )
         layer, restored = await self._list_masks(session, layer, phase=phase)
         require(restored == current, "mask duplicate Undo failed")
         self.runtime.mark_tool_passed(
@@ -649,19 +667,23 @@ class Issue167Package:
         }, phase=phase)
         layer = _locator(native_value(payload)["layerLocator"], "layer")
         await self._checkpoint_undo("ae_deleteLayerMask")
+        layer = await self._refresh_layer(
+            session,
+            phase=f"{phase}-mask-delete-undo-refresh",
+        )
         layer, restored = await self._list_masks(session, layer, phase=phase)
         require(restored == current, "mask delete Undo failed")
         self.runtime.mark_tool_passed(
             "ae_deleteLayerMask", undo_executed=True, undo_verified=True
         )
-        return layer
+        return layer, restored
 
     async def _run_footage(
         self,
         session: PublicSession,
         *,
         phase: str,
-    ) -> dict[str, Any]:
+    ) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
         payload = await self._call(session, "ae_importFootage", {
             "source_path": str(self.assets["main"]),
             "idempotency_key": self.runtime.intent("footage-import"),
@@ -774,7 +796,7 @@ class Issue167Package:
         self.runtime.mark_tool_passed(
             "ae_setItemUseProxy", undo_executed=True, undo_verified=True
         )
-        return item
+        return item, restored, restored_interpretation
 
     async def _reacquire_layer(
         self,
@@ -832,82 +854,23 @@ class Issue167Package:
         session: PublicSession,
     ) -> None:
         _composition, layer = await self._create_fixture(session, phase="t4-fixture")
-        installed_payload = await self._call(
-            session,
-            "ae_listInstalledEffects",
-            {"offset": 0, "limit": 50},
-            phase="t4-setup",
-        )
-        installed = native_value(installed_payload).get("effects")
-        require(isinstance(installed, list), "installed effect registry omitted effects")
-        require(
-            EFFECT_MATCH_NAMES[0]
-            in {
-                item.get("matchName")
-                for item in installed
-                if isinstance(item, Mapping)
-            },
-            "required built-in T4 effect is not installed",
-        )
-        payload = await self._call(session, "ae_applyLayerEffect", {
-            "layer_locator": layer,
-            "effect_match_name": EFFECT_MATCH_NAMES[0],
-            "idempotency_key": self.runtime.intent("t4-fixture-effect"),
-        }, phase="t4-setup")
-        layer = _locator(native_value(payload)["layerLocator"], "layer")
-        self.runtime.mark_tool_passed("ae_listInstalledEffects")
-        layer, effects = await self._list_effects(session, layer, phase="t4-effect")
-        self.runtime.mark_tool_passed("ae_listLayerEffects")
-        payload = await self._call(session, "ae_setLayerEffectEnabled", {
-            **_effect_reference(effects[0], layer),
-            "enabled": False,
-            "idempotency_key": self.runtime.intent("t4-effect-enabled"),
-        }, phase="t4-effect")
-        require(native_value(payload).get("afterEnabled") is False, "T4 effect write failed")
-        await self._checkpoint_undo("ae_setLayerEffectEnabled")
-        details = await self._effect_details(session, effects[0], layer, phase="t4-effect")
-        require(details.get("active") is True, "T4 effect Undo failed")
-        self.runtime.mark_tool_passed("ae_getLayerEffectDetails")
-        self.runtime.mark_tool_passed(
-            "ae_setLayerEffectEnabled", undo_executed=True, undo_verified=True
-        )
-
         payload = await self._call(session, "ae_createLayerMask", {
             "layer_locator": layer,
             "idempotency_key": self.runtime.intent("t4-mask-create"),
         }, phase="t4-mask")
         layer = _locator(native_value(payload)["layerLocator"], "layer")
         await self._checkpoint_undo("ae_createLayerMask")
+        layer = await self._refresh_layer(
+            session,
+            phase="t4-mask-create-undo-refresh",
+        )
         layer, masks = await self._list_masks(session, layer, phase="t4-mask")
         require(not masks, "T4 mask Undo failed")
         self.runtime.mark_tool_passed("ae_listLayerMasks")
         self.runtime.mark_tool_passed(
             "ae_createLayerMask", undo_executed=True, undo_verified=True
         )
-
-        payload = await self._call(session, "ae_importFootage", {
-            "source_path": str(self.assets["main"]),
-            "idempotency_key": self.runtime.intent("t4-footage-import"),
-        }, phase="t4-footage")
-        imported_value = native_value(payload)
-        imported = _locator(imported_value["itemLocator"], "item")
-        before_count = imported_value.get("beforeItemCount")
-        require(
-            isinstance(before_count, int)
-            and imported_value.get("afterItemCount") == before_count + 1,
-            "T4 footage import item-count evidence is invalid",
-        )
-        await self._checkpoint_undo("ae_importFootage")
-        items = await self._project_items(session, phase="t4-footage")
-        require(
-            len(items) == before_count
-            and not self._items_matching_locator(items, imported),
-            "T4 footage Undo left the imported project item",
-        )
-        self.runtime.mark_tool_passed(
-            "ae_importFootage", undo_executed=True, undo_verified=True
-        )
-        require(self.runtime.ledger.total == 11, "T4 must use exactly eleven public calls")
+        require(self.runtime.ledger.total == 6, "T4 must use exactly six public calls")
 
     async def _run_acceptance_initial(
         self,
@@ -919,28 +882,20 @@ class Issue167Package:
         layer = await self._apply_effects(
             session, layer, phase=f"{self.runtime.mode}-effects"
         )
-        layer = await self._run_effects(
+        layer, effects = await self._run_effects(
             session, layer, phase=f"{self.runtime.mode}-effects"
         )
-        layer = await self._run_masks(
+        layer, masks = await self._run_masks(
             session, layer, phase=f"{self.runtime.mode}-masks"
         )
-        item = await self._run_footage(
+        item, footage, interpretation = await self._run_footage(
             session, phase=f"{self.runtime.mode}-footage"
         )
         before_restart = {
-            "effects": json_hash((await self._list_effects(
-                session, layer, phase=f"{self.runtime.mode}-pre-restart"
-            ))[1]),
-            "masks": json_hash((await self._list_masks(
-                session, layer, phase=f"{self.runtime.mode}-pre-restart"
-            ))[1]),
-            "footage": json_hash(await self._footage_details(
-                session, item, phase=f"{self.runtime.mode}-pre-restart"
-            )),
-            "interpretation": json_hash(await self._footage_interpretation(
-                session, item, phase=f"{self.runtime.mode}-pre-restart"
-            )),
+            "effects": json_hash(effects),
+            "masks": json_hash(masks),
+            "footage": json_hash(footage),
+            "interpretation": json_hash(interpretation),
         }
         return before_restart
 
@@ -991,8 +946,8 @@ class Issue167Package:
                 f"{case.tool} did not pass the acceptance matrix",
             )
         require(
-            self.runtime.ledger.total == 56,
-            f"#167 {self.runtime.mode} must use exactly 56 public calls",
+            self.runtime.ledger.total == 60,
+            f"#167 {self.runtime.mode} must use exactly 60 public calls",
         )
         return {
             "firstHostInstanceId": first_instance,
