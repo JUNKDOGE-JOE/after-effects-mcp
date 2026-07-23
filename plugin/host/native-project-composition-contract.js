@@ -1,6 +1,7 @@
 'use strict';
 
-// Closed CEP-side verification for the #150, #155, #157, and #162 capability packages.
+// Closed CEP-side verification for the #150, #155, #157, #162, and #167
+// capability packages.
 // This is not a route resolver: it only validates the named native contracts.
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -924,6 +925,289 @@ function validKeyframeWriteValue(kind, value, argumentsValue, hostInstanceId, se
         && keyframeDetailsEqualExcept(before, after, ['behaviors']);
 }
 
+const NATIVE_MEDIA_READ_OPERATIONS = Object.freeze([
+    'effects-installed-list', 'effects-layer-list', 'effect-details', 'masks-list',
+    'mask-details', 'mask-path', 'footage-details', 'footage-interpretation',
+]);
+const NATIVE_MEDIA_WRITE_OPERATIONS = Object.freeze([
+    'effect-enabled', 'effect-reorder', 'effect-duplicate', 'effect-delete',
+    'mask-create', 'mask-properties', 'mask-path', 'mask-duplicate', 'mask-delete',
+    'footage-import', 'footage-replace', 'footage-interpretation', 'footage-proxy',
+    'item-use-proxy',
+]);
+const NATIVE_MEDIA_ARGUMENT_FIELDS = Object.freeze({
+    'effects-installed-list': [['operation', 'offset', 'limit'], []],
+    'effects-layer-list': [['operation', 'layerLocator', 'offset', 'limit'], []],
+    'effect-details': [[
+        'operation', 'layerLocator', 'effectIndex', 'installedEffectKey',
+    ], []],
+    'masks-list': [['operation', 'layerLocator', 'offset', 'limit'], []],
+    'mask-details': [['operation', 'layerLocator', 'maskIndex', 'maskId'], []],
+    'mask-path-read': [['operation', 'layerLocator', 'maskIndex', 'maskId'], []],
+    'footage-details': [['operation', 'itemLocator'], []],
+    'footage-interpretation-read': [['operation', 'itemLocator', 'proxy'], []],
+    'effect-enabled': [[
+        'operation', 'layerLocator', 'effectIndex', 'installedEffectKey', 'enabled',
+        'idempotencyKey',
+    ], []],
+    'effect-reorder': [[
+        'operation', 'layerLocator', 'effectIndex', 'installedEffectKey', 'targetIndex',
+        'idempotencyKey',
+    ], []],
+    'effect-duplicate': [[
+        'operation', 'layerLocator', 'effectIndex', 'installedEffectKey', 'idempotencyKey',
+    ], []],
+    'effect-delete': [[
+        'operation', 'layerLocator', 'effectIndex', 'installedEffectKey', 'idempotencyKey',
+    ], []],
+    'mask-create': [['operation', 'layerLocator', 'idempotencyKey'], []],
+    'mask-properties': [[
+        'operation', 'layerLocator', 'maskIndex', 'maskId', 'properties', 'idempotencyKey',
+    ], []],
+    'mask-path-write': [[
+        'operation', 'layerLocator', 'maskIndex', 'maskId', 'closed', 'vertices',
+        'idempotencyKey',
+    ], []],
+    'mask-duplicate': [[
+        'operation', 'layerLocator', 'maskIndex', 'maskId', 'targetIndex', 'idempotencyKey',
+    ], []],
+    'mask-delete': [[
+        'operation', 'layerLocator', 'maskIndex', 'maskId', 'idempotencyKey',
+    ], []],
+    'footage-import': [['operation', 'sourcePath', 'idempotencyKey'], [
+        'folderLocator', 'sequence',
+    ]],
+    'footage-replace': [[
+        'operation', 'itemLocator', 'sourcePath', 'idempotencyKey',
+    ], ['sequence']],
+    'footage-interpretation-write': [[
+        'operation', 'itemLocator', 'proxy', 'interpretation', 'idempotencyKey',
+    ], []],
+    'footage-proxy': [[
+        'operation', 'itemLocator', 'sourcePath', 'idempotencyKey',
+    ], ['sequence']],
+    'item-use-proxy': [[
+        'operation', 'itemLocator', 'enabled', 'idempotencyKey',
+    ], []],
+});
+const NATIVE_MEDIA_VALUE_FIELDS = Object.freeze({
+    'effects-installed-list': [
+        'operation', 'effects', 'total', 'offset', 'limit', 'returned', 'hasMore',
+        'nextOffset',
+    ],
+    'effects-layer-list': [
+        'operation', 'layerLocator', 'effects', 'total', 'offset', 'limit', 'returned',
+        'hasMore', 'nextOffset',
+    ],
+    'effect-details': ['operation', 'layerLocator', 'effect'],
+    'effect-enabled': [
+        'operation', 'beforeEnabled', 'afterEnabled', 'changed', 'effectIndex',
+        'installedEffectKey',
+    ],
+    'effect-reorder': [
+        'operation', 'beforeCount', 'afterCount', 'changed', 'installedEffectKey',
+        'layerLocator', 'beforeIndex', 'afterIndex',
+    ],
+    'effect-duplicate': [
+        'operation', 'beforeCount', 'afterCount', 'changed', 'installedEffectKey',
+        'layerLocator',
+    ],
+    'effect-delete': [
+        'operation', 'beforeCount', 'afterCount', 'changed', 'installedEffectKey',
+        'layerLocator',
+    ],
+    'masks-list': [
+        'operation', 'layerLocator', 'masks', 'total', 'offset', 'limit', 'returned',
+        'hasMore', 'nextOffset',
+    ],
+    'mask-details': ['operation', 'layerLocator', 'mask'],
+    'mask-path-read': ['operation', 'layerLocator', 'maskIndex', 'maskId', 'path'],
+    'mask-path-write': ['operation', 'maskIndex', 'maskId', 'path'],
+    'mask-create': [
+        'operation', 'beforeCount', 'afterCount', 'changed', 'layerLocator', 'maskIndex',
+        'maskId',
+    ],
+    'mask-properties': ['operation', 'changed', 'mask'],
+    'mask-duplicate': [
+        'operation', 'beforeCount', 'afterCount', 'changed', 'layerLocator', 'maskIndex',
+        'maskId',
+    ],
+    'mask-delete': ['operation', 'beforeCount', 'afterCount', 'changed', 'layerLocator'],
+    'footage-details': [
+        'operation', 'duration', 'fileCount', 'filesPerFrame', 'hasAudio', 'hasProxy',
+        'hasVideo', 'height', 'itemLocator', 'missing', 'name', 'pixelAspect', 'signature',
+        'sourcePath', 'still', 'usingProxy', 'width',
+    ],
+    'footage-interpretation': ['operation', 'itemLocator', 'proxy', 'interpretation'],
+    'footage-import': [
+        'operation', 'beforeItemCount', 'afterItemCount', 'changed', 'itemLocator',
+    ],
+    'footage-replace': ['operation', 'changed', 'itemLocator', 'proxy'],
+    'footage-proxy': ['operation', 'changed', 'itemLocator', 'proxy'],
+    'item-use-proxy': ['operation', 'changed', 'itemLocator', 'afterEnabled'],
+});
+
+function validSafeIndex(value) {
+    return Number.isSafeInteger(value) && value >= 1;
+}
+
+function validSafeCount(value) {
+    return Number.isSafeInteger(value) && value >= 0;
+}
+
+function validEffectKey(value) {
+    return Number.isSafeInteger(value) && value !== 0;
+}
+
+function validMediaColor(value) {
+    return exactKeys(value, ['red', 'green', 'blue', 'alpha'])
+        && ['red', 'green', 'blue', 'alpha'].every(function (key) {
+            return Number.isInteger(value[key]) && value[key] >= 0 && value[key] <= 255;
+        });
+}
+
+function validMediaSequence(value) {
+    if (!closedKeys(value, ['enabled'], ['forceAlphabetical', 'startFrame', 'endFrame'])
+        || typeof value.enabled !== 'boolean') return false;
+    if (Object.hasOwn(value, 'forceAlphabetical')
+        && typeof value.forceAlphabetical !== 'boolean') return false;
+    for (const field of ['startFrame', 'endFrame']) {
+        if (Object.hasOwn(value, field)
+            && (!Number.isInteger(value[field]) || value[field] < 0
+                || value[field] > 2147483647)) return false;
+    }
+    if (!value.enabled && (value.forceAlphabetical === true
+        || Object.hasOwn(value, 'startFrame') || Object.hasOwn(value, 'endFrame'))) return false;
+    return !Object.hasOwn(value, 'startFrame') || !Object.hasOwn(value, 'endFrame')
+        || value.endFrame >= value.startFrame;
+}
+
+function validMaskProperties(value) {
+    const fields = [
+        'mode', 'inverted', 'motionBlur', 'featherFalloff', 'color', 'locked',
+        'rotoBezier',
+    ];
+    if (!closedKeys(value, [], fields) || Object.keys(value).length === 0) return false;
+    if (Object.hasOwn(value, 'mode')
+        && !['none', 'add', 'subtract', 'intersect', 'lighten', 'darken', 'difference']
+            .includes(value.mode)) return false;
+    if (Object.hasOwn(value, 'motionBlur')
+        && !['same-as-layer', 'off', 'on'].includes(value.motionBlur)) return false;
+    if (Object.hasOwn(value, 'featherFalloff')
+        && !['smooth', 'linear'].includes(value.featherFalloff)) return false;
+    if (Object.hasOwn(value, 'color') && !validMediaColor(value.color)) return false;
+    return ['inverted', 'locked', 'rotoBezier'].every(function (field) {
+        return !Object.hasOwn(value, field) || typeof value[field] === 'boolean';
+    });
+}
+
+function validMaskVertex(value) {
+    return exactKeys(value, ['position', 'inTangent', 'outTangent'])
+        && ['position', 'inTangent', 'outTangent'].every(function (field) {
+            return Array.isArray(value[field]) && value[field].length === 2
+                && value[field].every(validDecimalString);
+        });
+}
+
+function validFootageInterpretationPatch(value) {
+    const fields = [
+        'loopCount', 'pixelAspect', 'nativeFps', 'conformFps', 'alphaMode',
+        'premultiplyColor',
+    ];
+    if (!closedKeys(value, [], fields) || Object.keys(value).length === 0) return false;
+    if (Object.hasOwn(value, 'loopCount')
+        && (!Number.isInteger(value.loopCount) || value.loopCount < 1
+            || value.loopCount > 4294967295)) return false;
+    if (Object.hasOwn(value, 'pixelAspect') && !exactKeys(
+        value.pixelAspect, ['numerator', 'denominator'],
+    )) return false;
+    if (Object.hasOwn(value, 'pixelAspect')
+        && (!validSafeIndex(value.pixelAspect.numerator)
+            || !validSafeIndex(value.pixelAspect.denominator))) return false;
+    if (Object.hasOwn(value, 'nativeFps') && !validDecimalString(value.nativeFps)) return false;
+    if (Object.hasOwn(value, 'conformFps') && !validDecimalString(value.conformFps)) return false;
+    if (Object.hasOwn(value, 'alphaMode')
+        && !['straight', 'premultiplied', 'ignore'].includes(value.alphaMode)) return false;
+    if (Object.hasOwn(value, 'premultiplyColor')
+        && (!validMediaColor(value.premultiplyColor)
+            || value.alphaMode !== 'premultiplied')) return false;
+    return true;
+}
+
+function validNativeMediaArguments(value, mutating) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return false;
+    const operations = mutating ? NATIVE_MEDIA_WRITE_OPERATIONS : NATIVE_MEDIA_READ_OPERATIONS;
+    if (!operations.includes(value.operation)) return false;
+    const discriminator = value.operation === 'mask-path'
+        ? 'mask-path-' + (mutating ? 'write' : 'read')
+        : (value.operation === 'footage-interpretation'
+            ? 'footage-interpretation-' + (mutating ? 'write' : 'read')
+            : value.operation);
+    const fields = NATIVE_MEDIA_ARGUMENT_FIELDS[discriminator];
+    if (!fields || !closedKeys(value, fields[0], fields[1])) return false;
+    if (Object.hasOwn(value, 'layerLocator')
+        && !validLocator(value.layerLocator, ['layer'])) return false;
+    if (Object.hasOwn(value, 'itemLocator')
+        && !validLocator(value.itemLocator, ['item', 'composition'])) return false;
+    if (Object.hasOwn(value, 'folderLocator')
+        && !validLocator(value.folderLocator, ['item'])) return false;
+    if (Object.hasOwn(value, 'offset') && !validSafeCount(value.offset)) return false;
+    if (Object.hasOwn(value, 'limit')
+        && (!Number.isInteger(value.limit) || value.limit < 1 || value.limit > 100)) return false;
+    for (const field of ['effectIndex', 'maskIndex', 'targetIndex']) {
+        if (Object.hasOwn(value, field) && !validSafeIndex(value[field])) return false;
+    }
+    for (const field of ['installedEffectKey', 'maskId']) {
+        if (Object.hasOwn(value, field) && !validEffectKey(value[field])) return false;
+    }
+    if (Object.hasOwn(value, 'enabled') && typeof value.enabled !== 'boolean') return false;
+    if (Object.hasOwn(value, 'proxy') && typeof value.proxy !== 'boolean') return false;
+    if (Object.hasOwn(value, 'idempotencyKey')
+        && !validIdempotencyKey(value.idempotencyKey)) return false;
+    if (Object.hasOwn(value, 'properties') && !validMaskProperties(value.properties)) return false;
+    if (Object.hasOwn(value, 'vertices')) {
+        const minimum = value.closed === true ? 3 : 2;
+        if (typeof value.closed !== 'boolean' || !Array.isArray(value.vertices)
+            || value.vertices.length < minimum || value.vertices.length > 128
+            || !value.vertices.every(validMaskVertex)) return false;
+    }
+    if (Object.hasOwn(value, 'sourcePath') && !validString(value.sourcePath, 1, 1024)) {
+        return false;
+    }
+    if (Object.hasOwn(value, 'sequence') && !validMediaSequence(value.sequence)) return false;
+    if (Object.hasOwn(value, 'interpretation')
+        && !validFootageInterpretationPatch(value.interpretation)) return false;
+    return true;
+}
+
+function validNativeMediaValue(value, argumentsValue, hostInstanceId, sessionId, mutating) {
+    if (value === null || typeof value !== 'object' || Array.isArray(value)
+        || value.operation !== argumentsValue.operation) return false;
+    const discriminator = value.operation === 'mask-path'
+        ? 'mask-path-' + (mutating ? 'write' : 'read') : value.operation;
+    const fields = NATIVE_MEDIA_VALUE_FIELDS[discriminator];
+    if (!fields || !exactKeys(value, fields)) return false;
+    for (const field of ['layerLocator', 'itemLocator']) {
+        if (!Object.hasOwn(value, field)) continue;
+        const kinds = field === 'layerLocator' ? ['layer'] : ['item', 'composition'];
+        if (!validLocator(value[field], kinds)
+            || !boundToSession(value[field], hostInstanceId, sessionId)) return false;
+    }
+    if (mutating && value.changed !== true) return false;
+    if (value.operation.endsWith('-list')) {
+        const collection = value.operation === 'masks-list' ? value.masks : value.effects;
+        if (!Array.isArray(collection) || !validSafeCount(value.total)
+            || !validSafeCount(value.offset) || !Number.isInteger(value.limit)
+            || value.limit < 1 || value.limit > 100 || !validSafeCount(value.returned)
+            || value.returned !== collection.length || value.returned > value.limit
+            || value.offset + value.returned > value.total
+            || typeof value.hasMore !== 'boolean'
+            || (value.nextOffset !== null && !validSafeCount(value.nextOffset))
+            || value.hasMore !== (value.nextOffset !== null)) return false;
+    }
+    return true;
+}
+
 const CONTRACTS = Object.freeze({
     'ae.project.context.read': Object.freeze({
         digest: 'ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca',
@@ -1299,6 +1583,44 @@ const CONTRACTS = Object.freeze({
         locatorFields: Object.freeze([
             ['layerLocator', 'ae_listLayerProperties'],
             ['propertyLocator', 'ae_listLayerProperties'],
+        ]),
+    }),
+    'ae.native.media.read': Object.freeze({
+        digest: '4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282',
+        mutating: false,
+        allowReplay: false,
+        postconditionKind: 'native-media-read',
+        validArguments: function (value) {
+            return validNativeMediaArguments(value, false);
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validNativeMediaValue(
+                value, argumentsValue, hostInstanceId, sessionId, false,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listCompositionLayers'],
+            ['itemLocator', 'ae_listProjectItems'],
+            ['folderLocator', 'ae_listProjectItems'],
+        ]),
+    }),
+    'ae.native.media.write': Object.freeze({
+        digest: 'a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'native-media-write',
+        validArguments: function (value) {
+            return validNativeMediaArguments(value, true);
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validNativeMediaValue(
+                value, argumentsValue, hostInstanceId, sessionId, true,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listCompositionLayers'],
+            ['itemLocator', 'ae_listProjectItems'],
+            ['folderLocator', 'ae_listProjectItems'],
         ]),
     }),
 });

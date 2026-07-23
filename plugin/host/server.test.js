@@ -91,6 +91,42 @@ const keyframeAuthoringVectors = keyframeAuthoringMatrix.cases.map(function (ent
         },
     };
 });
+const nativeMediaInvokeVectors = [
+    {
+        request: {
+            params: {
+                capabilityId: 'ae.native.media.read',
+                capabilityVersion: 1,
+                arguments: {
+                    operation: 'effects-installed-list',
+                    offset: 0,
+                    limit: 50,
+                },
+            },
+        },
+    },
+    {
+        request: {
+            params: {
+                capabilityId: 'ae.native.media.write',
+                capabilityVersion: 1,
+                arguments: {
+                    operation: 'item-use-proxy',
+                    itemLocator: {
+                        kind: 'item',
+                        hostInstanceId: '22222222-2222-4222-8222-222222222222',
+                        sessionId: '11111111-1111-4111-8111-111111111111',
+                        projectId: '44444444-4444-4444-8444-444444444444',
+                        generation: 1,
+                        objectId: '77777777-7777-4777-8777-777777777777',
+                    },
+                    enabled: true,
+                    idempotencyKey: 'issue167-http-gate-0001',
+                },
+            },
+        },
+    },
+];
 
 const authToken = require('./auth-token');
 
@@ -989,7 +1025,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
     }
 });
 
-test('native invoke HTTP gate accepts all #150/#155/#157/#162 contracts and rejects closed-shape drift', async () => {
+test('native invoke HTTP gate accepts all #150/#155/#157/#162/#167 contracts and rejects closed-shape drift', async () => {
     const nativeClient = fakeNativeClient();
     nativeClient.authorize();
     const { server, srv, port } = await startNativeApp(nativeClient);
@@ -1000,7 +1036,10 @@ test('native invoke HTTP gate accepts all #150/#155/#157/#162 contracts and reje
     try {
         const deadlineUnixMs = Date.now() + 10000;
         const expectedRequests = [];
-        const packageVectors = projectCompositionVectors.concat(keyframeAuthoringVectors);
+        const packageVectors = projectCompositionVectors.concat(
+            keyframeAuthoringVectors,
+            nativeMediaInvokeVectors,
+        );
         for (const [index, vector] of packageVectors.entries()) {
             const request = {
                 requestId: 'core-package-150-' + index,

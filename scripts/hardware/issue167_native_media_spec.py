@@ -431,7 +431,7 @@ class Issue167Package:
         installed_payload = await self._call(
             session,
             "ae_listInstalledEffects",
-            {"offset": 0, "limit": 100},
+            {"offset": 0, "limit": 50},
             phase=phase,
         )
         installed = native_value(installed_payload).get("effects")
@@ -788,7 +788,7 @@ class Issue167Package:
         installed_payload = await self._call(
             session,
             "ae_listInstalledEffects",
-            {"offset": 0, "limit": 100},
+            {"offset": 0, "limit": 50},
             phase="t4-setup",
         )
         installed = native_value(installed_payload).get("effects")

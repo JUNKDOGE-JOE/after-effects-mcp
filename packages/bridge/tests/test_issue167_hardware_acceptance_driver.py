@@ -242,6 +242,8 @@ class _T4Package(package.Issue167Package):
 
     async def _call(self, _session, tool: str, _arguments, *, phase: str):
         assert phase.startswith("t4-")
+        if tool == "ae_listInstalledEffects":
+            assert _arguments == {"offset": 0, "limit": 50}
         self.runtime.calls.append(tool)
         self.runtime.ledger.total += 1
         layer = _locator("layer", "55555555-5555-4555-8555-555555555555")
@@ -305,6 +307,47 @@ async def test_t4_smoke_uses_exactly_eleven_public_calls(tmp_path: Path) -> None
         "ae_importFootage",
         "ae_listProjectItems",
     ]
+
+
+@pytest.mark.asyncio
+async def test_acceptance_effect_discovery_respects_the_public_page_limit(
+    tmp_path: Path,
+) -> None:
+    class Runtime:
+        fixture = SimpleNamespace(path=tmp_path / "fixture.aep")
+
+        @staticmethod
+        def intent(purpose: str) -> str:
+            return f"issue167-{purpose}"
+
+        @staticmethod
+        def mark_tool_passed(_tool: str, **_details) -> None:
+            return None
+
+    class EffectsPackage(package.Issue167Package):
+        def __init__(self) -> None:
+            super().__init__(Runtime(), fixture_name="fixture")
+            self.discovery_arguments = None
+
+        async def _call(self, _session, tool: str, arguments, *, phase: str):
+            assert phase == "t5-effects"
+            if tool == "ae_listInstalledEffects":
+                self.discovery_arguments = arguments
+                return {
+                    "value": {
+                        "effects": [
+                            {"matchName": match_name}
+                            for match_name in package.EFFECT_MATCH_NAMES
+                        ]
+                    }
+                }
+            assert tool == "ae_applyLayerEffect"
+            return {"value": {"layerLocator": arguments["layer_locator"]}}
+
+    runner = EffectsPackage()
+    layer = _locator("layer", "77777777-7777-4777-8777-777777777777")
+    assert await runner._apply_effects(object(), layer, phase="t5-effects") == layer
+    assert runner.discovery_arguments == {"offset": 0, "limit": 50}
 
 
 @pytest.mark.asyncio
