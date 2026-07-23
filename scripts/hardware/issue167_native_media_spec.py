@@ -375,7 +375,7 @@ class Issue167Package:
         payload = await self._call(
             session,
             "ae_listProjectItems",
-            {"offset": 0, "limit": 100},
+            {"offset": 0, "limit": 50},
             phase=phase,
         )
         items = native_value(payload).get("items")

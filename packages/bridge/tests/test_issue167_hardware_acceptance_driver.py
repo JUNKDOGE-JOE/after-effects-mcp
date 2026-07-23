@@ -101,6 +101,25 @@ def test_fixture_assets_are_small_deterministic_rgba_pngs() -> None:
     assert int.from_bytes(first[20:24], "big") == 2
 
 
+@pytest.mark.asyncio
+async def test_project_item_reads_respect_the_public_page_limit(tmp_path: Path) -> None:
+    class Runtime:
+        fixture = SimpleNamespace(path=tmp_path / "fixture.aep")
+
+        def __init__(self) -> None:
+            self.arguments = None
+
+        async def call(self, _session, tool, arguments, **_metadata):
+            assert tool == "ae_listProjectItems"
+            self.arguments = arguments
+            return {"value": {"items": []}}
+
+    runtime = Runtime()
+    runner = package.Issue167Package(runtime, fixture_name="fixture")
+    assert await runner._project_items(object(), phase="fixture-reopen") == []
+    assert runtime.arguments == {"offset": 0, "limit": 50}
+
+
 class _BoundaryRuntime:
     def __init__(self, tmp_path: Path, mode: str) -> None:
         self.mode = mode
