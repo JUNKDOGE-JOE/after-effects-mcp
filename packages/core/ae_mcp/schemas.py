@@ -1986,6 +1986,387 @@ class AeCreateRigArgs(_StrictModel):
     options: Dict[str, Any] = Field(default_factory=dict, description="Rig-type-specific options.")
 
 
+class AeListInstalledEffectsArgs(_StrictModel):
+    """ae.listInstalledEffects — list the native AE effect registry."""
+
+    offset: int = Field(0, ge=0, le=9_007_199_254_740_991)
+    limit: int = Field(50, ge=1, le=100)
+
+
+class AeListLayerEffectsArgs(_StrictModel):
+    """ae.listLayerEffects — list one layer's native effect stack."""
+
+    layer_locator: AeLayerLocator
+    offset: int = Field(0, ge=0, le=9_007_199_254_740_991)
+    limit: int = Field(50, ge=1, le=100)
+
+
+class _AeEffectReferenceArgs(_StrictModel):
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Fresh layer locator from a native layer read.",
+    )
+    effect_index: int = Field(
+        ...,
+        ge=1,
+        le=9_007_199_254_740_991,
+        description="One-based effect stack index from ae_listLayerEffects.",
+    )
+    installed_effect_key: int = Field(
+        ...,
+        ge=-9_007_199_254_740_991,
+        le=9_007_199_254_740_991,
+        description="Non-zero installedEffectKey returned for the same effect.",
+    )
+
+    @model_validator(mode="after")
+    def _nonzero_effect_key(self) -> "_AeEffectReferenceArgs":
+        if self.installed_effect_key == 0:
+            raise ValueError("installed_effect_key must not be zero")
+        return self
+
+
+class AeGetLayerEffectDetailsArgs(_AeEffectReferenceArgs):
+    """ae.getLayerEffectDetails — read one stable effect reference."""
+
+
+class _AeEffectWriteArgs(_AeEffectReferenceArgs):
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+
+class AeSetLayerEffectEnabledArgs(_AeEffectWriteArgs):
+    """ae.setLayerEffectEnabled — enable or disable one effect with Undo."""
+
+    enabled: bool
+
+
+class AeReorderLayerEffectArgs(_AeEffectWriteArgs):
+    """ae.reorderLayerEffect — move one effect within its current stack."""
+
+    target_index: int = Field(..., ge=1, le=9_007_199_254_740_991)
+
+
+class AeDuplicateLayerEffectArgs(_AeEffectWriteArgs):
+    """ae.duplicateLayerEffect — duplicate one effect with verified count readback."""
+
+
+class AeDeleteLayerEffectArgs(_AeEffectWriteArgs):
+    """ae.deleteLayerEffect — delete one effect with verified count readback."""
+
+
+class AeListLayerMasksArgs(_StrictModel):
+    """ae.listLayerMasks — list one layer's native mask stack."""
+
+    layer_locator: AeLayerLocator
+    offset: int = Field(0, ge=0, le=9_007_199_254_740_991)
+    limit: int = Field(50, ge=1, le=100)
+
+
+class _AeMaskReferenceArgs(_StrictModel):
+    layer_locator: AeLayerLocator = Field(
+        ...,
+        description="Fresh layer locator from a native layer read.",
+    )
+    mask_index: int = Field(
+        ...,
+        ge=1,
+        le=9_007_199_254_740_991,
+        description="One-based mask stack index from ae_listLayerMasks.",
+    )
+    mask_id: int = Field(
+        ...,
+        ge=-9_007_199_254_740_991,
+        le=9_007_199_254_740_991,
+        description="Non-zero maskId returned for the same mask.",
+    )
+
+    @model_validator(mode="after")
+    def _nonzero_mask_id(self) -> "_AeMaskReferenceArgs":
+        if self.mask_id == 0:
+            raise ValueError("mask_id must not be zero")
+        return self
+
+
+class AeGetLayerMaskDetailsArgs(_AeMaskReferenceArgs):
+    """ae.getLayerMaskDetails — read one stable mask reference."""
+
+
+class AeGetLayerMaskPathArgs(_AeMaskReferenceArgs):
+    """ae.getLayerMaskPath — read one mask path at current composition time."""
+
+
+class _AeMaskWriteArgs(_AeMaskReferenceArgs):
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+
+class AeCreateLayerMaskArgs(_StrictModel):
+    """ae.createLayerMask — add one mask and return its stable identity."""
+
+    layer_locator: AeLayerLocator
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+
+class AeMediaColor(_StrictModel):
+    """Closed 8-bit RGBA color."""
+
+    red: int = Field(..., ge=0, le=255)
+    green: int = Field(..., ge=0, le=255)
+    blue: int = Field(..., ge=0, le=255)
+    alpha: int = Field(..., ge=0, le=255)
+
+
+class AeMaskPropertiesPatch(_StrictModel):
+    """Non-empty closed patch for one mask's non-path properties."""
+
+    mode: Optional[
+        Literal["none", "add", "subtract", "intersect", "lighten", "darken", "difference"]
+    ] = None
+    inverted: Optional[bool] = None
+    motion_blur: Optional[Literal["same-as-layer", "off", "on"]] = None
+    feather_falloff: Optional[Literal["smooth", "linear"]] = None
+    color: Optional[AeMediaColor] = None
+    locked: Optional[bool] = None
+    roto_bezier: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def _nonempty_patch(self) -> "AeMaskPropertiesPatch":
+        if not self.model_fields_set or not any(
+            getattr(self, field) is not None for field in self.model_fields_set
+        ):
+            raise ValueError("properties must contain at least one requested field")
+        return self
+
+
+class AeSetLayerMaskPropertiesArgs(_AeMaskWriteArgs):
+    """ae.setLayerMaskProperties — patch one mask with verified readback."""
+
+    properties: AeMaskPropertiesPatch
+
+
+_MEDIA_DECIMAL = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+
+
+class AeMaskVertexInput(_StrictModel):
+    """One mask vertex with position and relative tangent pairs."""
+
+    position: Tuple[
+        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
+        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
+    ]
+    in_tangent: Tuple[
+        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
+        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
+    ]
+    out_tangent: Tuple[
+        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
+        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
+    ]
+
+    @model_validator(mode="after")
+    def _finite_coordinates(self) -> "AeMaskVertexInput":
+        for text in (*self.position, *self.in_tangent, *self.out_tangent):
+            try:
+                decimal = Decimal(text)
+                binary = float(text)
+            except (InvalidOperation, OverflowError, ValueError) as error:
+                raise ValueError("mask coordinates must be finite decimals") from error
+            if not decimal.is_finite() or not math.isfinite(binary):
+                raise ValueError("mask coordinates must be finite decimals")
+            if binary == 0 and (not decimal.is_zero() or text.startswith("-")):
+                raise ValueError("mask coordinates must use canonical finite decimals")
+        return self
+
+
+class AeSetLayerMaskPathArgs(_AeMaskWriteArgs):
+    """ae.setLayerMaskPath — replace one mask path at current composition time."""
+
+    closed: bool
+    vertices: List[AeMaskVertexInput] = Field(..., min_length=2, max_length=128)
+
+    @model_validator(mode="after")
+    def _enough_vertices(self) -> "AeSetLayerMaskPathArgs":
+        if self.closed and len(self.vertices) < 3:
+            raise ValueError("a closed mask path requires at least three vertices")
+        return self
+
+
+class AeDuplicateLayerMaskArgs(_AeMaskWriteArgs):
+    """ae.duplicateLayerMask — duplicate one mask to a one-based target index."""
+
+    target_index: int = Field(..., ge=1, le=9_007_199_254_740_991)
+
+
+class AeDeleteLayerMaskArgs(_AeMaskWriteArgs):
+    """ae.deleteLayerMask — delete one stable mask reference."""
+
+
+class AeGetFootageDetailsArgs(_StrictModel):
+    """ae.getFootageDetails — read bounded metadata for one footage item."""
+
+    item_locator: AeProjectItemLocator
+
+
+class AeGetFootageInterpretationArgs(_StrictModel):
+    """ae.getFootageInterpretation — read main or proxy interpretation."""
+
+    item_locator: AeProjectItemLocator
+    proxy: bool = False
+
+
+class AeFootageSequenceOptions(_StrictModel):
+    """Optional file-sequence import bounds."""
+
+    enabled: bool
+    force_alphabetical: Optional[bool] = None
+    start_frame: Optional[int] = Field(None, ge=0, le=2_147_483_647)
+    end_frame: Optional[int] = Field(None, ge=0, le=2_147_483_647)
+
+    @model_validator(mode="after")
+    def _valid_sequence(self) -> "AeFootageSequenceOptions":
+        if not self.enabled and (
+            self.force_alphabetical is True
+            or self.start_frame is not None
+            or self.end_frame is not None
+        ):
+            raise ValueError("disabled sequence cannot include sequence options")
+        if (
+            self.start_frame is not None
+            and self.end_frame is not None
+            and self.end_frame < self.start_frame
+        ):
+            raise ValueError("end_frame must not precede start_frame")
+        return self
+
+
+class AeImportFootageArgs(_StrictModel):
+    """ae.importFootage — import one file or bounded sequence with Undo."""
+
+    source_path: str = Field(..., min_length=1, max_length=1024)
+    folder_locator: Optional[AeProjectItemLocator] = None
+    sequence: Optional[AeFootageSequenceOptions] = None
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+    @model_validator(mode="after")
+    def _valid_import(self) -> "AeImportFootageArgs":
+        if self.folder_locator is not None and self.folder_locator.kind != "item":
+            raise ValueError("folder_locator must have kind item")
+        _valid_media_path(self.source_path)
+        return self
+
+
+class _AeFootageSourceWriteArgs(_StrictModel):
+    item_locator: AeProjectItemLocator
+    source_path: str = Field(..., min_length=1, max_length=1024)
+    sequence: Optional[AeFootageSequenceOptions] = None
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+    @model_validator(mode="after")
+    def _valid_source(self) -> "_AeFootageSourceWriteArgs":
+        _valid_media_path(self.source_path)
+        return self
+
+
+class AeReplaceFootageArgs(_AeFootageSourceWriteArgs):
+    """ae.replaceFootage — replace one item's main footage with Undo."""
+
+
+class AeSetFootageProxyArgs(_AeFootageSourceWriteArgs):
+    """ae.setFootageProxy — assign one item's proxy footage with Undo."""
+
+
+class AePositiveRatioInput(_StrictModel):
+    numerator: int = Field(..., ge=1, le=2_147_483_647)
+    denominator: int = Field(..., ge=1, le=2_147_483_647)
+
+
+class AeFootageInterpretationPatch(_StrictModel):
+    """Non-empty interpretation patch."""
+
+    loop_count: Optional[int] = Field(None, ge=1, le=4_294_967_295)
+    pixel_aspect: Optional[AePositiveRatioInput] = None
+    native_fps: Optional[str] = Field(None, min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)
+    conform_fps: Optional[str] = Field(None, min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)
+    alpha_mode: Optional[Literal["straight", "premultiplied", "ignore"]] = None
+    premultiply_color: Optional[AeMediaColor] = None
+
+    @model_validator(mode="after")
+    def _valid_interpretation(self) -> "AeFootageInterpretationPatch":
+        if not self.model_fields_set or not any(
+            getattr(self, field) is not None for field in self.model_fields_set
+        ):
+            raise ValueError("interpretation must contain at least one requested field")
+        if self.premultiply_color is not None and self.alpha_mode != "premultiplied":
+            raise ValueError("premultiply_color requires alpha_mode='premultiplied'")
+        for text in (self.native_fps, self.conform_fps):
+            if text is None:
+                continue
+            try:
+                decimal = Decimal(text)
+                binary = float(text)
+            except (InvalidOperation, OverflowError, ValueError) as error:
+                raise ValueError("frame rates must be finite decimals") from error
+            if not decimal.is_finite() or not math.isfinite(binary) or binary < 0:
+                raise ValueError("frame rates must be finite non-negative decimals")
+        return self
+
+
+class AeSetFootageInterpretationArgs(_StrictModel):
+    """ae.setFootageInterpretation — patch main or proxy interpretation with Undo."""
+
+    item_locator: AeProjectItemLocator
+    proxy: bool = False
+    interpretation: AeFootageInterpretationPatch
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+
+class AeSetItemUseProxyArgs(_StrictModel):
+    """ae.setItemUseProxy — select main or proxy footage with verified readback."""
+
+    item_locator: AeProjectItemLocator
+    enabled: bool
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+
+def _valid_media_path(value: str) -> None:
+    if "\x00" in value or any(0xD800 <= ord(character) <= 0xDFFF for character in value):
+        raise ValueError("source_path must contain only non-NUL Unicode scalar values")
+
+
 class AeStatusArgs(_StrictModel):
     """ae.status — diagnose the ae-mcp install: backend selection result (with install hints when missing), installed backends, snapshotter availability. Call this first when other AE tools are missing or failing."""
     pass
@@ -2015,6 +2396,28 @@ SCHEMAS = {
     "ae.createComposition": AeCreateCompositionArgs,
     "ae.createCompositionLayer": AeCreateCompositionLayerArgs,
     "ae.applyLayerEffect": AeApplyLayerEffectArgs,
+    "ae.listInstalledEffects": AeListInstalledEffectsArgs,
+    "ae.listLayerEffects": AeListLayerEffectsArgs,
+    "ae.getLayerEffectDetails": AeGetLayerEffectDetailsArgs,
+    "ae.setLayerEffectEnabled": AeSetLayerEffectEnabledArgs,
+    "ae.reorderLayerEffect": AeReorderLayerEffectArgs,
+    "ae.duplicateLayerEffect": AeDuplicateLayerEffectArgs,
+    "ae.deleteLayerEffect": AeDeleteLayerEffectArgs,
+    "ae.listLayerMasks": AeListLayerMasksArgs,
+    "ae.getLayerMaskDetails": AeGetLayerMaskDetailsArgs,
+    "ae.getLayerMaskPath": AeGetLayerMaskPathArgs,
+    "ae.createLayerMask": AeCreateLayerMaskArgs,
+    "ae.setLayerMaskProperties": AeSetLayerMaskPropertiesArgs,
+    "ae.setLayerMaskPath": AeSetLayerMaskPathArgs,
+    "ae.duplicateLayerMask": AeDuplicateLayerMaskArgs,
+    "ae.deleteLayerMask": AeDeleteLayerMaskArgs,
+    "ae.getFootageDetails": AeGetFootageDetailsArgs,
+    "ae.importFootage": AeImportFootageArgs,
+    "ae.replaceFootage": AeReplaceFootageArgs,
+    "ae.getFootageInterpretation": AeGetFootageInterpretationArgs,
+    "ae.setFootageInterpretation": AeSetFootageInterpretationArgs,
+    "ae.setFootageProxy": AeSetFootageProxyArgs,
+    "ae.setItemUseProxy": AeSetItemUseProxyArgs,
     "ae.listLayerProperties": AeListLayerPropertiesArgs,
     "ae.listLayerPropertyKeyframes": AeListLayerPropertyKeyframesArgs,
     "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
@@ -2076,4 +2479,4 @@ SCHEMAS = {
     "ae.createRig": AeCreateRigArgs,
 }
 
-assert len(SCHEMAS) == 72, f"expected 72 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 94, f"expected 94 verbs, got {len(SCHEMAS)}"

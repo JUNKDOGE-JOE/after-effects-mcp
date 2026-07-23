@@ -972,6 +972,200 @@ std::string canonical_keyframe_write_arguments(
 }
 
 std::string nullable_locator_json(const std::optional<ObjectLocator>& value);
+std::string canonical_json(const JsonValue& value);
+
+std::string canonical_native_media_color(
+    const CompositionLayerCreateColor& color) {
+  return "{\"alpha\":" + std::to_string(color.alpha)
+      + ",\"blue\":" + std::to_string(color.blue)
+      + ",\"green\":" + std::to_string(color.green)
+      + ",\"red\":" + std::to_string(color.red) + "}";
+}
+
+std::string canonical_native_media_arguments(
+    const NativeMediaCommand& command,
+    std::string_view idempotency_key) {
+  std::vector<std::string> members;
+  members.push_back("\"operation\":" + json_string(command.operation));
+  if (command.layer_locator.has_value()) {
+    members.push_back("\"layerLocator\":" + locator_json(*command.layer_locator));
+  }
+  if (command.item_locator.has_value()) {
+    members.push_back("\"itemLocator\":" + locator_json(*command.item_locator));
+  }
+  if (command.folder_locator.has_value()) {
+    members.push_back("\"folderLocator\":" + locator_json(*command.folder_locator));
+  }
+  if (command.operation == "effects-installed-list"
+      || command.operation == "effects-layer-list"
+      || command.operation == "masks-list") {
+    members.push_back("\"limit\":" + std::to_string(command.limit));
+    members.push_back("\"offset\":" + std::to_string(command.offset));
+  }
+  if (command.effect_index != 0) {
+    members.push_back("\"effectIndex\":" + std::to_string(command.effect_index));
+  }
+  if (command.installed_effect_key != 0) {
+    members.push_back(
+        "\"installedEffectKey\":" + std::to_string(command.installed_effect_key));
+  }
+  if (command.mask_index != 0) {
+    members.push_back("\"maskIndex\":" + std::to_string(command.mask_index));
+  }
+  if (command.mask_id != 0) {
+    members.push_back("\"maskId\":" + std::to_string(command.mask_id));
+  }
+  if (command.target_index != 0) {
+    members.push_back("\"targetIndex\":" + std::to_string(command.target_index));
+  }
+  if (command.enabled.has_value()) {
+    members.push_back(
+        "\"enabled\":" + std::string(*command.enabled ? "true" : "false"));
+  }
+  std::vector<std::string> mask_properties;
+  if (command.mask_properties.mode.has_value()) {
+    mask_properties.push_back(
+        "\"mode\":" + json_string(*command.mask_properties.mode));
+  }
+  if (command.mask_properties.inverted.has_value()) {
+    mask_properties.push_back(
+        "\"inverted\":" + std::string(
+            *command.mask_properties.inverted ? "true" : "false"));
+  }
+  if (command.mask_properties.motion_blur.has_value()) {
+    mask_properties.push_back(
+        "\"motionBlur\":" + json_string(*command.mask_properties.motion_blur));
+  }
+  if (command.mask_properties.feather_falloff.has_value()) {
+    mask_properties.push_back(
+        "\"featherFalloff\":"
+        + json_string(*command.mask_properties.feather_falloff));
+  }
+  if (command.mask_properties.color.has_value()) {
+    mask_properties.push_back(
+        "\"color\":" + canonical_native_media_color(
+            *command.mask_properties.color));
+  }
+  if (command.mask_properties.locked.has_value()) {
+    mask_properties.push_back(
+        "\"locked\":" + std::string(
+            *command.mask_properties.locked ? "true" : "false"));
+  }
+  if (command.mask_properties.roto_bezier.has_value()) {
+    mask_properties.push_back(
+        "\"rotoBezier\":" + std::string(
+            *command.mask_properties.roto_bezier ? "true" : "false"));
+  }
+  if (!mask_properties.empty()) {
+    std::sort(mask_properties.begin(), mask_properties.end());
+    std::string properties = "{";
+    for (std::size_t index = 0; index < mask_properties.size(); ++index) {
+      if (index != 0) properties.push_back(',');
+      properties += mask_properties[index];
+    }
+    properties.push_back('}');
+    members.push_back("\"properties\":" + properties);
+  }
+  if (command.mask_closed.has_value()) {
+    members.push_back(
+        "\"closed\":" + std::string(*command.mask_closed ? "true" : "false"));
+    std::string vertices = "[";
+    for (std::size_t index = 0; index < command.mask_vertices.size(); ++index) {
+      if (index != 0) vertices.push_back(',');
+      const NativeMediaMaskVertex& vertex = command.mask_vertices[index];
+      vertices += "{\"inTangent\":[" + json_string(vertex.in_tangent_x)
+          + "," + json_string(vertex.in_tangent_y) + "],\"outTangent\":["
+          + json_string(vertex.out_tangent_x) + ","
+          + json_string(vertex.out_tangent_y) + "],\"position\":["
+          + json_string(vertex.position_x) + ","
+          + json_string(vertex.position_y) + "]}";
+    }
+    vertices.push_back(']');
+    members.push_back("\"vertices\":" + vertices);
+  }
+  if (!command.source_path.empty()) {
+    members.push_back("\"sourcePath\":" + json_string(command.source_path));
+  }
+  if (command.sequence.enabled || command.sequence.force_alphabetical
+      || command.sequence.start_frame != -1 || command.sequence.end_frame != -1) {
+    std::vector<std::string> sequence{
+        "\"enabled\":" + std::string(command.sequence.enabled ? "true" : "false")};
+    if (command.sequence.force_alphabetical) {
+      sequence.push_back("\"forceAlphabetical\":true");
+    }
+    if (command.sequence.start_frame != -1) {
+      sequence.push_back(
+          "\"startFrame\":" + std::to_string(command.sequence.start_frame));
+    }
+    if (command.sequence.end_frame != -1) {
+      sequence.push_back(
+          "\"endFrame\":" + std::to_string(command.sequence.end_frame));
+    }
+    std::sort(sequence.begin(), sequence.end());
+    std::string value = "{";
+    for (std::size_t index = 0; index < sequence.size(); ++index) {
+      if (index != 0) value.push_back(',');
+      value += sequence[index];
+    }
+    value.push_back('}');
+    members.push_back("\"sequence\":" + value);
+  }
+  if (command.operation == "footage-interpretation") {
+    members.push_back(
+        "\"proxy\":" + std::string(command.proxy ? "true" : "false"));
+  }
+  if (command.interpretation.has_value()) {
+    const NativeMediaInterpretation& interpretation = *command.interpretation;
+    std::vector<std::string> fields;
+    if (interpretation.loop_count.has_value()) {
+      fields.push_back(
+          "\"loopCount\":" + std::to_string(*interpretation.loop_count));
+    }
+    if (interpretation.pixel_aspect_numerator.has_value()) {
+      fields.push_back(
+          "\"pixelAspect\":{\"denominator\":"
+          + std::to_string(*interpretation.pixel_aspect_denominator)
+          + ",\"numerator\":"
+          + std::to_string(*interpretation.pixel_aspect_numerator) + "}");
+    }
+    if (interpretation.native_fps.has_value()) {
+      fields.push_back(
+          "\"nativeFps\":" + json_string(*interpretation.native_fps));
+    }
+    if (interpretation.conform_fps.has_value()) {
+      fields.push_back(
+          "\"conformFps\":" + json_string(*interpretation.conform_fps));
+    }
+    if (interpretation.alpha_mode.has_value()) {
+      fields.push_back(
+          "\"alphaMode\":" + json_string(*interpretation.alpha_mode));
+    }
+    if (interpretation.premultiply_color.has_value()) {
+      fields.push_back(
+          "\"premultiplyColor\":" + canonical_native_media_color(
+              *interpretation.premultiply_color));
+    }
+    std::sort(fields.begin(), fields.end());
+    std::string value = "{";
+    for (std::size_t index = 0; index < fields.size(); ++index) {
+      if (index != 0) value.push_back(',');
+      value += fields[index];
+    }
+    value.push_back('}');
+    members.push_back("\"interpretation\":" + value);
+  }
+  if (!idempotency_key.empty()) {
+    members.push_back("\"idempotencyKey\":" + json_string(idempotency_key));
+  }
+  std::sort(members.begin(), members.end());
+  std::string result = "{";
+  for (std::size_t index = 0; index < members.size(); ++index) {
+    if (index != 0) result.push_back(',');
+    result += members[index];
+  }
+  result.push_back('}');
+  return result;
+}
 
 std::string canonical_request(const ParsedRequest& request) {
   std::string params;
@@ -1192,6 +1386,10 @@ std::string canonical_request(const ParsedRequest& request) {
             value.keyframe_behavior,
             value.keyframe_behavior_enabled,
             value.idempotency_key);
+      } else if (value.capability_id == kNativeMediaReadCapability
+          || value.capability_id == kNativeMediaWriteCapability) {
+        arguments = canonical_native_media_arguments(
+            value.native_media, value.idempotency_key);
       }
       params = "{\"arguments\":" + arguments + ",\"capabilityId\":"
           + json_string(value.capability_id)
@@ -2113,6 +2311,488 @@ ParsedRequest classify_request(const JsonValue& root) {
             *result.property_locator,
             result.property_value,
             result.idempotency_key);
+      } else if (capability == kNativeMediaReadCapability
+          || capability == kNativeMediaWriteCapability) {
+        const bool media_write = capability == kNativeMediaWriteCapability;
+        NativeMediaCommand& command = result.native_media;
+        command.operation = required_string(
+            *arguments, "operation", CodecErrorKind::kInvalidArgument);
+        const auto parse_media_idempotency = [&] {
+          result.idempotency_key = required_string(
+              *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+          if (!valid_idempotency_key(result.idempotency_key)) {
+            invalid_argument("invalid native media idempotency key");
+          }
+        };
+        const auto parse_effect_reference = [&] {
+          command.layer_locator = parse_locator(
+              *member(*arguments, "layerLocator"), "layer");
+          command.effect_index = required_uint(
+              *arguments, "effectIndex", CodecErrorKind::kInvalidArgument,
+              1, kMaxSafeInteger);
+          command.installed_effect_key = required_int(
+              *arguments, "installedEffectKey", CodecErrorKind::kInvalidArgument,
+              std::numeric_limits<std::int64_t>::min(),
+              std::numeric_limits<std::int64_t>::max());
+          if (command.installed_effect_key == 0) {
+            invalid_argument("installedEffectKey must not be zero");
+          }
+        };
+        const auto parse_mask_reference = [&] {
+          command.layer_locator = parse_locator(
+              *member(*arguments, "layerLocator"), "layer");
+          command.mask_index = required_uint(
+              *arguments, "maskIndex", CodecErrorKind::kInvalidArgument,
+              1, kMaxSafeInteger);
+          command.mask_id = required_int(
+              *arguments, "maskId", CodecErrorKind::kInvalidArgument,
+              std::numeric_limits<std::int64_t>::min(),
+              std::numeric_limits<std::int64_t>::max());
+          if (command.mask_id == 0) invalid_argument("maskId must not be zero");
+        };
+        const auto parse_color = [&](const JsonValue& value) {
+          const JsonValue::Object* color = object_of(value);
+          if (color == nullptr || !exact_keys(
+              *color,
+              {"red", "green", "blue", "alpha"},
+              {"red", "green", "blue", "alpha"})) {
+            invalid_argument("color must be a closed RGBA object");
+          }
+          return CompositionLayerCreateColor{
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "red", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "green", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "blue", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "alpha", CodecErrorKind::kInvalidArgument, 0, 255))};
+        };
+        const auto parse_sequence = [&] {
+          const JsonValue* value = member(*arguments, "sequence");
+          if (value == nullptr) return;
+          const JsonValue::Object* sequence = object_of(*value);
+          if (sequence == nullptr || !exact_keys(
+              *sequence,
+              {"enabled", "forceAlphabetical", "startFrame", "endFrame"},
+              {"enabled"})) {
+            invalid_argument("sequence must be a closed sequence object");
+          }
+          command.sequence.enabled = required_bool(
+              *sequence, "enabled", CodecErrorKind::kInvalidArgument);
+          if (member(*sequence, "forceAlphabetical") != nullptr) {
+            command.sequence.force_alphabetical = required_bool(
+                *sequence, "forceAlphabetical", CodecErrorKind::kInvalidArgument);
+          }
+          if (member(*sequence, "startFrame") != nullptr) {
+            command.sequence.start_frame = static_cast<std::int32_t>(required_int(
+                *sequence, "startFrame", CodecErrorKind::kInvalidArgument,
+                0, std::numeric_limits<std::int32_t>::max()));
+          }
+          if (member(*sequence, "endFrame") != nullptr) {
+            command.sequence.end_frame = static_cast<std::int32_t>(required_int(
+                *sequence, "endFrame", CodecErrorKind::kInvalidArgument,
+                0, std::numeric_limits<std::int32_t>::max()));
+          }
+          if (!command.sequence.enabled
+              && (command.sequence.force_alphabetical
+                  || command.sequence.start_frame != -1
+                  || command.sequence.end_frame != -1)) {
+            invalid_argument("disabled sequence cannot include sequence options");
+          }
+          if (command.sequence.end_frame != -1
+              && command.sequence.start_frame != -1
+              && command.sequence.end_frame < command.sequence.start_frame) {
+            invalid_argument("sequence endFrame precedes startFrame");
+          }
+        };
+        const auto parse_source_path = [&] {
+          command.source_path = required_string(
+              *arguments, "sourcePath", CodecErrorKind::kInvalidArgument);
+          const std::size_t scalars = validate_utf8_and_count(command.source_path);
+          if (scalars < 1 || scalars > 1024
+              || command.source_path.find('\0') != std::string::npos) {
+            invalid_argument("invalid footage source path");
+          }
+        };
+        if (!media_write && command.operation == "effects-installed-list") {
+          if (!exact_keys(*arguments, {"operation", "offset", "limit"},
+              {"operation", "offset", "limit"})) {
+            invalid_argument("installed effects list arguments are not closed");
+          }
+          command.offset = required_uint(
+              *arguments, "offset", CodecErrorKind::kInvalidArgument,
+              0, kMaxSafeInteger);
+          command.limit = static_cast<std::uint16_t>(required_uint(
+              *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 100));
+        } else if (!media_write
+            && (command.operation == "effects-layer-list"
+                || command.operation == "masks-list")) {
+          if (!exact_keys(
+              *arguments, {"operation", "layerLocator", "offset", "limit"},
+              {"operation", "layerLocator", "offset", "limit"})) {
+            invalid_argument("layer media list arguments are not closed");
+          }
+          command.layer_locator = parse_locator(
+              *member(*arguments, "layerLocator"), "layer");
+          command.offset = required_uint(
+              *arguments, "offset", CodecErrorKind::kInvalidArgument,
+              0, kMaxSafeInteger);
+          command.limit = static_cast<std::uint16_t>(required_uint(
+              *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 100));
+        } else if (!media_write && command.operation == "effect-details") {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "layerLocator", "effectIndex", "installedEffectKey"},
+              {"operation", "layerLocator", "effectIndex", "installedEffectKey"})) {
+            invalid_argument("effect details arguments are not closed");
+          }
+          parse_effect_reference();
+        } else if (!media_write
+            && (command.operation == "mask-details"
+                || command.operation == "mask-path")) {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "layerLocator", "maskIndex", "maskId"},
+              {"operation", "layerLocator", "maskIndex", "maskId"})) {
+            invalid_argument("mask read arguments are not closed");
+          }
+          parse_mask_reference();
+        } else if (!media_write && command.operation == "footage-details") {
+          if (!exact_keys(*arguments, {"operation", "itemLocator"},
+              {"operation", "itemLocator"})) {
+            invalid_argument("footage details arguments are not closed");
+          }
+          command.item_locator = parse_project_item_locator(
+              *member(*arguments, "itemLocator"));
+        } else if (!media_write
+            && command.operation == "footage-interpretation") {
+          if (!exact_keys(*arguments, {"operation", "itemLocator", "proxy"},
+              {"operation", "itemLocator", "proxy"})) {
+            invalid_argument("footage interpretation read arguments are not closed");
+          }
+          command.item_locator = parse_project_item_locator(
+              *member(*arguments, "itemLocator"));
+          command.proxy = required_bool(
+              *arguments, "proxy", CodecErrorKind::kInvalidArgument);
+        } else if (media_write && command.operation == "effect-enabled") {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "layerLocator", "effectIndex", "installedEffectKey",
+               "enabled", "idempotencyKey"},
+              {"operation", "layerLocator", "effectIndex", "installedEffectKey",
+               "enabled", "idempotencyKey"})) {
+            invalid_argument("effect enabled arguments are not closed");
+          }
+          parse_effect_reference();
+          command.enabled = required_bool(
+              *arguments, "enabled", CodecErrorKind::kInvalidArgument);
+          parse_media_idempotency();
+        } else if (media_write && command.operation == "effect-reorder") {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "layerLocator", "effectIndex", "installedEffectKey",
+               "targetIndex", "idempotencyKey"},
+              {"operation", "layerLocator", "effectIndex", "installedEffectKey",
+               "targetIndex", "idempotencyKey"})) {
+            invalid_argument("effect reorder arguments are not closed");
+          }
+          parse_effect_reference();
+          command.target_index = required_uint(
+              *arguments, "targetIndex", CodecErrorKind::kInvalidArgument,
+              1, kMaxSafeInteger);
+          parse_media_idempotency();
+        } else if (media_write
+            && (command.operation == "effect-duplicate"
+                || command.operation == "effect-delete")) {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "layerLocator", "effectIndex", "installedEffectKey",
+               "idempotencyKey"},
+              {"operation", "layerLocator", "effectIndex", "installedEffectKey",
+               "idempotencyKey"})) {
+            invalid_argument("effect mutation arguments are not closed");
+          }
+          parse_effect_reference();
+          parse_media_idempotency();
+        } else if (media_write && command.operation == "mask-create") {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "layerLocator", "idempotencyKey"},
+              {"operation", "layerLocator", "idempotencyKey"})) {
+            invalid_argument("mask create arguments are not closed");
+          }
+          command.layer_locator = parse_locator(
+              *member(*arguments, "layerLocator"), "layer");
+          parse_media_idempotency();
+        } else if (media_write && command.operation == "mask-properties") {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "layerLocator", "maskIndex", "maskId",
+               "properties", "idempotencyKey"},
+              {"operation", "layerLocator", "maskIndex", "maskId",
+               "properties", "idempotencyKey"})) {
+            invalid_argument("mask properties arguments are not closed");
+          }
+          parse_mask_reference();
+          const JsonValue::Object* properties = object_of(
+              *member(*arguments, "properties"));
+          if (properties == nullptr || properties->empty()
+              || !exact_keys(
+                  *properties,
+                  {"mode", "inverted", "motionBlur", "featherFalloff",
+                   "color", "locked", "rotoBezier"})) {
+            invalid_argument("mask properties patch is not closed");
+          }
+          if (member(*properties, "mode") != nullptr) {
+            command.mask_properties.mode = required_string(
+                *properties, "mode", CodecErrorKind::kInvalidArgument);
+            static constexpr std::array<std::string_view, 7> modes{
+                "none", "add", "subtract", "intersect", "lighten",
+                "darken", "difference"};
+            if (std::find(
+                modes.begin(), modes.end(), *command.mask_properties.mode)
+                == modes.end()) {
+              invalid_argument("invalid mask mode");
+            }
+          }
+          if (member(*properties, "inverted") != nullptr) {
+            command.mask_properties.inverted = required_bool(
+                *properties, "inverted", CodecErrorKind::kInvalidArgument);
+          }
+          if (member(*properties, "motionBlur") != nullptr) {
+            command.mask_properties.motion_blur = required_string(
+                *properties, "motionBlur", CodecErrorKind::kInvalidArgument);
+            if (*command.mask_properties.motion_blur != "same-as-layer"
+                && *command.mask_properties.motion_blur != "off"
+                && *command.mask_properties.motion_blur != "on") {
+              invalid_argument("invalid mask motion blur");
+            }
+          }
+          if (member(*properties, "featherFalloff") != nullptr) {
+            command.mask_properties.feather_falloff = required_string(
+                *properties, "featherFalloff", CodecErrorKind::kInvalidArgument);
+            if (*command.mask_properties.feather_falloff != "smooth"
+                && *command.mask_properties.feather_falloff != "linear") {
+              invalid_argument("invalid mask feather falloff");
+            }
+          }
+          if (const JsonValue* value = member(*properties, "color")) {
+            command.mask_properties.color = parse_color(*value);
+          }
+          if (member(*properties, "locked") != nullptr) {
+            command.mask_properties.locked = required_bool(
+                *properties, "locked", CodecErrorKind::kInvalidArgument);
+          }
+          if (member(*properties, "rotoBezier") != nullptr) {
+            command.mask_properties.roto_bezier = required_bool(
+                *properties, "rotoBezier", CodecErrorKind::kInvalidArgument);
+          }
+          parse_media_idempotency();
+        } else if (media_write && command.operation == "mask-path") {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "layerLocator", "maskIndex", "maskId",
+               "closed", "vertices", "idempotencyKey"},
+              {"operation", "layerLocator", "maskIndex", "maskId",
+               "closed", "vertices", "idempotencyKey"})) {
+            invalid_argument("mask path arguments are not closed");
+          }
+          parse_mask_reference();
+          command.mask_closed = required_bool(
+              *arguments, "closed", CodecErrorKind::kInvalidArgument);
+          const JsonValue::Array* vertices = array_of(
+              *member(*arguments, "vertices"));
+          const std::size_t minimum = *command.mask_closed ? 3 : 2;
+          if (vertices == nullptr || vertices->size() < minimum
+              || vertices->size() > 128) {
+            invalid_argument("mask vertices violate their bounded path contract");
+          }
+          const auto parse_pair = [&](const JsonValue& value) {
+            const JsonValue::Array* pair = array_of(value);
+            if (pair == nullptr || pair->size() != 2) {
+              invalid_argument("mask coordinate must contain two decimals");
+            }
+            const std::string* x = string_of((*pair)[0]);
+            const std::string* y = string_of((*pair)[1]);
+            if (x == nullptr || y == nullptr
+                || !valid_decimal_string(*x) || !valid_decimal_string(*y)) {
+              invalid_argument("mask coordinate must contain finite decimals");
+            }
+            return std::pair<std::string, std::string>{*x, *y};
+          };
+          for (const JsonValue& vertex_value : *vertices) {
+            const JsonValue::Object* vertex = object_of(vertex_value);
+            if (vertex == nullptr || !exact_keys(
+                *vertex, {"position", "inTangent", "outTangent"},
+                {"position", "inTangent", "outTangent"})) {
+              invalid_argument("mask vertex is not closed");
+            }
+            const auto position = parse_pair(*member(*vertex, "position"));
+            const auto in_tangent = parse_pair(*member(*vertex, "inTangent"));
+            const auto out_tangent = parse_pair(*member(*vertex, "outTangent"));
+            command.mask_vertices.push_back({
+                position.first, position.second,
+                in_tangent.first, in_tangent.second,
+                out_tangent.first, out_tangent.second});
+          }
+          parse_media_idempotency();
+        } else if (media_write
+            && (command.operation == "mask-duplicate"
+                || command.operation == "mask-delete")) {
+          const bool duplicate = command.operation == "mask-duplicate";
+          const bool closed = duplicate
+              ? exact_keys(
+                  *arguments,
+                  {"operation", "layerLocator", "maskIndex", "maskId",
+                   "targetIndex", "idempotencyKey"},
+                  {"operation", "layerLocator", "maskIndex", "maskId",
+                   "targetIndex", "idempotencyKey"})
+              : exact_keys(
+                  *arguments,
+                  {"operation", "layerLocator", "maskIndex", "maskId",
+                   "idempotencyKey"},
+                  {"operation", "layerLocator", "maskIndex", "maskId",
+                   "idempotencyKey"});
+          if (!closed) invalid_argument("mask mutation arguments are not closed");
+          parse_mask_reference();
+          if (duplicate) {
+            command.target_index = required_uint(
+                *arguments, "targetIndex", CodecErrorKind::kInvalidArgument,
+                1, kMaxSafeInteger);
+          }
+          parse_media_idempotency();
+        } else if (media_write && command.operation == "footage-import") {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "sourcePath", "folderLocator", "sequence",
+               "idempotencyKey"},
+              {"operation", "sourcePath", "idempotencyKey"})) {
+            invalid_argument("footage import arguments are not closed");
+          }
+          parse_source_path();
+          if (const JsonValue* folder = member(*arguments, "folderLocator")) {
+            command.folder_locator = parse_locator(*folder, "item");
+          }
+          parse_sequence();
+          parse_media_idempotency();
+        } else if (media_write
+            && (command.operation == "footage-replace"
+                || command.operation == "footage-proxy")) {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "itemLocator", "sourcePath", "sequence",
+               "idempotencyKey"},
+              {"operation", "itemLocator", "sourcePath", "idempotencyKey"})) {
+            invalid_argument("footage source mutation arguments are not closed");
+          }
+          command.item_locator = parse_project_item_locator(
+              *member(*arguments, "itemLocator"));
+          parse_source_path();
+          parse_sequence();
+          parse_media_idempotency();
+        } else if (media_write
+            && command.operation == "footage-interpretation") {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "itemLocator", "proxy", "interpretation",
+               "idempotencyKey"},
+              {"operation", "itemLocator", "proxy", "interpretation",
+               "idempotencyKey"})) {
+            invalid_argument("footage interpretation arguments are not closed");
+          }
+          command.item_locator = parse_project_item_locator(
+              *member(*arguments, "itemLocator"));
+          command.proxy = required_bool(
+              *arguments, "proxy", CodecErrorKind::kInvalidArgument);
+          const JsonValue::Object* interpretation = object_of(
+              *member(*arguments, "interpretation"));
+          if (interpretation == nullptr || interpretation->empty()
+              || !exact_keys(
+                  *interpretation,
+                  {"loopCount", "pixelAspect", "nativeFps", "conformFps",
+                   "alphaMode", "premultiplyColor"})) {
+            invalid_argument("footage interpretation patch is not closed");
+          }
+          NativeMediaInterpretation value;
+          if (member(*interpretation, "loopCount") != nullptr) {
+            value.loop_count = static_cast<std::uint32_t>(required_uint(
+                *interpretation, "loopCount", CodecErrorKind::kInvalidArgument,
+                1, std::numeric_limits<std::uint32_t>::max()));
+          }
+          if (const JsonValue* ratio_value = member(
+              *interpretation, "pixelAspect")) {
+            const JsonValue::Object* ratio = object_of(*ratio_value);
+            if (ratio == nullptr || !exact_keys(
+                *ratio, {"numerator", "denominator"},
+                {"numerator", "denominator"})) {
+              invalid_argument("pixelAspect must be a closed positive ratio");
+            }
+            value.pixel_aspect_numerator = static_cast<std::int32_t>(required_uint(
+                *ratio, "numerator", CodecErrorKind::kInvalidArgument,
+                1, std::numeric_limits<std::int32_t>::max()));
+            value.pixel_aspect_denominator = static_cast<std::int32_t>(required_uint(
+                *ratio, "denominator", CodecErrorKind::kInvalidArgument,
+                1, std::numeric_limits<std::int32_t>::max()));
+          }
+          if (member(*interpretation, "nativeFps") != nullptr) {
+            value.native_fps = required_string(
+                *interpretation, "nativeFps", CodecErrorKind::kInvalidArgument);
+            if (!valid_decimal_string(*value.native_fps)
+                || value.native_fps->front() == '-') {
+              invalid_argument("nativeFps must be a finite non-negative decimal");
+            }
+          }
+          if (member(*interpretation, "conformFps") != nullptr) {
+            value.conform_fps = required_string(
+                *interpretation, "conformFps", CodecErrorKind::kInvalidArgument);
+            if (!valid_decimal_string(*value.conform_fps)
+                || value.conform_fps->front() == '-') {
+              invalid_argument("conformFps must be a finite non-negative decimal");
+            }
+          }
+          if (member(*interpretation, "alphaMode") != nullptr) {
+            value.alpha_mode = required_string(
+                *interpretation, "alphaMode", CodecErrorKind::kInvalidArgument);
+            if (*value.alpha_mode != "straight"
+                && *value.alpha_mode != "premultiplied"
+                && *value.alpha_mode != "ignore") {
+              invalid_argument("invalid footage alpha mode");
+            }
+          }
+          if (const JsonValue* color = member(
+              *interpretation, "premultiplyColor")) {
+            value.premultiply_color = parse_color(*color);
+          }
+          if (value.premultiply_color.has_value()
+              && (!value.alpha_mode.has_value()
+                  || *value.alpha_mode != "premultiplied")) {
+            invalid_argument(
+                "premultiplyColor requires alphaMode premultiplied");
+          }
+          command.interpretation = std::move(value);
+          parse_media_idempotency();
+        } else if (media_write && command.operation == "item-use-proxy") {
+          if (!exact_keys(
+              *arguments,
+              {"operation", "itemLocator", "enabled", "idempotencyKey"},
+              {"operation", "itemLocator", "enabled", "idempotencyKey"})) {
+            invalid_argument("item proxy arguments are not closed");
+          }
+          command.item_locator = parse_project_item_locator(
+              *member(*arguments, "itemLocator"));
+          command.enabled = required_bool(
+              *arguments, "enabled", CodecErrorKind::kInvalidArgument);
+          parse_media_idempotency();
+        } else {
+          invalid_argument("native media operation is not in the compile-time allowlist");
+        }
+        result.native_media_arguments_json = canonical_native_media_arguments(
+            command, result.idempotency_key);
+        if (media_write) {
+          result.arguments_fingerprint_sha256 =
+              sha256_hex(result.native_media_arguments_json);
+        }
       } else if (capability == kLayerPropertyKeyframeDetailsReadCapability) {
         if (!exact_keys(
                 *arguments,
@@ -4247,6 +4927,32 @@ std::string digest_layer_effect_apply_postcondition(
       + canonical_layer_effect_apply_value(value) + "}");
 }
 
+std::string digest_native_media_arguments(
+    std::string_view canonical_arguments_json) {
+  const JsonValue parsed = JsonParser(canonical_arguments_json).parse();
+  const std::string normalized = canonical_json(parsed);
+  if (normalized != canonical_arguments_json || object_of(parsed) == nullptr) {
+    invalid_argument("native media arguments are not a canonical object");
+  }
+  return sha256_hex(normalized);
+}
+
+std::string digest_native_media_postcondition(
+    std::string_view capability_id,
+    std::string_view canonical_value_json) {
+  if (capability_id != kNativeMediaReadCapability
+      && capability_id != kNativeMediaWriteCapability) {
+    invalid_argument("invalid native media postcondition capability");
+  }
+  const JsonValue parsed = JsonParser(canonical_value_json).parse();
+  const std::string normalized = canonical_json(parsed);
+  if (normalized != canonical_value_json || object_of(parsed) == nullptr) {
+    invalid_argument("native media value is not a canonical object");
+  }
+  return sha256_hex("{\"capabilityId\":" + json_string(capability_id)
+      + ",\"capabilityVersion\":1,\"value\":" + normalized + "}");
+}
+
 std::string digest_layer_properties_postcondition(
     const LayerPropertiesPage& page) {
   return sha256_hex(
@@ -5087,6 +5793,73 @@ std::string package_descriptor(
         + ",\"kind\":\"negative\",\"summary\":\"Synthetic failure exercises the documented recovery path.\"}]";
   }
   return descriptor + "}";
+}
+
+std::string native_media_descriptor(
+    const CapabilitiesSuccess& response, bool write) {
+  static constexpr std::string_view kReadOperations =
+      R"(["effects-installed-list","effects-layer-list","effect-details","masks-list","mask-details","mask-path","footage-details","footage-interpretation"])";
+  static constexpr std::string_view kWriteOperations =
+      R"(["effect-enabled","effect-reorder","effect-duplicate","effect-delete","mask-create","mask-properties","mask-path","mask-duplicate","mask-delete","footage-import","footage-replace","footage-interpretation","footage-proxy","item-use-proxy"])";
+  const std::string id = write
+      ? std::string(kNativeMediaWriteCapability)
+      : std::string(kNativeMediaReadCapability);
+  const std::string operations = std::string(
+      write ? kWriteOperations : kReadOperations);
+  const std::string input =
+      "{\"additionalProperties\":true,\"properties\":{\"operation\":{\"enum\":"
+      + operations
+      + "}},\"required\":[\"operation\"],\"type\":\"object\","
+        "\"x-invariant\":\"the-operation-discriminator-selects-one-closed-"
+      + std::string(write ? "write" : "read")
+      + "-argument-shape-enforced-by-the-compiled-codec\"}";
+  const std::string result =
+      "{\"additionalProperties\":true,\"properties\":{\"operation\":{\"enum\":"
+      + operations
+      + "}},\"required\":[\"operation\"],\"type\":\"object\","
+        "\"x-invariant\":\"the-operation-discriminator-selects-one-closed-"
+      + std::string(write ? "write" : "read")
+      + "-result-shape-validated-again-by-the-public-Core-adapter\"}";
+  const std::string arguments = write
+      ? R"({"effectIndex":1,"enabled":false,"idempotencyKey":"synthetic-native-media-write-0001","installedEffectKey":1,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"operation":"effect-enabled"})"
+      : R"({"limit":50,"offset":0,"operation":"effects-installed-list"})";
+  const std::string value = write
+      ? R"({"afterEnabled":false,"beforeEnabled":true,"changed":true,"effectIndex":1,"installedEffectKey":1,"operation":"effect-enabled"})"
+      : R"({"effects":[],"hasMore":false,"limit":50,"nextOffset":null,"offset":0,"operation":"effects-installed-list","returned":0,"total":0})";
+  return package_descriptor(response, {
+      id,
+      write
+          ? "Execute one closed native effect, mask, or footage mutation."
+          : "Execute one closed native effect, mask, or footage read.",
+      write
+          ? "Changes one bounded After Effects media-editing target and creates one Undo step."
+          : "Reads bounded After Effects effect, mask, or footage state without changing it.",
+      R"(["An After Effects project must be open.","The operation-specific locators must belong to the current native session."])",
+      write
+          ? "aemcp.contract.ae.native.media.write.input.v1"
+          : "aemcp.contract.ae.native.media.read.input.v1",
+      write
+          ? "aemcp.contract.ae.native.media.write.result.v1"
+          : "aemcp.contract.ae.native.media.read.result.v1",
+      write
+          ? "aemcp.requirement.native.media-write"
+          : "aemcp.requirement.native.media-read",
+      input,
+      result,
+      arguments,
+      write
+          ? "aemcp-example-native-media-write-stale"
+          : "aemcp-example-native-media-read-invalid",
+      write ? "STALE_LOCATOR" : "INVALID_ARGUMENT",
+      write ? "refresh-locator" : "change-arguments",
+      write,
+      write
+          ? "aemcp-example-native-media-write"
+          : "aemcp-example-native-media-read",
+      value},
+      write
+          ? response.native_media_write_contract_digest
+          : response.native_media_read_contract_digest);
 }
 
 std::string project_context_descriptor(const CapabilitiesSuccess& response) {
@@ -6417,6 +7190,16 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
   append_keyframe(
       response.include_layer_property_keyframe_delete,
       KeyframeDescriptorKind::kDelete);
+  if (response.include_native_media_read) {
+    if (needs_comma) items.push_back(',');
+    items += native_media_descriptor(response, false);
+    needs_comma = true;
+  }
+  if (response.include_native_media_write) {
+    if (needs_comma) items.push_back(',');
+    items += native_media_descriptor(response, true);
+    needs_comma = true;
+  }
   items.push_back(']');
   const bool complete_full_registry = response.detail == CapabilityDetail::kFull
       && response.include_project_summary
@@ -6459,7 +7242,9 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
       && response.include_layer_property_keyframe_interpolation_set
       && response.include_layer_property_keyframe_temporal_ease_set
       && response.include_layer_property_keyframe_behavior_set
-      && response.include_layer_property_keyframe_delete;
+      && response.include_layer_property_keyframe_delete
+      && response.include_native_media_read
+      && response.include_native_media_write;
   if (complete_full_registry) {
     const std::string encoded_digest = sha256_hex(
         canonical_json(JsonParser(items).parse()));
@@ -7168,6 +7953,52 @@ std::vector<std::uint8_t> encode_layer_effect_apply_success(
         "\"outcome\":\"succeeded\",\"value\":" + value
       + "},\"sessionId\":" + json_string(response.session_id)
       + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_native_media_success(
+    const NativeMediaSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const bool write = response.capability_id == kNativeMediaWriteCapability;
+  if ((!write && response.capability_id != kNativeMediaReadCapability)
+      || response.replayed || response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.postcondition_digest != digest_native_media_postcondition(
+          response.capability_id, response.canonical_value_json)) {
+    invalid_argument("invalid or unvalidated native media evidence");
+  }
+  std::string evidence = "\"capabilityId\":"
+      + json_string(response.capability_id)
+      + ",\"capabilityVersion\":1,\"completedAtUnixMs\":"
+      + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":" + json_string(write ? "committed" : "none")
+      + ",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\","
+        "\"digest\":" + json_string(response.postcondition_digest)
+      + ",\"kind\":" + json_string(
+          write ? "native-media-write" : "native-media-read")
+      + ",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms);
+  if (write) {
+    evidence += ",\"undo\":{\"available\":true,\"verified\":false}";
+  }
+  std::string json = "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":" + json_string(response.capability_id)
+      + ",\"capabilityVersion\":1,\"engine\":\"native-aegp\",\"evidence\":{"
+      + evidence + "},\"outcome\":\"succeeded\",\"value\":"
+      + response.canonical_value_json + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
 }
 

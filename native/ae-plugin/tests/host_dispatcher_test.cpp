@@ -1365,7 +1365,7 @@ void project_composition_package_dispatches_all_eight_capabilities() {
               .source_composition_locator.object_id
           != composition.object_id,
       "duplicate result did not reissue the source composition locator");
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 41);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 43);
   const std::array<std::string_view, 8> package_capabilities{
       aemcp::native::kProjectContextReadCapability,
       aemcp::native::kProjectItemMetadataReadCapability,
@@ -1688,7 +1688,7 @@ void keyframe_authoring_package_admits_all_seven_closed_capabilities() {
       aemcp::native::kLayerPropertyKeyframeBehaviorSetCapability,
       aemcp::native::kLayerPropertyKeyframeDeleteCapability,
   };
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 41);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 43);
   for (const std::string_view expected : package_capabilities) {
     require(std::find(
                 aemcp::native::kAdvertisedNativeCapabilities.begin(),

@@ -114,6 +114,8 @@ struct InvokeParams {
   std::optional<bool> layer_switch_enabled;
   std::string layer_quality;
   std::string layer_blending_mode;
+  NativeMediaCommand native_media;
+  std::string native_media_arguments_json;
 };
 
 struct CancelParams {
@@ -279,6 +281,11 @@ struct ParsedRequest {
     std::string_view idempotency_key);
 [[nodiscard]] std::string digest_layer_effect_apply_postcondition(
     const LayerEffectApplied& value);
+[[nodiscard]] std::string digest_native_media_arguments(
+    std::string_view canonical_arguments_json);
+[[nodiscard]] std::string digest_native_media_postcondition(
+    std::string_view capability_id,
+    std::string_view canonical_value_json);
 [[nodiscard]] std::string digest_layer_properties_postcondition(
     const LayerPropertiesPage& page);
 [[nodiscard]] std::string digest_layer_property_keyframes_postcondition(
@@ -549,6 +556,10 @@ struct CapabilitiesSuccess {
   std::string layer_property_keyframe_temporal_ease_set_contract_digest;
   std::string layer_property_keyframe_behavior_set_contract_digest;
   std::string layer_property_keyframe_delete_contract_digest;
+  bool include_native_media_read{false};
+  bool include_native_media_write{false};
+  std::string native_media_read_contract_digest;
+  std::string native_media_write_contract_digest;
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -715,6 +726,19 @@ struct LayerEffectApplySuccess {
   std::string session_id;
   std::string host_instance_id;
   LayerEffectApplied value;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool replayed{false};
+};
+
+struct NativeMediaSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  std::string capability_id;
+  std::string canonical_value_json;
   std::uint64_t started_at_unix_ms{0};
   std::uint64_t completed_at_unix_ms{0};
   std::string request_digest;
@@ -910,6 +934,8 @@ struct ErrorResponse {
     const CompositionLayerCreateSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_effect_apply_success(
     const LayerEffectApplySuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_native_media_success(
+    const NativeMediaSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(
     const LayerPropertiesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_property_keyframes_success(

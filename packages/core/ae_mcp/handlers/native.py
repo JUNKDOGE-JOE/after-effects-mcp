@@ -73,6 +73,10 @@ from ae_mcp.backends.native_keyframe_authoring import (
     invoke_keyframe_temporal_ease_set,
     invoke_keyframe_value_set,
 )
+from ae_mcp.backends.native_media import (
+    invoke_native_media_read,
+    invoke_native_media_write,
+)
 from ae_mcp.handlers import register
 
 
@@ -111,6 +115,7 @@ _LAYER_COMPOSITING_WRITE_TIMEOUT_MS = 10_000
 _LAYER_TRANSFORM_TIMEOUT_MS = 20_000
 _KEYFRAME_DETAILS_READ_TIMEOUT_MS = 10_000
 _KEYFRAME_WRITE_TIMEOUT_MS = 10_000
+_NATIVE_MEDIA_TIMEOUT_MS = 20_000
 
 
 def _backend() -> NativeInvokeBackend:
@@ -2185,6 +2190,72 @@ async def _run_delete_layer_property_keyframe(
     return _project_package_write_response(execution)
 
 
+async def _run_native_media(
+    args: Any,
+    ctx: Any,
+    *,
+    operation: str,
+    write: bool,
+) -> dict[str, Any]:
+    """Run one operation-specific public tool through the grouped native plane."""
+
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _NATIVE_MEDIA_TIMEOUT_MS
+    arguments = {
+        "operation": operation,
+        **args.model_dump(mode="json", exclude_none=True),
+    }
+
+    async def _call():
+        invoke = invoke_native_media_write if write else invoke_native_media_read
+        return await invoke(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            arguments=arguments,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    if write:
+        execution = await _await_project_package_write(
+            _call,
+            cancellation=cancellation,
+            ctx=ctx,
+            start_msg=(
+                f"ae.{operation} native AEGP write; wait for verified "
+                "readback and Undo evidence..."
+            ),
+        )
+        response = _project_package_write_response(execution)
+    else:
+        try:
+            execution = await progress.with_heartbeat(
+                ctx,
+                _call(),
+                start_msg=f"ae.{operation} native AEGP read...",
+            )
+        except asyncio.CancelledError:
+            cancellation.cancel()
+            raise
+        response = _native_read_response(execution)
+    response["value"] = execution.value.wire_payload()
+    response["implementation"]["publicOperation"] = operation
+    return response
+
+
+def _native_media_runner(operation: str, *, write: bool):
+    async def run(args: Any, ctx: Any) -> dict[str, Any]:
+        return await _run_native_media(
+            args,
+            ctx,
+            operation=operation,
+            write=write,
+        )
+
+    run.__name__ = f"_run_{operation.replace('-', '_')}"
+    return run
+
+
 register(
     "ae.getProjectContext",
     schemas.AeGetProjectContextArgs,
@@ -2387,6 +2458,38 @@ register(
     schemas.AeDeleteLayerPropertyKeyframeArgs,
     _run_delete_layer_property_keyframe,
 )
+
+_NATIVE_MEDIA_PUBLIC_TOOLS = (
+    ("ae.listInstalledEffects", schemas.AeListInstalledEffectsArgs, "effects-installed-list", False),
+    ("ae.listLayerEffects", schemas.AeListLayerEffectsArgs, "effects-layer-list", False),
+    ("ae.getLayerEffectDetails", schemas.AeGetLayerEffectDetailsArgs, "effect-details", False),
+    ("ae.setLayerEffectEnabled", schemas.AeSetLayerEffectEnabledArgs, "effect-enabled", True),
+    ("ae.reorderLayerEffect", schemas.AeReorderLayerEffectArgs, "effect-reorder", True),
+    ("ae.duplicateLayerEffect", schemas.AeDuplicateLayerEffectArgs, "effect-duplicate", True),
+    ("ae.deleteLayerEffect", schemas.AeDeleteLayerEffectArgs, "effect-delete", True),
+    ("ae.listLayerMasks", schemas.AeListLayerMasksArgs, "masks-list", False),
+    ("ae.getLayerMaskDetails", schemas.AeGetLayerMaskDetailsArgs, "mask-details", False),
+    ("ae.getLayerMaskPath", schemas.AeGetLayerMaskPathArgs, "mask-path", False),
+    ("ae.createLayerMask", schemas.AeCreateLayerMaskArgs, "mask-create", True),
+    ("ae.setLayerMaskProperties", schemas.AeSetLayerMaskPropertiesArgs, "mask-properties", True),
+    ("ae.setLayerMaskPath", schemas.AeSetLayerMaskPathArgs, "mask-path", True),
+    ("ae.duplicateLayerMask", schemas.AeDuplicateLayerMaskArgs, "mask-duplicate", True),
+    ("ae.deleteLayerMask", schemas.AeDeleteLayerMaskArgs, "mask-delete", True),
+    ("ae.getFootageDetails", schemas.AeGetFootageDetailsArgs, "footage-details", False),
+    ("ae.importFootage", schemas.AeImportFootageArgs, "footage-import", True),
+    ("ae.replaceFootage", schemas.AeReplaceFootageArgs, "footage-replace", True),
+    ("ae.getFootageInterpretation", schemas.AeGetFootageInterpretationArgs, "footage-interpretation", False),
+    ("ae.setFootageInterpretation", schemas.AeSetFootageInterpretationArgs, "footage-interpretation", True),
+    ("ae.setFootageProxy", schemas.AeSetFootageProxyArgs, "footage-proxy", True),
+    ("ae.setItemUseProxy", schemas.AeSetItemUseProxyArgs, "item-use-proxy", True),
+)
+
+for _tool_name, _tool_schema, _operation, _write in _NATIVE_MEDIA_PUBLIC_TOOLS:
+    register(
+        _tool_name,
+        _tool_schema,
+        _native_media_runner(_operation, write=_write),
+    )
 
 
 __all__ = [

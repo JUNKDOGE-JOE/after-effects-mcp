@@ -166,6 +166,28 @@ def _filtered_tool_names() -> set:
             "ae.setLayerPropertyKeyframeTemporalEase",
             "ae.setLayerPropertyKeyframeBehavior",
             "ae.deleteLayerPropertyKeyframe",
+            "ae.listInstalledEffects",
+            "ae.listLayerEffects",
+            "ae.getLayerEffectDetails",
+            "ae.setLayerEffectEnabled",
+            "ae.reorderLayerEffect",
+            "ae.duplicateLayerEffect",
+            "ae.deleteLayerEffect",
+            "ae.listLayerMasks",
+            "ae.getLayerMaskDetails",
+            "ae.getLayerMaskPath",
+            "ae.createLayerMask",
+            "ae.setLayerMaskProperties",
+            "ae.setLayerMaskPath",
+            "ae.duplicateLayerMask",
+            "ae.deleteLayerMask",
+            "ae.getFootageDetails",
+            "ae.importFootage",
+            "ae.replaceFootage",
+            "ae.getFootageInterpretation",
+            "ae.setFootageInterpretation",
+            "ae.setFootageProxy",
+            "ae.setItemUseProxy",
         }
     else:
         supported = supported - {
@@ -223,6 +245,28 @@ def _filtered_tool_names() -> set:
             "ae.setLayerPropertyKeyframeTemporalEase",
             "ae.setLayerPropertyKeyframeBehavior",
             "ae.deleteLayerPropertyKeyframe",
+            "ae.listInstalledEffects",
+            "ae.listLayerEffects",
+            "ae.getLayerEffectDetails",
+            "ae.setLayerEffectEnabled",
+            "ae.reorderLayerEffect",
+            "ae.duplicateLayerEffect",
+            "ae.deleteLayerEffect",
+            "ae.listLayerMasks",
+            "ae.getLayerMaskDetails",
+            "ae.getLayerMaskPath",
+            "ae.createLayerMask",
+            "ae.setLayerMaskProperties",
+            "ae.setLayerMaskPath",
+            "ae.duplicateLayerMask",
+            "ae.deleteLayerMask",
+            "ae.getFootageDetails",
+            "ae.importFootage",
+            "ae.replaceFootage",
+            "ae.getFootageInterpretation",
+            "ae.setFootageInterpretation",
+            "ae.setFootageProxy",
+            "ae.setItemUseProxy",
         }
     return supported | {"ae.status", "ae.diagnose"}
 
@@ -904,6 +948,94 @@ _PROJECT_COMPOSITION_VALIDATION = {
     "ae.duplicateLayer": (
         "ae.layer.duplicate",
         "Use a fresh layer_locator, a required 1 to 255 scalar new_name, and a stable idempotency_key.",
+    ),
+    "ae.listInstalledEffects": (
+        "ae.native.media.read",
+        "Use offset >= 0 and limit from 1 to 100.",
+    ),
+    "ae.listLayerEffects": (
+        "ae.native.media.read",
+        "Use a fresh layer_locator, offset >= 0, and limit from 1 to 100.",
+    ),
+    "ae.getLayerEffectDetails": (
+        "ae.native.media.read",
+        "Copy effect_index and installed_effect_key from ae_listLayerEffects.",
+    ),
+    "ae.setLayerEffectEnabled": (
+        "ae.native.media.write",
+        "Use a fresh effect reference, explicit enabled boolean, and stable idempotency_key.",
+    ),
+    "ae.reorderLayerEffect": (
+        "ae.native.media.write",
+        "Use a fresh effect reference, one-based target_index, and stable idempotency_key.",
+    ),
+    "ae.duplicateLayerEffect": (
+        "ae.native.media.write",
+        "Use a fresh effect reference and stable idempotency_key.",
+    ),
+    "ae.deleteLayerEffect": (
+        "ae.native.media.write",
+        "Use a fresh effect reference and stable idempotency_key.",
+    ),
+    "ae.listLayerMasks": (
+        "ae.native.media.read",
+        "Use a fresh layer_locator, offset >= 0, and limit from 1 to 100.",
+    ),
+    "ae.getLayerMaskDetails": (
+        "ae.native.media.read",
+        "Copy mask_index and mask_id from ae_listLayerMasks.",
+    ),
+    "ae.getLayerMaskPath": (
+        "ae.native.media.read",
+        "Copy a fresh mask reference from ae_listLayerMasks.",
+    ),
+    "ae.createLayerMask": (
+        "ae.native.media.write",
+        "Use a fresh layer_locator and stable idempotency_key.",
+    ),
+    "ae.setLayerMaskProperties": (
+        "ae.native.media.write",
+        "Use a fresh mask reference, a non-empty closed properties patch, and stable idempotency_key.",
+    ),
+    "ae.setLayerMaskPath": (
+        "ae.native.media.write",
+        "Use a fresh mask reference, 2..128 finite-decimal vertices, and stable idempotency_key.",
+    ),
+    "ae.duplicateLayerMask": (
+        "ae.native.media.write",
+        "Use a fresh mask reference, one-based target_index, and stable idempotency_key.",
+    ),
+    "ae.deleteLayerMask": (
+        "ae.native.media.write",
+        "Use a fresh mask reference and stable idempotency_key.",
+    ),
+    "ae.getFootageDetails": (
+        "ae.native.media.read",
+        "Use a fresh footage item_locator from a native project read.",
+    ),
+    "ae.importFootage": (
+        "ae.native.media.write",
+        "Use a bounded source_path, optional item-kind folder_locator, and stable idempotency_key.",
+    ),
+    "ae.replaceFootage": (
+        "ae.native.media.write",
+        "Use a fresh footage item_locator, bounded source_path, and stable idempotency_key.",
+    ),
+    "ae.getFootageInterpretation": (
+        "ae.native.media.read",
+        "Use a fresh footage item_locator and choose main or proxy interpretation.",
+    ),
+    "ae.setFootageInterpretation": (
+        "ae.native.media.write",
+        "Use a fresh footage item_locator, non-empty interpretation patch, and stable idempotency_key.",
+    ),
+    "ae.setFootageProxy": (
+        "ae.native.media.write",
+        "Use a fresh footage item_locator, bounded source_path, and stable idempotency_key.",
+    ),
+    "ae.setItemUseProxy": (
+        "ae.native.media.write",
+        "Use a fresh footage item_locator, explicit enabled boolean, and stable idempotency_key.",
     ),
     "ae.getLayerPropertyKeyframeDetails": (
         "ae.layer.property.keyframe.details.read",

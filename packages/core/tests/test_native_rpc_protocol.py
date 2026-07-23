@@ -217,6 +217,8 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "ae.layer.property.keyframe.temporal-ease.set",
         "ae.layer.property.keyframe.behavior.set",
         "ae.layer.property.keyframe.delete",
+        "ae.native.media.read",
+        "ae.native.media.write",
     ]
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
         "response"

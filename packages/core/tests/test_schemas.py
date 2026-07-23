@@ -9,7 +9,7 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 72, f"expected 72 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 94, f"expected 94 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.projectSummary",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
@@ -35,6 +35,17 @@ def test_registry_has_all_verbs():
         "ae.deleteLayerPropertyKeyframe",
         "ae.createCompositionLayer",
         "ae.applyLayerEffect",
+        "ae.listInstalledEffects", "ae.listLayerEffects",
+        "ae.getLayerEffectDetails", "ae.setLayerEffectEnabled",
+        "ae.reorderLayerEffect", "ae.duplicateLayerEffect",
+        "ae.deleteLayerEffect",
+        "ae.listLayerMasks", "ae.getLayerMaskDetails",
+        "ae.getLayerMaskPath", "ae.createLayerMask",
+        "ae.setLayerMaskProperties", "ae.setLayerMaskPath",
+        "ae.duplicateLayerMask", "ae.deleteLayerMask",
+        "ae.getFootageDetails", "ae.importFootage", "ae.replaceFootage",
+        "ae.getFootageInterpretation", "ae.setFootageInterpretation",
+        "ae.setFootageProxy", "ae.setItemUseProxy",
         "ae.layers", "ae.readProps", "ae.exec",
         "ae.checkpoint", "ae.revert", "ae.snapshot", "ae.previewFrame",
         "ae.applyEffect", "ae.ping", "ae.status", "ae.diagnose",

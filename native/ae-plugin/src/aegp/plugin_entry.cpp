@@ -99,6 +99,7 @@ using aemcp::native::HostLayerCompositingReadResult;
 using aemcp::native::HostLayerSwitchWriteResult;
 using aemcp::native::HostLayerQualityWriteResult;
 using aemcp::native::HostLayerBlendingModeWriteResult;
+using aemcp::native::HostNativeMediaResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
 using aemcp::native::NativeEndpointDescriptor;
@@ -128,6 +129,7 @@ using aemcp::native::LayerOrderChanged;
 using aemcp::native::LayerParentChanged;
 using aemcp::native::LayerRangeChanged;
 using aemcp::native::LayerStartTimeChanged;
+using aemcp::native::NativeMediaCommand;
 using aemcp::native::LayerStretchChanged;
 using aemcp::native::LayerCompositingState;
 using aemcp::native::LayerPropertyKeyframeDetails;
@@ -178,6 +180,8 @@ using aemcp::native::kLayerPropertyKeyframeInterpolationSetCapability;
 using aemcp::native::kLayerPropertyKeyframeTemporalEaseSetCapability;
 using aemcp::native::kLayerPropertyKeyframeBehaviorSetCapability;
 using aemcp::native::kLayerPropertyKeyframeDeleteCapability;
+using aemcp::native::kNativeMediaReadCapability;
+using aemcp::native::kNativeMediaWriteCapability;
 using aemcp::native::kProjectGraphInvalidateControl;
 using aemcp::native::locate_unique_insertion;
 
@@ -186,7 +190,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "7d2598ef2570828a4c1b616cf036b67fd966599aadad1530114e2d655b8646a4";
+    "ae72ee8f2244fa2ffb6a4f01590f17b83e782724504d981a88cbbc162ea1ac44";
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -269,6 +273,10 @@ constexpr std::string_view kLayerPropertyKeyframeBehaviorSetContractDigest =
     "e2ff59d765613db12468d2140d8c937fd1ceb5def9f632877b18b664b6d6bf5c";
 constexpr std::string_view kLayerPropertyKeyframeDeleteContractDigest =
     "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9";
+constexpr std::string_view kNativeMediaReadContractDigest =
+    "4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282";
+constexpr std::string_view kNativeMediaWriteContractDigest =
+    "a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5";
 constexpr std::int64_t kMaximumProjectItems = 100000;
 constexpr A_long kMaximumLayerEffects = 4096;
 static_assert(kSourceCommit.size() == 40);
@@ -352,7 +360,7 @@ std::string json_escape(std::string_view input) {
       case '\r': escaped << "\\r"; break;
       case '\t': escaped << "\\t"; break;
       default:
-        if (value < 0x20 || value >= 0x7f) {
+        if (value < 0x20) {
           escaped << "\\u00" << std::hex << std::setw(2) << std::setfill('0')
                   << static_cast<unsigned int>(value) << std::dec;
         } else {
@@ -788,6 +796,59 @@ class EffectRefOwner final {
  private:
   const AEGP_EffectSuite5* suite_{nullptr};
   AEGP_EffectRefH effect_{nullptr};
+};
+
+class MaskRefOwner final {
+ public:
+  MaskRefOwner(const AEGP_MaskSuite6* suite, AEGP_MaskRefH mask)
+      : suite_(suite), mask_(mask) {}
+  ~MaskRefOwner() {
+    if (suite_ != nullptr && mask_ != nullptr) {
+      (void)suite_->AEGP_DisposeMask(mask_);
+    }
+  }
+  MaskRefOwner(const MaskRefOwner&) = delete;
+  MaskRefOwner& operator=(const MaskRefOwner&) = delete;
+  MaskRefOwner(MaskRefOwner&& other) noexcept
+      : suite_(other.suite_), mask_(other.mask_) {
+    other.mask_ = nullptr;
+  }
+  MaskRefOwner& operator=(MaskRefOwner&& other) noexcept {
+    if (this != &other) {
+      if (suite_ != nullptr && mask_ != nullptr) {
+        (void)suite_->AEGP_DisposeMask(mask_);
+      }
+      suite_ = other.suite_;
+      mask_ = other.mask_;
+      other.mask_ = nullptr;
+    }
+    return *this;
+  }
+  [[nodiscard]] AEGP_MaskRefH get() const noexcept { return mask_; }
+
+ private:
+  const AEGP_MaskSuite6* suite_{nullptr};
+  AEGP_MaskRefH mask_{nullptr};
+};
+
+class FootageOwner final {
+ public:
+  FootageOwner(const AEGP_FootageSuite5* suite, AEGP_FootageH footage)
+      : suite_(suite), footage_(footage) {}
+  ~FootageOwner() {
+    if (!adopted_ && suite_ != nullptr && footage_ != nullptr) {
+      (void)suite_->AEGP_DisposeFootage(footage_);
+    }
+  }
+  FootageOwner(const FootageOwner&) = delete;
+  FootageOwner& operator=(const FootageOwner&) = delete;
+  [[nodiscard]] AEGP_FootageH get() const noexcept { return footage_; }
+  void adopted() noexcept { adopted_ = true; }
+
+ private:
+  const AEGP_FootageSuite5* suite_{nullptr};
+  AEGP_FootageH footage_{nullptr};
+  bool adopted_{false};
 };
 
 class StreamValueOwner final {
@@ -7045,6 +7106,1387 @@ class AegpHostApi final : public HostApi {
         after_preserve_alpha, *after_matte});
   }
 
+  [[nodiscard]] HostNativeMediaResult execute_native_media(
+      const NativeMediaCommand& command,
+      TimePoint work_deadline) override {
+    const auto budget_expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    const auto quoted = [](std::string_view value) {
+      return "\"" + json_escape(value) + "\"";
+    };
+    const auto locator_json = [&](const ObjectLocator& locator) {
+      return std::string("{\"generation\":") + std::to_string(locator.generation)
+          + ",\"hostInstanceId\":" + quoted(locator.host_instance_id)
+          + ",\"kind\":" + quoted(locator.kind)
+          + ",\"objectId\":" + quoted(locator.object_id)
+          + ",\"projectId\":" + quoted(locator.project_id)
+          + ",\"sessionId\":" + quoted(locator.session_id) + "}";
+    };
+    const auto operation_prefix = [&] {
+      return std::string("{\"operation\":") + quoted(command.operation);
+    };
+    if (budget_expired()) {
+      return HostNativeMediaResult::failure(
+          "DEADLINE_EXCEEDED", "native media operation budget elapsed");
+    }
+
+    SuiteLease<AEGP_EffectSuite5> effect_suite(
+        basic_, kAEGPEffectSuite, kAEGPEffectSuiteVersion5);
+    if (command.operation == "effects-installed-list") {
+      if (effect_suite.get() == nullptr) {
+        return HostNativeMediaResult::failure(
+            "NATIVE_UNSUPPORTED", "the installed effect registry is unavailable");
+      }
+      A_long count = 0;
+      if (effect_suite->AEGP_GetNumInstalledEffects(&count) != A_Err_NONE
+          || count < 0 || count > 16384) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "installed effect traversal bound was unavailable");
+      }
+      const std::uint64_t start = std::min<std::uint64_t>(
+          command.offset, static_cast<std::uint64_t>(count));
+      const std::uint64_t end = std::min<std::uint64_t>(
+          static_cast<std::uint64_t>(count), start + command.limit);
+      std::ostringstream output;
+      output << operation_prefix() << ",\"effects\":[";
+      AEGP_InstalledEffectKey key = AEGP_InstalledEffectKey_NONE;
+      bool first = true;
+      for (A_long index = 0; index < count; ++index) {
+        if (budget_expired()) {
+          return HostNativeMediaResult::failure(
+              "DEADLINE_EXCEEDED", "installed effect traversal budget elapsed");
+        }
+        AEGP_InstalledEffectKey next = AEGP_InstalledEffectKey_NONE;
+        if (effect_suite->AEGP_GetNextInstalledEffect(key, &next) != A_Err_NONE
+            || next == AEGP_InstalledEffectKey_NONE) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "installed effect traversal failed");
+        }
+        key = next;
+        if (static_cast<std::uint64_t>(index) < start
+            || static_cast<std::uint64_t>(index) >= end) {
+          continue;
+        }
+        std::array<A_char, AEGP_MAX_EFFECT_NAME_SIZE> name{};
+        std::array<A_char, AEGP_MAX_EFFECT_MATCH_NAME_SIZE> match_name{};
+        std::array<A_char, AEGP_MAX_EFFECT_CATEGORY_NAME_SIZE> category{};
+        if (effect_suite->AEGP_GetEffectName(key, name.data()) != A_Err_NONE
+            || effect_suite->AEGP_GetEffectMatchName(
+                key, match_name.data()) != A_Err_NONE
+            || effect_suite->AEGP_GetEffectCategory(
+                key, category.data()) != A_Err_NONE
+            || std::find(name.begin(), name.end(), '\0') == name.end()
+            || std::find(match_name.begin(), match_name.end(), '\0')
+                == match_name.end()
+            || std::find(category.begin(), category.end(), '\0') == category.end()) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "installed effect metadata was not bounded");
+        }
+        if (!first) output << ',';
+        first = false;
+        output << "{\"category\":" << quoted(category.data())
+               << ",\"displayName\":" << quoted(name.data())
+               << ",\"installedEffectKey\":" << key
+               << ",\"matchName\":" << quoted(match_name.data()) << "}";
+      }
+      output << "],\"hasMore\":" << (end < static_cast<std::uint64_t>(count) ? "true" : "false")
+             << ",\"limit\":" << command.limit
+             << ",\"nextOffset\":";
+      if (end < static_cast<std::uint64_t>(count)) output << end;
+      else output << "null";
+      output << ",\"offset\":" << start
+             << ",\"returned\":" << (end - start)
+             << ",\"total\":" << count << "}";
+      return HostNativeMediaResult::success(output.str());
+    }
+
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    const bool effect_operation = command.operation == "effects-layer-list"
+        || command.operation == "effect-details"
+        || command.operation == "effect-enabled"
+        || command.operation == "effect-reorder"
+        || command.operation == "effect-duplicate"
+        || command.operation == "effect-delete";
+    if (effect_operation) {
+      if (project_suite.get() == nullptr || item_suite.get() == nullptr
+          || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+          || memory_suite.get() == nullptr || effect_suite.get() == nullptr
+          || utility_suite.get() == nullptr) {
+        return HostNativeMediaResult::failure(
+            "NATIVE_UNSUPPORTED", "required native effect suites are unavailable");
+      }
+      if (!command.layer_locator.has_value()) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "layerLocator is required",
+            "params.arguments.layerLocator");
+      }
+      const auto resolved = resolve_layer(
+          project_suite.get(), item_suite.get(), comp_suite.get(),
+          layer_suite.get(), memory_suite.get(), *command.layer_locator,
+          command.host_instance_id, command.session_id, work_deadline);
+      if (!resolved.has_value()) {
+        return HostNativeMediaResult::failure(
+            "STALE_LOCATOR", "layerLocator cannot be resolved in the open project",
+            "params.arguments.layerLocator");
+      }
+      const auto effect_metadata = [&](A_long zero_index)
+          -> std::optional<std::string> {
+        AEGP_EffectRefH raw = nullptr;
+        if (effect_suite->AEGP_GetLayerEffectByIndex(
+                plugin_id_, resolved->layer, zero_index, &raw) != A_Err_NONE
+            || raw == nullptr) return std::nullopt;
+        EffectRefOwner owner(effect_suite.get(), raw);
+        AEGP_InstalledEffectKey key = AEGP_InstalledEffectKey_NONE;
+        AEGP_EffectFlags flags = AEGP_EffectFlags_NONE;
+        if (effect_suite->AEGP_GetInstalledKeyFromLayerEffect(
+                owner.get(), &key) != A_Err_NONE
+            || key == AEGP_InstalledEffectKey_NONE
+            || effect_suite->AEGP_GetEffectFlags(owner.get(), &flags) != A_Err_NONE) {
+          return std::nullopt;
+        }
+        std::array<A_char, AEGP_MAX_EFFECT_NAME_SIZE> name{};
+        std::array<A_char, AEGP_MAX_EFFECT_MATCH_NAME_SIZE> match_name{};
+        std::array<A_char, AEGP_MAX_EFFECT_CATEGORY_NAME_SIZE> category{};
+        if (effect_suite->AEGP_GetEffectName(key, name.data()) != A_Err_NONE
+            || effect_suite->AEGP_GetEffectMatchName(
+                key, match_name.data()) != A_Err_NONE
+            || effect_suite->AEGP_GetEffectCategory(
+                key, category.data()) != A_Err_NONE
+            || std::find(name.begin(), name.end(), '\0') == name.end()
+            || std::find(match_name.begin(), match_name.end(), '\0')
+                == match_name.end()
+            || std::find(category.begin(), category.end(), '\0') == category.end()) {
+          return std::nullopt;
+        }
+        return std::string("{\"active\":")
+            + ((flags & AEGP_EffectFlags_ACTIVE) != 0 ? "true" : "false")
+            + ",\"audioOnly\":"
+            + ((flags & AEGP_EffectFlags_AUDIO_ONLY) != 0 ? "true" : "false")
+            + ",\"audioToo\":"
+            + ((flags & AEGP_EffectFlags_AUDIO_TOO) != 0 ? "true" : "false")
+            + ",\"category\":" + quoted(category.data())
+            + ",\"displayName\":" + quoted(name.data())
+            + ",\"effectIndex\":" + std::to_string(zero_index + 1)
+            + ",\"installedEffectKey\":" + std::to_string(key)
+            + ",\"matchName\":" + quoted(match_name.data())
+            + ",\"missing\":"
+            + ((flags & AEGP_EffectFlags_MISSING) != 0 ? "true" : "false")
+            + "}";
+      };
+      A_long count = 0;
+      if (effect_suite->AEGP_GetLayerNumEffects(resolved->layer, &count) != A_Err_NONE
+          || count < 0 || count > kMaximumLayerEffects) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "layer effect count was unavailable");
+      }
+      if (command.operation == "effects-layer-list") {
+        const std::uint64_t start = std::min<std::uint64_t>(
+            command.offset, static_cast<std::uint64_t>(count));
+        const std::uint64_t end = std::min<std::uint64_t>(
+            static_cast<std::uint64_t>(count), start + command.limit);
+        std::ostringstream output;
+        output << operation_prefix() << ",\"effects\":[";
+        for (std::uint64_t index = start; index < end; ++index) {
+          if (budget_expired()) {
+            return HostNativeMediaResult::failure(
+                "DEADLINE_EXCEEDED", "layer effect traversal budget elapsed");
+          }
+          const auto metadata = effect_metadata(static_cast<A_long>(index));
+          if (!metadata.has_value()) {
+            return HostNativeMediaResult::failure(
+                "CAPABILITY_FAILED", "layer effect metadata was unavailable");
+          }
+          if (index != start) output << ',';
+          output << *metadata;
+        }
+        output << "],\"hasMore\":"
+               << (end < static_cast<std::uint64_t>(count) ? "true" : "false")
+               << ",\"layerLocator\":" << locator_json(*command.layer_locator)
+               << ",\"limit\":" << command.limit << ",\"nextOffset\":";
+        if (end < static_cast<std::uint64_t>(count)) output << end;
+        else output << "null";
+        output << ",\"offset\":" << start << ",\"returned\":" << (end - start)
+               << ",\"total\":" << count << "}";
+        return HostNativeMediaResult::success(output.str());
+      }
+      if (command.effect_index < 1
+          || command.effect_index > static_cast<std::uint64_t>(count)) {
+        return HostNativeMediaResult::failure(
+            "PRECONDITION_FAILED", "effectIndex is outside the current effect stack",
+            "params.arguments.effectIndex");
+      }
+      AEGP_EffectRefH raw = nullptr;
+      if (effect_suite->AEGP_GetLayerEffectByIndex(
+              plugin_id_, resolved->layer,
+              static_cast<A_long>(command.effect_index - 1), &raw) != A_Err_NONE
+          || raw == nullptr) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "the target effect could not be acquired");
+      }
+      EffectRefOwner target(effect_suite.get(), raw);
+      AEGP_InstalledEffectKey target_key = AEGP_InstalledEffectKey_NONE;
+      AEGP_EffectFlags before_flags = AEGP_EffectFlags_NONE;
+      if (effect_suite->AEGP_GetInstalledKeyFromLayerEffect(
+              target.get(), &target_key) != A_Err_NONE
+          || target_key != command.installed_effect_key
+          || effect_suite->AEGP_GetEffectFlags(
+              target.get(), &before_flags) != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "STALE_LOCATOR", "effect reference no longer matches the requested installed key",
+            "params.arguments.installedEffectKey");
+      }
+      if (command.operation == "effect-details") {
+        const auto metadata = effect_metadata(
+            static_cast<A_long>(command.effect_index - 1));
+        if (!metadata.has_value()) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "effect details were unavailable");
+        }
+        return HostNativeMediaResult::success(
+            operation_prefix() + ",\"effect\":" + *metadata
+            + ",\"layerLocator\":" + locator_json(*command.layer_locator) + "}");
+      }
+      if (command.operation == "effect-enabled"
+          && ((before_flags & AEGP_EffectFlags_ACTIVE) != 0) == *command.enabled) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT",
+            "effect enabled state already matches the requested value",
+            "params.arguments.enabled");
+      }
+      if (command.operation == "effect-reorder") {
+        if (command.target_index < 1
+            || command.target_index > static_cast<std::uint64_t>(count)) {
+          return HostNativeMediaResult::failure(
+              "INVALID_ARGUMENT", "targetIndex is outside the current effect stack",
+              "params.arguments.targetIndex");
+        }
+        if (command.target_index == command.effect_index) {
+          return HostNativeMediaResult::failure(
+              "INVALID_ARGUMENT",
+              "targetIndex already matches the effect's current position",
+              "params.arguments.targetIndex");
+        }
+      }
+      if (utility_suite->AEGP_StartUndoGroup(
+              "ae-mcp: Edit native effect stack") != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "could not start the After Effects undo group");
+      }
+      UndoGroupOwner undo(utility_suite.get());
+      undo.mark_started();
+      A_Err mutation_error = A_Err_GENERIC;
+      AEGP_EffectRefH duplicate_raw = nullptr;
+      if (command.operation == "effect-enabled") {
+        const AEGP_EffectFlags next = *command.enabled
+            ? AEGP_EffectFlags_ACTIVE : AEGP_EffectFlags_NONE;
+        mutation_error = effect_suite->AEGP_SetEffectFlags(
+            target.get(), AEGP_EffectFlags_ACTIVE, next);
+      } else if (command.operation == "effect-reorder") {
+        mutation_error = effect_suite->AEGP_ReorderEffect(
+            target.get(), static_cast<A_long>(command.target_index - 1));
+      } else if (command.operation == "effect-duplicate") {
+        mutation_error = effect_suite->AEGP_DuplicateEffect(
+            target.get(), &duplicate_raw);
+      } else if (command.operation == "effect-delete") {
+        mutation_error = effect_suite->AEGP_DeleteLayerEffect(target.get());
+      }
+      EffectRefOwner duplicate(effect_suite.get(), duplicate_raw);
+      const A_Err end_error = undo.finish();
+      A_long after_count = 0;
+      if (mutation_error != A_Err_NONE || end_error != A_Err_NONE
+          || effect_suite->AEGP_GetLayerNumEffects(
+              resolved->layer, &after_count) != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "effect stack mutation may have completed but readback or Undo close failed");
+      }
+      if (command.operation == "effect-enabled") {
+        AEGP_EffectFlags after_flags = AEGP_EffectFlags_NONE;
+        if (effect_suite->AEGP_GetEffectFlags(
+                target.get(), &after_flags) != A_Err_NONE
+            || ((after_flags & AEGP_EffectFlags_ACTIVE) != 0) != *command.enabled
+            || after_count != count) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "effect enabled state did not match the requested readback");
+        }
+        return HostNativeMediaResult::success(
+            operation_prefix() + ",\"afterEnabled\":"
+            + (*command.enabled ? "true" : "false")
+            + ",\"beforeEnabled\":"
+            + ((before_flags & AEGP_EffectFlags_ACTIVE) != 0 ? "true" : "false")
+            + ",\"changed\":"
+            + ((((before_flags & AEGP_EffectFlags_ACTIVE) != 0) != *command.enabled)
+                ? "true" : "false")
+            + ",\"effectIndex\":" + std::to_string(command.effect_index)
+            + ",\"installedEffectKey\":" + std::to_string(target_key) + "}");
+      }
+      const A_long expected_count = command.operation == "effect-duplicate"
+          ? count + 1 : command.operation == "effect-delete" ? count - 1 : count;
+      if (after_count != expected_count) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "effect stack count did not match the mutation");
+      }
+      if (command.operation == "effect-reorder") {
+        AEGP_EffectRefH reordered_raw = nullptr;
+        AEGP_InstalledEffectKey reordered_key = AEGP_InstalledEffectKey_NONE;
+        if (effect_suite->AEGP_GetLayerEffectByIndex(
+                plugin_id_, resolved->layer,
+                static_cast<A_long>(command.target_index - 1),
+                &reordered_raw) != A_Err_NONE
+            || reordered_raw == nullptr) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "effect reorder completed without a target-position readback");
+        }
+        EffectRefOwner reordered(effect_suite.get(), reordered_raw);
+        if (effect_suite->AEGP_GetInstalledKeyFromLayerEffect(
+                reordered.get(), &reordered_key) != A_Err_NONE
+            || reordered_key != target_key) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "effect reorder did not place the requested installed effect at targetIndex");
+        }
+      }
+      if (command.operation == "effect-duplicate") {
+        AEGP_InstalledEffectKey duplicate_key = AEGP_InstalledEffectKey_NONE;
+        if (duplicate.get() == nullptr
+            || effect_suite->AEGP_GetInstalledKeyFromLayerEffect(
+                duplicate.get(), &duplicate_key) != A_Err_NONE
+            || duplicate_key != target_key) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "duplicated effect identity did not match the source installed effect");
+        }
+      }
+      bool invalidated = false;
+      try {
+        invalidated = graph_.invalidate_project();
+      } catch (...) {
+        invalidated = false;
+      }
+      if (!invalidated) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "effect stack changed but fresh locator generation failed");
+      }
+      const ObjectLocator fresh_layer = graph_.layer_locator(
+          resolved->composition_item_id, resolved->layer_id,
+          command.host_instance_id, command.session_id);
+      std::ostringstream output;
+      output << operation_prefix() << ",\"afterCount\":" << after_count
+             << ",\"beforeCount\":" << count << ",\"changed\":true"
+             << ",\"installedEffectKey\":" << target_key
+             << ",\"layerLocator\":" << locator_json(fresh_layer);
+      if (command.operation == "effect-reorder") {
+        output << ",\"afterIndex\":" << command.target_index
+               << ",\"beforeIndex\":" << command.effect_index;
+      }
+      output << "}";
+      return HostNativeMediaResult::success(output.str());
+    }
+
+    const bool mask_operation = command.operation == "masks-list"
+        || command.operation == "mask-details"
+        || command.operation == "mask-path"
+        || command.operation == "mask-create"
+        || command.operation == "mask-properties"
+        || command.operation == "mask-duplicate"
+        || command.operation == "mask-delete";
+    if (mask_operation) {
+      SuiteLease<AEGP_MaskSuite6> mask_suite(
+          basic_, kAEGPMaskSuite, kAEGPMaskSuiteVersion6);
+      SuiteLease<AEGP_MaskOutlineSuite3> outline_suite(
+          basic_, kAEGPMaskOutlineSuite, kAEGPMaskOutlineSuiteVersion3);
+      SuiteLease<AEGP_StreamSuite6> stream_suite(
+          basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+      SuiteLease<AEGP_DynamicStreamSuite4> dynamic_suite(
+          basic_, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4);
+      if (project_suite.get() == nullptr || item_suite.get() == nullptr
+          || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+          || memory_suite.get() == nullptr || utility_suite.get() == nullptr
+          || mask_suite.get() == nullptr || outline_suite.get() == nullptr
+          || stream_suite.get() == nullptr || dynamic_suite.get() == nullptr) {
+        return HostNativeMediaResult::failure(
+            "NATIVE_UNSUPPORTED", "required native mask suites are unavailable");
+      }
+      if (!command.layer_locator.has_value()) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "layerLocator is required",
+            "params.arguments.layerLocator");
+      }
+      const auto resolved = resolve_layer(
+          project_suite.get(), item_suite.get(), comp_suite.get(),
+          layer_suite.get(), memory_suite.get(), *command.layer_locator,
+          command.host_instance_id, command.session_id, work_deadline);
+      if (!resolved.has_value()) {
+        return HostNativeMediaResult::failure(
+            "STALE_LOCATOR", "layerLocator cannot be resolved in the open project",
+            "params.arguments.layerLocator");
+      }
+      const auto mode_name = [](PF_MaskMode mode) -> std::optional<std::string_view> {
+        switch (mode) {
+          case PF_MaskMode_NONE: return "none";
+          case PF_MaskMode_ADD: return "add";
+          case PF_MaskMode_SUBTRACT: return "subtract";
+          case PF_MaskMode_INTERSECT: return "intersect";
+          case PF_MaskMode_LIGHTEN: return "lighten";
+          case PF_MaskMode_DARKEN: return "darken";
+          case PF_MaskMode_DIFFERENCE: return "difference";
+          default: return std::nullopt;
+        }
+      };
+      const auto mode_value = [](std::string_view mode) -> std::optional<PF_MaskMode> {
+        if (mode == "none") return PF_MaskMode_NONE;
+        if (mode == "add") return PF_MaskMode_ADD;
+        if (mode == "subtract") return PF_MaskMode_SUBTRACT;
+        if (mode == "intersect") return PF_MaskMode_INTERSECT;
+        if (mode == "lighten") return PF_MaskMode_LIGHTEN;
+        if (mode == "darken") return PF_MaskMode_DARKEN;
+        if (mode == "difference") return PF_MaskMode_DIFFERENCE;
+        return std::nullopt;
+      };
+      const auto motion_name = [](AEGP_MaskMBlur value)
+          -> std::optional<std::string_view> {
+        if (value == AEGP_MaskMBlur_SAME_AS_LAYER) return "same-as-layer";
+        if (value == AEGP_MaskMBlur_OFF) return "off";
+        if (value == AEGP_MaskMBlur_ON) return "on";
+        return std::nullopt;
+      };
+      const auto motion_value = [](std::string_view value)
+          -> std::optional<AEGP_MaskMBlur> {
+        if (value == "same-as-layer") return AEGP_MaskMBlur_SAME_AS_LAYER;
+        if (value == "off") return AEGP_MaskMBlur_OFF;
+        if (value == "on") return AEGP_MaskMBlur_ON;
+        return std::nullopt;
+      };
+      const auto falloff_name = [](AEGP_MaskFeatherFalloff value)
+          -> std::optional<std::string_view> {
+        if (value == AEGP_MaskFeatherFalloff_SMOOTH) return "smooth";
+        if (value == AEGP_MaskFeatherFalloff_LINEAR) return "linear";
+        return std::nullopt;
+      };
+      const auto falloff_value = [](std::string_view value)
+          -> std::optional<AEGP_MaskFeatherFalloff> {
+        if (value == "smooth") return AEGP_MaskFeatherFalloff_SMOOTH;
+        if (value == "linear") return AEGP_MaskFeatherFalloff_LINEAR;
+        return std::nullopt;
+      };
+      const auto color_channel = [](A_FpLong value) -> std::uint16_t {
+        const double bounded = std::clamp<double>(value, 0.0, 1.0);
+        return static_cast<std::uint16_t>(std::llround(bounded * 255.0));
+      };
+      const auto mask_snapshot = [&](AEGP_MaskRefH mask, A_long zero_index)
+          -> std::optional<std::string> {
+        AEGP_MaskIDVal id = AEGP_MaskIDVal_NONE;
+        A_Boolean inverted = FALSE;
+        PF_MaskMode mode = PF_MaskMode_NONE;
+        AEGP_MaskMBlur motion = AEGP_MaskMBlur_SAME_AS_LAYER;
+        AEGP_MaskFeatherFalloff falloff = AEGP_MaskFeatherFalloff_SMOOTH;
+        AEGP_ColorVal color{};
+        A_Boolean locked = FALSE;
+        A_Boolean roto = FALSE;
+        if (mask_suite->AEGP_GetMaskID(mask, &id) != A_Err_NONE
+            || id == AEGP_MaskIDVal_NONE
+            || mask_suite->AEGP_GetMaskInvert(mask, &inverted) != A_Err_NONE
+            || mask_suite->AEGP_GetMaskMode(mask, &mode) != A_Err_NONE
+            || mask_suite->AEGP_GetMaskMotionBlurState(mask, &motion) != A_Err_NONE
+            || mask_suite->AEGP_GetMaskFeatherFalloff(mask, &falloff) != A_Err_NONE
+            || mask_suite->AEGP_GetMaskColor(mask, &color) != A_Err_NONE
+            || mask_suite->AEGP_GetMaskLockState(mask, &locked) != A_Err_NONE
+            || mask_suite->AEGP_GetMaskIsRotoBezier(mask, &roto) != A_Err_NONE) {
+          return std::nullopt;
+        }
+        const auto mode_text = mode_name(mode);
+        const auto motion_text = motion_name(motion);
+        const auto falloff_text = falloff_name(falloff);
+        if (!mode_text.has_value() || !motion_text.has_value()
+            || !falloff_text.has_value()) return std::nullopt;
+        return std::string("{\"color\":{\"alpha\":")
+            + std::to_string(color_channel(color.alphaF))
+            + ",\"blue\":" + std::to_string(color_channel(color.blueF))
+            + ",\"green\":" + std::to_string(color_channel(color.greenF))
+            + ",\"red\":" + std::to_string(color_channel(color.redF))
+            + "},\"featherFalloff\":" + quoted(*falloff_text)
+            + ",\"inverted\":" + (inverted ? "true" : "false")
+            + ",\"locked\":" + (locked ? "true" : "false")
+            + ",\"maskId\":" + std::to_string(id)
+            + ",\"maskIndex\":" + std::to_string(zero_index + 1)
+            + ",\"mode\":" + quoted(*mode_text)
+            + ",\"motionBlur\":" + quoted(*motion_text)
+            + ",\"rotoBezier\":" + (roto ? "true" : "false") + "}";
+      };
+      A_long count = 0;
+      if (mask_suite->AEGP_GetLayerNumMasks(resolved->layer, &count) != A_Err_NONE
+          || count < 0 || count > 1024) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "layer mask count was unavailable");
+      }
+      if (command.operation == "masks-list") {
+        const std::uint64_t start = std::min<std::uint64_t>(
+            command.offset, static_cast<std::uint64_t>(count));
+        const std::uint64_t end = std::min<std::uint64_t>(
+            static_cast<std::uint64_t>(count), start + command.limit);
+        std::ostringstream output;
+        output << operation_prefix() << ",\"hasMore\":"
+               << (end < static_cast<std::uint64_t>(count) ? "true" : "false")
+               << ",\"layerLocator\":" << locator_json(*command.layer_locator)
+               << ",\"limit\":" << command.limit << ",\"masks\":[";
+        for (std::uint64_t index = start; index < end; ++index) {
+          AEGP_MaskRefH raw = nullptr;
+          if (budget_expired()
+              || mask_suite->AEGP_GetLayerMaskByIndex(
+                  resolved->layer, static_cast<A_long>(index), &raw) != A_Err_NONE
+              || raw == nullptr) {
+            return HostNativeMediaResult::failure(
+                budget_expired() ? "DEADLINE_EXCEEDED" : "CAPABILITY_FAILED",
+                "layer mask traversal failed");
+          }
+          MaskRefOwner mask(mask_suite.get(), raw);
+          const auto snapshot = mask_snapshot(mask.get(), static_cast<A_long>(index));
+          if (!snapshot.has_value()) {
+            return HostNativeMediaResult::failure(
+                "CAPABILITY_FAILED", "mask metadata was unavailable");
+          }
+          if (index != start) output << ',';
+          output << *snapshot;
+        }
+        output << "],\"nextOffset\":";
+        if (end < static_cast<std::uint64_t>(count)) output << end;
+        else output << "null";
+        output << ",\"offset\":" << start << ",\"returned\":" << (end - start)
+               << ",\"total\":" << count << "}";
+        return HostNativeMediaResult::success(output.str());
+      }
+
+      AEGP_MaskRefH raw = nullptr;
+      std::optional<MaskRefOwner> target;
+      if (command.operation != "mask-create") {
+        if (command.mask_index < 1
+            || command.mask_index > static_cast<std::uint64_t>(count)
+            || mask_suite->AEGP_GetLayerMaskByIndex(
+                resolved->layer, static_cast<A_long>(command.mask_index - 1), &raw)
+                != A_Err_NONE
+            || raw == nullptr) {
+          return HostNativeMediaResult::failure(
+              "PRECONDITION_FAILED", "maskIndex is outside the current mask stack",
+              "params.arguments.maskIndex");
+        }
+        target.emplace(mask_suite.get(), raw);
+        AEGP_MaskIDVal actual_id = AEGP_MaskIDVal_NONE;
+        if (mask_suite->AEGP_GetMaskID(target->get(), &actual_id) != A_Err_NONE
+            || actual_id != command.mask_id) {
+          return HostNativeMediaResult::failure(
+              "STALE_LOCATOR", "mask reference no longer matches maskId",
+              "params.arguments.maskId");
+        }
+      }
+      if (command.operation == "mask-details") {
+        const auto snapshot = mask_snapshot(
+            target->get(), static_cast<A_long>(command.mask_index - 1));
+        if (!snapshot.has_value()) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "mask details were unavailable");
+        }
+        return HostNativeMediaResult::success(
+            operation_prefix() + ",\"layerLocator\":"
+            + locator_json(*command.layer_locator) + ",\"mask\":" + *snapshot + "}");
+      }
+      const auto read_path = [&](AEGP_MaskRefH mask)
+          -> std::optional<std::string> {
+        AEGP_StreamRefH stream_raw = nullptr;
+        if (stream_suite->AEGP_GetNewMaskStream(
+                plugin_id_, mask, AEGP_MaskStream_OUTLINE, &stream_raw) != A_Err_NONE
+            || stream_raw == nullptr) return std::nullopt;
+        StreamRefOwner stream(stream_suite.get(), stream_raw);
+        A_Time current{};
+        if (item_suite->AEGP_GetItemCurrentTime(
+                resolved->composition_item, &current) != A_Err_NONE
+            || current.scale <= 0) return std::nullopt;
+        StreamValueOwner value(stream_suite.get());
+        if (stream_suite->AEGP_GetNewStreamValue(
+                plugin_id_, stream.get(), AEGP_LTimeMode_CompTime,
+                &current, TRUE, value.out()) != A_Err_NONE) return std::nullopt;
+        value.mark_initialized();
+        if (value.value().val.mask == nullptr) return std::nullopt;
+        A_Boolean open = FALSE;
+        A_long segments = 0;
+        if (outline_suite->AEGP_IsMaskOutlineOpen(
+                value.value().val.mask, &open) != A_Err_NONE
+            || outline_suite->AEGP_GetMaskOutlineNumSegments(
+                value.value().val.mask, &segments) != A_Err_NONE
+            || segments < 0 || segments > 128) return std::nullopt;
+        const A_long vertices = segments == 0 ? 0 : open ? segments + 1 : segments;
+        std::ostringstream output;
+        output << "{\"closed\":" << (open ? "false" : "true")
+               << ",\"vertices\":[";
+        for (A_long index = 0; index < vertices; ++index) {
+          AEGP_MaskVertex vertex{};
+          if (outline_suite->AEGP_GetMaskOutlineVertexInfo(
+                  value.value().val.mask, index, &vertex) != A_Err_NONE) {
+            return std::nullopt;
+          }
+          const auto x = decimal_string(vertex.x);
+          const auto y = decimal_string(vertex.y);
+          const auto in_x = decimal_string(vertex.tan_in_x);
+          const auto in_y = decimal_string(vertex.tan_in_y);
+          const auto out_x = decimal_string(vertex.tan_out_x);
+          const auto out_y = decimal_string(vertex.tan_out_y);
+          if (!x || !y || !in_x || !in_y || !out_x || !out_y) return std::nullopt;
+          if (index != 0) output << ',';
+          output << "{\"inTangent\":[" << quoted(*in_x) << ',' << quoted(*in_y)
+                 << "],\"outTangent\":[" << quoted(*out_x) << ',' << quoted(*out_y)
+                 << "],\"position\":[" << quoted(*x) << ',' << quoted(*y) << "]}";
+        }
+        output << "]}";
+        return output.str();
+      };
+      if (command.operation == "mask-path" && !command.mask_closed.has_value()) {
+        const auto path = read_path(target->get());
+        if (!path.has_value()) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "mask path was unavailable");
+        }
+        return HostNativeMediaResult::success(
+            operation_prefix() + ",\"layerLocator\":"
+            + locator_json(*command.layer_locator)
+            + ",\"maskId\":" + std::to_string(command.mask_id)
+            + ",\"maskIndex\":" + std::to_string(command.mask_index)
+            + ",\"path\":" + *path + "}");
+      }
+      if (command.operation == "mask-duplicate"
+          && (command.target_index < 1
+              || command.target_index
+                  > static_cast<std::uint64_t>(count) + 1U)) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "targetIndex is outside the resulting mask stack",
+            "params.arguments.targetIndex");
+      }
+      if (utility_suite->AEGP_StartUndoGroup(
+              "ae-mcp: Edit native mask") != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "could not start the After Effects undo group");
+      }
+      UndoGroupOwner undo(utility_suite.get());
+      undo.mark_started();
+      A_Err mutation_error = A_Err_NONE;
+      A_long created_index = -1;
+      AEGP_MaskRefH created_raw = nullptr;
+      if (command.operation == "mask-create") {
+        mutation_error = mask_suite->AEGP_CreateNewMask(
+            resolved->layer, &created_raw, &created_index);
+      } else if (command.operation == "mask-delete") {
+        mutation_error = mask_suite->AEGP_DeleteMaskFromLayer(target->get());
+      } else if (command.operation == "mask-duplicate") {
+        mutation_error = mask_suite->AEGP_DuplicateMask(
+            target->get(), &created_raw);
+        if (mutation_error == A_Err_NONE && created_raw != nullptr) {
+          AEGP_StreamRefH duplicate_stream_raw = nullptr;
+          if (dynamic_suite->AEGP_GetNewStreamRefForMask(
+                  plugin_id_, created_raw, &duplicate_stream_raw) != A_Err_NONE
+              || duplicate_stream_raw == nullptr) {
+            mutation_error = A_Err_GENERIC;
+          } else {
+            StreamRefOwner duplicate_stream(stream_suite.get(), duplicate_stream_raw);
+            mutation_error = dynamic_suite->AEGP_ReorderStream(
+                duplicate_stream.get(), static_cast<A_long>(command.target_index - 1));
+          }
+        }
+      } else if (command.operation == "mask-properties") {
+        if (command.mask_properties.mode.has_value()) {
+          const auto value = mode_value(*command.mask_properties.mode);
+          mutation_error = value.has_value()
+              ? mask_suite->AEGP_SetMaskMode(target->get(), *value) : A_Err_GENERIC;
+        }
+        if (mutation_error == A_Err_NONE
+            && command.mask_properties.inverted.has_value()) {
+          mutation_error = mask_suite->AEGP_SetMaskInvert(
+              target->get(), *command.mask_properties.inverted ? TRUE : FALSE);
+        }
+        if (mutation_error == A_Err_NONE
+            && command.mask_properties.motion_blur.has_value()) {
+          const auto value = motion_value(*command.mask_properties.motion_blur);
+          mutation_error = value.has_value()
+              ? mask_suite->AEGP_SetMaskMotionBlurState(target->get(), *value)
+              : A_Err_GENERIC;
+        }
+        if (mutation_error == A_Err_NONE
+            && command.mask_properties.feather_falloff.has_value()) {
+          const auto value = falloff_value(*command.mask_properties.feather_falloff);
+          mutation_error = value.has_value()
+              ? mask_suite->AEGP_SetMaskFeatherFalloff(target->get(), *value)
+              : A_Err_GENERIC;
+        }
+        if (mutation_error == A_Err_NONE
+            && command.mask_properties.color.has_value()) {
+          const auto& value = *command.mask_properties.color;
+          const AEGP_ColorVal color{
+              static_cast<A_FpLong>(value.alpha) / 255.0,
+              static_cast<A_FpLong>(value.red) / 255.0,
+              static_cast<A_FpLong>(value.green) / 255.0,
+              static_cast<A_FpLong>(value.blue) / 255.0};
+          mutation_error = mask_suite->AEGP_SetMaskColor(target->get(), &color);
+        }
+        if (mutation_error == A_Err_NONE
+            && command.mask_properties.roto_bezier.has_value()) {
+          mutation_error = mask_suite->AEGP_SetMaskIsRotoBezier(
+              target->get(), *command.mask_properties.roto_bezier ? TRUE : FALSE);
+        }
+        // Apply the lock state last. A combined patch that locks a mask must
+        // not prevent the earlier fields in the same atomic Undo group from
+        // being changed.
+        if (mutation_error == A_Err_NONE
+            && command.mask_properties.locked.has_value()) {
+          mutation_error = mask_suite->AEGP_SetMaskLockState(
+              target->get(), *command.mask_properties.locked ? TRUE : FALSE);
+        }
+      } else if (command.operation == "mask-path") {
+        AEGP_StreamRefH stream_raw = nullptr;
+        A_Time current{};
+        if (stream_suite->AEGP_GetNewMaskStream(
+                plugin_id_, target->get(), AEGP_MaskStream_OUTLINE, &stream_raw)
+                != A_Err_NONE
+            || stream_raw == nullptr
+            || item_suite->AEGP_GetItemCurrentTime(
+                resolved->composition_item, &current) != A_Err_NONE
+            || current.scale <= 0) {
+          mutation_error = A_Err_GENERIC;
+        } else {
+          StreamRefOwner stream(stream_suite.get(), stream_raw);
+          StreamValueOwner value(stream_suite.get());
+          if (stream_suite->AEGP_GetNewStreamValue(
+                  plugin_id_, stream.get(), AEGP_LTimeMode_CompTime,
+                  &current, TRUE, value.out()) != A_Err_NONE) {
+            mutation_error = A_Err_GENERIC;
+          } else {
+            value.mark_initialized();
+            A_long segments = 0;
+            A_Boolean open = FALSE;
+            if (value.value().val.mask == nullptr
+                || outline_suite->AEGP_IsMaskOutlineOpen(
+                    value.value().val.mask, &open) != A_Err_NONE
+                || outline_suite->AEGP_GetMaskOutlineNumSegments(
+                    value.value().val.mask, &segments) != A_Err_NONE
+                || segments < 0 || segments > 128) {
+              mutation_error = A_Err_GENERIC;
+            } else {
+              const A_long current_vertices =
+                  segments == 0 ? 0 : open ? segments + 1 : segments;
+              for (A_long index = current_vertices - 1;
+                   mutation_error == A_Err_NONE && index >= 0; --index) {
+                mutation_error = outline_suite->AEGP_DeleteVertex(
+                    value.value().val.mask, index);
+              }
+              for (std::size_t index = 0;
+                   mutation_error == A_Err_NONE
+                       && index < command.mask_vertices.size(); ++index) {
+                mutation_error = outline_suite->AEGP_CreateVertex(
+                    value.value().val.mask, static_cast<A_long>(index));
+                if (mutation_error != A_Err_NONE) break;
+                const auto parse_decimal = [](const std::string& text)
+                    -> std::optional<double> {
+                  char* end = nullptr;
+                  errno = 0;
+                  const double value = std::strtod(text.c_str(), &end);
+                  if (errno != 0 || end == text.c_str() || *end != '\0'
+                      || !std::isfinite(value)) return std::nullopt;
+                  return value;
+                };
+                const auto& source = command.mask_vertices[index];
+                const auto x = parse_decimal(source.position_x);
+                const auto y = parse_decimal(source.position_y);
+                const auto in_x = parse_decimal(source.in_tangent_x);
+                const auto in_y = parse_decimal(source.in_tangent_y);
+                const auto out_x = parse_decimal(source.out_tangent_x);
+                const auto out_y = parse_decimal(source.out_tangent_y);
+                if (!x || !y || !in_x || !in_y || !out_x || !out_y) {
+                  mutation_error = A_Err_GENERIC;
+                  break;
+                }
+                const AEGP_MaskVertex vertex{
+                    *x, *y, *in_x, *in_y, *out_x, *out_y};
+                mutation_error = outline_suite->AEGP_SetMaskOutlineVertexInfo(
+                    value.value().val.mask, static_cast<A_long>(index), &vertex);
+              }
+              if (mutation_error == A_Err_NONE) {
+                mutation_error = outline_suite->AEGP_SetMaskOutlineOpen(
+                    value.value().val.mask, *command.mask_closed ? FALSE : TRUE);
+              }
+              if (mutation_error == A_Err_NONE) {
+                mutation_error = stream_suite->AEGP_SetStreamValue(
+                    plugin_id_, stream.get(), &value.mutable_value());
+              }
+            }
+          }
+        }
+      }
+      MaskRefOwner created(mask_suite.get(), created_raw);
+      const A_Err end_error = undo.finish();
+      A_long after_count = 0;
+      if (mutation_error != A_Err_NONE || end_error != A_Err_NONE
+          || mask_suite->AEGP_GetLayerNumMasks(
+              resolved->layer, &after_count) != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "mask mutation may have completed but readback or Undo close failed");
+      }
+      if (command.operation == "mask-properties") {
+        const auto after = mask_snapshot(
+            target->get(), static_cast<A_long>(command.mask_index - 1));
+        if (!after.has_value() || after_count != count) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "mask property mutation did not produce a verifiable readback");
+        }
+        return HostNativeMediaResult::success(
+            operation_prefix() + ",\"changed\":true,\"mask\":" + *after + "}");
+      }
+      if (command.operation == "mask-path") {
+        const auto after = read_path(target->get());
+        if (!after.has_value() || after_count != count) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "mask path mutation did not produce a verifiable readback");
+        }
+        return HostNativeMediaResult::success(
+            operation_prefix() + ",\"changed\":true,\"maskId\":"
+            + std::to_string(command.mask_id) + ",\"maskIndex\":"
+            + std::to_string(command.mask_index) + ",\"path\":" + *after + "}");
+      }
+      const A_long expected_count = command.operation == "mask-delete"
+          ? count - 1 : count + 1;
+      if (after_count != expected_count) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "mask stack count did not match the mutation");
+      }
+      AEGP_MaskIDVal created_id = AEGP_MaskIDVal_NONE;
+      if (command.operation != "mask-delete"
+          && (created.get() == nullptr
+              || mask_suite->AEGP_GetMaskID(
+                  created.get(), &created_id) != A_Err_NONE
+              || created_id == AEGP_MaskIDVal_NONE)) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "created mask identity could not be verified");
+      }
+      std::optional<std::uint64_t> verified_created_index;
+      bool deleted_id_still_present = false;
+      for (A_long index = 0; index < after_count; ++index) {
+        AEGP_MaskRefH verify_raw = nullptr;
+        if (mask_suite->AEGP_GetLayerMaskByIndex(
+                resolved->layer, index, &verify_raw) != A_Err_NONE
+            || verify_raw == nullptr) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "mask stack mutation completed without a full identity readback");
+        }
+        MaskRefOwner verify(mask_suite.get(), verify_raw);
+        AEGP_MaskIDVal verify_id = AEGP_MaskIDVal_NONE;
+        if (mask_suite->AEGP_GetMaskID(
+                verify.get(), &verify_id) != A_Err_NONE
+            || verify_id == AEGP_MaskIDVal_NONE) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "mask stack mutation returned an invalid mask identity");
+        }
+        if (created_id != AEGP_MaskIDVal_NONE && verify_id == created_id) {
+          if (verified_created_index.has_value()) {
+            return HostNativeMediaResult::failure(
+                "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "created mask identity appeared more than once");
+          }
+          verified_created_index = static_cast<std::uint64_t>(index + 1);
+        }
+        if (command.operation == "mask-delete" && verify_id == command.mask_id) {
+          deleted_id_still_present = true;
+        }
+      }
+      if (command.operation != "mask-delete"
+          && (!verified_created_index.has_value()
+              || (command.operation == "mask-create"
+                  && *verified_created_index
+                      != static_cast<std::uint64_t>(created_index + 1))
+              || (command.operation == "mask-duplicate"
+                  && *verified_created_index != command.target_index))) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "created mask did not occupy the verified resulting index");
+      }
+      if (deleted_id_still_present) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "deleted mask identity remained in the layer mask stack");
+      }
+      bool invalidated = false;
+      try {
+        invalidated = graph_.invalidate_project();
+      } catch (...) {
+        invalidated = false;
+      }
+      if (!invalidated) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "mask stack changed but fresh locator generation failed");
+      }
+      const ObjectLocator fresh_layer = graph_.layer_locator(
+          resolved->composition_item_id, resolved->layer_id,
+          command.host_instance_id, command.session_id);
+      std::ostringstream output;
+      output << operation_prefix() << ",\"afterCount\":" << after_count
+             << ",\"beforeCount\":" << count << ",\"changed\":true"
+             << ",\"layerLocator\":" << locator_json(fresh_layer);
+      if (created_id != AEGP_MaskIDVal_NONE) {
+        output << ",\"maskId\":" << created_id;
+        output << ",\"maskIndex\":" << *verified_created_index;
+      }
+      output << "}";
+      return HostNativeMediaResult::success(output.str());
+    }
+
+    const bool footage_operation = command.operation == "footage-details"
+        || command.operation == "footage-interpretation"
+        || command.operation == "footage-import"
+        || command.operation == "footage-replace"
+        || command.operation == "footage-proxy"
+        || command.operation == "item-use-proxy";
+    if (!footage_operation) {
+      return HostNativeMediaResult::failure(
+          "NATIVE_UNSUPPORTED", "native media operation is unavailable");
+    }
+    SuiteLease<AEGP_FootageSuite5> footage_suite(
+        basic_, kAEGPFootageSuite, kAEGPFootageSuiteVersion5);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || memory_suite.get() == nullptr || utility_suite.get() == nullptr
+        || footage_suite.get() == nullptr) {
+      return HostNativeMediaResult::failure(
+          "NATIVE_UNSUPPORTED", "required native footage suites are unavailable");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    if (!open.has_value()) {
+      return HostNativeMediaResult::failure(
+          "PRECONDITION_FAILED", "an After Effects project must be open");
+    }
+    const auto resolve_item = [&](const ObjectLocator& locator)
+        -> std::optional<AEGP_ItemH> {
+      const auto item_id = graph_.resolve_project_item(
+          locator, command.host_instance_id, command.session_id);
+      if (!item_id.has_value()) return std::nullopt;
+      return find_project_item(
+          item_suite.get(), open->project, open->root, *item_id, work_deadline);
+    };
+    const auto footage_item = [&](const ObjectLocator& locator)
+        -> std::optional<AEGP_ItemH> {
+      const auto item = resolve_item(locator);
+      AEGP_ItemType type = AEGP_ItemType_NONE;
+      if (!item.has_value()
+          || item_suite->AEGP_GetItemType(*item, &type) != A_Err_NONE
+          || type != AEGP_ItemType_FOOTAGE) return std::nullopt;
+      return item;
+    };
+    const auto footage_path = [&](AEGP_FootageH footage)
+        -> std::optional<std::string> {
+      AEGP_MemHandle handle = nullptr;
+      if (footage_suite->AEGP_GetFootagePath(
+              footage, 0, AEGP_FOOTAGE_MAIN_FILE_INDEX, &handle) != A_Err_NONE) {
+        return std::nullopt;
+      }
+      if (handle == nullptr) return std::string{};
+      MemHandleOwner owner(memory_suite.get(), handle);
+      return owner.utf8();
+    };
+    const auto interpretation_json = [&](const AEGP_FootageInterp& value) {
+      std::string alpha_mode = "straight";
+      if ((value.al.flags & AEGP_AlphaIgnore) != 0) alpha_mode = "ignore";
+      else if ((value.al.flags & AEGP_AlphaPremul) != 0) alpha_mode = "premultiplied";
+      const auto native_fps = decimal_string(value.native_fpsF);
+      const auto conform_fps = decimal_string(value.conform_fpsF);
+      if (!native_fps.has_value() || !conform_fps.has_value()) {
+        return std::optional<std::string>{};
+      }
+      return std::optional<std::string>(
+          std::string("{\"alphaMode\":") + quoted(alpha_mode)
+          + ",\"conformFps\":" + quoted(*conform_fps)
+          + ",\"loopCount\":" + std::to_string(std::max<A_long>(1, value.loop.loops))
+          + ",\"nativeFps\":" + quoted(*native_fps)
+          + ",\"pixelAspect\":{\"denominator\":"
+          + std::to_string(value.pix_aspect_ratio.den)
+          + ",\"numerator\":" + std::to_string(value.pix_aspect_ratio.num)
+          + "},\"premultiplyColor\":{\"alpha\":255,\"blue\":"
+          + std::to_string(value.al.blueCu)
+          + ",\"green\":" + std::to_string(value.al.greenCu)
+          + ",\"red\":" + std::to_string(value.al.redCu) + "}}");
+    };
+    if (command.operation == "footage-details") {
+      if (!command.item_locator.has_value()) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "itemLocator is required",
+            "params.arguments.itemLocator");
+      }
+      const auto item = footage_item(*command.item_locator);
+      if (!item.has_value()) {
+        return HostNativeMediaResult::failure(
+            "STALE_LOCATOR", "itemLocator does not identify footage in the open project",
+            "params.arguments.itemLocator");
+      }
+      AEGP_FootageH footage = nullptr;
+      AEGP_FootageSignature signature = AEGP_FootageSignature_NONE;
+      A_long file_count = 0;
+      A_long files_per_frame = 0;
+      AEGP_ItemFlags flags = 0;
+      A_long width = 0;
+      A_long height = 0;
+      A_Time duration{};
+      A_Ratio pixel_aspect{};
+      const auto name = read_item_name(
+          item_suite.get(), memory_suite.get(), *item);
+      if (!name.has_value()
+          || footage_suite->AEGP_GetMainFootageFromItem(
+              *item, &footage) != A_Err_NONE
+          || footage == nullptr
+          || footage_suite->AEGP_GetFootageSignature(
+              footage, &signature) != A_Err_NONE
+          || footage_suite->AEGP_GetFootageNumFiles(
+              footage, &file_count, &files_per_frame) != A_Err_NONE
+          || item_suite->AEGP_GetItemFlags(*item, &flags) != A_Err_NONE
+          || item_suite->AEGP_GetItemDimensions(
+              *item, &width, &height) != A_Err_NONE
+          || item_suite->AEGP_GetItemDuration(*item, &duration) != A_Err_NONE
+          || item_suite->AEGP_GetItemPixelAspectRatio(
+              *item, &pixel_aspect) != A_Err_NONE
+          || file_count < 0 || files_per_frame < 0
+          || width < 0 || height < 0 || duration.scale <= 0
+          || pixel_aspect.num <= 0 || pixel_aspect.den <= 0) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "footage metadata was unavailable");
+      }
+      const auto path = footage_path(footage);
+      if (!path.has_value()) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "footage source path was unavailable");
+      }
+      std::ostringstream output;
+      output << operation_prefix() << ",\"duration\":{\"scale\":"
+             << duration.scale << ",\"value\":" << duration.value
+             << "},\"fileCount\":" << file_count
+             << ",\"filesPerFrame\":" << files_per_frame
+             << ",\"hasAudio\":" << ((flags & AEGP_ItemFlag_HAS_AUDIO) ? "true" : "false")
+             << ",\"hasProxy\":" << ((flags & AEGP_ItemFlag_HAS_PROXY) ? "true" : "false")
+             << ",\"hasVideo\":" << ((flags & AEGP_ItemFlag_HAS_VIDEO) ? "true" : "false")
+             << ",\"height\":" << height
+             << ",\"itemLocator\":" << locator_json(*command.item_locator)
+             << ",\"missing\":" << ((flags & AEGP_ItemFlag_MISSING) ? "true" : "false")
+             << ",\"name\":" << quoted(*name)
+             << ",\"pixelAspect\":{\"denominator\":" << pixel_aspect.den
+             << ",\"numerator\":" << pixel_aspect.num << "}"
+             << ",\"signature\":" << static_cast<std::int64_t>(signature)
+             << ",\"sourcePath\":";
+      if (path->empty()) output << "null";
+      else output << quoted(*path);
+      output << ",\"still\":" << ((flags & AEGP_ItemFlag_STILL) ? "true" : "false")
+             << ",\"usingProxy\":"
+             << ((flags & AEGP_ItemFlag_USING_PROXY) ? "true" : "false")
+             << ",\"width\":" << width << "}";
+      return HostNativeMediaResult::success(output.str());
+    }
+    if (command.operation == "footage-interpretation"
+        && !command.interpretation.has_value()) {
+      if (!command.item_locator.has_value()) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "itemLocator is required",
+            "params.arguments.itemLocator");
+      }
+      const auto item = footage_item(*command.item_locator);
+      AEGP_FootageInterp interpretation{};
+      if (!item.has_value()
+          || footage_suite->AEGP_GetFootageInterpretation(
+              *item, command.proxy ? TRUE : FALSE, &interpretation) != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "STALE_LOCATOR", "footage interpretation could not be read",
+            "params.arguments.itemLocator");
+      }
+      const auto value = interpretation_json(interpretation);
+      if (!value.has_value()) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "footage interpretation was not finite");
+      }
+      return HostNativeMediaResult::success(
+          operation_prefix() + ",\"interpretation\":" + *value
+          + ",\"itemLocator\":" + locator_json(*command.item_locator)
+          + ",\"proxy\":" + (command.proxy ? "true" : "false") + "}");
+    }
+
+    AEGP_ItemH target_item = nullptr;
+    if (command.operation != "footage-import") {
+      if (!command.item_locator.has_value()) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "itemLocator is required",
+            "params.arguments.itemLocator");
+      }
+      const auto item = footage_item(*command.item_locator);
+      if (!item.has_value()) {
+        return HostNativeMediaResult::failure(
+            "STALE_LOCATOR", "itemLocator does not identify footage in the open project",
+            "params.arguments.itemLocator");
+      }
+      target_item = *item;
+    }
+    if (command.operation == "item-use-proxy") {
+      AEGP_ItemFlags flags = 0;
+      if (item_suite->AEGP_GetItemFlags(target_item, &flags) != A_Err_NONE
+          || (flags & AEGP_ItemFlag_HAS_PROXY) == 0) {
+        return HostNativeMediaResult::failure(
+            "PRECONDITION_FAILED",
+            "item has no verified proxy footage to select",
+            "params.arguments.itemLocator");
+      }
+      if (((flags & AEGP_ItemFlag_USING_PROXY) != 0) == *command.enabled) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT",
+            "proxy selection already matches the requested value",
+            "params.arguments.enabled");
+      }
+    }
+    if (utility_suite->AEGP_StartUndoGroup(
+            "ae-mcp: Edit native footage") != A_Err_NONE) {
+      return HostNativeMediaResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    UndoGroupOwner undo(utility_suite.get());
+    undo.mark_started();
+    A_Err mutation_error = A_Err_NONE;
+    AEGP_ItemH imported_item = nullptr;
+    const auto before_count = count_project_items(
+        item_suite.get(), open->project, open->root);
+    if (!before_count.has_value()) mutation_error = A_Err_GENERIC;
+    if (command.operation == "footage-import"
+        || command.operation == "footage-replace"
+        || command.operation == "footage-proxy") {
+      const auto utf16_path = utf16_bounded_text(command.source_path, 1024, false);
+      if (!utf16_path.has_value()) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "sourcePath is not valid bounded UTF-8",
+            "params.arguments.sourcePath");
+      }
+      AEGP_FileSequenceImportOptions sequence_options{};
+      const AEGP_FileSequenceImportOptions* sequence_pointer = nullptr;
+      if (command.sequence.enabled) {
+        sequence_options.all_in_folderB = TRUE;
+        sequence_options.force_alphabeticalB =
+            command.sequence.force_alphabetical ? TRUE : FALSE;
+        sequence_options.start_frameL = command.sequence.start_frame < 0
+            ? AEGP_ANY_FRAME : command.sequence.start_frame;
+        sequence_options.end_frameL = command.sequence.end_frame < 0
+            ? AEGP_ANY_FRAME : command.sequence.end_frame;
+        sequence_pointer = &sequence_options;
+      }
+      AEGP_FootageH new_raw = nullptr;
+      if (mutation_error == A_Err_NONE) {
+        mutation_error = footage_suite->AEGP_NewFootage(
+            plugin_id_, utf16_path->data(), nullptr, sequence_pointer,
+            AEGP_InterpretationStyle_NO_DIALOG_NO_GUESS, nullptr, &new_raw);
+      }
+      FootageOwner new_footage(footage_suite.get(), new_raw);
+      if (mutation_error == A_Err_NONE && new_raw == nullptr) {
+        mutation_error = A_Err_GENERIC;
+      }
+      if (mutation_error == A_Err_NONE && command.operation == "footage-import") {
+        AEGP_ItemH folder = open->root;
+        if (command.folder_locator.has_value()) {
+          const auto candidate = resolve_item(*command.folder_locator);
+          AEGP_ItemType type = AEGP_ItemType_NONE;
+          if (!candidate.has_value()
+              || item_suite->AEGP_GetItemType(*candidate, &type) != A_Err_NONE
+              || type != AEGP_ItemType_FOLDER) {
+            mutation_error = A_Err_GENERIC;
+          } else {
+            folder = *candidate;
+          }
+        }
+        if (mutation_error == A_Err_NONE) {
+          mutation_error = footage_suite->AEGP_AddFootageToProject(
+              new_footage.get(), folder, &imported_item);
+          if (mutation_error == A_Err_NONE) new_footage.adopted();
+        }
+      } else if (mutation_error == A_Err_NONE
+          && command.operation == "footage-replace") {
+        mutation_error = footage_suite->AEGP_ReplaceItemMainFootage(
+            new_footage.get(), target_item);
+        if (mutation_error == A_Err_NONE) new_footage.adopted();
+      } else if (mutation_error == A_Err_NONE
+          && command.operation == "footage-proxy") {
+        mutation_error = footage_suite->AEGP_SetItemProxyFootage(
+            new_footage.get(), target_item);
+        if (mutation_error == A_Err_NONE) new_footage.adopted();
+      }
+    } else if (command.operation == "footage-interpretation") {
+      AEGP_FootageInterp value{};
+      if (footage_suite->AEGP_GetFootageInterpretation(
+              target_item, command.proxy ? TRUE : FALSE, &value) != A_Err_NONE
+          || !command.interpretation.has_value()) {
+        mutation_error = A_Err_GENERIC;
+      } else {
+        const auto& patch = *command.interpretation;
+        if (patch.loop_count.has_value()) {
+          value.loop.loops = static_cast<A_long>(*patch.loop_count);
+        }
+        if (patch.pixel_aspect_numerator.has_value()) {
+          value.pix_aspect_ratio.num = *patch.pixel_aspect_numerator;
+          value.pix_aspect_ratio.den = *patch.pixel_aspect_denominator;
+        }
+        const auto parse_decimal = [](const std::string& text)
+            -> std::optional<double> {
+          char* end = nullptr;
+          errno = 0;
+          const double parsed = std::strtod(text.c_str(), &end);
+          if (errno != 0 || end == text.c_str() || *end != '\0'
+              || !std::isfinite(parsed) || parsed < 0.0) return std::nullopt;
+          return parsed;
+        };
+        if (patch.native_fps.has_value()) {
+          const auto parsed = parse_decimal(*patch.native_fps);
+          if (!parsed.has_value()) mutation_error = A_Err_GENERIC;
+          else value.native_fpsF = *parsed;
+        }
+        if (mutation_error == A_Err_NONE && patch.conform_fps.has_value()) {
+          const auto parsed = parse_decimal(*patch.conform_fps);
+          if (!parsed.has_value()) mutation_error = A_Err_GENERIC;
+          else value.conform_fpsF = *parsed;
+        }
+        if (mutation_error == A_Err_NONE && patch.alpha_mode.has_value()) {
+          value.al.flags &= ~(AEGP_AlphaPremul | AEGP_AlphaIgnore);
+          if (*patch.alpha_mode == "premultiplied") value.al.flags |= AEGP_AlphaPremul;
+          else if (*patch.alpha_mode == "ignore") value.al.flags |= AEGP_AlphaIgnore;
+        }
+        if (mutation_error == A_Err_NONE && patch.premultiply_color.has_value()) {
+          value.al.redCu = static_cast<A_u_char>(patch.premultiply_color->red);
+          value.al.greenCu = static_cast<A_u_char>(patch.premultiply_color->green);
+          value.al.blueCu = static_cast<A_u_char>(patch.premultiply_color->blue);
+        }
+        if (mutation_error == A_Err_NONE) {
+          mutation_error = footage_suite->AEGP_SetFootageInterpretation(
+              target_item, command.proxy ? TRUE : FALSE, &value);
+        }
+      }
+    } else if (command.operation == "item-use-proxy") {
+      mutation_error = item_suite->AEGP_SetItemUseProxy(
+          target_item, *command.enabled ? TRUE : FALSE);
+    }
+    const A_Err end_error = undo.finish();
+    if (mutation_error != A_Err_NONE || end_error != A_Err_NONE
+        || !before_count.has_value()) {
+      return HostNativeMediaResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "footage mutation may have completed but readback or Undo close failed");
+    }
+    const auto after_count = count_project_items(
+        item_suite.get(), open->project, open->root);
+    if (!after_count.has_value()) {
+      return HostNativeMediaResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "footage mutation completed without a project item count readback");
+    }
+    if (command.operation == "footage-import") {
+      A_long item_id = 0;
+      AEGP_ItemType type = AEGP_ItemType_NONE;
+      if (imported_item == nullptr || *after_count != *before_count + 1
+          || item_suite->AEGP_GetItemID(imported_item, &item_id) != A_Err_NONE
+          || item_suite->AEGP_GetItemType(imported_item, &type) != A_Err_NONE
+          || type != AEGP_ItemType_FOOTAGE) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "imported footage could not be verified");
+      }
+      bool invalidated = false;
+      try {
+        invalidated = graph_.invalidate_project();
+      } catch (...) {
+        invalidated = false;
+      }
+      if (!invalidated) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "footage imported but fresh locator generation failed");
+      }
+      const ObjectLocator locator = graph_.item_locator(
+          item_id, false, command.host_instance_id, command.session_id);
+      return HostNativeMediaResult::success(
+          operation_prefix() + ",\"afterItemCount\":" + std::to_string(*after_count)
+          + ",\"beforeItemCount\":" + std::to_string(*before_count)
+          + ",\"changed\":true,\"itemLocator\":" + locator_json(locator) + "}");
+    }
+    if (*after_count != *before_count) {
+      return HostNativeMediaResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "footage mutation unexpectedly changed the project item count");
+    }
+    if (command.operation == "footage-interpretation") {
+      AEGP_FootageInterp after{};
+      if (footage_suite->AEGP_GetFootageInterpretation(
+              target_item, command.proxy ? TRUE : FALSE, &after) != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "footage interpretation could not be read back");
+      }
+      const auto value = interpretation_json(after);
+      if (!value.has_value()) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "footage interpretation readback was not finite");
+      }
+      return HostNativeMediaResult::success(
+          operation_prefix() + ",\"changed\":true,\"interpretation\":" + *value
+          + ",\"itemLocator\":" + locator_json(*command.item_locator)
+          + ",\"proxy\":" + (command.proxy ? "true" : "false") + "}");
+    }
+    if (command.operation == "item-use-proxy") {
+      AEGP_ItemFlags flags = 0;
+      if (item_suite->AEGP_GetItemFlags(target_item, &flags) != A_Err_NONE
+          || ((flags & AEGP_ItemFlag_USING_PROXY) != 0) != *command.enabled) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "proxy selection did not match the requested readback");
+      }
+      return HostNativeMediaResult::success(
+          operation_prefix() + ",\"afterEnabled\":"
+          + (*command.enabled ? "true" : "false")
+          + ",\"changed\":true,\"itemLocator\":"
+          + locator_json(*command.item_locator) + "}");
+    }
+    AEGP_FootageH readback_footage = nullptr;
+    const A_Err readback_error = command.operation == "footage-proxy"
+        ? footage_suite->AEGP_GetProxyFootageFromItem(
+            target_item, &readback_footage)
+        : footage_suite->AEGP_GetMainFootageFromItem(
+            target_item, &readback_footage);
+    const auto path = readback_error == A_Err_NONE && readback_footage != nullptr
+        ? footage_path(readback_footage) : std::nullopt;
+    if (!path.has_value() || *path != command.source_path) {
+      return HostNativeMediaResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "footage source mutation did not match the requested path readback");
+    }
+    return HostNativeMediaResult::success(
+        operation_prefix() + ",\"changed\":true,\"itemLocator\":"
+        + locator_json(*command.item_locator)
+        + ",\"proxy\":" + (command.operation == "footage-proxy" ? "true" : "false")
+        + "}");
+  }
+
  private:
   struct OpenProject {
     AEGP_ProjectH project{nullptr};
@@ -7988,6 +9430,8 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kLayerPropertyKeyframeTemporalEaseSetContractDigest),
             std::string(kLayerPropertyKeyframeBehaviorSetContractDigest),
             std::string(kLayerPropertyKeyframeDeleteContractDigest),
+            std::string(kNativeMediaReadContractDigest),
+            std::string(kNativeMediaWriteContractDigest),
         },
         *this,
         idle_signal);

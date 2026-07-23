@@ -133,6 +133,10 @@ async def _run(
         details = {"stopReason": "possibly-side-effecting", "message": str(uncertain)}
         return 3
     finally:
+        if not passed:
+            recovered = runtime.recover_zero_call_fixture()
+            if recovered is not None:
+                details = {**details, "zeroCallFixtureRecovery": recovered}
         evidence.finish(
             passed=passed,
             details={
