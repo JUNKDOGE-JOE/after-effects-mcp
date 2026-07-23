@@ -388,6 +388,19 @@ class Issue167Package:
         require(len(footage) == 1, "fixture must contain exactly one footage item")
         return _locator(footage[0]["locator"], "item")
 
+    @staticmethod
+    def _items_matching_locator(
+        items: list[dict[str, Any]],
+        target: Mapping[str, Any],
+    ) -> list[dict[str, Any]]:
+        return [
+            item
+            for item in items
+            if isinstance(item.get("locator"), Mapping)
+            and item["locator"].get("projectId") == target.get("projectId")
+            and item["locator"].get("objectId") == target.get("objectId")
+        ]
+
     async def _footage_details(
         self,
         session: PublicSession,
@@ -636,16 +649,33 @@ class Issue167Package:
             "source_path": str(self.assets["main"]),
             "idempotency_key": self.runtime.intent("footage-import"),
         }, phase=phase)
-        imported = _locator(native_value(payload)["itemLocator"], "item")
+        imported_value = native_value(payload)
+        imported = _locator(imported_value["itemLocator"], "item")
+        before_count = imported_value.get("beforeItemCount")
+        after_count = imported_value.get("afterItemCount")
+        require(
+            isinstance(before_count, int)
+            and after_count == before_count + 1,
+            "footage import item-count evidence is invalid",
+        )
         await self._checkpoint_undo("ae_importFootage")
         without_item = await self._project_items(session, phase=phase)
-        require(not [item for item in without_item if item.get("type") == "footage"],
-                "footage import Undo left a footage item")
+        require(
+            len(without_item) == before_count
+            and not self._items_matching_locator(without_item, imported),
+            "footage import Undo left the imported project item",
+        )
         self.runtime.mark_tool_passed(
             "ae_importFootage", undo_executed=True, undo_verified=True
         )
         await self._checkpoint_redo("footage-import-setup")
-        item = self._one_footage(await self._project_items(session, phase=phase))
+        restored_items = await self._project_items(session, phase=phase)
+        restored_imports = self._items_matching_locator(restored_items, imported)
+        require(
+            len(restored_items) == after_count and len(restored_imports) == 1,
+            "footage import Redo did not restore the imported project item",
+        )
+        item = _locator(restored_imports[0]["locator"], "item")
         require(
             item["projectId"] == imported["projectId"],
             "footage import Redo returned another project",
@@ -838,14 +868,25 @@ class Issue167Package:
             "ae_createLayerMask", undo_executed=True, undo_verified=True
         )
 
-        await self._call(session, "ae_importFootage", {
+        payload = await self._call(session, "ae_importFootage", {
             "source_path": str(self.assets["main"]),
             "idempotency_key": self.runtime.intent("t4-footage-import"),
         }, phase="t4-footage")
+        imported_value = native_value(payload)
+        imported = _locator(imported_value["itemLocator"], "item")
+        before_count = imported_value.get("beforeItemCount")
+        require(
+            isinstance(before_count, int)
+            and imported_value.get("afterItemCount") == before_count + 1,
+            "T4 footage import item-count evidence is invalid",
+        )
         await self._checkpoint_undo("ae_importFootage")
         items = await self._project_items(session, phase="t4-footage")
-        require(not [item for item in items if item.get("type") == "footage"],
-                "T4 footage Undo failed")
+        require(
+            len(items) == before_count
+            and not self._items_matching_locator(items, imported),
+            "T4 footage Undo left the imported project item",
+        )
         self.runtime.mark_tool_passed(
             "ae_importFootage", undo_executed=True, undo_verified=True
         )

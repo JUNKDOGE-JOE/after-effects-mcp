@@ -282,10 +282,33 @@ class _T4Package(package.Issue167Package):
             value = {
                 "itemLocator": _locator(
                     "item", "66666666-6666-4666-8666-666666666666"
-                )
+                ),
+                "beforeItemCount": 3,
+                "afterItemCount": 4,
             }
         elif tool == "ae_listProjectItems":
-            value = {"items": []}
+            value = {
+                "items": [
+                    {
+                        "type": "footage",
+                        "locator": _locator(
+                            "item", "77777777-7777-4777-8777-777777777777"
+                        ),
+                    },
+                    {
+                        "type": "composition",
+                        "locator": _locator(
+                            "composition", "88888888-8888-4888-8888-888888888888"
+                        ),
+                    },
+                    {
+                        "type": "folder",
+                        "locator": _locator(
+                            "item", "99999999-9999-4999-8999-999999999999"
+                        ),
+                    },
+                ],
+            }
         else:
             raise AssertionError(f"unexpected T4 tool {tool}")
         return {"value": value}
@@ -309,6 +332,45 @@ async def test_t4_smoke_uses_exactly_eleven_public_calls(tmp_path: Path) -> None
         "ae_importFootage",
         "ae_listProjectItems",
     ]
+
+
+@pytest.mark.asyncio
+async def test_t4_undo_rejects_the_imported_item_not_fixture_footage(
+    tmp_path: Path,
+) -> None:
+    class LeakedImportPackage(_T4Package):
+        async def _call(self, session, tool, arguments, *, phase: str):
+            result = await super()._call(
+                session, tool, arguments, phase=phase
+            )
+            if tool == "ae_listProjectItems":
+                result["value"]["items"][0]["locator"] = _locator(
+                    "item", "66666666-6666-4666-8666-666666666666"
+                )
+            return result
+
+    runtime = _T4Runtime(tmp_path)
+    runner = LeakedImportPackage(runtime, fixture_name="fixture")
+    with pytest.raises(
+        runtime_module.AcceptanceFailure,
+        match="Undo left the imported project item",
+    ):
+        await runner._run_t4_initial(object())
+
+
+def test_footage_locator_matching_ignores_other_fixture_footage(
+    tmp_path: Path,
+) -> None:
+    runner = package.Issue167Package(_T4Runtime(tmp_path), fixture_name="fixture")
+    imported = _locator("item", "66666666-6666-4666-8666-666666666666")
+    baseline = {
+        "type": "footage",
+        "locator": _locator("item", "77777777-7777-4777-8777-777777777777"),
+    }
+    restored = {"type": "footage", "locator": dict(imported)}
+
+    assert runner._items_matching_locator([baseline], imported) == []
+    assert runner._items_matching_locator([baseline, restored], imported) == [restored]
 
 
 @pytest.mark.asyncio
