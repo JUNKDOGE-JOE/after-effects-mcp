@@ -4,7 +4,7 @@
     "runtimeEvidence": false,
     "compatibilityEvidence": false
   },
-  "expectedRegistryDigest": "7d2598ef2570828a4c1b616cf036b67fd966599aadad1530114e2d655b8646a4",
+  "expectedRegistryDigest": "ae72ee8f2244fa2ffb6a4f01590f17b83e782724504d981a88cbbc162ea1ac44",
   "cases": [
     { "capabilityId": "ae.layer.compositing.read", "contractDigest": "407554b3f18f8758a8eb997d2b407e74dcca8edbd394e07cb2168a9548a7d99d", "postconditionKind": "layer-compositing-read", "mutating": false },
     { "capabilityId": "ae.layer.switch.set", "contractDigest": "505c9f16f34ded8d154e844e3078fe214cff6e5ebd83e42fc454f5b69a830d77", "postconditionKind": "layer-switch-set", "mutating": true },

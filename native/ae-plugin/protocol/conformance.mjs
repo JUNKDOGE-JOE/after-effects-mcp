@@ -256,6 +256,16 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.layer.blending-mode.set.input.v1',
     resultContractId: 'aemcp.contract.ae.layer.blending-mode.set.result.v1',
   }),
+  Object.freeze({
+    id: 'ae.native.media.read', version: 1,
+    inputContractId: 'aemcp.contract.ae.native.media.read.input.v1',
+    resultContractId: 'aemcp.contract.ae.native.media.read.result.v1',
+  }),
+  Object.freeze({
+    id: 'ae.native.media.write', version: 1,
+    inputContractId: 'aemcp.contract.ae.native.media.write.input.v1',
+    resultContractId: 'aemcp.contract.ae.native.media.write.result.v1',
+  }),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -373,6 +383,16 @@ const KEYFRAME_WRITE_CAPABILITIES = new Set([
   'ae.layer.property.keyframe.temporal-ease.set',
   'ae.layer.property.keyframe.behavior.set',
   'ae.layer.property.keyframe.delete',
+]);
+const NATIVE_MEDIA_READ_OPERATIONS = Object.freeze([
+  'effects-installed-list', 'effects-layer-list', 'effect-details', 'masks-list',
+  'mask-details', 'mask-path', 'footage-details', 'footage-interpretation',
+]);
+const NATIVE_MEDIA_WRITE_OPERATIONS = Object.freeze([
+  'effect-enabled', 'effect-reorder', 'effect-duplicate', 'effect-delete',
+  'mask-create', 'mask-properties', 'mask-path', 'mask-duplicate', 'mask-delete',
+  'footage-import', 'footage-replace', 'footage-interpretation', 'footage-proxy',
+  'item-use-proxy',
 ]);
 
 function isKeyframeTimeInput(value) {
@@ -1246,6 +1266,14 @@ export function classifyRequest(message) {
           || !isLocatorShape(args.layerLocator, ['layer'])
           || !LAYER_BLENDING_MODES.includes(args.mode)
           || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.native.media.read'
+        || params.capabilityId === 'ae.native.media.write') {
+      const operations = params.capabilityId === 'ae.native.media.read'
+        ? NATIVE_MEDIA_READ_OPERATIONS : NATIVE_MEDIA_WRITE_OPERATIONS;
+      if (!isPlainObject(params.arguments)
+          || !operations.includes(params.arguments.operation)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
     } else {
@@ -3227,6 +3255,107 @@ export function keyframeAuthoringDescriptors() {
   });
 }
 
+export function nativeMediaDescriptors(schema) {
+  return [
+    {
+      id: 'ae.native.media.read',
+      operations: NATIVE_MEDIA_READ_OPERATIONS,
+      mutating: false,
+      summary: 'Execute one closed native effect, mask, or footage read.',
+      sideEffectSummary: 'Reads bounded After Effects effect, mask, or footage state without changing it.',
+      requirementId: 'aemcp.requirement.native.media-read',
+      inputDef: 'nativeMediaReadInputSchemaContract',
+      resultDef: 'nativeMediaReadResultSchemaContract',
+      exampleId: 'aemcp-example-native-media-read',
+      negativeId: 'aemcp-example-native-media-read-invalid',
+      errorCode: 'INVALID_ARGUMENT',
+      recoveryAction: 'change-arguments',
+      arguments: { limit: 50, offset: 0, operation: 'effects-installed-list' },
+      value: {
+        effects: [], hasMore: false, limit: 50, nextOffset: null, offset: 0,
+        operation: 'effects-installed-list', returned: 0, total: 0,
+      },
+    },
+    {
+      id: 'ae.native.media.write',
+      operations: NATIVE_MEDIA_WRITE_OPERATIONS,
+      mutating: true,
+      summary: 'Execute one closed native effect, mask, or footage mutation.',
+      sideEffectSummary: 'Changes one bounded After Effects media-editing target and creates one Undo step.',
+      requirementId: 'aemcp.requirement.native.media-write',
+      inputDef: 'nativeMediaWriteInputSchemaContract',
+      resultDef: 'nativeMediaWriteResultSchemaContract',
+      exampleId: 'aemcp-example-native-media-write',
+      negativeId: 'aemcp-example-native-media-write-stale',
+      errorCode: 'STALE_LOCATOR',
+      recoveryAction: 'refresh-locator',
+      arguments: {
+        effectIndex: 1, enabled: false,
+        idempotencyKey: 'synthetic-native-media-write-0001',
+        installedEffectKey: 1,
+        layerLocator: syntheticDescriptorLocator(
+          'layer', '88888888-8888-4888-8888-888888888888',
+        ),
+        operation: 'effect-enabled',
+      },
+      value: {
+        afterEnabled: false, beforeEnabled: true, changed: true, effectIndex: 1,
+        installedEffectKey: 1, operation: 'effect-enabled',
+      },
+    },
+  ].map((spec) => {
+    const registration = INVOKE_REGISTRY.find((candidate) => candidate.id === spec.id);
+    const inputSchema = structuredClone(schema.$defs[spec.inputDef].const);
+    const resultSchema = structuredClone(schema.$defs[spec.resultDef].const);
+    return {
+      cancellation: 'before-dispatch',
+      compatibility: {
+        intendedPlatforms: ['macos-arm64', 'windows-x64'],
+        status: 'unverified',
+      },
+      detail: 'full',
+      contractDigest: sha256Jcs({ inputSchema, resultSchema }),
+      id: spec.id,
+      idempotency: spec.mutating ? 'idempotency-key' : 'idempotent',
+      inputContractId: registration.inputContractId,
+      inputSchema,
+      mutability: spec.mutating ? 'mutating' : 'read-only',
+      preconditions: [
+        'An After Effects project must be open.',
+        'The operation-specific locators must belong to the current native session.',
+      ],
+      requirements: [{ contractVersion: 1, id: spec.requirementId }],
+      resultContractId: registration.resultContractId,
+      resultSchema,
+      risk: spec.mutating ? 'write' : 'read',
+      schemaVersion: 1,
+      sideEffectSummary: spec.sideEffectSummary,
+      summary: spec.summary,
+      undo: spec.mutating ? 'ae-undo-group' : 'not-applicable',
+      version: 1,
+      examples: [
+        {
+          arguments: structuredClone(spec.arguments),
+          expected: { outcome: 'succeeded', value: structuredClone(spec.value) },
+          id: spec.exampleId,
+          kind: 'positive',
+          summary: 'Synthetic success demonstrates the typed result contract.',
+        },
+        {
+          arguments: structuredClone(spec.arguments),
+          expected: {
+            errorCode: spec.errorCode,
+            recoveryAction: spec.recoveryAction,
+          },
+          id: spec.negativeId,
+          kind: 'negative',
+          summary: 'Synthetic failure exercises the documented recovery path.',
+        },
+      ],
+    };
+  });
+}
+
 export function nativeCapabilityRegistry(schema) {
   return [
     projectSummaryDescriptor(schema),
@@ -3247,6 +3376,7 @@ export function nativeCapabilityRegistry(schema) {
     ...layerTimelineDescriptors(schema),
     ...layerCompositingDescriptors(schema),
     ...keyframeAuthoringDescriptors(schema),
+    ...nativeMediaDescriptors(schema),
   ];
 }
 

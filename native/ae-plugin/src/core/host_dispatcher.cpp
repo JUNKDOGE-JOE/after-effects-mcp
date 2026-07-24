@@ -105,6 +105,29 @@ bool has_layer_compositing_arguments(const Request& request) {
       || !request.layer_blending_mode.empty();
 }
 
+bool has_native_media_arguments(const Request& request) {
+  const NativeMediaCommand& command = request.native_media;
+  return !command.host_instance_id.empty() || !command.session_id.empty()
+      || !command.operation.empty() || command.layer_locator.has_value()
+      || command.item_locator.has_value() || command.folder_locator.has_value()
+      || command.offset != 0 || command.limit != 0 || command.effect_index != 0
+      || command.installed_effect_key != 0 || command.mask_index != 0
+      || command.mask_id != 0 || command.target_index != 0
+      || command.enabled.has_value()
+      || command.mask_properties.mode.has_value()
+      || command.mask_properties.inverted.has_value()
+      || command.mask_properties.motion_blur.has_value()
+      || command.mask_properties.feather_falloff.has_value()
+      || command.mask_properties.color.has_value()
+      || command.mask_properties.locked.has_value()
+      || command.mask_properties.roto_bezier.has_value()
+      || command.mask_closed.has_value() || !command.mask_vertices.empty()
+      || !command.source_path.empty() || command.sequence.enabled
+      || command.sequence.force_alphabetical || command.sequence.start_frame != -1
+      || command.sequence.end_frame != -1 || command.proxy
+      || command.interpretation.has_value();
+}
+
 bool valid_layer_switch_name(std::string_view value) {
   return value == "visibility" || value == "solo" || value == "locked"
       || value == "shy" || value == "motion-blur" || value == "three-d"
@@ -144,6 +167,163 @@ bool valid_bounded_text(
     std::string_view value, std::size_t maximum_bytes, bool allow_empty) {
   return (allow_empty || !value.empty()) && value.size() <= maximum_bytes
       && value.find('\0') == std::string_view::npos;
+}
+
+bool valid_uuid(std::string_view value);
+bool valid_locator(const ObjectLocator& locator);
+bool valid_item_locator(const ObjectLocator& locator);
+
+bool native_media_read_operation(std::string_view operation) {
+  static constexpr std::array<std::string_view, 8> operations{
+      "effects-installed-list",
+      "effects-layer-list",
+      "effect-details",
+      "masks-list",
+      "mask-details",
+      "mask-path",
+      "footage-details",
+      "footage-interpretation"};
+  return std::find(operations.begin(), operations.end(), operation) != operations.end();
+}
+
+bool native_media_write_operation(std::string_view operation) {
+  static constexpr std::array<std::string_view, 13> operations{
+      "effect-enabled",
+      "effect-reorder",
+      "effect-duplicate",
+      "effect-delete",
+      "mask-create",
+      "mask-properties",
+      "mask-path",
+      "mask-duplicate",
+      "mask-delete",
+      "footage-import",
+      "footage-replace",
+      "footage-interpretation",
+      "footage-proxy"};
+  if (std::find(operations.begin(), operations.end(), operation) != operations.end()) {
+    return true;
+  }
+  return operation == "item-use-proxy";
+}
+
+bool valid_native_media_locator(
+    const std::optional<ObjectLocator>& locator,
+    std::string_view kind,
+    const NativeMediaCommand& command) {
+  return locator.has_value() && valid_locator(*locator)
+      && locator->kind == kind
+      && locator->host_instance_id == command.host_instance_id
+      && locator->session_id == command.session_id;
+}
+
+bool valid_native_media_command(
+    const NativeMediaCommand& command, bool mutation) {
+  if (!valid_uuid(command.host_instance_id) || !valid_uuid(command.session_id)) {
+    return false;
+  }
+  if ((mutation && !native_media_write_operation(command.operation))
+      || (!mutation && !native_media_read_operation(command.operation))) {
+    return false;
+  }
+  if (command.offset > 9'007'199'254'740'991ULL || command.limit > 100
+      || command.effect_index > 9'007'199'254'740'991ULL
+      || command.mask_index > 9'007'199'254'740'991ULL
+      || command.target_index > 9'007'199'254'740'991ULL
+      || command.mask_vertices.size() > 128
+      || command.source_path.size() > 4096
+      || command.source_path.find('\0') != std::string::npos) {
+    return false;
+  }
+  const bool needs_layer = command.operation == "effects-layer-list"
+      || command.operation == "effect-details"
+      || command.operation == "effect-enabled"
+      || command.operation == "effect-reorder"
+      || command.operation == "effect-duplicate"
+      || command.operation == "effect-delete"
+      || command.operation == "masks-list"
+      || command.operation == "mask-details"
+      || command.operation == "mask-path"
+      || command.operation == "mask-create"
+      || command.operation == "mask-properties"
+      || command.operation == "mask-duplicate"
+      || command.operation == "mask-delete";
+  if (needs_layer
+      && !valid_native_media_locator(command.layer_locator, "layer", command)) {
+    return false;
+  }
+  const bool needs_item = command.operation == "footage-details"
+      || command.operation == "footage-interpretation"
+      || command.operation == "footage-replace"
+      || command.operation == "footage-proxy"
+      || command.operation == "item-use-proxy";
+  if (needs_item && (!command.item_locator.has_value()
+      || !valid_item_locator(*command.item_locator)
+      || command.item_locator->host_instance_id != command.host_instance_id
+      || command.item_locator->session_id != command.session_id)) {
+    return false;
+  }
+  if (command.folder_locator.has_value()
+      && (!valid_item_locator(*command.folder_locator)
+          || command.folder_locator->kind != "item"
+          || command.folder_locator->host_instance_id != command.host_instance_id
+          || command.folder_locator->session_id != command.session_id)) {
+    return false;
+  }
+  const bool needs_effect = command.operation == "effect-details"
+      || command.operation == "effect-enabled"
+      || command.operation == "effect-reorder"
+      || command.operation == "effect-duplicate"
+      || command.operation == "effect-delete";
+  if (needs_effect && (command.effect_index < 1 || command.installed_effect_key == 0)) {
+    return false;
+  }
+  const bool needs_mask = command.operation == "mask-details"
+      || command.operation == "mask-path"
+      || command.operation == "mask-properties"
+      || command.operation == "mask-duplicate"
+      || command.operation == "mask-delete";
+  if (needs_mask && (command.mask_index < 1 || command.mask_id == 0)) return false;
+  if ((command.operation == "effects-installed-list"
+          || command.operation == "effects-layer-list"
+          || command.operation == "masks-list")
+      && command.limit < 1) {
+    return false;
+  }
+  if ((command.operation == "effect-reorder"
+          || command.operation == "mask-duplicate")
+      && command.target_index < 1) {
+    return false;
+  }
+  if ((command.operation == "effect-enabled"
+          || command.operation == "item-use-proxy")
+      && !command.enabled.has_value()) {
+    return false;
+  }
+  if ((command.operation == "footage-import"
+          || command.operation == "footage-replace"
+          || command.operation == "footage-proxy")
+      && command.source_path.empty()) {
+    return false;
+  }
+  if ((command.operation == "footage-interpretation")
+      && mutation != command.interpretation.has_value()) {
+    return false;
+  }
+  if (command.mask_closed.has_value()) {
+    const std::size_t minimum = *command.mask_closed ? 3 : 2;
+    if (command.mask_vertices.size() < minimum) return false;
+  } else if (!command.mask_vertices.empty()) {
+    return false;
+  }
+  for (const NativeMediaMaskVertex& vertex : command.mask_vertices) {
+    if (vertex.position_x.empty() || vertex.position_y.empty()
+        || vertex.in_tangent_x.empty() || vertex.in_tangent_y.empty()
+        || vertex.out_tangent_x.empty() || vertex.out_tangent_y.empty()) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool has_composition_create_arguments(const Request& request) {
@@ -888,6 +1068,23 @@ HostLayerEffectApplyResult HostLayerEffectApplyResult::failure(
   return result;
 }
 
+HostNativeMediaResult HostNativeMediaResult::success(
+    std::string canonical_value_json) {
+  HostNativeMediaResult result;
+  result.ok = true;
+  result.canonical_value_json = std::move(canonical_value_json);
+  return result;
+}
+
+HostNativeMediaResult HostNativeMediaResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostNativeMediaResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 HostLayerPropertiesResult HostLayerPropertiesResult::success(
     LayerPropertiesPage value) {
   HostLayerPropertiesResult result;
@@ -1130,6 +1327,12 @@ HostLayerEffectApplyResult HostApi::apply_layer_effect(
       "NATIVE_UNSUPPORTED", "layer effect application is unavailable");
 }
 
+HostNativeMediaResult HostApi::execute_native_media(
+    const NativeMediaCommand&, TimePoint) {
+  return HostNativeMediaResult::failure(
+      "NATIVE_UNSUPPORTED", "native media operations are unavailable");
+}
+
 HostLayerPropertiesResult HostApi::list_layer_properties(
     const LayerPropertiesQuery&, TimePoint) {
   return HostLayerPropertiesResult::failure(
@@ -1336,6 +1539,10 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kLayerBlendingModeSetCapability;
   const bool layer_compositing = layer_compositing_read || layer_switch_set
       || layer_quality_set || layer_blending_mode_set;
+  const bool native_media_read =
+      request.capability_id == kNativeMediaReadCapability;
+  const bool native_media_write =
+      request.capability_id == kNativeMediaWriteCapability;
   const bool mutation = project_bit_depth_set || composition_time_set
       || composition_create
       || composition_layer_create
@@ -1345,7 +1552,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || project_item_label_set || composition_duplicate || layer_name_set
       || layer_range_set || layer_start_time_set || layer_stretch_set
       || layer_order_set || layer_parent_set || layer_duplicate
-      || layer_switch_set || layer_quality_set || layer_blending_mode_set;
+      || layer_switch_set || layer_quality_set || layer_blending_mode_set
+      || native_media_write;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
@@ -1360,6 +1568,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !project_item_name_set && !project_item_comment_set
       && !project_item_label_set && !composition_duplicate
       && !layer_timeline && !layer_compositing
+      && !native_media_read && !native_media_write
       && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
@@ -1387,6 +1596,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || has_layer_timeline_arguments(request)
           || has_layer_compositing_arguments(request)
           || has_keyframe_arguments(request)
+          || has_native_media_arguments(request)
           || has_nondefault_time(request.work_area_start)
           || has_nondefault_time(request.work_area_duration)
           || has_composition_create_arguments(request))) {
@@ -1398,7 +1608,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   }
   if ((project_summary || project_bit_depth_read)
       && (request.target_depth != 0 || !request.idempotency_key.empty()
-        || !request.arguments_fingerprint_sha256.empty())) {
+        || !request.arguments_fingerprint_sha256.empty()
+        || has_native_media_arguments(request))) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
@@ -1582,6 +1793,52 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
         "native layer effect apply arguments failed closed validation",
+        "params.arguments"};
+  }
+  if ((native_media_read || native_media_write)
+      && (request.target_depth != 0
+          || (native_media_read && (!request.idempotency_key.empty()
+            || !request.arguments_fingerprint_sha256.empty()))
+          || (native_media_write && (!valid_idempotency_key(request.idempotency_key)
+            || !valid_sha256(request.arguments_fingerprint_sha256)))
+          || request.host_instance_id != request.native_media.host_instance_id
+          || request.session_id != request.native_media.session_id
+          || !valid_native_media_command(request.native_media, native_media_write)
+          || request.offset != 0 || request.limit != 0
+          || request.project_locator.has_value()
+          || request.composition_locator.has_value()
+          || request.layer_locator.has_value()
+          || request.parent_property_locator.has_value()
+          || request.property_locator.has_value()
+          || !std::holds_alternative<std::monostate>(request.property_value)
+          || has_nondefault_time(request.target_time)
+          || !request.layer_create_kind.empty() || !request.layer_create_name.empty()
+          || request.layer_create_color.has_value()
+          || request.layer_create_width.has_value()
+          || request.layer_create_height.has_value()
+          || request.layer_create_duration.has_value()
+          || has_composition_create_arguments(request)
+          || !request.layer_effect_match_name.empty()
+          || request.item_locator.has_value()
+          || has_nondefault_time(request.work_area_start)
+          || has_nondefault_time(request.work_area_duration)
+          || !request.item_text.empty() || request.item_label_id != 0
+          || !request.duplicate_new_name.empty()
+          || has_layer_timeline_arguments(request)
+          || has_keyframe_arguments(request)
+          || has_layer_compositing_arguments(request))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native media arguments failed closed validation",
+        "params.arguments"};
+  }
+  if (!native_media_read && !native_media_write
+      && has_native_media_arguments(request)) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native media arguments are not accepted by this capability",
         "params.arguments"};
   }
   const bool package150_capability = project_context_read
@@ -3153,6 +3410,50 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
               completion.layer_effect_apply_result = std::move(host_result.value);
             }
           }
+        } else if (request.capability_id == kNativeMediaReadCapability
+            || request.capability_id == kNativeMediaWriteCapability) {
+          const bool media_write =
+              request.capability_id == kNativeMediaWriteCapability;
+          HostNativeMediaResult host_result = host.execute_native_media(
+              request.native_media,
+              media_write ? request.deadline
+                          : std::min(request.deadline, idle_deadline));
+          if (clock_.now() > request.deadline) {
+            completion = media_write
+                ? failure_for(
+                    request,
+                    "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                    "native media write completed after its deadline; inspect AE state")
+                : expired(request, true);
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty()
+                    ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty()
+                    ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (host_result.canonical_value_json.size() < 2
+              || host_result.canonical_value_json.size() > 65'536
+              || host_result.canonical_value_json.front() != '{'
+              || host_result.canonical_value_json.back() != '}'
+              || host_result.canonical_value_json.find('\0') != std::string::npos) {
+            completion = failure_for(
+                request,
+                media_write
+                    ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
+                "native media result failed its bounded object contract");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.native_media_result_json =
+                std::move(host_result.canonical_value_json);
+          }
         } else if (request.capability_id == kLayerDetailsReadCapability
             || request.capability_id == kLayerNameSetCapability
             || request.capability_id == kLayerRangeSetCapability
@@ -3901,7 +4202,8 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 || request.capability_id == kLayerStretchSetCapability
                 || request.capability_id == kLayerOrderSetCapability
                 || request.capability_id == kLayerParentSetCapability
-                || request.capability_id == kLayerDuplicateCapability)
+                || request.capability_id == kLayerDuplicateCapability
+                || request.capability_id == kNativeMediaWriteCapability)
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
             "native host adapter raised an exception");
       }
@@ -4118,7 +4420,8 @@ void HostDispatcher::finish_idempotency_locked(
           && request.capability_id != kLayerStretchSetCapability
           && request.capability_id != kLayerOrderSetCapability
           && request.capability_id != kLayerParentSetCapability
-          && request.capability_id != kLayerDuplicateCapability)
+          && request.capability_id != kLayerDuplicateCapability
+          && request.capability_id != kNativeMediaWriteCapability)
       || request.idempotency_key.empty()) {
     return;
   }

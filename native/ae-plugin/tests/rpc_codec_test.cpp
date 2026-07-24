@@ -41,6 +41,7 @@ using aemcp::native::rpc::LayerDuplicateSuccess;
 using aemcp::native::rpc::CompositionCreateSuccess;
 using aemcp::native::rpc::CompositionLayerCreateSuccess;
 using aemcp::native::rpc::LayerEffectApplySuccess;
+using aemcp::native::rpc::NativeMediaSuccess;
 using aemcp::native::rpc::LayerPropertiesSuccess;
 using aemcp::native::rpc::LayerPropertyKeyframesSuccess;
 using aemcp::native::rpc::LayerPropertySetSuccess;
@@ -99,6 +100,8 @@ using aemcp::native::rpc::project_item_label_persistent_diagnostic_fields;
 using aemcp::native::rpc::composition_duplicate_persistent_diagnostic_fields;
 using aemcp::native::rpc::digest_composition_layer_create_postcondition;
 using aemcp::native::rpc::digest_layer_effect_apply_postcondition;
+using aemcp::native::rpc::digest_native_media_postcondition;
+using aemcp::native::rpc::canonicalize_native_media_value;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
 using aemcp::native::rpc::digest_layer_property_keyframes_postcondition;
 using aemcp::native::rpc::digest_layer_property_set_postcondition;
@@ -135,6 +138,7 @@ using aemcp::native::rpc::encode_layer_duplicate_success;
 using aemcp::native::rpc::encode_composition_create_success;
 using aemcp::native::rpc::encode_composition_layer_create_success;
 using aemcp::native::rpc::encode_layer_effect_apply_success;
+using aemcp::native::rpc::encode_native_media_success;
 using aemcp::native::rpc::encode_layer_properties_success;
 using aemcp::native::rpc::encode_layer_property_keyframes_success;
 using aemcp::native::rpc::encode_layer_property_set_success;
@@ -222,8 +226,12 @@ constexpr std::string_view kKeyframeBehaviorContractDigest =
     "e2ff59d765613db12468d2140d8c937fd1ceb5def9f632877b18b664b6d6bf5c";
 constexpr std::string_view kKeyframeDeleteContractDigest =
     "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9";
+constexpr std::string_view kNativeMediaReadContractDigest =
+    "4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282";
+constexpr std::string_view kNativeMediaWriteContractDigest =
+    "a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5";
 constexpr std::string_view kCapabilitiesRegistryDigest =
-    "7d2598ef2570828a4c1b616cf036b67fd966599aadad1530114e2d655b8646a4";
+    "ae72ee8f2244fa2ffb6a4f01590f17b83e782724504d981a88cbbc162ea1ac44";
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -2533,6 +2541,12 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kKeyframeBehaviorContractDigest);
   capabilities.layer_property_keyframe_delete_contract_digest =
       std::string(kKeyframeDeleteContractDigest);
+  capabilities.include_native_media_read = true;
+  capabilities.include_native_media_write = true;
+  capabilities.native_media_read_contract_digest =
+      std::string(kNativeMediaReadContractDigest);
+  capabilities.native_media_write_contract_digest =
+      std::string(kNativeMediaWriteContractDigest);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -2889,6 +2903,265 @@ void response_helpers_are_bounded_and_typed() {
       "invalid UTF-8 project name");
 }
 
+void native_media_package_parses_all_twenty_two_public_operations() {
+  const std::string layer = locator_json(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const std::string item = locator_json(
+      "item", "99999999-9999-4999-8999-999999999999");
+  const std::string folder = locator_json(
+      "item", "77777777-7777-4777-8777-777777777777");
+  const std::string key = "native-media-codec-0001";
+  const std::string vertex =
+      "{\"inTangent\":[\"0\",\"0\"],\"outTangent\":[\"0\",\"0\"],"
+      "\"position\":[\"0\",\"0\"]}";
+  const std::array<std::tuple<
+      std::string, std::string, std::string, std::string>, 22> requests{{
+      {"media-effects-installed", "ae.native.media.read",
+          "{\"operation\":\"effects-installed-list\",\"offset\":0,\"limit\":50}",
+          "effects-installed-list"},
+      {"media-effects-layer", "ae.native.media.read",
+          "{\"operation\":\"effects-layer-list\",\"layerLocator\":" + layer
+              + ",\"offset\":0,\"limit\":50}",
+          "effects-layer-list"},
+      {"media-effect-details", "ae.native.media.read",
+          "{\"operation\":\"effect-details\",\"layerLocator\":" + layer
+              + ",\"effectIndex\":1,\"installedEffectKey\":9}",
+          "effect-details"},
+      {"media-effect-enabled", "ae.native.media.write",
+          "{\"operation\":\"effect-enabled\",\"layerLocator\":" + layer
+              + ",\"effectIndex\":1,\"installedEffectKey\":9,\"enabled\":false,"
+                "\"idempotencyKey\":\"" + key + "\"}",
+          "effect-enabled"},
+      {"media-effect-reorder", "ae.native.media.write",
+          "{\"operation\":\"effect-reorder\",\"layerLocator\":" + layer
+              + ",\"effectIndex\":1,\"installedEffectKey\":9,\"targetIndex\":2,"
+                "\"idempotencyKey\":\"" + key + "\"}",
+          "effect-reorder"},
+      {"media-effect-duplicate", "ae.native.media.write",
+          "{\"operation\":\"effect-duplicate\",\"layerLocator\":" + layer
+              + ",\"effectIndex\":1,\"installedEffectKey\":9,"
+                "\"idempotencyKey\":\"" + key + "\"}",
+          "effect-duplicate"},
+      {"media-effect-delete", "ae.native.media.write",
+          "{\"operation\":\"effect-delete\",\"layerLocator\":" + layer
+              + ",\"effectIndex\":1,\"installedEffectKey\":9,"
+                "\"idempotencyKey\":\"" + key + "\"}",
+          "effect-delete"},
+      {"media-masks-list", "ae.native.media.read",
+          "{\"operation\":\"masks-list\",\"layerLocator\":" + layer
+              + ",\"offset\":0,\"limit\":50}",
+          "masks-list"},
+      {"media-mask-details", "ae.native.media.read",
+          "{\"operation\":\"mask-details\",\"layerLocator\":" + layer
+              + ",\"maskIndex\":1,\"maskId\":7}",
+          "mask-details"},
+      {"media-mask-path-read", "ae.native.media.read",
+          "{\"operation\":\"mask-path\",\"layerLocator\":" + layer
+              + ",\"maskIndex\":1,\"maskId\":7}",
+          "mask-path"},
+      {"media-mask-create", "ae.native.media.write",
+          "{\"operation\":\"mask-create\",\"layerLocator\":" + layer
+              + ",\"idempotencyKey\":\"" + key + "\"}",
+          "mask-create"},
+      {"media-mask-properties", "ae.native.media.write",
+          "{\"operation\":\"mask-properties\",\"layerLocator\":" + layer
+              + ",\"maskIndex\":1,\"maskId\":7,\"properties\":{"
+                "\"color\":{\"red\":12,\"green\":34,\"blue\":56,\"alpha\":255},"
+                "\"inverted\":true,\"mode\":\"add\"},\"idempotencyKey\":\""
+              + key + "\"}",
+          "mask-properties"},
+      {"media-mask-path-write", "ae.native.media.write",
+          "{\"operation\":\"mask-path\",\"layerLocator\":" + layer
+              + ",\"maskIndex\":1,\"maskId\":7,\"closed\":false,\"vertices\":["
+              + vertex + "," + vertex + "],\"idempotencyKey\":\"" + key + "\"}",
+          "mask-path"},
+      {"media-mask-duplicate", "ae.native.media.write",
+          "{\"operation\":\"mask-duplicate\",\"layerLocator\":" + layer
+              + ",\"maskIndex\":1,\"maskId\":7,\"targetIndex\":2,"
+                "\"idempotencyKey\":\"" + key + "\"}",
+          "mask-duplicate"},
+      {"media-mask-delete", "ae.native.media.write",
+          "{\"operation\":\"mask-delete\",\"layerLocator\":" + layer
+              + ",\"maskIndex\":1,\"maskId\":7,\"idempotencyKey\":\""
+              + key + "\"}",
+          "mask-delete"},
+      {"media-footage-details", "ae.native.media.read",
+          "{\"operation\":\"footage-details\",\"itemLocator\":" + item + "}",
+          "footage-details"},
+      {"media-footage-import", "ae.native.media.write",
+          "{\"operation\":\"footage-import\",\"sourcePath\":\"/tmp/a.mov\","
+                "\"folderLocator\":" + folder + ",\"sequence\":{\"enabled\":true,"
+                "\"forceAlphabetical\":true,\"startFrame\":1,\"endFrame\":3},"
+                "\"idempotencyKey\":\"" + key + "\"}",
+          "footage-import"},
+      {"media-footage-replace", "ae.native.media.write",
+          "{\"operation\":\"footage-replace\",\"itemLocator\":" + item
+              + ",\"sourcePath\":\"/tmp/b.mov\",\"idempotencyKey\":\""
+              + key + "\"}",
+          "footage-replace"},
+      {"media-footage-interpretation-read", "ae.native.media.read",
+          "{\"operation\":\"footage-interpretation\",\"itemLocator\":" + item
+              + ",\"proxy\":false}",
+          "footage-interpretation"},
+      {"media-footage-interpretation-write", "ae.native.media.write",
+          "{\"operation\":\"footage-interpretation\",\"itemLocator\":" + item
+              + ",\"proxy\":false,\"interpretation\":{\"alphaMode\":"
+                "\"premultiplied\",\"loopCount\":2,\"pixelAspect\":{"
+                "\"numerator\":1,\"denominator\":1},\"premultiplyColor\":{"
+                "\"red\":0,\"green\":0,\"blue\":0,\"alpha\":255}},"
+                "\"idempotencyKey\":\"" + key + "\"}",
+          "footage-interpretation"},
+      {"media-footage-proxy", "ae.native.media.write",
+          "{\"operation\":\"footage-proxy\",\"itemLocator\":" + item
+              + ",\"sourcePath\":\"/tmp/proxy.mov\",\"idempotencyKey\":\""
+              + key + "\"}",
+          "footage-proxy"},
+      {"media-item-use-proxy", "ae.native.media.write",
+          "{\"operation\":\"item-use-proxy\",\"itemLocator\":" + item
+              + ",\"enabled\":true,\"idempotencyKey\":\"" + key + "\"}",
+          "item-use-proxy"},
+  }};
+  for (const auto& [request_id, capability_id, arguments, operation] : requests) {
+    try {
+      const ParsedRequest parsed = decode_request_frame(frame(package150_invoke_json(
+          request_id, capability_id, arguments)));
+      const auto& invoke = std::get<InvokeParams>(parsed.params);
+      require(parsed.method == RpcMethod::kInvoke
+              && invoke.capability_id == capability_id
+              && invoke.native_media.operation == operation,
+          "native media parser lost its typed operation: " + operation);
+      require(!invoke.native_media_arguments_json.empty(),
+          "native media parser did not retain canonical arguments: " + operation);
+      if (capability_id == "ae.native.media.write") {
+        require(!invoke.arguments_fingerprint_sha256.empty()
+                && invoke.idempotency_key == key,
+            "native media write lost its digest or idempotency key: " + operation);
+      }
+    } catch (const CodecError& error) {
+      fail("native media valid request rejected for " + operation + ": "
+          + error.what());
+    }
+  }
+
+  const auto invalid = [&](std::string_view label,
+                           std::string_view capability,
+                           std::string arguments) {
+    expect_codec_error([&] {
+      (void)decode_request_frame(frame(package150_invoke_json(
+          std::string("invalid-") + std::string(label),
+          capability,
+          arguments)));
+    }, "INVALID_ARGUMENT", std::string(label));
+  };
+  invalid(
+      "read-extra-field",
+      "ae.native.media.read",
+      "{\"operation\":\"effects-installed-list\",\"offset\":0,\"limit\":50,"
+      "\"extra\":true}");
+  invalid(
+      "zero-effect-key",
+      "ae.native.media.write",
+      "{\"operation\":\"effect-enabled\",\"layerLocator\":" + layer
+          + ",\"effectIndex\":1,\"installedEffectKey\":0,\"enabled\":false,"
+            "\"idempotencyKey\":\"" + key + "\"}");
+  invalid(
+      "closed-path-too-short",
+      "ae.native.media.write",
+      "{\"operation\":\"mask-path\",\"layerLocator\":" + layer
+          + ",\"maskIndex\":1,\"maskId\":7,\"closed\":true,\"vertices\":["
+          + vertex + "," + vertex + "],\"idempotencyKey\":\"" + key + "\"}");
+  invalid(
+      "empty-mask-patch",
+      "ae.native.media.write",
+      "{\"operation\":\"mask-properties\",\"layerLocator\":" + layer
+          + ",\"maskIndex\":1,\"maskId\":7,\"properties\":{},"
+            "\"idempotencyKey\":\"" + key + "\"}");
+  invalid(
+      "disabled-sequence-options",
+      "ae.native.media.write",
+      "{\"operation\":\"footage-import\",\"sourcePath\":\"/tmp/a.mov\","
+      "\"sequence\":{\"enabled\":false,\"startFrame\":1},\"idempotencyKey\":\""
+          + key + "\"}");
+  invalid(
+      "premultiply-color-without-mode",
+      "ae.native.media.write",
+      "{\"operation\":\"footage-interpretation\",\"itemLocator\":" + item
+          + ",\"proxy\":false,\"interpretation\":{\"premultiplyColor\":{"
+            "\"red\":0,\"green\":0,\"blue\":0,\"alpha\":255}},"
+            "\"idempotencyKey\":\"" + key + "\"}");
+  invalid(
+      "negative-footage-frame-rate",
+      "ae.native.media.write",
+      "{\"operation\":\"footage-interpretation\",\"itemLocator\":" + item
+          + ",\"proxy\":false,\"interpretation\":{\"nativeFps\":\"-24\"},"
+            "\"idempotencyKey\":\"" + key + "\"}");
+  invalid(
+      "write-operation-on-read-capability",
+      "ae.native.media.read",
+      "{\"operation\":\"effect-delete\",\"layerLocator\":" + layer
+          + ",\"effectIndex\":1,\"installedEffectKey\":9,"
+            "\"idempotencyKey\":\"" + key + "\"}");
+  invalid(
+      "read-operation-on-write-capability",
+      "ae.native.media.write",
+      "{\"operation\":\"footage-details\",\"itemLocator\":" + item + "}");
+
+  const std::string canonical_value =
+      "{\"operation\":\"effects-installed-list\",\"returned\":0,\"total\":0}";
+  require(
+      canonicalize_native_media_value(
+          "{\"operation\":\"effects-installed-list\",\"effects\":[],"
+          "\"hasMore\":false,\"limit\":50,\"nextOffset\":null,\"offset\":0,"
+          "\"returned\":0,\"total\":0}")
+          == "{\"effects\":[],\"hasMore\":false,\"limit\":50,"
+             "\"nextOffset\":null,\"offset\":0,"
+             "\"operation\":\"effects-installed-list\",\"returned\":0,\"total\":0}",
+      "native media Host result did not normalize to canonical JSON");
+  bool rejected_non_object_value = false;
+  try {
+    (void)canonicalize_native_media_value("[]");
+  } catch (const std::exception&) {
+    rejected_non_object_value = true;
+  }
+  require(rejected_non_object_value,
+      "native media Host result accepted a non-object root");
+  const NativeMediaSuccess success{
+      "native-media-success-1",
+      std::string(kSession),
+      std::string(kHost),
+      "ae.native.media.read",
+      canonical_value,
+      1'900'000'000'000ULL,
+      1'900'000'000'025ULL,
+      std::string(kDigest),
+      digest_native_media_postcondition(
+          "ae.native.media.read", canonical_value),
+      false};
+  const std::string encoded = body(encode_native_media_success(success));
+  require(encoded.find("\"capabilityId\":\"ae.native.media.read\"")
+              != std::string::npos
+          && encoded.find("\"effect\":\"none\"") != std::string::npos
+          && encoded.find("\"operation\":\"effects-installed-list\"")
+              != std::string::npos,
+      "native media success encoder lost capability, effect, or typed value");
+
+  NativeMediaSuccess write_success = success;
+  write_success.request_id = "native-media-success-2";
+  write_success.capability_id = "ae.native.media.write";
+  write_success.canonical_value_json =
+      "{\"afterEnabled\":false,\"beforeEnabled\":true,\"changed\":true,"
+      "\"effectIndex\":1,\"installedEffectKey\":9,"
+      "\"operation\":\"effect-enabled\"}";
+  write_success.postcondition_digest = digest_native_media_postcondition(
+      write_success.capability_id, write_success.canonical_value_json);
+  const std::string write_encoded = body(encode_native_media_success(write_success));
+  require(write_encoded.find("\"effect\":\"committed\"") != std::string::npos
+          && write_encoded.find(
+              "\"undo\":{\"available\":true,\"verified\":false}")
+              != std::string::npos,
+      "native media write success lost committed effect or Undo boundary");
+}
+
 void fixed_seed_mutation_fuzz_is_bounded() {
   const auto golden = frame(invoke_json("fuzz-1", 1'900'000'005'000ULL));
   std::uint32_t state = 0x5eed1234U;
@@ -2934,6 +3207,7 @@ int main() {
   project_graph_invokes_and_results_are_closed_and_deterministic();
   project_composition_package_parses_and_serializes_all_eight_contracts();
   layer_timeline_package_parses_and_serializes_all_eight_contracts();
+  native_media_package_parses_all_twenty_two_public_operations();
   layer_compositing_package_parses_and_serializes_closed_contracts();
   keyframe_authoring_package_parses_and_serializes_closed_contracts();
   framing_fragmentation_and_multiple_frames_work();

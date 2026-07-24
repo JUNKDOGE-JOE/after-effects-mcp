@@ -147,23 +147,49 @@ class PackageSpec:
     tools: tuple[ToolCase, ...]
     native_novelty: bool
     support_tools: tuple[ToolCase, ...] = ()
+    milestone: bool = False
     t4_target_calls: int = 3
     t5_target_calls: int = 26
     t6_target_calls: int = 26
+    t4_hard_limit: int = 5
+    t5_hard_limit: int = 30
+    t6_hard_limit: int = 30
 
     def __post_init__(self) -> None:
         require(self.issue > 0, "package issue must be positive")
         require(bool(self.slug), "package slug is required")
-        require(5 <= len(self.tools) <= 15, "capability package must contain 5..15 tools")
+        maximum_tools = 30 if self.milestone else 15
+        require(
+            5 <= len(self.tools) <= maximum_tools,
+            (
+                "milestone package must contain 5..30 tools"
+                if self.milestone
+                else "capability package must contain 5..15 tools"
+            ),
+        )
         names = [case.tool for case in self.tools]
         keys = [case.key for case in self.tools]
         all_names = names + [case.tool for case in self.support_tools]
         require(len(set(names)) == len(names), "package tool names must be unique")
         require(len(set(all_names)) == len(all_names), "package/support tool names must be unique")
         require(len(set(keys)) == len(keys), "package case keys must be unique")
-        require(0 < self.t4_target_calls <= 5, "T4 call target must be 1..5")
-        require(0 < self.t5_target_calls <= 30, "T5 call target must be 1..30")
-        require(0 < self.t6_target_calls <= 30, "T6 call target must be 1..30")
+        maximum_t4 = 12 if self.milestone else 5
+        maximum_package = 60 if self.milestone else 30
+        require(0 < self.t4_target_calls <= maximum_t4, "T4 call target is invalid")
+        require(0 < self.t5_target_calls <= maximum_package, "T5 call target is invalid")
+        require(0 < self.t6_target_calls <= maximum_package, "T6 call target is invalid")
+        require(
+            self.t4_target_calls <= self.t4_hard_limit <= maximum_t4,
+            "T4 hard limit is invalid",
+        )
+        require(
+            self.t5_target_calls <= self.t5_hard_limit <= maximum_package,
+            "T5 hard limit is invalid",
+        )
+        require(
+            self.t6_target_calls <= self.t6_hard_limit <= maximum_package,
+            "T6 hard limit is invalid",
+        )
 
     @property
     def case_by_tool(self) -> dict[str, ToolCase]:
@@ -221,12 +247,17 @@ class AepLifecycleCounters:
 class CallLedger:
     """Count every public tool dispatch, including support and error probes."""
 
-    HARD_LIMITS = {"preflight": 7, "t4": 5, "t5": 30, "t6": 30}
+    MODES = frozenset({"preflight", "t4", "t5", "t6"})
 
     def __init__(self, mode: str, spec: PackageSpec) -> None:
-        require(mode in self.HARD_LIMITS, f"unsupported hardware mode {mode}")
+        require(mode in self.MODES, f"unsupported hardware mode {mode}")
         self.mode = mode
-        self.hard_limit = self.HARD_LIMITS[mode]
+        self.hard_limit = {
+            "preflight": 7,
+            "t4": spec.t4_hard_limit,
+            "t5": spec.t5_hard_limit,
+            "t6": spec.t6_hard_limit,
+        }[mode]
         self.target = {
             "preflight": 7,
             "t4": spec.t4_target_calls,
@@ -890,6 +921,51 @@ class AcceptanceRuntime:
             "saveAsCopies": 0,
         }
         self.evidence.record("fixture-saved", record)
+        return record
+
+    def recover_zero_call_fixture(self) -> dict[str, Any] | None:
+        """Clear an agent-owned empty-call fixture after a pre-dispatch failure."""
+
+        if (
+            self.ledger.total != 0
+            or self.aep_lifecycle.created != 1
+            or not os.path.lexists(self.fixture.path)
+        ):
+            return None
+        size, digest = self.saved_fixture_identity()
+        root = self.fixture.recovery_root
+        root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        require(not root.is_symlink(), "recovery root cannot be a symlink")
+        run_directory = root / self.evidence.run_id
+        run_directory.mkdir(mode=0o700, parents=False, exist_ok=False)
+        destination = run_directory / self.fixture.path.name
+        shutil.move(str(self.fixture.path), str(destination))
+        require(not os.path.lexists(self.fixture.path), "failed fixture remained active")
+        require(
+            self.saved_fixture_identity(destination) == (size, digest),
+            "failed fixture recovery identity mismatch",
+        )
+        self.aep_lifecycle = AepLifecycleCounters(
+            created=1,
+            archived=1,
+            logical_bytes_moved=size,
+        )
+        record = {
+            "fixtureId": self.fixture.fixture_id,
+            "lifecycle": self.fixture.lifecycle,
+            "sourceAbsent": True,
+            "archivePath": destination,
+            "sha256": digest,
+            "bytes": size,
+            "cleanupAfterUnixMs": int(
+                (time.time() + (self.fixture.retention_days * 24 * 60 * 60)) * 1000
+            ),
+            "cleanupCondition": (
+                "zero public calls and no AE mutation; remove after the failed "
+                "preflight is diagnosed"
+            ),
+        }
+        self.evidence.record("fixture-recovered-before-first-call", record)
         return record
 
     @staticmethod

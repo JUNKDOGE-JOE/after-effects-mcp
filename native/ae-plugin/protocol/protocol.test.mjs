@@ -22,6 +22,7 @@ import {
   encodeFrame,
   materializeDeadline,
   nativeCapabilityRegistry,
+  nativeMediaDescriptors,
   keyframeAuthoringDescriptors,
   layerCompositingDescriptors,
   layerTimelineDescriptors,
@@ -685,7 +686,7 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 41);
+  assert.equal(nativeCapabilityRegistry(schema).length, 43);
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -879,6 +880,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const layerTimelineCapabilities = layerTimelineDescriptors(schema);
   const layerCompositingCapabilities = layerCompositingDescriptors(schema);
   const keyframeAuthoringCapabilities = keyframeAuthoringDescriptors(schema);
+  const nativeMediaCapabilities = nativeMediaDescriptors(schema);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -966,6 +968,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     ...layerTimelineCapabilities,
     ...layerCompositingCapabilities,
     ...keyframeAuthoringCapabilities,
+    ...nativeMediaCapabilities,
   ]), capabilityDigest(nativeCapabilityRegistry(schema)));
   assert.equal(projectCompositionCapabilities.length, 8);
   for (const descriptor of projectCompositionCapabilities) {
@@ -1001,6 +1004,15 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     assert.equal(keyframeDescriptor.contractDigest, sha256Jcs({
       inputSchema: keyframeDescriptor.inputSchema,
       resultSchema: keyframeDescriptor.resultSchema,
+    }));
+  }
+  assert.equal(nativeMediaCapabilities.length, 2);
+  for (const mediaDescriptor of nativeMediaCapabilities) {
+    assert.equal(validateCapabilityDescriptor(mediaDescriptor, schema), true,
+      mediaDescriptor.id);
+    assert.equal(mediaDescriptor.contractDigest, sha256Jcs({
+      inputSchema: mediaDescriptor.inputSchema,
+      resultSchema: mediaDescriptor.resultSchema,
     }));
   }
   assert.ok(Buffer.byteLength(canonicalize(descriptor), 'utf8') < LIMITS.maxFrameBytes);
@@ -1151,7 +1163,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 41);
+  assert.equal(exchange.response.result.items.length, 43);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);

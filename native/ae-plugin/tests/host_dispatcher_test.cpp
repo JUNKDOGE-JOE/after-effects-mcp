@@ -1365,7 +1365,7 @@ void project_composition_package_dispatches_all_eight_capabilities() {
               .source_composition_locator.object_id
           != composition.object_id,
       "duplicate result did not reissue the source composition locator");
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 41);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 43);
   const std::array<std::string_view, 8> package_capabilities{
       aemcp::native::kProjectContextReadCapability,
       aemcp::native::kProjectItemMetadataReadCapability,
@@ -1688,7 +1688,7 @@ void keyframe_authoring_package_admits_all_seven_closed_capabilities() {
       aemcp::native::kLayerPropertyKeyframeBehaviorSetCapability,
       aemcp::native::kLayerPropertyKeyframeDeleteCapability,
   };
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 41);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 43);
   for (const std::string_view expected : package_capabilities) {
     require(std::find(
                 aemcp::native::kAdvertisedNativeCapabilities.begin(),
@@ -1698,6 +1698,86 @@ void keyframe_authoring_package_admits_all_seven_closed_capabilities() {
   }
   require(dispatcher.shutdown().size() == 7,
       "package-157 admission test did not retain exactly seven queued requests");
+}
+
+void native_media_overlapping_operations_admit_on_their_selected_plane() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(4, 4, 16ms));
+  const ObjectLocator layer = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const ObjectLocator item = FakeHost::locator(
+      "item", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  const auto base = [&](std::string id, std::string capability, std::string operation) {
+    Request value;
+    value.request_id = std::move(id);
+    value.capability_id = std::move(capability);
+    value.deadline = clock.now() + 1s;
+    value.route_id = "native-media-overlap";
+    value.session_generation = 1;
+    value.host_instance_id = "22222222-2222-4222-8222-222222222222";
+    value.session_id = "11111111-1111-4111-8111-111111111111";
+    value.native_media.host_instance_id = value.host_instance_id;
+    value.native_media.session_id = value.session_id;
+    value.native_media.operation = std::move(operation);
+    return value;
+  };
+  const auto prepare_write = [](Request& value, char digest) {
+    value.idempotency_key = std::string("native-media-overlap-") + digest;
+    value.arguments_fingerprint_sha256 = std::string(64, digest);
+  };
+  const auto enqueue = [&](Request value) {
+    const std::string capability = value.capability_id;
+    const std::string operation = value.native_media.operation;
+    const auto admission = dispatcher.enqueue(std::move(value));
+    require(admission.code == EnqueueCode::kAccepted,
+        "native media overlap request was rejected: " + capability + " / "
+          + operation + " / " + admission.error_field);
+  };
+
+  Request mask_read = base(
+      "media-mask-path-read",
+      std::string(aemcp::native::kNativeMediaReadCapability),
+      "mask-path");
+  mask_read.native_media.layer_locator = layer;
+  mask_read.native_media.mask_index = 1;
+  mask_read.native_media.mask_id = 7;
+  enqueue(std::move(mask_read));
+
+  Request mask_write = base(
+      "media-mask-path-write",
+      std::string(aemcp::native::kNativeMediaWriteCapability),
+      "mask-path");
+  prepare_write(mask_write, 'a');
+  mask_write.native_media.layer_locator = layer;
+  mask_write.native_media.mask_index = 1;
+  mask_write.native_media.mask_id = 7;
+  mask_write.native_media.mask_closed = false;
+  mask_write.native_media.mask_vertices = {
+      {"0", "0", "0", "0", "0", "0"},
+      {"10", "10", "0", "0", "0", "0"}};
+  enqueue(std::move(mask_write));
+
+  Request interpretation_read = base(
+      "media-footage-interpretation-read",
+      std::string(aemcp::native::kNativeMediaReadCapability),
+      "footage-interpretation");
+  interpretation_read.native_media.item_locator = item;
+  enqueue(std::move(interpretation_read));
+
+  Request interpretation_write = base(
+      "media-footage-interpretation-write",
+      std::string(aemcp::native::kNativeMediaWriteCapability),
+      "footage-interpretation");
+  prepare_write(interpretation_write, 'b');
+  interpretation_write.native_media.item_locator = item;
+  interpretation_write.native_media.interpretation =
+      aemcp::native::NativeMediaInterpretation{};
+  interpretation_write.native_media.interpretation->loop_count = 2;
+  enqueue(std::move(interpretation_write));
+
+  require(dispatcher.shutdown().size() == 4,
+      "native media overlap admission did not retain all four requests");
 }
 
 void keyframe_value_owner_lifetime_is_bound_to_the_sdk_write() {
@@ -1768,6 +1848,68 @@ void layer_compositing_writes_read_back_only_their_owned_sdk_fields() {
           && source.find("if (mode == \"normal\") return PF_Xfer_IN_FRONT;")
               != std::string::npos,
       "layer Normal mode no longer matches the AEGP timeline transfer value");
+}
+
+void legacy_effect_metadata_is_utf8_normalized_before_json_evidence() {
+  const std::filesystem::path source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "aegp" / "plugin_entry.cpp";
+  std::ifstream input(source_path, std::ios::binary);
+  require(input.good(), "could not open plugin_entry.cpp effect metadata source");
+  const std::string source{
+      std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  const std::size_t media = source.find(
+      "HostNativeMediaResult execute_native_media(");
+  require(media != std::string::npos,
+      "could not isolate the native media SDK implementation");
+  const std::string_view implementation(source.data() + media, source.size() - media);
+  const auto occurrences = [&](std::string_view needle) {
+    std::size_t count = 0;
+    std::size_t offset = 0;
+    while ((offset = implementation.find(needle, offset)) != std::string_view::npos) {
+      ++count;
+      offset += needle.size();
+    }
+    return count;
+  };
+  require(occurrences("effect_text_utf8(name, true)") >= 2
+          && occurrences("effect_text_utf8(category, true)") >= 2
+          && occurrences("effect_text_utf8(match_name, false)") >= 2,
+      "installed and applied effect metadata are not normalized at both read paths");
+  require(implementation.find("quoted(name.data())") == std::string_view::npos
+          && implementation.find("quoted(category.data())") == std::string_view::npos,
+      "legacy effect metadata bytes bypass UTF-8 normalization");
+}
+
+void effect_enabled_uses_the_sdk_undoable_dynamic_stream_write() {
+  const std::filesystem::path source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "aegp" / "plugin_entry.cpp";
+  std::ifstream input(source_path, std::ios::binary);
+  require(input.good(), "could not open plugin_entry.cpp effect write source");
+  const std::string source{
+      std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  const std::size_t mutation = source.find(
+      "A_Err mutation_error = A_Err_GENERIC;",
+      source.find("HostNativeMediaResult execute_native_media("));
+  const std::size_t effect_branch = source.find(
+      "if (command.operation == \"effect-enabled\") {", mutation);
+  const std::size_t reorder_branch = source.find(
+      "} else if (command.operation == \"effect-reorder\") {", effect_branch);
+  require(mutation != std::string::npos && effect_branch != std::string::npos
+          && reorder_branch != std::string::npos,
+      "could not isolate the effect-enabled native mutation branch");
+  const std::string_view implementation(
+      source.data() + effect_branch, reorder_branch - effect_branch);
+  require(implementation.find("AEGP_SetDynamicStreamFlag")
+              != std::string_view::npos
+          && implementation.find("AEGP_DynStreamFlag_ACTIVE_EYEBALL")
+              != std::string_view::npos
+          && implementation.find("TRUE, *command.enabled ? TRUE : FALSE")
+              != std::string_view::npos,
+      "effect enabled state is no longer written through the undoable dynamic stream API");
+  require(implementation.find("AEGP_SetEffectFlags") == std::string_view::npos,
+      "effect enabled state regressed to the non-undoable effect flags setter");
 }
 
 void layer_duplicate_rejects_an_unrelated_layer_result() {
@@ -2959,8 +3101,11 @@ int main() {
   layer_timeline_package_dispatches_all_eight_capabilities();
   layer_compositing_package_dispatches_all_four_native_capabilities();
   keyframe_authoring_package_admits_all_seven_closed_capabilities();
+  native_media_overlapping_operations_admit_on_their_selected_plane();
   keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
   layer_compositing_writes_read_back_only_their_owned_sdk_fields();
+  legacy_effect_metadata_is_utf8_normalized_before_json_evidence();
+  effect_enabled_uses_the_sdk_undoable_dynamic_stream_write();
   layer_duplicate_rejects_an_unrelated_layer_result();
   project_graph_reads_validate_arguments_and_dispatch_on_owner_thread();
   selected_layers_read_is_closed_main_thread_bound_and_request_verified();

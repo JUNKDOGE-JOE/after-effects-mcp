@@ -59,6 +59,8 @@ struct NativeRpcRuntimeInfo {
   std::string layer_property_keyframe_temporal_ease_set_contract_digest;
   std::string layer_property_keyframe_behavior_set_contract_digest;
   std::string layer_property_keyframe_delete_contract_digest;
+  std::string native_media_read_contract_digest;
+  std::string native_media_write_contract_digest;
 };
 
 class NativeRpcObserver {
