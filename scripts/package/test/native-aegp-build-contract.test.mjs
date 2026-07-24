@@ -126,6 +126,55 @@ test('native pairing command is enabled by the AE update-menu hook', () => {
   );
 });
 
+test('native local transport auto-authorizes only in an explicitly opted-in development build', () => {
+  const source = fs.readFileSync(
+    'native/ae-plugin/src/platform/macos/mac_ipc_server.cpp',
+    'utf8',
+  );
+  assert.match(
+    source,
+    /#ifndef AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER\s+#define AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER 0\s+#endif/u,
+  );
+  const pending = source.indexOf('observer_.on_ipc_event("pairing", "pending")');
+  const optIn = source.indexOf('#if AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER', pending);
+  const confirm = source.indexOf(
+    'pairing_gate_.confirm(peer->connection_id, begin.fingerprint)',
+  );
+  const optInEnd = source.indexOf('#endif', optIn);
+  const serve = source.indexOf('handler_.serve(authenticated)');
+  assert.ok(pending >= 0);
+  assert.ok(optIn > pending);
+  assert.ok(confirm > optIn);
+  assert.ok(optInEnd > confirm);
+  assert.ok(serve > confirm);
+  assert.match(BUILD_SCRIPT, /developmentTrustLocalPeer = false/u);
+  assert.match(
+    BUILD_SCRIPT,
+    /developmentTrustLocalPeer === true\s+\? \['-DAE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER=1'\] : \[\]/u,
+  );
+});
+
+test('native build without the development opt-in keeps the manual pairing path', () => {
+  assert.doesNotMatch(
+    BUILD_SCRIPT,
+    /-DAE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER=1[^\n]*(?:process\.env|environment)/u,
+  );
+  assert.match(BUILD_SCRIPT, /name === '--development-trust-local-peer'/u);
+
+  const source = fs.readFileSync(
+    'native/ae-plugin/src/platform/macos/mac_ipc_server.cpp',
+    'utf8',
+  );
+  const optInEnd = source.indexOf(
+    '#endif',
+    source.indexOf('#if AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER'),
+  );
+  const pairingWait = source.indexOf(
+    'while (!stop_requested_.load() && std::chrono::steady_clock::now() < pairing_deadline)',
+  );
+  assert.ok(pairingWait > optInEnd);
+});
+
 test('native composition-create diagnostics use the redacted serializer', () => {
   const completionStart = PLUGIN_ENTRY.indexOf('void log_completion(');
   const completionEnd = PLUGIN_ENTRY.indexOf('bool PluginState::start_ipc', completionStart);

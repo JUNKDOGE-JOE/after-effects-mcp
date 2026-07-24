@@ -190,10 +190,16 @@ BUILD_DIR=/private/tmp/ae-mcp-native-73
 node native/ae-plugin/build-macos.mjs \
   --sdk-archive "$AE_SDK_ARCHIVE" \
   --sdk-root "$AE_SDK_ROOT" \
+  --development-trust-local-peer \
   --output "$BUILD_DIR"
 node native/ae-plugin/verify-macos.mjs \
   --bundle "$BUILD_DIR/AeMcpNative.plugin"
 ```
+
+`--development-trust-local-peer` is the explicit local-development opt-in that
+auto-confirms an already admitted same-user AE process-tree peer. Omitting it
+keeps the native pairing decision mandatory, which is the secure compile-time
+default for release builds.
 
 Close every After Effects, AfterFX, and aerender process before installing. The development
 installer verifies the build receipt and installed copy, and installs the loadable bundle at

@@ -118,6 +118,9 @@ async function packageFixture(base, {
   );
   const runtimeManifestSha256 = await sha256File(runtimeManifestPath);
   const launcherSha256 = await sha256File(launcher);
+  const inventoryByPath = new Map(files.map((record) => [record.path, record]));
+  const nodeRecord = inventoryByPath.get('node/bin/node');
+  const pythonRecord = inventoryByPath.get('python/bin/python3');
   await writeFile(extensionRoot, 'bundle-manifest.json', `${JSON.stringify({
     schemaVersion: 1,
     version,
@@ -139,6 +142,14 @@ async function packageFixture(base, {
       {
         path: 'runtime/macos-arm64/runtime-manifest.json', type: 'file',
         size: (await fs.promises.stat(runtimeManifestPath)).size, mode: '0644', sha256: runtimeManifestSha256,
+      },
+      {
+        ...nodeRecord,
+        path: `runtime/macos-arm64/${nodeRecord.path}`,
+      },
+      {
+        ...pythonRecord,
+        path: `runtime/macos-arm64/${pythonRecord.path}`,
       },
     ],
   }, null, 2)}\n`);
@@ -221,7 +232,7 @@ macosRuntimeTest('upgrade, downgrade, and rollback atomically select verified ve
   assert.equal(state.previous.record.version, '0.10.0');
 });
 
-macosRuntimeTest('a corrupt current runtime falls back once, then a later call repairs from the offline payload', async (t) => {
+macosRuntimeTest('a changed critical runtime signal triggers a verified repair without retaining the bad generation', async (t) => {
   const h = await harness(t);
   const v1 = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'one',
@@ -236,19 +247,19 @@ macosRuntimeTest('a corrupt current runtime falls back once, then a later call r
   const current = (await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8')).trim();
   await fs.promises.appendFile(path.join(h.platform.paths.runtimeRoot, current, 'python', 'bin', 'python3'), '# corrupt\n');
 
-  const fallback = await two.ensureReady();
+  const repaired = await two.ensureReady();
 
-  assert.equal(fallback.action, 'fallback');
-  assert.equal(fallback.version, '0.9.3');
-  assert.equal(fallback.diagnostics[0].code, 'RUNTIME_CURRENT_INVALID_FALLBACK');
-  const launched = await execFileAsync(h.platform.paths.launcher, ['--fallback'], {
+  assert.equal(repaired.action, 'repair');
+  assert.equal(repaired.version, '0.10.0');
+  assert.equal(repaired.diagnostics[0].code, 'RUNTIME_CURRENT_REPAIRED');
+  const launched = await execFileAsync(h.platform.paths.launcher, ['--repaired'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });
-  assert.match(launched.stdout, /core-started:one:-B -I -m ae_mcp --fallback/);
+  assert.match(launched.stdout, /core-started:two:-B -I -m ae_mcp --repaired/);
   assert.equal((await two.inspect()).ok, true);
   await assert.rejects(fs.promises.readFile(h.platform.paths.previousPointer), { code: 'ENOENT' });
   const next = await two.ensureReady();
-  assert.notEqual(next.action, 'fallback');
+  assert.equal(next.action, 'ready');
   assert.equal(next.version, '0.10.0');
   assert.equal((await two.inspect()).ok, true);
 });
@@ -347,6 +358,45 @@ macosRuntimeTest('concurrent cold-start checks on one panel share a single Runti
   assert.equal(first.action, 'install');
   assert.deepEqual(second, first);
   assert.equal((await manager.inspect()).ok, true);
+});
+
+macosRuntimeTest('unchanged runtime receipt is reused across source revisions without a tree walk', async (t) => {
+  const h = await harness(t);
+  const firstPayload = await packageFixture(path.join(h.root, 'first'), {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'shared',
+  });
+  const secondPayload = await packageFixture(path.join(h.root, 'second'), {
+    version: '0.9.3', sourceCommitSha: '2'.repeat(40), marker: 'shared',
+  });
+  const first = managerFor(h, firstPayload.extensionRoot);
+  const installed = await first.ensureReady();
+  const selectedRuntime = path.join(h.platform.paths.runtimeRoot, installed.relative);
+  const guardedPromises = new Proxy(fs.promises, {
+    get(target, property) {
+      const value = Reflect.get(target, property);
+      if (property === 'readdir' || property === 'readFile') {
+        return async function guarded(targetPath, ...args) {
+          const resolved = path.resolve(String(targetPath));
+          if (resolved === selectedRuntime || resolved.startsWith(`${selectedRuntime}${path.sep}`)) {
+            throw new Error(`routine trusted reuse attempted runtime tree I/O: ${property} ${resolved}`);
+          }
+          return value.call(target, targetPath, ...args);
+        };
+      }
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const guardedFs = { ...fs, promises: guardedPromises };
+  const second = managerFor(h, secondPayload.extensionRoot, { fsImpl: guardedFs });
+
+  const reused = await second.ensureReady();
+
+  assert.equal(reused.action, 'ready');
+  assert.equal(reused.relative, installed.relative);
+  assert.equal(reused.sourceCommitSha, '1'.repeat(40));
+  assert.equal(reused.packagedSourceCommitSha, '2'.repeat(40));
+  assert.equal(reused.diagnostics[0].code, 'RUNTIME_SOURCE_REVISION_DIFFERENT_TRUSTED');
+  assert.equal((await second.inspect()).ok, true);
 });
 
 macosRuntimeTest('a held lock fails with an actionable bounded diagnostic', async (t) => {

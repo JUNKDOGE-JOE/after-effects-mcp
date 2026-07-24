@@ -20,6 +20,15 @@
 #include <utility>
 #include <vector>
 
+#ifndef AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER
+#define AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER 0
+#endif
+
+static_assert(
+    AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER == 0
+        || AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER == 1,
+    "AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER must be 0 or 1");
+
 namespace aemcp::native {
 namespace {
 
@@ -199,6 +208,16 @@ void MacIpcServer::handle_connection(int socket_fd) noexcept {
       return;
     }
     observer_.on_ipc_event("pairing", "pending");
+#if AE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER
+    // Local development runs inside the already-admitted same-user AE process
+    // tree. Keep the V1 transport shape for compatibility, but authorize the
+    // exact peer binding immediately instead of waiting for a GUI fingerprint.
+    if (!pairing_gate_.confirm(peer->connection_id, begin.fingerprint)) {
+      pairing_gate_.revoke(*peer);
+      observer_.on_ipc_event("pairing", "local-auto-authorization-failed");
+      return;
+    }
+#endif
     const auto pairing_deadline = std::chrono::steady_clock::now() + begin.expires_in;
     bool authorized = false;
     while (!stop_requested_.load() && std::chrono::steady_clock::now() < pairing_deadline) {

@@ -25,9 +25,9 @@
     mod
   ));
 
-  // node_modules/react/cjs/react.production.min.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/cjs/react.production.min.js
   var require_react_production_min = __commonJS({
-    "node_modules/react/cjs/react.production.min.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/cjs/react.production.min.js"(exports) {
       "use strict";
       var l = Symbol.for("react.element");
       var n = Symbol.for("react.portal");
@@ -298,9 +298,9 @@
     }
   });
 
-  // node_modules/react/index.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/index.js
   var require_react = __commonJS({
-    "node_modules/react/index.js"(exports, module) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_production_min();
@@ -310,9 +310,9 @@
     }
   });
 
-  // node_modules/scheduler/cjs/scheduler.production.min.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js
   var require_scheduler_production_min = __commonJS({
-    "node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
       "use strict";
       function f(a, b) {
         var c = a.length;
@@ -563,9 +563,9 @@
     }
   });
 
-  // node_modules/scheduler/index.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/scheduler/index.js
   var require_scheduler = __commonJS({
-    "node_modules/scheduler/index.js"(exports, module) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/scheduler/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_scheduler_production_min();
@@ -575,9 +575,9 @@
     }
   });
 
-  // node_modules/react-dom/cjs/react-dom.production.min.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js
   var require_react_dom_production_min = __commonJS({
-    "node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
       "use strict";
       var aa = require_react();
       var ca = require_scheduler();
@@ -7185,9 +7185,9 @@
     }
   });
 
-  // node_modules/react-dom/index.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/index.js
   var require_react_dom = __commonJS({
-    "node_modules/react-dom/index.js"(exports, module) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/index.js"(exports, module) {
       "use strict";
       function checkDCE() {
         if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7211,9 +7211,9 @@
     }
   });
 
-  // node_modules/react-dom/client.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/client.js
   var require_client = __commonJS({
-    "node_modules/react-dom/client.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/client.js"(exports) {
       "use strict";
       var m = require_react_dom();
       if (true) {
@@ -7242,9 +7242,9 @@
     }
   });
 
-  // node_modules/react/cjs/react-jsx-runtime.production.min.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js
   var require_react_jsx_runtime_production_min = __commonJS({
-    "node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
       "use strict";
       var f = require_react();
       var k = Symbol.for("react.element");
@@ -7267,9 +7267,9 @@
     }
   });
 
-  // node_modules/react/jsx-runtime.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/jsx-runtime.js
   var require_jsx_runtime = __commonJS({
-    "node_modules/react/jsx-runtime.js"(exports, module) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/jsx-runtime.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_jsx_runtime_production_min();
@@ -7318,19 +7318,19 @@
   // src/components/core/Icon.jsx
   var import_react4 = __toESM(require_react(), 1);
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var import_react3 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/shared/src/utils.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/shared/src/utils.js
   var toKebabCase = (string) => string.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   var mergeClasses = (...classes) => classes.filter((className, index, array) => {
     return Boolean(className) && array.indexOf(className) === index;
   }).join(" ");
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var import_react2 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/defaultAttributes.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/defaultAttributes.js
   var defaultAttributes = {
     xmlns: "http://www.w3.org/2000/svg",
     width: 24,
@@ -7343,7 +7343,7 @@
     strokeLinejoin: "round"
   };
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var Icon = (0, import_react2.forwardRef)(
     ({
       color = "currentColor",
@@ -7375,7 +7375,7 @@
     }
   );
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var createLucideIcon = (iconName, iconNode) => {
     const Component = (0, import_react3.forwardRef)(
       ({ className, ...props }, ref) => (0, import_react3.createElement)(Icon, {
@@ -7389,13 +7389,13 @@
     return Component;
   };
 
-  // node_modules/lucide-react/dist/esm/icons/arrow-up.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/arrow-up.js
   var ArrowUp = createLucideIcon("ArrowUp", [
     ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
     ["path", { d: "M12 19V5", key: "x0mq9r" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/book-open.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/book-open.js
   var BookOpen = createLucideIcon("BookOpen", [
     ["path", { d: "M12 7v14", key: "1akyts" }],
     [
@@ -7407,7 +7407,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/box.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/box.js
   var Box = createLucideIcon("Box", [
     [
       "path",
@@ -7420,7 +7420,7 @@
     ["path", { d: "M12 22V12", key: "d0xqtd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/brain.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/brain.js
   var Brain = createLucideIcon("Brain", [
     [
       "path",
@@ -7445,58 +7445,58 @@
     ["path", { d: "M19.967 17.484A4 4 0 0 1 18 18", key: "159ez6" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/check.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/check.js
   var Check = createLucideIcon("Check", [["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-down.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-down.js
   var ChevronDown = createLucideIcon("ChevronDown", [
     ["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-right.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-right.js
   var ChevronRight = createLucideIcon("ChevronRight", [
     ["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-alert.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-alert.js
   var CircleAlert = createLucideIcon("CircleAlert", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "12", x2: "12", y1: "8", y2: "12", key: "1pkeuh" }],
     ["line", { x1: "12", x2: "12.01", y1: "16", y2: "16", key: "4dfq90" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-slash.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-slash.js
   var CircleSlash = createLucideIcon("CircleSlash", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "9", x2: "15", y1: "15", y2: "9", key: "1dfufj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/circle.js
   var Circle = createLucideIcon("Circle", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/copy.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/copy.js
   var Copy = createLucideIcon("Copy", [
     ["rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2", key: "17jyea" }],
     ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2", key: "zix9uf" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/download.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/download.js
   var Download = createLucideIcon("Download", [
     ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
     ["polyline", { points: "7 10 12 15 17 10", key: "2ggqvy" }],
     ["line", { x1: "12", x2: "12", y1: "15", y2: "3", key: "1vk2je" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/external-link.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/external-link.js
   var ExternalLink = createLucideIcon("ExternalLink", [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye-off.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/eye-off.js
   var EyeOff = createLucideIcon("EyeOff", [
     [
       "path",
@@ -7516,7 +7516,7 @@
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/eye.js
   var Eye = createLucideIcon("Eye", [
     [
       "path",
@@ -7528,7 +7528,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/file-text.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/file-text.js
   var FileText = createLucideIcon("FileText", [
     ["path", { d: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", key: "1rqfz7" }],
     ["path", { d: "M14 2v4a2 2 0 0 0 2 2h4", key: "tnqrlb" }],
@@ -7537,7 +7537,7 @@
     ["path", { d: "M16 17H8", key: "z1uh3a" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/github.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/github.js
   var Github = createLucideIcon("Github", [
     [
       "path",
@@ -7549,28 +7549,28 @@
     ["path", { d: "M9 18c-4.51 2-5-2-7-2", key: "9comsn" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/globe.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/globe.js
   var Globe = createLucideIcon("Globe", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/history.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/history.js
   var History = createLucideIcon("History", [
     ["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "1357e3" }],
     ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
     ["path", { d: "M12 7v5l4 2", key: "1fdv2h" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/info.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/info.js
   var Info = createLucideIcon("Info", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 16v-4", key: "1dtifu" }],
     ["path", { d: "M12 8h.01", key: "e9boi3" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list-checks.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/list-checks.js
   var ListChecks = createLucideIcon("ListChecks", [
     ["path", { d: "m3 17 2 2 4-4", key: "1jhpwq" }],
     ["path", { d: "m3 7 2 2 4-4", key: "1obspn" }],
@@ -7579,7 +7579,7 @@
     ["path", { d: "M13 18h8", key: "oe0vm4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/list.js
   var List = createLucideIcon("List", [
     ["path", { d: "M3 12h.01", key: "nlz23k" }],
     ["path", { d: "M3 18h.01", key: "1tta3j" }],
@@ -7589,23 +7589,23 @@
     ["path", { d: "M8 6h13", key: "ik3vkj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/message-square.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/message-square.js
   var MessageSquare = createLucideIcon("MessageSquare", [
     ["path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", key: "1lielz" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/pause.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/pause.js
   var Pause = createLucideIcon("Pause", [
     ["rect", { x: "14", y: "4", width: "4", height: "16", rx: "1", key: "zuxfzm" }],
     ["rect", { x: "6", y: "4", width: "4", height: "16", rx: "1", key: "1okwgv" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/play.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/play.js
   var Play = createLucideIcon("Play", [
     ["polygon", { points: "6 3 20 12 6 21 6 3", key: "1oa8hb" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plug.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/plug.js
   var Plug = createLucideIcon("Plug", [
     ["path", { d: "M12 22v-5", key: "1ega77" }],
     ["path", { d: "M9 8V2", key: "14iosj" }],
@@ -7613,25 +7613,25 @@
     ["path", { d: "M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z", key: "osxo6l" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plus.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/plus.js
   var Plus = createLucideIcon("Plus", [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/rotate-cw.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/rotate-cw.js
   var RotateCw = createLucideIcon("RotateCw", [
     ["path", { d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", key: "1p45f6" }],
     ["path", { d: "M21 3v5h-5", key: "1q7to0" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/search.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/search.js
   var Search = createLucideIcon("Search", [
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }],
     ["path", { d: "m21 21-4.3-4.3", key: "1qie3q" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/send.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/send.js
   var Send = createLucideIcon("Send", [
     [
       "path",
@@ -7643,7 +7643,7 @@
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/settings.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/settings.js
   var Settings = createLucideIcon("Settings", [
     [
       "path",
@@ -7655,7 +7655,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield-alert.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/shield-alert.js
   var ShieldAlert = createLucideIcon("ShieldAlert", [
     [
       "path",
@@ -7668,7 +7668,7 @@
     ["path", { d: "M12 16h.01", key: "1drbdi" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/shield.js
   var Shield = createLucideIcon("Shield", [
     [
       "path",
@@ -7679,7 +7679,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/sparkles.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/sparkles.js
   var Sparkles = createLucideIcon("Sparkles", [
     [
       "path",
@@ -7694,12 +7694,12 @@
     ["path", { d: "M5 18H3", key: "zchphs" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/square.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/square.js
   var Square = createLucideIcon("Square", [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/stethoscope.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/stethoscope.js
   var Stethoscope = createLucideIcon("Stethoscope", [
     ["path", { d: "M11 2v2", key: "1539x4" }],
     ["path", { d: "M5 2v2", key: "1yf1q8" }],
@@ -7708,7 +7708,7 @@
     ["circle", { cx: "20", cy: "10", r: "2", key: "ts1r5v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/trash-2.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/trash-2.js
   var Trash2 = createLucideIcon("Trash2", [
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", key: "4alrt4" }],
@@ -7717,7 +7717,7 @@
     ["line", { x1: "14", x2: "14", y1: "11", y2: "17", key: "xtxkd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/triangle-alert.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/triangle-alert.js
   var TriangleAlert = createLucideIcon("TriangleAlert", [
     [
       "path",
@@ -7730,13 +7730,13 @@
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/undo-2.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/undo-2.js
   var Undo2 = createLucideIcon("Undo2", [
     ["path", { d: "M9 14 4 9l5-5", key: "102s5s" }],
     ["path", { d: "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11", key: "f3b9sd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/wrench.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/wrench.js
   var Wrench = createLucideIcon("Wrench", [
     [
       "path",
@@ -7747,13 +7747,13 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/x.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/x.js
   var X = createLucideIcon("X", [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/zap.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/zap.js
   var Zap = createLucideIcon("Zap", [
     [
       "path",
@@ -17539,6 +17539,32 @@
         failure(code, "Runtime metadata is missing or invalid", { path: filePath });
       }
     }
+    async function ordinaryFileSignal(filePath, code, {
+      executable = false,
+      expectedMode,
+      expectedSize
+    } = {}) {
+      var _a2;
+      let info;
+      try {
+        info = await promises.lstat(filePath);
+      } catch (error) {
+        failure(code, "Trusted local runtime metadata is missing", { path: filePath });
+      }
+      if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1 || executable && (info.mode & 73) === 0 || expectedMode && modeOf(info) !== expectedMode || Number.isSafeInteger(expectedSize) && info.size !== expectedSize) {
+        failure(code, "Trusted local runtime metadata changed", {
+          path: filePath,
+          size: info.size,
+          mtimeMs: Math.trunc(info.mtimeMs)
+        });
+      }
+      return {
+        path: filePath,
+        size: info.size,
+        mtimeMs: Math.trunc(info.mtimeMs),
+        mode: modeOf(info)
+      };
+    }
     function validateRuntimeManifest(value) {
       var _a2, _b2;
       if (!value || value.schemaVersion !== 1 || value.platform !== platform.id || ((_a2 = value.node) == null ? void 0 : _a2.version) !== "24.17.0" || ((_b2 = value.python) == null ? void 0 : _b2.version) !== "3.13.14" || !Array.isArray(value.files) || value.files.length === 0) {
@@ -17625,6 +17651,66 @@
       }
       return { manifest: value, byPath };
     }
+    async function inspectPackagedPayload() {
+      const { manifest, byPath } = validateBundleManifest(
+        await readJson2(packageManifestPath, "RUNTIME_BUNDLE_INVALID")
+      );
+      const runtimeManifestRelative = `runtime/${platform.id}/runtime-manifest.json`;
+      const launcherRelative = `platform/${platform.id}/bin/ae-mcp`;
+      const nodeRelative = `runtime/${platform.id}/node/bin/node`;
+      const pythonRelative = `runtime/${platform.id}/python/bin/python3`;
+      const runtimeRecord = byPath.get(runtimeManifestRelative);
+      const launcherRecord = byPath.get(launcherRelative);
+      const nodeRecord = byPath.get(nodeRelative);
+      const pythonRecord = byPath.get(pythonRelative);
+      if (!runtimeRecord || runtimeRecord.type !== "file" || runtimeRecord.sha256 !== manifest.runtime.manifestSha256 || !Number.isSafeInteger(runtimeRecord.size) || runtimeRecord.size <= 0 || !launcherRecord || launcherRecord.type !== "file" || !Number.isSafeInteger(launcherRecord.size) || launcherRecord.size <= 0 || !nodeRecord || nodeRecord.type !== "file" || !Number.isSafeInteger(nodeRecord.size) || nodeRecord.size <= 0 || !pythonRecord || pythonRecord.type !== "file" || !Number.isSafeInteger(pythonRecord.size) || pythonRecord.size <= 0) {
+        failure("RUNTIME_BUNDLE_INVALID", "Packaged runtime entrypoints or stable launcher are not declared");
+      }
+      const runtimeManifestSignal = await ordinaryFileSignal(
+        packagedRuntimeManifest,
+        "RUNTIME_BUNDLE_METADATA_CHANGED",
+        { expectedMode: runtimeRecord.mode, expectedSize: runtimeRecord.size }
+      );
+      const launcherSignal = await ordinaryFileSignal(
+        packagedLauncher,
+        "RUNTIME_BUNDLE_METADATA_CHANGED",
+        {
+          executable: true,
+          expectedMode: launcherRecord.mode,
+          expectedSize: launcherRecord.size
+        }
+      );
+      const nodeSignal = await ordinaryFileSignal(
+        paths.join([packagedRuntimeRoot, "node", "bin", "node"]),
+        "RUNTIME_BUNDLE_METADATA_CHANGED",
+        {
+          executable: true,
+          expectedMode: nodeRecord.mode,
+          expectedSize: nodeRecord.size
+        }
+      );
+      const pythonSignal = await ordinaryFileSignal(
+        paths.join([packagedRuntimeRoot, "python", "bin", "python3"]),
+        "RUNTIME_BUNDLE_METADATA_CHANGED",
+        {
+          executable: true,
+          expectedMode: pythonRecord.mode,
+          expectedSize: pythonRecord.size
+        }
+      );
+      return {
+        version: manifest.version,
+        sourceCommitSha: manifest.sourceCommitSha,
+        runtimeManifestSha256: manifest.runtime.manifestSha256,
+        launcherSha256: launcherRecord.sha256,
+        signals: {
+          runtimeManifest: runtimeManifestSignal,
+          launcher: launcherSignal,
+          node: nodeSignal,
+          python: pythonSignal
+        }
+      };
+    }
     async function verifyPackagedPayload() {
       const { manifest, byPath } = validateBundleManifest(
         await readJson2(packageManifestPath, "RUNTIME_BUNDLE_INVALID")
@@ -17653,11 +17739,7 @@
     function generationLauncherPath(relative) {
       return paths.join([root, relative.split("/")[0], GENERATION_LAUNCHER]);
     }
-    async function verifyInstalled(relative) {
-      var _a2;
-      const normalized = pointerValue(relative, platform.id);
-      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Runtime pointer is invalid");
-      const record = await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID");
+    function validateInstallRecord(record, normalized) {
       if (!exactKeys(record, [
         "installedAt",
         "launcherSha256",
@@ -17670,14 +17752,57 @@
       ]) || record.schemaVersion !== 1 || record.platform !== platform.id || record.relative !== normalized || !SEMVER.test(record.version) || !SOURCE_SHA.test(record.sourceCommitSha) || !SHA256.test(record.runtimeManifestSha256) || !SHA256.test(record.launcherSha256) || !Number.isSafeInteger(record.installedAt) || record.installedAt < 0) {
         failure("RUNTIME_INSTALL_RECORD_INVALID", "Runtime install record is invalid");
       }
+      return record;
+    }
+    async function inspectInstalled(relative) {
+      const normalized = pointerValue(relative, platform.id);
+      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Runtime pointer is invalid");
+      const record = validateInstallRecord(
+        await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID"),
+        normalized
+      );
       const directory = paths.join([root, ...normalized.split("/")]);
+      const signals = {
+        runtimeManifest: await ordinaryFileSignal(
+          paths.join([directory, "runtime-manifest.json"]),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          {}
+        ),
+        launcher: await ordinaryFileSignal(
+          generationLauncherPath(normalized),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          { executable: true, expectedMode: "0755" }
+        ),
+        node: await ordinaryFileSignal(
+          paths.join([directory, "node", "bin", "node"]),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          { executable: true }
+        ),
+        python: await ordinaryFileSignal(
+          paths.join([directory, "python", "bin", "python3"]),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          { executable: true }
+        )
+      };
+      return {
+        relative: normalized,
+        directory,
+        launcher: generationLauncherPath(normalized),
+        record,
+        signals
+      };
+    }
+    async function verifyInstalled(relative) {
+      var _a2;
+      const selected = await inspectInstalled(relative);
+      const { record, directory } = selected;
       await verifyRuntime(directory, record.runtimeManifestSha256);
-      const launcher = generationLauncherPath(normalized);
+      const launcher = selected.launcher;
       const launcherInfo = await promises.lstat(launcher);
       if (!launcherInfo.isFile() || ((_a2 = launcherInfo.isSymbolicLink) == null ? void 0 : _a2.call(launcherInfo)) || launcherInfo.nlink !== 1 || modeOf(launcherInfo) !== "0755" || await sha256File(launcher) !== record.launcherSha256) {
         failure("RUNTIME_LAUNCHER_CORRUPT", "Runtime generation launcher failed verification");
       }
-      return { relative: normalized, directory, launcher, record };
+      return selected;
     }
     async function pointerState(pointerPath) {
       var _a2;
@@ -17689,7 +17814,7 @@
         const relative = pointerValue(await promises.readFile(pointerPath, "utf8"), platform.id);
         if (!relative) return { exists: true, ok: false, code: "RUNTIME_POINTER_INVALID" };
         try {
-          return { exists: true, ok: true, ...await verifyInstalled(relative) };
+          return { exists: true, ok: true, ...await inspectInstalled(relative) };
         } catch (error) {
           const normalized = runtimeError(error);
           return { exists: true, ok: false, relative, code: normalized.code, detail: normalized.message };
@@ -17743,20 +17868,30 @@
       }
     }
     async function installLauncher(selected) {
-      var _a2;
       try {
-        const info = await promises.lstat(paths.launcher);
-        if (info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && info.nlink === 1 && modeOf(info) === "0755" && await sha256File(paths.launcher) === selected.record.launcherSha256) return;
+        const source = await ordinaryFileSignal(
+          selected.launcher,
+          "RUNTIME_LAUNCHER_CORRUPT",
+          { executable: true, expectedMode: "0755" }
+        );
+        await ordinaryFileSignal(
+          paths.launcher,
+          "RUNTIME_LAUNCHER_CORRUPT",
+          { executable: true, expectedMode: "0755", expectedSize: source.size }
+        );
+        return;
       } catch (error) {
-        if ((error == null ? void 0 : error.code) !== "ENOENT" && !(error instanceof RuntimeManagerError)) throw error;
+        if (!(error instanceof RuntimeManagerError) && (error == null ? void 0 : error.code) !== "ENOENT") throw error;
       }
       await promises.mkdir(paths.binRoot, { recursive: true, mode: 448 });
       const bytes = await promises.readFile(selected.launcher);
       await atomicWrite(paths.launcher, bytes, 493);
       await promises.chmod(paths.launcher, 493);
-      if (await sha256File(paths.launcher) !== selected.record.launcherSha256) {
-        failure("RUNTIME_LAUNCHER_CORRUPT", "Installed stable launcher failed verification");
-      }
+      await ordinaryFileSignal(
+        paths.launcher,
+        "RUNTIME_LAUNCHER_CORRUPT",
+        { executable: true, expectedMode: "0755", expectedSize: bytes.length }
+      );
     }
     function assertLauncherTransitionCompatible(selected, current) {
       if (!(current == null ? void 0 : current.ok) || current.relative === selected.relative) return;
@@ -17878,7 +18013,7 @@
     function ensureReady() {
       if (readinessPromise) return readinessPromise;
       const pending = withLock(async () => {
-        const current = await pointerState(paths.currentPointer);
+        let current = await pointerState(paths.currentPointer);
         const previous = await pointerState(paths.previousPointer);
         if (!current.ok && previous.ok) {
           await installLauncher(previous);
@@ -17900,7 +18035,7 @@
         }
         let packaged;
         try {
-          packaged = await verifyPackagedPayload();
+          packaged = await inspectPackagedPayload();
         } catch (error) {
           if (!current.ok) throw error;
           await installLauncher(current);
@@ -17918,7 +18053,9 @@
             }]
           };
         }
-        if (current.ok && current.record.version === packaged.version && current.record.sourceCommitSha === packaged.sourceCommitSha && current.record.runtimeManifestSha256 === packaged.runtimeManifestSha256) {
+        const declaredRuntimeMatches = current.ok && current.record.version === packaged.version && current.record.runtimeManifestSha256 === packaged.runtimeManifestSha256 && current.record.launcherSha256 === packaged.launcherSha256;
+        const trustedSignalsMatch = declaredRuntimeMatches && current.signals.runtimeManifest.size === packaged.signals.runtimeManifest.size && current.signals.launcher.size === packaged.signals.launcher.size && current.signals.node.size === packaged.signals.node.size && current.signals.python.size === packaged.signals.python.size;
+        if (trustedSignalsMatch) {
           await installLauncher(current);
           return {
             ok: true,
@@ -17927,9 +18064,23 @@
             relative: current.relative,
             version: current.record.version,
             sourceCommitSha: current.record.sourceCommitSha,
-            diagnostics: []
+            packagedSourceCommitSha: packaged.sourceCommitSha,
+            trustSignals: current.signals,
+            diagnostics: current.record.sourceCommitSha === packaged.sourceCommitSha ? [] : [{
+              code: "RUNTIME_SOURCE_REVISION_DIFFERENT_TRUSTED",
+              message: "The unchanged installed runtime was reused across an advisory source revision change."
+            }]
           };
         }
+        if (declaredRuntimeMatches) {
+          current = {
+            ...current,
+            ok: false,
+            code: "RUNTIME_TRUST_SIGNAL_CHANGED",
+            detail: "A bounded runtime size or metadata signal changed."
+          };
+        }
+        packaged = await verifyPackagedPayload();
         const selected = await installPackaged(packaged);
         assertLauncherTransitionCompatible(selected, current);
         await installLauncher(selected);
@@ -18022,8 +18173,8 @@
       let launcher = { ok: false, code: "RUNTIME_LAUNCHER_MISSING", path: paths.launcher };
       try {
         const info = await promises.lstat(paths.launcher);
-        const digestOk = current.ok ? await sha256File(paths.launcher) === current.record.launcherSha256 : true;
-        launcher = info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && modeOf(info) === "0755" && digestOk ? { ok: true, path: paths.launcher } : { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
+        const sourceSize = current.ok ? current.signals.launcher.size : info.size;
+        launcher = info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && info.nlink === 1 && modeOf(info) === "0755" && info.size === sourceSize ? { ok: true, path: paths.launcher } : { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
       } catch (error) {
         if ((error == null ? void 0 : error.code) !== "ENOENT") launcher = { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
       }

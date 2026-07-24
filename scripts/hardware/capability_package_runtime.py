@@ -4,7 +4,7 @@
 This module deliberately stops short of being a general plan language.  A
 package still owns its exact request builders, semantic projections, fixture
 recipe, Undo checks, and interaction order.  The stable concerns demonstrated
-by packages #150 and #155 live here: exact-build identity, public MCP
+by packages #150 and #155 live here: local component identity, public MCP
 transport, native provenance/postcondition validation, bounded call accounting,
 private evidence, GUI checkpoints, and one ephemeral ``.aep`` lifecycle.
 """
@@ -401,7 +401,7 @@ class EvidenceLog:
         lines = [
             f"## Issue #{self.spec.issue} {self.mode.upper()} acceptance",
             "",
-            f"- exact source commit: `{summary['expectedSourceCommit']}`",
+            f"- requested source revision: `{summary['expectedSourceCommit']}`",
             f"- candidate run: `{str(summary['candidateRun']).lower()}`",
             f"- candidate evidence: `{str(summary['candidateEvidence']).lower()}`",
             f"- passed: `{str(summary['passed']).lower()}`",
@@ -552,10 +552,12 @@ class AcceptanceRuntime:
             for case in spec.tools
         }
         self.aep_lifecycle = AepLifecycleCounters()
-        self.component_hashes: dict[str, str] = {}
+        self.component_signals: dict[str, dict[str, Any]] = {}
+        self.source_revisions: dict[str, str] = {}
         self.contract_digests: dict[str, str] = {}
-        self.formal_ae_identity: dict[str, str] = {}
+        self.formal_ae_identity: dict[str, Any] = {}
         self.expected_host_instance_id: str | None = None
+        self.expected_native_source_revision: str | None = None
         self.intent_counter = 0
         self.pairing_checkpoint_used = False
         self.pairing_epoch_start_total = 0
@@ -574,7 +576,8 @@ class AcceptanceRuntime:
             )
         except IdentityFailure as error:
             raise AcceptanceFailure(str(error)) from error
-        self.component_hashes.update(proof.component_hashes)
+        self.component_signals.update(proof.component_signals)
+        self.source_revisions.update(proof.source_revisions)
         self.contract_digests.update(proof.contract_digests)
         self.formal_ae_identity.update(proof.formal_ae_identity)
 
@@ -604,10 +607,12 @@ class AcceptanceRuntime:
         require(latest is not None, "native log has no load event")
         host = mapping(latest.get("host"), "native load host is invalid")
         instance_id = latest.get("instanceId")
+        source_revision = latest.get("sourceCommit")
         require(
             latest.get("schemaVersion") == 1
             and latest.get("provenance") == "native-aegp"
-            and latest.get("sourceCommit") == self.identity.expected_sha
+            and isinstance(source_revision, str)
+            and FULL_SHA.fullmatch(source_revision) is not None
             and isinstance(instance_id, str)
             and UUID.fullmatch(instance_id),
             "native load identity mismatch",
@@ -617,6 +622,7 @@ class AcceptanceRuntime:
         if previous_instance_id is not None:
             require(instance_id != previous_instance_id, "AE restart reused native instance")
         self.expected_host_instance_id = instance_id
+        self.expected_native_source_revision = source_revision
         self.pairing_checkpoint_used = False
         self.pairing_epoch_start_total = self.ledger.total
         self.evidence.record(
@@ -624,7 +630,7 @@ class AcceptanceRuntime:
             {
                 "stage": stage,
                 "instanceId": instance_id,
-                "sourceCommit": self.identity.expected_sha,
+                "sourceRevision": source_revision,
                 "host": host,
                 "logSha256": hashlib.sha256(payload).hexdigest(),
                 "recordSha256": json_hash(latest),
@@ -669,7 +675,19 @@ class AcceptanceRuntime:
         expected_contract = self.contract_digests.get(capability_id)
         require(expected_contract is not None, f"{tool} contract was not frozen")
         require(implementation.get("contractDigest") == expected_contract, f"{tool} contract digest mismatch")
-        require(provenance.get("sourceCommit") == self.identity.expected_sha, f"{tool} source SHA mismatch")
+        source_revision = provenance.get("sourceCommit")
+        require(
+            isinstance(source_revision, str) and FULL_SHA.fullmatch(source_revision) is not None,
+            f"{tool} native source revision is invalid",
+        )
+        bound_source = getattr(self, "expected_native_source_revision", None)
+        if bound_source is None:
+            self.expected_native_source_revision = source_revision
+        else:
+            require(
+                source_revision == bound_source,
+                f"{tool} native source revision changed within the active host",
+            )
         require(provenance.get("engine") == "native-aegp", f"{tool} provenance mismatch")
         require(
             provenance.get("hostInstanceId") == evidence.get("hostInstanceId")
