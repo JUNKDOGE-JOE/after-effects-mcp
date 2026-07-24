@@ -175,6 +175,30 @@ inline constexpr std::size_t kNativePageValueBudgetBytes = 48U * 1024U;
   return source_item_name;
 }
 
+struct IndexedGroupReorderPlan {
+  bool valid{false};
+  bool required{false};
+  std::uint64_t target_zero_index{0};
+};
+
+// AE reports an error dialog when AEGP_ReorderStream is asked to move an
+// indexed-group child to the position it already occupies. Plan the SDK call
+// only after the newly created child has been located by stable identity.
+[[nodiscard]] inline constexpr IndexedGroupReorderPlan plan_indexed_group_reorder(
+    std::uint64_t current_one_index,
+    std::uint64_t target_one_index,
+    std::uint64_t resulting_count) noexcept {
+  if (current_one_index < 1 || current_one_index > resulting_count
+      || target_one_index < 1 || target_one_index > resulting_count) {
+    return {};
+  }
+  return {
+      true,
+      current_one_index != target_one_index,
+      target_one_index - 1U,
+  };
+}
+
 // Returns the exact byte count used by the codec's JSON string serializer,
 // including quotes and control-character escaping. It is intentionally
 // independent of AE SDK types so bounded page assembly is portable-testable.

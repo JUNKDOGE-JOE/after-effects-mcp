@@ -7921,15 +7921,64 @@ class AegpHostApi final : public HostApi {
         mutation_error = mask_suite->AEGP_DuplicateMask(
             target->get(), &created_raw);
         if (mutation_error == A_Err_NONE && created_raw != nullptr) {
-          AEGP_StreamRefH duplicate_stream_raw = nullptr;
-          if (dynamic_suite->AEGP_GetNewStreamRefForMask(
-                  plugin_id_, created_raw, &duplicate_stream_raw) != A_Err_NONE
-              || duplicate_stream_raw == nullptr) {
+          AEGP_MaskIDVal duplicate_id = AEGP_MaskIDVal_NONE;
+          A_long duplicate_count = 0;
+          std::optional<std::uint64_t> duplicate_index;
+          if (mask_suite->AEGP_GetMaskID(created_raw, &duplicate_id) != A_Err_NONE
+              || duplicate_id == AEGP_MaskIDVal_NONE
+              || mask_suite->AEGP_GetLayerNumMasks(
+                  resolved->layer, &duplicate_count) != A_Err_NONE
+              || duplicate_count != count + 1) {
             mutation_error = A_Err_GENERIC;
           } else {
-            StreamRefOwner duplicate_stream(stream_suite.get(), duplicate_stream_raw);
-            mutation_error = dynamic_suite->AEGP_ReorderStream(
-                duplicate_stream.get(), static_cast<A_long>(command.target_index - 1));
+            for (A_long index = 0;
+                 mutation_error == A_Err_NONE && index < duplicate_count; ++index) {
+              AEGP_MaskRefH candidate_raw = nullptr;
+              if (mask_suite->AEGP_GetLayerMaskByIndex(
+                      resolved->layer, index, &candidate_raw) != A_Err_NONE
+                  || candidate_raw == nullptr) {
+                mutation_error = A_Err_GENERIC;
+                break;
+              }
+              MaskRefOwner candidate(mask_suite.get(), candidate_raw);
+              AEGP_MaskIDVal candidate_id = AEGP_MaskIDVal_NONE;
+              if (mask_suite->AEGP_GetMaskID(
+                      candidate.get(), &candidate_id) != A_Err_NONE
+                  || candidate_id == AEGP_MaskIDVal_NONE) {
+                mutation_error = A_Err_GENERIC;
+                break;
+              }
+              if (candidate_id == duplicate_id) {
+                if (duplicate_index.has_value()) {
+                  mutation_error = A_Err_GENERIC;
+                  break;
+                }
+                duplicate_index = static_cast<std::uint64_t>(index + 1);
+              }
+            }
+            const auto reorder = duplicate_index.has_value()
+                ? aemcp::native::plan_indexed_group_reorder(
+                    *duplicate_index,
+                    command.target_index,
+                    static_cast<std::uint64_t>(duplicate_count))
+                : aemcp::native::IndexedGroupReorderPlan{};
+            if (mutation_error == A_Err_NONE && !reorder.valid) {
+              mutation_error = A_Err_GENERIC;
+            }
+            if (mutation_error == A_Err_NONE && reorder.required) {
+              AEGP_StreamRefH duplicate_stream_raw = nullptr;
+              if (dynamic_suite->AEGP_GetNewStreamRefForMask(
+                      plugin_id_, created_raw, &duplicate_stream_raw) != A_Err_NONE
+                  || duplicate_stream_raw == nullptr) {
+                mutation_error = A_Err_GENERIC;
+              } else {
+                StreamRefOwner duplicate_stream(
+                    stream_suite.get(), duplicate_stream_raw);
+                mutation_error = dynamic_suite->AEGP_ReorderStream(
+                    duplicate_stream.get(),
+                    static_cast<A_long>(reorder.target_zero_index));
+              }
+            }
           }
         }
       } else if (command.operation == "mask-properties") {

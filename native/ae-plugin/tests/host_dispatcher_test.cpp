@@ -72,6 +72,7 @@ using aemcp::native::NormalizedSelectedLayers;
 using aemcp::native::OwnedSelectionCollection;
 using aemcp::native::SelectionCollectionEntryKind;
 using aemcp::native::select_effective_layer_name;
+using aemcp::native::plan_indexed_group_reorder;
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -120,6 +121,20 @@ void effective_layer_name_uses_sdk_source_fallback() {
   require(!select_effective_layer_name(
               std::nullopt, std::nullopt, std::nullopt).has_value(),
       "missing layer, source, and source Item handles produced a name");
+}
+
+void indexed_group_reorder_skips_the_existing_position() {
+  const auto no_op = plan_indexed_group_reorder(2, 2, 2);
+  require(no_op.valid && !no_op.required && no_op.target_zero_index == 1,
+      "indexed-group no-op reorder was not suppressed");
+
+  const auto move = plan_indexed_group_reorder(2, 1, 2);
+  require(move.valid && move.required && move.target_zero_index == 0,
+      "indexed-group reorder did not preserve the requested zero-based target");
+
+  require(!plan_indexed_group_reorder(0, 1, 2).valid
+          && !plan_indexed_group_reorder(2, 3, 2).valid,
+      "indexed-group reorder accepted an out-of-range position");
 }
 
 void effect_stack_transition_requires_one_unambiguous_insertion() {
@@ -3093,6 +3108,7 @@ void idle_budget_and_shutdown_are_bounded() {
 int main() {
   bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
   effective_layer_name_uses_sdk_source_fallback();
+  indexed_group_reorder_skips_the_existing_position();
   effect_stack_transition_requires_one_unambiguous_insertion();
   selected_collection_ownership_and_mixed_filter_are_portable_tested();
   composition_time_rational_is_exact_and_overflow_safe();
