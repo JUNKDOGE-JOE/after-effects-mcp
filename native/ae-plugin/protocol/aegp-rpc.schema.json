@@ -2180,6 +2180,72 @@
         "capabilityVersion": { "const": 1 },
         "arguments": { "$ref": "#/$defs/layerBlendingModeSetArguments" } }
     },
+    "nativeMediaReadArguments": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["operation"],
+      "properties": {
+        "operation": {
+          "enum": [
+            "effects-installed-list",
+            "effects-layer-list",
+            "effect-details",
+            "masks-list",
+            "mask-details",
+            "mask-path",
+            "footage-details",
+            "footage-interpretation"
+          ]
+        }
+      },
+      "x-invariant": "the-operation-discriminator-selects-one-closed-read-argument-shape-enforced-by-the-compiled-codec"
+    },
+    "nativeMediaWriteArguments": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["operation"],
+      "properties": {
+        "operation": {
+          "enum": [
+            "effect-enabled",
+            "effect-reorder",
+            "effect-duplicate",
+            "effect-delete",
+            "mask-create",
+            "mask-properties",
+            "mask-path",
+            "mask-duplicate",
+            "mask-delete",
+            "footage-import",
+            "footage-replace",
+            "footage-interpretation",
+            "footage-proxy",
+            "item-use-proxy"
+          ]
+        }
+      },
+      "x-invariant": "the-operation-discriminator-selects-one-closed-write-argument-shape-enforced-by-the-compiled-codec"
+    },
+    "nativeMediaReadInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.native.media.read" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/nativeMediaReadArguments" }
+      }
+    },
+    "nativeMediaWriteInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": { "const": "ae.native.media.write" },
+        "capabilityVersion": { "const": 1 },
+        "arguments": { "$ref": "#/$defs/nativeMediaWriteArguments" }
+      }
+    },
     "invokeParams": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeParams" },
@@ -2222,7 +2288,9 @@
         { "$ref": "#/$defs/layerCompositingReadInvokeParams" },
         { "$ref": "#/$defs/layerSwitchSetInvokeParams" },
         { "$ref": "#/$defs/layerQualitySetInvokeParams" },
-        { "$ref": "#/$defs/layerBlendingModeSetInvokeParams" }
+        { "$ref": "#/$defs/layerBlendingModeSetInvokeParams" },
+        { "$ref": "#/$defs/nativeMediaReadInvokeParams" },
+        { "$ref": "#/$defs/nativeMediaWriteInvokeParams" }
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
     },
@@ -2511,7 +2579,9 @@
         { "$ref": "#/$defs/layerCompositingReadArguments" },
         { "$ref": "#/$defs/layerSwitchSetArguments" },
         { "$ref": "#/$defs/layerQualitySetArguments" },
-        { "$ref": "#/$defs/layerBlendingModeSetArguments" }
+        { "$ref": "#/$defs/layerBlendingModeSetArguments" },
+        { "$ref": "#/$defs/nativeMediaReadArguments" },
+        { "$ref": "#/$defs/nativeMediaWriteArguments" }
       ]
     },
     "capabilityValue": {
@@ -2550,7 +2620,9 @@
         { "$ref": "#/$defs/layerCompositingReadValue" },
         { "$ref": "#/$defs/layerSwitchSetValue" },
         { "$ref": "#/$defs/layerQualitySetValue" },
-        { "$ref": "#/$defs/layerBlendingModeSetValue" }
+        { "$ref": "#/$defs/layerBlendingModeSetValue" },
+        { "$ref": "#/$defs/nativeMediaReadArguments" },
+        { "$ref": "#/$defs/nativeMediaWriteArguments" }
       ]
     },
     "projectContextReadInputSchemaContract": { "const": {"additionalProperties":false,"properties":{"selectionLimit":{"maximum":50,"minimum":1,"type":"integer"},"selectionOffset":{"maximum":9007199254740991,"minimum":0,"type":"integer"}},"required":["selectionOffset","selectionLimit"],"type":"object"} },
@@ -2593,6 +2665,106 @@
     "layerQualitySetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeQuality","afterQuality"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeQuality":{"enum":["wireframe","draft","best"]},"afterQuality":{"enum":["wireframe","draft","best"]}},"x-invariant":"afterQuality-equals-request-and-differs-from-beforeQuality"} },
     "layerBlendingModeSetInputSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["layerLocator","mode","idempotencyKey"],"properties":{"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"mode":{"enum":["normal","dissolve","add","multiply","screen","overlay","soft-light","hard-light","darken","lighten","difference","hue","saturation","color","luminosity","color-dodge","color-burn","exclusion","linear-dodge","linear-burn","linear-light","vivid-light","pin-light","hard-mix","lighter-color","darker-color","subtract","divide"]},"idempotencyKey":{"type":"string","minLength":16,"maxLength":64,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$"}}} },
     "layerBlendingModeSetResultSchemaContract": { "const": {"type":"object","additionalProperties":false,"required":["changed","layerLocator","beforeMode","afterMode","preserveAlpha","trackMatte"],"properties":{"changed":{"const":true},"layerLocator":{"type":"object","additionalProperties":false,"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"properties":{"kind":{"const":"layer"},"hostInstanceId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"sessionId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"projectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"},"generation":{"type":"integer","minimum":1,"maximum":9007199254740991},"objectId":{"type":"string","pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"}}},"beforeMode":{"enum":["normal","dissolve","add","multiply","screen","overlay","soft-light","hard-light","darken","lighten","difference","hue","saturation","color","luminosity","color-dodge","color-burn","exclusion","linear-dodge","linear-burn","linear-light","vivid-light","pin-light","hard-mix","lighter-color","darker-color","subtract","divide"]},"afterMode":{"enum":["normal","dissolve","add","multiply","screen","overlay","soft-light","hard-light","darken","lighten","difference","hue","saturation","color","luminosity","color-dodge","color-burn","exclusion","linear-dodge","linear-burn","linear-light","vivid-light","pin-light","hard-mix","lighter-color","darker-color","subtract","divide"]},"preserveAlpha":{"type":"boolean"},"trackMatte":{"enum":["none","alpha","inverted-alpha","luma","inverted-luma"]}},"x-invariant":"afterMode-equals-request;preserveAlpha-and-trackMatte-are-preserved"} },
+    "nativeMediaReadInputSchemaContract": {
+      "const": {
+        "additionalProperties": true,
+        "properties": {
+          "operation": {
+            "enum": [
+              "effects-installed-list",
+              "effects-layer-list",
+              "effect-details",
+              "masks-list",
+              "mask-details",
+              "mask-path",
+              "footage-details",
+              "footage-interpretation"
+            ]
+          }
+        },
+        "required": ["operation"],
+        "type": "object",
+        "x-invariant": "the-operation-discriminator-selects-one-closed-read-argument-shape-enforced-by-the-compiled-codec"
+      }
+    },
+    "nativeMediaWriteInputSchemaContract": {
+      "const": {
+        "additionalProperties": true,
+        "properties": {
+          "operation": {
+            "enum": [
+              "effect-enabled",
+              "effect-reorder",
+              "effect-duplicate",
+              "effect-delete",
+              "mask-create",
+              "mask-properties",
+              "mask-path",
+              "mask-duplicate",
+              "mask-delete",
+              "footage-import",
+              "footage-replace",
+              "footage-interpretation",
+              "footage-proxy",
+              "item-use-proxy"
+            ]
+          }
+        },
+        "required": ["operation"],
+        "type": "object",
+        "x-invariant": "the-operation-discriminator-selects-one-closed-write-argument-shape-enforced-by-the-compiled-codec"
+      }
+    },
+    "nativeMediaReadResultSchemaContract": {
+      "const": {
+        "additionalProperties": true,
+        "properties": {
+          "operation": {
+            "enum": [
+              "effects-installed-list",
+              "effects-layer-list",
+              "effect-details",
+              "masks-list",
+              "mask-details",
+              "mask-path",
+              "footage-details",
+              "footage-interpretation"
+            ]
+          }
+        },
+        "required": ["operation"],
+        "type": "object",
+        "x-invariant": "the-operation-discriminator-selects-one-closed-read-result-shape-validated-again-by-the-public-Core-adapter"
+      }
+    },
+    "nativeMediaWriteResultSchemaContract": {
+      "const": {
+        "additionalProperties": true,
+        "properties": {
+          "operation": {
+            "enum": [
+              "effect-enabled",
+              "effect-reorder",
+              "effect-duplicate",
+              "effect-delete",
+              "mask-create",
+              "mask-properties",
+              "mask-path",
+              "mask-duplicate",
+              "mask-delete",
+              "footage-import",
+              "footage-replace",
+              "footage-interpretation",
+              "footage-proxy",
+              "item-use-proxy"
+            ]
+          }
+        },
+        "required": ["operation"],
+        "type": "object",
+        "x-invariant": "the-operation-discriminator-selects-one-closed-write-result-shape-validated-again-by-the-public-Core-adapter"
+      }
+    },
     "capabilityInputSchemaContract": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInputSchemaContract" },
@@ -2626,7 +2798,9 @@
         { "$ref": "#/$defs/layerDuplicateInputSchemaContract" },
         { "$ref": "#/$defs/layerSwitchSetInputSchemaContract" },
         { "$ref": "#/$defs/layerQualitySetInputSchemaContract" },
-        { "$ref": "#/$defs/layerBlendingModeSetInputSchemaContract" }
+        { "$ref": "#/$defs/layerBlendingModeSetInputSchemaContract" },
+        { "$ref": "#/$defs/nativeMediaReadInputSchemaContract" },
+        { "$ref": "#/$defs/nativeMediaWriteInputSchemaContract" }
       ]
     },
     "capabilityResultSchemaContract": {
@@ -2664,7 +2838,9 @@
         { "$ref": "#/$defs/layerCompositingReadResultSchemaContract" },
         { "$ref": "#/$defs/layerSwitchSetResultSchemaContract" },
         { "$ref": "#/$defs/layerQualitySetResultSchemaContract" },
-        { "$ref": "#/$defs/layerBlendingModeSetResultSchemaContract" }
+        { "$ref": "#/$defs/layerBlendingModeSetResultSchemaContract" },
+        { "$ref": "#/$defs/nativeMediaReadResultSchemaContract" },
+        { "$ref": "#/$defs/nativeMediaWriteResultSchemaContract" }
       ]
     },
     "positiveCapabilityExample": {
@@ -4382,6 +4558,32 @@
         "engine": { "const": "native-aegp" }, "outcome": { "const": "succeeded" },
         "value": { "$ref": "#/$defs/layerBlendingModeSetValue" }, "evidence": { "$ref": "#/$defs/executionEvidence" } }
     },
+    "nativeMediaReadInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.native.media.read" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/nativeMediaReadArguments" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
+    "nativeMediaWriteInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "engine", "outcome", "value", "evidence"],
+      "properties": {
+        "capabilityId": { "const": "ae.native.media.write" },
+        "capabilityVersion": { "const": 1 },
+        "engine": { "const": "native-aegp" },
+        "outcome": { "const": "succeeded" },
+        "value": { "$ref": "#/$defs/nativeMediaWriteArguments" },
+        "evidence": { "$ref": "#/$defs/executionEvidence" }
+      }
+    },
     "invokeResult": {
       "oneOf": [
         { "$ref": "#/$defs/projectSummaryInvokeResult" },
@@ -4424,7 +4626,9 @@
         { "$ref": "#/$defs/layerCompositingReadInvokeResult" },
         { "$ref": "#/$defs/layerSwitchSetInvokeResult" },
         { "$ref": "#/$defs/layerQualitySetInvokeResult" },
-        { "$ref": "#/$defs/layerBlendingModeSetInvokeResult" }
+        { "$ref": "#/$defs/layerBlendingModeSetInvokeResult" },
+        { "$ref": "#/$defs/nativeMediaReadInvokeResult" },
+        { "$ref": "#/$defs/nativeMediaWriteInvokeResult" }
       ]
     },
     "cancelResult": {
@@ -4722,7 +4926,8 @@
                     "ae.layer.property.keyframe.delete",
                     "ae.layer.switch.set",
                     "ae.layer.quality.set",
-                    "ae.layer.blending-mode.set"
+                    "ae.layer.blending-mode.set",
+                    "ae.native.media.write"
                   ] }
                 },
                 "required": ["capabilityId"]

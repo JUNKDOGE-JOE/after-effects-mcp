@@ -190,3 +190,15 @@ Do not proceed to the next dependent capability package when any of the followin
 - a new task would hide or work around the current failure instead of resolving it.
 
 These stop conditions are delivery controls, not reasons to add unrelated hardening. Fix the narrow blocking path, preserve the evidence, and resume the closure loop.
+
+## 11. Require user approval before the next PR package
+
+After every capability-package or standalone product PR completes its full closure loop—including merge, clean-`main` revalidation, Issue/Epic updates, evidence publication, and fixture disposition—stop work before beginning another PR package.
+
+- Perform only the bounded read-only inventory needed to prepare the decision. Do not create the next Issue, branch, worktree, schema, fixture, candidate, or implementation, and do not mutate backlog priorities before approval.
+- Present the user with the just-completed package status and any remaining risks, followed by two to four next-package candidates ordered by dependency and user value.
+- For each candidate, state the target user workflow, proposed 6-10 public tools or bounded standalone outcome, shared SDK suite/primitive, native novelty, dependencies, expected T5/T6 call budget, principal risks, and explicit non-goals.
+- Recommend one direction with concrete reasoning, but treat it as a proposal rather than authorization.
+- Wait for the user's explicit selection or approval before creating or implementing the next PR package. Silence, an earlier backlog order, an existing open Issue, or a previous instruction to continue sequentially does not satisfy this approval gate.
+
+This is a mandatory product-direction checkpoint, not a request to pause an unfinished package. Finish the active package safely, then stop at the approval packet.

@@ -274,7 +274,8 @@ test('all twenty frozen #150/#155/#162 contracts accept their closed valid shape
     const vectors = cases();
     assert.deepEqual(
         Object.keys(packageContracts.CONTRACTS).filter(function (capabilityId) {
-            return !capabilityId.startsWith('ae.layer.property.keyframe.');
+            return !capabilityId.startsWith('ae.layer.property.keyframe.')
+                && !capabilityId.startsWith('ae.native.media.');
         }).sort(),
         Object.keys(vectors).sort(),
     );
@@ -298,6 +299,213 @@ test('all twenty frozen #150/#155/#162 contracts accept their closed valid shape
             capabilityId + ' open value',
         );
     }
+});
+
+test('#167 grouped media contracts admit closed read/write invokes and reject drift', () => {
+    const item = locator('item', SOURCE, 8);
+    const readArguments = {
+        operation: 'effects-installed-list',
+        offset: 0,
+        limit: 50,
+    };
+    const readValue = {
+        operation: 'effects-installed-list',
+        effects: [],
+        total: 0,
+        offset: 0,
+        limit: 50,
+        returned: 0,
+        hasMore: false,
+        nextOffset: null,
+    };
+    const writeArguments = {
+        operation: 'item-use-proxy',
+        itemLocator: item,
+        enabled: true,
+        idempotencyKey: 'issue167-item-proxy-0001',
+    };
+    const writeValue = {
+        operation: 'item-use-proxy',
+        changed: true,
+        itemLocator: item,
+        afterEnabled: true,
+    };
+    const read = packageContracts.getContract('ae.native.media.read');
+    const write = packageContracts.getContract('ae.native.media.write');
+
+    assert.equal(read.digest, '4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282');
+    assert.equal(write.digest, 'a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5');
+    assert.equal(read.validArguments(readArguments), true);
+    assert.equal(read.validValue(readValue, readArguments, HOST, SESSION), true);
+    assert.equal(write.validArguments(writeArguments), true);
+    assert.equal(write.validValue(writeValue, writeArguments, HOST, SESSION), true);
+    assert.equal(read.validArguments({ ...readArguments, extra: true }), false);
+    assert.equal(read.validValue({ ...readValue, extra: true }, readArguments, HOST, SESSION), false);
+    assert.equal(write.validArguments({ ...writeArguments, enabled: 'true' }), false);
+    assert.equal(write.validValue(
+        { ...writeValue, changed: false }, writeArguments, HOST, SESSION,
+    ), false);
+});
+
+test('#167 grouped media contracts bind every operation to one closed argument shape', () => {
+    const layer = locator('layer', SOURCE, 8);
+    const item = locator('item', CREATED, 8);
+    const maskReference = { layerLocator: layer, maskIndex: 1, maskId: 7 };
+    const effectReference = {
+        layerLocator: layer, effectIndex: 1, installedEffectKey: 9,
+    };
+    const key = 'issue167-media-contract-0001';
+    const vertex = {
+        position: ['0', '0'], inTangent: ['0', '0'], outTangent: ['0', '0'],
+    };
+    const reads = [
+        { operation: 'effects-installed-list', offset: 0, limit: 50 },
+        { operation: 'effects-layer-list', layerLocator: layer, offset: 0, limit: 50 },
+        { operation: 'effect-details', ...effectReference },
+        { operation: 'masks-list', layerLocator: layer, offset: 0, limit: 50 },
+        { operation: 'mask-details', ...maskReference },
+        { operation: 'mask-path', ...maskReference },
+        { operation: 'footage-details', itemLocator: item },
+        { operation: 'footage-interpretation', itemLocator: item, proxy: false },
+    ];
+    const writes = [
+        { operation: 'effect-enabled', ...effectReference, enabled: false, idempotencyKey: key },
+        { operation: 'effect-reorder', ...effectReference, targetIndex: 2, idempotencyKey: key },
+        { operation: 'effect-duplicate', ...effectReference, idempotencyKey: key },
+        { operation: 'effect-delete', ...effectReference, idempotencyKey: key },
+        { operation: 'mask-create', layerLocator: layer, idempotencyKey: key },
+        {
+            operation: 'mask-properties', ...maskReference,
+            properties: { mode: 'add' }, idempotencyKey: key,
+        },
+        {
+            operation: 'mask-path', ...maskReference, closed: false,
+            vertices: [vertex, { ...vertex, position: ['10', '10'] }],
+            idempotencyKey: key,
+        },
+        { operation: 'mask-duplicate', ...maskReference, targetIndex: 2, idempotencyKey: key },
+        { operation: 'mask-delete', ...maskReference, idempotencyKey: key },
+        { operation: 'footage-import', sourcePath: '/tmp/a.png', idempotencyKey: key },
+        {
+            operation: 'footage-replace', itemLocator: item,
+            sourcePath: '/tmp/b.png', idempotencyKey: key,
+        },
+        {
+            operation: 'footage-interpretation', itemLocator: item, proxy: false,
+            interpretation: { loopCount: 2 }, idempotencyKey: key,
+        },
+        {
+            operation: 'footage-proxy', itemLocator: item,
+            sourcePath: '/tmp/proxy.png', idempotencyKey: key,
+        },
+        { operation: 'item-use-proxy', itemLocator: item, enabled: true, idempotencyKey: key },
+    ];
+    const read = packageContracts.getContract('ae.native.media.read');
+    const write = packageContracts.getContract('ae.native.media.write');
+    assert.equal(reads.every(function (value) { return read.validArguments(value); }), true);
+    assert.equal(writes.every(function (value) { return write.validArguments(value); }), true);
+    assert.equal(reads.every(function (value) {
+        return !read.validArguments({ ...value, idempotencyKey: key });
+    }), true);
+    assert.equal(writes.every(function (value) {
+        return !write.validArguments({ ...value, unexpected: true });
+    }), true);
+});
+
+test('#167 mask-path write admits the native changed result and rejects drift', () => {
+    const layer = locator('layer', SOURCE, 8);
+    const vertex = {
+        position: ['0', '0'], inTangent: ['0', '0'], outTangent: ['0', '0'],
+    };
+    const argumentsValue = {
+        operation: 'mask-path',
+        layerLocator: layer,
+        maskIndex: 1,
+        maskId: 7,
+        closed: false,
+        vertices: [vertex, { ...vertex, position: ['10', '10'] }],
+        idempotencyKey: 'issue167-mask-path-result-0001',
+    };
+    const value = {
+        operation: 'mask-path',
+        changed: true,
+        maskIndex: 1,
+        maskId: 7,
+        path: {
+            closed: false,
+            vertices: argumentsValue.vertices,
+        },
+    };
+    const write = packageContracts.getContract('ae.native.media.write');
+
+    assert.equal(write.validValue(value, argumentsValue, HOST, SESSION), true);
+    assert.equal(write.validValue({ ...value, changed: false }, argumentsValue, HOST, SESSION), false);
+    const withoutChanged = { ...value };
+    delete withoutChanged.changed;
+    assert.equal(write.validValue(withoutChanged, argumentsValue, HOST, SESSION), false);
+});
+
+test('#167 footage-interpretation write admits the exact native changed result', () => {
+    const item = locator('item', CREATED, 8);
+    const argumentsValue = {
+        operation: 'footage-interpretation',
+        itemLocator: item,
+        proxy: false,
+        interpretation: {
+            alphaMode: 'premultiplied',
+            premultiplyColor: { red: 12, green: 24, blue: 36, alpha: 255 },
+        },
+        idempotencyKey: 'issue167-footage-interpretation-result-0001',
+    };
+    const value = {
+        operation: 'footage-interpretation',
+        changed: true,
+        itemLocator: item,
+        proxy: false,
+        interpretation: {
+            loopCount: 1,
+            pixelAspect: { numerator: 1, denominator: 1 },
+            nativeFps: '24',
+            conformFps: '24',
+            alphaMode: 'premultiplied',
+            premultiplyColor: { red: 12, green: 24, blue: 36, alpha: 255 },
+        },
+    };
+    const write = packageContracts.getContract('ae.native.media.write');
+
+    assert.equal(write.validValue(value, argumentsValue, HOST, SESSION), true);
+    assert.equal(write.validValue(
+        { ...value, changed: false }, argumentsValue, HOST, SESSION,
+    ), false);
+    const withoutChanged = { ...value };
+    delete withoutChanged.changed;
+    assert.equal(write.validValue(withoutChanged, argumentsValue, HOST, SESSION), false);
+});
+
+test('#167 footage-interpretation read remains closed without changed', () => {
+    const item = locator('item', CREATED, 8);
+    const argumentsValue = {
+        operation: 'footage-interpretation',
+        itemLocator: item,
+        proxy: false,
+    };
+    const value = {
+        operation: 'footage-interpretation',
+        itemLocator: item,
+        proxy: false,
+        interpretation: {
+            loopCount: 1,
+            pixelAspect: { numerator: 1, denominator: 1 },
+            nativeFps: '24',
+            conformFps: '24',
+            alphaMode: 'straight',
+            premultiplyColor: { red: 0, green: 0, blue: 0, alpha: 255 },
+        },
+    };
+    const read = packageContracts.getContract('ae.native.media.read');
+
+    assert.equal(read.validValue(value, argumentsValue, HOST, SESSION), true);
+    assert.equal(read.validValue({ ...value, changed: true }, argumentsValue, HOST, SESSION), false);
 });
 
 test('#162 compositing contracts reject generic, no-op, and unrelated readbacks', () => {

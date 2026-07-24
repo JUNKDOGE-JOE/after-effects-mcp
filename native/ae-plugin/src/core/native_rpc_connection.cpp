@@ -270,7 +270,9 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.layer_property_keyframe_interpolation_set_contract_digest.size() != 64
       || runtime_.layer_property_keyframe_temporal_ease_set_contract_digest.size() != 64
       || runtime_.layer_property_keyframe_behavior_set_contract_digest.size() != 64
-      || runtime_.layer_property_keyframe_delete_contract_digest.size() != 64) {
+      || runtime_.layer_property_keyframe_delete_contract_digest.size() != 64
+      || runtime_.native_media_read_contract_digest.size() != 64
+      || runtime_.native_media_write_contract_digest.size() != 64) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
 }
@@ -500,6 +502,14 @@ void NativeRpcConnectionHandler::serve(
             } else if (completion.capability_id == kLayerEffectApplyCapability) {
               postcondition_digest = rpc::digest_layer_effect_apply_postcondition(
                   completion.layer_effect_apply_result);
+            } else if (completion.capability_id == kNativeMediaReadCapability
+                || completion.capability_id == kNativeMediaWriteCapability) {
+              completion.native_media_result_json =
+                  rpc::canonicalize_native_media_value(
+                      completion.native_media_result_json);
+              postcondition_digest = rpc::digest_native_media_postcondition(
+                  completion.capability_id,
+                  completion.native_media_result_json);
             } else if (completion.capability_id == kLayerPropertiesListCapability) {
               postcondition_digest = rpc::digest_layer_properties_postcondition(
                   completion.layer_properties_result);
@@ -551,7 +561,8 @@ void NativeRpcConnectionHandler::serve(
               || completion.capability_id == kLayerDuplicateCapability
               || completion.capability_id == kLayerSwitchSetCapability
               || completion.capability_id == kLayerQualitySetCapability
-              || completion.capability_id == kLayerBlendingModeSetCapability;
+              || completion.capability_id == kLayerBlendingModeSetCapability
+              || completion.capability_id == kNativeMediaWriteCapability;
           completion.error_code = mutating
               ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
               : graph_invalidation ? "NATIVE_UNAVAILABLE" : "CAPABILITY_FAILED";
@@ -830,6 +841,20 @@ void NativeRpcConnectionHandler::serve(
                 postcondition_digest,
                 completion.replayed,
             });
+          } else if (completion.capability_id == kNativeMediaReadCapability
+              || completion.capability_id == kNativeMediaWriteCapability) {
+            response = rpc::encode_native_media_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                completion.capability_id,
+                completion.native_media_result_json,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                completion.replayed,
+            });
           } else if (completion.capability_id == kLayerPropertiesListCapability) {
             response = rpc::encode_layer_properties_success({
                 completion.request_id,
@@ -1067,6 +1092,10 @@ void NativeRpcConnectionHandler::serve(
               includes(kLayerPropertyKeyframeBehaviorSetCapability);
           const bool include_keyframe_delete =
               includes(kLayerPropertyKeyframeDeleteCapability);
+          const bool include_native_media_read =
+              includes(kNativeMediaReadCapability);
+          const bool include_native_media_write =
+              includes(kNativeMediaWriteCapability);
           const std::size_t selected = static_cast<std::size_t>(include_summary)
               + static_cast<std::size_t>(include_bit_depth_read)
               + static_cast<std::size_t>(include_bit_depth_set)
@@ -1107,7 +1136,9 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_keyframe_interpolation_set)
               + static_cast<std::size_t>(include_keyframe_temporal_ease_set)
               + static_cast<std::size_t>(include_keyframe_behavior_set)
-              + static_cast<std::size_t>(include_keyframe_delete);
+              + static_cast<std::size_t>(include_keyframe_delete)
+              + static_cast<std::size_t>(include_native_media_read)
+              + static_cast<std::size_t>(include_native_media_write);
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                     request,
@@ -1208,6 +1239,10 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.layer_property_keyframe_temporal_ease_set_contract_digest,
                   runtime_.layer_property_keyframe_behavior_set_contract_digest,
                   runtime_.layer_property_keyframe_delete_contract_digest,
+                  include_native_media_read,
+                  include_native_media_write,
+                  runtime_.native_media_read_contract_digest,
+                  runtime_.native_media_write_contract_digest,
               }))) {
             connected = false;
             break;
@@ -1319,6 +1354,13 @@ void NativeRpcConnectionHandler::serve(
               invoke.layer_quality,
               invoke.layer_blending_mode,
           };
+          if (invoke.capability_id == kNativeMediaReadCapability
+              || invoke.capability_id == kNativeMediaWriteCapability) {
+            dispatch_request.native_media = invoke.native_media;
+            dispatch_request.native_media.host_instance_id =
+                runtime_.host_instance_id;
+            dispatch_request.native_media.session_id = connection.session_id;
+          }
         }
         const std::string dispatched_capability = dispatch_request.capability_id;
         const EnqueueResult enqueued = dispatcher_.enqueue(std::move(dispatch_request));

@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 export const GOVERNANCE_PATH = 'AGENTS.md';
 export const INVENTORY_PATH = 'docs/checkpoints/2026-07-16-worktree-audit.md';
-export const GOVERNANCE_SHA256 = '9547d8e792f861dbae1db1588622004334e38d271eaee1d8c40b25e2592fe6a1';
+export const GOVERNANCE_SHA256 = 'a9e672524afab1fdbc3e9708a4c9a425dcdc1ed568ba595a95464adcfbe7402f';
 export const SUPPORTING_WORKFLOW_PATHS = [
   '.github/ISSUE_TEMPLATE/capability-package.md',
   '.github/pull_request_template.md',
@@ -45,6 +45,10 @@ const REQUIRED_RULES = [
   'Complete each short-lived pairing handshake as one continuous automation action',
   'Do not use Finder, file double-click, or LaunchServices',
   'a machine-generated per-tool summary',
+  '## 11. Require user approval before the next PR package',
+  'Do not create the next Issue, branch, worktree, schema, fixture, candidate, or implementation',
+  'Wait for the user\'s explicit selection or approval before creating or implementing the next PR package',
+  'previous instruction to continue sequentially does not satisfy this approval gate',
 ];
 
 export const FINAL_WORKTREES = [

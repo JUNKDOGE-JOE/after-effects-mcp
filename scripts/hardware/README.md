@@ -3,6 +3,24 @@
 These scripts call the same public MCP tools that a model sees. They do not
 call Core handlers, the CEP HTTP bridge, or the native socket directly.
 
+## Native editing milestone #167
+
+`issue167_native_media_acceptance.py` drives the frozen 22-tool Effect Stack,
+Mask/Path, and Footage/Source milestone. Its package-specific file owns one
+deterministic solid-layer fixture plus three generated 2x2 RGBA footage assets;
+the shared runtime still owns exact identity, public-MCP evidence, call
+accounting, and recoverable `.aep` lifecycle.
+
+Run the zero-evidence `preflight` before candidate freeze. It uses four public
+calls to save, restart, reopen inside formal AE, reacquire, and archive one
+fixture. The justified native-novelty T4 uses exactly six calls for the
+previously reproduced mask-properties path. T5/T6 use exactly 60 calls each,
+touch all 22 public tools, verify 13 writes with real Undo, and verify
+`ae_setLayerMaskProperties` through before/after readback while explicitly
+reporting that one-step Undo is not guaranteed. They restart formal AE, compare
+effect/mask/footage state hashes, and archive the single `.aep` plus generated
+assets. The runner never uses Finder, LaunchServices, or Save As.
+
 ## Capability package #162
 
 `issue162_layer_compositing_acceptance.py` is a thin wrapper around the shared

@@ -102,7 +102,11 @@ inline constexpr std::string_view kLayerQualitySetCapability =
     "ae.layer.quality.set";
 inline constexpr std::string_view kLayerBlendingModeSetCapability =
     "ae.layer.blending-mode.set";
-inline constexpr std::array<std::string_view, 41> kAdvertisedNativeCapabilities{
+inline constexpr std::string_view kNativeMediaReadCapability =
+    "ae.native.media.read";
+inline constexpr std::string_view kNativeMediaWriteCapability =
+    "ae.native.media.write";
+inline constexpr std::array<std::string_view, 43> kAdvertisedNativeCapabilities{
     kProjectSummaryCapability,
     kProjectBitDepthReadCapability,
     kProjectBitDepthSetCapability,
@@ -144,6 +148,8 @@ inline constexpr std::array<std::string_view, 41> kAdvertisedNativeCapabilities{
     kLayerPropertyKeyframeTemporalEaseSetCapability,
     kLayerPropertyKeyframeBehaviorSetCapability,
     kLayerPropertyKeyframeDeleteCapability,
+    kNativeMediaReadCapability,
+    kNativeMediaWriteCapability,
 };
 // Authenticated broker control-plane operation. This is deliberately omitted
 // from model-facing capability discovery and can only fence native locator
@@ -167,6 +173,30 @@ inline constexpr std::size_t kNativePageValueBudgetBytes = 48U * 1024U;
   if (layer_name.has_value()) return layer_name;
   if (source_name.has_value()) return source_name;
   return source_item_name;
+}
+
+struct IndexedGroupReorderPlan {
+  bool valid{false};
+  bool required{false};
+  std::uint64_t target_zero_index{0};
+};
+
+// AE reports an error dialog when AEGP_ReorderStream is asked to move an
+// indexed-group child to the position it already occupies. Plan the SDK call
+// only after the newly created child has been located by stable identity.
+[[nodiscard]] inline constexpr IndexedGroupReorderPlan plan_indexed_group_reorder(
+    std::uint64_t current_one_index,
+    std::uint64_t target_one_index,
+    std::uint64_t resulting_count) noexcept {
+  if (current_one_index < 1 || current_one_index > resulting_count
+      || target_one_index < 1 || target_one_index > resulting_count) {
+    return {};
+  }
+  return {
+      true,
+      current_one_index != target_one_index,
+      target_one_index - 1U,
+  };
 }
 
 // Returns the exact byte count used by the codec's JSON string serializer,
@@ -853,6 +883,66 @@ struct LayerEffectApplyCommand {
   std::string effect_match_name;
 };
 
+struct NativeMediaMaskVertex {
+  std::string position_x;
+  std::string position_y;
+  std::string in_tangent_x;
+  std::string in_tangent_y;
+  std::string out_tangent_x;
+  std::string out_tangent_y;
+};
+
+struct NativeMediaMaskProperties {
+  std::optional<std::string> mode;
+  std::optional<bool> inverted;
+  std::optional<std::string> motion_blur;
+  std::optional<std::string> feather_falloff;
+  std::optional<CompositionLayerCreateColor> color;
+  std::optional<bool> locked;
+  std::optional<bool> roto_bezier;
+};
+
+struct NativeMediaSequenceOptions {
+  bool enabled{false};
+  bool force_alphabetical{false};
+  std::int32_t start_frame{-1};
+  std::int32_t end_frame{-1};
+};
+
+struct NativeMediaInterpretation {
+  std::optional<std::uint32_t> loop_count;
+  std::optional<std::int32_t> pixel_aspect_numerator;
+  std::optional<std::int32_t> pixel_aspect_denominator;
+  std::optional<std::string> native_fps;
+  std::optional<std::string> conform_fps;
+  std::optional<std::string> alpha_mode;
+  std::optional<CompositionLayerCreateColor> premultiply_color;
+};
+
+struct NativeMediaCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  std::string operation;
+  std::optional<ObjectLocator> layer_locator;
+  std::optional<ObjectLocator> item_locator;
+  std::optional<ObjectLocator> folder_locator;
+  std::uint64_t offset{0};
+  std::uint16_t limit{0};
+  std::uint64_t effect_index{0};
+  std::int64_t installed_effect_key{0};
+  std::uint64_t mask_index{0};
+  std::int64_t mask_id{0};
+  std::uint64_t target_index{0};
+  std::optional<bool> enabled;
+  NativeMediaMaskProperties mask_properties;
+  std::optional<bool> mask_closed;
+  std::vector<NativeMediaMaskVertex> mask_vertices;
+  std::string source_path;
+  NativeMediaSequenceOptions sequence;
+  bool proxy{false};
+  std::optional<NativeMediaInterpretation> interpretation;
+};
+
 struct LayerPropertiesQuery {
   std::string host_instance_id;
   std::string session_id;
@@ -1156,6 +1246,18 @@ struct HostLayerEffectApplyResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostNativeMediaResult {
+  bool ok{false};
+  std::string canonical_value_json;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostNativeMediaResult success(std::string canonical_value_json);
+  [[nodiscard]] static HostNativeMediaResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostLayerPropertiesResult {
   bool ok{false};
   LayerPropertiesPage value;
@@ -1407,6 +1509,8 @@ class HostApi {
       const CompositionLayerCreateCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerEffectApplyResult apply_layer_effect(
       const LayerEffectApplyCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostNativeMediaResult execute_native_media(
+      const NativeMediaCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
       const LayerPropertiesQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertyKeyframesResult list_layer_property_keyframes(
@@ -1623,6 +1727,7 @@ struct Request {
   std::optional<bool> layer_switch_enabled;
   std::string layer_quality;
   std::string layer_blending_mode;
+  NativeMediaCommand native_media;
 };
 
 enum class EnqueueCode {
@@ -1671,6 +1776,7 @@ struct Completion {
   CompositionCreated composition_create_result;
   CompositionLayerCreated composition_layer_create_result;
   LayerEffectApplied layer_effect_apply_result;
+  std::string native_media_result_json;
   LayerPropertiesPage layer_properties_result;
   LayerPropertyKeyframesPage layer_property_keyframes_result;
   LayerPropertyChanged layer_property_change_result;
