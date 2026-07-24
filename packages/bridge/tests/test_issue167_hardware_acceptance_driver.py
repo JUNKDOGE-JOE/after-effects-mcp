@@ -54,8 +54,8 @@ def test_milestone_freeze_is_explicit_and_bounded() -> None:
     assert len(package.SPEC.write_tools) == 14
     assert package.SPEC.t4_target_calls == 6
     assert package.SPEC.t4_hard_limit == 7
-    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 59
-    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 59
+    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 60
+    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 60
     assert len({case.tool for case in package.SPEC.tools}) == 22
 
 
@@ -694,6 +694,9 @@ async def test_structural_mask_history_reacquires_a_fresh_layer_locator(
                 assert self.mask_count == 1
                 self.generation += 1
                 self.mask_count = 0
+            elif tool == "ae_setLayerMaskPath":
+                assert self.mask_count == 1
+                self.generation += 1
             elif tool == "ae_duplicateLayerMask":
                 assert self.mask_count == 2
                 self.generation += 1
@@ -740,6 +743,7 @@ async def test_structural_mask_history_reacquires_a_fresh_layer_locator(
     assert runner.refreshes == [
         "t5-masks-mask-create-undo-refresh",
         "t5-masks-mask-create-redo-refresh",
+        "t5-masks-mask-path-undo-refresh",
         "t5-masks-mask-duplicate-undo-refresh",
         "t5-masks-mask-delete-undo-refresh",
     ]

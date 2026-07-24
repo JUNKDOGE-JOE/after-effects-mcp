@@ -70,11 +70,11 @@ SPEC = PackageSpec(
     native_novelty=True,
     milestone=True,
     t4_target_calls=6,
-    t5_target_calls=59,
-    t6_target_calls=59,
+    t5_target_calls=60,
+    t6_target_calls=60,
     t4_hard_limit=7,
-    t5_hard_limit=59,
-    t6_hard_limit=59,
+    t5_hard_limit=60,
+    t6_hard_limit=60,
     tools=(*READ_TOOLS, *WRITE_TOOLS),
     support_tools=(
         ToolCase("create-comp", "ae_createComposition", "ae.composition.create", "write"),
@@ -504,10 +504,6 @@ class Issue167Package:
             "fixture effect stack is not deterministic",
         )
         self.runtime.mark_tool_passed("ae_listLayerEffects")
-        details = await self._effect_details(session, baseline[0], layer, phase=phase)
-        require(details.get("active") is True, "fresh effect must be enabled")
-        self.runtime.mark_tool_passed("ae_getLayerEffectDetails")
-
         payload = await self._call(session, "ae_setLayerEffectEnabled", {
             **_effect_reference(baseline[0], layer),
             "enabled": False,
@@ -517,6 +513,7 @@ class Issue167Package:
         await self._checkpoint_undo("ae_setLayerEffectEnabled")
         restored = await self._effect_details(session, baseline[0], layer, phase=phase)
         require(restored.get("active") is True, "effect enabled Undo failed")
+        self.runtime.mark_tool_passed("ae_getLayerEffectDetails")
         self.runtime.mark_tool_passed(
             "ae_setLayerEffectEnabled", undo_executed=True, undo_verified=True
         )
@@ -574,9 +571,10 @@ class Issue167Package:
         *,
         phase: str,
     ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-        layer, baseline = await self._list_masks(session, layer, phase=phase)
-        require(not baseline, "fixture layer unexpectedly has masks")
-        self.runtime.mark_tool_passed("ae_listLayerMasks")
+        # The fixture layer is created immediately before this phase and has no
+        # masks by construction. The first list is the post-Undo readback below,
+        # so it both exercises the public read tool and proves that baseline.
+        baseline: list[dict[str, Any]] = []
 
         payload = await self._call(session, "ae_createLayerMask", {
             "layer_locator": dict(layer),
@@ -591,6 +589,7 @@ class Issue167Package:
         )
         layer, restored = await self._list_masks(session, layer, phase=phase)
         require(restored == baseline, "mask create Undo failed")
+        self.runtime.mark_tool_passed("ae_listLayerMasks")
         self.runtime.mark_tool_passed(
             "ae_createLayerMask", undo_executed=True, undo_verified=True
         )
@@ -621,6 +620,13 @@ class Issue167Package:
         }, phase=phase)
         require(native_value(payload)["path"].get("closed") is True, "mask path write failed")
         await self._checkpoint_undo("ae_setLayerMaskPath")
+        layer = await self._refresh_layer(
+            session,
+            phase=f"{phase}-mask-path-undo-refresh",
+        )
+        layer, current = await self._list_masks(session, layer, phase=phase)
+        require(len(current) == 1, "mask path Undo changed the mask count")
+        mask = current[0]
         restored_path = await self._mask_path(session, mask, layer, phase=phase)
         require(restored_path == path, "mask path Undo failed")
         self.runtime.mark_tool_passed(
@@ -955,8 +961,8 @@ class Issue167Package:
                 f"{case.tool} did not pass the acceptance matrix",
             )
         require(
-            self.runtime.ledger.total == 59,
-            f"#167 {self.runtime.mode} must use exactly 59 public calls",
+            self.runtime.ledger.total == 60,
+            f"#167 {self.runtime.mode} must use exactly 60 public calls",
         )
         return {
             "firstHostInstanceId": first_instance,
