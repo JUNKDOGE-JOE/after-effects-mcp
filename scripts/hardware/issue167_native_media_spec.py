@@ -70,11 +70,11 @@ SPEC = PackageSpec(
     native_novelty=True,
     milestone=True,
     t4_target_calls=6,
-    t5_target_calls=60,
-    t6_target_calls=60,
+    t5_target_calls=65,
+    t6_target_calls=65,
     t4_hard_limit=7,
-    t5_hard_limit=60,
-    t6_hard_limit=60,
+    t5_hard_limit=65,
+    t6_hard_limit=65,
     tools=(*READ_TOOLS, *WRITE_TOOLS),
     support_tools=(
         ToolCase("create-comp", "ae_createComposition", "ae.composition.create", "write"),
@@ -429,6 +429,23 @@ class Issue167Package:
             and item["parentLocator"].get("kind") == "project"
         ]
 
+    async def _refresh_footage(
+        self,
+        session: PublicSession,
+        *,
+        phase: str,
+    ) -> dict[str, Any]:
+        items = await self._project_items(session, phase=phase)
+        matching = self._items_matching_footage_identity(
+            items,
+            name=self.assets["main"].name,
+        )
+        require(
+            len(matching) == 1,
+            "fixture root footage is not unique after history change",
+        )
+        return _locator(matching[0]["locator"], "item")
+
     async def _footage_details(
         self,
         session: PublicSession,
@@ -755,6 +772,10 @@ class Issue167Package:
         }, phase=phase)
         require(native_value(payload).get("proxy") is False, "main footage replacement was not bound")
         await self._checkpoint_undo("ae_replaceFootage")
+        item = await self._refresh_footage(
+            session,
+            phase=f"{phase}-footage-replace-undo-refresh",
+        )
         restored = await self._footage_details(session, item, phase=phase)
         require(restored.get("sourcePath") == str(self.assets["main"]),
                 "footage replacement Undo failed")
@@ -780,6 +801,10 @@ class Issue167Package:
         require(changed.get("alphaMode") == "premultiplied",
                 "footage interpretation write readback failed")
         await self._checkpoint_undo("ae_setFootageInterpretation")
+        item = await self._refresh_footage(
+            session,
+            phase=f"{phase}-footage-interpretation-undo-refresh",
+        )
         restored_interpretation = await self._footage_interpretation(
             session, item, phase=phase
         )
@@ -796,12 +821,20 @@ class Issue167Package:
         }, phase=phase)
         require(native_value(payload).get("proxy") is True, "proxy footage write was not bound")
         await self._checkpoint_undo("ae_setFootageProxy")
+        item = await self._refresh_footage(
+            session,
+            phase=f"{phase}-footage-proxy-undo-refresh",
+        )
         restored = await self._footage_details(session, item, phase=phase)
         require(restored.get("hasProxy") is False, "proxy footage Undo failed")
         self.runtime.mark_tool_passed(
             "ae_setFootageProxy", undo_executed=True, undo_verified=True
         )
         await self._checkpoint_redo("footage-proxy-setup")
+        item = await self._refresh_footage(
+            session,
+            phase=f"{phase}-footage-proxy-redo-refresh",
+        )
 
         payload = await self._call(session, "ae_setItemUseProxy", {
             "item_locator": item,
@@ -811,6 +844,10 @@ class Issue167Package:
         require(native_value(payload).get("afterEnabled") is True,
                 "proxy selection write readback failed")
         await self._checkpoint_undo("ae_setItemUseProxy")
+        item = await self._refresh_footage(
+            session,
+            phase=f"{phase}-item-use-proxy-undo-refresh",
+        )
         restored = await self._footage_details(session, item, phase=phase)
         require(restored.get("hasProxy") is True and restored.get("usingProxy") is False,
                 "proxy selection Undo failed")
@@ -967,8 +1004,8 @@ class Issue167Package:
                 f"{case.tool} did not pass the acceptance matrix",
             )
         require(
-            self.runtime.ledger.total == 60,
-            f"#167 {self.runtime.mode} must use exactly 60 public calls",
+            self.runtime.ledger.total == 65,
+            f"#167 {self.runtime.mode} must use exactly 65 public calls",
         )
         return {
             "firstHostInstanceId": first_instance,

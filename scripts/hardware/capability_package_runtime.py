@@ -174,7 +174,7 @@ class PackageSpec:
         require(len(set(all_names)) == len(all_names), "package/support tool names must be unique")
         require(len(set(keys)) == len(keys), "package case keys must be unique")
         maximum_t4 = 12 if self.milestone else 5
-        maximum_package = 60 if self.milestone else 30
+        maximum_package = 65 if self.milestone else 30
         require(0 < self.t4_target_calls <= maximum_t4, "T4 call target is invalid")
         require(0 < self.t5_target_calls <= maximum_package, "T5 call target is invalid")
         require(0 < self.t6_target_calls <= maximum_package, "T6 call target is invalid")

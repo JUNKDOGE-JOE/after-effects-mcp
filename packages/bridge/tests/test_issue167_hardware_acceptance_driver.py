@@ -54,8 +54,8 @@ def test_milestone_freeze_is_explicit_and_bounded() -> None:
     assert len(package.SPEC.write_tools) == 14
     assert package.SPEC.t4_target_calls == 6
     assert package.SPEC.t4_hard_limit == 7
-    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 60
-    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 60
+    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 65
+    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 65
     assert len({case.tool for case in package.SPEC.tools}) == 22
 
 
@@ -459,6 +459,157 @@ def test_footage_history_refresh_uses_semantic_identity_not_stale_object_id(
     ) == [restored]
     assert restored["locator"]["objectId"] != imported["objectId"]
     assert restored["locator"]["projectId"] != imported["projectId"]
+
+
+@pytest.mark.asyncio
+async def test_footage_history_readbacks_reacquire_a_fresh_root_item_locator(
+    tmp_path: Path,
+) -> None:
+    class Runtime:
+        fixture = SimpleNamespace(path=tmp_path / "fixture.aep")
+
+        def __init__(self) -> None:
+            self.passed: list[str] = []
+
+        @staticmethod
+        def intent(purpose: str) -> str:
+            return f"issue167-{purpose}"
+
+        def mark_tool_passed(self, tool: str, **_details) -> None:
+            self.passed.append(tool)
+
+    class FootagePackage(package.Issue167Package):
+        def __init__(self) -> None:
+            super().__init__(Runtime(), fixture_name="fixture")
+            self.generation = 1
+            self.exists = True
+            self.source = str(self.assets["main"])
+            self.interpretation = {"alphaMode": "straight"}
+            self.has_proxy = False
+            self.using_proxy = False
+            self.refreshes: list[str] = []
+
+        def item(self):
+            locator = _locator(
+                "item", "77777777-7777-4777-8777-777777777777"
+            )
+            locator["generation"] = self.generation
+            locator["projectId"] = (
+                f"{self.generation:08x}-3333-4333-8333-333333333333"
+            )
+            return locator
+
+        def require_fresh(self, item) -> None:
+            assert item["generation"] == self.generation, "STALE_LOCATOR"
+
+        async def _call(self, _session, tool: str, arguments, *, phase: str):
+            assert phase == "t5-footage"
+            if tool == "ae_importFootage":
+                return {
+                    "value": {
+                        "itemLocator": self.item(),
+                        "beforeItemCount": 0,
+                        "afterItemCount": 1,
+                    }
+                }
+            self.require_fresh(arguments["item_locator"])
+            if tool == "ae_replaceFootage":
+                self.source = str(self.assets["replacement"])
+                return {"value": {"proxy": False}}
+            if tool == "ae_setFootageInterpretation":
+                self.interpretation = {"alphaMode": "premultiplied"}
+                return {"value": {"interpretation": dict(self.interpretation)}}
+            if tool == "ae_setFootageProxy":
+                self.has_proxy = True
+                return {"value": {"proxy": True}}
+            if tool == "ae_setItemUseProxy":
+                self.using_proxy = True
+                return {"value": {"afterEnabled": True}}
+            raise AssertionError(f"unexpected footage tool {tool}")
+
+        async def _project_items(self, _session, *, phase: str):
+            self.refreshes.append(phase)
+            if not self.exists:
+                return []
+            return [{
+                "type": "footage",
+                "name": self.assets["main"].name,
+                "locator": self.item(),
+                "parentLocator": {
+                    **self.item(),
+                    "kind": "project",
+                    "objectId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                },
+            }]
+
+        async def _footage_details(self, _session, item, *, phase: str):
+            assert phase == "t5-footage"
+            self.require_fresh(item)
+            return {
+                "sourcePath": self.source,
+                "hasProxy": self.has_proxy,
+                "usingProxy": self.using_proxy,
+            }
+
+        async def _footage_interpretation(
+            self, _session, item, *, phase: str
+        ):
+            assert phase == "t5-footage"
+            self.require_fresh(item)
+            return dict(self.interpretation)
+
+        async def _checkpoint_undo(self, tool: str) -> None:
+            self.generation += 1
+            if tool == "ae_importFootage":
+                self.exists = False
+            elif tool == "ae_replaceFootage":
+                self.source = str(self.assets["main"])
+            elif tool == "ae_setFootageInterpretation":
+                self.interpretation = {"alphaMode": "straight"}
+            elif tool == "ae_setFootageProxy":
+                self.has_proxy = False
+            elif tool == "ae_setItemUseProxy":
+                self.using_proxy = False
+
+        async def _checkpoint_redo(self, purpose: str) -> None:
+            self.generation += 1
+            if purpose == "footage-import-setup":
+                self.exists = True
+            elif purpose == "footage-proxy-setup":
+                self.has_proxy = True
+            else:
+                raise AssertionError(f"unexpected Redo checkpoint {purpose}")
+
+    runner = FootagePackage()
+    item, details, interpretation = await runner._run_footage(
+        object(), phase="t5-footage"
+    )
+
+    assert item == runner.item()
+    assert details == {
+        "sourcePath": str(runner.assets["main"]),
+        "hasProxy": True,
+        "usingProxy": False,
+    }
+    assert interpretation == {"alphaMode": "straight"}
+    assert runner.refreshes == [
+        "t5-footage",
+        "t5-footage",
+        "t5-footage-footage-replace-undo-refresh",
+        "t5-footage-footage-interpretation-undo-refresh",
+        "t5-footage-footage-proxy-undo-refresh",
+        "t5-footage-footage-proxy-redo-refresh",
+        "t5-footage-item-use-proxy-undo-refresh",
+    ]
+    assert runner.runtime.passed == [
+        "ae_importFootage",
+        "ae_getFootageDetails",
+        "ae_getFootageInterpretation",
+        "ae_replaceFootage",
+        "ae_setFootageInterpretation",
+        "ae_setFootageProxy",
+        "ae_setItemUseProxy",
+    ]
 
 
 @pytest.mark.asyncio
