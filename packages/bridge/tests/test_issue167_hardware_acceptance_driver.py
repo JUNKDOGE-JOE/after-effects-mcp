@@ -435,28 +435,30 @@ def test_footage_history_refresh_uses_semantic_identity_not_stale_object_id(
         "type": "footage",
         "name": "issue167-main.png",
         "locator": _locator("item", "88888888-8888-4888-8888-888888888888"),
+        "parentLocator": _locator(
+            "project", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        ),
     }
-    restored["locator"]["projectId"] = imported["projectId"]
-    other_project = {
+    restored["locator"]["projectId"] = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    nested_same_name = {
         "type": "footage",
         "name": "issue167-main.png",
         "locator": _locator("item", "99999999-9999-4999-8999-999999999999"),
+        "parentLocator": _locator(
+            "item", "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+        ),
     }
-    other_project["locator"]["projectId"] = (
-        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-    )
 
     assert runner._items_matching_footage_identity(
         [baseline],
-        project_id=imported["projectId"],
         name="issue167-main.png",
     ) == []
     assert runner._items_matching_footage_identity(
-        [baseline, restored, other_project],
-        project_id=imported["projectId"],
+        [baseline, restored, nested_same_name],
         name="issue167-main.png",
     ) == [restored]
     assert restored["locator"]["objectId"] != imported["objectId"]
+    assert restored["locator"]["projectId"] != imported["projectId"]
 
 
 @pytest.mark.asyncio

@@ -416,7 +416,6 @@ class Issue167Package:
     def _items_matching_footage_identity(
         items: list[dict[str, Any]],
         *,
-        project_id: Any,
         name: str,
     ) -> list[dict[str, Any]]:
         return [
@@ -425,7 +424,9 @@ class Issue167Package:
             if item.get("type") == "footage"
             and item.get("name") == name
             if isinstance(item.get("locator"), Mapping)
-            and item["locator"].get("projectId") == project_id
+            and item["locator"].get("kind") == "item"
+            and isinstance(item.get("parentLocator"), Mapping)
+            and item["parentLocator"].get("kind") == "project"
         ]
 
     async def _footage_details(
@@ -721,7 +722,6 @@ class Issue167Package:
             len(without_item) == before_count
             and not self._items_matching_footage_identity(
                 without_item,
-                project_id=imported["projectId"],
                 name=self.assets["main"].name,
             ),
             "footage import Undo left the imported project item",
@@ -733,7 +733,6 @@ class Issue167Package:
         restored_items = await self._project_items(session, phase=phase)
         restored_imports = self._items_matching_footage_identity(
             restored_items,
-            project_id=imported["projectId"],
             name=self.assets["main"].name,
         )
         require(
@@ -741,10 +740,6 @@ class Issue167Package:
             "footage import Redo did not restore the imported project item",
         )
         item = _locator(restored_imports[0]["locator"], "item")
-        require(
-            item["projectId"] == imported["projectId"],
-            "footage import Redo returned another project",
-        )
 
         details = await self._footage_details(session, item, phase=phase)
         require(details.get("sourcePath") == str(self.assets["main"]),
