@@ -332,7 +332,7 @@ class NativeMediaArguments(_NativeModel):
             mode="json",
             by_alias=True,
             include=self.model_fields_set,
-            exclude_none=False,
+            exclude_none=True,
         )
 
 

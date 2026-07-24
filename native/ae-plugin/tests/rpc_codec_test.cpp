@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <span>
@@ -3042,6 +3043,43 @@ void native_media_package_parses_all_twenty_two_public_operations() {
           + error.what());
     }
   }
+
+  std::ifstream python_wire_fixture(
+      "native/ae-plugin/protocol/fixtures/native-media-wire-admission.ndjson");
+  require(
+      python_wire_fixture.good(),
+      "native media Python wire admission fixture is unavailable");
+  std::size_t python_wire_cases = 0;
+  std::size_t mask_property_cases = 0;
+  std::size_t footage_interpretation_cases = 0;
+  std::string python_wire_arguments;
+  while (std::getline(python_wire_fixture, python_wire_arguments)) {
+    if (python_wire_arguments.empty()) {
+      continue;
+    }
+    const ParsedRequest parsed = decode_request_frame(frame(package150_invoke_json(
+        "python-wire-" + std::to_string(++python_wire_cases),
+        "ae.native.media.write",
+        python_wire_arguments)));
+    const auto& invoke = std::get<InvokeParams>(parsed.params);
+    require(
+        invoke.capability_id == "ae.native.media.write",
+        "Python wire fixture lost the native media write capability");
+    if (invoke.native_media.operation == "mask-properties") {
+      ++mask_property_cases;
+    } else if (invoke.native_media.operation == "footage-interpretation") {
+      ++footage_interpretation_cases;
+    } else {
+      fail(
+          "Python wire fixture admitted an unexpected operation: "
+          + invoke.native_media.operation);
+    }
+  }
+  require(
+      python_wire_cases == 4
+          && mask_property_cases == 2
+          && footage_interpretation_cases == 2,
+      "Python wire fixture did not cover partial/full mask and footage patches");
 
   const auto invalid = [&](std::string_view label,
                            std::string_view capability,

@@ -35,6 +35,7 @@ from ae_mcp.handlers import HANDLERS, load_all
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = REPO_ROOT / "native" / "ae-plugin" / "protocol" / "fixtures"
+WIRE_ADMISSION_FIXTURE = FIXTURES / "native-media-wire-admission.ndjson"
 HOST = "22222222-2222-4222-8222-222222222222"
 SESSION = "11111111-1111-4111-8111-111111111111"
 PROJECT = "44444444-4444-4444-8444-444444444444"
@@ -55,6 +56,61 @@ ITEM = {
     "objectId": "99999999-9999-4999-8999-999999999999",
 }
 KEY = "native-media-test-0001"
+
+
+def _wire_admission_cases() -> tuple[dict[str, Any], ...]:
+    return (
+        {
+            "operation": "mask-properties",
+            "layerLocator": LAYER,
+            "maskIndex": 1,
+            "maskId": 7,
+            "properties": {"mode": "add"},
+            "idempotencyKey": KEY,
+        },
+        {
+            "operation": "mask-properties",
+            "layerLocator": LAYER,
+            "maskIndex": 1,
+            "maskId": 7,
+            "properties": {
+                "mode": "subtract",
+                "inverted": True,
+                "motionBlur": "on",
+                "featherFalloff": "linear",
+                "color": {"red": 12, "green": 34, "blue": 56, "alpha": 255},
+                "locked": True,
+                "rotoBezier": False,
+            },
+            "idempotencyKey": KEY,
+        },
+        {
+            "operation": "footage-interpretation",
+            "itemLocator": ITEM,
+            "proxy": False,
+            "interpretation": {"loopCount": 2},
+            "idempotencyKey": KEY,
+        },
+        {
+            "operation": "footage-interpretation",
+            "itemLocator": ITEM,
+            "proxy": False,
+            "interpretation": {
+                "loopCount": 3,
+                "pixelAspect": {"numerator": 4, "denominator": 3},
+                "nativeFps": "24",
+                "conformFps": "23.976",
+                "alphaMode": "premultiplied",
+                "premultiplyColor": {
+                    "red": 1,
+                    "green": 2,
+                    "blue": 3,
+                    "alpha": 255,
+                },
+            },
+            "idempotencyKey": KEY,
+        },
+    )
 
 
 def _fixture(name: str) -> dict[str, Any]:
@@ -249,6 +305,28 @@ def test_grouped_media_contract_rejects_present_but_null_required_fields() -> No
             "enabled": None,
             "idempotencyKey": KEY,
         })
+
+
+def test_native_media_wire_payload_recursively_omits_unset_patch_nulls() -> None:
+    partial_mask = NativeMediaArguments.model_validate(_wire_admission_cases()[0])
+    wire = partial_mask.wire_payload()
+    assert wire["properties"] == {"mode": "add"}
+    assert "motionBlur" not in wire["properties"]
+    assert "featherFalloff" not in wire["properties"]
+    assert "null" not in json.dumps(wire, separators=(",", ":"), sort_keys=True)
+
+
+def test_native_media_python_wire_snapshot_matches_cpp_admission_fixture() -> None:
+    generated = "\n".join(
+        json.dumps(
+            NativeMediaArguments.model_validate(case).wire_payload(),
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        for case in _wire_admission_cases()
+    ) + "\n"
+    assert WIRE_ADMISSION_FIXTURE.read_text(encoding="utf-8") == generated
 
 
 @pytest.mark.asyncio
