@@ -505,6 +505,116 @@ async def test_native_media_mask_path_write_accepts_native_changed_readback() ->
     assert execution.value.wire_payload() == value
 
 
+@pytest.mark.asyncio
+async def test_native_media_footage_interpretation_write_accepts_native_changed_readback() -> None:
+    value = {
+        "operation": "footage-interpretation",
+        "changed": True,
+        "itemLocator": ITEM,
+        "proxy": False,
+        "interpretation": {
+            "loopCount": 1,
+            "pixelAspect": {"numerator": 1, "denominator": 1},
+            "nativeFps": "24",
+            "conformFps": "24",
+            "alphaMode": "premultiplied",
+            "premultiplyColor": {
+                "red": 12,
+                "green": 24,
+                "blue": 36,
+                "alpha": 255,
+            },
+        },
+    }
+    backend = MediaBackend(value)
+    execution = await invoke_native_media_write(
+        backend,
+        request_id="media-footage-interpretation-write-1",
+        arguments={
+            "operation": "footage-interpretation",
+            "itemLocator": ITEM,
+            "proxy": False,
+            "interpretation": {
+                "alphaMode": "premultiplied",
+                "premultiplyColor": {
+                    "red": 12,
+                    "green": 24,
+                    "blue": 36,
+                    "alpha": 255,
+                },
+            },
+            "idempotencyKey": KEY,
+        },
+        deadline_unix_ms=2_000_000_000_000,
+    )
+
+    assert execution.value.changed is True
+    assert execution.value.wire_payload() == value
+
+
+@pytest.mark.asyncio
+async def test_native_media_footage_interpretation_write_rejects_missing_changed() -> None:
+    value = {
+        "operation": "footage-interpretation",
+        "itemLocator": ITEM,
+        "proxy": False,
+        "interpretation": {
+            "loopCount": 1,
+            "pixelAspect": {"numerator": 1, "denominator": 1},
+            "nativeFps": "24",
+            "conformFps": "24",
+            "alphaMode": "straight",
+            "premultiplyColor": {
+                "red": 0,
+                "green": 0,
+                "blue": 0,
+                "alpha": 255,
+            },
+        },
+    }
+    backend = MediaBackend(value)
+
+    with pytest.raises(NativeBackendError) as captured:
+        await invoke_native_media_write(
+            backend,
+            request_id="media-footage-interpretation-write-missing-changed",
+            arguments={
+                "operation": "footage-interpretation",
+                "itemLocator": ITEM,
+                "proxy": False,
+                "interpretation": {"loopCount": 1},
+                "idempotencyKey": KEY,
+            },
+            deadline_unix_ms=2_000_000_000_000,
+        )
+
+    assert captured.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert captured.value.side_effect == "may-have-occurred"
+
+
+def test_native_media_footage_interpretation_read_remains_closed_without_changed() -> None:
+    value = NativeMediaValue.model_validate({
+        "operation": "footage-interpretation",
+        "itemLocator": ITEM,
+        "proxy": False,
+        "interpretation": {
+            "loopCount": 1,
+            "pixelAspect": {"numerator": 1, "denominator": 1},
+            "nativeFps": "24",
+            "conformFps": "24",
+            "alphaMode": "straight",
+            "premultiplyColor": {
+                "red": 0,
+                "green": 0,
+                "blue": 0,
+                "alpha": 255,
+            },
+        },
+    })
+
+    assert "changed" not in value.wire_payload()
+
+
 def test_native_media_mask_path_read_remains_closed_without_changed() -> None:
     value = NativeMediaValue.model_validate({
         "operation": "mask-path",

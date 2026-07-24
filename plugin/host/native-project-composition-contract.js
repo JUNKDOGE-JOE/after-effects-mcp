@@ -1038,7 +1038,12 @@ const NATIVE_MEDIA_VALUE_FIELDS = Object.freeze({
         'hasVideo', 'height', 'itemLocator', 'missing', 'name', 'pixelAspect', 'signature',
         'sourcePath', 'still', 'usingProxy', 'width',
     ],
-    'footage-interpretation': ['operation', 'itemLocator', 'proxy', 'interpretation'],
+    'footage-interpretation-read': [
+        'operation', 'itemLocator', 'proxy', 'interpretation',
+    ],
+    'footage-interpretation-write': [
+        'operation', 'changed', 'itemLocator', 'proxy', 'interpretation',
+    ],
     'footage-import': [
         'operation', 'beforeItemCount', 'afterItemCount', 'changed', 'itemLocator',
     ],
@@ -1183,8 +1188,8 @@ function validNativeMediaArguments(value, mutating) {
 function validNativeMediaValue(value, argumentsValue, hostInstanceId, sessionId, mutating) {
     if (value === null || typeof value !== 'object' || Array.isArray(value)
         || value.operation !== argumentsValue.operation) return false;
-    const discriminator = value.operation === 'mask-path'
-        ? 'mask-path-' + (mutating ? 'write' : 'read') : value.operation;
+    const discriminator = ['mask-path', 'footage-interpretation'].includes(value.operation)
+        ? value.operation + '-' + (mutating ? 'write' : 'read') : value.operation;
     const fields = NATIVE_MEDIA_VALUE_FIELDS[discriminator];
     if (!fields || !exactKeys(value, fields)) return false;
     for (const field of ['layerLocator', 'itemLocator']) {

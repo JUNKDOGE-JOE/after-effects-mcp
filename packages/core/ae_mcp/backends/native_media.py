@@ -468,6 +468,11 @@ class NativeMediaValue(_NativeModel):
                 expected.add("layer_locator")
             else:
                 expected.add("changed")
+        if (
+            self.operation == "footage-interpretation"
+            and "changed" in self.model_fields_set
+        ):
+            expected.add("changed")
         if set(self.model_fields_set) != expected:
             raise ValueError(f"{self.operation} result is not closed")
         if self.installed_effect_key == 0 or self.mask_id == 0:
@@ -530,6 +535,8 @@ def _validate_value(
 ) -> NativeMediaValue:
     try:
         value = NativeMediaValue.model_validate(result.value)
+        if side_effecting and value.changed is not True:
+            raise ValueError("native media write did not prove that it changed state")
         _validate_operation_binding(arguments, value)
         digest = _sha256_closed_json({
             "capabilityId": contract.capability_id,

@@ -445,6 +445,69 @@ test('#167 mask-path write admits the native changed result and rejects drift', 
     assert.equal(write.validValue(withoutChanged, argumentsValue, HOST, SESSION), false);
 });
 
+test('#167 footage-interpretation write admits the exact native changed result', () => {
+    const item = locator('item', CREATED, 8);
+    const argumentsValue = {
+        operation: 'footage-interpretation',
+        itemLocator: item,
+        proxy: false,
+        interpretation: {
+            alphaMode: 'premultiplied',
+            premultiplyColor: { red: 12, green: 24, blue: 36, alpha: 255 },
+        },
+        idempotencyKey: 'issue167-footage-interpretation-result-0001',
+    };
+    const value = {
+        operation: 'footage-interpretation',
+        changed: true,
+        itemLocator: item,
+        proxy: false,
+        interpretation: {
+            loopCount: 1,
+            pixelAspect: { numerator: 1, denominator: 1 },
+            nativeFps: '24',
+            conformFps: '24',
+            alphaMode: 'premultiplied',
+            premultiplyColor: { red: 12, green: 24, blue: 36, alpha: 255 },
+        },
+    };
+    const write = packageContracts.getContract('ae.native.media.write');
+
+    assert.equal(write.validValue(value, argumentsValue, HOST, SESSION), true);
+    assert.equal(write.validValue(
+        { ...value, changed: false }, argumentsValue, HOST, SESSION,
+    ), false);
+    const withoutChanged = { ...value };
+    delete withoutChanged.changed;
+    assert.equal(write.validValue(withoutChanged, argumentsValue, HOST, SESSION), false);
+});
+
+test('#167 footage-interpretation read remains closed without changed', () => {
+    const item = locator('item', CREATED, 8);
+    const argumentsValue = {
+        operation: 'footage-interpretation',
+        itemLocator: item,
+        proxy: false,
+    };
+    const value = {
+        operation: 'footage-interpretation',
+        itemLocator: item,
+        proxy: false,
+        interpretation: {
+            loopCount: 1,
+            pixelAspect: { numerator: 1, denominator: 1 },
+            nativeFps: '24',
+            conformFps: '24',
+            alphaMode: 'straight',
+            premultiplyColor: { red: 0, green: 0, blue: 0, alpha: 255 },
+        },
+    };
+    const read = packageContracts.getContract('ae.native.media.read');
+
+    assert.equal(read.validValue(value, argumentsValue, HOST, SESSION), true);
+    assert.equal(read.validValue({ ...value, changed: true }, argumentsValue, HOST, SESSION), false);
+});
+
 test('#162 compositing contracts reject generic, no-op, and unrelated readbacks', () => {
     const vectors = cases();
     const read = vectors['ae.layer.compositing.read'];
