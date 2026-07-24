@@ -413,9 +413,14 @@ class EvidenceLog:
         for case in self.spec.tools:
             row = mapping(matrix[case.tool], f"matrix row {case.tool} is invalid")
             undo = mapping(row["undo"], f"matrix undo {case.tool} is invalid")
+            undo_display = (
+                str(undo["policy"])
+                if undo.get("policy") == "not-guaranteed"
+                else f"{undo['executed']}/{str(undo['verified']).lower()}"
+            )
             lines.append(
                 f"| `{case.tool}` | {row['status']} | {row['invocations']} | "
-                f"{undo['executed']}/{str(undo['verified']).lower()} |"
+                f"{undo_display} |"
             )
         return "\n".join(lines)
 
@@ -752,7 +757,41 @@ class AcceptanceRuntime:
         )
         if write:
             undo = mapping(evidence.get("undo"), f"{tool} omitted Undo evidence")
-            require(undo == {"available": True, "verified": False}, f"{tool} Undo evidence mismatch")
+            matrix_row = self.matrix.get(tool)
+            undo_contract = (
+                mapping(
+                    mapping(matrix_row, f"{tool} matrix row is invalid").get("undo"),
+                    f"{tool} matrix Undo contract is invalid",
+                )
+                if matrix_row is not None
+                else {}
+            )
+            if undo_contract.get("policy") == "not-guaranteed":
+                native_boundary = mapping(
+                    evidence.get("nativeUndoBoundary"),
+                    f"{tool} omitted native Undo-boundary evidence",
+                )
+                limitation = mapping(
+                    evidence.get("undoLimitation"),
+                    f"{tool} omitted public Undo limitation",
+                )
+                require(
+                    implementation.get("undo") == "not-guaranteed"
+                    and implementation.get("nativeUndoBoundary") == "ae-undo-group"
+                    and undo == {"available": False, "verified": False}
+                    and native_boundary == {"available": True, "verified": False}
+                    and limitation.get("code")
+                    == undo_contract.get("reasonCode")
+                    and limitation.get("guaranteed") is False
+                    and audit.get("undoAvailable") is False
+                    and audit.get("nativeUndoBoundaryAvailable") is True,
+                    f"{tool} public Undo limitation mismatch",
+                )
+            else:
+                require(
+                    undo == {"available": True, "verified": False},
+                    f"{tool} Undo evidence mismatch",
+                )
             require(isinstance(payload.get("replayed"), bool), f"{tool} omitted replay status")
 
     async def call(

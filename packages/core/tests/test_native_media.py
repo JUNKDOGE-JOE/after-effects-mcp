@@ -31,6 +31,8 @@ from ae_mcp.backends.native_media import (
     invoke_native_media_write,
 )
 from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp.handlers.native import _run_native_media
+from ae_mcp.server import tool_description
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -314,6 +316,77 @@ def test_native_media_wire_payload_recursively_omits_unset_patch_nulls() -> None
     assert "motionBlur" not in wire["properties"]
     assert "featherFalloff" not in wire["properties"]
     assert "null" not in json.dumps(wire, separators=(",", ":"), sort_keys=True)
+
+
+def test_mask_properties_public_schema_discloses_undo_limitation() -> None:
+    description = tool_description(
+        schemas.AeSetLayerMaskPropertiesArgs,
+        "ae.setLayerMaskProperties",
+    )
+    roto = schemas.AeMaskPropertiesPatch.model_json_schema()["properties"][
+        "roto_bezier"
+    ]
+    assert description.startswith("ae_setLayerMaskProperties")
+    assert "Undo is not guaranteed" in description
+    assert "does not record this SDK setter" in roto["description"]
+
+
+@pytest.mark.asyncio
+async def test_mask_properties_public_response_does_not_claim_undo_guarantee(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    value = {
+        "operation": "mask-properties",
+        "changed": True,
+        "mask": {
+            "maskIndex": 1,
+            "maskId": 7,
+            "mode": "add",
+            "inverted": False,
+            "motionBlur": "same-as-layer",
+            "featherFalloff": "smooth",
+            "color": {"red": 255, "green": 0, "blue": 0, "alpha": 255},
+            "locked": False,
+            "rotoBezier": True,
+        },
+    }
+    backend = MediaBackend(value)
+    monkeypatch.setattr(
+        "ae_mcp.handlers.native._discovery.select_backend",
+        lambda: backend,
+    )
+    monkeypatch.setattr(
+        "ae_mcp.handlers.native.time.time",
+        lambda: 2_000_000_000,
+    )
+    arguments = schemas.AeSetLayerMaskPropertiesArgs.model_validate({
+        "layer_locator": LAYER,
+        "mask_index": 1,
+        "mask_id": 7,
+        "properties": {"roto_bezier": True},
+        "idempotency_key": KEY,
+    })
+
+    response = await _run_native_media(
+        arguments,
+        None,
+        operation="mask-properties",
+        write=True,
+    )
+
+    assert response["implementation"]["undo"] == "not-guaranteed"
+    assert response["implementation"]["nativeUndoBoundary"] == "ae-undo-group"
+    assert response["implementation"]["undoLimitation"]["guaranteed"] is False
+    assert response["audit"]["undoAvailable"] is False
+    assert response["audit"]["nativeUndoBoundaryAvailable"] is True
+    assert response["evidence"]["undo"] == {
+        "available": False,
+        "verified": False,
+    }
+    assert response["evidence"]["nativeUndoBoundary"] == {
+        "available": True,
+        "verified": False,
+    }
 
 
 def test_native_media_python_wire_snapshot_matches_cpp_admission_fixture() -> None:

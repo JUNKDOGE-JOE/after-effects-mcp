@@ -2217,14 +2217,20 @@ async def _run_native_media(
         )
 
     if write:
+        start_msg = (
+            f"ae.{operation} native AEGP write; wait for verified readback "
+            "and terminal evidence..."
+            if operation == "mask-properties"
+            else (
+                f"ae.{operation} native AEGP write; wait for verified "
+                "readback and Undo evidence..."
+            )
+        )
         execution = await _await_project_package_write(
             _call,
             cancellation=cancellation,
             ctx=ctx,
-            start_msg=(
-                f"ae.{operation} native AEGP write; wait for verified "
-                "readback and Undo evidence..."
-            ),
+            start_msg=start_msg,
         )
         response = _project_package_write_response(execution)
     else:
@@ -2240,6 +2246,40 @@ async def _run_native_media(
         response = _native_read_response(execution)
     response["value"] = execution.value.wire_payload()
     response["implementation"]["publicOperation"] = operation
+    if operation == "mask-properties":
+        limitation = {
+            "code": "MASK_PROPERTIES_UNDO_NOT_GUARANTEED",
+            "guaranteed": False,
+            "reason": (
+                "After Effects does not record every native mask-property "
+                "setter in the opened Undo group; rotoBezier is verified by "
+                "readback but is known not to register an Undo action."
+            ),
+            "recovery": (
+                "Capture the previous mask properties and restore them with a "
+                "new explicit ae_setLayerMaskProperties call when reversal is required."
+            ),
+        }
+        native_undo = response["implementation"]["undo"]
+        response["implementation"]["nativeUndoBoundary"] = native_undo
+        response["implementation"]["undo"] = "not-guaranteed"
+        response["implementation"]["undoLimitation"] = limitation
+        response["implementation"]["sideEffectSummary"] = (
+            "Changes one bounded mask with verified readback; the public tool "
+            "does not guarantee that After Effects records the patch as one Undo step."
+        )
+        native_evidence = dict(response["evidence"]["undo"])
+        response["evidence"]["nativeUndoBoundary"] = native_evidence
+        response["evidence"]["undo"] = {
+            "available": False,
+            "verified": False,
+        }
+        response["evidence"]["undoLimitation"] = limitation
+        response["audit"]["nativeUndoBoundaryAvailable"] = response["audit"][
+            "undoAvailable"
+        ]
+        response["audit"]["undoAvailable"] = False
+        response["audit"]["undoVerified"] = False
     return response
 
 

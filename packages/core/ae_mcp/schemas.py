@@ -2131,7 +2131,12 @@ class AeMediaColor(_StrictModel):
 
 
 class AeMaskPropertiesPatch(_StrictModel):
-    """Non-empty closed patch for one mask's non-path properties."""
+    """Non-empty closed patch for one mask's non-path properties.
+
+    ``ae_setLayerMaskProperties`` does not guarantee one After Effects Undo
+    step for this patch. In particular, the native ``roto_bezier`` setter is
+    verified by write readback but is not recorded by AE's Undo stack.
+    """
 
     mode: Optional[
         Literal["none", "add", "subtract", "intersect", "lighten", "darken", "difference"]
@@ -2141,7 +2146,14 @@ class AeMaskPropertiesPatch(_StrictModel):
     feather_falloff: Optional[Literal["smooth", "linear"]] = None
     color: Optional[AeMediaColor] = None
     locked: Optional[bool] = None
-    roto_bezier: Optional[bool] = None
+    roto_bezier: Optional[bool] = Field(
+        default=None,
+        description=(
+            "Enable or disable RotoBezier. The write is verified by native "
+            "readback, but After Effects does not record this SDK setter in "
+            "the tool's Undo group; do not rely on Undo to restore it."
+        ),
+    )
 
     @model_validator(mode="after")
     def _nonempty_patch(self) -> "AeMaskPropertiesPatch":
@@ -2153,7 +2165,13 @@ class AeMaskPropertiesPatch(_StrictModel):
 
 
 class AeSetLayerMaskPropertiesArgs(_AeMaskWriteArgs):
-    """ae.setLayerMaskProperties — patch one mask with verified readback."""
+    """ae.setLayerMaskProperties — patch one mask with verified readback.
+
+    Undo is not guaranteed for this tool. The native host opens an AE Undo
+    boundary, but AE does not record every mask-property SDK setter in it;
+    ``roto_bezier`` is a verified example. Inspect the returned mask state and
+    do not assume one Undo restores the whole patch.
+    """
 
     properties: AeMaskPropertiesPatch
 

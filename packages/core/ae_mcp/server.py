@@ -995,7 +995,12 @@ _PROJECT_COMPOSITION_VALIDATION = {
     ),
     "ae.setLayerMaskProperties": (
         "ae.native.media.write",
-        "Use a fresh mask reference, a non-empty closed properties patch, and stable idempotency_key.",
+        (
+            "Use a fresh mask reference, a non-empty closed properties patch, "
+            "and stable idempotency_key. Undo is not guaranteed for this tool; "
+            "in particular, roto_bezier must be verified by readback rather "
+            "than assumed reversible."
+        ),
     ),
     "ae.setLayerMaskPath": (
         "ae.native.media.write",

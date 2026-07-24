@@ -54,9 +54,94 @@ def test_milestone_freeze_is_explicit_and_bounded() -> None:
     assert len(package.SPEC.write_tools) == 14
     assert package.SPEC.t4_target_calls == 6
     assert package.SPEC.t4_hard_limit == 7
-    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 60
-    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 60
+    assert package.SPEC.t5_target_calls == package.SPEC.t5_hard_limit == 59
+    assert package.SPEC.t6_target_calls == package.SPEC.t6_hard_limit == 59
     assert len({case.tool for case in package.SPEC.tools}) == 22
+
+
+def test_acceptance_matrix_treats_mask_properties_undo_as_not_guaranteed() -> None:
+    runtime = object.__new__(runtime_module.AcceptanceRuntime)
+    capability = "ae.native.media.write"
+    contract_digest = "a" * 64
+    host = "11111111-1111-4111-8111-111111111111"
+    session = "22222222-2222-4222-8222-222222222222"
+    source = "f" * 40
+    request = "mcp-mask-properties"
+    value = {"operation": "mask-properties", "changed": True, "mask": {}}
+    postcondition = runtime_module.json_hash({
+        "capabilityId": capability,
+        "capabilityVersion": 1,
+        "value": value,
+    })
+    runtime.contract_digests = {capability: contract_digest}
+    runtime.identity = SimpleNamespace(expected_sha=source)
+    runtime.expected_host_instance_id = host
+    runtime.matrix = {
+        "ae_setLayerMaskProperties": {
+            "undo": {
+                "required": False,
+                "executed": 0,
+                "verified": False,
+                "policy": "not-guaranteed",
+                "reasonCode": "MASK_PROPERTIES_UNDO_NOT_GUARANTEED",
+            }
+        }
+    }
+    payload = {
+        "ok": True,
+        "replayed": False,
+        "value": value,
+        "implementation": {
+            "engine": "native-aegp",
+            "capabilityId": capability,
+            "capabilityVersion": 1,
+            "contractDigest": contract_digest,
+            "undo": "not-guaranteed",
+            "nativeUndoBoundary": "ae-undo-group",
+        },
+        "provenance": {
+            "engine": "native-aegp",
+            "sourceCommit": source,
+            "hostInstanceId": host,
+            "sessionId": session,
+        },
+        "audit": {
+            "requestId": request,
+            "capabilityId": capability,
+            "contractDigest": contract_digest,
+            "effect": "committed",
+            "requestDigest": "b" * 64,
+            "postconditionDigest": postcondition,
+            "undoAvailable": False,
+            "undoVerified": False,
+            "nativeUndoBoundaryAvailable": True,
+        },
+        "evidence": {
+            "hostInstanceId": host,
+            "sessionId": session,
+            "requestId": request,
+            "effect": "committed",
+            "requestDigest": "b" * 64,
+            "postcondition": {
+                "verified": True,
+                "algorithm": "sha256-rfc8785-jcs-v1",
+                "digest": postcondition,
+            },
+            "undo": {"available": False, "verified": False},
+            "nativeUndoBoundary": {"available": True, "verified": False},
+            "undoLimitation": {
+                "code": "MASK_PROPERTIES_UNDO_NOT_GUARANTEED",
+                "guaranteed": False,
+            },
+        },
+    }
+
+    runtime._validate_native_success(
+        payload,
+        tool="ae_setLayerMaskProperties",
+        capability_id=capability,
+        write=True,
+    )
 
 
 def test_normal_package_limit_stays_closed_while_milestone_is_explicit() -> None:
@@ -506,6 +591,15 @@ async def test_structural_mask_history_reacquires_a_fresh_layer_locator(
 
         def __init__(self) -> None:
             self.passed: list[str] = []
+            self.matrix = {
+                "ae_setLayerMaskProperties": {
+                    "undo": {
+                        "required": True,
+                        "executed": 0,
+                        "verified": False,
+                    }
+                }
+            }
 
         @staticmethod
         def intent(purpose: str) -> str:
@@ -624,6 +718,13 @@ async def test_structural_mask_history_reacquires_a_fresh_layer_locator(
             return self.layer()
 
     runner = MasksPackage()
+    assert runner.runtime.matrix["ae_setLayerMaskProperties"]["undo"] == {
+        "required": False,
+        "executed": 0,
+        "verified": False,
+        "policy": "not-guaranteed",
+        "reasonCode": "MASK_PROPERTIES_UNDO_NOT_GUARANTEED",
+    }
     restored, masks = await runner._run_masks(
         object(), runner.layer(), phase="t5-masks"
     )
