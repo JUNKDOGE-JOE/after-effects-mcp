@@ -465,6 +465,9 @@ def test_footage_history_refresh_uses_semantic_identity_not_stale_object_id(
         [baseline, restored, nested_same_name, nested_solid_source],
         name="issue167-main.png",
     ) == [restored]
+    assert runner._reacquire_footage(
+        [baseline, restored, nested_same_name, nested_solid_source],
+    ) == restored["locator"]
     assert restored["locator"]["objectId"] != imported["objectId"]
     assert restored["locator"]["projectId"] != imported["projectId"]
 

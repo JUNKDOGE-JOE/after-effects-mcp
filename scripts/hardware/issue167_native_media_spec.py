@@ -430,6 +430,12 @@ class Issue167Package:
         phase: str,
     ) -> dict[str, Any]:
         items = await self._project_items(session, phase=phase)
+        return self._reacquire_footage(items)
+
+    def _reacquire_footage(
+        self,
+        items: list[dict[str, Any]],
+    ) -> dict[str, Any]:
         matching = self._items_matching_footage_identity(
             items,
             name=self.assets["main"].name,
@@ -969,9 +975,7 @@ class Issue167Package:
             layer = await self._reacquire_layer(
                 restarted, items, phase=f"{self.runtime.mode}-restart"
             )
-            item = await self._refresh_footage(
-                restarted, phase=f"{self.runtime.mode}-restart"
-            )
+            item = self._reacquire_footage(items)
             layer, effects = await self._list_effects(
                 restarted, layer, phase=f"{self.runtime.mode}-restart"
             )
