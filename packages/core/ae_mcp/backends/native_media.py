@@ -461,9 +461,13 @@ class NativeMediaValue(_NativeModel):
     @model_validator(mode="after")
     def _closed_value(self) -> "NativeMediaValue":
         expected = set(_VALUE_FIELDS[self.operation])
-        # Read mask-path additionally returns its layer locator; the write does not.
-        if self.operation == "mask-path" and "layer_locator" in self.model_fields_set:
-            expected.add("layer_locator")
+        if self.operation == "mask-path":
+            # The shared discriminator has two closed result shapes. Reads bind
+            # the layer locator; writes prove that a mutation occurred.
+            if "layer_locator" in self.model_fields_set:
+                expected.add("layer_locator")
+            else:
+                expected.add("changed")
         if set(self.model_fields_set) != expected:
             raise ValueError(f"{self.operation} result is not closed")
         if self.installed_effect_key == 0 or self.mask_id == 0:
@@ -575,9 +579,20 @@ def _validate_operation_binding(
 
     if value.operation != arguments.operation:
         raise ValueError("native media result operation does not match the request")
-    if arguments.layer_locator is not None and arguments.operation in {
-        "effects-layer-list", "effect-details", "masks-list", "mask-details", "mask-path",
-    }:
+    if (
+        arguments.layer_locator is not None
+        and arguments.operation in {
+            "effects-layer-list",
+            "effect-details",
+            "masks-list",
+            "mask-details",
+            "mask-path",
+        }
+        # mask-path is a shared read/write discriminator. Only its read result
+        # includes layerLocator; the write result is bound by maskIndex/maskId
+        # and the exact path readback below.
+        and not (arguments.operation == "mask-path" and arguments.vertices is not None)
+    ):
         if value.layer_locator != arguments.layer_locator:
             raise ValueError("native media read returned another layer")
     if arguments.item_locator is not None and arguments.operation in {

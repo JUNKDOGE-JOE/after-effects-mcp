@@ -412,6 +412,39 @@ test('#167 grouped media contracts bind every operation to one closed argument s
     }), true);
 });
 
+test('#167 mask-path write admits the native changed result and rejects drift', () => {
+    const layer = locator('layer', SOURCE, 8);
+    const vertex = {
+        position: ['0', '0'], inTangent: ['0', '0'], outTangent: ['0', '0'],
+    };
+    const argumentsValue = {
+        operation: 'mask-path',
+        layerLocator: layer,
+        maskIndex: 1,
+        maskId: 7,
+        closed: false,
+        vertices: [vertex, { ...vertex, position: ['10', '10'] }],
+        idempotencyKey: 'issue167-mask-path-result-0001',
+    };
+    const value = {
+        operation: 'mask-path',
+        changed: true,
+        maskIndex: 1,
+        maskId: 7,
+        path: {
+            closed: false,
+            vertices: argumentsValue.vertices,
+        },
+    };
+    const write = packageContracts.getContract('ae.native.media.write');
+
+    assert.equal(write.validValue(value, argumentsValue, HOST, SESSION), true);
+    assert.equal(write.validValue({ ...value, changed: false }, argumentsValue, HOST, SESSION), false);
+    const withoutChanged = { ...value };
+    delete withoutChanged.changed;
+    assert.equal(write.validValue(withoutChanged, argumentsValue, HOST, SESSION), false);
+});
+
 test('#162 compositing contracts reject generic, no-op, and unrelated readbacks', () => {
     const vectors = cases();
     const read = vectors['ae.layer.compositing.read'];

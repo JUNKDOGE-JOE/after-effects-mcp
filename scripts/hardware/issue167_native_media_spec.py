@@ -608,27 +608,6 @@ class Issue167Package:
         self.runtime.mark_tool_passed("ae_getLayerMaskDetails")
         self.runtime.mark_tool_passed("ae_getLayerMaskPath")
 
-        payload = await self._call(session, "ae_setLayerMaskProperties", {
-            **_mask_reference(mask, layer),
-            "properties": {
-                "mode": "subtract",
-                "inverted": True,
-                "color": {"red": 32, "green": 96, "blue": 160, "alpha": 255},
-                "roto_bezier": True,
-                "locked": True,
-            },
-            "idempotency_key": self.runtime.intent("mask-properties"),
-        }, phase=phase)
-        changed = mapping(native_value(payload)["mask"], "mask property result is invalid")
-        require(
-            changed.get("mode") == "subtract"
-            and changed.get("inverted") is True
-            and changed.get("locked") is True
-            and changed.get("rotoBezier") is True,
-            "mask property write readback failed",
-        )
-        self.runtime.mark_tool_passed("ae_setLayerMaskProperties")
-
         triangle = [
             {"position": ["40", "40"], "in_tangent": ["0", "0"], "out_tangent": ["0", "0"]},
             {"position": ["280", "40"], "in_tangent": ["0", "0"], "out_tangent": ["0", "0"]},
@@ -680,7 +659,33 @@ class Issue167Package:
         self.runtime.mark_tool_passed(
             "ae_deleteLayerMask", undo_executed=True, undo_verified=True
         )
-        return layer, restored
+
+        # Validate the non-guaranteed mask-property write after all exact path
+        # and structural Undo checks. Enabling RotoBezier before a path write
+        # lets AE normalize explicit tangents, so the two capabilities must be
+        # accepted independently rather than as one exact-value interaction.
+        mask = restored[0]
+        payload = await self._call(session, "ae_setLayerMaskProperties", {
+            **_mask_reference(mask, layer),
+            "properties": {
+                "mode": "subtract",
+                "inverted": True,
+                "color": {"red": 32, "green": 96, "blue": 160, "alpha": 255},
+                "roto_bezier": True,
+                "locked": True,
+            },
+            "idempotency_key": self.runtime.intent("mask-properties"),
+        }, phase=phase)
+        changed = mapping(native_value(payload)["mask"], "mask property result is invalid")
+        require(
+            changed.get("mode") == "subtract"
+            and changed.get("inverted") is True
+            and changed.get("locked") is True
+            and changed.get("rotoBezier") is True,
+            "mask property write readback failed",
+        )
+        self.runtime.mark_tool_passed("ae_setLayerMaskProperties")
+        return layer, [changed]
 
     async def _run_footage(
         self,

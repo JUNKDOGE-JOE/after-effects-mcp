@@ -1022,7 +1022,7 @@ const NATIVE_MEDIA_VALUE_FIELDS = Object.freeze({
     ],
     'mask-details': ['operation', 'layerLocator', 'mask'],
     'mask-path-read': ['operation', 'layerLocator', 'maskIndex', 'maskId', 'path'],
-    'mask-path-write': ['operation', 'maskIndex', 'maskId', 'path'],
+    'mask-path-write': ['operation', 'changed', 'maskIndex', 'maskId', 'path'],
     'mask-create': [
         'operation', 'beforeCount', 'afterCount', 'changed', 'layerLocator', 'maskIndex',
         'maskId',

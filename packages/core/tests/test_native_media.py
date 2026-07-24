@@ -27,6 +27,7 @@ from ae_mcp.backends.native_media import (
     NATIVE_MEDIA_READ_CAPABILITY_ID,
     NATIVE_MEDIA_WRITE_CAPABILITY_ID,
     NativeMediaArguments,
+    NativeMediaValue,
     invoke_native_media_read,
     invoke_native_media_write,
 )
@@ -461,6 +462,73 @@ async def test_native_media_write_verifies_readback_and_undo_boundary() -> None:
     assert execution.evidence.undo is not None
     assert execution.evidence.undo.available is True
     assert execution.evidence.undo.verified is False
+
+
+@pytest.mark.asyncio
+async def test_native_media_mask_path_write_accepts_native_changed_readback() -> None:
+    vertices = [
+        {
+            "position": ["0", "0"],
+            "inTangent": ["0", "0"],
+            "outTangent": ["0", "0"],
+        },
+        {
+            "position": ["100", "100"],
+            "inTangent": ["0", "0"],
+            "outTangent": ["0", "0"],
+        },
+    ]
+    value = {
+        "operation": "mask-path",
+        "changed": True,
+        "maskIndex": 1,
+        "maskId": 7,
+        "path": {"closed": False, "vertices": vertices},
+    }
+    backend = MediaBackend(value)
+    execution = await invoke_native_media_write(
+        backend,
+        request_id="media-mask-path-write-1",
+        arguments={
+            "operation": "mask-path",
+            "layerLocator": LAYER,
+            "maskIndex": 1,
+            "maskId": 7,
+            "closed": False,
+            "vertices": vertices,
+            "idempotencyKey": KEY,
+        },
+        deadline_unix_ms=2_000_000_000_000,
+    )
+
+    assert execution.value.changed is True
+    assert execution.value.wire_payload() == value
+
+
+def test_native_media_mask_path_read_remains_closed_without_changed() -> None:
+    value = NativeMediaValue.model_validate({
+        "operation": "mask-path",
+        "layerLocator": LAYER,
+        "maskIndex": 1,
+        "maskId": 7,
+        "path": {
+            "closed": False,
+            "vertices": [
+                {
+                    "position": ["0", "0"],
+                    "inTangent": ["0", "0"],
+                    "outTangent": ["0", "0"],
+                },
+                {
+                    "position": ["100", "100"],
+                    "inTangent": ["0", "0"],
+                    "outTangent": ["0", "0"],
+                },
+            ],
+        },
+    })
+
+    assert "changed" not in value.wire_payload()
 
 
 @pytest.mark.asyncio

@@ -730,7 +730,13 @@ async def test_structural_mask_history_reacquires_a_fresh_layer_locator(
     )
 
     assert restored == runner.layer()
-    assert masks == runner.masks()
+    assert masks == [{
+        **runner.details,
+        "mode": "subtract",
+        "inverted": True,
+        "locked": True,
+        "rotoBezier": True,
+    }]
     assert runner.refreshes == [
         "t5-masks-mask-create-undo-refresh",
         "t5-masks-mask-create-redo-refresh",
@@ -742,10 +748,10 @@ async def test_structural_mask_history_reacquires_a_fresh_layer_locator(
         "ae_createLayerMask",
         "ae_getLayerMaskDetails",
         "ae_getLayerMaskPath",
-        "ae_setLayerMaskProperties",
         "ae_setLayerMaskPath",
         "ae_duplicateLayerMask",
         "ae_deleteLayerMask",
+        "ae_setLayerMaskProperties",
     ]
 
 
