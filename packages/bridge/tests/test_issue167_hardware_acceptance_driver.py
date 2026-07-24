@@ -59,6 +59,44 @@ def test_milestone_freeze_is_explicit_and_bounded() -> None:
     assert len({case.tool for case in package.SPEC.tools}) == 22
 
 
+def test_restart_footage_state_ignores_only_session_scoped_locator() -> None:
+    first = {
+        "operation": "footage-details",
+        "itemLocator": {
+            "kind": "item",
+            "hostInstanceId": "11111111-1111-4111-8111-111111111111",
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "projectId": "33333333-3333-4333-8333-333333333333",
+            "generation": 4,
+            "objectId": "44444444-4444-4444-8444-444444444444",
+        },
+        "name": "fixture.png",
+        "hasProxy": True,
+        "usingProxy": False,
+        "width": 2,
+        "height": 2,
+    }
+    restarted = {
+        **first,
+        "itemLocator": {
+            **first["itemLocator"],
+            "hostInstanceId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            "sessionId": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "projectId": "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            "generation": 1,
+            "objectId": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+        },
+    }
+
+    assert package._persistent_footage_state(first) == package._persistent_footage_state(
+        restarted
+    )
+    restarted["usingProxy"] = True
+    assert package._persistent_footage_state(first) != package._persistent_footage_state(
+        restarted
+    )
+
+
 def test_acceptance_matrix_treats_mask_properties_undo_as_not_guaranteed() -> None:
     runtime = object.__new__(runtime_module.AcceptanceRuntime)
     capability = "ae.native.media.write"

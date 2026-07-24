@@ -100,6 +100,16 @@ EFFECT_MATCH_NAMES = ("CC Ball Action", "CC Bend It")
 LAYER_NAME = "NATIVE_MEDIA_TARGET"
 
 
+def _persistent_footage_state(value: Mapping[str, Any]) -> dict[str, Any]:
+    """Exclude the session-scoped locator from restart-persistent footage state."""
+
+    state = dict(value)
+    locator = state.pop("itemLocator", None)
+    require(locator is not None, "footage details omitted itemLocator")
+    _locator(locator, "item")
+    return state
+
+
 def _locator(value: Any, kinds: str | tuple[str, ...]) -> dict[str, Any]:
     locator = mapping(value, "native locator is invalid")
     expected = (kinds,) if isinstance(kinds, str) else kinds
@@ -952,7 +962,7 @@ class Issue167Package:
         before_restart = {
             "effects": json_hash(effects),
             "masks": json_hash(masks),
-            "footage": json_hash(footage),
+            "footage": json_hash(_persistent_footage_state(footage)),
             "interpretation": json_hash(interpretation),
         }
         return before_restart
@@ -991,7 +1001,7 @@ class Issue167Package:
         after_restart = {
             "effects": json_hash(effects),
             "masks": json_hash(masks),
-            "footage": json_hash(footage),
+            "footage": json_hash(_persistent_footage_state(footage)),
             "interpretation": json_hash(interpretation),
         }
         require(
