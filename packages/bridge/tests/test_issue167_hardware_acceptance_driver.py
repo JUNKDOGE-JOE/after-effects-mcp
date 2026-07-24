@@ -421,19 +421,42 @@ async def test_t4_smoke_uses_exactly_six_public_calls(tmp_path: Path) -> None:
         "ae_listLayerMasks",
     ]
 
-def test_footage_locator_matching_ignores_other_fixture_footage(
+def test_footage_history_refresh_uses_semantic_identity_not_stale_object_id(
     tmp_path: Path,
 ) -> None:
     runner = package.Issue167Package(_T4Runtime(tmp_path), fixture_name="fixture")
     imported = _locator("item", "66666666-6666-4666-8666-666666666666")
     baseline = {
         "type": "footage",
+        "name": "baseline.png",
         "locator": _locator("item", "77777777-7777-4777-8777-777777777777"),
     }
-    restored = {"type": "footage", "locator": dict(imported)}
+    restored = {
+        "type": "footage",
+        "name": "issue167-main.png",
+        "locator": _locator("item", "88888888-8888-4888-8888-888888888888"),
+    }
+    restored["locator"]["projectId"] = imported["projectId"]
+    other_project = {
+        "type": "footage",
+        "name": "issue167-main.png",
+        "locator": _locator("item", "99999999-9999-4999-8999-999999999999"),
+    }
+    other_project["locator"]["projectId"] = (
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    )
 
-    assert runner._items_matching_locator([baseline], imported) == []
-    assert runner._items_matching_locator([baseline, restored], imported) == [restored]
+    assert runner._items_matching_footage_identity(
+        [baseline],
+        project_id=imported["projectId"],
+        name="issue167-main.png",
+    ) == []
+    assert runner._items_matching_footage_identity(
+        [baseline, restored, other_project],
+        project_id=imported["projectId"],
+        name="issue167-main.png",
+    ) == [restored]
+    assert restored["locator"]["objectId"] != imported["objectId"]
 
 
 @pytest.mark.asyncio

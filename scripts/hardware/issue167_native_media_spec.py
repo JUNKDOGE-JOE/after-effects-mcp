@@ -413,16 +413,19 @@ class Issue167Package:
         return _locator(footage[0]["locator"], "item")
 
     @staticmethod
-    def _items_matching_locator(
+    def _items_matching_footage_identity(
         items: list[dict[str, Any]],
-        target: Mapping[str, Any],
+        *,
+        project_id: Any,
+        name: str,
     ) -> list[dict[str, Any]]:
         return [
             item
             for item in items
+            if item.get("type") == "footage"
+            and item.get("name") == name
             if isinstance(item.get("locator"), Mapping)
-            and item["locator"].get("projectId") == target.get("projectId")
-            and item["locator"].get("objectId") == target.get("objectId")
+            and item["locator"].get("projectId") == project_id
         ]
 
     async def _footage_details(
@@ -716,7 +719,11 @@ class Issue167Package:
         without_item = await self._project_items(session, phase=phase)
         require(
             len(without_item) == before_count
-            and not self._items_matching_locator(without_item, imported),
+            and not self._items_matching_footage_identity(
+                without_item,
+                project_id=imported["projectId"],
+                name=self.assets["main"].name,
+            ),
             "footage import Undo left the imported project item",
         )
         self.runtime.mark_tool_passed(
@@ -724,7 +731,11 @@ class Issue167Package:
         )
         await self._checkpoint_redo("footage-import-setup")
         restored_items = await self._project_items(session, phase=phase)
-        restored_imports = self._items_matching_locator(restored_items, imported)
+        restored_imports = self._items_matching_footage_identity(
+            restored_items,
+            project_id=imported["projectId"],
+            name=self.assets["main"].name,
+        )
         require(
             len(restored_items) == after_count and len(restored_imports) == 1,
             "footage import Redo did not restore the imported project item",
