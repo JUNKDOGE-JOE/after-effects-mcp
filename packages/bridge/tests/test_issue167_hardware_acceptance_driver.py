@@ -448,13 +448,21 @@ def test_footage_history_refresh_uses_semantic_identity_not_stale_object_id(
             "item", "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
         ),
     }
+    nested_solid_source = {
+        "type": "footage",
+        "name": package.LAYER_NAME,
+        "locator": _locator("item", "dddddddd-dddd-4ddd-8ddd-dddddddddddd"),
+        "parentLocator": _locator(
+            "item", "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+        ),
+    }
 
     assert runner._items_matching_footage_identity(
         [baseline],
         name="issue167-main.png",
     ) == []
     assert runner._items_matching_footage_identity(
-        [baseline, restored, nested_same_name],
+        [baseline, restored, nested_same_name, nested_solid_source],
         name="issue167-main.png",
     ) == [restored]
     assert restored["locator"]["objectId"] != imported["objectId"]

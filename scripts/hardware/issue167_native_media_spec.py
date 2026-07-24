@@ -407,12 +407,6 @@ class Issue167Package:
         return await self._reacquire_layer(session, items, phase=phase)
 
     @staticmethod
-    def _one_footage(items: list[dict[str, Any]]) -> dict[str, Any]:
-        footage = [item for item in items if item.get("type") == "footage"]
-        require(len(footage) == 1, "fixture must contain exactly one footage item")
-        return _locator(footage[0]["locator"], "item")
-
-    @staticmethod
     def _items_matching_footage_identity(
         items: list[dict[str, Any]],
         *,
@@ -975,7 +969,9 @@ class Issue167Package:
             layer = await self._reacquire_layer(
                 restarted, items, phase=f"{self.runtime.mode}-restart"
             )
-            item = self._one_footage(items)
+            item = await self._refresh_footage(
+                restarted, phase=f"{self.runtime.mode}-restart"
+            )
             layer, effects = await self._list_effects(
                 restarted, layer, phase=f"{self.runtime.mode}-restart"
             )
