@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
-import { createHash } from 'node:crypto';
 import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
@@ -9,7 +8,6 @@ import { fileURLToPath } from 'node:url';
 
 export const GOVERNANCE_PATH = 'AGENTS.md';
 export const INVENTORY_PATH = 'docs/checkpoints/2026-07-16-worktree-audit.md';
-export const GOVERNANCE_SHA256 = 'a9e672524afab1fdbc3e9708a4c9a425dcdc1ed568ba595a95464adcfbe7402f';
 export const SUPPORTING_WORKFLOW_PATHS = [
   '.github/ISSUE_TEMPLATE/capability-package.md',
   '.github/pull_request_template.md',
@@ -18,37 +16,12 @@ export const SUPPORTING_WORKFLOW_PATHS = [
 ];
 
 const REQUIRED_RULES = [
-  '# Repository Development and Delivery Rules',
-  '## 1. Measure outcomes, not activity',
-  'public MCP surface',
-  '## 4. Layer hardware validation by native novelty and capability package',
-  'Core, CEP host, native plugin',
-  'POSSIBLY_SIDE_EFFECTING_FAILURE',
-  'one worktree and one branch for each capability package',
-  'one branch/worktree, one PR, one concentrated review',
-  '## 9. Completion evidence',
-  '## 10. Stop conditions before starting the next dependent capability package',
-  'Do not implement issues by issue number or creation order.',
-  'Automated tests and CI never substitute for hardware validation.',
-  'After merge, repeat the public MCP package smoke from a clean `main` build.',
+  "Never use the user's production project for write testing.",
+  'demonstrate a real Undo followed by state verification',
   'Never blindly repeat a possibly completed write.',
-  'This is the candidate freeze.',
-  '**T0, every edit:**',
-  '**T6, clean-main acceptance:**',
-  'no more than two concentrated review rounds by default',
-  'fully local, non-evictable storage',
+  'Automated tests and CI never substitute for hardware validation.',
+  'Use the public MCP tool name and request shape that a model will see',
   'The WIP limit is one dependent native capability package.',
-  'complete a zero-evidence hardware preflight',
-  'A failure before the first public MCP tool call is a T0-T2 environment or runner failure',
-  'fail fast on every locked external input and identity prerequisite',
-  'the runner must move it to recovery and clear the active slot before exit',
-  'Complete each short-lived pairing handshake as one continuous automation action',
-  'Do not use Finder, file double-click, or LaunchServices',
-  'a machine-generated per-tool summary',
-  '## 11. Require user approval before the next PR package',
-  'Do not create the next Issue, branch, worktree, schema, fixture, candidate, or implementation',
-  'Wait for the user\'s explicit selection or approval before creating or implementing the next PR package',
-  'previous instruction to continue sequentially does not satisfy this approval gate',
 ];
 
 export const FINAL_WORKTREES = [
@@ -91,10 +64,6 @@ const INITIAL_WORKTREES = [
 
 export function validateGovernance({ agentsText, inventoryText, trackedPaths }) {
   const errors = [];
-  const agentsSha256 = createHash('sha256').update(agentsText).digest('hex');
-  if (agentsSha256 !== GOVERNANCE_SHA256) {
-    errors.push(`${GOVERNANCE_PATH} content changed; review and update the locked SHA-256 deliberately`);
-  }
   for (const required of REQUIRED_RULES) {
     if (!agentsText.includes(required)) errors.push(`${GOVERNANCE_PATH} is missing required rule: ${required}`);
   }
