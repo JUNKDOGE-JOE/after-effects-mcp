@@ -222,7 +222,7 @@ bool valid_native_media_command(
   if (!valid_uuid(command.host_instance_id) || !valid_uuid(command.session_id)) {
     return false;
   }
-  if (mutation != native_media_write_operation(command.operation)
+  if ((mutation && !native_media_write_operation(command.operation))
       || (!mutation && !native_media_read_operation(command.operation))) {
     return false;
   }

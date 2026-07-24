@@ -1700,6 +1700,86 @@ void keyframe_authoring_package_admits_all_seven_closed_capabilities() {
       "package-157 admission test did not retain exactly seven queued requests");
 }
 
+void native_media_overlapping_operations_admit_on_their_selected_plane() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(4, 4, 16ms));
+  const ObjectLocator layer = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const ObjectLocator item = FakeHost::locator(
+      "item", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  const auto base = [&](std::string id, std::string capability, std::string operation) {
+    Request value;
+    value.request_id = std::move(id);
+    value.capability_id = std::move(capability);
+    value.deadline = clock.now() + 1s;
+    value.route_id = "native-media-overlap";
+    value.session_generation = 1;
+    value.host_instance_id = "22222222-2222-4222-8222-222222222222";
+    value.session_id = "11111111-1111-4111-8111-111111111111";
+    value.native_media.host_instance_id = value.host_instance_id;
+    value.native_media.session_id = value.session_id;
+    value.native_media.operation = std::move(operation);
+    return value;
+  };
+  const auto prepare_write = [](Request& value, char digest) {
+    value.idempotency_key = std::string("native-media-overlap-") + digest;
+    value.arguments_fingerprint_sha256 = std::string(64, digest);
+  };
+  const auto enqueue = [&](Request value) {
+    const std::string capability = value.capability_id;
+    const std::string operation = value.native_media.operation;
+    const auto admission = dispatcher.enqueue(std::move(value));
+    require(admission.code == EnqueueCode::kAccepted,
+        "native media overlap request was rejected: " + capability + " / "
+          + operation + " / " + admission.error_field);
+  };
+
+  Request mask_read = base(
+      "media-mask-path-read",
+      std::string(aemcp::native::kNativeMediaReadCapability),
+      "mask-path");
+  mask_read.native_media.layer_locator = layer;
+  mask_read.native_media.mask_index = 1;
+  mask_read.native_media.mask_id = 7;
+  enqueue(std::move(mask_read));
+
+  Request mask_write = base(
+      "media-mask-path-write",
+      std::string(aemcp::native::kNativeMediaWriteCapability),
+      "mask-path");
+  prepare_write(mask_write, 'a');
+  mask_write.native_media.layer_locator = layer;
+  mask_write.native_media.mask_index = 1;
+  mask_write.native_media.mask_id = 7;
+  mask_write.native_media.mask_closed = false;
+  mask_write.native_media.mask_vertices = {
+      {"0", "0", "0", "0", "0", "0"},
+      {"10", "10", "0", "0", "0", "0"}};
+  enqueue(std::move(mask_write));
+
+  Request interpretation_read = base(
+      "media-footage-interpretation-read",
+      std::string(aemcp::native::kNativeMediaReadCapability),
+      "footage-interpretation");
+  interpretation_read.native_media.item_locator = item;
+  enqueue(std::move(interpretation_read));
+
+  Request interpretation_write = base(
+      "media-footage-interpretation-write",
+      std::string(aemcp::native::kNativeMediaWriteCapability),
+      "footage-interpretation");
+  prepare_write(interpretation_write, 'b');
+  interpretation_write.native_media.item_locator = item;
+  interpretation_write.native_media.interpretation =
+      aemcp::native::NativeMediaInterpretation{};
+  interpretation_write.native_media.interpretation->loop_count = 2;
+  enqueue(std::move(interpretation_write));
+
+  require(dispatcher.shutdown().size() == 4,
+      "native media overlap admission did not retain all four requests");
+}
+
 void keyframe_value_owner_lifetime_is_bound_to_the_sdk_write() {
   const std::filesystem::path source_path =
       std::filesystem::path(__FILE__).parent_path().parent_path()
@@ -3021,6 +3101,7 @@ int main() {
   layer_timeline_package_dispatches_all_eight_capabilities();
   layer_compositing_package_dispatches_all_four_native_capabilities();
   keyframe_authoring_package_admits_all_seven_closed_capabilities();
+  native_media_overlapping_operations_admit_on_their_selected_plane();
   keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
   layer_compositing_writes_read_back_only_their_owned_sdk_fields();
   legacy_effect_metadata_is_utf8_normalized_before_json_evidence();
