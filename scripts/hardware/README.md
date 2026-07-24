@@ -13,12 +13,13 @@ accounting, and recoverable `.aep` lifecycle.
 
 Run the zero-evidence `preflight` before candidate freeze. It uses four public
 calls to save, restart, reopen inside formal AE, reacquire, and archive one
-fixture. The justified native-novelty T4 uses exactly 11 calls: one effect,
-one mask, one footage import, and a real Undo for each write. T5/T6 use exactly
-52 calls each, touch all 22 public tools, verify all 14 writes with real Undo,
-restart formal AE, compare effect/mask/footage state hashes, and archive the
-single `.aep` plus generated assets. The runner never uses Finder,
-LaunchServices, or Save As.
+fixture. The justified native-novelty T4 uses exactly six calls for the
+previously reproduced mask-properties path. T5/T6 use exactly 59 calls each,
+touch all 22 public tools, verify 13 writes with real Undo, and verify
+`ae_setLayerMaskProperties` through before/after readback while explicitly
+reporting that one-step Undo is not guaranteed. They restart formal AE, compare
+effect/mask/footage state hashes, and archive the single `.aep` plus generated
+assets. The runner never uses Finder, LaunchServices, or Save As.
 
 ## Capability package #162
 
