@@ -1,9 +1,8 @@
-"""Exact component and formal-After-Effects identity verification."""
+"""Lightweight local component and formal-After-Effects identity verification."""
 
 from __future__ import annotations
 
 import dataclasses
-import hashlib
 import json
 import os
 import plistlib
@@ -32,35 +31,41 @@ def _mapping(value: Any, message: str) -> dict[str, Any]:
     return dict(value)
 
 
-def _sha256_file(path: Path, label: str) -> str:
-    _require(path.is_file() and not path.is_symlink(), f"{label} is not a regular file")
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for block in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
-
-
-def _require_executable_file(path: Path, label: str) -> str:
+def _file_signal(
+    path: Path,
+    label: str,
+    *,
+    executable: bool = False,
+    expected_mode: int | None = None,
+) -> dict[str, Any]:
     try:
         info = path.lstat()
     except FileNotFoundError as error:
         raise IdentityFailure(f"{label} is missing") from error
     _require(stat.S_ISREG(info.st_mode) and not path.is_symlink(), f"{label} is not canonical")
-    if os.name == "posix":
-        _require(stat.S_IMODE(info.st_mode) == 0o755, f"{label} must use mode 0755")
-    return _sha256_file(path, label)
+    mode = stat.S_IMODE(info.st_mode)
+    if expected_mode is not None and os.name == "posix":
+        _require(mode == expected_mode, f"{label} must use mode {expected_mode:04o}")
+    if executable and os.name == "posix":
+        _require(mode & 0o111, f"{label} must be executable")
+    _require(info.st_size > 0, f"{label} is empty")
+    return {
+        "path": str(path),
+        "size": info.st_size,
+        "mtimeNs": info.st_mtime_ns,
+        "mode": f"{mode:04o}",
+    }
 
 
-def _identity_json(path: Path, label: str) -> tuple[dict[str, Any], str]:
-    _require(path.is_file() and not path.is_symlink(), f"{label} is not a regular file")
+def _identity_json(path: Path, label: str) -> tuple[dict[str, Any], dict[str, Any]]:
+    signal = _file_signal(path, label)
     payload = path.read_bytes()
     _require(0 < len(payload) <= 4 * 1024 * 1024, f"{label} is empty or unbounded")
     try:
         decoded = json.loads(payload)
     except (UnicodeDecodeError, ValueError) as error:
         raise IdentityFailure(f"{label} is not valid JSON") from error
-    return _mapping(decoded, f"{label} must be an object"), hashlib.sha256(payload).hexdigest()
+    return _mapping(decoded, f"{label} must be an object"), signal
 
 
 def _validate_declared_hashes(value: Any, label: str) -> None:
@@ -97,27 +102,35 @@ class IdentityConfig:
 
 @dataclasses.dataclass(frozen=True)
 class IdentityProof:
-    component_hashes: dict[str, str]
+    component_signals: dict[str, dict[str, Any]]
+    source_revisions: dict[str, str]
     contract_digests: dict[str, str]
-    formal_ae_identity: dict[str, str]
+    formal_ae_identity: dict[str, Any]
 
 
 def verify_exact_identity(
     config: IdentityConfig, *, required_capability_ids: Sequence[str]
 ) -> IdentityProof:
-    receipt, receipt_hash = _identity_json(config.native_receipt, "native receipt")
-    manifest, manifest_hash = _identity_json(config.native_manifest, "native manifest")
+    receipt, receipt_signal = _identity_json(config.native_receipt, "native receipt")
+    manifest, manifest_signal = _identity_json(config.native_manifest, "native manifest")
     _validate_declared_hashes(receipt, "nativeReceipt")
     _validate_declared_hashes(manifest, "nativeManifest")
+    receipt_source = receipt.get("sourceCommit")
+    receipt_nested_source = _mapping(
+        receipt.get("source"), "native receipt source is invalid"
+    ).get("commit")
     _require(
-        receipt.get("sourceCommit") == config.expected_sha
-        and _mapping(receipt.get("source"), "native receipt source is invalid").get("commit")
-        == config.expected_sha,
-        "native receipt source commit mismatch",
+        isinstance(receipt_source, str)
+        and FULL_SHA.fullmatch(receipt_source) is not None
+        and receipt_nested_source == receipt_source,
+        "native receipt source revision is invalid",
     )
     artifact = _mapping(manifest.get("artifact"), "native manifest artifact is invalid")
-    _require(manifest.get("sourceCommitSha") == config.expected_sha, "native manifest SHA mismatch")
-    _require(artifact.get("receiptSha256") == receipt_hash, "native manifest receipt mismatch")
+    manifest_source = manifest.get("sourceCommitSha")
+    _require(
+        isinstance(manifest_source, str) and FULL_SHA.fullmatch(manifest_source) is not None,
+        "native manifest source revision is invalid",
+    )
     for field in ("bundleTreeSha256", "executableSha256", "piplSha256"):
         _require(
             isinstance(artifact.get(field), str) and SHA256.fullmatch(artifact[field]),
@@ -128,38 +141,53 @@ def verify_exact_identity(
         config.identity_home
         / "Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel/bundle-manifest.json"
     )
-    cep, cep_hash = _identity_json(cep_path, "CEP bundle manifest")
+    cep, cep_signal = _identity_json(cep_path, "CEP bundle manifest")
     _validate_declared_hashes(cep, "cepManifest")
-    _require(cep.get("sourceCommitSha") == config.expected_sha, "CEP manifest SHA mismatch")
+    cep_source = cep.get("sourceCommitSha")
+    _require(
+        isinstance(cep_source, str) and FULL_SHA.fullmatch(cep_source) is not None,
+        "CEP manifest source revision is invalid",
+    )
     current_path = config.identity_home / ".ae-mcp/runtime/current"
-    _require(current_path.is_file() and not current_path.is_symlink(), "runtime current is missing")
+    current_signal = _file_signal(current_path, "runtime current pointer")
     relative = current_path.read_text(encoding="utf-8").strip()
-    expected_relative = f"{config.runtime_version}-{config.expected_sha}/macos-arm64"
-    _require(relative == expected_relative, "runtime current source mismatch")
+    parts = relative.split("/")
+    _require(
+        len(parts) == 2
+        and parts[1] == "macos-arm64"
+        and parts[0].startswith(f"{config.runtime_version}-")
+        and ".." not in parts[0]
+        and not parts[0].startswith("."),
+        "runtime current pointer is invalid",
+    )
     record_path = (
         config.identity_home
         / ".ae-mcp/runtime"
         / relative.split("/", 1)[0]
         / "install-record.json"
     )
-    record, record_hash = _identity_json(record_path, "runtime install record")
+    record, record_signal = _identity_json(record_path, "runtime install record")
     _validate_declared_hashes(record, "runtimeInstallRecord")
     launcher_hash = record.get("launcherSha256")
     _require(
         record.get("relative") == relative
-        and record.get("sourceCommitSha") == config.expected_sha
+        and record.get("platform") == "macos-arm64"
+        and record.get("version") == config.runtime_version
+        and isinstance(record.get("sourceCommitSha"), str)
+        and FULL_SHA.fullmatch(record["sourceCommitSha"]) is not None
         and isinstance(launcher_hash, str)
         and SHA256.fullmatch(launcher_hash),
-        "runtime install record source mismatch",
+        "runtime install record is incompatible",
     )
-    runtime_manifest_path = (
-        config.identity_home / ".ae-mcp/runtime" / relative / "runtime-manifest.json"
+    runtime_root = config.identity_home / ".ae-mcp/runtime" / relative
+    runtime_manifest_signal = _file_signal(
+        runtime_root / "runtime-manifest.json", "runtime manifest"
     )
-    runtime_manifest, runtime_manifest_hash = _identity_json(runtime_manifest_path, "runtime manifest")
-    _validate_declared_hashes(runtime_manifest, "runtimeManifest")
-    _require(
-        record.get("runtimeManifestSha256") == runtime_manifest_hash,
-        "install record is not bound to runtime manifest",
+    node_signal = _file_signal(
+        runtime_root / "node/bin/node", "runtime Node", executable=True
+    )
+    python_signal = _file_signal(
+        runtime_root / "python/bin/python3", "runtime Python", executable=True
     )
     generation_launcher = (
         config.identity_home
@@ -168,16 +196,23 @@ def verify_exact_identity(
         / "ae-mcp-launcher"
     )
     stable_launcher = config.identity_home / ".ae-mcp/bin/ae-mcp"
-    generation_launcher_hash = _require_executable_file(
-        generation_launcher, "runtime generation launcher"
+    generation_launcher_signal = _file_signal(
+        generation_launcher,
+        "runtime generation launcher",
+        executable=True,
+        expected_mode=0o755,
     )
-    stable_launcher_hash = _require_executable_file(stable_launcher, "stable launcher")
+    stable_launcher_signal = _file_signal(
+        stable_launcher, "stable launcher", executable=True, expected_mode=0o755
+    )
     _require(
-        generation_launcher_hash == launcher_hash == stable_launcher_hash,
-        "runtime launcher identity mismatch",
+        generation_launcher_signal["size"] == stable_launcher_signal["size"],
+        "runtime launcher size signals are incompatible",
     )
 
-    capabilities, fixture_hash = _identity_json(config.capabilities_fixture, "capabilities fixture")
+    capabilities, fixture_signal = _identity_json(
+        config.capabilities_fixture, "capabilities fixture"
+    )
     result = _mapping(
         _mapping(capabilities.get("response"), "capabilities response is invalid").get("result"),
         "capabilities result is invalid",
@@ -207,29 +242,39 @@ def verify_exact_identity(
     _require(info.get("CFBundleVersion") == config.expected_ae_build, "AE build mismatch")
     executable_name = info.get("CFBundleExecutable")
     _require(isinstance(executable_name, str) and executable_name, "AE executable is invalid")
-    executable_hash = _sha256_file(app / "Contents/MacOS" / executable_name, "AE executable")
+    executable_signal = _file_signal(
+        app / "Contents/MacOS" / executable_name, "AE executable", executable=True
+    )
+    plist_signal = _file_signal(plist_path, "formal AE plist")
     formal_identity = {
         "applicationPath": str(app),
         "bundleId": config.expected_ae_bundle_id,
         "version": config.expected_ae_version,
         "build": config.expected_ae_build,
         "nativeHostBuild": config.expected_ae_host_build,
-        "infoPlistSha256": hashlib.sha256(plist_path.read_bytes()).hexdigest(),
-        "executableSha256": executable_hash,
+        "infoPlistSignal": plist_signal,
+        "executableSignal": executable_signal,
     }
-    hashes = {
-        "nativeReceiptSha256": receipt_hash,
-        "nativeManifestSha256": manifest_hash,
-        "cepManifestSha256": cep_hash,
-        "runtimeInstallRecordSha256": record_hash,
-        "runtimeManifestFileSha256": runtime_manifest_hash,
-        "runtimeGenerationLauncherSha256": generation_launcher_hash,
-        "stableLauncherSha256": stable_launcher_hash,
-        "nativeBundleTreeSha256": artifact["bundleTreeSha256"],
-        "nativeExecutableSha256": artifact["executableSha256"],
-        "nativePiplSha256": artifact["piplSha256"],
-        "capabilitiesFixtureSha256": fixture_hash,
-        "formalAeInfoPlistSha256": formal_identity["infoPlistSha256"],
-        "formalAeExecutableSha256": executable_hash,
+    signals = {
+        "nativeReceipt": receipt_signal,
+        "nativeManifest": manifest_signal,
+        "cepManifest": cep_signal,
+        "runtimeCurrent": current_signal,
+        "runtimeInstallRecord": record_signal,
+        "runtimeManifest": runtime_manifest_signal,
+        "runtimeGenerationLauncher": generation_launcher_signal,
+        "stableLauncher": stable_launcher_signal,
+        "runtimeNode": node_signal,
+        "runtimePython": python_signal,
+        "capabilitiesFixture": fixture_signal,
+        "formalAeInfoPlist": plist_signal,
+        "formalAeExecutable": executable_signal,
     }
-    return IdentityProof(hashes, contract_digests, formal_identity)
+    source_revisions = {
+        "requested": config.expected_sha,
+        "nativeReceipt": receipt_source,
+        "nativeManifest": manifest_source,
+        "cep": cep_source,
+        "runtime": record["sourceCommitSha"],
+    }
+    return IdentityProof(signals, source_revisions, contract_digests, formal_identity)

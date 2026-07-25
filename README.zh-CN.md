@@ -217,10 +217,14 @@ BUILD_DIR=/private/tmp/ae-mcp-native-73
 node native/ae-plugin/build-macos.mjs \
   --sdk-archive "$AE_SDK_ARCHIVE" \
   --sdk-root "$AE_SDK_ROOT" \
+  --development-trust-local-peer \
   --output "$BUILD_DIR"
 node native/ae-plugin/verify-macos.mjs \
   --bundle "$BUILD_DIR/AeMcpNative.plugin"
 ```
+
+`--development-trust-local-peer` 是本地开发专用的显式选择：仅对已经通过同一用户和 AE
+进程树校验的 peer 自动确认。省略此参数时仍必须完成原生 pairing；这也是 release 构建的安全编译默认值。
 
 安装前必须关闭所有 After Effects、AfterFX 和 aerender 进程。开发安装器会校验构建回执和安装后的副本，
 最终安装位置为

@@ -694,7 +694,7 @@ test('native routes require the shared token and reject an open-ended invoke env
     }
 });
 
-test('native routes expose pairing then preserve Core negotiation, registry, and invoke fields', async () => {
+test('native routes auto-connect locally then preserve Core negotiation, registry, and invoke fields', async () => {
     const nativeClient = fakeNativeClient();
     const { server, srv, port } = await startNativeApp(nativeClient);
     const headers = {
@@ -703,29 +703,17 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
     };
     try {
         const deadlineUnixMs = Date.now() + 10000;
-        const pairing = await post(port, '/native/negotiate', headers, {
-            deadlineUnixMs,
-        });
-        assert.strictEqual(pairing.status, 409);
-        assert.strictEqual(pairing.body.error.code, 'NATIVE_PAIRING_REQUIRED');
-        assert.strictEqual(pairing.body.error.recovery.action, 'approve-pairing');
-        assert.deepStrictEqual(pairing.body.error.details, {
-            pairingFingerprint: '12AB-34CD',
-            pairingExpiresInMs: 60000,
-            hostInstanceId: '22222222-2222-4222-8222-222222222222',
-            sourceCommit: 'a'.repeat(40),
-        });
-        assert.strictEqual(pairing.body.pairing.fingerprint, '12AB-34CD');
-        assert.strictEqual(pairing.body.pairing.sourceCommit, 'a'.repeat(40));
-        assert.doesNotMatch(JSON.stringify(server.activity.list()), /12AB-34CD/);
-
-        nativeClient.authorize();
         const negotiated = await post(port, '/native/negotiate', headers, {
             deadlineUnixMs,
         });
         assert.strictEqual(negotiated.status, 200);
         assert.strictEqual(negotiated.body.result.sourceCommit, 'a'.repeat(40));
         assert.strictEqual(negotiated.body.result.compiledSdkVersion, '25.6.61');
+        assert.deepStrictEqual(nativeClient.calls.slice(0, 3), [
+            'pair',
+            ['wait', deadlineUnixMs],
+            ['negotiate', { deadlineUnixMs }],
+        ]);
 
         const capabilities = await post(port, '/native/capabilities', headers, {
             detail: 'full', limit: 100, deadlineUnixMs,
@@ -996,6 +984,7 @@ test('native routes expose pairing then preserve Core negotiation, registry, and
         assert.strictEqual(layerPropertySet.body.result.evidence.effect, 'committed');
         assert.deepStrictEqual(nativeClient.calls, [
             'pair',
+            ['wait', deadlineUnixMs],
             ['negotiate', { deadlineUnixMs }],
             ['capabilities', { detail: 'full', limit: 100, deadlineUnixMs }],
             ['invoke', {

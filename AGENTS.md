@@ -42,18 +42,20 @@ public MCP tool
 
 ## 4. Layer hardware validation by native novelty and capability package
 
+- **Local development trust model:** on the maintainer's single-user development Mac, files just built, copied, or atomically installed by the active agent-owned workflow are trusted by default. Routine development, AE restart, T4, T5, and T6 must not rehash the complete runtime tree or require Core, CEP, native, protocol, runner, and evidence to share one full repository SHA. Use the install receipt, canonical path, component version, file size, and modification time as inexpensive change signals; escalate to content hashing only after an observed inconsistency or for an explicitly requested release/security audit. Hash verification for external downloads such as the Adobe SDK archive remains allowed.
+- The local development MCP path must not require a connection code, fingerprint confirmation, or pairing ceremony. Same-user local IPC and filesystem permissions are sufficient during development. Authentication, pairing, signing, and hostile same-UID process defenses belong to a later release/remote/multi-user security milestone unless a concrete exploit is reproduced on the active path.
 - When a package introduces a new AEGP SDK suite, object-lifecycle rule, main-thread mechanism, or other unverified native primitive, run one narrow intermediate hardware smoke as soon as that primitive is testable. Once the mechanism is proven, do not redeploy for each simple tool built on it.
-- Complete the package with one exact-SHA real-machine run through the public MCP surface that exercises every included tool and their important interactions in the same disposable AE fixture. Batch the structured response, AE state, native provenance, audit, recovery, and write-tool Undo evidence.
+- Complete the package with one prepared real-machine run through the public MCP surface that exercises every included tool and their important interactions in the same disposable AE fixture. Batch the structured response, AE state, native provenance, audit, recovery, and write-tool Undo evidence.
 - Any package whose acceptance depends on AE loading, lifecycle, GUI state, main-thread behavior, CEP/native communication, or project mutation still requires this package-level real-machine validation before merge.
 - Automated tests and CI never substitute for hardware validation.
-- Build, install, and test the exact candidate commit. Core, CEP host, native plugin, protocol metadata, and test evidence must report the same full commit SHA. Abort validation on any mismatch.
+- Record the candidate source revision and installed component receipts for traceability, but do not make full-repository SHA equality a runtime or acceptance gate. Abort only on an observed incompatible protocol/component version, wrong canonical path, failed load, or contradictory AE result.
 - After merge, repeat the public MCP package smoke from a clean `main` build. It must touch every included public tool, cover each accepted optional child Issue, and verify real Undo for every included write. Do not rely on the pre-merge installation.
 - Use a dedicated disposable AE project. Never use the user's production project for write testing.
-- Prepare GUI access, permissions, pairing, no-sleep state, fixture path, canonical plugin path, and log locations in one preflight instead of discovering them through repeated user interruptions.
-- Before T4 or T5, complete a zero-evidence hardware preflight that proves the exact runtime/current pointer, stable launcher, CEP, native plug-in, and protocol metadata are mutually deployable; the formal AE absolute path, GUI, pairing flow, fixture runner, and log directories are usable; and the runner can create or reset, save, reopen from inside AE, and archive its single disposable fixture. A preflight creates no candidate acceptance evidence and does not count as a T4/T5 hardware run.
+- Prepare GUI access, permissions, no-sleep state, fixture path, canonical plugin path, and log locations in one preflight instead of discovering them through repeated user interruptions.
+- Before T4 or T5, complete a zero-evidence hardware preflight that proves the selected runtime/current pointer, stable launcher, CEP, native plug-in, and protocol metadata can communicate; the formal AE absolute path, GUI, fixture runner, and log directories are usable; and the runner can create or reset, save, reopen from inside AE, and archive its single disposable fixture. The preflight uses lightweight receipts/metadata and does not perform a full runtime hash walk or a pairing ceremony. A preflight creates no candidate acceptance evidence and does not count as a T4/T5 hardware run.
 - A failure before the first public MCP tool call is a T0-T2 environment or runner failure, not a failed candidate hardware acceptance. Repair and falsify it at the lowest applicable tier before returning to T4/T5.
-- After concentrated review has no unresolved blocker and all source, generated bundles, documentation, license metadata, fixtures, and evidence schemas are committed, designate that exact SHA as the candidate freeze. Run T3 and required CI on the frozen SHA; except for the single narrow smoke allowed for a genuinely new native primitive, do not begin exact-candidate hardware acceptance until they pass. This is the candidate freeze.
-- After candidate freeze, change the SHA only for a reproduced acceptance blocker or a defect that demonstrably invalidates the package evidence. Batch all known blockers into one fix set, rerun only the affected lower test tiers, perform a focused re-review, and then create one replacement candidate. The replacement is a new frozen candidate and must pass required CI before any T5 acceptance evidence is collected.
+- After concentrated review has no unresolved blocker and all source, generated bundles, documentation, license metadata, fixtures, and evidence schemas are committed, designate that source revision/build as the candidate freeze. Run T3 and required CI once; except for the single narrow smoke allowed for a genuinely new native primitive, do not begin candidate hardware acceptance until they pass.
+- After candidate freeze, create a replacement only for a reproduced acceptance blocker or a defect that demonstrably invalidates the package evidence. Batch all known blockers into one fix set, rerun only the affected lower test tiers, perform a focused re-review, and then create one replacement candidate. The replacement must pass required CI before any T5 acceptance evidence is collected.
 - The normal target is one candidate and one full CI run. At most one replacement candidate is allowed for a reproduced blocker; that replacement gets its own required CI run, while already-passing unaffected local tiers need not be repeated. The normal hardware target remains one successful candidate session and one clean-`main` session. Exceeding these targets must be explained in the completion evidence; it is not a reason to weaken a gate.
 
 ## 5. Keep review feedback from expanding P0
@@ -76,14 +78,25 @@ Use the lowest test tier that can falsify the current change, then escalate at p
 - **T0, every edit:** formatting, syntax, lint, or a single focused unit test; target seconds.
 - **T1, each tool or adapter:** schema, codec, suite adapter, structured-error, and postcondition contract tests; target 1-5 minutes.
 - **T2, package integration:** affected native compile tests, Core/CEP integration, shared fixture, interaction corpus, and generated-file checks; target 10-30 minutes.
-- **T3, frozen candidate:** the relevant full repository regression plus required CI; run once for each exact candidate SHA after concentrated or focused replacement review.
+- **T3, frozen candidate:** the relevant full repository regression plus required CI; run once for each candidate or approved replacement after concentrated or focused replacement review.
 - **T4, optional native-novelty smoke:** one narrow real-AE check only when the package introduces an unverified suite, object lifecycle, or main-thread mechanism.
-- **T5, candidate acceptance:** one exact-SHA public-MCP package run on real AE.
+- **T5, candidate acceptance:** one public-MCP package run on real AE using the recorded candidate build receipts.
 - **T6, clean-main acceptance:** one rebuild/reinstall and package smoke from the merge commit that touches every included public tool, covers each accepted optional child Issue, and verifies real Undo for every included write.
 
 Do not rerun T3, T5, or T6 after every small fix. A failed higher tier should drive the smallest reproducing lower-tier test first; return to the higher tier only after the fix set is complete.
 
-For an immutable installed generation whose identity has already been verified, lower tiers may reuse that verified identity only when the runtime contract proves that the generation and its inputs have not changed. Full payload verification remains mandatory at installation, candidate freeze/acceptance, and clean-`main` acceptance; do not pay the full verification cost repeatedly within one unchanged lower-tier session.
+For an agent-owned installed generation on the single-user development machine, reuse is the default. Check only the canonical pointer, install receipt, component version, size, and modification time on routine starts. Do not perform a full payload hash walk at T4, T5, T6, or AE restart. Escalate to selective/content verification only when those inexpensive signals change, AE reports an incompatible component/protocol, an actual result is contradictory, or a release/security audit explicitly requests it.
+
+### 5.2 Batch independent acceptance defects before repair
+
+During a diagnostic T4, or after a T5/T6 run has already failed, do not stop and modify source after the first ordinary assertion failure. Continue every independent case whose evidence remains trustworthy and whose fixture state is either unchanged or restored, then repair the collected blockers as one fix set.
+
+- The runner must record each case as `PASS`, `FAIL`, `BLOCKED`, or `INDETERMINATE`, together with the failing layer, side-effect status, state-reconciliation result, dependency impact, and evidence identifiers.
+- Continue after a failure only when it is read-only or definitively `not-started`, or when any completed write has been reconciled against AE state and audit evidence and the fixture baseline has been verified as restored.
+- Stop the sweep immediately when a possible write remains unreconciled, the fixture baseline cannot be restored, AE crashes or corrupts the project, an incompatible component/protocol is observed, or subsequent evidence would otherwise be untrustworthy.
+- Mark dependent cases `BLOCKED` and continue unrelated cases; continuing diagnostic collection never converts the failed candidate into accepted evidence.
+- Do not edit source between individual diagnostic cases. After the bounded sweep, group all reproduced current blockers by layer, fix them together, rerun only the affected lower tiers, perform one focused review, and replay the hardware gate once on the permitted replacement candidate.
+- Generate a machine-readable defect ledger from the sweep so the repair batch, replacement review, and completion report consume the same observed failures instead of manually reconstructing them.
 
 ## 6. Treat writes and uncertain failures explicitly
 
@@ -96,9 +109,9 @@ For an immutable installed generation whose identity has already been verified, 
 ## 7. Preserve build and workspace identity
 
 - Use one worktree and one branch for each capability package. Record any optional child Issues and the acceptance matrix owned by that worktree, and know which package owns every build, install, test artifact, and running process.
-- Before starting an expensive build, fail fast on every locked external input and identity prerequisite, including the clean source SHA, Adobe SDK archive/root, Node headers, license approvals, output ownership, and local non-evictable input state. Do not discover a missing build prerequisite after a long runtime or native build has started.
-- Before building or deploying, record `git rev-parse HEAD`, dirty state, artifact hashes, installed paths, and runtime-reported source commit.
-- Never mix Core, CEP, native plugin, or protocol files from different commits. A convenient partial redeploy is not valid evidence.
+- Before starting an expensive build, fail fast on every locked external input and prerequisite, including the Adobe SDK archive/root, Node headers, license approvals, output ownership, and local non-evictable input state. Do not discover a missing build prerequisite after a long runtime or native build has started.
+- Before building or deploying, record the source revision, dirty state, installed paths, component versions, sizes, and modification times. Content hashes are optional diagnostics, not routine acceptance gates.
+- Do not intentionally deploy incompatible Core, CEP, native plug-in, or protocol versions. A source-revision mismatch by itself is not proof of incompatibility and must not block development.
 - Keep backup, staging, rollback, and evidence directories outside Adobe's plugin scan roots.
 - Keep disposable projects, generated scripts, logs, and smoke outputs out of tracked source paths unless they are intentional fixtures.
 - Do not use a stale or dirty root checkout as an implicit source for another issue's build.
@@ -111,7 +124,7 @@ Classify every agent-created After Effects project before creating it. Lifecycle
 - **`ephemeral-validation`:** single candidate, read/write, Undo, recovery, or acceptance work. After structured evidence is extracted, move it to a short-lived recoverable archive outside Adobe scan roots.
 - **`reusable-fixture`:** deterministic input shared by multiple capability packages. Keep exactly one canonical copy plus its rebuild recipe; do not duplicate it per Issue or candidate.
 - **`persistent-workspace`:** a project the user explicitly chose for continued editing, or a project in a user-selected workspace. Never move, archive, overwrite, or delete it automatically.
-- **`evidence-snapshot`:** allowed only when an unresolved defect cannot be reproduced from structured logs and a deterministic recipe. Keep one minimal, redacted snapshot bound to the exact source SHA.
+- **`evidence-snapshot`:** allowed only when an unresolved defect cannot be reproduced from structured logs and a deterministic recipe. Keep one minimal, redacted snapshot with its source revision/build receipt.
 
 Before creating, retaining, moving, or archiving an `.aep`, determine and record:
 
@@ -124,19 +137,19 @@ Before creating, retaining, moving, or archiving an `.aep`, determine and record
 - If long-term value cannot be demonstrated, do not retain the project permanently under an Issue or candidate directory; use a dated recovery archive with a cleanup condition.
 - One T5/T6 hardware session may have only one active fixture. Retry by resetting or deterministically rebuilding that fixture; do not accumulate projects through repeated Save As operations.
 - If an agent-created `ephemeral-validation` fixture fails before the first public tool call, has no AE mutation, and has no unresolved diagnostic value, the runner must move it to recovery and clear the active slot before exit. Once any public call or possible write dispatch occurred, reconcile AE state and audit evidence before resetting, archiving, or retrying.
-- Issue and evidence directories should normally store the fixture ID, lifecycle, owner, rebuild recipe, exact SHA, content digest, public MCP request/response, before/after state, audit, Undo, and result—not a complete `.aep`.
-- When a candidate is superseded, archive its ephemeral project by default. An old SHA is traceability metadata, not a reason for permanent retention.
-- Permanent retention requires a recorded reason, owner, references, exact SHA, and cleanup condition. A canonical reusable fixture also requires a uniqueness check before another copy is created.
+- Issue and evidence directories should normally store the fixture ID, lifecycle, owner, rebuild recipe, source revision/build receipt, public MCP request/response, before/after state, audit, Undo, and result—not a complete `.aep`.
+- When a candidate is superseded, archive its ephemeral project by default. An old build identifier is traceability metadata, not a reason for permanent retention.
+- Permanent retention requires a recorded reason, owner, references, source revision/build receipt, and cleanup condition. A canonical reusable fixture also requires a uniqueness check before another copy is created.
 - Use centralized `canonical`, `active`, `recovery`, and `evidence` roots outside Adobe scan directories. Do not create a new file-management framework merely to enforce this lifecycle.
 - Completion evidence must report `.aep` counts: created, canonical retained, evidence snapshots retained, archived, unclassified, and logical/physical space moved or released.
 
 ## 8. Minimize human interruption during hardware work
 
 - Consolidate all known permissions and GUI prerequisites into one preflight.
-- Run package hardware acceptance as one continuous prepared session. Keep pairing, fixture creation, all tool calls, write verification, Undo/Redo, restart/reconnect, and evidence collection in the same orchestrated window; do not spread a short-lived pairing flow across conversational round trips.
-- Complete each short-lived pairing handshake as one continuous automation action: open the pairing UI, read and verify the current fingerprint, authorize it, and observe the acknowledgement without yielding across model or user turns.
+- Run package hardware acceptance as one continuous prepared session. Keep fixture creation, all tool calls, write verification, Undo/Redo, restart/reconnect, and evidence collection in the same orchestrated window.
+- Do not require or perform a connection-code/fingerprint pairing ceremony on the local single-user development path. If legacy pairing code is still present, bypass it for development until the P0 removal task deletes the mandatory path.
 - Open or reopen acceptance fixtures from the formal AE process using AE's own File/Open or Open Recent flow. Do not use Finder, file double-click, or LaunchServices because they may route the project to Beta or another host.
-- Once the user has authorized routine AE/macOS GUI control, perform normal focus, open/save/close, pairing, restart, disposable-project, and test Undo/Redo operations without repeatedly asking them to click.
+- Once the user has authorized routine AE/macOS GUI control, perform normal focus, open/save/close, restart, disposable-project, and test Undo/Redo operations without repeatedly asking them to click.
 - Pause only for a genuinely required system confirmation, credential/license decision, destructive action outside the disposable fixture, or a product choice that changes the result.
 - When blocked, report the single concrete blocker and the evidence already gathered; do not offload ordinary debugging steps to the user.
 
@@ -165,16 +178,16 @@ Treat this Skip -> Continue sequence as established project knowledge. Do not re
 
 A capability-package completion report must include:
 
-- package PR, parent Epic, any optional child Issue links and dispositions, per-tool acceptance disposition, exact tested commit, and merge commit;
+- package PR, parent Epic, any optional child Issue links and dispositions, per-tool acceptance disposition, tested source revision/build receipt, and merge commit;
 - the public MCP request and structured response;
 - AE state evidence before and after the operation;
-- native/AEGP provenance and matching source commit;
+- native/AEGP provenance and observed component/protocol versions;
 - audit evidence with sensitive values and private paths redacted;
 - Undo and recovery evidence for writes;
 - CI/review status and the clean-`main` hardware revalidation;
 - remaining risks and their follow-up issue classification.
 - package-efficiency counters: included tools, review rounds, candidate builds, full CI runs, candidate/main hardware runs, first-hardware-pass result, environment/pairing interruptions, and elapsed time from scope freeze to clean-`main` acceptance.
-- a machine-generated per-tool summary containing public-call counts, request/result disposition, before/after state, Undo result, exact component SHAs, host instances, audit/postcondition IDs, and fixture lifecycle. PR and Issue updates should consume this generated summary instead of manually transcribing repeated evidence.
+- a machine-generated per-tool summary containing public-call counts, request/result disposition, before/after state, Undo result, component build receipts/versions, host instances, audit/postcondition IDs, and fixture lifecycle. PR and Issue updates should consume this generated summary instead of manually transcribing repeated evidence.
 
 Do not claim completion using only "tests passed", "CI is green", "the plugin compiled", or "the PR merged".
 
@@ -183,7 +196,7 @@ Do not claim completion using only "tests passed", "CI is green", "the plugin co
 Do not proceed to the next dependent capability package when any of the following is true:
 
 - the current public MCP acceptance test has not passed on real AE;
-- the installed components do not share an exact source commit;
+- an installed component or protocol is observed to be incompatible with the active public-MCP path;
 - a write produced an indeterminate result whose AE state and audit outcome are unreconciled;
 - the PR is merged but clean `main` has not been rebuilt, reinstalled, and reverified;
 - the test fixture, logs, or workspace state cannot distinguish the tested build from an older installation;

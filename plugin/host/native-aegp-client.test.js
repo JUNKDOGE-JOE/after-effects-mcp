@@ -251,6 +251,15 @@ function installProtocol(server, options) {
                 assert.equal(bytes.subarray(0, 8).toString('ascii'), 'AEMCP-A1');
                 assert.notDeepEqual(bytes.subarray(8, 24), Buffer.alloc(16));
                 bytes = bytes.subarray(24);
+                if (input.autoAuthorize) {
+                    authenticated = true;
+                    socket.write(Buffer.concat([
+                        pendingMessage(),
+                        decisionMessage(1, SESSION, 7),
+                    ]));
+                    consume();
+                    return;
+                }
                 socket.write(pendingMessage());
                 authorized.then(function () {
                     authenticated = true;
@@ -520,6 +529,28 @@ function installProtocol(server, options) {
     });
     return { authorize, requests };
 }
+
+test('CEP client accepts a local pending and authorized decision without an external pairing step', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const fixture = await endpointFixture(t);
+    installProtocol(fixture.server, { autoAuthorize: true });
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: fixture.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+        now: function () { return 1900000000000; },
+    });
+    t.after(function () { return client.close(); });
+
+    const pending = await client.beginPairing();
+    assert.equal(pending.hostInstanceId, HOST);
+    const hello = await client.waitUntilConnected();
+
+    assert.equal(hello.host.instanceId, HOST);
+    assert.equal(client.status().state, 'connected');
+});
 
 async function readyNativeClient(t, protocolOptions) {
     const endpoint = await endpointFixture(t);

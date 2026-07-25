@@ -28,27 +28,27 @@ test('tracked repository rules and worktree baseline pass the governance contrac
 
 test('missing delivery rules and untracked governance files fail closed', () => {
   const errors = validateGovernance({ agentsText: '', inventoryText: '', trackedPaths: new Set() });
-  assert.ok(errors.some((error) => error.includes('public MCP surface')));
+  assert.ok(errors.some((error) => error.includes("Never use the user's production project")));
   assert.ok(errors.some((error) => error.includes('must be tracked by git')));
   assert.ok(errors.some((error) => error.includes('26-worktree baseline')));
 });
 
-test('semantic rule reversal and final retained-set removal fail closed', () => {
+test('required safety invariant reversal and final retained-set removal fail closed', () => {
   const agentsText = fs.readFileSync(GOVERNANCE_PATH, 'utf8');
   const inventoryText = fs.readFileSync(INVENTORY_PATH, 'utf8');
   const trackedPaths = new Set([GOVERNANCE_PATH, INVENTORY_PATH, ...SUPPORTING_WORKFLOW_PATHS]);
   const weakened = agentsText.replace(
-    'Automated tests and CI never substitute for hardware validation.',
-    'Automated tests and CI fully substitute for hardware validation.',
+    "Never use the user's production project for write testing.",
+    "Use the user's production project for write testing.",
   );
   assert.ok(validateGovernance({ agentsText: weakened, inventoryText, trackedPaths })
-    .some((error) => error.includes('locked SHA-256')));
+    .some((error) => error.includes("Never use the user's production project")));
   const otherWeakening = agentsText.replace(
-    'Use one worktree and one branch for each capability package.',
-    'Do not use one worktree and one branch for each capability package.',
+    'Never blindly repeat a possibly completed write.',
+    'Blindly repeat a possibly completed write.',
   );
   assert.ok(validateGovernance({ agentsText: otherWeakening, inventoryText, trackedPaths })
-    .some((error) => error.includes('locked SHA-256')));
+    .some((error) => error.includes('Never blindly repeat a possibly completed write.')));
   const withoutFinalSet = inventoryText.replace(/## Final retained registry[\s\S]*?(?=\n## Cleanup execution record)/, '');
   assert.ok(validateGovernance({ agentsText, inventoryText: withoutFinalSet, trackedPaths })
     .some((error) => error.includes('final retained worktree set')));

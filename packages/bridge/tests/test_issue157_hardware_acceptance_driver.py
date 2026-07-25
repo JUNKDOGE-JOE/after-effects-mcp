@@ -513,6 +513,7 @@ def make_runtime(tmp_path: Path, mode: str, fake: FakeAe):
     def bind(*, stage: str, previous_instance_id: str | None = None) -> str:
         assert previous_instance_id is None or fake.host != previous_instance_id
         runner.expected_host_instance_id = fake.host
+        runner.expected_native_source_revision = EXPECTED_SHA
         runner.pairing_checkpoint_used = False
         runner.pairing_epoch_start_total = runner.ledger.total
         return fake.host
@@ -564,12 +565,23 @@ def make_identity_config(tmp_path: Path) -> runtime_module.IdentityConfig:
     write_json(
         generation_root / "install-record.json",
         {
+            "schemaVersion": 1,
+            "platform": "macos-arm64",
+            "version": "0.9.2",
+            "installedAt": 1,
             "relative": relative,
             "sourceCommitSha": EXPECTED_SHA,
             "runtimeManifestSha256": runtime_hash,
             "launcherSha256": launcher_hash,
         },
     )
+    for executable_path in (
+        home / ".ae-mcp/runtime" / relative / "node/bin/node",
+        home / ".ae-mcp/runtime" / relative / "python/bin/python3",
+    ):
+        executable_path.parent.mkdir(parents=True, exist_ok=True)
+        executable_path.write_bytes(b"#!/bin/sh\nexit 0\n")
+        executable_path.chmod(0o755)
     for launcher in (generation_root / "ae-mcp-launcher", home / ".ae-mcp/bin/ae-mcp"):
         launcher.parent.mkdir(parents=True, exist_ok=True)
         launcher.write_bytes(launcher_bytes)
@@ -597,6 +609,7 @@ def make_identity_config(tmp_path: Path) -> runtime_module.IdentityConfig:
     executable = app / "Contents/MacOS/After Effects"
     executable.parent.mkdir(parents=True, exist_ok=True)
     executable.write_bytes(b"formal-ae")
+    executable.chmod(0o755)
     plist = {
         "CFBundleIdentifier": "com.adobe.AfterEffects.application",
         "CFBundleShortVersionString": "26.3.0",
@@ -836,20 +849,31 @@ def test_spatial_detail_uses_the_public_vector_value_contract() -> None:
         package._spatial_detail(legacy, locator)
 
 
-def test_identity_binds_generation_and_canonical_stable_launcher(tmp_path: Path):
+def test_identity_uses_local_component_signals_and_advisory_source_revisions(tmp_path: Path):
     identity = make_identity_config(tmp_path)
     required = tuple(case.capability_id for case in package.SPEC.tools)
     proof = runtime_module.verify_exact_identity(
         identity, required_capability_ids=required
     )
     stable = identity.identity_home / ".ae-mcp/bin/ae-mcp"
-    expected_hash = hashlib.sha256(stable.read_bytes()).hexdigest()
-    assert proof.component_hashes["stableLauncherSha256"] == expected_hash
-    assert proof.component_hashes["runtimeGenerationLauncherSha256"] == expected_hash
+    assert proof.component_signals["stableLauncher"]["size"] == stable.stat().st_size
+    assert (
+        proof.component_signals["runtimeGenerationLauncher"]["size"]
+        == stable.stat().st_size
+    )
+    cep_path = (
+        identity.identity_home
+        / "Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel/bundle-manifest.json"
+    )
+    write_json(cep_path, {"sourceCommitSha": "f" * 40})
+    drifted = runtime_module.verify_exact_identity(
+        identity, required_capability_ids=required
+    )
+    assert drifted.source_revisions["cep"] == "f" * 40
 
-    stable.write_bytes(b"#!/bin/sh\nexit 1\n")
+    stable.write_bytes(b"#!/bin/sh\nexit 10\n")
     stable.chmod(0o755)
-    with pytest.raises(runtime_module.IdentityFailure, match="launcher identity mismatch"):
+    with pytest.raises(runtime_module.IdentityFailure, match="launcher size signals"):
         runtime_module.verify_exact_identity(identity, required_capability_ids=required)
 
 
@@ -878,6 +902,7 @@ async def test_call_budget_aborts_before_dispatching_call_31(tmp_path: Path):
     runner, _evidence = make_runtime(tmp_path, "t5", fake)
     runner.contract_digests.update(fake.contracts)
     runner.expected_host_instance_id = fake.host
+    runner.expected_native_source_revision = EXPECTED_SHA
     for index in range(30):
         await runner.call(
             fake,
@@ -917,7 +942,8 @@ def test_identity_validation_can_freeze_only_base_support_contracts(
     def verify(_identity, *, required_capability_ids):
         observed.extend(required_capability_ids)
         return SimpleNamespace(
-            component_hashes={},
+            component_signals={},
+            source_revisions={},
             contract_digests={
                 capability: fake.contracts[capability]
                 for capability in required_capability_ids

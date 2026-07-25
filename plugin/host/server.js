@@ -592,7 +592,9 @@ async function connectedNativeClient(deadlineUnixMs) {
         await client.waitUntilConnected(deadlineUnixMs);
         return client;
     }
-    return nativePairingRequired(client, deadlineUnixMs);
+    await client.beginPairing(deadlineUnixMs);
+    await client.waitUntilConnected(deadlineUnixMs);
+    return client;
 }
 
 function sendNativeFailure(res, error) {

@@ -17539,6 +17539,92 @@
         failure(code, "Runtime metadata is missing or invalid", { path: filePath });
       }
     }
+    async function ordinaryFileSignal(filePath, code, {
+      executable = false,
+      expectedMode,
+      expectedSize
+    } = {}) {
+      var _a2;
+      let info;
+      try {
+        info = await promises.lstat(filePath);
+      } catch (error) {
+        failure(code, "Trusted local runtime metadata is missing", { path: filePath });
+      }
+      if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1 || executable && (info.mode & 73) === 0 || expectedMode && modeOf(info) !== expectedMode || Number.isSafeInteger(expectedSize) && info.size !== expectedSize) {
+        failure(code, "Trusted local runtime metadata changed", {
+          path: filePath,
+          size: info.size,
+          mtimeMs: Math.trunc(info.mtimeMs)
+        });
+      }
+      return {
+        path: filePath,
+        size: info.size,
+        mtimeMs: Math.trunc(info.mtimeMs),
+        mode: modeOf(info)
+      };
+    }
+    async function executableSignal(filePath, code, {
+      rootDirectory,
+      expectedMode,
+      expectedSize,
+      expectedType
+    } = {}) {
+      var _a2, _b2;
+      let info;
+      try {
+        info = await promises.lstat(filePath);
+      } catch (error) {
+        failure(code, "Trusted local runtime entrypoint is missing", { path: filePath });
+      }
+      const type = ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) ? "symlink" : "file";
+      if (expectedType && type !== expectedType || expectedMode && modeOf(info) !== expectedMode || Number.isSafeInteger(expectedSize) && info.size !== expectedSize) {
+        failure(code, "Trusted local runtime entrypoint metadata changed", {
+          path: filePath,
+          size: info.size,
+          mtimeMs: Math.trunc(info.mtimeMs)
+        });
+      }
+      if (type === "file") {
+        if (!info.isFile() || info.nlink !== 1 || (info.mode & 73) === 0) {
+          failure(code, "Trusted local runtime entrypoint changed", { path: filePath });
+        }
+        return {
+          path: filePath,
+          type,
+          size: info.size,
+          mtimeMs: Math.trunc(info.mtimeMs),
+          mode: modeOf(info)
+        };
+      }
+      let target;
+      let targetInfo;
+      try {
+        target = await promises.readlink(filePath);
+        const resolved = paths.resolve([paths.dirname(filePath), target]);
+        if (!rootDirectory || paths.isAbsolute(target) || !paths.contains(rootDirectory, resolved)) {
+          failure(code, "Trusted local runtime entrypoint symlink is unsafe", { path: filePath });
+        }
+        targetInfo = await promises.lstat(resolved);
+      } catch (error) {
+        if (error instanceof RuntimeManagerError) throw error;
+        failure(code, "Trusted local runtime entrypoint symlink is invalid", { path: filePath });
+      }
+      if (!targetInfo.isFile() || ((_b2 = targetInfo.isSymbolicLink) == null ? void 0 : _b2.call(targetInfo)) || targetInfo.nlink !== 1 || (targetInfo.mode & 73) === 0) {
+        failure(code, "Trusted local runtime entrypoint target changed", { path: filePath });
+      }
+      return {
+        path: filePath,
+        type,
+        size: targetInfo.size,
+        mtimeMs: Math.trunc(targetInfo.mtimeMs),
+        mode: modeOf(targetInfo),
+        linkTarget: target,
+        linkSize: info.size,
+        linkMtimeMs: Math.trunc(info.mtimeMs)
+      };
+    }
     function validateRuntimeManifest(value) {
       var _a2, _b2;
       if (!value || value.schemaVersion !== 1 || value.platform !== platform.id || ((_a2 = value.node) == null ? void 0 : _a2.version) !== "24.17.0" || ((_b2 = value.python) == null ? void 0 : _b2.version) !== "3.13.14" || !Array.isArray(value.files) || value.files.length === 0) {
@@ -17625,6 +17711,67 @@
       }
       return { manifest: value, byPath };
     }
+    async function inspectPackagedPayload() {
+      const { manifest, byPath } = validateBundleManifest(
+        await readJson2(packageManifestPath, "RUNTIME_BUNDLE_INVALID")
+      );
+      const runtimeManifestRelative = `runtime/${platform.id}/runtime-manifest.json`;
+      const launcherRelative = `platform/${platform.id}/bin/ae-mcp`;
+      const nodeRelative = `runtime/${platform.id}/node/bin/node`;
+      const pythonRelative = `runtime/${platform.id}/python/bin/python3`;
+      const runtimeRecord = byPath.get(runtimeManifestRelative);
+      const launcherRecord = byPath.get(launcherRelative);
+      const nodeRecord = byPath.get(nodeRelative);
+      const pythonRecord = byPath.get(pythonRelative);
+      if (!runtimeRecord || runtimeRecord.type !== "file" || runtimeRecord.sha256 !== manifest.runtime.manifestSha256 || !Number.isSafeInteger(runtimeRecord.size) || runtimeRecord.size <= 0 || !launcherRecord || launcherRecord.type !== "file" || !Number.isSafeInteger(launcherRecord.size) || launcherRecord.size <= 0 || !nodeRecord || nodeRecord.type !== "file" || !Number.isSafeInteger(nodeRecord.size) || nodeRecord.size <= 0 || !pythonRecord || !["file", "symlink"].includes(pythonRecord.type) || !Number.isSafeInteger(pythonRecord.size) || pythonRecord.size <= 0) {
+        failure("RUNTIME_BUNDLE_INVALID", "Packaged runtime entrypoints or stable launcher are not declared");
+      }
+      const runtimeManifestSignal = await ordinaryFileSignal(
+        packagedRuntimeManifest,
+        "RUNTIME_BUNDLE_METADATA_CHANGED",
+        { expectedMode: runtimeRecord.mode, expectedSize: runtimeRecord.size }
+      );
+      const launcherSignal = await ordinaryFileSignal(
+        packagedLauncher,
+        "RUNTIME_BUNDLE_METADATA_CHANGED",
+        {
+          executable: true,
+          expectedMode: launcherRecord.mode,
+          expectedSize: launcherRecord.size
+        }
+      );
+      const nodeSignal = await ordinaryFileSignal(
+        paths.join([packagedRuntimeRoot, "node", "bin", "node"]),
+        "RUNTIME_BUNDLE_METADATA_CHANGED",
+        {
+          executable: true,
+          expectedMode: nodeRecord.mode,
+          expectedSize: nodeRecord.size
+        }
+      );
+      const pythonSignal = await executableSignal(
+        paths.join([packagedRuntimeRoot, "python", "bin", "python3"]),
+        "RUNTIME_BUNDLE_METADATA_CHANGED",
+        {
+          rootDirectory: packagedRuntimeRoot,
+          expectedMode: pythonRecord.mode,
+          expectedSize: pythonRecord.size,
+          expectedType: pythonRecord.type
+        }
+      );
+      return {
+        version: manifest.version,
+        sourceCommitSha: manifest.sourceCommitSha,
+        runtimeManifestSha256: manifest.runtime.manifestSha256,
+        launcherSha256: launcherRecord.sha256,
+        signals: {
+          runtimeManifest: runtimeManifestSignal,
+          launcher: launcherSignal,
+          node: nodeSignal,
+          python: pythonSignal
+        }
+      };
+    }
     async function verifyPackagedPayload() {
       const { manifest, byPath } = validateBundleManifest(
         await readJson2(packageManifestPath, "RUNTIME_BUNDLE_INVALID")
@@ -17653,11 +17800,7 @@
     function generationLauncherPath(relative) {
       return paths.join([root, relative.split("/")[0], GENERATION_LAUNCHER]);
     }
-    async function verifyInstalled(relative) {
-      var _a2;
-      const normalized = pointerValue(relative, platform.id);
-      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Runtime pointer is invalid");
-      const record = await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID");
+    function validateInstallRecord(record, normalized) {
       if (!exactKeys(record, [
         "installedAt",
         "launcherSha256",
@@ -17670,14 +17813,57 @@
       ]) || record.schemaVersion !== 1 || record.platform !== platform.id || record.relative !== normalized || !SEMVER.test(record.version) || !SOURCE_SHA.test(record.sourceCommitSha) || !SHA256.test(record.runtimeManifestSha256) || !SHA256.test(record.launcherSha256) || !Number.isSafeInteger(record.installedAt) || record.installedAt < 0) {
         failure("RUNTIME_INSTALL_RECORD_INVALID", "Runtime install record is invalid");
       }
+      return record;
+    }
+    async function inspectInstalled(relative) {
+      const normalized = pointerValue(relative, platform.id);
+      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Runtime pointer is invalid");
+      const record = validateInstallRecord(
+        await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID"),
+        normalized
+      );
       const directory = paths.join([root, ...normalized.split("/")]);
+      const signals = {
+        runtimeManifest: await ordinaryFileSignal(
+          paths.join([directory, "runtime-manifest.json"]),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          {}
+        ),
+        launcher: await ordinaryFileSignal(
+          generationLauncherPath(normalized),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          { executable: true, expectedMode: "0755" }
+        ),
+        node: await ordinaryFileSignal(
+          paths.join([directory, "node", "bin", "node"]),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          { executable: true }
+        ),
+        python: await executableSignal(
+          paths.join([directory, "python", "bin", "python3"]),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          { rootDirectory: directory }
+        )
+      };
+      return {
+        relative: normalized,
+        directory,
+        launcher: generationLauncherPath(normalized),
+        record,
+        signals
+      };
+    }
+    async function verifyInstalled(relative) {
+      var _a2;
+      const selected = await inspectInstalled(relative);
+      const { record, directory } = selected;
       await verifyRuntime(directory, record.runtimeManifestSha256);
-      const launcher = generationLauncherPath(normalized);
+      const launcher = selected.launcher;
       const launcherInfo = await promises.lstat(launcher);
       if (!launcherInfo.isFile() || ((_a2 = launcherInfo.isSymbolicLink) == null ? void 0 : _a2.call(launcherInfo)) || launcherInfo.nlink !== 1 || modeOf(launcherInfo) !== "0755" || await sha256File(launcher) !== record.launcherSha256) {
         failure("RUNTIME_LAUNCHER_CORRUPT", "Runtime generation launcher failed verification");
       }
-      return { relative: normalized, directory, launcher, record };
+      return selected;
     }
     async function pointerState(pointerPath) {
       var _a2;
@@ -17689,7 +17875,7 @@
         const relative = pointerValue(await promises.readFile(pointerPath, "utf8"), platform.id);
         if (!relative) return { exists: true, ok: false, code: "RUNTIME_POINTER_INVALID" };
         try {
-          return { exists: true, ok: true, ...await verifyInstalled(relative) };
+          return { exists: true, ok: true, ...await inspectInstalled(relative) };
         } catch (error) {
           const normalized = runtimeError(error);
           return { exists: true, ok: false, relative, code: normalized.code, detail: normalized.message };
@@ -17743,20 +17929,30 @@
       }
     }
     async function installLauncher(selected) {
-      var _a2;
       try {
-        const info = await promises.lstat(paths.launcher);
-        if (info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && info.nlink === 1 && modeOf(info) === "0755" && await sha256File(paths.launcher) === selected.record.launcherSha256) return;
+        const source = await ordinaryFileSignal(
+          selected.launcher,
+          "RUNTIME_LAUNCHER_CORRUPT",
+          { executable: true, expectedMode: "0755" }
+        );
+        await ordinaryFileSignal(
+          paths.launcher,
+          "RUNTIME_LAUNCHER_CORRUPT",
+          { executable: true, expectedMode: "0755", expectedSize: source.size }
+        );
+        return;
       } catch (error) {
-        if ((error == null ? void 0 : error.code) !== "ENOENT" && !(error instanceof RuntimeManagerError)) throw error;
+        if (!(error instanceof RuntimeManagerError) && (error == null ? void 0 : error.code) !== "ENOENT") throw error;
       }
       await promises.mkdir(paths.binRoot, { recursive: true, mode: 448 });
       const bytes = await promises.readFile(selected.launcher);
       await atomicWrite(paths.launcher, bytes, 493);
       await promises.chmod(paths.launcher, 493);
-      if (await sha256File(paths.launcher) !== selected.record.launcherSha256) {
-        failure("RUNTIME_LAUNCHER_CORRUPT", "Installed stable launcher failed verification");
-      }
+      await ordinaryFileSignal(
+        paths.launcher,
+        "RUNTIME_LAUNCHER_CORRUPT",
+        { executable: true, expectedMode: "0755", expectedSize: bytes.length }
+      );
     }
     function assertLauncherTransitionCompatible(selected, current) {
       if (!(current == null ? void 0 : current.ok) || current.relative === selected.relative) return;
@@ -17878,7 +18074,7 @@
     function ensureReady() {
       if (readinessPromise) return readinessPromise;
       const pending = withLock(async () => {
-        const current = await pointerState(paths.currentPointer);
+        let current = await pointerState(paths.currentPointer);
         const previous = await pointerState(paths.previousPointer);
         if (!current.ok && previous.ok) {
           await installLauncher(previous);
@@ -17900,7 +18096,7 @@
         }
         let packaged;
         try {
-          packaged = await verifyPackagedPayload();
+          packaged = await inspectPackagedPayload();
         } catch (error) {
           if (!current.ok) throw error;
           await installLauncher(current);
@@ -17918,7 +18114,9 @@
             }]
           };
         }
-        if (current.ok && current.record.version === packaged.version && current.record.sourceCommitSha === packaged.sourceCommitSha && current.record.runtimeManifestSha256 === packaged.runtimeManifestSha256) {
+        const declaredRuntimeMatches = current.ok && current.record.version === packaged.version && current.record.runtimeManifestSha256 === packaged.runtimeManifestSha256 && current.record.launcherSha256 === packaged.launcherSha256;
+        const trustedSignalsMatch = declaredRuntimeMatches && current.signals.runtimeManifest.size === packaged.signals.runtimeManifest.size && current.signals.launcher.size === packaged.signals.launcher.size && current.signals.node.size === packaged.signals.node.size && current.signals.python.size === packaged.signals.python.size && current.signals.python.type === packaged.signals.python.type && current.signals.python.linkTarget === packaged.signals.python.linkTarget;
+        if (trustedSignalsMatch) {
           await installLauncher(current);
           return {
             ok: true,
@@ -17927,9 +18125,23 @@
             relative: current.relative,
             version: current.record.version,
             sourceCommitSha: current.record.sourceCommitSha,
-            diagnostics: []
+            packagedSourceCommitSha: packaged.sourceCommitSha,
+            trustSignals: current.signals,
+            diagnostics: current.record.sourceCommitSha === packaged.sourceCommitSha ? [] : [{
+              code: "RUNTIME_SOURCE_REVISION_DIFFERENT_TRUSTED",
+              message: "The unchanged installed runtime was reused across an advisory source revision change."
+            }]
           };
         }
+        if (declaredRuntimeMatches) {
+          current = {
+            ...current,
+            ok: false,
+            code: "RUNTIME_TRUST_SIGNAL_CHANGED",
+            detail: "A bounded runtime size or metadata signal changed."
+          };
+        }
+        packaged = await verifyPackagedPayload();
         const selected = await installPackaged(packaged);
         assertLauncherTransitionCompatible(selected, current);
         await installLauncher(selected);
@@ -18022,8 +18234,8 @@
       let launcher = { ok: false, code: "RUNTIME_LAUNCHER_MISSING", path: paths.launcher };
       try {
         const info = await promises.lstat(paths.launcher);
-        const digestOk = current.ok ? await sha256File(paths.launcher) === current.record.launcherSha256 : true;
-        launcher = info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && modeOf(info) === "0755" && digestOk ? { ok: true, path: paths.launcher } : { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
+        const sourceSize = current.ok ? current.signals.launcher.size : info.size;
+        launcher = info.isFile() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) && info.nlink === 1 && modeOf(info) === "0755" && info.size === sourceSize ? { ok: true, path: paths.launcher } : { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
       } catch (error) {
         if ((error == null ? void 0 : error.code) !== "ENOENT") launcher = { ok: false, code: "RUNTIME_LAUNCHER_INVALID", path: paths.launcher };
       }
