@@ -17496,6 +17496,16 @@
     now = () => Date.now(),
     sleep: sleep2 = defaultSleep,
     pid = Number(((_c) => (_c = ((_b) => (_b = ((_a) => (_a = globalThis.window) == null ? void 0 : _a.cep_node)()) == null ? void 0 : _b.process)()) == null ? void 0 : _c.pid)() || ((_d) => (_d = globalThis.process) == null ? void 0 : _d.pid)() || 0),
+    isProcessAlive = (ownerPid) => {
+      var _a2, _b2;
+      const processApi = ((_b2 = (_a2 = globalThis.window) == null ? void 0 : _a2.cep_node) == null ? void 0 : _b2.process) || globalThis.process;
+      try {
+        processApi.kill(ownerPid, 0);
+        return true;
+      } catch (error) {
+        return (error == null ? void 0 : error.code) !== "ESRCH";
+      }
+    },
     lockTimeoutMs = 1e4,
     lockPollMs = 25
   } = {}) {
@@ -18505,6 +18515,24 @@
           return;
         } catch (error) {
           if ((error == null ? void 0 : error.code) !== "EEXIST") throw error;
+          let owner;
+          try {
+            owner = JSON.parse(String(await promises.readFile(lockPath, "utf8")));
+          } catch {
+            owner = null;
+          }
+          if (Number.isSafeInteger(owner == null ? void 0 : owner.pid) && owner.pid > 0 && Number.isSafeInteger(owner == null ? void 0 : owner.acquiredAt) && owner.acquiredAt >= 0 && !isProcessAlive(owner.pid)) {
+            const stalePath = paths.join([
+              root,
+              `.runtime-manager.stale-lock.${randomHex(randomBytes)}.json`
+            ]);
+            try {
+              await promises.rename(lockPath, stalePath);
+              continue;
+            } catch (reclaimError) {
+              if ((reclaimError == null ? void 0 : reclaimError.code) !== "ENOENT") throw reclaimError;
+            }
+          }
           if (now() >= deadline) {
             failure("RUNTIME_MANAGER_LOCKED", "Another panel is updating the runtime; retry after it finishes");
           }

@@ -607,6 +607,67 @@ macosRuntimeTest('concurrent cold-start checks on one panel share a single Runti
   assert.equal((await manager.inspect()).ok, true);
 });
 
+macosRuntimeTest('a dead lock owner is archived and activation proceeds', async (t) => {
+  const h = await harness(t);
+  const payload = await packageFixture(h.root, {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'dead-owner',
+  });
+  const lockPath = path.join(h.platform.paths.runtimeRoot, '.runtime-manager.lock');
+  const deadOwner = { pid: 999999, acquiredAt: 1 };
+  await fs.promises.mkdir(h.platform.paths.runtimeRoot, { recursive: true });
+  await fs.promises.writeFile(lockPath, `${JSON.stringify(deadOwner)}\n`);
+  const manager = managerFor(h, payload.extensionRoot, {
+    isProcessAlive(ownerPid) {
+      assert.equal(ownerPid, deadOwner.pid);
+      return false;
+    },
+  });
+
+  const selected = await manager.ensureReady();
+
+  assert.equal(selected.action, 'install');
+  await assert.rejects(fs.promises.lstat(lockPath), { code: 'ENOENT' });
+  const entries = await fs.promises.readdir(h.platform.paths.runtimeRoot);
+  const archive = entries.find((entry) => entry.startsWith('.runtime-manager.stale-lock.'));
+  assert.ok(archive);
+  assert.deepEqual(
+    JSON.parse(await fs.promises.readFile(path.join(h.platform.paths.runtimeRoot, archive), 'utf8')),
+    deadOwner,
+  );
+});
+
+macosRuntimeTest('a malformed lock with a dead pid fails closed without archiving', async (t) => {
+  const h = await harness(t);
+  const payload = await packageFixture(h.root, {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'malformed-lock',
+  });
+  const lockPath = path.join(h.platform.paths.runtimeRoot, '.runtime-manager.lock');
+  const malformedOwner = { pid: 999999 };
+  await fs.promises.mkdir(h.platform.paths.runtimeRoot, { recursive: true });
+  await fs.promises.writeFile(lockPath, `${JSON.stringify(malformedOwner)}\n`);
+  let clock = 0;
+  const manager = managerFor(h, payload.extensionRoot, {
+    isProcessAlive() {
+      assert.fail('malformed lock must not be treated as a known owner');
+    },
+    now: () => clock,
+    sleep: async (ms) => { clock += ms; },
+    lockTimeoutMs: 50,
+    lockPollMs: 25,
+  });
+
+  await assert.rejects(
+    manager.ensureReady(),
+    (error) => error?.code === 'RUNTIME_MANAGER_LOCKED',
+  );
+  assert.deepEqual(
+    JSON.parse(await fs.promises.readFile(lockPath, 'utf8')),
+    malformedOwner,
+  );
+  const entries = await fs.promises.readdir(h.platform.paths.runtimeRoot);
+  assert.equal(entries.filter((entry) => entry.startsWith('.runtime-manager.stale-lock.')).length, 0);
+});
+
 macosRuntimeTest('unchanged runtime receipt is reused across source revisions without a tree walk', async (t) => {
   const h = await harness(t);
   const firstPayload = await packageFixture(path.join(h.root, 'first'), {
@@ -666,9 +727,17 @@ macosRuntimeTest('a held lock fails with an actionable bounded diagnostic', asyn
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'locked',
   });
   await fs.promises.mkdir(h.platform.paths.runtimeRoot, { recursive: true });
-  await fs.promises.writeFile(path.join(h.platform.paths.runtimeRoot, '.runtime-manager.lock'), '{}\n');
+  const liveOwner = { pid: 12345, acquiredAt: 1 };
+  await fs.promises.writeFile(
+    path.join(h.platform.paths.runtimeRoot, '.runtime-manager.lock'),
+    `${JSON.stringify(liveOwner)}\n`,
+  );
   let clock = 0;
   const manager = managerFor(h, payload.extensionRoot, {
+    isProcessAlive(ownerPid) {
+      assert.equal(ownerPid, liveOwner.pid);
+      return true;
+    },
     now: () => clock,
     sleep: async (ms) => { clock += ms; },
     lockTimeoutMs: 50,

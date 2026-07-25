@@ -97,6 +97,15 @@ export function createRuntimeManager({
   now = () => Date.now(),
   sleep = defaultSleep,
   pid = Number(globalThis.window?.cep_node?.process?.pid || globalThis.process?.pid || 0),
+  isProcessAlive = (ownerPid) => {
+    const processApi = globalThis.window?.cep_node?.process || globalThis.process;
+    try {
+      processApi.kill(ownerPid, 0);
+      return true;
+    } catch (error) {
+      return error?.code !== 'ESRCH';
+    }
+  },
   lockTimeoutMs = 10000,
   lockPollMs = 25,
 } = {}) {
@@ -1172,6 +1181,30 @@ export function createRuntimeManager({
         return;
       } catch (error) {
         if (error?.code !== 'EEXIST') throw error;
+        let owner;
+        try {
+          owner = JSON.parse(String(await promises.readFile(lockPath, 'utf8')));
+        } catch {
+          owner = null;
+        }
+        if (
+          Number.isSafeInteger(owner?.pid)
+          && owner.pid > 0
+          && Number.isSafeInteger(owner?.acquiredAt)
+          && owner.acquiredAt >= 0
+          && !isProcessAlive(owner.pid)
+        ) {
+          const stalePath = paths.join([
+            root,
+            `.runtime-manager.stale-lock.${randomHex(randomBytes)}.json`,
+          ]);
+          try {
+            await promises.rename(lockPath, stalePath);
+            continue;
+          } catch (reclaimError) {
+            if (reclaimError?.code !== 'ENOENT') throw reclaimError;
+          }
+        }
         if (now() >= deadline) {
           failure('RUNTIME_MANAGER_LOCKED', 'Another panel is updating the runtime; retry after it finishes');
         }
