@@ -138,8 +138,7 @@ function makeNativeAegpClient() {
         runtime: nativeAegpRuntime,
     });
     if (!nativeAegpClient
-        || typeof nativeAegpClient.beginPairing !== 'function'
-        || typeof nativeAegpClient.waitUntilConnected !== 'function'
+        || typeof nativeAegpClient.connect !== 'function'
         || typeof nativeAegpClient.negotiate !== 'function'
         || typeof nativeAegpClient.capabilities !== 'function'
         || typeof nativeAegpClient.invoke !== 'function'
@@ -188,7 +187,6 @@ function nativeErrorPayload(error) {
         NATIVE_UNAVAILABLE: [true, 'not-started', 'reconnect'],
         NATIVE_UNSUPPORTED: [false, 'not-started', 'refresh-capabilities'],
         NATIVE_CONTRACT_MISMATCH: [false, 'not-started', 'refresh-capabilities'],
-        AUTH_REQUIRED: [false, 'not-started', 'approve-pairing'],
         WIRE_VERSION_MISMATCH: [false, 'not-started', 'reconnect'],
         INVALID_REQUEST: [false, 'not-started', 'none'],
         INVALID_ARGUMENT: [false, 'not-started', 'change-arguments'],
@@ -202,7 +200,6 @@ function nativeErrorPayload(error) {
         SESSION_STALE: [true, 'not-started', 'reconnect'],
         CAPABILITY_FAILED: [false, 'not-started', 'inspect-state'],
         POSSIBLY_SIDE_EFFECTING_FAILURE: [false, 'may-have-occurred', 'inspect-state'],
-        NATIVE_PAIRING_REQUIRED: [true, 'not-started', 'approve-pairing'],
     };
     const policy = policies[code] || policies.NATIVE_UNAVAILABLE;
     const fixedContractMismatch = code === 'NATIVE_CONTRACT_MISMATCH';
@@ -213,30 +210,19 @@ function nativeErrorPayload(error) {
             action: policy[2],
             hint: fixedContractMismatch
                 ? 'Refresh the authenticated native contract before retrying.'
-                : code === 'NATIVE_PAIRING_REQUIRED' || code === 'AUTH_REQUIRED'
-                ? 'Approve the matching fingerprint in After Effects, then retry.'
                 : 'Follow the recovery action before retrying the native request.',
         };
     const payload = {
         code,
         message: typeof error?.message === 'string' && error.message.length > 0
-            ? error.message : code === 'NATIVE_PAIRING_REQUIRED'
-            ? 'Approve the matching fingerprint from the After Effects AE MCP menu, then retry.'
-            : 'Native AEGP request failed with ' + code + '.',
+            ? error.message : 'Native AEGP request failed with ' + code + '.',
         retryable: fixedContractMismatch
             ? false : typeof error?.retryable === 'boolean' ? error.retryable : policy[0],
         sideEffect: fixedContractMismatch
             ? 'not-started' : typeof error?.sideEffect === 'string' ? error.sideEffect : policy[1],
         recovery,
     };
-    if (code === 'NATIVE_PAIRING_REQUIRED' && error?.pairing) {
-        payload.details = {
-            pairingFingerprint: error.pairing.fingerprint,
-            pairingExpiresInMs: error.pairing.expiresInMs,
-            hostInstanceId: error.pairing.hostInstanceId,
-            sourceCommit: error.pairing.sourceCommit,
-        };
-    } else if (error?.details && typeof error.details === 'object' && !Array.isArray(error.details)) {
+    if (error?.details && typeof error.details === 'object' && !Array.isArray(error.details)) {
         payload.details = { ...error.details };
     }
     return payload;
@@ -575,42 +561,18 @@ function nativeRequestGate(req, res) {
     return client;
 }
 
-async function nativePairingRequired(client, deadlineUnixMs) {
-    const pending = await client.beginPairing(deadlineUnixMs);
-    const error = new Error('native AEGP pairing requires an After Effects decision');
-    error.code = 'NATIVE_PAIRING_REQUIRED';
-    error.retryable = true;
-    error.pairing = pending;
-    throw error;
-}
-
 async function connectedNativeClient(deadlineUnixMs) {
     const client = makeNativeAegpClient();
     const status = client.status();
     if (status.state === 'connected') return client;
-    if (status.state === 'authenticating') {
-        await client.waitUntilConnected(deadlineUnixMs);
-        return client;
-    }
-    await client.beginPairing(deadlineUnixMs);
-    await client.waitUntilConnected(deadlineUnixMs);
+    await client.connect(deadlineUnixMs);
     return client;
 }
 
 function sendNativeFailure(res, error) {
     const payload = nativeErrorPayload(error);
-    const status = payload.code === 'NATIVE_PAIRING_REQUIRED' ? 409
-        : payload.code === 'INVALID_ARGUMENT' ? 400
-            : payload.code === 'AUTH_REQUIRED' ? 401 : 503;
+    const status = payload.code === 'INVALID_ARGUMENT' ? 400 : 503;
     const response = { ok: false, error: payload };
-    if (payload.code === 'NATIVE_PAIRING_REQUIRED' && error?.pairing) {
-        response.pairing = {
-            fingerprint: error.pairing.fingerprint,
-            expiresInMs: error.pairing.expiresInMs,
-            hostInstanceId: error.pairing.hostInstanceId,
-            sourceCommit: error.pairing.sourceCommit,
-        };
-    }
     res.status(status).json(response);
 }
 
@@ -752,42 +714,6 @@ function buildApp() {
             const status = makeNativeAegpClient().status();
             res.json({ ok: true, status });
         } catch (error) {
-            sendNativeFailure(res, error);
-        }
-    });
-
-    a.post('/native/pair', async (req, res) => {
-        const clientLabel = nativeRequestGate(req, res);
-        if (clientLabel === null) return;
-        const startedAt = Date.now();
-        try {
-            const client = makeNativeAegpClient();
-            if (client.status().state === 'connected') {
-                return res.json({ ok: true, status: client.status() });
-            }
-            const pending = await client.beginPairing();
-            activity.record({
-                client: clientLabel,
-                engine: 'native-aegp',
-                operation: 'pair',
-                ok: false,
-                denied: 'pairing_required',
-                durationMs: Date.now() - startedAt,
-            });
-            const error = new Error('native AEGP pairing requires an After Effects decision');
-            error.code = 'NATIVE_PAIRING_REQUIRED';
-            error.retryable = true;
-            error.pairing = pending;
-            sendNativeFailure(res, error);
-        } catch (error) {
-            activity.record({
-                client: clientLabel,
-                engine: 'native-aegp',
-                operation: 'pair',
-                ok: false,
-                error: nativeErrorPayload(error).code,
-                durationMs: Date.now() - startedAt,
-            });
             sendNativeFailure(res, error);
         }
     });

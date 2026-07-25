@@ -380,87 +380,6 @@ class FakeAe:
         return self._success(tool, case.capability_id, value, write=case.kind == "write")
 
 
-class PairingFake(FakeAe):
-    def __init__(self, *, required_responses: int = 1, reject_retry: bool = False) -> None:
-        super().__init__()
-        self.required_responses = required_responses
-        self.reject_retry = reject_retry
-        self.pairing_dispatches = 0
-
-    async def call(
-        self, tool: str, arguments: dict[str, Any]
-    ) -> tuple[bool, dict[str, Any]]:
-        self.pairing_dispatches += 1
-        if self.pairing_dispatches <= self.required_responses:
-            self.timeline.append(f"call:{tool}")
-            self.calls.append(tool)
-            return True, {
-                "ok": False,
-                "error": {
-                    "code": "NATIVE_PAIRING_REQUIRED",
-                    "message": "Authorize native pairing.",
-                    "retryable": True,
-                    "sideEffect": "not-started",
-                    "recovery": {"action": "approve-pairing", "hint": "Authorize in AE."},
-                    "details": {
-                        "pairingFingerprint": "12AB-34CD",
-                        "pairingExpiresInMs": 60_000,
-                        "hostInstanceId": self.host,
-                        "sourceCommit": EXPECTED_SHA,
-                    },
-                },
-            }
-        if self.reject_retry and self.pairing_dispatches == self.required_responses + 1:
-            self.timeline.append(f"call:{tool}")
-            self.calls.append(tool)
-            return True, {
-                "ok": False,
-                "error": {
-                    "code": "NATIVE_PAIRING_REJECTED",
-                    "message": "Pairing was rejected.",
-                    "retryable": True,
-                    "sideEffect": "not-started",
-                    "recovery": {"action": "retry-pairing", "hint": "Start again."},
-                },
-            }
-        return await super().call(tool, arguments)
-
-
-class EpochPairingFake(FakeAe):
-    def __init__(self) -> None:
-        super().__init__()
-        self.pending_hosts: set[str] = set()
-        self.paired_hosts: set[str] = set()
-
-    async def call(
-        self, tool: str, arguments: dict[str, Any]
-    ) -> tuple[bool, dict[str, Any]]:
-        if self.host not in self.paired_hosts:
-            if self.host in self.pending_hosts:
-                self.paired_hosts.add(self.host)
-                return await super().call(tool, arguments)
-            self.pending_hosts.add(self.host)
-            self.timeline.append(f"call:{tool}")
-            self.calls.append(tool)
-            return True, {
-                "ok": False,
-                "error": {
-                    "code": "NATIVE_PAIRING_REQUIRED",
-                    "message": "Authorize native pairing.",
-                    "retryable": True,
-                    "sideEffect": "not-started",
-                    "recovery": {"action": "approve-pairing", "hint": "Authorize in AE."},
-                    "details": {
-                        "pairingFingerprint": "12AB-34CD",
-                        "pairingExpiresInMs": 60_000,
-                        "hostInstanceId": self.host,
-                        "sourceCommit": EXPECTED_SHA,
-                    },
-                },
-            }
-        return await super().call(tool, arguments)
-
-
 def make_runtime(tmp_path: Path, mode: str, fake: FakeAe):
     fixture = tmp_path / f"{mode}.aep"
     evidence = runtime_module.EvidenceLog(
@@ -515,8 +434,6 @@ def make_runtime(tmp_path: Path, mode: str, fake: FakeAe):
         assert previous_instance_id is None or fake.host != previous_instance_id
         runner.expected_host_instance_id = fake.host
         runner.expected_native_source_revision = EXPECTED_SHA
-        runner.pairing_checkpoint_used = False
-        runner.pairing_epoch_start_total = runner.ledger.total
         return fake.host
 
     runner.bind_latest_native_load = bind
@@ -651,58 +568,6 @@ async def test_preflight_is_non_candidate_seven_calls_and_proves_locator_undo(tm
 
 
 @pytest.mark.asyncio
-async def test_first_pairing_required_checkpoints_once_then_keeps_seven_effective_calls(
-    tmp_path: Path,
-):
-    fake = PairingFake()
-    fake.tool_names = frozenset(case.tool for case in package.SPEC.support_tools)
-    runner, evidence = make_runtime(tmp_path, "preflight", fake)
-    await package.Issue157Package(
-        runner, fixture_name="Issue157 Keyframe Authoring Fixture"
-    ).run()
-    assert runner.ledger.total == 7
-    assert runner.ledger.handshake_attempts == 1
-    assert len(fake.calls) == 8
-    assert fake.checkpoints.count("pair-native") == 1
-    persisted = evidence.events_path.read_text(encoding="utf-8")
-    assert "12AB-34CD" not in persisted
-    assert "pairingFingerprint" not in persisted
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("required_responses", "reject_retry", "message", "handshakes"),
-    [
-        (2, False, "still required", 2),
-        (1, True, "was rejected", 2),
-    ],
-)
-async def test_pairing_retry_failure_is_fail_closed_without_effective_call(
-    tmp_path: Path,
-    required_responses: int,
-    reject_retry: bool,
-    message: str,
-    handshakes: int,
-):
-    fake = PairingFake(
-        required_responses=required_responses,
-        reject_retry=reject_retry,
-    )
-    fake.tool_names = frozenset(case.tool for case in package.SPEC.support_tools)
-    runner, _evidence = make_runtime(tmp_path, "preflight", fake)
-    with pytest.raises(runtime_module.AcceptanceFailure, match=message):
-        await package.Issue157Package(
-            runner, fixture_name="Issue157 Keyframe Authoring Fixture"
-        ).run()
-    assert runner.ledger.total == 0
-    assert runner.ledger.handshake_attempts == handshakes
-    assert fake.checkpoints.count("pair-native") == 1
-    assert not runner.fixture.path.exists()
-    assert runner.aep_lifecycle.created == 0
-    assert not fake.keyframes[OPACITY]
-
-
-@pytest.mark.asyncio
 async def test_t5_runs_seven_tools_in_28_calls_with_real_undo_and_restart(tmp_path: Path):
     fake = FakeAe()
     runner, _evidence = make_runtime(tmp_path, "t5", fake)
@@ -757,19 +622,6 @@ async def test_t5_seeds_ease_neighbors_through_public_adds_before_the_matrix(tmp
     ease_undo_at = timeline.index("checkpoint:undo-ae_setLayerPropertyKeyframeTemporalEase")
     assert interpolation_undo_at < ease_write_at < ease_undo_at
     assert runner.ledger.total == 28
-
-
-@pytest.mark.asyncio
-async def test_pairing_is_scoped_to_each_native_host_epoch(tmp_path: Path):
-    fake = EpochPairingFake()
-    runner, _evidence = make_runtime(tmp_path, "t5", fake)
-    details = await package.Issue157Package(
-        runner, fixture_name="Issue157 Keyframe Authoring Fixture"
-    ).run()
-    assert runner.ledger.total == 28
-    assert runner.ledger.handshake_attempts == 2
-    assert fake.checkpoints.count("pair-native") == 2
-    assert details["firstHostInstanceId"] != details["restartHostInstanceId"]
 
 
 @pytest.mark.parametrize(

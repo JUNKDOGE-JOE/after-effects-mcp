@@ -233,6 +233,14 @@ macosRuntimeTest('clean macOS install activates and starts the bundled core with
   assert.doesNotMatch(result.relative, /1{40}/);
   assert.equal(result.componentReceipt.sourceRevisionRole, 'advisory');
   assert.equal(result.componentReceipt.canonicalPath.includes('/layers/'), true);
+  assert.equal(result.componentReceipt.stableLauncher.canonicalPath, result.launcher);
+  assert.equal(
+    result.componentReceipt.stableLauncher.installReceiptPath,
+    path.join(h.platform.paths.runtimeRoot, 'stable-launcher-record.json'),
+  );
+  assert.equal(result.componentReceipt.stableLauncher.signal.path, result.launcher);
+  assert.equal(result.componentReceipt.stableLauncher.signal.size > 0, true);
+  assert.equal(result.componentReceipt.stableLauncher.signal.mtimeMs > 0, true);
   assert.equal(result.lifecycle.generations.created, 1);
   assert.equal(result.lifecycle.layers.created, 1);
   const launched = await execFileAsync(result.launcher, ['--fixture'], {
@@ -268,6 +276,20 @@ macosRuntimeTest('a readable schema-v1 generation migrates forward without delet
   assert.equal((await fs.promises.lstat(legacy.generationRoot)).isDirectory(), true);
   assert.equal(migrated.lifecycle.layers.created, 1);
   assert.equal((await manager.inspect()).previous.record.schemaVersion, 1);
+  const stableReceipt = JSON.parse(await fs.promises.readFile(
+    path.join(h.platform.paths.runtimeRoot, 'stable-launcher-record.json'),
+    'utf8',
+  ));
+  assert.equal(stableReceipt.canonicalPath, h.platform.paths.launcher);
+  assert.equal(stableReceipt.signal.path, h.platform.paths.launcher);
+  assert.equal(stableReceipt.signal.size > 0, true);
+  assert.equal(stableReceipt.signal.mtimeMs > 0, true);
+  const uninstalled = await manager.uninstall();
+  assert.equal(uninstalled.lifecycle.generations.reclaimed >= 2, true);
+  assert.equal(uninstalled.lifecycle.layers.reclaimed, 1);
+  assert.equal(uninstalled.lifecycle.logicalBytes.reclaimed > 0, true);
+  assert.equal(uninstalled.lifecycle.physicalBytes.reclaimed > 0, true);
+  await assert.rejects(fs.promises.lstat(legacy.generationRoot), { code: 'ENOENT' });
 });
 
 macosRuntimeTest('upgrade, downgrade, and rollback atomically select verified versions', async (t) => {
@@ -283,7 +305,10 @@ macosRuntimeTest('upgrade, downgrade, and rollback atomically select verified ve
 
   await one.ensureReady();
   assert.equal((await two.ensureReady()).action, 'upgrade');
-  assert.equal((await two.rollback()).version, '0.9.3');
+  const rollback = await two.rollback();
+  assert.equal(rollback.version, '0.9.3');
+  assert.equal(rollback.lifecycle.generations.reused, 1);
+  assert.equal(rollback.lifecycle.layers.reused, 1);
   let launched = await execFileAsync(h.platform.paths.launcher, ['--rollback'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });
@@ -346,20 +371,29 @@ macosRuntimeTest('GC retains current and previous while reclaiming only stale ow
   assert.equal(state.current.record.version, '0.11.0');
   assert.equal(state.previous.record.version, '0.10.0');
   assert.equal(upgraded.lifecycle.generations.reclaimed, 1);
-  assert.equal(upgraded.lifecycle.layers.reclaimed, 1);
+  assert.equal(upgraded.lifecycle.layers.reclaimed, 0);
   assert.equal(upgraded.lifecycle.logicalBytes.reclaimed > 0, true);
   assert.equal(upgraded.lifecycle.physicalBytes.reclaimed > 0, true);
   await assert.rejects(
     fs.promises.lstat(path.join(runtimeRoot, first.relative)),
     { code: 'ENOENT' },
   );
+  assert.equal((await fs.promises.lstat(first.componentReceipt.canonicalPath)).isDirectory(), true);
+  for (const marker of untouched) {
+    assert.equal(await fs.promises.readFile(marker, 'utf8'), 'retain\n');
+  }
+  await fs.promises.rm(
+    path.join(runtimeRoot, 'generations', 'g-aaaaaaaaaaaaaaaa'),
+    { recursive: true },
+  );
+  const collected = await managerFor(h, v3.extensionRoot).ensureReady();
+  assert.equal(collected.lifecycle.generations.reused, 1);
+  assert.equal(collected.lifecycle.layers.reused, 1);
+  assert.equal(collected.lifecycle.layers.reclaimed, 1);
   await assert.rejects(
     fs.promises.lstat(first.componentReceipt.canonicalPath),
     { code: 'ENOENT' },
   );
-  for (const marker of untouched) {
-    assert.equal(await fs.promises.readFile(marker, 'utf8'), 'retain\n');
-  }
 });
 
 macosRuntimeTest('a corrupt current layer falls back to the verified previous generation', async (t) => {
@@ -381,6 +415,10 @@ macosRuntimeTest('a corrupt current layer falls back to the verified previous ge
 
   assert.equal(fallback.action, 'fallback');
   assert.equal(fallback.version, '0.9.3');
+  assert.equal(fallback.lifecycle.generations.reused, 1);
+  assert.equal(fallback.lifecycle.layers.reused, 1);
+  assert.equal(fallback.lifecycle.generations.reclaimed, 1);
+  assert.equal(fallback.lifecycle.layers.reclaimed, 1);
   assert.equal(fallback.diagnostics[0].code, 'RUNTIME_CURRENT_INVALID_FALLBACK');
   const launched = await execFileAsync(h.platform.paths.launcher, ['--repaired'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
@@ -494,7 +532,12 @@ macosRuntimeTest('repair creates a fresh verified generation and uninstall remov
   assert.equal(repaired.action, 'repair');
   assert.notEqual(repaired.relative, installed.relative);
   assert.equal((await manager.rollback()).relative, installed.relative);
-  assert.equal((await manager.uninstall()).action, 'uninstall');
+  const uninstalled = await manager.uninstall();
+  assert.equal(uninstalled.action, 'uninstall');
+  assert.equal(uninstalled.lifecycle.generations.reclaimed, 2);
+  assert.equal(uninstalled.lifecycle.layers.reclaimed, 2);
+  assert.equal(uninstalled.lifecycle.logicalBytes.reclaimed > 0, true);
+  assert.equal(uninstalled.lifecycle.physicalBytes.reclaimed > 0, true);
   await assert.rejects(fs.promises.readFile(h.platform.paths.currentPointer), { code: 'ENOENT' });
   await assert.rejects(fs.promises.readFile(h.platform.paths.previousPointer), { code: 'ENOENT' });
   await assert.rejects(fs.promises.lstat(h.platform.paths.launcher), { code: 'ENOENT' });
@@ -560,6 +603,16 @@ macosRuntimeTest('unchanged runtime receipt is reused across source revisions wi
   });
   const guardedFs = { ...fs, promises: guardedPromises };
   const second = managerFor(h, secondPayload.extensionRoot, { fsImpl: guardedFs });
+  const generationLauncher = path.join(
+    h.platform.paths.runtimeRoot,
+    installed.relative,
+    'ae-mcp-launcher',
+  );
+  const expectedLauncher = await fs.promises.readFile(generationLauncher);
+  const driftedLauncher = Buffer.from(expectedLauncher);
+  driftedLauncher[driftedLauncher.length - 1] ^= 1;
+  await fs.promises.writeFile(h.platform.paths.launcher, driftedLauncher, { mode: 0o755 });
+  await fs.promises.chmod(h.platform.paths.launcher, 0o755);
 
   const reused = await second.ensureReady();
 
@@ -570,6 +623,8 @@ macosRuntimeTest('unchanged runtime receipt is reused across source revisions wi
   assert.equal(reused.diagnostics[0].code, 'RUNTIME_SOURCE_REVISION_DIFFERENT_TRUSTED');
   assert.equal(reused.lifecycle.generations.reused, 1);
   assert.equal(reused.lifecycle.layers.reused, 1);
+  assert.equal(reused.componentReceipt.stableLauncher.signal.path, reused.launcher);
+  assert.deepEqual(await fs.promises.readFile(h.platform.paths.launcher), expectedLauncher);
   assert.equal((await second.inspect()).ok, true);
 });
 

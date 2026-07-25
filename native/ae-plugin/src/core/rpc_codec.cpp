@@ -5105,19 +5105,6 @@ RpcSessionFrontDoor::RpcSessionFrontDoor(
   }
 }
 
-bool RpcSessionFrontDoor::authorize_pairing() noexcept {
-  if (closed_) return false;
-  paired_ = true;
-  return true;
-}
-
-void RpcSessionFrontDoor::revoke_pairing() noexcept {
-  paired_ = false;
-  hello_complete_ = false;
-  active_.clear();
-  tombstones_.clear();
-}
-
 SessionIngressResult RpcSessionFrontDoor::admit(const ParsedRequest& request) {
   if (closed_) return {SessionIngressCode::kClosed, "SESSION_STALE", std::nullopt, false};
   if (!valid_request_id(request.request_id)
@@ -5142,9 +5129,6 @@ SessionIngressResult RpcSessionFrontDoor::admit(const ParsedRequest& request) {
     if (hello == nullptr || request.session_id.has_value()) {
       return {SessionIngressCode::kInvalidRequest, "INVALID_REQUEST", std::nullopt, false};
     }
-    if (!paired_) {
-      return {SessionIngressCode::kPairingRequired, "AUTH_REQUIRED", std::nullopt, false};
-    }
     if (hello_complete_) {
       return {SessionIngressCode::kSessionStale, "SESSION_STALE", std::nullopt, false};
     }
@@ -5153,9 +5137,6 @@ SessionIngressResult RpcSessionFrontDoor::admit(const ParsedRequest& request) {
     }
     hello_complete_ = true;
     return {SessionIngressCode::kAcceptedHello, {}, std::nullopt, false};
-  }
-  if (!paired_) {
-    return {SessionIngressCode::kAuthorizationRequired, "AUTH_REQUIRED", std::nullopt, false};
   }
   if (!hello_complete_) {
     return {SessionIngressCode::kHelloRequired, "SESSION_STALE", std::nullopt, false};
@@ -5210,7 +5191,6 @@ bool RpcSessionFrontDoor::complete_request(std::string_view request_id) {
 
 void RpcSessionFrontDoor::close() noexcept {
   closed_ = true;
-  paired_ = false;
   hello_complete_ = false;
   active_.clear();
   tombstones_.clear();

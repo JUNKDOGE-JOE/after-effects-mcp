@@ -3,8 +3,6 @@
 #include "aemcp_native/endpoint_registry_macos.hpp"
 #include "aemcp_native/mac_ipc_server.hpp"
 #include "aemcp_native/native_rpc_connection.hpp"
-#include "aemcp_native/pairing_gate.hpp"
-#include "aemcp_native/pairing_ui_macos.hpp"
 #include "aemcp_native/peer_identity_macos.hpp"
 #include "aemcp_native/project_epoch.hpp"
 #include "aemcp_native/rpc_codec.hpp"
@@ -108,8 +106,6 @@ using aemcp::native::NativeIpcObserver;
 using aemcp::native::NativeRpcConnectionHandler;
 using aemcp::native::NativeRpcObserver;
 using aemcp::native::NativeRpcRuntimeInfo;
-using aemcp::native::PairingGate;
-using aemcp::native::PairingUiDecision;
 using aemcp::native::ProjectBitDepth;
 using aemcp::native::ProjectBitDepthChanged;
 using aemcp::native::ProjectEpochTracker;
@@ -9537,8 +9533,7 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
         driver_minor(driver_minor_value),
         utility_suite(basic_suite, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6),
         idle_signal(utility_suite.get()),
-        dispatcher(std::this_thread::get_id(), clock),
-        pairing_gate(pairing_clock, pairing_material) {
+        dispatcher(std::this_thread::get_id(), clock) {
     if (utility_suite.get() == nullptr) {
       throw std::runtime_error("AEGP utility suite unavailable");
     }
@@ -9614,11 +9609,10 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
     ipc_server = std::make_unique<MacIpcServer>(
         *endpoint,
         *peer_backend,
-        pairing_gate,
         *rpc_handler,
         *this,
         aemcp::native::MacIpcServerConfig{
-            1500ms, 100ms, 16, aemcp::native::macos_native_cpu_type()});
+            1500ms, 16, aemcp::native::macos_native_cpu_type()});
   }
 
   [[nodiscard]] bool start_ipc() noexcept;
@@ -9649,14 +9643,10 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
   ProjectGraphRegistry project_graph;
   HostDispatcher dispatcher;
   aemcp::native::rpc::SystemSessionClock session_clock;
-  aemcp::native::SystemPairingGateClock pairing_clock;
-  aemcp::native::MacPairingMaterialSource pairing_material;
-  PairingGate pairing_gate;
   std::unique_ptr<aemcp::native::PeerIdentityBackend> peer_backend;
   std::unique_ptr<MacEndpointRegistry> endpoint;
   std::unique_ptr<NativeRpcConnectionHandler> rpc_handler;
   std::unique_ptr<MacIpcServer> ipc_server;
-  AEGP_Command pairing_command{0};
 };
 
 std::string event_prefix(const PluginState& state, std::string_view event) {
@@ -10069,71 +10059,19 @@ A_Err command_hook(
     AEGP_Command command,
     AEGP_HookPriority,
     A_Boolean,
-    A_Boolean* handled) noexcept {
+    A_Boolean*) noexcept {
   try {
     auto* state = reinterpret_cast<PluginState*>(global_refcon);
     if (state == nullptr) return A_Err_GENERIC;
-    if (command != state->pairing_command) {
-      const bool invalidated = state->project_graph.invalidate_project();
-      state->dispatcher.invalidate_composition_creation_replays();
-      state->log.append(event_prefix(*state, "project.command-invalidation")
-          + ",\"command\":" + std::to_string(command)
-          + ",\"phase\":\"before-ae\",\"invalidated\":"
-          + (invalidated ? "true" : "false")
-          + ",\"generation\":"
-          + std::to_string(state->project_graph.generation()) + "}");
-      return A_Err_NONE;
-    }
-    if (handled == nullptr) return A_Err_GENERIC;
-    *handled = TRUE;
-    const auto pending = state->ipc_server
-        ? state->ipc_server->pending_pairing() : std::nullopt;
-    if (!pending.has_value()) {
-      aemcp::native::show_no_pending_pairing();
-      return A_Err_NONE;
-    }
-    const PairingUiDecision decision = aemcp::native::show_pairing_confirmation(
-        pending->fingerprint, pending->expires_in);
-    bool applied = false;
-    if (decision == PairingUiDecision::kAuthorize) {
-      applied = state->ipc_server->confirm_pending(
-          pending->binding.connection_id, pending->fingerprint);
-    } else {
-      applied = state->ipc_server->reject_pending(
-          pending->binding.connection_id, pending->fingerprint);
-    }
-    state->log.append(event_prefix(*state, "pairing.user-decision")
-        + ",\"decision\":\""
-        + (decision == PairingUiDecision::kAuthorize ? "authorize" : "reject")
-        + "\",\"applied\":" + (applied ? "true" : "false") + "}");
+    const bool invalidated = state->project_graph.invalidate_project();
+    state->dispatcher.invalidate_composition_creation_replays();
+    state->log.append(event_prefix(*state, "project.command-invalidation")
+        + ",\"command\":" + std::to_string(command)
+        + ",\"phase\":\"before-ae\",\"invalidated\":"
+        + (invalidated ? "true" : "false")
+        + ",\"generation\":"
+        + std::to_string(state->project_graph.generation()) + "}");
     return A_Err_NONE;
-  } catch (...) {
-    return A_Err_GENERIC;
-  }
-}
-
-A_Err update_menu_hook(
-    AEGP_GlobalRefcon global_refcon,
-    AEGP_UpdateMenuRefcon,
-    AEGP_WindowType) noexcept {
-  try {
-    auto* state = reinterpret_cast<PluginState*>(global_refcon);
-    if (state == nullptr || state->pairing_command == 0) return A_Err_GENERIC;
-
-    const AEGP_CommandSuite1* command_suite = nullptr;
-    const SPErr acquire_error = state->basic->AcquireSuite(
-        kAEGPCommandSuite,
-        kAEGPCommandSuiteVersion1,
-        reinterpret_cast<const void**>(&command_suite));
-    if (acquire_error != 0 || command_suite == nullptr) return A_Err_GENERIC;
-
-    const A_Err enable_error = command_suite->AEGP_EnableCommand(
-        state->pairing_command);
-    const SPErr release_error = state->basic->ReleaseSuite(
-        kAEGPCommandSuite, kAEGPCommandSuiteVersion1);
-    return enable_error == A_Err_NONE && release_error == 0
-        ? A_Err_NONE
-        : A_Err_GENERIC;
   } catch (...) {
     return A_Err_GENERIC;
   }
@@ -10181,42 +10119,14 @@ extern "C" __attribute__((visibility("default"))) A_Err AeMcpNativeMain(
             plugin_id, idle_hook, reinterpret_cast<AEGP_IdleRefcon>(lifecycle_state))
         : death_error;
 
-    A_Err menu_error = A_Err_GENERIC;
-    const AEGP_CommandSuite1* command_suite = nullptr;
-    const SPErr command_acquire_error = idle_error == A_Err_NONE
-        ? pica_basic->AcquireSuite(
-            kAEGPCommandSuite,
-            kAEGPCommandSuiteVersion1,
-            reinterpret_cast<const void**>(&command_suite))
-        : A_Err_GENERIC;
-    if (command_acquire_error == 0 && command_suite != nullptr) {
-      menu_error = command_suite->AEGP_GetUniqueCommand(
-          &lifecycle_state->pairing_command);
-      if (menu_error == A_Err_NONE) {
-        menu_error = command_suite->AEGP_InsertMenuCommand(
-            lifecycle_state->pairing_command,
-            "AE MCP: Pair native connection...",
-            AEGP_Menu_WINDOW,
-            AEGP_MENU_INSERT_SORTED);
-      }
-      if (menu_error == A_Err_NONE) {
-        menu_error = register_suite->AEGP_RegisterCommandHook(
+    const A_Err command_error = idle_error == A_Err_NONE
+        ? register_suite->AEGP_RegisterCommandHook(
             plugin_id,
             AEGP_HP_BeforeAE,
             AEGP_Command_ALL,
             command_hook,
-            0);
-      }
-      if (menu_error == A_Err_NONE) {
-        menu_error = register_suite->AEGP_RegisterUpdateMenuHook(
-            plugin_id, update_menu_hook, 0);
-      }
-      const SPErr command_release_error = pica_basic->ReleaseSuite(
-          kAEGPCommandSuite, kAEGPCommandSuiteVersion1);
-      if (command_release_error != 0 && menu_error == A_Err_NONE) {
-        menu_error = A_Err_GENERIC;
-      }
-    }
+            0)
+        : idle_error;
     const SPErr release_error = pica_basic->ReleaseSuite(
         kAEGPRegisterSuite, kAEGPRegisterSuiteVersion5);
 
@@ -10230,9 +10140,9 @@ extern "C" __attribute__((visibility("default"))) A_Err AeMcpNativeMain(
 
     try {
       log_load(*lifecycle_state);
-      if (menu_error != A_Err_NONE) {
+      if (command_error != A_Err_NONE) {
         lifecycle_state->log.append(
-            event_prefix(*lifecycle_state, "pairing.menu-unavailable") + "}");
+            event_prefix(*lifecycle_state, "project.command-hook-unavailable") + "}");
       } else {
         (void)lifecycle_state->start_ipc();
       }

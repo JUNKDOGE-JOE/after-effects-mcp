@@ -17419,6 +17419,7 @@
   var LOCK_NAME = ".runtime-manager.lock";
   var INSTALL_RECORD = "install-record.json";
   var LAYER_RECORD = "layer-record.json";
+  var STABLE_LAUNCHER_RECORD = "stable-launcher-record.json";
   var GENERATION_LAUNCHER = "ae-mcp-launcher";
   var GENERATION_OWNER = "ae-mcp-runtime-manager";
   var GENERATION_ID = /^g-[0-9a-f]{16}$/;
@@ -17522,6 +17523,7 @@
     const packagedRuntimeRoot = paths.join([extensionRoot, "runtime", platform.id]);
     const packagedRuntimeManifest = paths.join([packagedRuntimeRoot, "runtime-manifest.json"]);
     const packagedLauncher = paths.join([extensionRoot, "platform", platform.id, "bin", "ae-mcp"]);
+    const stableLauncherRecordPath = paths.join([root, STABLE_LAUNCHER_RECORD]);
     async function sha256File(filePath) {
       var _a2;
       const info = await promises.lstat(filePath);
@@ -18047,7 +18049,12 @@
         installReceiptPath: installRecordPath(selected.relative),
         generation: selected.relative,
         layerId,
-        signals: selected.signals
+        signals: selected.signals,
+        stableLauncher: {
+          canonicalPath: paths.launcher,
+          installReceiptPath: stableLauncherRecordPath,
+          signal: selected.stableLauncherSignal
+        }
       };
     }
     async function pointerState(pointerPath) {
@@ -18114,30 +18121,69 @@
       }
     }
     async function installLauncher(selected) {
+      let source;
       try {
-        const source = await ordinaryFileSignal(
+        source = await ordinaryFileSignal(
           selected.launcher,
           "RUNTIME_LAUNCHER_CORRUPT",
           { executable: true, expectedMode: "0755" }
         );
-        await ordinaryFileSignal(
+        const record = await readJson2(stableLauncherRecordPath, "RUNTIME_LAUNCHER_CORRUPT");
+        if (!exactKeys(record, [
+          "schemaVersion",
+          "owner",
+          "platform",
+          "canonicalPath",
+          "launcherSha256",
+          "signal"
+        ]) || record.schemaVersion !== 1 || record.owner !== GENERATION_OWNER || record.platform !== platform.id || record.canonicalPath !== paths.launcher || record.launcherSha256 !== selected.record.launcherSha256) {
+          failure("RUNTIME_LAUNCHER_CORRUPT", "Stable launcher receipt is invalid");
+        }
+        const installed = await ordinaryFileSignal(
           paths.launcher,
           "RUNTIME_LAUNCHER_CORRUPT",
           { executable: true, expectedMode: "0755", expectedSize: source.size }
         );
-        return;
+        if (sameSignal(installed, record.signal)) {
+          selected.stableLauncherSignal = installed;
+          return;
+        }
       } catch (error) {
         if (!(error instanceof RuntimeManagerError) && (error == null ? void 0 : error.code) !== "ENOENT") throw error;
       }
       await promises.mkdir(paths.binRoot, { recursive: true, mode: 448 });
       const bytes = await promises.readFile(selected.launcher);
+      if (crypto.createHash("sha256").update(bytes).digest("hex") !== selected.record.launcherSha256) {
+        failure("RUNTIME_LAUNCHER_CORRUPT", "Runtime generation launcher failed verification");
+      }
       await atomicWrite(paths.launcher, bytes, 493);
       await promises.chmod(paths.launcher, 493);
-      await ordinaryFileSignal(
+      const signal = await ordinaryFileSignal(
         paths.launcher,
         "RUNTIME_LAUNCHER_CORRUPT",
         { executable: true, expectedMode: "0755", expectedSize: bytes.length }
       );
+      selected.stableLauncherSignal = signal;
+      await atomicWrite(stableLauncherRecordPath, `${JSON.stringify({
+        schemaVersion: 1,
+        owner: GENERATION_OWNER,
+        platform: platform.id,
+        canonicalPath: paths.launcher,
+        launcherSha256: selected.record.launcherSha256,
+        signal
+      }, null, 2)}
+`);
+    }
+    function reusedLifecycle(selected) {
+      var _a2;
+      return ((_a2 = selected == null ? void 0 : selected.record) == null ? void 0 : _a2.schemaVersion) === 2 ? {
+        ...emptyLifecycle(),
+        generations: { created: 0, reused: 1, reclaimed: 0 },
+        layers: { created: 0, reused: 1, reclaimed: 0 }
+      } : {
+        ...emptyLifecycle(),
+        generations: { created: 0, reused: 1, reclaimed: 0 }
+      };
     }
     function assertLauncherTransitionCompatible(selected, current) {
       if (!(current == null ? void 0 : current.ok) || current.relative === selected.relative) return;
@@ -18371,6 +18417,7 @@
         [currentRelative, previousRelative, inProgressRelative].filter((value) => value == null ? void 0 : value.startsWith("generations/"))
       );
       const referencedLayers = /* @__PURE__ */ new Set();
+      let layerGcSafe = true;
       const generationsRoot = paths.join([root, "generations"]);
       let entries = [];
       try {
@@ -18382,7 +18429,10 @@
         if (!entry.isDirectory() || !GENERATION_ID.test(entry.name)) continue;
         const relative = `generations/${entry.name}`;
         const record = await readOwnedGeneration(relative);
-        if (!record) continue;
+        if (!record) {
+          layerGcSafe = false;
+          continue;
+        }
         if (retained.has(relative)) {
           referencedLayers.add(record.layer.relative);
           continue;
@@ -18394,6 +18444,7 @@
         lifecycle.logicalBytes.reclaimed += usage.logicalBytes;
         lifecycle.physicalBytes.reclaimed += usage.physicalBytes;
       }
+      if (!layerGcSafe) return lifecycle;
       const layersRoot = paths.join([root, "layers"]);
       let digests = [];
       try {
@@ -18493,7 +18544,7 @@
             version: previous.record.version,
             sourceCommitSha: previous.record.sourceCommitSha,
             componentReceipt: componentReceipt(previous),
-            lifecycle: reclaimed2,
+            lifecycle: mergeLifecycle(reusedLifecycle(previous), reclaimed2),
             diagnostics: [{
               code: "RUNTIME_CURRENT_INVALID_FALLBACK",
               message: "The current runtime was invalid; RuntimeManager activated the previous verified runtime once.",
@@ -18520,7 +18571,7 @@
             version: current.record.version,
             sourceCommitSha: current.record.sourceCommitSha,
             componentReceipt: componentReceipt(current),
-            lifecycle: reclaimed2,
+            lifecycle: mergeLifecycle(reusedLifecycle(current), reclaimed2),
             diagnostics: [{
               code: "RUNTIME_PACKAGED_PAYLOAD_INVALID_ACTIVE_RETAINED",
               message: "The extension runtime payload was invalid; RuntimeManager retained the previously verified active runtime.",
@@ -18537,11 +18588,6 @@
             previousRelative: previous.ok ? previous.relative : null,
             inProgressRelative: current.relative
           });
-          const reuse = current.record.schemaVersion === 2 ? {
-            ...emptyLifecycle(),
-            generations: { created: 0, reused: 1, reclaimed: 0 },
-            layers: { created: 0, reused: 1, reclaimed: 0 }
-          } : emptyLifecycle();
           return {
             ok: true,
             action: "ready",
@@ -18552,7 +18598,7 @@
             packagedSourceCommitSha: packaged.sourceCommitSha,
             componentReceipt: componentReceipt(current),
             trustSignals: current.signals,
-            lifecycle: mergeLifecycle(reuse, reclaimed2),
+            lifecycle: mergeLifecycle(reusedLifecycle(current), reclaimed2),
             diagnostics: current.record.sourceCommitSha === packaged.sourceCommitSha ? [] : [{
               code: "RUNTIME_SOURCE_REVISION_DIFFERENT_TRUSTED",
               message: "The unchanged installed runtime was reused across an advisory source revision change."
@@ -18649,7 +18695,7 @@
           version: previous.record.version,
           sourceCommitSha: previous.record.sourceCommitSha,
           componentReceipt: componentReceipt(previous),
-          lifecycle: reclaimed,
+          lifecycle: mergeLifecycle(reusedLifecycle(previous), reclaimed),
           diagnostics: []
         };
       });
@@ -18659,6 +18705,7 @@
         await removePointer(paths.currentPointer);
         await removePointer(paths.previousPointer);
         await promises.rm(paths.launcher, { force: true });
+        await promises.rm(stableLauncherRecordPath, { force: true });
         const reclaimed = await reclaimOwnedV2({
           currentRelative: null,
           previousRelative: null,
@@ -18671,7 +18718,12 @@
           try {
             const record = await readJson2(recordPath, "RUNTIME_INSTALL_RECORD_INVALID");
             if ((record == null ? void 0 : record.schemaVersion) === 1 && record.platform === platform.id) {
-              await promises.rm(paths.join([root, entry.name]), { recursive: true, force: true });
+              const legacyRoot = paths.join([root, entry.name]);
+              const usage = await treeUsage(legacyRoot);
+              await promises.rm(legacyRoot, { recursive: true, force: true });
+              reclaimed.generations.reclaimed += 1;
+              reclaimed.logicalBytes.reclaimed += usage.logicalBytes;
+              reclaimed.physicalBytes.reclaimed += usage.physicalBytes;
             }
           } catch (error) {
           }

@@ -306,17 +306,12 @@ function fakeNativeClient() {
     let state = 'disconnected';
     let closed = 0;
     const calls = [];
-    const pending = {
-        fingerprint: '12AB-34CD',
-        expiresInMs: 60000,
-        hostInstanceId: '22222222-2222-4222-8222-222222222222',
-        sourceCommit: 'a'.repeat(40),
-    };
+    const hostInstanceId = '22222222-2222-4222-8222-222222222222';
+    const sourceCommit = 'a'.repeat(40);
     const sessionId = '11111111-1111-4111-8111-111111111111';
     return {
-        beginPairing: async function () { calls.push('pair'); state = 'pairing-decision'; return pending; },
-        waitUntilConnected: async function (deadlineUnixMs) {
-            calls.push(['wait', deadlineUnixMs]);
+        connect: async function (deadlineUnixMs) {
+            calls.push(['connect', deadlineUnixMs]);
             state = 'connected';
             return {};
         },
@@ -326,8 +321,8 @@ function fakeNativeClient() {
                 selectedWireVersion: 1,
                 pluginVersion: '0.1.0-dev',
                 compiledSdk: { version: '25.6.61' },
-                sourceCommit: pending.sourceCommit,
-                host: { instanceId: pending.hostInstanceId, platform: 'macos-arm64' },
+                sourceCommit,
+                host: { instanceId: hostInstanceId, platform: 'macos-arm64' },
                 sessionId,
                 sessionGeneration: 7,
                 capabilitiesDigest: nativeCapabilitiesFixture.capabilitiesDigest,
@@ -450,8 +445,8 @@ function fakeNativeClient() {
         status: function () {
             return {
                 state,
-                hostInstanceId: pending.hostInstanceId,
-                sourceCommit: pending.sourceCommit,
+                hostInstanceId,
+                sourceCommit,
                 sessionId: state === 'connected' ? sessionId : null,
                 sessionGeneration: state === 'connected' ? 7 : null,
                 capabilitiesDigest: nativeCapabilitiesFixture.capabilitiesDigest,
@@ -484,7 +479,6 @@ function fakeNativeClient() {
         },
         close: async function () { closed += 1; state = 'closed'; },
         authorize: function () { state = 'connected'; },
-        authenticate: function () { state = 'authenticating'; },
         calls,
         closed: function () { return closed; },
     };
@@ -709,9 +703,8 @@ test('native routes auto-connect locally then preserve Core negotiation, registr
         assert.strictEqual(negotiated.status, 200);
         assert.strictEqual(negotiated.body.result.sourceCommit, 'a'.repeat(40));
         assert.strictEqual(negotiated.body.result.compiledSdkVersion, '25.6.61');
-        assert.deepStrictEqual(nativeClient.calls.slice(0, 3), [
-            'pair',
-            ['wait', deadlineUnixMs],
+        assert.deepStrictEqual(nativeClient.calls.slice(0, 2), [
+            ['connect', deadlineUnixMs],
             ['negotiate', { deadlineUnixMs }],
         ]);
 
@@ -983,8 +976,7 @@ test('native routes auto-connect locally then preserve Core negotiation, registr
         assert.strictEqual(layerPropertySet.body.result.value.changed, true);
         assert.strictEqual(layerPropertySet.body.result.evidence.effect, 'committed');
         assert.deepStrictEqual(nativeClient.calls, [
-            'pair',
-            ['wait', deadlineUnixMs],
+            ['connect', deadlineUnixMs],
             ['negotiate', { deadlineUnixMs }],
             ['capabilities', { detail: 'full', limit: 100, deadlineUnixMs }],
             ['invoke', {
@@ -1256,9 +1248,8 @@ for (const failureFixture of brokerFailureFixtures.concat([
     });
 }
 
-test('native negotiation forwards the Core deadline while authentication is pending', async () => {
+test('native negotiation forwards the Core deadline while connection is pending', async () => {
     const nativeClient = fakeNativeClient();
-    nativeClient.authenticate();
     const { server, srv, port } = await startNativeApp(nativeClient);
     const deadlineUnixMs = Date.now() + 10000;
     try {
@@ -1267,7 +1258,7 @@ test('native negotiation forwards the Core deadline while authentication is pend
         }, { deadlineUnixMs });
         assert.strictEqual(response.status, 200);
         assert.deepStrictEqual(nativeClient.calls, [
-            ['wait', deadlineUnixMs],
+            ['connect', deadlineUnixMs],
             ['negotiate', { deadlineUnixMs }],
         ]);
     } finally {

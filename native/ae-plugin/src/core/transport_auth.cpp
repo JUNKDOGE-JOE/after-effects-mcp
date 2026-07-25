@@ -1,17 +1,21 @@
 #include "aemcp_native/transport_auth.hpp"
+#include "aemcp_native/peer_identity.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cstring>
 #include <stdexcept>
 #include <string_view>
+#include <unordered_set>
+#include <utility>
+#include <vector>
 
 namespace aemcp::native {
 namespace {
 
 constexpr std::array<std::uint8_t, 8> kPrefaceMagic{
     'A', 'E', 'M', 'C', 'P', '-', 'A', '1'};
-constexpr std::array<std::uint8_t, 8> kPendingMagic{
+constexpr std::array<std::uint8_t, 8> kChallengeMagic{
     'A', 'E', 'M', 'C', 'P', '-', 'P', '1'};
 constexpr std::array<std::uint8_t, 8> kDecisionMagic{
     'A', 'E', 'M', 'C', 'P', '-', 'D', '1'};
@@ -35,7 +39,7 @@ bool uuid_v4(std::string_view value) {
   return true;
 }
 
-bool fingerprint(std::string_view value) {
+bool challenge_id(std::string_view value) {
   if (value.size() != 9 || value[4] != '-') return false;
   for (std::size_t index = 0; index < value.size(); ++index) {
     if (index == 4) continue;
@@ -71,6 +75,78 @@ bool starts_with(
 
 }  // namespace
 
+std::optional<PeerBinding> admit_local_ae_peer(
+    PeerIdentityBackend& backend,
+    int socket_fd,
+    std::string connection_id,
+    const PeerAdmissionConfig& config) noexcept {
+  if (socket_fd < 0 || connection_id.empty()
+      || config.maximum_ancestor_depth < 2
+      || config.maximum_ancestor_depth > 64
+      || config.expected_cpu_type == 0
+      || !config.host_process.valid()
+      || config.host_instance_id.empty()) {
+    return std::nullopt;
+  }
+  SocketPeerEvidence peer;
+  if (!backend.socket_peer(socket_fd, peer) || peer.pid <= 1
+      || peer.euid != config.expected_uid || peer.pid_version == 0) {
+    return std::nullopt;
+  }
+  std::unordered_set<std::int32_t> seen;
+  std::vector<ProcessSnapshot> chain;
+  std::int32_t pid = peer.pid;
+  bool reached_host = false;
+  for (std::size_t depth = 0; depth < config.maximum_ancestor_depth; ++depth) {
+    ProcessSnapshot snapshot;
+    if (!backend.process_snapshot(pid, snapshot) || snapshot.pid != pid
+        || snapshot.uid != peer.euid || snapshot.exiting || snapshot.traced
+        || snapshot.cpu_type != config.expected_cpu_type
+        || !seen.insert(pid).second) {
+      return std::nullopt;
+    }
+    chain.push_back(snapshot);
+    if (pid == config.host_process.pid) {
+      reached_host = snapshot.generation == config.host_process.generation;
+      break;
+    }
+    if (snapshot.parent_pid <= 1 || snapshot.parent_pid == pid) return std::nullopt;
+    pid = snapshot.parent_pid;
+  }
+  if (!reached_host) return std::nullopt;
+  for (const ProcessSnapshot& before : chain) {
+    ProcessSnapshot after;
+    if (!backend.process_snapshot(before.pid, after) || after != before) {
+      return std::nullopt;
+    }
+  }
+  SocketPeerEvidence after;
+  if (!backend.socket_peer(socket_fd, after) || after != peer) return std::nullopt;
+  PeerBinding binding{
+      peer.pid,
+      peer.pid_version,
+      peer.euid,
+      peer.audit_session,
+      std::move(connection_id),
+      config.host_instance_id,
+  };
+  return binding.valid()
+      ? std::optional<PeerBinding>(std::move(binding))
+      : std::nullopt;
+}
+
+bool same_peer(
+    PeerIdentityBackend& backend,
+    int socket_fd,
+    const PeerBinding& binding) noexcept {
+  SocketPeerEvidence current;
+  return binding.valid() && backend.socket_peer(socket_fd, current)
+      && current.pid == binding.pid
+      && current.pid_version == binding.pid_version
+      && current.euid == binding.uid
+      && current.audit_session == binding.audit_session;
+}
+
 std::array<std::uint8_t, kTransportAuthPrefaceBytes> serialize_auth_preface(
     const TransportAuthPreface& value) {
   if (std::all_of(value.client_nonce.begin(), value.client_nonce.end(),
@@ -97,30 +173,30 @@ bool parse_auth_preface(
   return true;
 }
 
-std::array<std::uint8_t, kTransportAuthPendingBytes> serialize_auth_pending(
-    const TransportAuthPending& value) {
-  if (!fingerprint(value.fingerprint) || !uuid_v4(value.host_instance_id)
+std::array<std::uint8_t, kTransportAuthChallengeBytes> serialize_auth_challenge(
+    const TransportAuthChallenge& value) {
+  if (!challenge_id(value.challenge_id) || !uuid_v4(value.host_instance_id)
       || value.expires_in < std::chrono::seconds(1)
       || value.expires_in > std::chrono::minutes(2)) {
-    throw std::invalid_argument("invalid transport pending message");
+    throw std::invalid_argument("invalid transport compatibility challenge");
   }
-  std::array<std::uint8_t, kTransportAuthPendingBytes> output{};
-  std::copy(kPendingMagic.begin(), kPendingMagic.end(), output.begin());
-  std::copy(value.fingerprint.begin(), value.fingerprint.end(), output.begin() + 8);
+  std::array<std::uint8_t, kTransportAuthChallengeBytes> output{};
+  std::copy(kChallengeMagic.begin(), kChallengeMagic.end(), output.begin());
+  std::copy(value.challenge_id.begin(), value.challenge_id.end(), output.begin() + 8);
   write_u32(output.data() + 17, static_cast<std::uint32_t>(value.expires_in.count()));
   std::copy(value.host_instance_id.begin(), value.host_instance_id.end(), output.begin() + 21);
   return output;
 }
 
-bool parse_auth_pending(
-    const std::array<std::uint8_t, kTransportAuthPendingBytes>& bytes,
-    TransportAuthPending& output) noexcept {
-  if (!starts_with(bytes, kPendingMagic)) return false;
-  TransportAuthPending parsed;
-  parsed.fingerprint.assign(reinterpret_cast<const char*>(bytes.data() + 8), 9);
+bool parse_auth_challenge(
+    const std::array<std::uint8_t, kTransportAuthChallengeBytes>& bytes,
+    TransportAuthChallenge& output) noexcept {
+  if (!starts_with(bytes, kChallengeMagic)) return false;
+  TransportAuthChallenge parsed;
+  parsed.challenge_id.assign(reinterpret_cast<const char*>(bytes.data() + 8), 9);
   parsed.expires_in = std::chrono::milliseconds(read_u32(bytes.data() + 17));
   parsed.host_instance_id.assign(reinterpret_cast<const char*>(bytes.data() + 21), 36);
-  if (!fingerprint(parsed.fingerprint) || !uuid_v4(parsed.host_instance_id)
+  if (!challenge_id(parsed.challenge_id) || !uuid_v4(parsed.host_instance_id)
       || parsed.expires_in < std::chrono::seconds(1)
       || parsed.expires_in > std::chrono::minutes(2)) {
     return false;

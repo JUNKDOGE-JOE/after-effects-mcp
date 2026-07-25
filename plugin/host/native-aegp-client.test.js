@@ -13,7 +13,7 @@ const {
     createNativeAegpClient,
     discoverNativeEndpoints,
     endpointDescriptor,
-    parseAuthPending,
+    parseAuthChallenge,
     parseAuthDecision,
 } = require('./native-aegp-client');
 const projectCompositionContracts = require('./native-project-composition-contract');
@@ -118,7 +118,7 @@ function descriptor(socketName) {
     ].join('\n');
 }
 
-function pendingMessage() {
+function challengeMessage() {
     const result = Buffer.alloc(57);
     result.write('AEMCP-P1', 0, 'ascii');
     result.write('12AB-34CD', 8, 'ascii');
@@ -254,13 +254,13 @@ function installProtocol(server, options) {
                 if (input.autoAuthorize) {
                     authenticated = true;
                     socket.write(Buffer.concat([
-                        pendingMessage(),
+                        challengeMessage(),
                         decisionMessage(1, SESSION, 7),
                     ]));
                     consume();
                     return;
                 }
-                socket.write(pendingMessage());
+                socket.write(challengeMessage());
                 authorized.then(function () {
                     authenticated = true;
                     socket.write(decisionMessage(1, SESSION, 7));
@@ -530,7 +530,7 @@ function installProtocol(server, options) {
     return { authorize, requests };
 }
 
-test('CEP client accepts a local pending and authorized decision without an external pairing step', {
+test('CEP client automatically consumes the compatibility challenge and decision', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const fixture = await endpointFixture(t);
@@ -544,9 +544,7 @@ test('CEP client accepts a local pending and authorized decision without an exte
     });
     t.after(function () { return client.close(); });
 
-    const pending = await client.beginPairing();
-    assert.equal(pending.hostInstanceId, HOST);
-    const hello = await client.waitUntilConnected();
+    const hello = await client.connect();
 
     assert.equal(hello.host.instanceId, HOST);
     assert.equal(client.status().state, 'connected');
@@ -563,9 +561,9 @@ async function readyNativeClient(t, protocolOptions) {
         now: function () { return 1900000000000; },
     });
     t.after(function () { return client.close(); });
-    await client.beginPairing();
+    const connecting = client.connect();
     protocol.authorize();
-    await client.waitUntilConnected();
+    await connecting;
     await client.capabilities({ detail: 'full', limit: 100 });
     return { client, protocol };
 }
@@ -770,13 +768,13 @@ test('descriptor and fixed transport messages are strict and closed', () => {
     assert.equal(endpointDescriptor(descriptor('s-123456abcdef.sock')).hostInstanceId, HOST);
     assert.equal(endpointDescriptor(descriptor('../escape.sock')), null);
     assert.equal(endpointDescriptor(descriptor('s-123456abcdef.sock') + 'extra=1\n'), null);
-    assert.deepEqual(parseAuthPending(pendingMessage()), {
-        fingerprint: '12AB-34CD', expiresInMs: 60000, hostInstanceId: HOST,
+    assert.deepEqual(parseAuthChallenge(challengeMessage()), {
+        challengeId: '12AB-34CD', expiresInMs: 60000, hostInstanceId: HOST,
     });
     assert.deepEqual(parseAuthDecision(decisionMessage(1, SESSION, 7)), {
         code: 'authorized', sessionId: SESSION, sessionGeneration: 7,
     });
-    assert.equal(parseAuthPending(Buffer.alloc(57)), null);
+    assert.equal(parseAuthChallenge(Buffer.alloc(57)), null);
     assert.equal(parseAuthDecision(decisionMessage(1, SESSION, 0)), null);
 
     const layerPropertiesDescriptor = CAPABILITIES_VECTOR.items.find(function (item) {
@@ -879,17 +877,9 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
     });
     t.after(function () { return client.close(); });
 
-    const pending = await client.beginPairing();
-    assert.deepEqual(pending, {
-        fingerprint: '12AB-34CD',
-        expiresInMs: 60000,
-        hostInstanceId: HOST,
-        sourceCommit: SOURCE,
-    });
-    assert.equal(client.status().state, 'pairing-decision');
-
+    const connecting = client.connect();
     protocol.authorize();
-    const hello = await client.waitUntilConnected();
+    const hello = await connecting;
     assert.equal(hello.host.instanceId, HOST);
     assert.equal(client.status().state, 'connected');
     const negotiation = await client.negotiate({ deadlineUnixMs: 1900000005000 });
@@ -2250,9 +2240,9 @@ test('CEP client preserves the bit-depth no-op INVALID_ARGUMENT contract', {
         now: function () { return 1900000000000; },
     });
     t.after(function () { return client.close(); });
-    await client.beginPairing();
+    const connection = client.connect();
     protocol.authorize();
-    await client.waitUntilConnected();
+    await connection;
     await client.capabilities({ detail: 'full', limit: 100 });
 
     await assert.rejects(
@@ -2296,9 +2286,9 @@ test('CEP client treats unverifiable bit-depth write evidence as side-effect unc
         now: function () { return 1900000000000; },
     });
     t.after(function () { return client.close(); });
-    await client.beginPairing();
+    const connection = client.connect();
     protocol.authorize();
-    await client.waitUntilConnected();
+    await connection;
     await client.capabilities({ detail: 'full', limit: 100 });
 
     await assert.rejects(
@@ -2345,9 +2335,9 @@ test('CEP client preserves the complete structured native error contract', {
         now: function () { return 1900000000000; },
     });
     t.after(function () { return client.close(); });
-    await client.beginPairing();
+    const connection = client.connect();
     protocol.authorize();
-    await client.waitUntilConnected();
+    await connection;
     await client.capabilities({ detail: 'full', limit: 100 });
     await assert.rejects(
         client.invoke({
@@ -2399,9 +2389,9 @@ test('CEP client preserves actionable keyframe property precondition recovery', 
         now: function () { return 1900000000000; },
     });
     t.after(function () { return client.close(); });
-    await client.beginPairing();
+    const connection = client.connect();
     protocol.authorize();
-    await client.waitUntilConnected();
+    await connection;
     await client.capabilities({ detail: 'full', limit: 100 });
     await assert.rejects(
         client.invoke({
@@ -2483,9 +2473,9 @@ for (const errorFixture of [
             now: function () { return 1900000000000; },
         });
         t.after(function () { return client.close(); });
-        await client.beginPairing();
+        const connection = client.connect();
         protocol.authorize();
-        await client.waitUntilConnected();
+        await connection;
         await client.capabilities({ detail: 'full', limit: 100 });
         await assert.rejects(
             client.invoke({
@@ -2526,9 +2516,9 @@ test('CEP client treats a malformed mutation error as side-effect uncertain', {
         now: function () { return 1900000000000; },
     });
     t.after(function () { return client.close(); });
-    await client.beginPairing();
+    const connection = client.connect();
     protocol.authorize();
-    await client.waitUntilConnected();
+    await connection;
     await client.capabilities({ detail: 'full', limit: 100 });
     await assert.rejects(client.invoke({
         requestId: 'layer-property-malformed-error',
@@ -2555,7 +2545,7 @@ test('CEP client bounds an authenticating wait by the Core absolute deadline', {
         requestTimeoutMs: 2000,
     });
     t.after(function () { return client.close(); });
-    await client.beginPairing();
+    client.connect().catch(function () {});
     protocol.authorize();
     while (!protocol.requests.some(function (request) { return request.method === 'hello'; })) {
         await new Promise(function (resolve) { setImmediate(resolve); });
@@ -2568,7 +2558,7 @@ test('CEP client bounds an authenticating wait by the Core absolute deadline', {
     assert.equal(client.status().state, 'authenticating');
 });
 
-test('CEP client bounds the initial pairing challenge by the Core absolute deadline', {
+test('CEP client bounds the initial compatibility challenge by the Core absolute deadline', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const fixture = await endpointFixture(t);
@@ -2580,10 +2570,10 @@ test('CEP client bounds the initial pairing challenge by the Core absolute deadl
     });
     t.after(function () { return client.close(); });
     await assert.rejects(
-        client.beginPairing(Date.now() + 40),
+        client.connect(Date.now() + 40),
         { code: 'DEADLINE_EXCEEDED', retryable: true },
     );
-    assert.equal(client.status().state, 'pairing-pending');
+    assert.equal(client.status().state, 'challenge-pending');
 });
 
 for (const fixture of [
@@ -2609,9 +2599,9 @@ for (const fixture of [
             now: function () { return 1900000000000; },
         });
         t.after(function () { return client.close(); });
-        await client.beginPairing();
+        const connection = client.connect();
         protocol.authorize();
-        await client.waitUntilConnected();
+        await connection;
         await client.capabilities();
         await assert.rejects(client.projectSummary(), function (error) {
             assert.equal(error.code, 'NATIVE_CONTRACT_MISMATCH');
@@ -2626,15 +2616,15 @@ for (const fixture of [
     });
 }
 
-test('client does not bypass explicit pairing rejection', {
+test('client does not bypass an explicit native admission rejection', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const fixture = await endpointFixture(t);
-    let rejectPairing;
+    let rejectAdmission;
     fixture.server.on('connection', function (socket) {
         socket.once('data', function () {
-            socket.write(pendingMessage());
-            rejectPairing = function () { socket.write(decisionMessage(2)); };
+            socket.write(challengeMessage());
+            rejectAdmission = function () { socket.write(decisionMessage(2)); };
         });
     });
     const client = createNativeAegpClient({
@@ -2643,17 +2633,20 @@ test('client does not bypass explicit pairing rejection', {
         clientInstanceId: CLIENT,
     });
     t.after(function () { return client.close(); });
-    await client.beginPairing();
-    rejectPairing();
-    await assert.rejects(client.waitUntilConnected(), { code: 'AUTH_REQUIRED', retryable: false });
+    const connection = client.connect();
+    while (!rejectAdmission) {
+        await new Promise(function (resolve) { setImmediate(resolve); });
+    }
+    rejectAdmission();
+    await assert.rejects(connection, { code: 'NATIVE_UNAVAILABLE', retryable: false });
 });
 
-test('closing after the pairing response does not create an unhandled connected rejection', {
+test('closing after the compatibility challenge does not create an unhandled connected rejection', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const fixture = await endpointFixture(t);
     fixture.server.on('connection', function (socket) {
-        socket.once('data', function () { socket.write(pendingMessage()); });
+        socket.once('data', function () { socket.write(challengeMessage()); });
     });
     const client = createNativeAegpClient({
         runtime: { platform: 'darwin', arch: 'arm64' },
@@ -2665,7 +2658,7 @@ test('closing after the pairing response does not create an unhandled connected 
     process.on('unhandledRejection', capture);
     t.after(function () { process.off('unhandledRejection', capture); });
 
-    await client.beginPairing();
+    client.connect().catch(function () {});
     await client.close();
     await new Promise(function (resolve) { setImmediate(resolve); });
     assert.deepEqual(unhandled, []);
@@ -2696,17 +2689,17 @@ test('late events from a failed socket cannot tear down its replacement', async 
         },
     });
 
-    const first = client.beginPairing();
+    const first = client.connect();
     sockets[0].emit('error', Object.assign(new Error('first failed'), { code: 'ECONNRESET' }));
     await assert.rejects(first, { code: 'NATIVE_UNAVAILABLE', retryable: true });
 
-    const second = client.beginPairing();
+    const second = client.connect();
+    second.catch(function () {});
     sockets[0].emit('data', Buffer.alloc(100));
     sockets[0].emit('close');
-    assert.equal(client.status().state, 'pairing-pending');
+    assert.equal(client.status().state, 'challenge-pending');
     sockets[1].emit('connect');
-    sockets[1].emit('data', pendingMessage());
-    assert.equal((await second).fingerprint, '12AB-34CD');
-    assert.equal(client.status().state, 'pairing-decision');
+    sockets[1].emit('data', challengeMessage());
+    assert.equal(client.status().state, 'decision-pending');
     await client.close();
 });

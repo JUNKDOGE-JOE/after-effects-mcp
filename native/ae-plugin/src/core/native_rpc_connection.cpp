@@ -285,9 +285,6 @@ void NativeRpcConnectionHandler::serve(
         runtime_.host_instance_id,
         connection.session_id,
         session_clock_);
-    if (!front_door.authorize_pairing()) {
-      throw std::runtime_error("paired RPC session could not be authorized");
-    }
     rpc::FrameDecoder decoder;
     std::unordered_map<std::string, ActiveEvidence> active;
     std::array<std::uint8_t, 16384> input{};
@@ -960,10 +957,6 @@ void NativeRpcConnectionHandler::serve(
               std::span<const std::uint8_t>(input.data(), static_cast<std::size_t>(received)))) {
         const rpc::SessionIngressResult ingress = front_door.admit(request);
         if (!ingress.accepted()) {
-          if (ingress.error_code == "AUTH_REQUIRED") {
-            connected = false;
-            break;
-          }
           const std::string message = ingress.error_code.empty()
               ? "native request admission failed" : "native request was rejected";
           if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(

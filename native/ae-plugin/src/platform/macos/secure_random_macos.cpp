@@ -9,7 +9,6 @@
 namespace aemcp::native {
 namespace {
 
-constexpr char kUpperHex[] = "0123456789ABCDEF";
 constexpr char kLowerHex[] = "0123456789abcdef";
 
 template <std::size_t Size>
@@ -20,18 +19,6 @@ void fill_random(std::array<std::uint8_t, Size>& bytes) {
 }
 
 }  // namespace
-
-PairingMaterial MacPairingMaterialSource::create() {
-  PairingMaterial material;
-  fill_random(material.capability);
-  material.fingerprint.reserve(9);
-  for (std::size_t index = 0; index < 4; ++index) {
-    if (index == 2) material.fingerprint.push_back('-');
-    material.fingerprint.push_back(kUpperHex[material.capability[index] >> 4]);
-    material.fingerprint.push_back(kUpperHex[material.capability[index] & 0x0f]);
-  }
-  return material;
-}
 
 std::string secure_uuid_v4() {
   std::array<std::uint8_t, 16> bytes{};

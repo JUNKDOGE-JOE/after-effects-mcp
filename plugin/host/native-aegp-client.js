@@ -11,7 +11,7 @@ const projectCompositionContracts = require('./native-project-composition-contra
 const MAX_FRAME_BYTES = 524288;
 const MAX_BUFFERED_BYTES = MAX_FRAME_BYTES * 8;
 const MAX_ENDPOINT_ENTRIES = 128;
-const AUTH_PENDING_BYTES = 57;
+const AUTH_CHALLENGE_BYTES = 57;
 const AUTH_DECISION_BYTES = 49;
 const ENDPOINT_DIRECTORY = 'aemcp-n1';
 const ENDPOINT_PATTERN = /^d-([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.endpoint$/;
@@ -242,16 +242,16 @@ function discoverNativeEndpoints(options) {
     return Object.freeze(endpoints);
 }
 
-function parseAuthPending(bytes) {
-    if (!Buffer.isBuffer(bytes) || bytes.length !== AUTH_PENDING_BYTES
+function parseAuthChallenge(bytes) {
+    if (!Buffer.isBuffer(bytes) || bytes.length !== AUTH_CHALLENGE_BYTES
         || !bytes.subarray(0, 8).equals(Buffer.from('AEMCP-P1', 'ascii'))) return null;
-    const fingerprint = bytes.toString('ascii', 8, 17);
+    const challengeId = bytes.toString('ascii', 8, 17);
     const expiresInMs = bytes.readUInt32BE(17);
     const hostInstanceId = bytes.toString('ascii', 21, 57);
-    if (!/^[0-9A-F]{4}-[0-9A-F]{4}$/.test(fingerprint)
+    if (!/^[0-9A-F]{4}-[0-9A-F]{4}$/.test(challengeId)
         || expiresInMs < 1000 || expiresInMs > 120000
         || !UUID_PATTERN.test(hostInstanceId)) return null;
-    return Object.freeze({ fingerprint, expiresInMs, hostInstanceId });
+    return Object.freeze({ challengeId, expiresInMs, hostInstanceId });
 }
 
 function parseAuthDecision(bytes) {
@@ -1467,11 +1467,8 @@ function createNativeAegpClient(options) {
     let helloIdentity = null;
     let nextRequest = 1;
     let inputBuffer = Buffer.alloc(0);
-    let pairingResolve;
-    let pairingReject;
     let connectedResolve;
     let connectedReject;
-    let pairingPromise = null;
     let connectedPromise = null;
     const pendingRequests = new Map();
 
@@ -1483,14 +1480,11 @@ function createNativeAegpClient(options) {
 
     function fail(error) {
         const protocolCodes = new Set([
-            ...NATIVE_WIRE_ERROR_CODES, 'AUTH_REQUIRED', 'NATIVE_CONTRACT_MISMATCH',
+            ...NATIVE_WIRE_ERROR_CODES, 'NATIVE_CONTRACT_MISMATCH',
         ]);
         const failure = error && protocolCodes.has(error.code)
             ? error : nativeError('NATIVE_UNAVAILABLE', 'native AEGP connection failed', true, error);
-        if (pairingReject) pairingReject(failure);
         if (connectedReject) connectedReject(failure);
-        pairingResolve = null;
-        pairingReject = null;
         connectedResolve = null;
         connectedReject = null;
         for (const pending of pendingRequests.values()) {
@@ -1708,26 +1702,28 @@ function createNativeAegpClient(options) {
                 throw nativeContractMismatch('native AEGP buffered input exceeded its bound');
             }
             inputBuffer = Buffer.concat([inputBuffer, Buffer.from(chunk)]);
-            if (state === 'pairing-pending') {
-                if (inputBuffer.length < AUTH_PENDING_BYTES) return;
-                const pending = parseAuthPending(inputBuffer.subarray(0, AUTH_PENDING_BYTES));
-                inputBuffer = inputBuffer.subarray(AUTH_PENDING_BYTES);
-                if (!pending || pending.hostInstanceId !== endpoint.hostInstanceId) {
-                    throw nativeContractMismatch('native pairing challenge did not match discovery');
+            if (state === 'challenge-pending') {
+                if (inputBuffer.length < AUTH_CHALLENGE_BYTES) return;
+                const challenge = parseAuthChallenge(
+                    inputBuffer.subarray(0, AUTH_CHALLENGE_BYTES),
+                );
+                inputBuffer = inputBuffer.subarray(AUTH_CHALLENGE_BYTES);
+                if (!challenge || challenge.hostInstanceId !== endpoint.hostInstanceId) {
+                    throw nativeContractMismatch('native compatibility challenge did not match discovery');
                 }
-                state = 'pairing-decision';
-                const resolve = pairingResolve;
-                pairingResolve = null;
-                pairingReject = null;
-                resolve(Object.freeze({ ...pending, sourceCommit: endpoint.sourceCommit }));
+                state = 'decision-pending';
             }
-            if (state === 'pairing-decision') {
+            if (state === 'decision-pending') {
                 if (inputBuffer.length < AUTH_DECISION_BYTES) return;
                 const decision = parseAuthDecision(inputBuffer.subarray(0, AUTH_DECISION_BYTES));
                 inputBuffer = inputBuffer.subarray(AUTH_DECISION_BYTES);
-                if (!decision) throw nativeContractMismatch('native pairing decision was malformed');
+                if (!decision) throw nativeContractMismatch('native authorization decision was malformed');
                 if (decision.code !== 'authorized') {
-                    throw nativeError('AUTH_REQUIRED', 'native pairing was ' + decision.code, decision.code === 'expired');
+                    throw nativeError(
+                        'NATIVE_UNAVAILABLE',
+                        'native authorization was ' + decision.code,
+                        decision.code === 'expired',
+                    );
                 }
                 sessionId = decision.sessionId;
                 sessionGeneration = decision.sessionGeneration;
@@ -1751,7 +1747,7 @@ function createNativeAegpClient(options) {
     function open(candidate) {
         endpoint = candidate;
         inputBuffer = Buffer.alloc(0);
-        state = 'pairing-pending';
+        state = 'challenge-pending';
         const current = netImpl.createConnection({ path: candidate.socketPath });
         socket = current;
         current.on('data', function (chunk) {
@@ -1771,7 +1767,7 @@ function createNativeAegpClient(options) {
             const preface = Buffer.concat([Buffer.from('AEMCP-A1', 'ascii'), randomBytes(16)]);
             current.write(preface, function (error) {
                 if (error && socket === current) {
-                    fail(nativeError('NATIVE_UNAVAILABLE', 'native pairing preface failed', true, error));
+                    fail(nativeError('NATIVE_UNAVAILABLE', 'native authorization preface failed', true, error));
                 }
             });
         });
@@ -1796,13 +1792,17 @@ function createNativeAegpClient(options) {
         });
     }
 
-    function beginPairing(deadlineUnixMs) {
+    function connect(deadlineUnixMs) {
         if (state === 'closed') return Promise.reject(nativeError('NATIVE_UNAVAILABLE', 'native AEGP client is closed', false));
-        if (pairingPromise && state.startsWith('pairing')) {
-            return boundByDeadline(pairingPromise, deadlineUnixMs, 'native pairing deadline elapsed');
+        if (state === 'connected') {
+            return boundByDeadline(
+                Promise.resolve(helloIdentity), deadlineUnixMs, 'native connection deadline elapsed',
+            );
         }
-        if (state === 'connected' || state === 'authenticating') {
-            return Promise.reject(nativeError('DUPLICATE_REQUEST', 'native AEGP client is already connected', false));
+        if (connectedPromise && state !== 'disconnected') {
+            return boundByDeadline(
+                connectedPromise, deadlineUnixMs, 'native connection deadline elapsed',
+            );
         }
         let endpoints;
         try { endpoints = discoverEndpoints(input); } catch (error) { return Promise.reject(error); }
@@ -1813,24 +1813,17 @@ function createNativeAegpClient(options) {
                 true,
             ));
         }
-        pairingPromise = new Promise(function (resolve, reject) {
-            pairingResolve = resolve;
-            pairingReject = reject;
-        });
         connectedPromise = new Promise(function (resolve, reject) {
             connectedResolve = resolve;
             connectedReject = reject;
         });
-        // The connection may outlive the HTTP request that surfaced the pairing
-        // fingerprint. Mark this promise handled without changing what a later
-        // waitUntilConnected() caller observes.
         connectedPromise.catch(function () {});
         try {
             open(endpoints[0]);
         } catch (cause) {
             fail(nativeError('NATIVE_UNAVAILABLE', 'native AEGP connection could not be opened', true, cause));
         }
-        return boundByDeadline(pairingPromise, deadlineUnixMs, 'native pairing deadline elapsed');
+        return boundByDeadline(connectedPromise, deadlineUnixMs, 'native connection deadline elapsed');
     }
 
     function waitUntilConnected(deadlineUnixMs) {
@@ -1839,8 +1832,7 @@ function createNativeAegpClient(options) {
                 Promise.resolve(helloIdentity), deadlineUnixMs, 'native connection deadline elapsed',
             );
         }
-        if (!connectedPromise) return Promise.reject(nativeError('AUTH_REQUIRED', 'begin native pairing first', false));
-        return boundByDeadline(connectedPromise, deadlineUnixMs, 'native connection deadline elapsed');
+        return connect(deadlineUnixMs);
     }
 
     async function negotiate(options) {
@@ -2735,7 +2727,7 @@ function createNativeAegpClient(options) {
     }
 
     return Object.freeze({
-        beginPairing,
+        connect,
         waitUntilConnected,
         negotiate,
         capabilities,
@@ -2777,7 +2769,7 @@ module.exports = {
     createNativeAegpClient,
     discoverNativeEndpoints,
     endpointDescriptor,
-    parseAuthPending,
+    parseAuthChallenge,
     parseAuthDecision,
     encodeFrame,
 };

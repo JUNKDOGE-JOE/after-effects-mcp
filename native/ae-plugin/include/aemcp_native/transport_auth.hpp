@@ -9,15 +9,15 @@
 namespace aemcp::native {
 
 inline constexpr std::size_t kTransportAuthPrefaceBytes = 24;
-inline constexpr std::size_t kTransportAuthPendingBytes = 57;
+inline constexpr std::size_t kTransportAuthChallengeBytes = 57;
 inline constexpr std::size_t kTransportAuthDecisionBytes = 49;
 
 struct TransportAuthPreface {
   std::array<std::uint8_t, 16> client_nonce{};
 };
 
-struct TransportAuthPending {
-  std::string fingerprint;
+struct TransportAuthChallenge {
+  std::string challenge_id;
   std::chrono::milliseconds expires_in{0};
   std::string host_instance_id;
 };
@@ -42,11 +42,11 @@ serialize_auth_preface(const TransportAuthPreface& value);
     const std::array<std::uint8_t, kTransportAuthPrefaceBytes>& bytes,
     TransportAuthPreface& output) noexcept;
 
-[[nodiscard]] std::array<std::uint8_t, kTransportAuthPendingBytes>
-serialize_auth_pending(const TransportAuthPending& value);
-[[nodiscard]] bool parse_auth_pending(
-    const std::array<std::uint8_t, kTransportAuthPendingBytes>& bytes,
-    TransportAuthPending& output) noexcept;
+[[nodiscard]] std::array<std::uint8_t, kTransportAuthChallengeBytes>
+serialize_auth_challenge(const TransportAuthChallenge& value);
+[[nodiscard]] bool parse_auth_challenge(
+    const std::array<std::uint8_t, kTransportAuthChallengeBytes>& bytes,
+    TransportAuthChallenge& output) noexcept;
 
 [[nodiscard]] std::array<std::uint8_t, kTransportAuthDecisionBytes>
 serialize_auth_decision(const TransportAuthDecision& value);
