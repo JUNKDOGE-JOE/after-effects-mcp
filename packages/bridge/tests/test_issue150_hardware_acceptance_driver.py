@@ -429,17 +429,48 @@ def _config(tmp_path: Path | None = None, *, mode: str = "t4") -> Any:
     }) + "\n", encoding="utf-8")
     cep = tmp_path / "Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel/bundle-manifest.json"
     cep.parent.mkdir(parents=True)
-    cep.write_text(json.dumps({"sourceCommitSha": EXPECTED_SHA}) + "\n", encoding="utf-8")
-    relative = f"0.9.2-{EXPECTED_SHA}/macos-arm64"
+    cep.write_text(json.dumps({"sourceCommitSha": "2" * 40}) + "\n", encoding="utf-8")
+    generation_id = "g-" + "a" * 16
+    layer_id = "e" * 64
+    layer_relative = f"layers/{layer_id}/i-{'b' * 16}/macos-arm64"
+    relative = f"generations/{generation_id}"
     current = tmp_path / ".ae-mcp/runtime/current"
     current.parent.mkdir(parents=True)
     current.write_text(relative + "\n", encoding="utf-8")
-    record = current.parent / relative.split("/", 1)[0] / "install-record.json"
+    record = current.parent / relative / "install-record.json"
     record.parent.mkdir(parents=True)
     record.write_text(json.dumps({
+        "schemaVersion": 2,
+        "owner": "ae-mcp-runtime-manager",
+        "generationId": generation_id,
+        "platform": "macos-arm64",
+        "version": "0.9.2",
         "relative": relative,
-        "sourceCommitSha": EXPECTED_SHA,
-        "runtimeManifestSha256": "e" * 64,
+        "sourceCommitSha": "3" * 40,
+        "launcherSha256": "4" * 64,
+        "layer": {
+            "id": layer_id,
+            "instanceId": "i-" + "b" * 16,
+            "manifestSha256": layer_id,
+            "relative": layer_relative,
+        },
+    }) + "\n", encoding="utf-8")
+    layer_record = current.parent / layer_relative
+    layer_record.parent.mkdir(parents=True)
+    (layer_record.parent / "layer-record.json").write_text(json.dumps({
+        "schemaVersion": 1,
+        "owner": "ae-mcp-runtime-manager",
+        "id": layer_id,
+        "instanceId": "i-" + "b" * 16,
+        "platform": "macos-arm64",
+        "relative": layer_relative,
+    }) + "\n", encoding="utf-8")
+    (current.parent / "stable-launcher-record.json").write_text(json.dumps({
+        "schemaVersion": 1,
+        "owner": "ae-mcp-runtime-manager",
+        "platform": "macos-arm64",
+        "canonicalPath": str(tmp_path / ".ae-mcp/bin/ae-mcp"),
+        "launcherSha256": "4" * 64,
     }) + "\n", encoding="utf-8")
     return driver.dataclasses.replace(
         config,
@@ -657,9 +688,9 @@ def test_machine_identity_and_jcs_binding_fail_closed(tmp_path: Path) -> None:
     )
     current = tmp_path / ".ae-mcp/runtime/current"
     relative = current.read_text(encoding="utf-8").strip()
-    record = current.parent / relative.split("/", 1)[0] / "install-record.json"
+    record = current.parent / relative / "install-record.json"
     record_payload = json.loads(record.read_text(encoding="utf-8"))
-    record_payload["sourceCommitSha"] = "f" * 40
+    record_payload["platform"] = "windows-x64"
     record.write_text(json.dumps(record_payload) + "\n", encoding="utf-8")
     with pytest.raises(driver.AcceptanceFailure, match="current/install record"):
         acceptance._validate_machine_identity()
@@ -676,8 +707,7 @@ def test_machine_identity_and_jcs_binding_fail_closed(tmp_path: Path) -> None:
         checkpoint=lambda *_args: None,
         evidence=driver.EvidenceLog(tmp_path / "t4-evidence", mode="t4", expected_sha=EXPECTED_SHA),
     )
-    with pytest.raises(driver.AcceptanceFailure, match="CEP bundle manifest"):
-        t4_acceptance._validate_machine_identity()
+    t4_acceptance._validate_machine_identity()
 
     session = _FakeT4Session()
     _is_error, payload = session._success("ae_getProjectContext", {"synthetic": True})

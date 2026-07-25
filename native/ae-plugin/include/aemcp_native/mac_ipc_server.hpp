@@ -1,7 +1,6 @@
 #pragma once
 
 #include "aemcp_native/endpoint_registry_macos.hpp"
-#include "aemcp_native/pairing_gate.hpp"
 #include "aemcp_native/peer_identity.hpp"
 #include "aemcp_native/transport_auth.hpp"
 
@@ -44,21 +43,20 @@ class NativeIpcObserver {
 
 struct MacIpcServerConfig {
   std::chrono::milliseconds handshake_timeout{1500};
-  std::chrono::milliseconds pairing_poll_interval{100};
   std::size_t maximum_ancestor_depth{16};
   std::int32_t expected_cpu_type{0};
 };
 
 // Minimum P0 authenticated transport. It deliberately does not claim the
 // strict Adobe signing/client-attestation hardening tracked in #89. Admission
-// requires same UID, exact current AE ancestry, and an AEGP-owned explicit
-// pairing decision before the handler sees the connection.
+// requires same UID, exact current AE ancestry, stable peer identity, endpoint
+// re-verification, and the wire-v1 compatibility challenge before the handler
+// sees the connection.
 class MacIpcServer final {
  public:
   MacIpcServer(
       MacEndpointRegistry& endpoint,
       PeerIdentityBackend& peer_backend,
-      PairingGate& pairing_gate,
       AuthenticatedConnectionHandler& handler,
       NativeIpcObserver& observer,
       MacIpcServerConfig config);
@@ -69,24 +67,11 @@ class MacIpcServer final {
   [[nodiscard]] bool start();
   void stop() noexcept;
 
-  [[nodiscard]] std::optional<PendingPairingSnapshot> pending_pairing();
-  [[nodiscard]] bool confirm_pending(
-      const std::string& connection_id,
-      const std::string& fingerprint);
-  [[nodiscard]] bool reject_pending(
-      const std::string& connection_id,
-      const std::string& fingerprint);
   [[nodiscard]] bool running() const noexcept { return running_.load(); }
 
  private:
   void run() noexcept;
   void handle_connection(int socket_fd) noexcept;
-  [[nodiscard]] std::optional<PeerBinding> admit_peer(
-      int socket_fd,
-      const std::string& connection_id) noexcept;
-  [[nodiscard]] bool same_peer(
-      int socket_fd,
-      const PeerBinding& binding) noexcept;
   [[nodiscard]] bool read_exact(
       int socket_fd,
       std::uint8_t* output,
@@ -101,7 +86,6 @@ class MacIpcServer final {
 
   MacEndpointRegistry& endpoint_;
   PeerIdentityBackend& peer_backend_;
-  PairingGate& pairing_gate_;
   AuthenticatedConnectionHandler& handler_;
   NativeIpcObserver& observer_;
   const MacIpcServerConfig config_;

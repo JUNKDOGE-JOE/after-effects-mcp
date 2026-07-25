@@ -265,7 +265,6 @@ class CallLedger:
             "t6": spec.t6_target_calls,
         }[mode]
         self.total = 0
-        self.handshake_attempts = 0
         self.by_tool: Counter[str] = Counter()
         self.by_phase: Counter[str] = Counter()
 
@@ -275,9 +274,6 @@ class CallLedger:
                 f"public MCP call budget exhausted before dispatching {tool}: "
                 f"{self.total}/{self.hard_limit}"
             )
-
-    def pairing_required(self) -> None:
-        self.handshake_attempts += 1
 
     def reserve(self, *, tool: str, phase: str) -> int:
         require(bool(tool) and bool(phase), "tool and phase are required for call accounting")
@@ -292,7 +288,6 @@ class CallLedger:
             "target": self.target,
             "hardLimit": self.hard_limit,
             "total": self.total,
-            "handshakeAttempts": self.handshake_attempts,
             "withinTarget": self.total <= self.target,
             "byTool": dict(sorted(self.by_tool.items())),
             "byPhase": dict(sorted(self.by_phase.items())),
@@ -406,7 +401,6 @@ class EvidenceLog:
             f"- candidate evidence: `{str(summary['candidateEvidence']).lower()}`",
             f"- passed: `{str(summary['passed']).lower()}`",
             f"- public calls: `{calls['total']}/{calls['target']}` target, hard `{calls['hardLimit']}`",
-            f"- pairing handshake attempts: `{calls['handshakeAttempts']}`",
             "- fixture: `ephemeral-validation`, one active, `saveAsCopies=0`",
             "", "| Public tool | Status | Calls | Undo |", "|---|---:|---:|---:|",
         ]
@@ -559,8 +553,6 @@ class AcceptanceRuntime:
         self.expected_host_instance_id: str | None = None
         self.expected_native_source_revision: str | None = None
         self.intent_counter = 0
-        self.pairing_checkpoint_used = False
-        self.pairing_epoch_start_total = 0
 
     def validate_machine_identity(
         self, *, required_capability_ids: Sequence[str] | None = None
@@ -623,8 +615,6 @@ class AcceptanceRuntime:
             require(instance_id != previous_instance_id, "AE restart reused native instance")
         self.expected_host_instance_id = instance_id
         self.expected_native_source_revision = source_revision
-        self.pairing_checkpoint_used = False
-        self.pairing_epoch_start_total = self.ledger.total
         self.evidence.record(
             "native-load-bound",
             {
@@ -826,66 +816,6 @@ class AcceptanceRuntime:
     ) -> dict[str, Any]:
         self.ledger.ensure_capacity(tool=tool)
         is_error, payload = await session.call(tool, dict(arguments))
-        code = error_code(payload)
-        if code == "NATIVE_PAIRING_REQUIRED":
-            self.ledger.pairing_required()
-            error = mapping(payload.get("error"), "pairing error is invalid")
-            pairing = mapping(error.get("details"), "pairing details are invalid")
-            require(
-                is_error
-                and payload.get("ok") is False
-                and error.get("sideEffect") == "not-started"
-                and error.get("retryable") is True,
-                "pairing requirement did not prove the tool was not dispatched",
-            )
-            require(
-                isinstance(pairing.get("pairingFingerprint"), str)
-                and bool(pairing["pairingFingerprint"])
-                and isinstance(pairing.get("pairingExpiresInMs"), int)
-                and pairing["pairingExpiresInMs"] > 0
-                and pairing.get("hostInstanceId") == self.expected_host_instance_id
-                and pairing.get("sourceCommit") == self.identity.expected_sha,
-                "pairing request was not bound to the exact formal AE candidate",
-            )
-            require(
-                self.ledger.total == self.pairing_epoch_start_total
-                and not self.pairing_checkpoint_used,
-                "pairing recovery is allowed only before the first effective tool call in this host epoch",
-            )
-            self.pairing_checkpoint_used = True
-            self.evidence.record(
-                "pairing-required",
-                {"tool": tool, "attempt": self.ledger.handshake_attempts, "sideEffect": "not-started"},
-            )
-            await self.checkpoint(
-                "pair-native",
-                {
-                    "instruction": (
-                        "Immediately open the formal After Effects AE MCP pairing command, "
-                        "authorize the currently displayed request, close the prompt, then acknowledge."
-                    ),
-                    "tool": tool,
-                    "expectedSourceCommit": self.identity.expected_sha,
-                    "secretsPersisted": False,
-                },
-            )
-            self.ledger.ensure_capacity(tool=tool)
-            is_error, payload = await session.call(tool, dict(arguments))
-            code = error_code(payload)
-            if code == "NATIVE_PAIRING_REQUIRED":
-                self.ledger.pairing_required()
-                self.evidence.record(
-                    "pairing-retry-failed",
-                    {"tool": tool, "attempt": self.ledger.handshake_attempts, "code": code},
-                )
-                raise AcceptanceFailure("native pairing was still required after one authorization")
-            if code == "NATIVE_PAIRING_REJECTED":
-                self.ledger.pairing_required()
-                self.evidence.record(
-                    "pairing-retry-failed",
-                    {"tool": tool, "attempt": self.ledger.handshake_attempts, "code": code},
-                )
-                raise AcceptanceFailure("native pairing was rejected; start a new prepared session")
         sequence = self.ledger.reserve(tool=tool, phase=phase)
         self.evidence.record(
             "public-tool-request",

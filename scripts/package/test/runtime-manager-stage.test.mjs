@@ -39,5 +39,10 @@ test('RuntimeManager installs the exact verified macOS platform-bundle layout', 
   assert.equal(selected.launcher, path.join(home, '.ae-mcp', 'bin', 'ae-mcp'));
   const state = await manager.inspect();
   assert.equal(state.ok, true);
-  assert.equal(state.current.record.runtimeManifestSha256, fixture.manifest().runtime.manifestSha256);
+  assert.equal(state.current.record.schemaVersion, 2);
+  assert.equal(
+    state.current.record.layer.manifestSha256,
+    fixture.manifest().runtime.manifestSha256,
+  );
+  assert.equal(selected.componentReceipt.canonicalPath, state.current.directory);
 });

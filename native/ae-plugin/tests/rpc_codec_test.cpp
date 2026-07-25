@@ -2337,13 +2337,8 @@ void authorization_session_and_replay_gate_are_bounded() {
       "opaque-connection-7", std::string(kHost), std::string(kSession), clock,
       SessionFrontDoorConfig{1, 2, 1'000, 5'000, 30'000});
   const ParsedRequest hello = decode_request_frame(frame(hello_json()));
-  require(door.admit(hello).code == SessionIngressCode::kPairingRequired,
-      "unauthorized hello was not kept pending");
   const ParsedRequest invoke = decode_request_frame(frame(invoke_json(
       "invoke-1", clock.now + 5'000)));
-  require(door.admit(invoke).code == SessionIngressCode::kAuthorizationRequired,
-      "unauthorized invoke passed the gate");
-  require(door.authorize_pairing(), "pairing authorization failed");
   require(door.admit(invoke).code == SessionIngressCode::kHelloRequired,
       "request was accepted before hello");
   require(door.admit(hello).code == SessionIngressCode::kAcceptedHello && door.hello_complete(),
@@ -2371,23 +2366,17 @@ void authorization_session_and_replay_gate_are_bounded() {
   clock.now += 1'001;
   require(door.admit(second).code == SessionIngressCode::kAcceptedRequest,
       "expired tombstone did not release the request ID ledger");
-  door.revoke_pairing();
-  require(!door.paired() && door.active_request_count() == 0
-      && door.admit(second).code == SessionIngressCode::kAuthorizationRequired,
-      "revocation did not purge and close the dispatch gate");
   door.close();
-  require(door.admit(hello).code == SessionIngressCode::kClosed && !door.authorize_pairing(),
+  require(door.admit(hello).code == SessionIngressCode::kClosed,
       "closed session could be reopened");
 
   RpcSessionFrontDoor mismatch("conn", std::string(kHost), std::string(kSession), clock);
-  require(mismatch.authorize_pairing(), "mismatch pairing setup failed");
   const ParsedRequest future = decode_request_frame(frame(hello_json(2, 3)));
   require(mismatch.admit(future).code == SessionIngressCode::kWireVersionMismatch
       && !mismatch.hello_complete(), "wire mismatch established a session");
 
   RpcSessionFrontDoor deadlines("deadline-conn", std::string(kHost), std::string(kSession), clock);
-  require(deadlines.authorize_pairing()
-      && deadlines.admit(hello).code == SessionIngressCode::kAcceptedHello,
+  require(deadlines.admit(hello).code == SessionIngressCode::kAcceptedHello,
       "deadline session setup failed");
   const std::string capabilities_without_deadline = "{\"wireVersion\":1,\"kind\":\"request\","
       "\"sessionId\":\"" + std::string(kSession)

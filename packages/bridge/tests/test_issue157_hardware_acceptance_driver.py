@@ -9,6 +9,8 @@ import importlib.util
 import json
 import os
 import plistlib
+import shutil
+import stat
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -380,87 +382,6 @@ class FakeAe:
         return self._success(tool, case.capability_id, value, write=case.kind == "write")
 
 
-class PairingFake(FakeAe):
-    def __init__(self, *, required_responses: int = 1, reject_retry: bool = False) -> None:
-        super().__init__()
-        self.required_responses = required_responses
-        self.reject_retry = reject_retry
-        self.pairing_dispatches = 0
-
-    async def call(
-        self, tool: str, arguments: dict[str, Any]
-    ) -> tuple[bool, dict[str, Any]]:
-        self.pairing_dispatches += 1
-        if self.pairing_dispatches <= self.required_responses:
-            self.timeline.append(f"call:{tool}")
-            self.calls.append(tool)
-            return True, {
-                "ok": False,
-                "error": {
-                    "code": "NATIVE_PAIRING_REQUIRED",
-                    "message": "Authorize native pairing.",
-                    "retryable": True,
-                    "sideEffect": "not-started",
-                    "recovery": {"action": "approve-pairing", "hint": "Authorize in AE."},
-                    "details": {
-                        "pairingFingerprint": "12AB-34CD",
-                        "pairingExpiresInMs": 60_000,
-                        "hostInstanceId": self.host,
-                        "sourceCommit": EXPECTED_SHA,
-                    },
-                },
-            }
-        if self.reject_retry and self.pairing_dispatches == self.required_responses + 1:
-            self.timeline.append(f"call:{tool}")
-            self.calls.append(tool)
-            return True, {
-                "ok": False,
-                "error": {
-                    "code": "NATIVE_PAIRING_REJECTED",
-                    "message": "Pairing was rejected.",
-                    "retryable": True,
-                    "sideEffect": "not-started",
-                    "recovery": {"action": "retry-pairing", "hint": "Start again."},
-                },
-            }
-        return await super().call(tool, arguments)
-
-
-class EpochPairingFake(FakeAe):
-    def __init__(self) -> None:
-        super().__init__()
-        self.pending_hosts: set[str] = set()
-        self.paired_hosts: set[str] = set()
-
-    async def call(
-        self, tool: str, arguments: dict[str, Any]
-    ) -> tuple[bool, dict[str, Any]]:
-        if self.host not in self.paired_hosts:
-            if self.host in self.pending_hosts:
-                self.paired_hosts.add(self.host)
-                return await super().call(tool, arguments)
-            self.pending_hosts.add(self.host)
-            self.timeline.append(f"call:{tool}")
-            self.calls.append(tool)
-            return True, {
-                "ok": False,
-                "error": {
-                    "code": "NATIVE_PAIRING_REQUIRED",
-                    "message": "Authorize native pairing.",
-                    "retryable": True,
-                    "sideEffect": "not-started",
-                    "recovery": {"action": "approve-pairing", "hint": "Authorize in AE."},
-                    "details": {
-                        "pairingFingerprint": "12AB-34CD",
-                        "pairingExpiresInMs": 60_000,
-                        "hostInstanceId": self.host,
-                        "sourceCommit": EXPECTED_SHA,
-                    },
-                },
-            }
-        return await super().call(tool, arguments)
-
-
 def make_runtime(tmp_path: Path, mode: str, fake: FakeAe):
     fixture = tmp_path / f"{mode}.aep"
     evidence = runtime_module.EvidenceLog(
@@ -515,8 +436,6 @@ def make_runtime(tmp_path: Path, mode: str, fake: FakeAe):
         assert previous_instance_id is None or fake.host != previous_instance_id
         runner.expected_host_instance_id = fake.host
         runner.expected_native_source_revision = EXPECTED_SHA
-        runner.pairing_checkpoint_used = False
-        runner.pairing_epoch_start_total = runner.ledger.total
         return fake.host
 
     runner.bind_latest_native_load = bind
@@ -628,6 +547,119 @@ def make_identity_config(tmp_path: Path) -> runtime_module.IdentityConfig:
     )
 
 
+def make_schema_v2_identity_config(tmp_path: Path) -> runtime_module.IdentityConfig:
+    identity = make_identity_config(tmp_path)
+    home = identity.identity_home
+    runtime_base = home / ".ae-mcp/runtime"
+    shutil.rmtree(runtime_base)
+    runtime_source = "3" * 40
+    generation_id = "g-" + "a" * 16
+    layer_id = "b" * 64
+    instance_id = "i-" + "c" * 16
+    relative = f"generations/{generation_id}"
+    layer_relative = f"layers/{layer_id}/{instance_id}/macos-arm64"
+    layer_root = runtime_base / "layers" / layer_id / instance_id
+    runtime_root = runtime_base / layer_relative
+    runtime_manifest = runtime_root / "runtime-manifest.json"
+    write_json(runtime_manifest, {"sourceCommitSha": runtime_source})
+    for executable_path in (
+        runtime_root / "node/bin/node",
+        runtime_root / "python/bin/python3",
+    ):
+        executable_path.parent.mkdir(parents=True, exist_ok=True)
+        executable_path.write_bytes(b"#!/bin/sh\nexit 0\n")
+        executable_path.chmod(0o755)
+
+    def signal(path: Path) -> dict[str, Any]:
+        info = path.stat()
+        return {
+            "path": str(path),
+            "size": info.st_size,
+            "mtimeMs": info.st_mtime_ns // 1_000_000,
+            "mode": f"{stat.S_IMODE(info.st_mode):04o}",
+        }
+
+    write_json(
+        layer_root / "layer-record.json",
+        {
+            "schemaVersion": 1,
+            "owner": "ae-mcp-runtime-manager",
+            "id": layer_id,
+            "instanceId": instance_id,
+            "platform": "macos-arm64",
+            "relative": layer_relative,
+            "installedAt": 1,
+            "logicalBytes": 100,
+            "physicalBytes": 100,
+            "signals": {
+                "runtimeManifest": signal(runtime_manifest),
+                "node": signal(runtime_root / "node/bin/node"),
+                "python": signal(runtime_root / "python/bin/python3"),
+            },
+        },
+    )
+    generation_root = runtime_base / relative
+    generation_root.mkdir(parents=True)
+    launcher_bytes = b"#!/bin/sh\nexit 0\n"
+    generation_launcher = generation_root / "ae-mcp-launcher"
+    generation_launcher.write_bytes(launcher_bytes)
+    generation_launcher.chmod(0o755)
+    generation_root.joinpath("runtime").symlink_to(
+        f"../../{layer_relative}"
+    )
+    launcher_hash = hashlib.sha256(launcher_bytes).hexdigest()
+    write_json(
+        generation_root / "install-record.json",
+        {
+            "schemaVersion": 2,
+            "owner": "ae-mcp-runtime-manager",
+            "generationId": generation_id,
+            "platform": "macos-arm64",
+            "version": "0.9.2",
+            "sourceCommitSha": runtime_source,
+            "layer": {
+                "id": layer_id,
+                "instanceId": instance_id,
+                "manifestSha256": layer_id,
+                "relative": layer_relative,
+            },
+            "launcherSha256": launcher_hash,
+            "launcherSignal": signal(generation_launcher),
+            "relative": relative,
+            "installedAt": 1,
+        },
+    )
+    current = runtime_base / "current"
+    current.write_text(relative + "\n", encoding="utf-8")
+    stable = home / ".ae-mcp/bin/ae-mcp"
+    stable.write_bytes(launcher_bytes)
+    stable.chmod(0o755)
+    write_json(
+        runtime_base / "stable-launcher-record.json",
+        {
+            "schemaVersion": 1,
+            "owner": "ae-mcp-runtime-manager",
+            "platform": "macos-arm64",
+            "canonicalPath": str(stable),
+            "launcherSha256": launcher_hash,
+            "signal": signal(stable),
+        },
+    )
+    receipt = json.loads(identity.native_receipt.read_text(encoding="utf-8"))
+    receipt["sourceCommit"] = "1" * 40
+    receipt["source"]["commit"] = "1" * 40
+    receipt_hash = write_json(identity.native_receipt, receipt)
+    manifest = json.loads(identity.native_manifest.read_text(encoding="utf-8"))
+    manifest["sourceCommitSha"] = "1" * 40
+    manifest["artifact"]["receiptSha256"] = receipt_hash
+    write_json(identity.native_manifest, manifest)
+    write_json(
+        home / "Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel/bundle-manifest.json",
+        {"sourceCommitSha": "4" * 40},
+    )
+    return identity
+
+
 @pytest.mark.asyncio
 async def test_preflight_is_non_candidate_seven_calls_and_proves_locator_undo(tmp_path: Path):
     fake = FakeAe()
@@ -648,58 +680,6 @@ async def test_preflight_is_non_candidate_seven_calls_and_proves_locator_undo(tm
     saved = fake.timeline.index("checkpoint:save-fixture")
     created = fake.timeline.index("call:ae_createComposition")
     assert probe < saved < created
-
-
-@pytest.mark.asyncio
-async def test_first_pairing_required_checkpoints_once_then_keeps_seven_effective_calls(
-    tmp_path: Path,
-):
-    fake = PairingFake()
-    fake.tool_names = frozenset(case.tool for case in package.SPEC.support_tools)
-    runner, evidence = make_runtime(tmp_path, "preflight", fake)
-    await package.Issue157Package(
-        runner, fixture_name="Issue157 Keyframe Authoring Fixture"
-    ).run()
-    assert runner.ledger.total == 7
-    assert runner.ledger.handshake_attempts == 1
-    assert len(fake.calls) == 8
-    assert fake.checkpoints.count("pair-native") == 1
-    persisted = evidence.events_path.read_text(encoding="utf-8")
-    assert "12AB-34CD" not in persisted
-    assert "pairingFingerprint" not in persisted
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("required_responses", "reject_retry", "message", "handshakes"),
-    [
-        (2, False, "still required", 2),
-        (1, True, "was rejected", 2),
-    ],
-)
-async def test_pairing_retry_failure_is_fail_closed_without_effective_call(
-    tmp_path: Path,
-    required_responses: int,
-    reject_retry: bool,
-    message: str,
-    handshakes: int,
-):
-    fake = PairingFake(
-        required_responses=required_responses,
-        reject_retry=reject_retry,
-    )
-    fake.tool_names = frozenset(case.tool for case in package.SPEC.support_tools)
-    runner, _evidence = make_runtime(tmp_path, "preflight", fake)
-    with pytest.raises(runtime_module.AcceptanceFailure, match=message):
-        await package.Issue157Package(
-            runner, fixture_name="Issue157 Keyframe Authoring Fixture"
-        ).run()
-    assert runner.ledger.total == 0
-    assert runner.ledger.handshake_attempts == handshakes
-    assert fake.checkpoints.count("pair-native") == 1
-    assert not runner.fixture.path.exists()
-    assert runner.aep_lifecycle.created == 0
-    assert not fake.keyframes[OPACITY]
 
 
 @pytest.mark.asyncio
@@ -757,19 +737,6 @@ async def test_t5_seeds_ease_neighbors_through_public_adds_before_the_matrix(tmp
     ease_undo_at = timeline.index("checkpoint:undo-ae_setLayerPropertyKeyframeTemporalEase")
     assert interpolation_undo_at < ease_write_at < ease_undo_at
     assert runner.ledger.total == 28
-
-
-@pytest.mark.asyncio
-async def test_pairing_is_scoped_to_each_native_host_epoch(tmp_path: Path):
-    fake = EpochPairingFake()
-    runner, _evidence = make_runtime(tmp_path, "t5", fake)
-    details = await package.Issue157Package(
-        runner, fixture_name="Issue157 Keyframe Authoring Fixture"
-    ).run()
-    assert runner.ledger.total == 28
-    assert runner.ledger.handshake_attempts == 2
-    assert fake.checkpoints.count("pair-native") == 2
-    assert details["firstHostInstanceId"] != details["restartHostInstanceId"]
 
 
 @pytest.mark.parametrize(
@@ -875,6 +842,36 @@ def test_identity_uses_local_component_signals_and_advisory_source_revisions(tmp
     stable.write_bytes(b"#!/bin/sh\nexit 10\n")
     stable.chmod(0o755)
     with pytest.raises(runtime_module.IdentityFailure, match="launcher size signals"):
+        runtime_module.verify_exact_identity(identity, required_capability_ids=required)
+
+
+def test_identity_accepts_schema_v2_component_set_with_mixed_revisions(tmp_path: Path):
+    identity = make_schema_v2_identity_config(tmp_path)
+    required = tuple(case.capability_id for case in package.SPEC.tools)
+
+    proof = runtime_module.verify_exact_identity(
+        identity, required_capability_ids=required
+    )
+
+    assert proof.source_revisions == {
+        "requested": EXPECTED_SHA,
+        "nativeReceipt": "1" * 40,
+        "nativeManifest": "1" * 40,
+        "cep": "4" * 40,
+        "runtime": "3" * 40,
+    }
+    assert proof.component_signals["runtimeLayerRecord"]["size"] > 0
+    assert proof.component_signals["runtimeLayerAlias"]["symlinkTarget"].startswith(
+        "../../layers/"
+    )
+    assert proof.component_signals["stableLauncherReceipt"]["size"] > 0
+    stable = identity.identity_home / ".ae-mcp/bin/ae-mcp"
+    stable_stat = stable.stat()
+    os.utime(
+        stable,
+        ns=(stable_stat.st_atime_ns, stable_stat.st_mtime_ns + 1_000_000_000),
+    )
+    with pytest.raises(runtime_module.IdentityFailure, match="bounded signal changed"):
         runtime_module.verify_exact_identity(identity, required_capability_ids=required)
 
 

@@ -208,7 +208,7 @@ Windows 输入使用 `windows-x64`。输入缺失时会明确返回
 
 这是原生 AEGP 的开发流程，与下方 CEP 面板安装器相互独立。目前只构建 Apple Silicon arm64
 目标。请先提交产品源码：用于取证的构建要求整个工作树干净，否则会以
-`AE_PLUGIN_SOURCE_DIRTY` 安全失败，从而确保回执能绑定到精确 commit。为防止绕过事务安装器，输出必须是
+`AE_PLUGIN_SOURCE_DIRTY` 安全失败，从而确保回执能标识原生组件源码。为防止绕过事务安装器，输出必须是
 canonical `/private/tmp` 下尚不存在的绝对目录，并且位于所有 Git worktree、Git common directory 和 SDK
 根目录之外。
 
@@ -217,14 +217,15 @@ BUILD_DIR=/private/tmp/ae-mcp-native-73
 node native/ae-plugin/build-macos.mjs \
   --sdk-archive "$AE_SDK_ARCHIVE" \
   --sdk-root "$AE_SDK_ROOT" \
-  --development-trust-local-peer \
   --output "$BUILD_DIR"
 node native/ae-plugin/verify-macos.mjs \
   --bundle "$BUILD_DIR/AeMcpNative.plugin"
 ```
 
-`--development-trust-local-peer` 是本地开发专用的显式选择：仅对已经通过同一用户和 AE
-进程树校验的 peer 自动确认。省略此参数时仍必须完成原生 pairing；这也是 release 构建的安全编译默认值。
+本地开发仅接纳同一用户、且进程祖先链能够追溯到当前正式版 After Effects host 的客户端。
+原生 challenge 仍会绑定 endpoint 与 peer 身份，但单用户开发路径不再使用连接码、指纹确认或构建开关。
+例行启动与验收按组件集记录各自的源码 revision 和安装回执，并校验 canonical path、组件/协议版本、
+文件大小、mode 与修改时间等有界信号；只有观察到矛盾、或明确执行 release/security 审计时才升级为内容哈希。
 
 安装前必须关闭所有 After Effects、AfterFX 和 aerender 进程。开发安装器会校验构建回执和安装后的副本，
 最终安装位置为
@@ -260,8 +261,8 @@ node native/ae-plugin/install-dev-macos.mjs recover
 ```
 
 Ad-hoc 签名和本地构建成功只属于开发证据。生成的回执会刻意保持
-`distributionApproved`、`runtimeEvidence` 和 `compatibilityEvidence` 为 false；每个候选提交仍必须通过
-精确 commit 的真实 AE + 公开 MCP 门禁。当前开发态原生 surface 刻意保持很小：
+`distributionApproved`、`runtimeEvidence` 和 `compatibilityEvidence` 为 false；每个候选仍必须通过
+已记录组件集的真实 AE + 公开 MCP 门禁。当前开发态原生 surface 刻意保持很小：
 `ae_projectSummary` 读取工程摘要，`ae_getProjectBitDepth` 读取当前 8/16/32 bits-per-channel，
 `ae_setProjectBitDepth` 使用幂等键执行 SDK 明确标记为可撤销的修改，并做原生 readback 验证。
 `ae_listProjectItems` 返回有界的工程项目分页；将其中的 composition locator 原样复制给

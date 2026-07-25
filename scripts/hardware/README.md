@@ -8,7 +8,7 @@ call Core handlers, the CEP HTTP bridge, or the native socket directly.
 `issue167_native_media_acceptance.py` drives the frozen 22-tool Effect Stack,
 Mask/Path, and Footage/Source milestone. Its package-specific file owns one
 deterministic solid-layer fixture plus three generated 2x2 RGBA footage assets;
-the shared runtime still owns exact identity, public-MCP evidence, call
+the shared runtime still owns component-set identity, public-MCP evidence, call
 accounting, and recoverable `.aep` lifecycle.
 
 Run the zero-evidence `preflight` before candidate freeze. It uses four public
@@ -30,7 +30,7 @@ reacquisition. Seven fixed public switch tools intentionally share one closed
 native capability, while the model never receives a generic SDK flag.
 
 Run `preflight` before candidate freeze. It uses three public calls to prove
-the exact deployed identity, create one disposable composition/solid fixture,
+the deployed component-set identity, create one disposable composition/solid fixture,
 read compositing state, and archive the fixture without candidate evidence.
 Because #162 is the first real-machine write use of LayerSuite9 flag/quality/
 transfer setters, `t4` is one four-call non-candidate smoke: two previously
@@ -61,7 +61,7 @@ PYTHONDONTWRITEBYTECODE=1 uv run --frozen python \
 `issue157_keyframe_authoring_acceptance.py` is the thin CLI and
 `issue157_keyframe_authoring_spec.py` owns the package-specific matrix,
 fixture recipe, target-field assertions, Undo semantics, and interaction
-order. Stable exact-identity, public-MCP, evidence, call-budget, checkpoint,
+order. Stable component-set identity, public-MCP, evidence, call-budget, checkpoint,
 and `.aep` lifecycle mechanics are shared by `capability_package_runtime.py`;
 the shared code does not infer package semantics.
 
@@ -73,20 +73,17 @@ Opacity property locator remains valid across a native property write and a
 real AE Undo. It does not require or advertise the seven unbuilt package
 capabilities. A preflight failure is T0-T2 work, not T4/T5 evidence.
 Before the first Save, one public `ae_listProjectItems(offset=0, limit=1)` read
-proves readiness and completes pairing. Only after that read succeeds does the
+proves readiness. Only after that read succeeds does the
 runner save the still-empty project, before composition creation or any locator
 acquisition. Later archival saves the populated project in place. This avoids
-both an abandoned AEP after pairing failure and locators invalidated by AE's
+both an abandoned AEP after admission failure and locators invalidated by AE's
 first-save project-generation advance while keeping `saveAsCopies=0`.
 
-If the first call in a native-host epoch returns `NATIVE_PAIRING_REQUIRED` with
-`sideEffect=not-started`, the runner emits one `pair-native` checkpoint and
-retries the identical request once. The failed handshake is excluded from the
-seven effective `publicCalls` and reported separately as `handshakeAttempts`.
-Neither the short-lived fingerprint nor any token is written to evidence. A
-rejection or a second pairing-required response in that epoch fails closed
-without another retry. After the formal-AE restart, the new host instance starts
-one new pairing epoch under the same rule.
+Local transport admission is automatic only for the same user and a client
+process whose ancestry reaches the current formal AE host. The native challenge
+still binds the endpoint and peer identity. Admission failure is
+`sideEffect=not-started` and fails closed without a connection-code checkpoint
+or a retry ceremony.
 
 T5/T6 each use exactly 28 public calls: all seven package tools, scalar and
 spatial behavior paths, a real Undo for all six writes with post-Undo state
@@ -153,7 +150,7 @@ root. That root must be outside every Adobe CEP and plug-in scan root.
 PYTHONDONTWRITEBYTECODE=1 uv run --frozen python \
   scripts/hardware/issue155_layer_timeline_acceptance.py \
   --mode t5 \
-  --expected-sha 0123456789abcdef0123456789abcdef01234567 \
+  --requested-source-revision 0123456789abcdef0123456789abcdef01234567 \
   --fixture-path '/absolute/local/active/issue155-layer-timeline.aep' \
   --recovery-archive-root '/absolute/local/recovery/ae-mcp-fixtures' \
   --stretch-percent 125.5 \
@@ -175,7 +172,7 @@ the Project / Composition Context & Mutation package.
 
 - `t4`: one narrow native-novelty smoke for composition duplication and real
   After Effects Undo.
-- `t5`: one exact-candidate run covering all eight package tools, all five
+- `t5`: one candidate component-set run covering all eight package tools, all five
   writes and their real Undo/readback checkpoints, then AE restart/reconnect
   and stale-locator rejection.
 - `t6`: the same package matrix rebuilt and reinstalled from the clean merge
@@ -187,7 +184,7 @@ Example (use only a disposable fixture project):
 PYTHONDONTWRITEBYTECODE=1 uv run --frozen python \
   scripts/hardware/issue150_project_composition_acceptance.py \
   --mode t5 \
-  --expected-sha 0123456789abcdef0123456789abcdef01234567 \
+  --requested-source-revision 0123456789abcdef0123456789abcdef01234567 \
   --fixture-composition-name 'Issue150 Fixture' \
   --renamed-name 'Issue150 Renamed' \
   --duplicate-name 'Issue150 Duplicate' \
@@ -200,11 +197,13 @@ PYTHONDONTWRITEBYTECODE=1 uv run --frozen python \
   --evidence-dir "$HOME/Library/Application Support/AfterEffectsMCP/issue150/evidence"
 ```
 
-T4, T5 and T6 all fail closed unless the canonical CEP
-`bundle-manifest.json`, RuntimeManager `current` pointer and selected
-`install-record.json`, supplied native receipt/manifest, and every public
-response report the same full candidate SHA. Component and artifact hashes
-are recorded in the private evidence log.
+T4, T5 and T6 fail closed unless the canonical CEP manifest, RuntimeManager
+schema-v2 `current` generation, referenced shared layer, stable launcher
+receipt, supplied native receipt/manifest, and public native provenance form a
+compatible component set. Each component retains its own source revision.
+Routine starts verify canonical paths, component/protocol versions, sizes,
+modes, and modification times; content hashing is reserved for a contradictory
+signal or an explicitly requested release/security audit.
 
 The frozen package matrix has eight public acceptance rows: three reads and
 five writes. `ae_listProjectItems` is an existing support read used only for
@@ -218,10 +217,15 @@ GUI action, and writes exactly one acknowledgement line:
 {"checkpointId":"the-emitted-id","status":"completed"}
 ```
 
-Pairing, Undo and restart are deliberately explicit checkpoints. Pairing
-fingerprints and private paths are available only in the live checkpoint and
-are redacted before evidence is persisted. Evidence files use mode `0600` in a
-`0700` directory.
+Undo and restart are deliberately explicit checkpoints. Local admission has no
+connection code or fingerprint checkpoint. Private paths are redacted before
+evidence is persisted. Evidence files use mode `0600` in a `0700` directory.
+
+The shared #157/#162 CLI retains the legacy option spelling `--expected-sha`;
+it records the requested package source revision and is not an equality
+requirement across installed components. The #150/#155 standalone drivers use
+`--requested-source-revision` and retain `--expected-sha` only as a deprecated
+one-release alias.
 
 Before completing the emitted `preflight-ae` checkpoint, open only the
 disposable #150 project in the formal After Effects app, make the named source

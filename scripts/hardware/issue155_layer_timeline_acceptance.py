@@ -452,7 +452,7 @@ class EfficiencyCounters:
     candidate_hardware_runs: int = 0
     main_hardware_runs: int = 0
     first_hardware_pass: bool | None = None
-    gui_pairing_interruptions: int = 0
+    gui_interruptions: int = 0
     scope_frozen_unix_ms: int | None = None
 
     def public_dict(self, *, completed_unix_ms: int) -> dict[str, Any]:
@@ -468,7 +468,7 @@ class EfficiencyCounters:
             "candidateHardwareRuns": self.candidate_hardware_runs,
             "mainHardwareRuns": self.main_hardware_runs,
             "firstHardwarePass": self.first_hardware_pass,
-            "guiPairingInterruptions": self.gui_pairing_interruptions,
+            "guiInterruptions": self.gui_interruptions,
             "scopeFreezeToCompletionMs": elapsed,
         }
 
@@ -538,7 +538,7 @@ class EvidenceLog:
         lines = [
             f"## Issue #{PACKAGE_ISSUE} {summary['mode'].upper()} acceptance",
             "",
-            f"- exact source commit: `{summary['expectedSourceCommit']}`",
+            f"- requested source revision: `{summary['expectedSourceCommit']}`",
             f"- passed: `{str(summary['passed']).lower()}`",
             f"- continuous evidence events: `{summary['eventCount']}`",
             f"- evidence SHA-256: `{summary['eventsSha256']}`",
@@ -567,7 +567,7 @@ class EvidenceLog:
                 f"- candidate builds / full CI: {efficiency['candidateBuilds']} / {efficiency['fullCiRuns']}",
                 f"- T4 / T5 / T6: {efficiency['t4Runs']} / {efficiency['candidateHardwareRuns']} / {efficiency['mainHardwareRuns']}",
                 f"- first hardware pass: {efficiency['firstHardwarePass']}",
-                f"- GUI/pairing interruptions: {efficiency['guiPairingInterruptions']}",
+                f"- GUI interruptions: {efficiency['guiInterruptions']}",
                 f"- scope-freeze to completion ms: {efficiency['scopeFreezeToCompletionMs']}",
                 "",
                 "### `.aep` lifecycle",
@@ -734,6 +734,7 @@ class PackageAcceptance:
         self.aep_lifecycle = AepLifecycleCounters()
         self._formal_ae_identity: dict[str, str] = {}
         self._expected_host_instance_id: str | None = None
+        self._native_source_revision = ""
 
     @staticmethod
     def _identity_json(path: Path, label: str) -> tuple[dict[str, Any], str]:
@@ -853,7 +854,7 @@ class PackageAcceptance:
         _require(
             latest.get("schemaVersion") == 1
             and latest.get("provenance") == "native-aegp"
-            and latest.get("sourceCommit") == self.config.expected_sha
+            and latest.get("sourceCommit") == self._native_source_revision
             and isinstance(instance_id, str)
             and UUID.fullmatch(instance_id),
             "native load event identity mismatch",
@@ -873,7 +874,7 @@ class PackageAcceptance:
             {
                 "stage": stage,
                 "instanceId": instance_id,
-                "sourceCommit": self.config.expected_sha,
+                "sourceCommit": self._native_source_revision,
                 "host": dict(host),
                 "logSha256": log_hash,
                 "recordSha256": record_hash,
@@ -911,40 +912,117 @@ class PackageAcceptance:
         manifest, manifest_hash = self._identity_json(manifest_path, "native plugin manifest")
         self._validate_declared_sha256s(receipt, "nativeReceipt")
         self._validate_declared_sha256s(manifest, "nativeManifest")
+        native_source = receipt.get("sourceCommit")
         _require(
-            receipt.get("sourceCommit") == self.config.expected_sha
+            isinstance(native_source, str)
+            and FULL_SHA.fullmatch(native_source) is not None
             and _mapping(receipt.get("source"), "native receipt source is invalid").get("commit")
-            == self.config.expected_sha,
-            "native build receipt source commit mismatch",
+            == native_source,
+            "native build receipt source revision is invalid",
         )
+        self._native_source_revision = native_source
         artifact = _mapping(manifest.get("artifact"), "native manifest artifact is invalid")
-        _require(manifest.get("sourceCommitSha") == self.config.expected_sha, "native manifest source commit mismatch")
+        _require(
+            manifest.get("sourceCommitSha") == native_source,
+            "native manifest contradicts its bound build receipt",
+        )
         _require(artifact.get("receiptSha256") == receipt_hash, "native manifest receipt hash mismatch")
         for field in ("bundleTreeSha256", "executableSha256", "piplSha256"):
             _require(isinstance(artifact.get(field), str) and SHA256.fullmatch(artifact[field]), f"native manifest {field} is invalid")
         cep_path = identity_home / "Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel/bundle-manifest.json"
         cep, cep_hash = self._identity_json(cep_path, "CEP bundle manifest")
         self._validate_declared_sha256s(cep, "cepManifest")
-        _require(cep.get("sourceCommitSha") == self.config.expected_sha, "CEP bundle manifest source commit mismatch")
+        cep_source = cep.get("sourceCommitSha")
+        _require(
+            isinstance(cep_source, str) and FULL_SHA.fullmatch(cep_source) is not None,
+            "CEP bundle manifest source revision is invalid",
+        )
         current_path = identity_home / ".ae-mcp/runtime/current"
         _require(current_path.is_file() and not current_path.is_symlink(), "runtime current pointer is missing")
         relative = current_path.read_text(encoding="utf-8").strip()
-        _require(relative == f"0.9.2-{self.config.expected_sha}/macos-arm64", "runtime current pointer source mismatch")
-        record_path = identity_home / ".ae-mcp/runtime" / relative.split("/", 1)[0] / "install-record.json"
+        parts = relative.split("/")
+        schema_v2 = (
+            len(parts) == 2 and parts[0] == "generations"
+            and re.fullmatch(r"g-[0-9a-f]{16}", parts[1]) is not None
+        )
+        schema_v1 = len(parts) == 2 and parts[1] == "macos-arm64"
+        _require(schema_v1 or schema_v2, "runtime current pointer is invalid")
+        runtime_base = identity_home / ".ae-mcp/runtime"
+        record_path = (
+            runtime_base / relative / "install-record.json"
+            if schema_v2 else runtime_base / parts[0] / "install-record.json"
+        )
         record, record_hash = self._identity_json(record_path, "runtime install record")
         self._validate_declared_sha256s(record, "runtimeInstallRecord")
+        runtime_source = record.get("sourceCommitSha")
         _require(
             record.get("relative") == relative
-            and record.get("sourceCommitSha") == self.config.expected_sha,
-            "runtime current/install record source mismatch",
+            and record.get("platform") == "macos-arm64"
+            and record.get("version") == "0.9.2"
+            and isinstance(runtime_source, str)
+            and FULL_SHA.fullmatch(runtime_source) is not None,
+            "runtime current/install record is incompatible",
         )
-        runtime_manifest_path = identity_home / ".ae-mcp/runtime" / relative / "runtime-manifest.json"
+        runtime_manifest_sha = record.get("runtimeManifestSha256")
+        if schema_v2:
+            layer = _mapping(record.get("layer"), "runtime layer reference is invalid")
+            layer_id = layer.get("id")
+            layer_instance = layer.get("instanceId")
+            layer_relative = layer.get("relative")
+            _require(
+                record.get("schemaVersion") == 2
+                and record.get("owner") == "ae-mcp-runtime-manager"
+                and record.get("generationId") == parts[1]
+                and isinstance(layer_id, str)
+                and SHA256.fullmatch(layer_id) is not None
+                and layer.get("manifestSha256") == layer_id
+                and isinstance(layer_instance, str)
+                and re.fullmatch(r"i-[0-9a-f]{16}", layer_instance) is not None
+                and layer_relative
+                == f"layers/{layer_id}/{layer_instance}/macos-arm64",
+                "runtime schema-v2 generation is incompatible",
+            )
+            layer_record, layer_record_hash = self._identity_json(
+                (runtime_base / layer_relative).parent / "layer-record.json",
+                "runtime layer record",
+            )
+            _require(
+                layer_record.get("schemaVersion") == 1
+                and layer_record.get("owner") == "ae-mcp-runtime-manager"
+                and layer_record.get("platform") == "macos-arm64"
+                and layer_record.get("relative") == layer_relative
+                and layer_record.get("id") == layer_id
+                and layer_record.get("instanceId") == layer_instance,
+                "runtime layer record is incompatible",
+            )
+            stable_record, stable_record_hash = self._identity_json(
+                runtime_base / "stable-launcher-record.json",
+                "stable launcher record",
+            )
+            _require(
+                stable_record.get("schemaVersion") == 1
+                and stable_record.get("owner") == "ae-mcp-runtime-manager"
+                and stable_record.get("platform") == "macos-arm64"
+                and stable_record.get("canonicalPath")
+                == str(identity_home / ".ae-mcp/bin/ae-mcp")
+                and stable_record.get("launcherSha256") == record.get("launcherSha256"),
+                "stable launcher record is incompatible",
+            )
+            runtime_manifest_path = runtime_base / layer_relative / "runtime-manifest.json"
+            runtime_manifest_sha = layer_id
+            self._component_hashes.update({
+                "runtimeLayerRecordSha256": layer_record_hash,
+                "runtimeStableLauncherRecordSha256": stable_record_hash,
+            })
+        else:
+            _require(record.get("schemaVersion") == 1, "runtime schema-v1 record is invalid")
+            runtime_manifest_path = runtime_base / relative / "runtime-manifest.json"
         runtime_manifest, runtime_manifest_hash = self._identity_json(
             runtime_manifest_path, "installed runtime manifest"
         )
         self._validate_declared_sha256s(runtime_manifest, "runtimeManifest")
         _require(
-            record.get("runtimeManifestSha256") == runtime_manifest_hash,
+            runtime_manifest_sha == runtime_manifest_hash,
             "runtime install record is not bound to the installed runtime manifest",
         )
         self._component_hashes.update(
@@ -957,9 +1035,18 @@ class PackageAcceptance:
                 "nativeBundleTreeSha256": artifact["bundleTreeSha256"],
                 "nativeExecutableSha256": artifact["executableSha256"],
                 "nativePiplSha256": artifact["piplSha256"],
-                "runtimeManifestSha256": record.get("runtimeManifestSha256"),
+                "runtimeManifestSha256": runtime_manifest_sha,
             }
         )
+        self.evidence.record("component-set-identity", {
+            "requestedSourceRevision": self.config.expected_sha,
+            "runtimeRelative": relative,
+            "sourceRevisions": {
+                "native": native_source,
+                "cep": cep_source,
+                "runtime": runtime_source,
+            },
+        })
         self._load_contract_digests()
         self._validate_formal_ae_identity()
 
@@ -1090,7 +1177,11 @@ class PackageAcceptance:
         _require(expected_contract is not None, f"{tool} contract was not frozen")
         _require(implementation.get("contractDigest") == expected_contract, f"{tool} contract digest mismatch")
         _require(provenance.get("engine") == "native-aegp", f"{tool} provenance was not native-aegp")
-        _require(provenance.get("sourceCommit") == self.config.expected_sha, f"{tool} source commit mismatch")
+        _require(
+            not self._native_source_revision
+            or provenance.get("sourceCommit") == self._native_source_revision,
+            f"{tool} native source revision contradicts the installed native component",
+        )
         _require(
             evidence.get("engine") == "native-aegp"
             and evidence.get("capabilityId") == capability
@@ -1750,7 +1841,7 @@ class PackageAcceptance:
                 "instruction": (
                     "Save the one active ephemeral fixture in place at its exact declared "
                     "path, quit formal After Effects normally, relaunch only the explicit "
-                    "formal application path, reopen that exact fixture, pair once, and "
+                    "formal application path, reopen that exact fixture, and "
                     "acknowledge. Do not use Save As or Finder/LaunchServices."
                 ),
                 "fixturePath": self.config.fixture_path,
@@ -1810,7 +1901,7 @@ class PackageAcceptance:
                 "instruction": (
                     "Launch only formal After Effects by its explicit application path, use "
                     "a new empty unsaved disposable project with no user work, prepare "
-                    "canonical plugin/CEP pairing, GUI access, and no-sleep, then acknowledge. "
+                    "canonical plugin/CEP access, GUI access, and no-sleep, then acknowledge. "
                     "Do not save yet, create or open another fixture, or use Save As."
                 ),
                 "fixturePath": self.config.fixture_path,
@@ -2028,7 +2119,11 @@ def _time_argument(value: str) -> dict[str, int]:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", required=True, choices=("t4", "t5", "t6"))
-    parser.add_argument("--expected-sha", required=True)
+    parser.add_argument("--requested-source-revision")
+    parser.add_argument(
+        "--expected-sha",
+        help="Deprecated one-release alias for --requested-source-revision",
+    )
     parser.add_argument("--fixture-name", default="Issue155 Layer Timeline Fixture")
     parser.add_argument("--fixture-path", type=Path, required=True)
     parser.add_argument("--recovery-archive-root", type=Path, required=True)
@@ -2065,11 +2160,19 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--candidate-hardware-runs", type=int, default=0)
     parser.add_argument("--main-hardware-runs", type=int, default=0)
     parser.add_argument("--first-hardware-pass", choices=("true", "false", "unknown"), default="unknown")
-    parser.add_argument("--gui-pairing-interruptions", type=int, default=0)
+    parser.add_argument("--gui-interruptions", type=int, default=0)
     parser.add_argument("--scope-frozen-unix-ms", type=int)
     parsed = parser.parse_args(argv)
-    if FULL_SHA.fullmatch(parsed.expected_sha) is None:
-        parser.error("--expected-sha must be one full lowercase 40-character Git SHA")
+    requested = parsed.requested_source_revision or parsed.expected_sha
+    if (
+        parsed.requested_source_revision
+        and parsed.expected_sha
+        and parsed.requested_source_revision != parsed.expected_sha
+    ):
+        parser.error("source-revision options disagree")
+    if requested is None or FULL_SHA.fullmatch(requested) is None:
+        parser.error("--requested-source-revision must be one full lowercase Git SHA")
+    parsed.expected_sha = requested
     for name in (
         parsed.fixture_name,
         parsed.renamed_name,
@@ -2114,7 +2217,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "t4_runs",
         "candidate_hardware_runs",
         "main_hardware_runs",
-        "gui_pairing_interruptions",
+        "gui_interruptions",
     ):
         if getattr(parsed, field) < 0:
             parser.error(f"--{field.replace('_', '-')} cannot be negative")
@@ -2163,7 +2266,7 @@ async def _main(argv: Sequence[str] | None = None) -> int:
             if arguments.first_hardware_pass == "unknown"
             else arguments.first_hardware_pass == "true"
         ),
-        gui_pairing_interruptions=arguments.gui_pairing_interruptions,
+        gui_interruptions=arguments.gui_interruptions,
         scope_frozen_unix_ms=arguments.scope_frozen_unix_ms,
     )
     acceptance = PackageAcceptance(

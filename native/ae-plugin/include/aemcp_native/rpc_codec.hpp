@@ -353,8 +353,6 @@ struct SessionFrontDoorConfig {
 enum class SessionIngressCode {
   kAcceptedHello,
   kAcceptedRequest,
-  kPairingRequired,
-  kAuthorizationRequired,
   kHelloRequired,
   kWireVersionMismatch,
   kInvalidRequest,
@@ -396,13 +394,10 @@ class RpcSessionFrontDoor final {
       SessionClock& clock,
       SessionFrontDoorConfig config = {});
 
-  [[nodiscard]] bool authorize_pairing() noexcept;
-  void revoke_pairing() noexcept;
   [[nodiscard]] SessionIngressResult admit(const ParsedRequest& request);
   [[nodiscard]] bool complete_request(std::string_view request_id);
   void close() noexcept;
 
-  [[nodiscard]] bool paired() const noexcept { return paired_; }
   [[nodiscard]] bool hello_complete() const noexcept { return hello_complete_; }
   [[nodiscard]] bool closed() const noexcept { return closed_; }
   [[nodiscard]] std::string_view connection_id() const noexcept { return connection_id_; }
@@ -431,7 +426,6 @@ class RpcSessionFrontDoor final {
   std::string session_id_;
   SessionClock& clock_;
   SessionFrontDoorConfig config_;
-  bool paired_{false};
   bool hello_complete_{false};
   bool closed_{false};
   std::unordered_map<std::string, ActiveEntry> active_;

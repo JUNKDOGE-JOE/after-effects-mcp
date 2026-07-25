@@ -177,27 +177,14 @@ async function digestFile(filePath) {
 
 function parseCli(argv, environment = process.env) {
   const options = new Map();
-  let developmentTrustLocalPeer = false;
   for (let index = 0; index < argv.length;) {
     const name = argv[index];
-    if (name === '--development-trust-local-peer') {
-      if (developmentTrustLocalPeer) {
-        throw buildError(
-          'AE_PLUGIN_ARGUMENT_INVALID',
-          '--development-trust-local-peer may be specified only once',
-        );
-      }
-      developmentTrustLocalPeer = true;
-      index += 1;
-      continue;
-    }
     const value = argv[index + 1];
     if (!['--sdk-archive', '--sdk-root', '--output'].includes(name)
         || !value || options.has(name)) {
       throw buildError(
         'AE_PLUGIN_ARGUMENT_INVALID',
-        'expected unique --sdk-archive, --sdk-root, and --output options, plus an optional '
-          + '--development-trust-local-peer flag',
+        'expected unique --sdk-archive, --sdk-root, and --output options',
       );
     }
     options.set(name, value);
@@ -217,7 +204,6 @@ function parseCli(argv, environment = process.env) {
     sdkArchive,
     sdkRoot,
     output: path.resolve(output),
-    developmentTrustLocalPeer,
   };
 }
 
@@ -364,14 +350,7 @@ async function buildMacPluginInternal({
   sdkArchive: sdkArchiveInput,
   sdkRoot: sdkRootInput,
   output,
-  developmentTrustLocalPeer = false,
 }) {
-  if (typeof developmentTrustLocalPeer !== 'boolean') {
-    throw buildError(
-      'AE_PLUGIN_ARGUMENT_INVALID',
-      'developmentTrustLocalPeer must be an explicit boolean',
-    );
-  }
   if (process.platform !== 'darwin' || process.arch !== 'arm64') {
     throw buildError('AE_PLUGIN_PLATFORM_UNSUPPORTED', 'macOS arm64 is required for this development build');
   }
@@ -419,8 +398,6 @@ async function buildMacPluginInternal({
       'native/ae-plugin/include/aemcp_native/host_dispatcher.hpp',
       'native/ae-plugin/include/aemcp_native/mac_ipc_server.hpp',
       'native/ae-plugin/include/aemcp_native/native_rpc_connection.hpp',
-      'native/ae-plugin/include/aemcp_native/pairing_gate.hpp',
-      'native/ae-plugin/include/aemcp_native/pairing_ui_macos.hpp',
       'native/ae-plugin/include/aemcp_native/peer_identity.hpp',
       'native/ae-plugin/include/aemcp_native/peer_identity_macos.hpp',
       'native/ae-plugin/include/aemcp_native/project_epoch.hpp',
@@ -430,12 +407,10 @@ async function buildMacPluginInternal({
       'native/ae-plugin/include/aemcp_native/transport_auth.hpp',
       'native/ae-plugin/src/core/host_dispatcher.cpp',
       'native/ae-plugin/src/core/native_rpc_connection.cpp',
-      'native/ae-plugin/src/core/pairing_gate.cpp',
       'native/ae-plugin/src/core/rpc_codec.cpp',
       'native/ae-plugin/src/core/transport_auth.cpp',
       'native/ae-plugin/src/platform/macos/endpoint_registry_macos.cpp',
       'native/ae-plugin/src/platform/macos/mac_ipc_server.cpp',
-      'native/ae-plugin/src/platform/macos/pairing_ui_macos.mm',
       'native/ae-plugin/src/platform/macos/peer_identity_macos.cpp',
       'native/ae-plugin/src/platform/macos/secure_random_macos.cpp',
       'native/ae-plugin/src/aegp/plugin_entry.cpp',
@@ -542,8 +517,6 @@ async function buildMacPluginInternal({
       '-isysroot', sysroot,
       `-DAE_MCP_SOURCE_COMMIT="${sourceCommit}"`,
       `-DAE_MCP_PRODUCT_VERSION="${productVersion}"`,
-      ...(developmentTrustLocalPeer === true
-        ? ['-DAE_MCP_DEVELOPMENT_TRUST_LOCAL_PEER=1'] : []),
       '-pthread', '-fPIC', '-fvisibility=hidden', '-fvisibility-inlines-hidden',
       '-Wall', '-Wextra', '-Wpedantic', '-Werror', '-O0',
       ...includes,
@@ -551,12 +524,10 @@ async function buildMacPluginInternal({
     const sourceFiles = [
       'native/ae-plugin/src/core/host_dispatcher.cpp',
       'native/ae-plugin/src/core/native_rpc_connection.cpp',
-      'native/ae-plugin/src/core/pairing_gate.cpp',
       'native/ae-plugin/src/core/rpc_codec.cpp',
       'native/ae-plugin/src/core/transport_auth.cpp',
       'native/ae-plugin/src/platform/macos/endpoint_registry_macos.cpp',
       'native/ae-plugin/src/platform/macos/mac_ipc_server.cpp',
-      'native/ae-plugin/src/platform/macos/pairing_ui_macos.mm',
       'native/ae-plugin/src/platform/macos/peer_identity_macos.cpp',
       'native/ae-plugin/src/platform/macos/secure_random_macos.cpp',
       'native/ae-plugin/src/aegp/plugin_entry.cpp',

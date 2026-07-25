@@ -880,58 +880,13 @@ async def test_mcp_dispatch_preserves_structured_native_error(monkeypatch):
     from ae_mcp import server as server_module
 
     error = N.NativeBackendError(
-        "NATIVE_PAIRING_REQUIRED",
-        "Approve the matching fingerprint in After Effects.",
+        "NATIVE_ACTIONS_PAUSED",
+        "Native actions are paused.",
         retryable=True,
         side_effect="not-started",
         recovery=N.NativeRecovery(
-            action="approve-pairing",
-            hint="Approve the fingerprint, then retry.",
-        ),
-        details={
-            "pairingFingerprint": "12AB-34CD",
-            "pairingExpiresInMs": 60_000,
-            "hostInstanceId": "22222222-2222-4222-8222-222222222222",
-            "sourceCommit": "a" * 40,
-        },
-    )
-
-    async def _raise(_args, _ctx):
-        raise error
-
-    monkeypatch.setitem(
-        HANDLERS,
-        "ae.getProjectBitDepth",
-        (schemas.AeGetProjectBitDepthArgs, _raise),
-    )
-    monkeypatch.setattr(server_module, "_filtered_tool_names", lambda: set(HANDLERS))
-    monkeypatch.setattr(
-        server_module.approval_gate,
-        "enforce",
-        lambda *_args, **_kwargs: _none(),
-    )
-
-    response = await server_module.build_server()._ae_call_tool(
-        "ae_getProjectBitDepth", {}
-    )
-    payload = json.loads(response.content[0].text)
-    assert response.isError is True
-    assert payload["error"]["code"] == "NATIVE_PAIRING_REQUIRED"
-    assert payload["error"]["details"]["pairingFingerprint"] == "12AB-34CD"
-
-
-@pytest.mark.asyncio
-async def test_mcp_dispatch_preserves_pairing_rejection_as_structured_error(monkeypatch):
-    from ae_mcp import server as server_module
-
-    error = N.NativeBackendError(
-        "NATIVE_PAIRING_REJECTED",
-        "Native pairing expired before authorization.",
-        retryable=True,
-        side_effect="not-started",
-        recovery=N.NativeRecovery(
-            action="retry-pairing",
-            hint="Start a fresh native pairing request and approve it in After Effects.",
+            action="resume-actions",
+            hint="Resume native actions in the panel.",
         ),
     )
 
@@ -955,8 +910,8 @@ async def test_mcp_dispatch_preserves_pairing_rejection_as_structured_error(monk
     )
     payload = json.loads(response.content[0].text)
     assert response.isError is True
-    assert payload["error"]["code"] == "NATIVE_PAIRING_REJECTED"
-    assert payload["error"]["recovery"]["action"] == "retry-pairing"
+    assert payload["error"]["code"] == "NATIVE_ACTIONS_PAUSED"
+    assert payload["error"]["recovery"]["action"] == "resume-actions"
 
 
 async def _none():

@@ -39,13 +39,13 @@ Implementation may refine an ambiguous field, but a material scope expansion req
 | Frame | 2-4 hours | Freeze schemas, matrix, fixture, native novelty, acceptance harness skeleton, exclusions | Matrix is reviewable and every included public tool has an observable result |
 | Native novelty smoke | 0-1 focused run | Only for an unverified suite, lifecycle, or main-thread mechanism | Primitive works in real AE or the package is redesigned |
 | Implement | 1-2.5 working days | Up to three coordinated tracks: native; Core/bridge/public MCP; tests/fixture | All matrix rows pass T0-T2 and generated artifacts are current |
-| Review, freeze, and CI | 0.5-1 day | Concentrated review and blocker fixes, freeze the exact SHA, then run T3 and required CI | No unresolved in-scope blocker; the frozen SHA passes T3 and CI |
-| Candidate hardware | 60-90 minutes plus deterministic build time | One continuous exact-SHA package session on real AE | Every included public tool has evidence; writes have verified Undo |
+| Review, freeze, and CI | 0.5-1 day | Concentrated review and blocker fixes, freeze the candidate source and component receipts, then run T3 and required CI | No unresolved in-scope blocker; the candidate source passes T3 and CI |
+| Candidate hardware | 60-90 minutes plus deterministic build time | One continuous component-set package session on real AE | Every included public tool has evidence; writes have verified Undo |
 | Merge and main | 0.5-1.5 hours plus build time | Merge, rebuild/reinstall from clean `main`, rerun package smoke | Merge SHA passes; any accepted child Issues can close |
 
 These are scope alarms, not promises and not permission to drop evidence. When a phase exceeds its target, first remove unrelated work, repair the environment, or split a genuinely oversized package.
 
-Keep edit-level work local to the package worktree and run T0-T2 there. Complete the concentrated review, resolve blockers, and freeze the exact candidate before the first branch publication and required CI run. Do not push every small edit and trigger a full remote matrix repeatedly. If a genuinely required human review can only occur on GitHub, publish a Draft explicitly as pre-candidate review input; any CI run on that unfrozen SHA is not candidate evidence and the completion report must explain the extra run.
+Keep edit-level work local to the package worktree and run T0-T2 there. Complete the concentrated review, resolve blockers, and freeze the candidate source plus component receipts before the first branch publication and required CI run. Do not push every small edit and trigger a full remote matrix repeatedly. If a genuinely required human review can only occur on GitHub, publish a Draft explicitly as pre-candidate review input; any CI run on that unfrozen source is not candidate evidence and the completion report must explain the extra run.
 
 ## 4. Test escalation
 
@@ -58,7 +58,7 @@ Use the lowest tier that can disprove the current edit. Escalate only at the lis
 | T2 | Package integration | affected native compile, Core/CEP bridge, fixture and interaction corpus, generated-file checks | At integration checkpoints |
 | T3 | Frozen candidate | relevant full repository regression and required CI | Once after review |
 | T4 | New primitive only | narrow real-AE smoke for the unverified mechanism | Zero or one per package |
-| T5 | Candidate | full exact-SHA public-MCP package acceptance | Once normally |
+| T5 | Candidate | full component-set public-MCP package acceptance | Once normally |
 | T6 | Clean main | rebuild/reinstall plus package smoke from merge SHA | Once |
 
 After a T3-T6 failure, first add or run the smallest reproducing T0-T2 test. Batch the complete fix set before returning to the expensive tier.
@@ -79,13 +79,14 @@ Concurrency hardening, power-loss behavior, extreme installer recovery, signing/
 
 ## 6. Candidate freeze
 
-Freeze the exact candidate SHA after:
+Freeze the candidate source revision and installed component set after:
 
 - all product source and generated bundles are committed;
 - schemas, fixtures, docs, license/policy metadata, and evidence format are final;
-- T0-T2 pass for the exact source and generated files under review;
+- T0-T2 pass for the source and generated files under review;
 - concentrated review has no unresolved blocker;
-- the worktree is clean and all components can report the same full SHA.
+- the worktree is clean and every component has a compatible protocol/version
+  plus its own source revision and install receipt.
 
 Run the relevant T3 full regression and required CI on that frozen SHA. T5 hardware starts only after they pass. If T3 or CI finds a blocker, unfreeze the candidate, collect and batch the complete fix set, run focused lower-tier tests and review, then freeze one replacement candidate. The replacement SHA must pass required CI before T5; already-passing unaffected local tiers need not be repeated. After freeze, a new SHA is otherwise allowed only for a reproduced acceptance blocker or an evidence-invalidating defect. Do not deploy once per small fix.
 
@@ -99,13 +100,16 @@ Prepare before launching AE:
 - target machine unlocked/awake, required OS permissions, and normal GUI control;
 - Beta and unrelated AE processes closed;
 - canonical CEP/native paths and scan-root audit;
-- exact source SHA, clean state, artifact hashes, and installed receipts;
-- disposable project/fixture, evidence root, logs, pairing flow, and known optional dialogs.
+- requested source revision, clean state, component versions, and installed receipts;
+- bounded canonical-path, size, mode, and modification-time signals for the
+  runtime generation, shared layer, and stable launcher;
+- disposable project/fixture, evidence root, logs, and known optional dialogs.
 
 Run the package in one continuous window:
 
 1. Launch formal AE and verify host identity and canonical plug-in mapping.
-2. Pair immediately without conversational round trips.
+2. Verify automatic same-user/current-AE ancestry admission and the native
+   endpoint/peer-bound challenge.
 3. Create the disposable fixture once.
 4. Run every read tool and record the real AE state.
 5. For every write: record before state, invoke once, record response/audit/after state, execute Undo, and verify the Undo state.
@@ -114,8 +118,8 @@ Run the package in one continuous window:
 8. Emit one machine-readable evidence bundle and a redacted completion summary.
 
 Before candidate freeze, run a non-evidentiary hardware preflight for the
-actual prepared session. It must prove that exact Core/CEP/native/protocol
-components can be deployed, the formal AE path and GUI/pairing are available,
+actual prepared session. It must prove that the recorded Core/CEP/native/runtime
+component set is protocol-compatible and deployable, the formal AE path and GUI are available,
 the driver can create/reset/archive its one fixture, and any locator assumption
 needed by the package survives its planned Undo flow. Mark the output
 `candidateEvidence=false`; repair failures at T0-T2 and do not count them as
@@ -130,7 +134,7 @@ documents a risk that lower tiers cannot falsify.
 
 If a write returns `POSSIBLY_SIDE_EFFECTING_FAILURE`, stop retries and reconcile AE state plus audit first.
 
-Commit the package acceptance driver with the package and use the same driver for candidate and clean-`main` runs. The driver must call the public MCP surface, support the package's real dynamic locators and generation changes, create a fresh intent key for each new write while reusing that key for reconciliation, and bind its evidence to separately verified Core/CEP/native/protocol identities. A hashed test plan is explicit authorization for the disposable fixture only; it does not prove the production approval/elicitation path unless the package explicitly exercises that path. Temporary `/private/tmp` clients are not acceptance assets.
+Commit the package acceptance driver with the package and use the same driver for candidate and clean-`main` runs. The driver must call the public MCP surface, support the package's real dynamic locators and generation changes, create a fresh intent key for each new write while reusing that key for reconciliation, and bind its evidence to separately verified Core/CEP/native/runtime component identities and protocol compatibility. A hashed test plan is explicit authorization for the disposable fixture only; it does not prove the production approval/elicitation path unless the package explicitly exercises that path. Temporary `/private/tmp` clients are not acceptance assets.
 
 Do not introduce a generalized plan language speculatively. Promote repeated driver code into a shared runner only after at least two capability packages demonstrate the same stable need; a shared runner must not infer exact component identity from native self-report or model an invented response/Undo contract.
 
@@ -155,7 +159,7 @@ Record these counters in the completion report:
 - full CI runs;
 - T4, T5, and T6 hardware runs;
 - first candidate hardware pass/fail;
-- environment, pairing, and permission interruptions;
+- environment, GUI, and permission interruptions;
 - follow-up work created outside the active package.
 
 Useful targets are 6-10 tools per package, no more than two review rounds, no more than two candidate builds, and exactly one T5 plus one T6 run under normal conditions. These counters diagnose process waste; they are not substitutes for functional evidence.

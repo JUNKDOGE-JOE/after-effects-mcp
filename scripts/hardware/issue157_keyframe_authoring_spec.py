@@ -740,7 +740,7 @@ class Issue157Package:
         await self.runtime.checkpoint(
             "prepare-formal-ae",
             {
-                "instruction": "Launch only formalAeApp with one empty project and make GUI/pairing ready.",
+                "instruction": "Launch only formalAeApp with one empty project and make GUI ready; local same-user/current-AE admission is automatic.",
                 "formalAeApp": self.runtime.identity.formal_ae_app,
                 "fixturePath": self.runtime.fixture.path,
                 "candidateRun": self.runtime.mode in {"t5", "t6"},

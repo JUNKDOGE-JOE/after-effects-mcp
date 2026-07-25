@@ -313,11 +313,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
                 "CEP returned a malformed native failure error."
             )
         code = raw_error["code"]
-        expected_envelope = (
-            {"ok", "error", "pairing"}
-            if code == "NATIVE_PAIRING_REQUIRED"
-            else {"ok", "error"}
-        )
+        expected_envelope = {"ok", "error"}
         if body.get("ok") is not False or set(body) != expected_envelope:
             return self._contract_error(
                 "CEP returned a native failure envelope with unexpected fields."
@@ -393,27 +389,6 @@ class HttpBridge(Backend, NativeInvokeBackend):
                     hint="Resume AI actions in the panel, then retry.",
                 ),
             )
-        if code == "AUTH_REQUIRED":
-            if not (
-                status_code == 401
-                and set(raw_error) == _ERROR_FIELDS
-                and raw_error["sideEffect"] == "not-started"
-                and set(raw_error["recovery"]) == {"action", "hint"}
-                and raw_error["recovery"]["action"] == "approve-pairing"
-            ):
-                return self._contract_error(
-                    "CEP returned an invalid native pairing outcome policy."
-                )
-            return NativeBackendError(
-                "NATIVE_PAIRING_REJECTED",
-                raw_error["message"],
-                retryable=True,
-                side_effect="not-started",
-                recovery=NativeRecovery(
-                    action="retry-pairing",
-                    hint="Start a fresh native pairing request and approve it in After Effects.",
-                ),
-            )
         if code == "NATIVE_CONTRACT_MISMATCH":
             if not (
                 status_code == 503
@@ -427,48 +402,6 @@ class HttpBridge(Backend, NativeInvokeBackend):
                     "CEP returned a malformed internal contract-mismatch policy."
                 )
             return self._contract_error(raw_error["message"])
-
-        if code == "NATIVE_PAIRING_REQUIRED":
-            if not (
-                status_code == 409
-                and set(raw_error) == _ERROR_FIELDS | {"details"}
-                and raw_error["retryable"] is True
-                and raw_error["sideEffect"] == "not-started"
-                and set(raw_error["recovery"]) == {"action", "hint"}
-                and raw_error["recovery"]["action"] == "approve-pairing"
-            ):
-                return self._contract_error(
-                    "CEP returned an invalid native pairing-required policy."
-                )
-            pairing = body.get("pairing")
-            if not isinstance(pairing, Mapping):
-                return self._contract_error(
-                    "CEP omitted the native pairing fingerprint and provenance."
-                )
-            projected = {
-                "pairingFingerprint": pairing.get("fingerprint"),
-                "pairingExpiresInMs": pairing.get("expiresInMs"),
-                "hostInstanceId": pairing.get("hostInstanceId"),
-                "sourceCommit": pairing.get("sourceCommit"),
-            }
-            if set(pairing) != {
-                "fingerprint", "expiresInMs", "hostInstanceId", "sourceCommit"
-            } or dict(raw_error["details"]) != projected:
-                return self._contract_error(
-                    "CEP returned inconsistent native pairing details."
-                )
-            message = raw_error.get("message")
-            return NativeBackendError(
-                "NATIVE_PAIRING_REQUIRED",
-                message,
-                retryable=True,
-                side_effect="not-started",
-                recovery=NativeRecovery(
-                    action="approve-pairing",
-                    hint="Approve the matching fingerprint in After Effects, then retry.",
-                ),
-                details=projected,
-            )
 
         try:
             return NativeBackendError.from_payload(raw_error)
