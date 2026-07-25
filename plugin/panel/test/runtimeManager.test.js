@@ -76,12 +76,14 @@ async function packageFixture(base, {
 }) {
   const extensionRoot = path.join(base, `AE MCP 插件 ${version}`);
   const runtimeRoot = path.join(extensionRoot, 'runtime', 'macos-arm64');
-  const python = await writeFile(
+  const pythonVersioned = await writeFile(
     runtimeRoot,
-    'python/bin/python3',
+    'python/bin/python3.13',
     `#!/bin/sh\nprintf 'core-started:${marker}:%s\\n' "$*"\n`,
     0o755,
   );
+  const python = path.join(runtimeRoot, 'python', 'bin', 'python3');
+  await fs.promises.symlink(path.basename(pythonVersioned), python);
   await writeFile(runtimeRoot, 'python/site-packages/ae_mcp/__init__.py', `MARKER = ${JSON.stringify(marker)}\n`);
   await writeFile(runtimeRoot, 'node/bin/node', '#!/bin/sh\nexit 0\n', 0o755);
   await writeFile(runtimeRoot, 'node/host/package.json', '{"private":true}\n');

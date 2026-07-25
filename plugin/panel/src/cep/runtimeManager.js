@@ -176,6 +176,73 @@ export function createRuntimeManager({
     };
   }
 
+  async function executableSignal(
+    filePath,
+    code,
+    {
+      rootDirectory,
+      expectedMode,
+      expectedSize,
+      expectedType,
+    } = {},
+  ) {
+    let info;
+    try {
+      info = await promises.lstat(filePath);
+    } catch (error) {
+      failure(code, 'Trusted local runtime entrypoint is missing', { path: filePath });
+    }
+    const type = info.isSymbolicLink?.() ? 'symlink' : 'file';
+    if ((expectedType && type !== expectedType)
+        || (expectedMode && modeOf(info) !== expectedMode)
+        || (Number.isSafeInteger(expectedSize) && info.size !== expectedSize)) {
+      failure(code, 'Trusted local runtime entrypoint metadata changed', {
+        path: filePath,
+        size: info.size,
+        mtimeMs: Math.trunc(info.mtimeMs),
+      });
+    }
+    if (type === 'file') {
+      if (!info.isFile() || info.nlink !== 1 || (info.mode & 0o111) === 0) {
+        failure(code, 'Trusted local runtime entrypoint changed', { path: filePath });
+      }
+      return {
+        path: filePath,
+        type,
+        size: info.size,
+        mtimeMs: Math.trunc(info.mtimeMs),
+        mode: modeOf(info),
+      };
+    }
+    let target;
+    let targetInfo;
+    try {
+      target = await promises.readlink(filePath);
+      const resolved = paths.resolve([paths.dirname(filePath), target]);
+      if (!rootDirectory || paths.isAbsolute(target) || !paths.contains(rootDirectory, resolved)) {
+        failure(code, 'Trusted local runtime entrypoint symlink is unsafe', { path: filePath });
+      }
+      targetInfo = await promises.lstat(resolved);
+    } catch (error) {
+      if (error instanceof RuntimeManagerError) throw error;
+      failure(code, 'Trusted local runtime entrypoint symlink is invalid', { path: filePath });
+    }
+    if (!targetInfo.isFile() || targetInfo.isSymbolicLink?.() || targetInfo.nlink !== 1
+        || (targetInfo.mode & 0o111) === 0) {
+      failure(code, 'Trusted local runtime entrypoint target changed', { path: filePath });
+    }
+    return {
+      path: filePath,
+      type,
+      size: targetInfo.size,
+      mtimeMs: Math.trunc(targetInfo.mtimeMs),
+      mode: modeOf(targetInfo),
+      linkTarget: target,
+      linkSize: info.size,
+      linkMtimeMs: Math.trunc(info.mtimeMs),
+    };
+  }
+
   function validateRuntimeManifest(value) {
     if (!value || value.schemaVersion !== 1 || value.platform !== platform.id
         || value.node?.version !== '24.17.0' || value.python?.version !== '3.13.14'
@@ -291,7 +358,7 @@ export function createRuntimeManager({
         || !Number.isSafeInteger(launcherRecord.size) || launcherRecord.size <= 0
         || !nodeRecord || nodeRecord.type !== 'file'
         || !Number.isSafeInteger(nodeRecord.size) || nodeRecord.size <= 0
-        || !pythonRecord || pythonRecord.type !== 'file'
+        || !pythonRecord || !['file', 'symlink'].includes(pythonRecord.type)
         || !Number.isSafeInteger(pythonRecord.size) || pythonRecord.size <= 0) {
       failure('RUNTIME_BUNDLE_INVALID', 'Packaged runtime entrypoints or stable launcher are not declared');
     }
@@ -318,13 +385,14 @@ export function createRuntimeManager({
         expectedSize: nodeRecord.size,
       },
     );
-    const pythonSignal = await ordinaryFileSignal(
+    const pythonSignal = await executableSignal(
       paths.join([packagedRuntimeRoot, 'python', 'bin', 'python3']),
       'RUNTIME_BUNDLE_METADATA_CHANGED',
       {
-        executable: true,
+        rootDirectory: packagedRuntimeRoot,
         expectedMode: pythonRecord.mode,
         expectedSize: pythonRecord.size,
+        expectedType: pythonRecord.type,
       },
     );
     return {
@@ -413,10 +481,10 @@ export function createRuntimeManager({
         'RUNTIME_TRUST_SIGNAL_CHANGED',
         { executable: true },
       ),
-      python: await ordinaryFileSignal(
+      python: await executableSignal(
         paths.join([directory, 'python', 'bin', 'python3']),
         'RUNTIME_TRUST_SIGNAL_CHANGED',
-        { executable: true },
+        { rootDirectory: directory },
       ),
     };
     return {
@@ -699,7 +767,9 @@ export function createRuntimeManager({
         && current.signals.runtimeManifest.size === packaged.signals.runtimeManifest.size
         && current.signals.launcher.size === packaged.signals.launcher.size
         && current.signals.node.size === packaged.signals.node.size
-        && current.signals.python.size === packaged.signals.python.size;
+        && current.signals.python.size === packaged.signals.python.size
+        && current.signals.python.type === packaged.signals.python.type
+        && current.signals.python.linkTarget === packaged.signals.python.linkTarget;
       if (trustedSignalsMatch) {
         await installLauncher(current);
         return {
