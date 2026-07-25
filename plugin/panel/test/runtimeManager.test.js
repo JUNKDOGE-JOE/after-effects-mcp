@@ -113,7 +113,8 @@ async function packageFixture(base, {
       'base="${AE_MCP_HOME:-$HOME/.ae-mcp}"',
       'relative="$(/bin/cat "$base/runtime/current")"',
       'case "$relative" in ""|/*|*..*) exit 78 ;; esac',
-      'exec "$base/runtime/$relative/python/bin/python3" -B -I -m ae_mcp "$@"',
+      'case "$relative" in generations/g-*) runtime="$base/runtime/$relative/runtime" ;; *) runtime="$base/runtime/$relative" ;; esac',
+      'exec "$runtime/python/bin/python3" -B -I -m ae_mcp "$@"',
       '',
     ].join('\n'),
     0o755,
@@ -155,7 +156,16 @@ async function packageFixture(base, {
       },
     ],
   }, null, 2)}\n`);
-  return { extensionRoot, runtimeRoot, python };
+  return {
+    extensionRoot,
+    launcher,
+    launcherSha256,
+    runtimeManifestSha256,
+    runtimeRoot,
+    python,
+    sourceCommitSha,
+    version,
+  };
 }
 
 async function harness(t) {
@@ -176,6 +186,35 @@ function managerFor(h, extensionRoot, options = {}) {
   });
 }
 
+async function seedLegacyGeneration(h, payload) {
+  const generation = `${payload.version}-${payload.sourceCommitSha}`;
+  const relative = `${generation}/macos-arm64`;
+  const generationRoot = path.join(h.platform.paths.runtimeRoot, generation);
+  await fs.promises.mkdir(generationRoot, { recursive: true });
+  await fs.promises.cp(
+    payload.runtimeRoot,
+    path.join(generationRoot, 'macos-arm64'),
+    { recursive: true, preserveTimestamps: true, verbatimSymlinks: true },
+  );
+  await fs.promises.copyFile(payload.launcher, path.join(generationRoot, 'ae-mcp-launcher'));
+  await fs.promises.chmod(path.join(generationRoot, 'ae-mcp-launcher'), 0o755);
+  await fs.promises.writeFile(path.join(generationRoot, 'install-record.json'), `${JSON.stringify({
+    schemaVersion: 1,
+    version: payload.version,
+    platform: 'macos-arm64',
+    sourceCommitSha: payload.sourceCommitSha,
+    runtimeManifestSha256: payload.runtimeManifestSha256,
+    launcherSha256: payload.launcherSha256,
+    relative,
+    installedAt: Date.now(),
+  }, null, 2)}\n`);
+  await fs.promises.mkdir(h.platform.paths.binRoot, { recursive: true });
+  await fs.promises.copyFile(payload.launcher, h.platform.paths.launcher);
+  await fs.promises.chmod(h.platform.paths.launcher, 0o755);
+  await fs.promises.writeFile(h.platform.paths.currentPointer, `${relative}\n`);
+  return { generationRoot, relative };
+}
+
 macosRuntimeTest('clean macOS install activates and starts the bundled core without PATH tools', async (t) => {
   const h = await harness(t);
   const payload = await packageFixture(h.root, {
@@ -187,17 +226,48 @@ macosRuntimeTest('clean macOS install activates and starts the bundled core with
 
   assert.equal(result.action, 'install');
   assert.equal(result.launcher, path.join(h.home, '.ae-mcp', 'bin', 'ae-mcp'));
-  assert.match(await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8'), /^0\.9\.3-[0-9a-f]{40}\/macos-arm64\n$/);
+  assert.match(
+    await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8'),
+    /^generations\/g-[0-9a-f]{16}\n$/,
+  );
+  assert.doesNotMatch(result.relative, /1{40}/);
+  assert.equal(result.componentReceipt.sourceRevisionRole, 'advisory');
+  assert.equal(result.componentReceipt.canonicalPath.includes('/layers/'), true);
+  assert.equal(result.lifecycle.generations.created, 1);
+  assert.equal(result.lifecycle.layers.created, 1);
   const launched = await execFileAsync(result.launcher, ['--fixture'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });
   assert.match(launched.stdout, /core-started:clean:-B -I -m ae_mcp --fixture/);
   const node = await manager.resolveNode();
-  assert.equal(node.nodePath, path.join(h.platform.paths.runtimeRoot, result.relative, 'node', 'bin', 'node'));
+  assert.equal(node.nodePath, path.join(result.componentReceipt.canonicalPath, 'node', 'bin', 'node'));
   assert.equal(node.runtime.relative, result.relative);
   assert.equal(node.runtime.sourceCommitSha, result.sourceCommitSha);
   assert.equal(node.executable.source, 'runtime-manager');
   assert.equal((await manager.inspect()).ok, true);
+});
+
+macosRuntimeTest('a readable schema-v1 generation migrates forward without deleting the legacy runtime', async (t) => {
+  const h = await harness(t);
+  const payload = await packageFixture(h.root, {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'legacy',
+  });
+  const legacy = await seedLegacyGeneration(h, payload);
+  const manager = managerFor(h, payload.extensionRoot);
+  const before = await manager.inspect();
+  assert.equal(before.current.ok, true, JSON.stringify(before.current));
+
+  const migrated = await manager.ensureReady();
+
+  assert.equal(migrated.action, 'migrate');
+  assert.match(migrated.relative, /^generations\/g-[0-9a-f]{16}$/);
+  assert.equal(
+    (await fs.promises.readFile(h.platform.paths.previousPointer, 'utf8')).trim(),
+    legacy.relative,
+  );
+  assert.equal((await fs.promises.lstat(legacy.generationRoot)).isDirectory(), true);
+  assert.equal(migrated.lifecycle.layers.created, 1);
+  assert.equal((await manager.inspect()).previous.record.schemaVersion, 1);
 });
 
 macosRuntimeTest('upgrade, downgrade, and rollback atomically select verified versions', async (t) => {
@@ -234,7 +304,65 @@ macosRuntimeTest('upgrade, downgrade, and rollback atomically select verified ve
   assert.equal(state.previous.record.version, '0.10.0');
 });
 
-macosRuntimeTest('a changed critical runtime signal triggers a verified repair without retaining the bad generation', async (t) => {
+macosRuntimeTest('GC retains current and previous while reclaiming only stale owned schema-v2 state', async (t) => {
+  const h = await harness(t);
+  const v1 = await packageFixture(path.join(h.root, 'v1'), {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'one',
+  });
+  const v2 = await packageFixture(path.join(h.root, 'v2'), {
+    version: '0.10.0', sourceCommitSha: '2'.repeat(40), marker: 'two',
+  });
+  const v3 = await packageFixture(path.join(h.root, 'v3'), {
+    version: '0.11.0', sourceCommitSha: '3'.repeat(40), marker: 'three',
+  });
+  const first = await managerFor(h, v1.extensionRoot).ensureReady();
+  await managerFor(h, v2.extensionRoot).ensureReady();
+  const runtimeRoot = h.platform.paths.runtimeRoot;
+  const untouched = [
+    path.join(runtimeRoot, 'evidence', 'keep.json'),
+    path.join(runtimeRoot, 'fixtures', 'keep.aep'),
+    path.join(runtimeRoot, 'issue169-bundle', 'keep.txt'),
+    path.join(runtimeRoot, 'locks', 'retained.lock'),
+    path.join(runtimeRoot, '.stage-generation-g-in-progress', 'keep.txt'),
+    path.join(runtimeRoot, `0.8.0-${'9'.repeat(40)}`, 'keep.txt'),
+    path.join(runtimeRoot, 'generations', 'g-aaaaaaaaaaaaaaaa', 'keep.txt'),
+    path.join(
+      runtimeRoot,
+      'layers',
+      'f'.repeat(64),
+      'i-bbbbbbbbbbbbbbbb',
+      'keep.txt',
+    ),
+  ];
+  for (const marker of untouched) {
+    await fs.promises.mkdir(path.dirname(marker), { recursive: true });
+    await fs.promises.writeFile(marker, 'retain\n');
+  }
+
+  const upgraded = await managerFor(h, v3.extensionRoot).ensureReady();
+  const state = await managerFor(h, v3.extensionRoot).inspect();
+
+  assert.equal(upgraded.action, 'upgrade');
+  assert.equal(state.current.record.version, '0.11.0');
+  assert.equal(state.previous.record.version, '0.10.0');
+  assert.equal(upgraded.lifecycle.generations.reclaimed, 1);
+  assert.equal(upgraded.lifecycle.layers.reclaimed, 1);
+  assert.equal(upgraded.lifecycle.logicalBytes.reclaimed > 0, true);
+  assert.equal(upgraded.lifecycle.physicalBytes.reclaimed > 0, true);
+  await assert.rejects(
+    fs.promises.lstat(path.join(runtimeRoot, first.relative)),
+    { code: 'ENOENT' },
+  );
+  await assert.rejects(
+    fs.promises.lstat(first.componentReceipt.canonicalPath),
+    { code: 'ENOENT' },
+  );
+  for (const marker of untouched) {
+    assert.equal(await fs.promises.readFile(marker, 'utf8'), 'retain\n');
+  }
+});
+
+macosRuntimeTest('a corrupt current layer falls back to the verified previous generation', async (t) => {
   const h = await harness(t);
   const v1 = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'one',
@@ -246,24 +374,66 @@ macosRuntimeTest('a changed critical runtime signal triggers a verified repair w
   const two = managerFor(h, v2.extensionRoot);
   await one.ensureReady();
   await two.ensureReady();
-  const current = (await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8')).trim();
-  await fs.promises.appendFile(path.join(h.platform.paths.runtimeRoot, current, 'python', 'bin', 'python3'), '# corrupt\n');
+  const current = (await two.inspect()).current;
+  await fs.promises.appendFile(path.join(current.directory, 'python', 'bin', 'python3'), '# corrupt\n');
 
-  const repaired = await two.ensureReady();
+  const fallback = await two.ensureReady();
 
-  assert.equal(repaired.action, 'repair');
-  assert.equal(repaired.version, '0.10.0');
-  assert.equal(repaired.diagnostics[0].code, 'RUNTIME_CURRENT_REPAIRED');
+  assert.equal(fallback.action, 'fallback');
+  assert.equal(fallback.version, '0.9.3');
+  assert.equal(fallback.diagnostics[0].code, 'RUNTIME_CURRENT_INVALID_FALLBACK');
   const launched = await execFileAsync(h.platform.paths.launcher, ['--repaired'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });
-  assert.match(launched.stdout, /core-started:two:-B -I -m ae_mcp --repaired/);
+  assert.match(launched.stdout, /core-started:one:-B -I -m ae_mcp --repaired/);
   assert.equal((await two.inspect()).ok, true);
   await assert.rejects(fs.promises.readFile(h.platform.paths.previousPointer), { code: 'ENOENT' });
   const next = await two.ensureReady();
-  assert.equal(next.action, 'ready');
+  assert.equal(next.action, 'upgrade');
   assert.equal(next.version, '0.10.0');
   assert.equal((await two.inspect()).ok, true);
+});
+
+macosRuntimeTest('a changed receipt signal escalates to full verification and reuses valid content', async (t) => {
+  const h = await harness(t);
+  const payload = await packageFixture(h.root, {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'signal',
+  });
+  const first = managerFor(h, payload.extensionRoot);
+  const installed = await first.ensureReady();
+  const selectedRuntime = installed.componentReceipt.canonicalPath;
+  const nodePath = path.join(selectedRuntime, 'node', 'bin', 'node');
+  const nodeInfo = await fs.promises.stat(nodePath);
+  await fs.promises.utimes(nodePath, nodeInfo.atime, new Date(nodeInfo.mtimeMs + 2000));
+  let payloadReads = 0;
+  const countedPromises = new Proxy(fs.promises, {
+    get(target, property) {
+      const value = Reflect.get(target, property);
+      if (property === 'readFile') {
+        return async function counted(targetPath, ...args) {
+          const resolved = path.resolve(String(targetPath));
+          if (resolved === selectedRuntime || resolved.startsWith(`${selectedRuntime}${path.sep}`)) {
+            payloadReads += 1;
+          }
+          return value.call(target, targetPath, ...args);
+        };
+      }
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const manager = managerFor(h, payload.extensionRoot, {
+    fsImpl: { ...fs, promises: countedPromises },
+  });
+
+  const repaired = await manager.ensureReady();
+
+  assert.equal(repaired.action, 'repair');
+  assert.equal(repaired.componentReceipt.layerId, installed.componentReceipt.layerId);
+  assert.notEqual(repaired.relative, installed.relative);
+  assert.equal(repaired.lifecycle.layers.reused, 1);
+  assert.equal(repaired.lifecycle.generations.created, 1);
+  assert.equal(repaired.lifecycle.generations.reclaimed, 1);
+  assert.equal(payloadReads > 0, true);
 });
 
 macosRuntimeTest('a launcher contract change cannot publish a mixed launcher/runtime selection', async (t) => {
@@ -372,7 +542,7 @@ macosRuntimeTest('unchanged runtime receipt is reused across source revisions wi
   });
   const first = managerFor(h, firstPayload.extensionRoot);
   const installed = await first.ensureReady();
-  const selectedRuntime = path.join(h.platform.paths.runtimeRoot, installed.relative);
+  const selectedRuntime = installed.componentReceipt.canonicalPath;
   const guardedPromises = new Proxy(fs.promises, {
     get(target, property) {
       const value = Reflect.get(target, property);
@@ -398,6 +568,8 @@ macosRuntimeTest('unchanged runtime receipt is reused across source revisions wi
   assert.equal(reused.sourceCommitSha, '1'.repeat(40));
   assert.equal(reused.packagedSourceCommitSha, '2'.repeat(40));
   assert.equal(reused.diagnostics[0].code, 'RUNTIME_SOURCE_REVISION_DIFFERENT_TRUSTED');
+  assert.equal(reused.lifecycle.generations.reused, 1);
+  assert.equal(reused.lifecycle.layers.reused, 1);
   assert.equal((await second.inspect()).ok, true);
 });
 

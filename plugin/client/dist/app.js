@@ -25,9 +25,9 @@
     mod
   ));
 
-  // node_modules/react/cjs/react.production.min.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/cjs/react.production.min.js
   var require_react_production_min = __commonJS({
-    "node_modules/react/cjs/react.production.min.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/cjs/react.production.min.js"(exports) {
       "use strict";
       var l = Symbol.for("react.element");
       var n = Symbol.for("react.portal");
@@ -298,9 +298,9 @@
     }
   });
 
-  // node_modules/react/index.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/index.js
   var require_react = __commonJS({
-    "node_modules/react/index.js"(exports, module) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_production_min();
@@ -310,9 +310,9 @@
     }
   });
 
-  // node_modules/scheduler/cjs/scheduler.production.min.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js
   var require_scheduler_production_min = __commonJS({
-    "node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
       "use strict";
       function f(a, b) {
         var c = a.length;
@@ -563,9 +563,9 @@
     }
   });
 
-  // node_modules/scheduler/index.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/scheduler/index.js
   var require_scheduler = __commonJS({
-    "node_modules/scheduler/index.js"(exports, module) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/scheduler/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_scheduler_production_min();
@@ -575,9 +575,9 @@
     }
   });
 
-  // node_modules/react-dom/cjs/react-dom.production.min.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js
   var require_react_dom_production_min = __commonJS({
-    "node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
       "use strict";
       var aa = require_react();
       var ca = require_scheduler();
@@ -7185,9 +7185,9 @@
     }
   });
 
-  // node_modules/react-dom/index.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/index.js
   var require_react_dom = __commonJS({
-    "node_modules/react-dom/index.js"(exports, module) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/index.js"(exports, module) {
       "use strict";
       function checkDCE() {
         if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7211,9 +7211,9 @@
     }
   });
 
-  // node_modules/react-dom/client.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/client.js
   var require_client = __commonJS({
-    "node_modules/react-dom/client.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react-dom/client.js"(exports) {
       "use strict";
       var m = require_react_dom();
       if (true) {
@@ -7242,9 +7242,9 @@
     }
   });
 
-  // node_modules/react/cjs/react-jsx-runtime.production.min.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js
   var require_react_jsx_runtime_production_min = __commonJS({
-    "node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
       "use strict";
       var f = require_react();
       var k = Symbol.for("react.element");
@@ -7267,9 +7267,9 @@
     }
   });
 
-  // node_modules/react/jsx-runtime.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/jsx-runtime.js
   var require_jsx_runtime = __commonJS({
-    "node_modules/react/jsx-runtime.js"(exports, module) {
+    "../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/react/jsx-runtime.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_jsx_runtime_production_min();
@@ -7318,19 +7318,19 @@
   // src/components/core/Icon.jsx
   var import_react4 = __toESM(require_react(), 1);
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var import_react3 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/shared/src/utils.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/shared/src/utils.js
   var toKebabCase = (string) => string.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   var mergeClasses = (...classes) => classes.filter((className, index, array) => {
     return Boolean(className) && array.indexOf(className) === index;
   }).join(" ");
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var import_react2 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/defaultAttributes.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/defaultAttributes.js
   var defaultAttributes = {
     xmlns: "http://www.w3.org/2000/svg",
     width: 24,
@@ -7343,7 +7343,7 @@
     strokeLinejoin: "round"
   };
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var Icon = (0, import_react2.forwardRef)(
     ({
       color = "currentColor",
@@ -7375,7 +7375,7 @@
     }
   );
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var createLucideIcon = (iconName, iconNode) => {
     const Component = (0, import_react3.forwardRef)(
       ({ className, ...props }, ref) => (0, import_react3.createElement)(Icon, {
@@ -7389,13 +7389,13 @@
     return Component;
   };
 
-  // node_modules/lucide-react/dist/esm/icons/arrow-up.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/arrow-up.js
   var ArrowUp = createLucideIcon("ArrowUp", [
     ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
     ["path", { d: "M12 19V5", key: "x0mq9r" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/book-open.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/book-open.js
   var BookOpen = createLucideIcon("BookOpen", [
     ["path", { d: "M12 7v14", key: "1akyts" }],
     [
@@ -7407,7 +7407,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/box.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/box.js
   var Box = createLucideIcon("Box", [
     [
       "path",
@@ -7420,7 +7420,7 @@
     ["path", { d: "M12 22V12", key: "d0xqtd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/brain.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/brain.js
   var Brain = createLucideIcon("Brain", [
     [
       "path",
@@ -7445,58 +7445,58 @@
     ["path", { d: "M19.967 17.484A4 4 0 0 1 18 18", key: "159ez6" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/check.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/check.js
   var Check = createLucideIcon("Check", [["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-down.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-down.js
   var ChevronDown = createLucideIcon("ChevronDown", [
     ["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-right.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-right.js
   var ChevronRight = createLucideIcon("ChevronRight", [
     ["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-alert.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-alert.js
   var CircleAlert = createLucideIcon("CircleAlert", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "12", x2: "12", y1: "8", y2: "12", key: "1pkeuh" }],
     ["line", { x1: "12", x2: "12.01", y1: "16", y2: "16", key: "4dfq90" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-slash.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-slash.js
   var CircleSlash = createLucideIcon("CircleSlash", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "9", x2: "15", y1: "15", y2: "9", key: "1dfufj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/circle.js
   var Circle = createLucideIcon("Circle", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/copy.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/copy.js
   var Copy = createLucideIcon("Copy", [
     ["rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2", key: "17jyea" }],
     ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2", key: "zix9uf" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/download.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/download.js
   var Download = createLucideIcon("Download", [
     ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
     ["polyline", { points: "7 10 12 15 17 10", key: "2ggqvy" }],
     ["line", { x1: "12", x2: "12", y1: "15", y2: "3", key: "1vk2je" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/external-link.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/external-link.js
   var ExternalLink = createLucideIcon("ExternalLink", [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye-off.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/eye-off.js
   var EyeOff = createLucideIcon("EyeOff", [
     [
       "path",
@@ -7516,7 +7516,7 @@
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/eye.js
   var Eye = createLucideIcon("Eye", [
     [
       "path",
@@ -7528,7 +7528,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/file-text.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/file-text.js
   var FileText = createLucideIcon("FileText", [
     ["path", { d: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", key: "1rqfz7" }],
     ["path", { d: "M14 2v4a2 2 0 0 0 2 2h4", key: "tnqrlb" }],
@@ -7537,7 +7537,7 @@
     ["path", { d: "M16 17H8", key: "z1uh3a" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/github.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/github.js
   var Github = createLucideIcon("Github", [
     [
       "path",
@@ -7549,28 +7549,28 @@
     ["path", { d: "M9 18c-4.51 2-5-2-7-2", key: "9comsn" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/globe.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/globe.js
   var Globe = createLucideIcon("Globe", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/history.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/history.js
   var History = createLucideIcon("History", [
     ["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "1357e3" }],
     ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
     ["path", { d: "M12 7v5l4 2", key: "1fdv2h" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/info.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/info.js
   var Info = createLucideIcon("Info", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 16v-4", key: "1dtifu" }],
     ["path", { d: "M12 8h.01", key: "e9boi3" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list-checks.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/list-checks.js
   var ListChecks = createLucideIcon("ListChecks", [
     ["path", { d: "m3 17 2 2 4-4", key: "1jhpwq" }],
     ["path", { d: "m3 7 2 2 4-4", key: "1obspn" }],
@@ -7579,7 +7579,7 @@
     ["path", { d: "M13 18h8", key: "oe0vm4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/list.js
   var List = createLucideIcon("List", [
     ["path", { d: "M3 12h.01", key: "nlz23k" }],
     ["path", { d: "M3 18h.01", key: "1tta3j" }],
@@ -7589,23 +7589,23 @@
     ["path", { d: "M8 6h13", key: "ik3vkj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/message-square.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/message-square.js
   var MessageSquare = createLucideIcon("MessageSquare", [
     ["path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", key: "1lielz" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/pause.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/pause.js
   var Pause = createLucideIcon("Pause", [
     ["rect", { x: "14", y: "4", width: "4", height: "16", rx: "1", key: "zuxfzm" }],
     ["rect", { x: "6", y: "4", width: "4", height: "16", rx: "1", key: "1okwgv" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/play.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/play.js
   var Play = createLucideIcon("Play", [
     ["polygon", { points: "6 3 20 12 6 21 6 3", key: "1oa8hb" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plug.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/plug.js
   var Plug = createLucideIcon("Plug", [
     ["path", { d: "M12 22v-5", key: "1ega77" }],
     ["path", { d: "M9 8V2", key: "14iosj" }],
@@ -7613,25 +7613,25 @@
     ["path", { d: "M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z", key: "osxo6l" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plus.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/plus.js
   var Plus = createLucideIcon("Plus", [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/rotate-cw.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/rotate-cw.js
   var RotateCw = createLucideIcon("RotateCw", [
     ["path", { d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", key: "1p45f6" }],
     ["path", { d: "M21 3v5h-5", key: "1q7to0" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/search.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/search.js
   var Search = createLucideIcon("Search", [
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }],
     ["path", { d: "m21 21-4.3-4.3", key: "1qie3q" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/send.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/send.js
   var Send = createLucideIcon("Send", [
     [
       "path",
@@ -7643,7 +7643,7 @@
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/settings.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/settings.js
   var Settings = createLucideIcon("Settings", [
     [
       "path",
@@ -7655,7 +7655,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield-alert.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/shield-alert.js
   var ShieldAlert = createLucideIcon("ShieldAlert", [
     [
       "path",
@@ -7668,7 +7668,7 @@
     ["path", { d: "M12 16h.01", key: "1drbdi" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/shield.js
   var Shield = createLucideIcon("Shield", [
     [
       "path",
@@ -7679,7 +7679,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/sparkles.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/sparkles.js
   var Sparkles = createLucideIcon("Sparkles", [
     [
       "path",
@@ -7694,12 +7694,12 @@
     ["path", { d: "M5 18H3", key: "zchphs" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/square.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/square.js
   var Square = createLucideIcon("Square", [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/stethoscope.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/stethoscope.js
   var Stethoscope = createLucideIcon("Stethoscope", [
     ["path", { d: "M11 2v2", key: "1539x4" }],
     ["path", { d: "M5 2v2", key: "1yf1q8" }],
@@ -7708,7 +7708,7 @@
     ["circle", { cx: "20", cy: "10", r: "2", key: "ts1r5v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/trash-2.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/trash-2.js
   var Trash2 = createLucideIcon("Trash2", [
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", key: "4alrt4" }],
@@ -7717,7 +7717,7 @@
     ["line", { x1: "14", x2: "14", y1: "11", y2: "17", key: "xtxkd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/triangle-alert.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/triangle-alert.js
   var TriangleAlert = createLucideIcon("TriangleAlert", [
     [
       "path",
@@ -7730,13 +7730,13 @@
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/undo-2.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/undo-2.js
   var Undo2 = createLucideIcon("Undo2", [
     ["path", { d: "M9 14 4 9l5-5", key: "102s5s" }],
     ["path", { d: "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11", key: "f3b9sd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/wrench.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/wrench.js
   var Wrench = createLucideIcon("Wrench", [
     [
       "path",
@@ -7747,13 +7747,13 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/x.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/x.js
   var X = createLucideIcon("X", [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/zap.js
+  // ../../../../../Users/junk_doge/Documents/ae-mcp/plugin/panel/node_modules/lucide-react/dist/esm/icons/zap.js
   var Zap = createLucideIcon("Zap", [
     [
       "path",
@@ -17418,7 +17418,11 @@
   var RUNTIME_PLATFORM = "macos-arm64";
   var LOCK_NAME = ".runtime-manager.lock";
   var INSTALL_RECORD = "install-record.json";
+  var LAYER_RECORD = "layer-record.json";
   var GENERATION_LAUNCHER = "ae-mcp-launcher";
+  var GENERATION_OWNER = "ae-mcp-runtime-manager";
+  var GENERATION_ID = /^g-[0-9a-f]{16}$/;
+  var LAYER_INSTANCE_ID = /^i-[0-9a-f]{16}$/;
   var SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
   var SOURCE_SHA = /^[0-9a-f]{40}$/;
   var SHA256 = /^[0-9a-f]{64}$/;
@@ -17443,8 +17447,9 @@
   function pointerValue(value, platformId = RUNTIME_PLATFORM) {
     const text = String(value || "").trim();
     const parts = text.split("/");
-    if (!portablePath(text) || parts.length !== 2 || parts[1] !== platformId) return "";
-    return text;
+    if (!portablePath(text) || parts.length !== 2) return "";
+    if (parts[0] === "generations" && GENERATION_ID.test(parts[1])) return text;
+    return parts[1] === platformId ? text : "";
   }
   function compareSemver(left, right) {
     const numbers = (value) => String(value).split(/[+-]/, 1)[0].split(".").map(Number);
@@ -17625,6 +17630,56 @@
         linkMtimeMs: Math.trunc(info.mtimeMs)
       };
     }
+    function sameSignal(actual, expected) {
+      if (!actual || !expected) return false;
+      return actual.size === expected.size && actual.mtimeMs === expected.mtimeMs && actual.mode === expected.mode && actual.type === expected.type && actual.linkTarget === expected.linkTarget && actual.linkSize === expected.linkSize && actual.linkMtimeMs === expected.linkMtimeMs;
+    }
+    function emptyLifecycle() {
+      return {
+        generations: { created: 0, reused: 0, reclaimed: 0 },
+        layers: { created: 0, reused: 0, reclaimed: 0 },
+        logicalBytes: { created: 0, reclaimed: 0 },
+        physicalBytes: { created: 0, reclaimed: 0 }
+      };
+    }
+    function mergeLifecycle(...values) {
+      var _a2, _b2;
+      const result = emptyLifecycle();
+      for (const value of values) {
+        if (!value) continue;
+        for (const kind of ["generations", "layers"]) {
+          for (const counter of ["created", "reused", "reclaimed"]) {
+            result[kind][counter] += Number(((_a2 = value[kind]) == null ? void 0 : _a2[counter]) || 0);
+          }
+        }
+        for (const kind of ["logicalBytes", "physicalBytes"]) {
+          for (const counter of ["created", "reclaimed"]) {
+            result[kind][counter] += Number(((_b2 = value[kind]) == null ? void 0 : _b2[counter]) || 0);
+          }
+        }
+      }
+      return result;
+    }
+    async function treeUsage(directory) {
+      let logicalBytes = 0;
+      let physicalBytes = 0;
+      const visit = async (current) => {
+        var _a2;
+        const entries = await promises.readdir(current, { withFileTypes: true });
+        for (const entry of entries) {
+          const absolute = paths.join([current, entry.name]);
+          const info = await promises.lstat(absolute);
+          if (info.isDirectory() && !((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info))) {
+            await visit(absolute);
+          } else {
+            logicalBytes += info.size;
+            physicalBytes += Number.isSafeInteger(info.blocks) ? info.blocks * 512 : info.size;
+          }
+        }
+      };
+      await visit(directory);
+      return { logicalBytes, physicalBytes };
+    }
     function validateRuntimeManifest(value) {
       var _a2, _b2;
       if (!value || value.schemaVersion !== 1 || value.platform !== platform.id || ((_a2 = value.node) == null ? void 0 : _a2.version) !== "24.17.0" || ((_b2 = value.python) == null ? void 0 : _b2.version) !== "3.13.14" || !Array.isArray(value.files) || value.files.length === 0) {
@@ -17795,12 +17850,12 @@
       };
     }
     function installRecordPath(relative) {
-      return paths.join([root, relative.split("/")[0], INSTALL_RECORD]);
+      return relative.startsWith("generations/") ? paths.join([root, ...relative.split("/"), INSTALL_RECORD]) : paths.join([root, relative.split("/")[0], INSTALL_RECORD]);
     }
     function generationLauncherPath(relative) {
-      return paths.join([root, relative.split("/")[0], GENERATION_LAUNCHER]);
+      return relative.startsWith("generations/") ? paths.join([root, ...relative.split("/"), GENERATION_LAUNCHER]) : paths.join([root, relative.split("/")[0], GENERATION_LAUNCHER]);
     }
-    function validateInstallRecord(record, normalized) {
+    function validateLegacyInstallRecord(record, normalized) {
       if (!exactKeys(record, [
         "installedAt",
         "launcherSha256",
@@ -17815,10 +17870,50 @@
       }
       return record;
     }
-    async function inspectInstalled(relative) {
-      const normalized = pointerValue(relative, platform.id);
-      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Runtime pointer is invalid");
-      const record = validateInstallRecord(
+    function validateLayerReference(value) {
+      if (!exactKeys(value, ["id", "instanceId", "manifestSha256", "relative"]) || !SHA256.test(value.id) || value.manifestSha256 !== value.id || !LAYER_INSTANCE_ID.test(value.instanceId) || value.relative !== `layers/${value.id}/${value.instanceId}/${platform.id}`) {
+        failure("RUNTIME_INSTALL_RECORD_INVALID", "Runtime layer reference is invalid");
+      }
+      return value;
+    }
+    function validateGenerationRecord(record, normalized) {
+      if (!exactKeys(record, [
+        "generationId",
+        "installedAt",
+        "launcherSha256",
+        "launcherSignal",
+        "layer",
+        "owner",
+        "platform",
+        "relative",
+        "schemaVersion",
+        "sourceCommitSha",
+        "version"
+      ]) || record.schemaVersion !== 2 || record.owner !== GENERATION_OWNER || record.platform !== platform.id || record.relative !== normalized || normalized !== `generations/${record.generationId}` || !GENERATION_ID.test(record.generationId) || !SEMVER.test(record.version) || !SOURCE_SHA.test(record.sourceCommitSha) || !SHA256.test(record.launcherSha256) || !Number.isSafeInteger(record.installedAt) || record.installedAt < 0) {
+        failure("RUNTIME_INSTALL_RECORD_INVALID", "Runtime generation receipt is invalid");
+      }
+      validateLayerReference(record.layer);
+      return record;
+    }
+    function validateLayerRecord(record, reference) {
+      if (!exactKeys(record, [
+        "id",
+        "installedAt",
+        "instanceId",
+        "logicalBytes",
+        "owner",
+        "physicalBytes",
+        "platform",
+        "relative",
+        "schemaVersion",
+        "signals"
+      ]) || record.schemaVersion !== 1 || record.owner !== GENERATION_OWNER || record.platform !== platform.id || record.id !== reference.id || record.instanceId !== reference.instanceId || record.relative !== reference.relative || !Number.isSafeInteger(record.installedAt) || record.installedAt < 0 || !Number.isSafeInteger(record.logicalBytes) || record.logicalBytes <= 0 || !Number.isSafeInteger(record.physicalBytes) || record.physicalBytes <= 0 || !exactKeys(record.signals, ["node", "python", "runtimeManifest"])) {
+        failure("RUNTIME_LAYER_RECORD_INVALID", "Runtime layer receipt is invalid");
+      }
+      return record;
+    }
+    async function inspectLegacyInstalled(normalized) {
+      const record = validateLegacyInstallRecord(
         await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID"),
         normalized
       );
@@ -17853,17 +17948,107 @@
         signals
       };
     }
+    async function layerSignals(directory) {
+      return {
+        runtimeManifest: await ordinaryFileSignal(
+          paths.join([directory, "runtime-manifest.json"]),
+          "RUNTIME_TRUST_SIGNAL_CHANGED"
+        ),
+        node: await ordinaryFileSignal(
+          paths.join([directory, "node", "bin", "node"]),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          { executable: true }
+        ),
+        python: await executableSignal(
+          paths.join([directory, "python", "bin", "python3"]),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          { rootDirectory: directory }
+        )
+      };
+    }
+    async function inspectV2Installed(normalized) {
+      var _a2;
+      const record = validateGenerationRecord(
+        await readJson2(installRecordPath(normalized), "RUNTIME_INSTALL_RECORD_INVALID"),
+        normalized
+      );
+      const generationRoot = paths.join([root, ...normalized.split("/")]);
+      const directory = paths.join([root, ...record.layer.relative.split("/")]);
+      const layerRoot = paths.dirname(directory);
+      const layerRecord = validateLayerRecord(
+        await readJson2(paths.join([layerRoot, LAYER_RECORD]), "RUNTIME_LAYER_RECORD_INVALID"),
+        record.layer
+      );
+      const signals = {
+        ...await layerSignals(directory),
+        launcher: await ordinaryFileSignal(
+          generationLauncherPath(normalized),
+          "RUNTIME_TRUST_SIGNAL_CHANGED",
+          { executable: true, expectedMode: "0755" }
+        )
+      };
+      if (!sameSignal(signals.runtimeManifest, layerRecord.signals.runtimeManifest) || !sameSignal(signals.node, layerRecord.signals.node) || !sameSignal(signals.python, layerRecord.signals.python) || !sameSignal(signals.launcher, record.launcherSignal)) {
+        failure("RUNTIME_TRUST_SIGNAL_CHANGED", "A runtime receipt path, size, or modification time changed");
+      }
+      const runtimeAlias = paths.join([generationRoot, "runtime"]);
+      let target;
+      try {
+        const info = await promises.lstat(runtimeAlias);
+        target = await promises.readlink(runtimeAlias);
+        const resolved = paths.resolve([generationRoot, target]);
+        if (!((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || paths.isAbsolute(target) || !paths.contains(root, resolved) || !paths.same(resolved, directory)) {
+          failure("RUNTIME_GENERATION_INVALID", "Runtime generation layer alias is invalid");
+        }
+      } catch (error) {
+        if (error instanceof RuntimeManagerError) throw error;
+        failure("RUNTIME_GENERATION_INVALID", "Runtime generation layer alias is missing");
+      }
+      return {
+        relative: normalized,
+        generationRoot,
+        directory,
+        launcher: generationLauncherPath(normalized),
+        record,
+        layerRecord,
+        signals,
+        schemaVersion: 2
+      };
+    }
+    async function inspectInstalled(relative) {
+      const normalized = pointerValue(relative, platform.id);
+      if (!normalized) failure("RUNTIME_POINTER_INVALID", "Runtime pointer is invalid");
+      return normalized.startsWith("generations/") ? inspectV2Installed(normalized) : inspectLegacyInstalled(normalized);
+    }
     async function verifyInstalled(relative) {
       var _a2;
       const selected = await inspectInstalled(relative);
       const { record, directory } = selected;
-      await verifyRuntime(directory, record.runtimeManifestSha256);
+      await verifyRuntime(
+        directory,
+        record.schemaVersion === 2 ? record.layer.manifestSha256 : record.runtimeManifestSha256
+      );
       const launcher = selected.launcher;
       const launcherInfo = await promises.lstat(launcher);
       if (!launcherInfo.isFile() || ((_a2 = launcherInfo.isSymbolicLink) == null ? void 0 : _a2.call(launcherInfo)) || launcherInfo.nlink !== 1 || modeOf(launcherInfo) !== "0755" || await sha256File(launcher) !== record.launcherSha256) {
         failure("RUNTIME_LAUNCHER_CORRUPT", "Runtime generation launcher failed verification");
       }
       return selected;
+    }
+    function componentReceipt(selected) {
+      const layerId = selected.record.schemaVersion === 2 ? selected.record.layer.id : selected.record.runtimeManifestSha256;
+      return {
+        schemaVersion: 1,
+        component: "core-runtime",
+        platform: platform.id,
+        version: selected.record.version,
+        sourceRevision: selected.record.sourceCommitSha,
+        sourceRevisionRole: "advisory",
+        canonicalPath: selected.directory,
+        installReceiptPath: installRecordPath(selected.relative),
+        generation: selected.relative,
+        layerId,
+        signals: selected.signals
+      };
     }
     async function pointerState(pointerPath) {
       var _a2;
@@ -17956,6 +18141,7 @@
     }
     function assertLauncherTransitionCompatible(selected, current) {
       if (!(current == null ? void 0 : current.ok) || current.relative === selected.relative) return;
+      if (current.record.schemaVersion === 1 && selected.record.schemaVersion === 2) return;
       if (current.record.launcherSha256 !== selected.record.launcherSha256) {
         failure(
           "RUNTIME_LAUNCHER_MIGRATION_REQUIRED",
@@ -17967,44 +18153,154 @@
         );
       }
     }
-    async function installPackaged(packaged, { repair: repair2 = false } = {}) {
-      var _a2;
-      const identity = `${packaged.version}-${packaged.sourceCommitSha}`;
-      let runtimeId = identity;
-      const normalRelative = `${runtimeId}/${platform.id}`;
+    async function refreshLayerReceipt(layerRoot, record, directory) {
+      const refreshed = {
+        ...record,
+        signals: await layerSignals(directory)
+      };
+      await atomicWrite(
+        paths.join([layerRoot, LAYER_RECORD]),
+        `${JSON.stringify(refreshed, null, 2)}
+`
+      );
+      return refreshed;
+    }
+    async function findReusableLayer(layerId) {
+      const contentRoot = paths.join([root, "layers", layerId]);
+      let entries;
       try {
-        const existing = await verifyInstalled(normalRelative);
-        if (!repair2 && existing.record.runtimeManifestSha256 === packaged.runtimeManifestSha256) return existing;
-        runtimeId = `${identity}-repair-${randomHex(randomBytes, 6)}`;
+        entries = await promises.readdir(contentRoot, { withFileTypes: true });
       } catch (error) {
-        if ((error == null ? void 0 : error.code) !== "ENOENT" && !(error instanceof RuntimeManagerError)) throw error;
+        if ((error == null ? void 0 : error.code) === "ENOENT") return null;
+        throw error;
+      }
+      entries.sort((left, right) => compareUtf8(left.name, right.name));
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !LAYER_INSTANCE_ID.test(entry.name)) continue;
+        const relative = `layers/${layerId}/${entry.name}/${platform.id}`;
+        const reference = {
+          id: layerId,
+          instanceId: entry.name,
+          manifestSha256: layerId,
+          relative
+        };
+        const layerRoot = paths.join([contentRoot, entry.name]);
+        const directory = paths.join([root, ...relative.split("/")]);
         try {
-          await promises.lstat(paths.join([root, identity]));
-          runtimeId = `${identity}-repair-${randomHex(randomBytes, 6)}`;
-        } catch (missing) {
-          if ((missing == null ? void 0 : missing.code) !== "ENOENT") throw missing;
+          let record = validateLayerRecord(
+            await readJson2(paths.join([layerRoot, LAYER_RECORD]), "RUNTIME_LAYER_RECORD_INVALID"),
+            reference
+          );
+          const signals = await layerSignals(directory);
+          if (!sameSignal(signals.runtimeManifest, record.signals.runtimeManifest) || !sameSignal(signals.node, record.signals.node) || !sameSignal(signals.python, record.signals.python)) {
+            await verifyRuntime(directory, layerId);
+            record = await refreshLayerReceipt(layerRoot, record, directory);
+          }
+          return { reference, record, directory, lifecycle: {
+            ...emptyLifecycle(),
+            layers: { created: 0, reused: 1, reclaimed: 0 }
+          } };
+        } catch (error) {
+          if (!(error instanceof RuntimeManagerError) && (error == null ? void 0 : error.code) !== "ENOENT") throw error;
         }
       }
-      const relative = `${runtimeId}/${platform.id}`;
-      const temporary = paths.join([root, `.stage-${runtimeId}-${randomHex(randomBytes, 6)}`]);
-      const finalRoot = paths.join([root, runtimeId]);
+      return null;
+    }
+    async function installLayer(packaged, { forceNew = false } = {}) {
+      if (!forceNew) {
+        const reusable = await findReusableLayer(packaged.runtimeManifestSha256);
+        if (reusable) return reusable;
+      }
+      const layerId = packaged.runtimeManifestSha256;
+      const instanceId = `i-${randomHex(randomBytes)}`;
+      const relative = `layers/${layerId}/${instanceId}/${platform.id}`;
+      const temporary = paths.join([root, `.stage-layer-${instanceId}-${randomHex(randomBytes, 6)}`]);
+      const finalRoot = paths.join([root, "layers", layerId, instanceId]);
       try {
         await promises.mkdir(root, { recursive: true, mode: 448 });
         await promises.mkdir(temporary, { mode: 448 });
         await copyTree(packagedRuntimeRoot, paths.join([temporary, platform.id]));
+        const directory = paths.join([temporary, platform.id]);
+        await verifyRuntime(directory, layerId);
+        const usage = await treeUsage(directory);
+        const record = {
+          schemaVersion: 1,
+          owner: GENERATION_OWNER,
+          id: layerId,
+          instanceId,
+          platform: platform.id,
+          relative,
+          installedAt: Math.max(0, Math.floor(now())),
+          logicalBytes: usage.logicalBytes,
+          physicalBytes: usage.physicalBytes,
+          signals: await layerSignals(directory)
+        };
+        await promises.writeFile(
+          paths.join([temporary, LAYER_RECORD]),
+          `${JSON.stringify(record, null, 2)}
+`,
+          { flag: "wx", mode: 384 }
+        );
+        await promises.mkdir(paths.dirname(finalRoot), { recursive: true, mode: 448 });
+        await promises.rename(temporary, finalRoot);
+        const finalDirectory = paths.join([root, ...relative.split("/")]);
+        const finalRecord = {
+          ...record,
+          signals: await layerSignals(finalDirectory)
+        };
+        await atomicWrite(
+          paths.join([finalRoot, LAYER_RECORD]),
+          `${JSON.stringify(finalRecord, null, 2)}
+`
+        );
+        return {
+          reference: { id: layerId, instanceId, manifestSha256: layerId, relative },
+          record: finalRecord,
+          directory: finalDirectory,
+          lifecycle: {
+            ...emptyLifecycle(),
+            layers: { created: 1, reused: 0, reclaimed: 0 },
+            logicalBytes: { created: usage.logicalBytes, reclaimed: 0 },
+            physicalBytes: { created: usage.physicalBytes, reclaimed: 0 }
+          }
+        };
+      } catch (error) {
+        await promises.rm(temporary, { recursive: true, force: true }).catch(() => {
+        });
+        throw runtimeError(error, "RUNTIME_INSTALL_FAILED");
+      }
+    }
+    async function installPackaged(packaged, { repair: repair2 = false } = {}) {
+      var _a2;
+      const layer = await installLayer(packaged, { forceNew: repair2 });
+      const generationId = `g-${randomHex(randomBytes)}`;
+      const relative = `generations/${generationId}`;
+      const temporary = paths.join([root, `.stage-generation-${generationId}-${randomHex(randomBytes, 6)}`]);
+      const finalRoot = paths.join([root, ...relative.split("/")]);
+      try {
+        await promises.mkdir(temporary, { mode: 448 });
         await promises.copyFile(
           packagedLauncher,
           paths.join([temporary, GENERATION_LAUNCHER]),
           (_a2 = fs.constants) == null ? void 0 : _a2.COPYFILE_EXCL
         );
         await promises.chmod(paths.join([temporary, GENERATION_LAUNCHER]), 493);
+        await promises.symlink(`../../${layer.reference.relative}`, paths.join([temporary, "runtime"]));
+        const launcherSignal = await ordinaryFileSignal(
+          paths.join([temporary, GENERATION_LAUNCHER]),
+          "RUNTIME_LAUNCHER_CORRUPT",
+          { executable: true, expectedMode: "0755" }
+        );
         const record = {
-          schemaVersion: 1,
+          schemaVersion: 2,
+          owner: GENERATION_OWNER,
+          generationId,
           platform: platform.id,
           version: packaged.version,
           sourceCommitSha: packaged.sourceCommitSha,
-          runtimeManifestSha256: packaged.runtimeManifestSha256,
+          layer: layer.reference,
           launcherSha256: packaged.launcherSha256,
+          launcherSignal,
           relative,
           installedAt: Math.max(0, Math.floor(now()))
         };
@@ -18014,12 +18310,35 @@
 `,
           { flag: "wx", mode: 384 }
         );
-        await verifyRuntime(paths.join([temporary, platform.id]), packaged.runtimeManifestSha256);
         if (await sha256File(paths.join([temporary, GENERATION_LAUNCHER])) !== packaged.launcherSha256) {
           failure("RUNTIME_LAUNCHER_CORRUPT", "Staged runtime launcher failed verification");
         }
+        await promises.mkdir(paths.dirname(finalRoot), { recursive: true, mode: 448 });
         await promises.rename(temporary, finalRoot);
-        return verifyInstalled(relative);
+        const finalRecord = {
+          ...record,
+          launcherSignal: await ordinaryFileSignal(
+            paths.join([finalRoot, GENERATION_LAUNCHER]),
+            "RUNTIME_LAUNCHER_CORRUPT",
+            { executable: true, expectedMode: "0755" }
+          )
+        };
+        await atomicWrite(
+          paths.join([finalRoot, INSTALL_RECORD]),
+          `${JSON.stringify(finalRecord, null, 2)}
+`
+        );
+        const selected = await inspectInstalled(relative);
+        const usage = await treeUsage(finalRoot);
+        return {
+          ...selected,
+          lifecycle: mergeLifecycle(layer.lifecycle, {
+            ...emptyLifecycle(),
+            generations: { created: 1, reused: 0, reclaimed: 0 },
+            logicalBytes: { created: usage.logicalBytes, reclaimed: 0 },
+            physicalBytes: { created: usage.physicalBytes, reclaimed: 0 }
+          })
+        };
       } catch (error) {
         await promises.rm(temporary, { recursive: true, force: true }).catch(() => {
         });
@@ -18033,6 +18352,87 @@
         await removePointer(paths.previousPointer);
       }
       await writePointer(paths.currentPointer, selected.relative);
+    }
+    async function readOwnedGeneration(relative) {
+      if (!(relative == null ? void 0 : relative.startsWith("generations/"))) return null;
+      try {
+        return validateGenerationRecord(
+          await readJson2(installRecordPath(relative), "RUNTIME_INSTALL_RECORD_INVALID"),
+          relative
+        );
+      } catch (error) {
+        if (error instanceof RuntimeManagerError || (error == null ? void 0 : error.code) === "ENOENT") return null;
+        throw error;
+      }
+    }
+    async function reclaimOwnedV2({ currentRelative, previousRelative, inProgressRelative }) {
+      const lifecycle = emptyLifecycle();
+      const retained = new Set(
+        [currentRelative, previousRelative, inProgressRelative].filter((value) => value == null ? void 0 : value.startsWith("generations/"))
+      );
+      const referencedLayers = /* @__PURE__ */ new Set();
+      const generationsRoot = paths.join([root, "generations"]);
+      let entries = [];
+      try {
+        entries = await promises.readdir(generationsRoot, { withFileTypes: true });
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) !== "ENOENT") throw error;
+      }
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !GENERATION_ID.test(entry.name)) continue;
+        const relative = `generations/${entry.name}`;
+        const record = await readOwnedGeneration(relative);
+        if (!record) continue;
+        if (retained.has(relative)) {
+          referencedLayers.add(record.layer.relative);
+          continue;
+        }
+        const generationRoot = paths.join([generationsRoot, entry.name]);
+        const usage = await treeUsage(generationRoot);
+        await promises.rm(generationRoot, { recursive: true, force: true });
+        lifecycle.generations.reclaimed += 1;
+        lifecycle.logicalBytes.reclaimed += usage.logicalBytes;
+        lifecycle.physicalBytes.reclaimed += usage.physicalBytes;
+      }
+      const layersRoot = paths.join([root, "layers"]);
+      let digests = [];
+      try {
+        digests = await promises.readdir(layersRoot, { withFileTypes: true });
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) !== "ENOENT") throw error;
+      }
+      for (const digestEntry of digests) {
+        if (!digestEntry.isDirectory() || !SHA256.test(digestEntry.name)) continue;
+        const digestRoot = paths.join([layersRoot, digestEntry.name]);
+        const instances = await promises.readdir(digestRoot, { withFileTypes: true });
+        for (const instanceEntry of instances) {
+          if (!instanceEntry.isDirectory() || !LAYER_INSTANCE_ID.test(instanceEntry.name)) continue;
+          const relative = `layers/${digestEntry.name}/${instanceEntry.name}/${platform.id}`;
+          if (referencedLayers.has(relative)) continue;
+          const reference = {
+            id: digestEntry.name,
+            instanceId: instanceEntry.name,
+            manifestSha256: digestEntry.name,
+            relative
+          };
+          const instanceRoot = paths.join([digestRoot, instanceEntry.name]);
+          let record;
+          try {
+            record = validateLayerRecord(
+              await readJson2(paths.join([instanceRoot, LAYER_RECORD]), "RUNTIME_LAYER_RECORD_INVALID"),
+              reference
+            );
+          } catch (error) {
+            if (error instanceof RuntimeManagerError || (error == null ? void 0 : error.code) === "ENOENT") continue;
+            throw error;
+          }
+          await promises.rm(instanceRoot, { recursive: true, force: true });
+          lifecycle.layers.reclaimed += 1;
+          lifecycle.logicalBytes.reclaimed += record.logicalBytes;
+          lifecycle.physicalBytes.reclaimed += record.physicalBytes;
+        }
+      }
+      return lifecycle;
     }
     async function acquireLock() {
       await promises.mkdir(root, { recursive: true, mode: 448 });
@@ -18080,6 +18480,11 @@
           await installLauncher(previous);
           await writePointer(paths.currentPointer, previous.relative);
           await removePointer(paths.previousPointer);
+          const reclaimed2 = await reclaimOwnedV2({
+            currentRelative: previous.relative,
+            previousRelative: null,
+            inProgressRelative: previous.relative
+          });
           return {
             ok: true,
             action: "fallback",
@@ -18087,6 +18492,8 @@
             relative: previous.relative,
             version: previous.record.version,
             sourceCommitSha: previous.record.sourceCommitSha,
+            componentReceipt: componentReceipt(previous),
+            lifecycle: reclaimed2,
             diagnostics: [{
               code: "RUNTIME_CURRENT_INVALID_FALLBACK",
               message: "The current runtime was invalid; RuntimeManager activated the previous verified runtime once.",
@@ -18100,6 +18507,11 @@
         } catch (error) {
           if (!current.ok) throw error;
           await installLauncher(current);
+          const reclaimed2 = await reclaimOwnedV2({
+            currentRelative: current.relative,
+            previousRelative: previous.ok ? previous.relative : null,
+            inProgressRelative: current.relative
+          });
           return {
             ok: true,
             action: "retained",
@@ -18107,6 +18519,8 @@
             relative: current.relative,
             version: current.record.version,
             sourceCommitSha: current.record.sourceCommitSha,
+            componentReceipt: componentReceipt(current),
+            lifecycle: reclaimed2,
             diagnostics: [{
               code: "RUNTIME_PACKAGED_PAYLOAD_INVALID_ACTIVE_RETAINED",
               message: "The extension runtime payload was invalid; RuntimeManager retained the previously verified active runtime.",
@@ -18114,10 +18528,20 @@
             }]
           };
         }
-        const declaredRuntimeMatches = current.ok && current.record.version === packaged.version && current.record.runtimeManifestSha256 === packaged.runtimeManifestSha256 && current.record.launcherSha256 === packaged.launcherSha256;
-        const trustedSignalsMatch = declaredRuntimeMatches && current.signals.runtimeManifest.size === packaged.signals.runtimeManifest.size && current.signals.launcher.size === packaged.signals.launcher.size && current.signals.node.size === packaged.signals.node.size && current.signals.python.size === packaged.signals.python.size && current.signals.python.type === packaged.signals.python.type && current.signals.python.linkTarget === packaged.signals.python.linkTarget;
+        const declaredRuntimeMatches = current.ok && current.record.version === packaged.version && (current.record.schemaVersion === 2 ? current.record.layer.manifestSha256 : current.record.runtimeManifestSha256) === packaged.runtimeManifestSha256 && current.record.launcherSha256 === packaged.launcherSha256;
+        const trustedSignalsMatch = declaredRuntimeMatches && current.record.schemaVersion === 2 && current.signals.runtimeManifest.size === packaged.signals.runtimeManifest.size && current.signals.launcher.size === packaged.signals.launcher.size && current.signals.node.size === packaged.signals.node.size && current.signals.python.size === packaged.signals.python.size && current.signals.python.type === packaged.signals.python.type && current.signals.python.linkTarget === packaged.signals.python.linkTarget;
         if (trustedSignalsMatch) {
           await installLauncher(current);
+          const reclaimed2 = await reclaimOwnedV2({
+            currentRelative: current.relative,
+            previousRelative: previous.ok ? previous.relative : null,
+            inProgressRelative: current.relative
+          });
+          const reuse = current.record.schemaVersion === 2 ? {
+            ...emptyLifecycle(),
+            generations: { created: 0, reused: 1, reclaimed: 0 },
+            layers: { created: 0, reused: 1, reclaimed: 0 }
+          } : emptyLifecycle();
           return {
             ok: true,
             action: "ready",
@@ -18126,14 +18550,16 @@
             version: current.record.version,
             sourceCommitSha: current.record.sourceCommitSha,
             packagedSourceCommitSha: packaged.sourceCommitSha,
+            componentReceipt: componentReceipt(current),
             trustSignals: current.signals,
+            lifecycle: mergeLifecycle(reuse, reclaimed2),
             diagnostics: current.record.sourceCommitSha === packaged.sourceCommitSha ? [] : [{
               code: "RUNTIME_SOURCE_REVISION_DIFFERENT_TRUSTED",
               message: "The unchanged installed runtime was reused across an advisory source revision change."
             }]
           };
         }
-        if (declaredRuntimeMatches) {
+        if (declaredRuntimeMatches && current.record.schemaVersion === 2) {
           current = {
             ...current,
             ok: false,
@@ -18146,7 +18572,12 @@
         assertLauncherTransitionCompatible(selected, current);
         await installLauncher(selected);
         await activate(selected, current);
-        const action = current.ok ? compareSemver(packaged.version, current.record.version) < 0 ? "downgrade" : "upgrade" : current.exists ? "repair" : "install";
+        const reclaimed = await reclaimOwnedV2({
+          currentRelative: selected.relative,
+          previousRelative: current.ok ? current.relative : null,
+          inProgressRelative: selected.relative
+        });
+        const action = current.ok ? current.record.schemaVersion === 1 ? "migrate" : compareSemver(packaged.version, current.record.version) < 0 ? "downgrade" : "upgrade" : current.exists ? "repair" : "install";
         return {
           ok: true,
           action,
@@ -18154,6 +18585,8 @@
           relative: selected.relative,
           version: selected.record.version,
           sourceCommitSha: selected.record.sourceCommitSha,
+          componentReceipt: componentReceipt(selected),
+          lifecycle: mergeLifecycle(selected.lifecycle, reclaimed),
           diagnostics: current.exists && !current.ok ? [{
             code: "RUNTIME_CURRENT_REPAIRED",
             message: "The active runtime was invalid and no verified previous runtime was available; the packaged runtime was repaired offline.",
@@ -18175,6 +18608,11 @@
         assertLauncherTransitionCompatible(selected, current);
         await installLauncher(selected);
         await activate(selected, current);
+        const reclaimed = await reclaimOwnedV2({
+          currentRelative: selected.relative,
+          previousRelative: current.ok ? current.relative : null,
+          inProgressRelative: selected.relative
+        });
         return {
           ok: true,
           action: "repair",
@@ -18182,6 +18620,8 @@
           relative: selected.relative,
           version: selected.record.version,
           sourceCommitSha: selected.record.sourceCommitSha,
+          componentReceipt: componentReceipt(selected),
+          lifecycle: mergeLifecycle(selected.lifecycle, reclaimed),
           diagnostics: []
         };
       });
@@ -18196,6 +18636,11 @@
         await writePointer(paths.currentPointer, previous.relative);
         if (current.ok && current.relative !== previous.relative) await writePointer(paths.previousPointer, current.relative);
         else await removePointer(paths.previousPointer);
+        const reclaimed = await reclaimOwnedV2({
+          currentRelative: previous.relative,
+          previousRelative: current.ok && current.relative !== previous.relative ? current.relative : null,
+          inProgressRelative: previous.relative
+        });
         return {
           ok: true,
           action: "rollback",
@@ -18203,6 +18648,8 @@
           relative: previous.relative,
           version: previous.record.version,
           sourceCommitSha: previous.record.sourceCommitSha,
+          componentReceipt: componentReceipt(previous),
+          lifecycle: reclaimed,
           diagnostics: []
         };
       });
@@ -18212,6 +18659,11 @@
         await removePointer(paths.currentPointer);
         await removePointer(paths.previousPointer);
         await promises.rm(paths.launcher, { force: true });
+        const reclaimed = await reclaimOwnedV2({
+          currentRelative: null,
+          previousRelative: null,
+          inProgressRelative: null
+        });
         const entries = await promises.readdir(root, { withFileTypes: true });
         for (const entry of entries) {
           if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
@@ -18224,7 +18676,14 @@
           } catch (error) {
           }
         }
-        return { ok: true, action: "uninstall", launcher: paths.launcher, relative: "", diagnostics: [] };
+        return {
+          ok: true,
+          action: "uninstall",
+          launcher: paths.launcher,
+          relative: "",
+          lifecycle: reclaimed,
+          diagnostics: []
+        };
       });
     }
     async function inspect() {
@@ -18244,13 +18703,8 @@
     async function resolveNode() {
       var _a2;
       const selected = await ensureReady();
-      const nodePath = paths.join([
-        root,
-        ...selected.relative.split("/"),
-        "node",
-        "bin",
-        "node"
-      ]);
+      const inspected = await inspectInstalled(selected.relative);
+      const nodePath = paths.join([inspected.directory, "node", "bin", "node"]);
       const info = await promises.lstat(nodePath);
       if (!info.isFile() || ((_a2 = info.isSymbolicLink) == null ? void 0 : _a2.call(info)) || info.nlink !== 1 || (info.mode & 73) === 0) {
         failure("RUNTIME_NODE_INVALID", "The verified runtime Node entrypoint is unavailable");
