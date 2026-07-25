@@ -538,13 +538,15 @@ single-field response.
 }
 ```
 
-The normal tool response reports Undo availability but does not pretend the
-later real Undo has already happened: `undoVerified` and
+For the five Undoable tools, the normal response reports Undo availability but
+does not pretend the later real Undo has already happened: `undoVerified` and
 `evidence.undo.verified` are false. T5/T6 runner evidence separately records
-the executed Undo and its independent postcondition. Errors continue to use the
-existing structured native error envelope, including `sideEffect`,
-`recovery.action`, request/audit identity and
-`POSSIBLY_SIDE_EFFECTING_FAILURE`; this package adds no error shape.
+the executed Undo and its independent postcondition. Display start instead
+returns `undo.available=false` and `undo.verified=false` and follows the
+compensating-write rule in DONE-WHEN 4. Errors continue to use the existing
+structured native error envelope, including `sideEffect`, `recovery.action`,
+request/audit identity and `POSSIBLY_SIDE_EFFECTING_FAILURE`; this package adds
+no error shape.
 
 ## DONE-WHEN 2 — Capability and interaction matrix
 
@@ -729,12 +731,26 @@ participates in AE Undo, one
 | frame rate | individually Undoable; one AE group | prior frame rate and reciprocal frame duration; duration, work area and keyframe seconds unchanged |
 | pixel aspect | individually Undoable; one AE group | prior pixel-aspect ratio; dimensions remain at the immediately preceding state |
 | background colour | individually Undoable; one AE group | prior RGBA8 background colour only |
-| display start time | **not Undoable by AE**; `undo="none"` | no Undo is claimed; the runner restores the exact prior display start with a second idempotent public call and verifies the restored full snapshot |
+| display start time | **not Undoable by AE**; `undo="none"`, no AE Undo group | `undo.available=false` and `undo.verified=false`; the runner uses a labelled compensating public write with a distinct idempotency key to restore the exact prior display start and independently verifies the full postcondition |
 
 The non-Undoable display-start setter is an explicit CompSuite behavior, not a
-new mechanism. Its success response reports `undoAvailable=false` and
-`undoVerified=false`. T5/T6 report `restoreMethod="compensating-public-write"`
-and never relabel that compensation as real Undo.
+new mechanism. Its success response reports `undo.available=false` and
+`undo.verified=false`; it does not open `AEGP_StartUndoGroup` or
+`AEGP_EndUndoGroup`, and does not claim an Undo entry, availability, execution
+or restoration. T5/T6 label the second call
+`restoreMethod="compensating-public-write"` and never relabel that compensation
+as real Undo. Its acceptance records the SDK citation, public request and
+response, native and public before/after readback, audit and postcondition
+evidence, plus the compensating call's independently verified full
+postcondition.
+
+The non-Undoable citation currently rests on the published Adobe After Effects
+SDK guide, **not** on the pinned `AE_GeneralPlug.h`: the SDK is
+developer-supplied and is not vendored in this repository. T0-T2 must verify
+the guide's statement against the pinned header before the package's hardware
+acceptance; record that check in the package evidence. Until a hardware run
+proves that this exact setter restores the prior state, no real AE Undo may be
+reported or inferred from a successful Undo-group call or an Edit-menu label.
 
 For the five Undoable tools, availability and verification are distinct:
 
@@ -833,8 +849,13 @@ IDs.
   post-click label transition; the runner must not click stale coordinates.
   This is the direct guard for #157's **Undo-menu-refresh surprise**.
 - `test_comp_settings_runner_records_nonundoable_display_start_restore`:
-  requires a second public call, distinct idempotency key and restored
-  postcondition; it forbids `undoVerified=true`.
+  requires no Undo group or Undo claim, `undo.available=false`,
+  `undo.verified=false`, a labelled second public call with a distinct
+  idempotency key, and its independently verified restored full postcondition.
+- `test_comp_settings_display_start_nonundoable_citation_matches_pinned_header`:
+  before hardware acceptance, records the developer-supplied pinned-header
+  check against the published SDK guide citation; it fails if the rule is not
+  verified during T0-T2.
 - `test_comp_settings_runner_restart_reacquires_state`: serializes the
   checkpoint, changes host/session/generation, reopens the same fixture through
   formal AE, reacquires every locator, re-verifies the baseline and resumes
@@ -879,10 +900,10 @@ The T5 candidate and clean-main T6 use the identical 20-call script:
 | 3 | `ae_listCompositionLayers` | fresh timing-witness layer locator |
 | 4 | `ae_listLayerProperties` | locate Transform group |
 | 5 | `ae_listLayerProperties` | locate Opacity property |
-| 6 | `ae_setCompositionDisplayStartTime` | set -1/1; verified non-Undoable write |
+| 6 | `ae_setCompositionDisplayStartTime` | set -1/1; non-Undoable write, no AE Undo group, `undo.available=false`, `undo.verified=false` |
 | 7 | `ae_getCompositionSettings` | display origin changed, other settings stable |
 | 8 | `ae_listLayerPropertyKeyframes` | keyframe times remain 1/1, 4/1, 7/1 |
-| 9 | `ae_setCompositionDisplayStartTime` | compensating restore to 0/1 with new key |
+| 9 | `ae_setCompositionDisplayStartTime` | labelled `compensating-public-write` restore to 0/1 with new key; independently verify full postcondition |
 | 10 | `ae_setCompositionFrameRate` | 24/1 -> 25/1 |
 | 11 | `ae_setCompositionDuration` | 10/1 -> 8/1 after new frame duration |
 | 12 | `ae_setCompositionDimensions` | 1920x1080 -> 1440x1080 |
@@ -919,8 +940,10 @@ Per tool, acceptance requires:
 - the DONE-WHEN 3 target and non-target comparisons pass;
 - for five Undoable tools, one real Undo restores the exact intermediate
   snapshot; and
-- for display start, `undoAvailable=false` and the separate compensating public
-  write restores the baseline without being called Undo.
+- for display start, no AE Undo group or Undo claim occurs,
+  `undo.available=false`, `undo.verified=false`, and the labelled separate
+  compensating public write restores the baseline with an independently
+  verified full postcondition without being called Undo.
 
 ## DONE-WHEN 8 — Deferred follow-ups
 
