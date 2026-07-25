@@ -1344,10 +1344,10 @@ class AeLayersArgs(_StrictModel):
 
 
 class AeReadPropsArgs(_StrictModel):
-    """ae.readProps — run read-only JSX and return its JSON.
+    """ae.readProps — execute caller-supplied JSX and return its JSON.
 
     Caller supplies explicit JSX; the backend runs it via Backend.exec().
-    Use this for ad-hoc reads not covered by the typed read verbs.
+    The JSX is unrestricted and may modify After Effects state.
     """
     code: str = Field(
         ...,
@@ -1488,7 +1488,7 @@ class AeCreateLayerArgs(_StrictModel):
 
 
 class AeSetPropertyArgs(_StrictModel):
-    """ae.setProperty — write a property on a layer by dotted path."""
+    """ae.setProperty — write a value or caller-supplied AE expression code."""
     comp_id: Optional[str] = Field(None, description="AE comp id. Omit for active comp.")
     layer_id: int = Field(..., ge=1, description="1-based layer index.")
     path: str = Field(
@@ -1502,7 +1502,10 @@ class AeSetPropertyArgs(_StrictModel):
     expression: Optional[str] = Field(
         None,
         min_length=1,
-        description="AE expression text. Exactly one of value/expression is required.",
+        description=(
+            "Caller-supplied AE expression code, persisted in the project and "
+            "re-evaluated by AE. Exactly one of value/expression is required."
+        ),
     )
     at_time: Optional[float] = Field(
         None,

@@ -1,4 +1,9 @@
+from collections.abc import Mapping
+from typing import Any, Literal, get_args, get_origin
+
 import pytest
+from mcp.types import ToolAnnotations
+from pydantic import BaseModel
 
 from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.handlers import HANDLERS, load_all
@@ -55,6 +60,43 @@ def test_exec_is_destructive_and_reads_are_readonly():
 def test_no_verb_is_both_readonly_and_destructive():
     for verb, ann in VERB_ANNOTATIONS.items():
         assert not (ann.readOnlyHint and ann.destructiveHint), verb
+
+
+_EXECUTABLE_INPUT_FIELDS = {"code", "expression", "execute"}
+_EXECUTABLE_ACTION_LITERALS = {"execute", "start"}
+
+
+def _literal_strings(annotation: Any) -> set[str]:
+    if get_origin(annotation) is Literal:
+        return {value for value in get_args(annotation) if isinstance(value, str)}
+    values: set[str] = set()
+    for argument in get_args(annotation):
+        values.update(_literal_strings(argument))
+    return values
+
+
+def _assert_executable_input_tools_are_destructive(
+    handlers: Mapping[str, tuple[type[BaseModel], Any]],
+    annotations: Mapping[str, ToolAnnotations],
+) -> None:
+    for verb, (schema, _run) in handlers.items():
+        fields = schema.model_fields
+        action_values = (
+            _literal_strings(fields["action"].annotation)
+            if "action" in fields
+            else set()
+        )
+        accepts_executable_input = (
+            bool(_EXECUTABLE_INPUT_FIELDS & fields.keys())
+            or bool(_EXECUTABLE_ACTION_LITERALS & action_values)
+        )
+        if accepts_executable_input:
+            assert annotations[verb].destructiveHint is True, verb
+
+
+def test_tools_accepting_executable_caller_input_are_destructive():
+    load_all()
+    _assert_executable_input_tools_are_destructive(HANDLERS, VERB_ANNOTATIONS)
 
 
 def test_tool_library_annotations_express_worst_path_risk():

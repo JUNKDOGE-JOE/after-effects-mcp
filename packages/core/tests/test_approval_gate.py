@@ -177,7 +177,7 @@ def test_gate_decision_matrix(
     tier, read_decision, write_decision, destructive_decision
 ):
     assert gate_decision(tier, "ae.overview") == read_decision
-    assert gate_decision(tier, "ae.setProperty") == write_decision
+    assert gate_decision(tier, "ae.setTime") == write_decision
     assert gate_decision(tier, "ae.exec") == destructive_decision
 
 
@@ -223,13 +223,32 @@ async def test_enforce_allows_when_elicitation_is_accepted(monkeypatch, tmp_path
     session = _FakeSession("accept")
     ctx = SimpleNamespace(session=session, request_id="req-1")
 
-    result = await approval_gate.enforce("ae.setProperty", ctx)
+    result = await approval_gate.enforce("ae.setTime", ctx)
 
     assert result is None
     assert session.calls
-    assert "ae.setProperty" in session.calls[0]["message"]
+    assert "ae.setTime" in session.calls[0]["message"]
     assert "non-destructive write" in session.calls[0]["message"]
     assert session.calls[0]["related_request_id"] == "req-1"
+
+
+@pytest.mark.parametrize("verb", ("ae.readProps", "ae.setProperty"))
+@pytest.mark.asyncio
+async def test_enforce_prompts_for_executable_input_tools_in_auto_tier(
+    monkeypatch, tmp_path, verb
+):
+    tier_file = tmp_path / "tier.txt"
+    tier_file.write_text("auto\n", encoding="utf-8")
+    monkeypatch.setenv("AE_MCP_APPROVAL_TIER_FILE", str(tier_file))
+    session = _FakeSession("accept")
+    ctx = SimpleNamespace(session=session, request_id="req-executable")
+
+    result = await approval_gate.enforce(verb, ctx)
+
+    assert result is None
+    assert len(session.calls) == 1
+    assert verb in session.calls[0]["message"]
+    assert "destructive" in session.calls[0]["message"]
 
 
 @pytest.mark.asyncio
