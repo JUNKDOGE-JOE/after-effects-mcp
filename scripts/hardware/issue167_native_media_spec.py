@@ -1035,8 +1035,8 @@ class Issue167Package:
         try:
             await self.runtime.checkpoint("prepare-formal-ae", {
                 "instruction": (
-                    "Launch only formalAeApp. Complete any native pairing as one "
-                    "continuous automation action. Do not open the fixture through Finder."
+                    "Launch only formalAeApp; local same-user/current-AE admission is "
+                    "automatic. Do not open the fixture through Finder."
                 ),
                 "formalAeApp": self.runtime.identity.formal_ae_app,
                 "fixturePath": self.runtime.fixture.path,

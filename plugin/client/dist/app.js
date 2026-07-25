@@ -18716,15 +18716,16 @@
           if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
           const recordPath = paths.join([root, entry.name, INSTALL_RECORD]);
           try {
-            const record = await readJson2(recordPath, "RUNTIME_INSTALL_RECORD_INVALID");
-            if ((record == null ? void 0 : record.schemaVersion) === 1 && record.platform === platform.id) {
-              const legacyRoot = paths.join([root, entry.name]);
-              const usage = await treeUsage(legacyRoot);
-              await promises.rm(legacyRoot, { recursive: true, force: true });
-              reclaimed.generations.reclaimed += 1;
-              reclaimed.logicalBytes.reclaimed += usage.logicalBytes;
-              reclaimed.physicalBytes.reclaimed += usage.physicalBytes;
-            }
+            validateLegacyInstallRecord(
+              await readJson2(recordPath, "RUNTIME_INSTALL_RECORD_INVALID"),
+              `${entry.name}/${platform.id}`
+            );
+            const legacyRoot = paths.join([root, entry.name]);
+            const usage = await treeUsage(legacyRoot);
+            await promises.rm(legacyRoot, { recursive: true, force: true });
+            reclaimed.generations.reclaimed += 1;
+            reclaimed.logicalBytes.reclaimed += usage.logicalBytes;
+            reclaimed.physicalBytes.reclaimed += usage.physicalBytes;
           } catch (error) {
           }
         }

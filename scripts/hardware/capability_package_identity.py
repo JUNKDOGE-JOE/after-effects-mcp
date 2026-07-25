@@ -15,6 +15,9 @@ from typing import Any
 
 FULL_SHA = re.compile(r"^[0-9a-f]{40}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+GENERATION_ID = re.compile(r"^g-[0-9a-f]{16}$")
+LAYER_INSTANCE_ID = re.compile(r"^i-[0-9a-f]{16}$")
+RUNTIME_OWNER = "ae-mcp-runtime-manager"
 
 
 class IdentityFailure(RuntimeError):
@@ -126,6 +129,18 @@ def _validate_declared_hashes(value: Any, label: str) -> None:
             _validate_declared_hashes(member, f"{label}[{index}]")
 
 
+def _require_receipt_signal(
+    actual: Mapping[str, Any], expected: Any, label: str
+) -> None:
+    receipt = _mapping(expected, f"{label} receipt signal is invalid")
+    _require(
+        receipt.get("size") == actual.get("size")
+        and receipt.get("mode") == actual.get("mode")
+        and receipt.get("mtimeMs") == actual.get("mtimeNs", 0) // 1_000_000,
+        f"{label} bounded signal changed",
+    )
+
+
 @dataclasses.dataclass(frozen=True)
 class IdentityConfig:
     expected_sha: str
@@ -172,7 +187,9 @@ def verify_exact_identity(
     artifact = _mapping(manifest.get("artifact"), "native manifest artifact is invalid")
     manifest_source = manifest.get("sourceCommitSha")
     _require(
-        isinstance(manifest_source, str) and FULL_SHA.fullmatch(manifest_source) is not None,
+        isinstance(manifest_source, str)
+        and FULL_SHA.fullmatch(manifest_source) is not None
+        and manifest_source == receipt_source,
         "native manifest source revision is invalid",
     )
     for field in ("bundleTreeSha256", "executableSha256", "piplSha256"):
@@ -196,34 +213,99 @@ def verify_exact_identity(
     current_signal = _file_signal(current_path, "runtime current pointer")
     relative = current_path.read_text(encoding="utf-8").strip()
     parts = relative.split("/")
-    _require(
+    schema_v2 = (
+        len(parts) == 2
+        and parts[0] == "generations"
+        and GENERATION_ID.fullmatch(parts[1]) is not None
+    )
+    schema_v1 = (
         len(parts) == 2
         and parts[1] == "macos-arm64"
         and parts[0].startswith(f"{config.runtime_version}-")
         and ".." not in parts[0]
-        and not parts[0].startswith("."),
-        "runtime current pointer is invalid",
+        and not parts[0].startswith(".")
     )
+    _require(schema_v1 or schema_v2, "runtime current pointer is invalid")
+    runtime_base = config.identity_home / ".ae-mcp/runtime"
     record_path = (
-        config.identity_home
-        / ".ae-mcp/runtime"
-        / relative.split("/", 1)[0]
-        / "install-record.json"
+        runtime_base / relative / "install-record.json"
+        if schema_v2
+        else runtime_base / parts[0] / "install-record.json"
     )
     record, record_signal = _identity_json(record_path, "runtime install record")
     _validate_declared_hashes(record, "runtimeInstallRecord")
     launcher_hash = record.get("launcherSha256")
-    _require(
+    common_record_valid = (
         record.get("relative") == relative
         and record.get("platform") == "macos-arm64"
         and record.get("version") == config.runtime_version
         and isinstance(record.get("sourceCommitSha"), str)
         and FULL_SHA.fullmatch(record["sourceCommitSha"]) is not None
         and isinstance(launcher_hash, str)
-        and SHA256.fullmatch(launcher_hash),
-        "runtime install record is incompatible",
+        and SHA256.fullmatch(launcher_hash) is not None
     )
-    runtime_root = config.identity_home / ".ae-mcp/runtime" / relative
+    layer_record_signal: dict[str, Any] | None = None
+    stable_receipt_signal: dict[str, Any] | None = None
+    layer_alias_signal: dict[str, Any] | None = None
+    if schema_v2:
+        layer = _mapping(record.get("layer"), "runtime generation layer is invalid")
+        layer_id = layer.get("id")
+        instance_id = layer.get("instanceId")
+        layer_relative = layer.get("relative")
+        _require(
+            common_record_valid
+            and record.get("schemaVersion") == 2
+            and record.get("owner") == RUNTIME_OWNER
+            and record.get("generationId") == parts[1]
+            and isinstance(layer_id, str)
+            and SHA256.fullmatch(layer_id) is not None
+            and layer.get("manifestSha256") == layer_id
+            and isinstance(instance_id, str)
+            and LAYER_INSTANCE_ID.fullmatch(instance_id) is not None
+            and layer_relative
+            == f"layers/{layer_id}/{instance_id}/macos-arm64",
+            "runtime schema-v2 generation receipt is incompatible",
+        )
+        runtime_root = runtime_base / str(layer_relative)
+        layer_alias = runtime_base / relative / "runtime"
+        try:
+            alias_info = layer_alias.lstat()
+            alias_target = os.readlink(layer_alias)
+            alias_resolved = (layer_alias.parent / alias_target).resolve(strict=True)
+        except (FileNotFoundError, OSError) as error:
+            raise IdentityFailure("runtime generation layer alias is invalid") from error
+        _require(
+            stat.S_ISLNK(alias_info.st_mode)
+            and not Path(alias_target).is_absolute()
+            and alias_resolved == runtime_root.resolve(strict=True),
+            "runtime generation layer alias is invalid",
+        )
+        layer_alias_signal = {
+            "path": str(layer_alias),
+            "size": alias_info.st_size,
+            "mtimeNs": alias_info.st_mtime_ns,
+            "mode": f"{stat.S_IMODE(alias_info.st_mode):04o}",
+            "symlinkTarget": alias_target,
+        }
+        layer_record_path = runtime_root.parent / "layer-record.json"
+        layer_record, layer_record_signal = _identity_json(
+            layer_record_path, "runtime layer receipt"
+        )
+        _require(
+            layer_record.get("schemaVersion") == 1
+            and layer_record.get("owner") == RUNTIME_OWNER
+            and layer_record.get("platform") == "macos-arm64"
+            and layer_record.get("id") == layer_id
+            and layer_record.get("instanceId") == instance_id
+            and layer_record.get("relative") == layer_relative,
+            "runtime layer receipt is incompatible",
+        )
+    else:
+        _require(
+            common_record_valid and record.get("schemaVersion") == 1,
+            "runtime schema-v1 install record is incompatible",
+        )
+        runtime_root = runtime_base / relative
     runtime_manifest_signal = _file_signal(
         runtime_root / "runtime-manifest.json", "runtime manifest"
     )
@@ -234,10 +316,9 @@ def verify_exact_identity(
         runtime_root / "python/bin/python3", runtime_root
     )
     generation_launcher = (
-        config.identity_home
-        / ".ae-mcp/runtime"
-        / relative.split("/", 1)[0]
-        / "ae-mcp-launcher"
+        runtime_base / relative / "ae-mcp-launcher"
+        if schema_v2
+        else runtime_base / parts[0] / "ae-mcp-launcher"
     )
     stable_launcher = config.identity_home / ".ae-mcp/bin/ae-mcp"
     generation_launcher_signal = _file_signal(
@@ -253,6 +334,39 @@ def verify_exact_identity(
         generation_launcher_signal["size"] == stable_launcher_signal["size"],
         "runtime launcher size signals are incompatible",
     )
+    if schema_v2:
+        _require_receipt_signal(
+            generation_launcher_signal,
+            record.get("launcherSignal"),
+            "runtime generation launcher",
+        )
+        layer_signals = _mapping(
+            layer_record.get("signals"), "runtime layer signals are invalid"
+        )
+        _require_receipt_signal(
+            runtime_manifest_signal,
+            layer_signals.get("runtimeManifest"),
+            "runtime manifest",
+        )
+        _require_receipt_signal(node_signal, layer_signals.get("node"), "runtime Node")
+        _require_receipt_signal(python_signal, layer_signals.get("python"), "runtime Python")
+        stable_record_path = runtime_base / "stable-launcher-record.json"
+        stable_record, stable_receipt_signal = _identity_json(
+            stable_record_path, "stable launcher receipt"
+        )
+        _require(
+            stable_record.get("schemaVersion") == 1
+            and stable_record.get("owner") == RUNTIME_OWNER
+            and stable_record.get("platform") == "macos-arm64"
+            and stable_record.get("canonicalPath") == str(stable_launcher)
+            and stable_record.get("launcherSha256") == launcher_hash,
+            "stable launcher receipt is incompatible",
+        )
+        _require_receipt_signal(
+            stable_launcher_signal,
+            stable_record.get("signal"),
+            "stable launcher",
+        )
 
     capabilities, fixture_signal = _identity_json(
         config.capabilities_fixture, "capabilities fixture"
@@ -314,6 +428,12 @@ def verify_exact_identity(
         "formalAeInfoPlist": plist_signal,
         "formalAeExecutable": executable_signal,
     }
+    if layer_record_signal is not None:
+        signals["runtimeLayerRecord"] = layer_record_signal
+    if stable_receipt_signal is not None:
+        signals["stableLauncherReceipt"] = stable_receipt_signal
+    if layer_alias_signal is not None:
+        signals["runtimeLayerAlias"] = layer_alias_signal
     source_revisions = {
         "requested": config.expected_sha,
         "nativeReceipt": receipt_source,

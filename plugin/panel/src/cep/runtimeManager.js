@@ -1390,15 +1390,16 @@ export function createRuntimeManager({
         if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
         const recordPath = paths.join([root, entry.name, INSTALL_RECORD]);
         try {
-          const record = await readJson(recordPath, 'RUNTIME_INSTALL_RECORD_INVALID');
-          if (record?.schemaVersion === 1 && record.platform === platform.id) {
-            const legacyRoot = paths.join([root, entry.name]);
-            const usage = await treeUsage(legacyRoot);
-            await promises.rm(legacyRoot, { recursive: true, force: true });
-            reclaimed.generations.reclaimed += 1;
-            reclaimed.logicalBytes.reclaimed += usage.logicalBytes;
-            reclaimed.physicalBytes.reclaimed += usage.physicalBytes;
-          }
+          validateLegacyInstallRecord(
+            await readJson(recordPath, 'RUNTIME_INSTALL_RECORD_INVALID'),
+            `${entry.name}/${platform.id}`,
+          );
+          const legacyRoot = paths.join([root, entry.name]);
+          const usage = await treeUsage(legacyRoot);
+          await promises.rm(legacyRoot, { recursive: true, force: true });
+          reclaimed.generations.reclaimed += 1;
+          reclaimed.logicalBytes.reclaimed += usage.logicalBytes;
+          reclaimed.physicalBytes.reclaimed += usage.physicalBytes;
         } catch (error) {
           // Unknown directories are not owned by RuntimeManager and are retained.
         }

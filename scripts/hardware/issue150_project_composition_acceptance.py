@@ -494,6 +494,7 @@ class PackageAcceptance:
         self._intent_counter = 0
         self._covered_tools: set[str] = set()
         self._component_hashes: dict[str, str] = {}
+        self._native_source_revision = ""
 
     @staticmethod
     def _identity_json(path: Path, label: str) -> tuple[dict[str, Any], str]:
@@ -510,20 +511,24 @@ class PackageAcceptance:
         receipt_path = self.config.native_receipt
         _require(receipt_path is not None, "native build receipt is required for hardware acceptance")
         receipt, receipt_hash = self._identity_json(receipt_path, "native build receipt")
+        native_source = receipt.get("sourceCommit")
         _require(
-            receipt.get("sourceCommit") == self.config.expected_sha
+            isinstance(native_source, str)
+            and FULL_SHA.fullmatch(native_source) is not None
             and isinstance(receipt.get("source"), Mapping)
-            and receipt["source"].get("commit") == self.config.expected_sha,
-            "native build receipt source commit does not match the exact candidate",
+            and receipt["source"].get("commit") == native_source,
+            "native build receipt source revision is invalid",
         )
+        self._native_source_revision = native_source
         self._component_hashes = {"nativeBuildReceiptSha256": receipt_hash}
         home = self.config.identity_home or Path.home()
         cep_path = home / "Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel/bundle-manifest.json"
         current_path = home / ".ae-mcp/runtime/current"
         cep, cep_hash = self._identity_json(cep_path, "canonical CEP bundle manifest")
+        cep_source = cep.get("sourceCommitSha")
         _require(
-            cep.get("sourceCommitSha") == self.config.expected_sha,
-            "canonical CEP bundle manifest source commit mismatch",
+            isinstance(cep_source, str) and FULL_SHA.fullmatch(cep_source) is not None,
+            "canonical CEP bundle manifest source revision is invalid",
         )
         _require(current_path.is_file() and not current_path.is_symlink(), "RuntimeManager current pointer is invalid")
         current_bytes = current_path.read_bytes()
@@ -532,21 +537,87 @@ class PackageAcceptance:
             relative and not relative.startswith("/") and ".." not in relative.split("/"),
             "RuntimeManager current pointer is invalid",
         )
-        generation = relative.split("/", 1)[0]
-        install_path = home / ".ae-mcp/runtime" / generation / "install-record.json"
+        parts = relative.split("/")
+        schema_v2 = (
+            len(parts) == 2 and parts[0] == "generations"
+            and re.fullmatch(r"g-[0-9a-f]{16}", parts[1]) is not None
+        )
+        schema_v1 = len(parts) == 2 and parts[1] == "macos-arm64"
+        _require(schema_v1 or schema_v2, "RuntimeManager current pointer is invalid")
+        runtime_base = home / ".ae-mcp/runtime"
+        install_path = (
+            runtime_base / relative / "install-record.json"
+            if schema_v2 else runtime_base / parts[0] / "install-record.json"
+        )
         install, install_hash = self._identity_json(install_path, "RuntimeManager install record")
+        runtime_source = install.get("sourceCommitSha")
         _require(
             install.get("relative") == relative
-            and install.get("sourceCommitSha") == self.config.expected_sha,
-            "RuntimeManager current/install record do not match the exact candidate",
+            and install.get("platform") == "macos-arm64"
+            and install.get("version") == "0.9.2"
+            and isinstance(runtime_source, str)
+            and FULL_SHA.fullmatch(runtime_source) is not None,
+            "RuntimeManager current/install record is incompatible",
         )
+        runtime_manifest_sha = install.get("runtimeManifestSha256")
+        if schema_v2:
+            layer = _mapping(install.get("layer"), "RuntimeManager layer reference is invalid")
+            layer_id = layer.get("id")
+            layer_instance = layer.get("instanceId")
+            layer_relative = layer.get("relative")
+            _require(
+                install.get("schemaVersion") == 2
+                and install.get("owner") == "ae-mcp-runtime-manager"
+                and install.get("generationId") == parts[1]
+                and isinstance(layer_id, str)
+                and SHA256.fullmatch(layer_id) is not None
+                and layer.get("manifestSha256") == layer_id
+                and isinstance(layer_instance, str)
+                and re.fullmatch(r"i-[0-9a-f]{16}", layer_instance) is not None
+                and layer_relative
+                == f"layers/{layer_id}/{layer_instance}/macos-arm64",
+                "RuntimeManager schema-v2 generation is incompatible",
+            )
+            layer_record_path = runtime_base / layer_relative
+            layer_record, layer_record_hash = self._identity_json(
+                layer_record_path.parent / "layer-record.json",
+                "RuntimeManager layer record",
+            )
+            _require(
+                layer_record.get("schemaVersion") == 1
+                and layer_record.get("owner") == "ae-mcp-runtime-manager"
+                and layer_record.get("platform") == "macos-arm64"
+                and layer_record.get("relative") == layer_relative
+                and layer_record.get("id") == layer_id
+                and layer_record.get("instanceId") == layer_instance,
+                "RuntimeManager layer record is incompatible",
+            )
+            stable_record, stable_record_hash = self._identity_json(
+                runtime_base / "stable-launcher-record.json",
+                "RuntimeManager stable launcher record",
+            )
+            _require(
+                stable_record.get("schemaVersion") == 1
+                and stable_record.get("owner") == "ae-mcp-runtime-manager"
+                and stable_record.get("platform") == "macos-arm64"
+                and stable_record.get("canonicalPath") == str(home / ".ae-mcp/bin/ae-mcp")
+                and stable_record.get("launcherSha256") == install.get("launcherSha256"),
+                "RuntimeManager stable launcher record is incompatible",
+            )
+            runtime_manifest_sha = layer_id
+            self._component_hashes.update({
+                "runtimeLayerRecordSha256": layer_record_hash,
+                "runtimeStableLauncherRecordSha256": stable_record_hash,
+            })
+        else:
+            _require(install.get("schemaVersion") == 1, "RuntimeManager schema-v1 record is invalid")
         manifest_path = self.config.native_manifest
         _require(manifest_path is not None, "native plug-in manifest is required for hardware acceptance")
         manifest, manifest_hash = self._identity_json(manifest_path, "native plug-in manifest")
         artifact = _mapping(manifest.get("artifact"), "native plug-in manifest omitted artifact")
         _require(
-            manifest.get("sourceCommitSha") == self.config.expected_sha,
-            "native plug-in manifest source commit mismatch",
+            manifest.get("sourceCommitSha") == native_source,
+            "native plug-in manifest contradicts its bound build receipt",
         )
         _require(
             artifact.get("receiptSha256") == receipt_hash,
@@ -558,7 +629,7 @@ class PackageAcceptance:
             "cepBundleManifestSha256": cep_hash,
             "runtimeCurrentSha256": hashlib.sha256(current_bytes).hexdigest(),
             "runtimeInstallRecordSha256": install_hash,
-            "runtimeManifestSha256": str(install.get("runtimeManifestSha256")),
+            "runtimeManifestSha256": str(runtime_manifest_sha),
             "nativePluginManifestSha256": manifest_hash,
             "nativeBundleTreeSha256": str(artifact["bundleTreeSha256"]),
             "nativeExecutableSha256": str(artifact["executableSha256"]),
@@ -569,8 +640,13 @@ class PackageAcceptance:
             "machine component identity contains a non-SHA256 value",
         )
         self.evidence.record("machine-identity", {
-            "sourceCommit": self.config.expected_sha,
+            "requestedSourceRevision": self.config.expected_sha,
             "runtimeRelative": relative,
+            "sourceRevisions": {
+                "native": native_source,
+                "cep": cep_source,
+                "runtime": runtime_source,
+            },
             "components": self._component_hashes,
         })
 
@@ -656,8 +732,9 @@ class PackageAcceptance:
             f"{tool} provenance identity is incomplete",
         )
         _require(
-            provenance.get("sourceCommit") == self.config.expected_sha,
-            f"{tool} source commit did not match exact candidate",
+            not self._native_source_revision
+            or provenance.get("sourceCommit") == self._native_source_revision,
+            f"{tool} native source revision contradicts the installed native component",
         )
         _require(audit.get("capabilityId") == capability, f"{tool} audit capability mismatch")
         _require(audit.get("capabilityVersion") == 1, f"{tool} audit capability version mismatch")
@@ -735,41 +812,9 @@ class PackageAcceptance:
             _require(evidence.get("effect") == "none", f"{tool} read evidence reported a side effect")
             _require("undo" not in evidence, f"{tool} read exposed Undo evidence")
 
-    async def _pairing_context(self, session: PublicSession) -> dict[str, Any]:
+    async def _connection_context(self, session: PublicSession) -> dict[str, Any]:
         arguments = {"selection_offset": 0, "selection_limit": 50}
-        self.evidence.record(
-            "public-mcp-request",
-            {"tool": "ae_getProjectContext", "arguments": arguments},
-        )
-        is_error, payload = await session.call("ae_getProjectContext", arguments)
-        self.evidence.record(
-            "public-mcp-response",
-            {"tool": "ae_getProjectContext", "isError": is_error, "payload": payload},
-        )
-        code = _error_code(payload)
-        if code == "NATIVE_PAIRING_REQUIRED":
-            error = payload.get("error") if isinstance(payload.get("error"), Mapping) else {}
-            await self._checkpoint(
-                "pair-native",
-                {
-                    "tool": "ae_getProjectContext",
-                    "expiresInMs": error.get("details", {}).get("pairingExpiresInMs")
-                    if isinstance(error.get("details"), Mapping)
-                    else None,
-                    # The live control message may display the short-lived value,
-                    # but EvidenceLog redacts this member before persistence.
-                    "pairingFingerprint": error.get("details", {}).get("pairingFingerprint")
-                    if isinstance(error.get("details"), Mapping)
-                    else None,
-                },
-            )
-            return await self._call(session, "ae_getProjectContext", arguments)
-        if code == "POSSIBLY_SIDE_EFFECTING_FAILURE":
-            raise PossiblySideEffectingStop("context read unexpectedly reported an ambiguous write")
-        _require(not is_error and payload.get("ok") is True, f"context preflight failed: {code}")
-        self._validate_native_success(payload, "ae_getProjectContext")
-        self._covered_tools.add("ae_getProjectContext")
-        return payload
+        return await self._call(session, "ae_getProjectContext", arguments)
 
     async def _context(self, session: PublicSession) -> dict[str, Any]:
         payload = await self._call(
@@ -1269,7 +1314,7 @@ class PackageAcceptance:
         )
         async with self.session_factory() as session:
             self._require_tools(session, full=False)
-            await self._pairing_context(session)
+            await self._connection_context(session)
             await self._call(
                 session,
                 "ae_getProjectItemMetadata",
@@ -1301,7 +1346,7 @@ class PackageAcceptance:
                     "Open only the disposable #150 fixture in formal After Effects, "
                     "make the named source composition active, select it in the Project "
                     "panel, keep the project at 49 items or fewer, confirm canonical "
-                    "plugin/CEP pairing access, and keep the Mac awake."
+                    "plugin/CEP access, and keep the Mac awake."
                 ),
                 "fixtureCompositionName": self.config.fixture_composition_name,
                 "expectedSourceCommit": self.config.expected_sha,
@@ -1309,7 +1354,7 @@ class PackageAcceptance:
         )
         async with self.session_factory() as session:
             self._require_tools(session, full=full)
-            await self._pairing_context(session)
+            await self._connection_context(session)
             baseline = await self._state(session, self.config.fixture_composition_name)
             if full:
                 await self._exercise_work_area(session)
@@ -1434,7 +1479,11 @@ def _time_argument(value: str) -> dict[str, int]:
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--mode", required=True, choices=("t4", "t5", "t6"))
-    parser.add_argument("--expected-sha", required=True)
+    parser.add_argument("--requested-source-revision")
+    parser.add_argument(
+        "--expected-sha",
+        help="Deprecated one-release alias for --requested-source-revision",
+    )
     parser.add_argument("--fixture-composition-name", required=True)
     parser.add_argument("--renamed-name", required=True)
     parser.add_argument("--duplicate-name", required=True)
@@ -1448,8 +1497,16 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--native-manifest", type=Path)
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parsed = parser.parse_args(argv)
-    if FULL_SHA.fullmatch(parsed.expected_sha) is None:
-        parser.error("--expected-sha must be one full lowercase 40-character Git SHA")
+    requested = parsed.requested_source_revision or parsed.expected_sha
+    if (
+        parsed.requested_source_revision
+        and parsed.expected_sha
+        and parsed.requested_source_revision != parsed.expected_sha
+    ):
+        parser.error("source-revision options disagree")
+    if requested is None or FULL_SHA.fullmatch(requested) is None:
+        parser.error("--requested-source-revision must be one full lowercase Git SHA")
+    parsed.expected_sha = requested
     if parsed.native_manifest is None:
         parser.error("--native-manifest is required for exact component identity")
     if not _bounded_unicode(parsed.fixture_composition_name, maximum=1024):

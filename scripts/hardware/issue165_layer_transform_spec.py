@@ -236,7 +236,7 @@ class Issue165Package:
         self.runtime.validate_machine_identity()
         await self.runtime.checkpoint("prepare-formal-ae", {
             "instruction": (
-                "Launch only formalAeApp and complete pairing in one continuous automated action."
+                "Launch only formalAeApp; local same-user/current-AE admission is automatic."
             ),
             "formalAeApp": self.runtime.identity.formal_ae_app,
             "fixturePath": self.runtime.fixture.path,

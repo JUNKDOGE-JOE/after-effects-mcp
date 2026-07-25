@@ -532,12 +532,44 @@ macosRuntimeTest('repair creates a fresh verified generation and uninstall remov
   assert.equal(repaired.action, 'repair');
   assert.notEqual(repaired.relative, installed.relative);
   assert.equal((await manager.rollback()).relative, installed.relative);
+  const runtimeRoot = h.platform.paths.runtimeRoot;
+  const adversarial = [
+    path.join(runtimeRoot, 'unowned-minimal'),
+    path.join(runtimeRoot, 'unowned-corrupt'),
+    path.join(runtimeRoot, 'unowned-v1-like'),
+  ];
+  for (const directory of adversarial) await fs.promises.mkdir(directory, { recursive: true });
+  await fs.promises.writeFile(
+    path.join(adversarial[0], 'install-record.json'),
+    JSON.stringify({ schemaVersion: 1, platform: 'macos-arm64' }),
+  );
+  await fs.promises.writeFile(
+    path.join(adversarial[1], 'install-record.json'),
+    '{"schemaVersion":1',
+  );
+  await fs.promises.writeFile(
+    path.join(adversarial[2], 'install-record.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      owner: 'not-runtime-manager',
+      platform: 'macos-arm64',
+      version: '0.9.3',
+      installedAt: 1,
+      relative: 'unowned-v1-like/macos-arm64',
+      sourceCommitSha: '1'.repeat(40),
+      runtimeManifestSha256: '2'.repeat(64),
+      launcherSha256: '3'.repeat(64),
+    }),
+  );
   const uninstalled = await manager.uninstall();
   assert.equal(uninstalled.action, 'uninstall');
   assert.equal(uninstalled.lifecycle.generations.reclaimed, 2);
   assert.equal(uninstalled.lifecycle.layers.reclaimed, 2);
   assert.equal(uninstalled.lifecycle.logicalBytes.reclaimed > 0, true);
   assert.equal(uninstalled.lifecycle.physicalBytes.reclaimed > 0, true);
+  for (const directory of adversarial) {
+    assert.equal((await fs.promises.lstat(directory)).isDirectory(), true);
+  }
   await assert.rejects(fs.promises.readFile(h.platform.paths.currentPointer), { code: 'ENOENT' });
   await assert.rejects(fs.promises.readFile(h.platform.paths.previousPointer), { code: 'ENOENT' });
   await assert.rejects(fs.promises.lstat(h.platform.paths.launcher), { code: 'ENOENT' });

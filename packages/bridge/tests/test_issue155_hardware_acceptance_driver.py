@@ -755,14 +755,10 @@ def _config(
     )
     cep = identity / "Library/Application Support/Adobe/CEP/extensions/com.aemcp.panel/bundle-manifest.json"
     cep.parent.mkdir(parents=True)
-    cep.write_text(json.dumps({"sourceCommitSha": EXPECTED_SHA}) + "\n", encoding="utf-8")
-    relative = f"0.9.2-{EXPECTED_SHA}/macos-arm64"
-    current = identity / ".ae-mcp/runtime/current"
-    current.parent.mkdir(parents=True)
-    current.write_text(relative + "\n", encoding="utf-8")
-    runtime_manifest = current.parent / relative / "runtime-manifest.json"
-    runtime_manifest.parent.mkdir(parents=True)
-    runtime_manifest.write_text(
+    cep.write_text(json.dumps({"sourceCommitSha": "2" * 40}) + "\n", encoding="utf-8")
+    generation_id = "g-" + "a" * 16
+    instance_id = "i-" + "b" * 16
+    runtime_manifest_bytes = (
         json.dumps(
             {
                 "schemaVersion": 1,
@@ -772,18 +768,62 @@ def _config(
                 "files": [],
             }
         )
-        + "\n",
-        encoding="utf-8",
-    )
-    runtime_manifest_hash = hashlib.sha256(runtime_manifest.read_bytes()).hexdigest()
-    record = current.parent / relative.split("/", 1)[0] / "install-record.json"
+        + "\n"
+    ).encode()
+    layer_id = hashlib.sha256(runtime_manifest_bytes).hexdigest()
+    layer_relative = f"layers/{layer_id}/{instance_id}/macos-arm64"
+    relative = f"generations/{generation_id}"
+    current = identity / ".ae-mcp/runtime/current"
+    current.parent.mkdir(parents=True)
+    current.write_text(relative + "\n", encoding="utf-8")
+    runtime_manifest = current.parent / layer_relative / "runtime-manifest.json"
+    runtime_manifest.parent.mkdir(parents=True)
+    runtime_manifest.write_bytes(runtime_manifest_bytes)
+    record = current.parent / relative / "install-record.json"
     record.parent.mkdir(parents=True, exist_ok=True)
     record.write_text(
         json.dumps(
             {
+                "schemaVersion": 2,
+                "owner": "ae-mcp-runtime-manager",
+                "generationId": generation_id,
                 "relative": relative,
-                "sourceCommitSha": EXPECTED_SHA,
-                "runtimeManifestSha256": runtime_manifest_hash,
+                "platform": "macos-arm64",
+                "version": "0.9.2",
+                "sourceCommitSha": "3" * 40,
+                "launcherSha256": "e" * 64,
+                "layer": {
+                    "id": layer_id,
+                    "instanceId": instance_id,
+                    "manifestSha256": layer_id,
+                    "relative": layer_relative,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (runtime_manifest.parent.parent / "layer-record.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "owner": "ae-mcp-runtime-manager",
+                "id": layer_id,
+                "instanceId": instance_id,
+                "platform": "macos-arm64",
+                "relative": layer_relative,
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (current.parent / "stable-launcher-record.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 1,
+                "owner": "ae-mcp-runtime-manager",
+                "platform": "macos-arm64",
+                "canonicalPath": str(identity / ".ae-mcp/bin/ae-mcp"),
                 "launcherSha256": "e" * 64,
             }
         )
@@ -1043,7 +1083,7 @@ async def test_t5_continuous_package_matrix_covers_all_tools_undo_restart_and_su
             candidate_hardware_runs=1,
             main_hardware_runs=0,
             first_hardware_pass=True,
-            gui_pairing_interruptions=0,
+            gui_interruptions=0,
             scope_frozen_unix_ms=1_900_000_000_000,
         ),
         aep_lifecycle=acceptance.aep_lifecycle,
@@ -1404,28 +1444,29 @@ def test_component_manifests_and_formal_ae_identity_fail_closed(
 
     native["artifact"]["bundleTreeSha256"] = "b" * 64
     config.native_manifest.write_text(json.dumps(native) + "\n", encoding="utf-8")
-    relative = f"0.9.2-{EXPECTED_SHA}/macos-arm64"
-    record_path = (
-        config.identity_home
-        / ".ae-mcp/runtime"
-        / relative.split("/", 1)[0]
-        / "install-record.json"
-    )
+    current = config.identity_home / ".ae-mcp/runtime/current"
+    relative = current.read_text(encoding="utf-8").strip()
+    record_path = current.parent / relative / "install-record.json"
     record = json.loads(record_path.read_text(encoding="utf-8"))
-    record["runtimeManifestSha256"] = "not-a-sha"
+    record["layer"]["manifestSha256"] = "not-a-sha"
     record_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
     with pytest.raises(driver.AcceptanceFailure, match="full lowercase SHA-256"):
         acceptance()._validate_machine_identity()
 
-    runtime_manifest = config.identity_home / ".ae-mcp/runtime" / relative / "runtime-manifest.json"
-    record["runtimeManifestSha256"] = "0" * 64
+    runtime_manifest = (
+        config.identity_home
+        / ".ae-mcp/runtime"
+        / record["layer"]["relative"]
+        / "runtime-manifest.json"
+    )
+    record["layer"]["manifestSha256"] = record["layer"]["id"]
     record_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
-    assert hashlib.sha256(runtime_manifest.read_bytes()).hexdigest() != "0" * 64
+    original_runtime_manifest = runtime_manifest.read_bytes()
+    runtime_manifest.write_bytes(original_runtime_manifest + b" ")
     with pytest.raises(driver.AcceptanceFailure, match="not bound"):
         acceptance()._validate_machine_identity()
 
-    record["runtimeManifestSha256"] = hashlib.sha256(runtime_manifest.read_bytes()).hexdigest()
-    record_path.write_text(json.dumps(record) + "\n", encoding="utf-8")
+    runtime_manifest.write_bytes(original_runtime_manifest)
     plist_path = config.formal_ae_app / "Contents/Info.plist"
     info = plistlib.loads(plist_path.read_bytes())
     info["CFBundleIdentifier"] = "com.adobe.AfterEffects.beta"
@@ -1475,6 +1516,12 @@ def test_evidence_redacts_paths_and_fixture_lifecycle_arguments_are_strict(
     ]
     parsed = driver.parse_args([*base_args, "--stretch-percent", "150"])
     assert parsed.stretch_percent == "150"
+    canonical_args = list(base_args)
+    canonical_args[canonical_args.index("--expected-sha")] = "--requested-source-revision"
+    assert (
+        driver.parse_args([*canonical_args, "--stretch-percent", "150"]).expected_sha
+        == EXPECTED_SHA
+    )
     invalid_stretches = (
         "0",
         "0.0",

@@ -180,8 +180,8 @@ rejects vendored SDK material; it never receives the SDK. Read the complete
 
 This development flow is separate from the CEP panel installer below. It currently builds only
 an Apple Silicon arm64 AEGP host. Commit the product source first: evidence builds fail closed
-with `AE_PLUGIN_SOURCE_DIRTY` unless the entire worktree is clean, so the receipt can bind the
-artifact to the exact repository commit. To prevent bypassing the transactional installer, the
+with `AE_PLUGIN_SOURCE_DIRTY` unless the entire worktree is clean, so the receipt can identify
+the native component source. To prevent bypassing the transactional installer, the
 output path must be a new absolute directory under canonical `/private/tmp`; it must remain
 outside every Git worktree, the Git common directory, and the SDK root.
 
@@ -190,16 +190,15 @@ BUILD_DIR=/private/tmp/ae-mcp-native-73
 node native/ae-plugin/build-macos.mjs \
   --sdk-archive "$AE_SDK_ARCHIVE" \
   --sdk-root "$AE_SDK_ROOT" \
-  --development-trust-local-peer \
   --output "$BUILD_DIR"
 node native/ae-plugin/verify-macos.mjs \
   --bundle "$BUILD_DIR/AeMcpNative.plugin"
 ```
 
-`--development-trust-local-peer` is the explicit local-development opt-in that
-auto-confirms an already admitted same-user AE process-tree peer. Omitting it
-keeps the native pairing decision mandatory, which is the secure compile-time
-default for release builds.
+Local development admits only a same-user client whose process ancestry reaches
+the current formal After Effects host. The native challenge still binds the
+endpoint and peer identity, but there is no connection code, fingerprint
+confirmation, or build flag on the single-user development path.
 
 Close every After Effects, AfterFX, and aerender process before installing. The development
 installer verifies the build receipt and installed copy, and installs the loadable bundle at
@@ -241,7 +240,7 @@ node native/ae-plugin/install-dev-macos.mjs recover
 
 Ad-hoc signing and a successful local build are development evidence only. The generated receipt
 deliberately keeps `distributionApproved`, `runtimeEvidence`, and `compatibilityEvidence` false;
-each candidate still requires an exact-commit real-AE gate through the public MCP surface. The
+each candidate still requires a recorded component-set real-AE gate through the public MCP surface. The
 development-native surface is intentionally small: `ae_projectSummary` reads a project summary,
 `ae_getProjectBitDepth` reads the current 8/16/32 bits-per-channel value, and
 `ae_setProjectBitDepth` performs the SDK-declared undoable change with an idempotency key and
