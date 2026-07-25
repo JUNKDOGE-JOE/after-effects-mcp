@@ -131,7 +131,8 @@ async def _run(arguments: argparse.Namespace) -> int:
             passed=passed,
             details={
                 **details,
-                "componentHashes": runtime.component_hashes,
+                "componentSignals": runtime.component_signals,
+                "sourceRevisions": runtime.source_revisions,
                 "contractDigests": runtime.contract_digests,
                 "formalAeIdentity": runtime.formal_ae_identity,
             },
