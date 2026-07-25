@@ -9,7 +9,7 @@ import plistlib
 import re
 import stat
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -55,6 +55,50 @@ def _file_signal(
         "mtimeNs": info.st_mtime_ns,
         "mode": f"{mode:04o}",
     }
+
+
+def _runtime_python_signal(path: Path, runtime_root: Path) -> dict[str, Any]:
+    """Return a signal for the runtime Python, allowing its direct local alias."""
+    try:
+        path.lstat()
+    except FileNotFoundError as error:
+        raise IdentityFailure("runtime Python is missing") from error
+    if not path.is_symlink():
+        return _file_signal(path, "runtime Python", executable=True)
+
+    try:
+        target_text = os.readlink(path)
+    except OSError as error:
+        raise IdentityFailure("runtime Python symlink is unreadable") from error
+    target_is_absolute = (
+        PurePosixPath(target_text).is_absolute() or Path(target_text).is_absolute()
+    )
+    _require(not target_is_absolute, "runtime Python symlink target must be relative")
+    target_path = path.parent / target_text
+    try:
+        target_info = target_path.lstat()
+    except FileNotFoundError as error:
+        raise IdentityFailure("runtime Python symlink target is dangling") from error
+    _require(
+        stat.S_ISREG(target_info.st_mode) and not target_path.is_symlink(),
+        "runtime Python symlink target must be a direct regular file",
+    )
+    try:
+        resolved_root = runtime_root.resolve(strict=True)
+        resolved_target = target_path.resolve(strict=True)
+        resolved_target.relative_to(resolved_root)
+    except (FileNotFoundError, OSError, ValueError) as error:
+        raise IdentityFailure("runtime Python symlink target escapes the runtime") from error
+
+    signal = _file_signal(target_path, "runtime Python symlink target", executable=True)
+    signal.update(
+        {
+            "path": str(path),
+            "symlinkTarget": target_text,
+            "targetPath": str(resolved_target),
+        }
+    )
+    return signal
 
 
 def _identity_json(path: Path, label: str) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -186,8 +230,8 @@ def verify_exact_identity(
     node_signal = _file_signal(
         runtime_root / "node/bin/node", "runtime Node", executable=True
     )
-    python_signal = _file_signal(
-        runtime_root / "python/bin/python3", "runtime Python", executable=True
+    python_signal = _runtime_python_signal(
+        runtime_root / "python/bin/python3", runtime_root
     )
     generation_launcher = (
         config.identity_home

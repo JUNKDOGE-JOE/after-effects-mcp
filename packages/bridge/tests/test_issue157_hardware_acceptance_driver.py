@@ -7,6 +7,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 import plistlib
 import sys
 from pathlib import Path
@@ -875,6 +876,113 @@ def test_identity_uses_local_component_signals_and_advisory_source_revisions(tmp
     stable.chmod(0o755)
     with pytest.raises(runtime_module.IdentityFailure, match="launcher size signals"):
         runtime_module.verify_exact_identity(identity, required_capability_ids=required)
+
+
+def test_identity_accepts_direct_in_runtime_python_symlink(tmp_path: Path):
+    identity = make_identity_config(tmp_path)
+    python = identity.identity_home / ".ae-mcp/runtime" / (
+        f"0.9.2-{EXPECTED_SHA}/macos-arm64/python/bin/python3"
+    )
+    target = python.with_name("python3.13")
+    python.rename(target)
+    python.symlink_to("python3.13")
+
+    proof = runtime_module.verify_exact_identity(
+        identity,
+        required_capability_ids=tuple(case.capability_id for case in package.SPEC.tools),
+    )
+
+    assert proof.component_signals["runtimePython"]["path"] == str(python)
+    assert proof.component_signals["runtimePython"]["symlinkTarget"] == "python3.13"
+    assert proof.component_signals["runtimePython"]["targetPath"] == str(target)
+
+
+UNSAFE_RUNTIME_PYTHON_SYMLINKS = [
+    ("symlink", "/bin/sh", "must be relative"),
+    ("escaping", "../../../../../../../outside-python", "escapes the runtime"),
+    ("symlink", "missing-python", "is dangling"),
+    ("chain", "python3-link", "direct regular file"),
+    ("directory", "python3.13", "direct regular file"),
+]
+if os.name == "posix":
+    UNSAFE_RUNTIME_PYTHON_SYMLINKS.append(
+        ("non-executable", "python3.13", "must be executable")
+    )
+
+
+@pytest.mark.parametrize(
+    ("target_kind", "target_value", "message"), UNSAFE_RUNTIME_PYTHON_SYMLINKS
+)
+def test_identity_rejects_unsafe_runtime_python_symlink(
+    tmp_path: Path, target_kind: str, target_value: str, message: str
+):
+    identity = make_identity_config(tmp_path)
+    python = identity.identity_home / ".ae-mcp/runtime" / (
+        f"0.9.2-{EXPECTED_SHA}/macos-arm64/python/bin/python3"
+    )
+    target = python.with_name("python3.13")
+    python.rename(target)
+    if target_kind == "chain":
+        intermediate = python.with_name(target_value)
+        intermediate.symlink_to(target.name)
+        python.symlink_to(intermediate.name)
+    elif target_kind == "escaping":
+        outside = tmp_path / "outside-python"
+        outside.write_bytes(b"#!/bin/sh\nexit 0\n")
+        outside.chmod(0o755)
+        python.symlink_to(target_value)
+    elif target_kind == "non-executable":
+        target.chmod(0o644)
+        python.symlink_to(target_value)
+    elif target_kind == "directory":
+        target.unlink()
+        target.mkdir()
+        python.symlink_to(target_value)
+    else:
+        python.symlink_to(target_value)
+
+    with pytest.raises(runtime_module.IdentityFailure, match=message):
+        runtime_module.verify_exact_identity(
+            identity,
+            required_capability_ids=tuple(case.capability_id for case in package.SPEC.tools),
+        )
+
+
+@pytest.mark.asyncio
+async def test_issue157_completion_uses_component_signals_and_source_revisions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    class PassingPackage:
+        def __init__(self, runtime: runtime_module.AcceptanceRuntime, **_kwargs: Any) -> None:
+            self.runtime = runtime
+
+        async def run(self) -> dict[str, bool]:
+            self.runtime.component_signals["runtimePython"] = {"size": 1}
+            self.runtime.source_revisions["runtime"] = EXPECTED_SHA
+            return {"finalized": True}
+
+    monkeypatch.setattr(acceptance_cli, "Issue157Package", PassingPackage)
+    arguments = SimpleNamespace(
+        expected_sha=EXPECTED_SHA,
+        fixture_path=tmp_path / "fixture.aep",
+        recovery_archive_root=tmp_path / "recovery",
+        native_receipt=tmp_path / "receipt.json",
+        native_manifest=tmp_path / "manifest.json",
+        evidence_dir=tmp_path / "evidence",
+        contract_fixture=tmp_path / "capabilities.json",
+        formal_ae_app=tmp_path / "Formal AE.app",
+        identity_home=tmp_path,
+        launcher=tmp_path / ".ae-mcp/bin/ae-mcp",
+        fixture_name="Issue157 Keyframe Authoring Fixture",
+        mode="preflight",
+    )
+
+    assert await acceptance_cli._run(arguments) == 0
+    summary = json.loads(next(arguments.evidence_dir.glob("*.summary.json")).read_text())
+    details = summary["details"]
+    assert details["componentSignals"] == {"runtimePython": {"size": 1}}
+    assert details["sourceRevisions"] == {"runtime": EXPECTED_SHA}
+    assert "componentHashes" not in details
 
 
 def test_cli_launcher_is_canonical_under_identity_home(tmp_path: Path):
