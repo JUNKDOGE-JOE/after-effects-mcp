@@ -7,6 +7,7 @@ import copy
 import hashlib
 import importlib.util
 import json
+import os
 import plistlib
 import sys
 from pathlib import Path
@@ -896,16 +897,21 @@ def test_identity_accepts_direct_in_runtime_python_symlink(tmp_path: Path):
     assert proof.component_signals["runtimePython"]["targetPath"] == str(target)
 
 
+UNSAFE_RUNTIME_PYTHON_SYMLINKS = [
+    ("symlink", "/bin/sh", "must be relative"),
+    ("escaping", "../../../../../../../outside-python", "escapes the runtime"),
+    ("symlink", "missing-python", "is dangling"),
+    ("chain", "python3-link", "direct regular file"),
+    ("directory", "python3.13", "direct regular file"),
+]
+if os.name == "posix":
+    UNSAFE_RUNTIME_PYTHON_SYMLINKS.append(
+        ("non-executable", "python3.13", "must be executable")
+    )
+
+
 @pytest.mark.parametrize(
-    ("target_kind", "target_value", "message"),
-    [
-        ("symlink", "/bin/sh", "must be relative"),
-        ("escaping", "../../../../../../../outside-python", "escapes the runtime"),
-        ("symlink", "missing-python", "is dangling"),
-        ("chain", "python3-link", "direct regular file"),
-        ("non-executable", "python3.13", "must be executable"),
-        ("directory", "python3.13", "direct regular file"),
-    ],
+    ("target_kind", "target_value", "message"), UNSAFE_RUNTIME_PYTHON_SYMLINKS
 )
 def test_identity_rejects_unsafe_runtime_python_symlink(
     tmp_path: Path, target_kind: str, target_value: str, message: str

@@ -9,7 +9,7 @@ import plistlib
 import re
 import stat
 from collections.abc import Mapping, Sequence
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 
@@ -70,9 +70,11 @@ def _runtime_python_signal(path: Path, runtime_root: Path) -> dict[str, Any]:
         target_text = os.readlink(path)
     except OSError as error:
         raise IdentityFailure("runtime Python symlink is unreadable") from error
-    target = Path(target_text)
-    _require(not target.is_absolute(), "runtime Python symlink target must be relative")
-    target_path = path.parent / target
+    target_is_absolute = (
+        PurePosixPath(target_text).is_absolute() or Path(target_text).is_absolute()
+    )
+    _require(not target_is_absolute, "runtime Python symlink target must be relative")
+    target_path = path.parent / target_text
     try:
         target_info = target_path.lstat()
     except FileNotFoundError as error:
