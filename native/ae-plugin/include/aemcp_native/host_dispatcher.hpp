@@ -70,6 +70,18 @@ inline constexpr std::string_view kCompositionSettingsReadCapability =
     "ae.composition.settings.read";
 inline constexpr std::string_view kCompositionWorkAreaSetCapability =
     "ae.composition.work-area.set";
+inline constexpr std::string_view kCompositionDimensionsSetCapability =
+    "ae.composition.dimensions.set";
+inline constexpr std::string_view kCompositionDurationSetCapability =
+    "ae.composition.duration.set";
+inline constexpr std::string_view kCompositionFrameRateSetCapability =
+    "ae.composition.frame-rate.set";
+inline constexpr std::string_view kCompositionPixelAspectRatioSetCapability =
+    "ae.composition.pixel-aspect-ratio.set";
+inline constexpr std::string_view kCompositionBackgroundColorSetCapability =
+    "ae.composition.background-color.set";
+inline constexpr std::string_view kCompositionDisplayStartTimeSetCapability =
+    "ae.composition.display-start-time.set";
 inline constexpr std::string_view kProjectItemNameSetCapability =
     "ae.project.item.name.set";
 inline constexpr std::string_view kProjectItemCommentSetCapability =
@@ -150,7 +162,7 @@ inline constexpr std::array<std::string_view, 11> kTextShapeMarkerCapabilities{
       && capability_id != kShapeGroupsListCapability
       && capability_id != kMarkerListCapability;
 }
-inline constexpr std::array<std::string_view, 54> kAdvertisedNativeCapabilities{
+inline constexpr std::array<std::string_view, 60> kAdvertisedNativeCapabilities{
     kProjectSummaryCapability,
     kProjectBitDepthReadCapability,
     kProjectBitDepthSetCapability,
@@ -169,6 +181,12 @@ inline constexpr std::array<std::string_view, 54> kAdvertisedNativeCapabilities{
     kProjectItemMetadataReadCapability,
     kCompositionSettingsReadCapability,
     kCompositionWorkAreaSetCapability,
+    kCompositionDimensionsSetCapability,
+    kCompositionDurationSetCapability,
+    kCompositionFrameRateSetCapability,
+    kCompositionPixelAspectRatioSetCapability,
+    kCompositionBackgroundColorSetCapability,
+    kCompositionDisplayStartTimeSetCapability,
     kProjectItemNameSetCapability,
     kProjectItemCommentSetCapability,
     kProjectItemLabelSetCapability,
@@ -541,6 +559,15 @@ struct CompositionPositiveRatio {
   [[nodiscard]] bool operator==(const CompositionPositiveRatio&) const = default;
 };
 
+struct CompositionColor {
+  std::uint8_t red{0};
+  std::uint8_t green{0};
+  std::uint8_t blue{0};
+  std::uint8_t alpha{255};
+
+  [[nodiscard]] bool operator==(const CompositionColor&) const = default;
+};
+
 struct ProjectItemMetadata {
   ObjectLocator item_locator;
   std::string name;
@@ -564,10 +591,29 @@ struct CompositionSettings {
   CompositionCurrentTime frame_duration;
   CompositionPositiveRatio frame_rate;
   CompositionPositiveRatio pixel_aspect_ratio;
+  CompositionColor background_color;
   CompositionCurrentTime work_area_start;
   CompositionCurrentTime work_area_duration;
   CompositionCurrentTime display_start_time;
   std::uint64_t layer_count{0};
+
+  [[nodiscard]] bool operator==(const CompositionSettings&) const = default;
+};
+
+enum class CompositionSettingKind {
+  kDimensions,
+  kDuration,
+  kFrameRate,
+  kPixelAspectRatio,
+  kBackgroundColor,
+  kDisplayStartTime,
+};
+
+struct CompositionSettingsChanged {
+  bool changed{true};
+  ObjectLocator composition_locator;
+  CompositionSettings before;
+  CompositionSettings after;
 };
 
 struct CompositionWorkAreaChanged {
@@ -1144,6 +1190,18 @@ struct CompositionWorkAreaSetCommand {
   CompositionCurrentTime duration;
 };
 
+struct CompositionSettingsSetCommand {
+  std::string host_instance_id;
+  std::string session_id;
+  ObjectLocator composition_locator;
+  CompositionSettingKind kind{CompositionSettingKind::kDimensions};
+  std::uint32_t width{0};
+  std::uint32_t height{0};
+  CompositionCurrentTime time;
+  CompositionPositiveRatio ratio;
+  CompositionColor color;
+};
+
 struct ProjectItemTextSetCommand {
   std::string host_instance_id;
   std::string session_id;
@@ -1256,6 +1314,19 @@ struct HostCompositionWorkAreaWriteResult {
   [[nodiscard]] static HostCompositionWorkAreaWriteResult success(
       CompositionWorkAreaChanged value);
   [[nodiscard]] static HostCompositionWorkAreaWriteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostCompositionSettingsWriteResult {
+  bool ok{false};
+  CompositionSettingsChanged value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostCompositionSettingsWriteResult success(
+      CompositionSettingsChanged value);
+  [[nodiscard]] static HostCompositionSettingsWriteResult failure(
       std::string code, std::string detail, std::string field = {});
 };
 
@@ -1614,6 +1685,8 @@ class HostApi {
       const CompositionSettingsQuery& query, TimePoint work_deadline);
   [[nodiscard]] virtual HostCompositionWorkAreaWriteResult set_composition_work_area(
       const CompositionWorkAreaSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionSettingsWriteResult set_composition_setting(
+      const CompositionSettingsSetCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostProjectItemTextWriteResult set_project_item_name(
       const ProjectItemTextSetCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostProjectItemTextWriteResult set_project_item_comment(
@@ -1913,6 +1986,7 @@ struct Completion {
   ProjectItemMetadata project_item_metadata_result;
   CompositionSettings composition_settings_result;
   CompositionWorkAreaChanged composition_work_area_change_result;
+  CompositionSettingsChanged composition_settings_change_result;
   ProjectItemTextChanged project_item_text_change_result;
   ProjectItemLabelChanged project_item_label_change_result;
   CompositionDuplicated composition_duplicate_result;

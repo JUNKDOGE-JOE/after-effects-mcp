@@ -999,6 +999,23 @@ HostCompositionWorkAreaWriteResult HostCompositionWorkAreaWriteResult::failure(
   return result;
 }
 
+HostCompositionSettingsWriteResult HostCompositionSettingsWriteResult::success(
+    CompositionSettingsChanged value) {
+  HostCompositionSettingsWriteResult result;
+  result.ok = true;
+  result.value = std::move(value);
+  return result;
+}
+
+HostCompositionSettingsWriteResult HostCompositionSettingsWriteResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostCompositionSettingsWriteResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
+
 HostProjectItemTextWriteResult HostProjectItemTextWriteResult::success(
     ProjectItemTextChanged value) {
   HostProjectItemTextWriteResult result;
@@ -1345,6 +1362,12 @@ HostCompositionWorkAreaWriteResult HostApi::set_composition_work_area(
       "NATIVE_UNSUPPORTED", "composition work-area writes are unavailable");
 }
 
+HostCompositionSettingsWriteResult HostApi::set_composition_setting(
+    const CompositionSettingsSetCommand&, TimePoint) {
+  return HostCompositionSettingsWriteResult::failure(
+      "NATIVE_UNSUPPORTED", "composition settings writes are not implemented by this host");
+}
+
 HostProjectItemTextWriteResult HostApi::set_project_item_name(
     const ProjectItemTextSetCommand&, TimePoint) {
   return HostProjectItemTextWriteResult::failure(
@@ -1593,6 +1616,22 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kCompositionSettingsReadCapability;
   const bool composition_work_area_set =
       request.capability_id == kCompositionWorkAreaSetCapability;
+  const bool composition_dimensions_set =
+      request.capability_id == kCompositionDimensionsSetCapability;
+  const bool composition_duration_set =
+      request.capability_id == kCompositionDurationSetCapability;
+  const bool composition_frame_rate_set =
+      request.capability_id == kCompositionFrameRateSetCapability;
+  const bool composition_pixel_aspect_ratio_set =
+      request.capability_id == kCompositionPixelAspectRatioSetCapability;
+  const bool composition_background_color_set =
+      request.capability_id == kCompositionBackgroundColorSetCapability;
+  const bool composition_display_start_time_set =
+      request.capability_id == kCompositionDisplayStartTimeSetCapability;
+  const bool composition_setting_set = composition_dimensions_set
+      || composition_duration_set || composition_frame_rate_set
+      || composition_pixel_aspect_ratio_set || composition_background_color_set
+      || composition_display_start_time_set;
   const bool project_item_name_set =
       request.capability_id == kProjectItemNameSetCapability;
   const bool project_item_comment_set =
@@ -1636,6 +1675,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || composition_layer_create
       || layer_effect_apply
       || layer_property_set || keyframe_write || composition_work_area_set
+      || composition_setting_set
       || project_item_name_set || project_item_comment_set
       || project_item_label_set || composition_duplicate || layer_name_set
       || layer_range_set || layer_start_time_set || layer_stretch_set
@@ -1653,6 +1693,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !keyframe_details_read && !keyframe_write
       && !project_context_read && !project_item_metadata_read
       && !composition_settings_read && !composition_work_area_set
+      && !composition_setting_set
       && !project_item_name_set && !project_item_comment_set
       && !project_item_label_set && !composition_duplicate
       && !layer_timeline && !layer_compositing
@@ -1941,7 +1982,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
   }
   const bool package150_capability = project_context_read
       || project_item_metadata_read || composition_settings_read
-      || composition_work_area_set || project_item_name_set
+      || composition_work_area_set || composition_setting_set || project_item_name_set
       || project_item_comment_set || project_item_label_set
       || composition_duplicate;
   if (!package150_capability
@@ -1962,11 +2003,13 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
           || request.property_locator.has_value()
           || !std::holds_alternative<std::monostate>(request.property_value)
           || !request.layer_create_kind.empty() || !request.layer_create_name.empty()
-          || request.layer_create_color.has_value()
+          || (request.layer_create_color.has_value()
+              && !composition_background_color_set)
           || request.layer_create_width.has_value()
           || request.layer_create_height.has_value()
           || request.layer_create_duration.has_value()
-          || has_composition_create_arguments(request)
+          || (has_composition_create_arguments(request)
+              && !composition_setting_set)
           || !request.layer_effect_match_name.empty()
           || !valid_uuid(request.host_instance_id)
           || !valid_uuid(request.session_id))) {
@@ -2053,6 +2096,36 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "composition work-area arguments failed closed validation",
         request.work_area_start.value < 0
             ? "params.arguments.start" : "params.arguments.duration"};
+  }
+  if (composition_setting_set
+      && (!request.composition_locator.has_value()
+          || request.item_locator.has_value() || request.offset != 0
+          || request.limit != 0
+          || !valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256)
+          || (composition_dimensions_set
+              && (request.composition_create_width < 1
+                  || request.composition_create_width > 30000
+                  || request.composition_create_height < 1
+                  || request.composition_create_height > 30000))
+          || (composition_duration_set
+              && (!valid_composition_time(request.composition_create_duration)
+                  || request.composition_create_duration.value <= 0))
+          || (composition_frame_rate_set
+              && (request.composition_create_frame_rate.numerator <= 0
+                  || request.composition_create_frame_rate.denominator <= 0))
+          || (composition_pixel_aspect_ratio_set
+              && (request.composition_create_pixel_aspect_ratio.numerator <= 0
+                  || request.composition_create_pixel_aspect_ratio.denominator <= 0))
+          || (composition_background_color_set
+              && !request.layer_create_color.has_value())
+          || (composition_display_start_time_set
+              && !valid_composition_time(request.target_time)))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "composition setting arguments failed closed validation",
+        "params.arguments"};
   }
   if (composition_duplicate
       && (!request.composition_locator.has_value()
@@ -2264,7 +2337,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "layer compositing arguments are not accepted by this capability",
         "params.arguments"};
   }
-  if (!composition_layer_create
+  if (!composition_layer_create && !composition_background_color_set
       && (!request.layer_create_kind.empty()
           || !request.layer_create_name.empty()
           || request.layer_create_color.has_value()
@@ -2277,7 +2350,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "composition layer create arguments are not accepted by this capability",
         "params.arguments"};
   }
-  if (!composition_create && has_composition_create_arguments(request)) {
+  if (!composition_create && !composition_setting_set
+      && has_composition_create_arguments(request)) {
     return {
         EnqueueCode::kInvalidRequest,
         "INVALID_ARGUMENT",
@@ -3025,6 +3099,82 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
               completion.composition_work_area_change_result =
                   std::move(host_result.value);
             }
+          }
+        } else if (request.capability_id == kCompositionDimensionsSetCapability
+            || request.capability_id == kCompositionDurationSetCapability
+            || request.capability_id == kCompositionFrameRateSetCapability
+            || request.capability_id == kCompositionPixelAspectRatioSetCapability
+            || request.capability_id == kCompositionBackgroundColorSetCapability
+            || request.capability_id == kCompositionDisplayStartTimeSetCapability) {
+          const CompositionSettingKind kind =
+              request.capability_id == kCompositionDimensionsSetCapability
+              ? CompositionSettingKind::kDimensions
+              : request.capability_id == kCompositionDurationSetCapability
+              ? CompositionSettingKind::kDuration
+              : request.capability_id == kCompositionFrameRateSetCapability
+              ? CompositionSettingKind::kFrameRate
+              : request.capability_id == kCompositionPixelAspectRatioSetCapability
+              ? CompositionSettingKind::kPixelAspectRatio
+              : request.capability_id == kCompositionBackgroundColorSetCapability
+              ? CompositionSettingKind::kBackgroundColor
+              : CompositionSettingKind::kDisplayStartTime;
+          CompositionColor color;
+          if (request.layer_create_color.has_value()) {
+            color = {
+                static_cast<std::uint8_t>(request.layer_create_color->red),
+                static_cast<std::uint8_t>(request.layer_create_color->green),
+                static_cast<std::uint8_t>(request.layer_create_color->blue),
+                static_cast<std::uint8_t>(request.layer_create_color->alpha)};
+          }
+          HostCompositionSettingsWriteResult host_result =
+              host.set_composition_setting(
+                  CompositionSettingsSetCommand{
+                      request.host_instance_id,
+                      request.session_id,
+                      *request.composition_locator,
+                      kind,
+                      request.composition_create_width,
+                      request.composition_create_height,
+                      request.capability_id == kCompositionDurationSetCapability
+                          ? request.composition_create_duration
+                          : request.target_time,
+                      request.capability_id == kCompositionFrameRateSetCapability
+                          ? request.composition_create_frame_rate
+                          : request.composition_create_pixel_aspect_ratio,
+                      color},
+                  request.deadline);
+          if (clock_.now() > request.deadline) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native composition setting write completed after its deadline");
+            completion.late_result_discarded = true;
+          } else if (!host_result.ok) {
+            completion = failure_for(
+                request,
+                host_result.error_code.empty() ? "CAPABILITY_FAILED" : host_result.error_code,
+                host_result.message.empty() ? "native capability failed" : host_result.message,
+                host_result.error_field);
+          } else if (!host_result.value.changed
+              || host_result.value.composition_locator != *request.composition_locator
+              || host_result.value.before.composition_locator
+                  != *request.composition_locator
+              || host_result.value.after.composition_locator
+                  != *request.composition_locator
+              || !valid_composition_settings(host_result.value.before)
+              || !valid_composition_settings(host_result.value.after)
+              || host_result.value.before == host_result.value.after) {
+            completion = failure_for(
+                request, "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                "native composition setting readback did not verify");
+          } else {
+            completion.request_id = request.request_id;
+            completion.capability_id = request.capability_id;
+            completion.route_id = request.route_id;
+            completion.session_generation = request.session_generation;
+            completion.idempotency_key = request.idempotency_key;
+            completion.ok = true;
+            completion.composition_settings_change_result =
+                std::move(host_result.value);
           }
         } else if (request.capability_id == kProjectItemNameSetCapability
             || request.capability_id == kProjectItemCommentSetCapability) {
