@@ -847,6 +847,70 @@ class AePositiveRatioInput(_StrictModel):
     denominator: int = Field(..., ge=1, le=2_147_483_647)
 
 
+class AeCompositionColorInput(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    red: int = Field(..., ge=0, le=255)
+    green: int = Field(..., ge=0, le=255)
+    blue: int = Field(..., ge=0, le=255)
+    alpha: Literal[255]
+
+
+class _AeCompositionSettingWriteArgs(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator
+    idempotency_key: str = Field(
+        ..., min_length=16, max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+
+class AeSetCompositionDimensionsArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionDimensions — set exact composition dimensions."""
+
+    width: int = Field(..., ge=1, le=30_000)
+    height: int = Field(..., ge=1, le=30_000)
+
+
+class AeSetCompositionDurationArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionDuration — set exact frame-aligned composition duration."""
+
+    duration: AePositiveCompositionTimeInput
+
+
+class AeSetCompositionFrameRateArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionFrameRate — set an exact supported composition frame rate."""
+
+    frame_rate: AePositiveRatioInput
+
+    @model_validator(mode="after")
+    def _pinned_fp_policy(self) -> "AeSetCompositionFrameRateArgs":
+        if self.frame_rate.denominator != 1:
+            raise ValueError(
+                "fractional frame rates require a pinned-host normalization measurement"
+            )
+        return self
+
+
+class AeSetCompositionPixelAspectRatioArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionPixelAspectRatio — set exact composition pixel aspect."""
+
+    pixel_aspect_ratio: AePositiveRatioInput
+
+
+class AeSetCompositionBackgroundColorArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionBackgroundColor — set exact RGBA8 composition background."""
+
+    background_color: AeCompositionColorInput
+
+
+class AeSetCompositionDisplayStartTimeArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionDisplayStartTime — set exact composition display start."""
+
+    display_start_time: AeCompositionTimeInput
+
+
 class AeCreateCompositionArgs(_StrictModel):
     """ae.createComposition — create one root composition through native AEGP.
 

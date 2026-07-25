@@ -118,6 +118,12 @@ def _filtered_tool_names() -> set:
             "ae.getProjectItemMetadata",
             "ae.getCompositionSettings",
             "ae.setCompositionWorkArea",
+            "ae.setCompositionDimensions",
+            "ae.setCompositionDuration",
+            "ae.setCompositionFrameRate",
+            "ae.setCompositionPixelAspectRatio",
+            "ae.setCompositionBackgroundColor",
+            "ae.setCompositionDisplayStartTime",
             "ae.renameProjectItem",
             "ae.setProjectItemComment",
             "ae.setProjectItemLabel",
@@ -197,6 +203,12 @@ def _filtered_tool_names() -> set:
             "ae.getProjectItemMetadata",
             "ae.getCompositionSettings",
             "ae.setCompositionWorkArea",
+            "ae.setCompositionDimensions",
+            "ae.setCompositionDuration",
+            "ae.setCompositionFrameRate",
+            "ae.setCompositionPixelAspectRatio",
+            "ae.setCompositionBackgroundColor",
+            "ae.setCompositionDisplayStartTime",
             "ae.renameProjectItem",
             "ae.setProjectItemComment",
             "ae.setProjectItemLabel",
@@ -834,6 +846,30 @@ _PROJECT_COMPOSITION_VALIDATION = {
     "ae.setCompositionWorkArea": (
         "ae.composition.work-area.set",
         "Use a fresh composition_locator, non-negative start, positive duration, and a stable idempotency_key.",
+    ),
+    "ae.setCompositionDimensions": (
+        "ae.composition.dimensions.set",
+        "Use a fresh composition_locator, exact integer dimensions, and a stable idempotency_key.",
+    ),
+    "ae.setCompositionDuration": (
+        "ae.composition.duration.set",
+        "Use a fresh composition_locator, frame-aligned positive duration, and a stable idempotency_key.",
+    ),
+    "ae.setCompositionFrameRate": (
+        "ae.composition.frame-rate.set",
+        "Use a fresh composition_locator, a supported exact frame_rate ratio, and a stable idempotency_key.",
+    ),
+    "ae.setCompositionPixelAspectRatio": (
+        "ae.composition.pixel-aspect-ratio.set",
+        "Use a fresh composition_locator, an exact positive pixel_aspect_ratio, and a stable idempotency_key.",
+    ),
+    "ae.setCompositionBackgroundColor": (
+        "ae.composition.background-color.set",
+        "Use a fresh composition_locator, exact RGBA8 background_color, and a stable idempotency_key.",
+    ),
+    "ae.setCompositionDisplayStartTime": (
+        "ae.composition.display-start-time.set",
+        "Use a fresh composition_locator, frame-aligned display_start_time, and a stable idempotency_key.",
     ),
     "ae.renameProjectItem": (
         "ae.project.item.name.set",

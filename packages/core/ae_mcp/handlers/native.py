@@ -30,7 +30,14 @@ from ae_mcp.backends.native import (
     invoke_project_summary,
 )
 from ae_mcp.backends.native_project_composition import (
+    COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID,
+    COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID,
+    COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID,
+    COMPOSITION_DURATION_SET_CAPABILITY_ID,
+    COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID,
+    COMPOSITION_PIXEL_ASPECT_RATIO_SET_CAPABILITY_ID,
     invoke_composition_duplicate,
+    invoke_composition_setting_set,
     invoke_composition_settings_read,
     invoke_composition_work_area_set,
     invoke_project_context_read,
@@ -98,6 +105,7 @@ _PROJECT_CONTEXT_READ_TIMEOUT_MS = 10_000
 _PROJECT_ITEM_METADATA_READ_TIMEOUT_MS = 10_000
 _COMPOSITION_SETTINGS_READ_TIMEOUT_MS = 10_000
 _COMPOSITION_WORK_AREA_SET_TIMEOUT_MS = 10_000
+_COMPOSITION_SETTING_SET_TIMEOUT_MS = 10_000
 _PROJECT_ITEM_NAME_SET_TIMEOUT_MS = 10_000
 _PROJECT_ITEM_COMMENT_SET_TIMEOUT_MS = 10_000
 _PROJECT_ITEM_LABEL_SET_TIMEOUT_MS = 10_000
@@ -1392,6 +1400,53 @@ async def _run_set_composition_work_area(
     return _project_package_write_response(execution)
 
 
+def _composition_setting_runner(capability_id: str):
+    async def run(args: Any, ctx: Any) -> dict[str, Any]:
+        cancellation = NativeCancellationToken()
+        deadline_unix_ms = int(time.time() * 1000) + _COMPOSITION_SETTING_SET_TIMEOUT_MS
+
+        async def _call():
+            return await invoke_composition_setting_set(
+                _backend(),
+                request_id=f"mcp-{uuid.uuid4().hex}",
+                capability_id=capability_id,
+                arguments=args.model_dump(mode="json", by_alias=True),
+                deadline_unix_ms=deadline_unix_ms,
+                cancellation=cancellation,
+            )
+
+        execution = await _await_project_package_write(
+            _call,
+            cancellation=cancellation,
+            ctx=ctx,
+            start_msg=f"{capability_id} native AEGP write; wait for verified readback...",
+        )
+        return _project_package_write_response(execution)
+
+    run.__name__ = f"_run_{capability_id.replace('.', '_').replace('-', '_')}"
+    return run
+
+
+_run_set_composition_dimensions = _composition_setting_runner(
+    COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID
+)
+_run_set_composition_duration = _composition_setting_runner(
+    COMPOSITION_DURATION_SET_CAPABILITY_ID
+)
+_run_set_composition_frame_rate = _composition_setting_runner(
+    COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID
+)
+_run_set_composition_pixel_aspect_ratio = _composition_setting_runner(
+    COMPOSITION_PIXEL_ASPECT_RATIO_SET_CAPABILITY_ID
+)
+_run_set_composition_background_color = _composition_setting_runner(
+    COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID
+)
+_run_set_composition_display_start_time = _composition_setting_runner(
+    COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID
+)
+
+
 async def _run_rename_project_item(
     args: schemas.AeRenameProjectItemArgs,
     ctx: Any,
@@ -2315,6 +2370,36 @@ register(
     "ae.setCompositionWorkArea",
     schemas.AeSetCompositionWorkAreaArgs,
     _run_set_composition_work_area,
+)
+register(
+    "ae.setCompositionDimensions",
+    schemas.AeSetCompositionDimensionsArgs,
+    _run_set_composition_dimensions,
+)
+register(
+    "ae.setCompositionDuration",
+    schemas.AeSetCompositionDurationArgs,
+    _run_set_composition_duration,
+)
+register(
+    "ae.setCompositionFrameRate",
+    schemas.AeSetCompositionFrameRateArgs,
+    _run_set_composition_frame_rate,
+)
+register(
+    "ae.setCompositionPixelAspectRatio",
+    schemas.AeSetCompositionPixelAspectRatioArgs,
+    _run_set_composition_pixel_aspect_ratio,
+)
+register(
+    "ae.setCompositionBackgroundColor",
+    schemas.AeSetCompositionBackgroundColorArgs,
+    _run_set_composition_background_color,
+)
+register(
+    "ae.setCompositionDisplayStartTime",
+    schemas.AeSetCompositionDisplayStartTimeArgs,
+    _run_set_composition_display_start_time,
 )
 register(
     "ae.renameProjectItem",
