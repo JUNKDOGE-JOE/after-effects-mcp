@@ -138,6 +138,36 @@ Commit the package acceptance driver with the package and use the same driver fo
 
 Do not introduce a generalized plan language speculatively. Promote repeated driver code into a shared runner only after at least two capability packages demonstrate the same stable need; a shared runner must not infer exact component identity from native self-report or model an invented response/Undo contract.
 
+### 7.1 Known traps that cost whole retry cycles
+
+A retry of the seven-call sequence is not cheap: it costs a full AE quit,
+relaunch, and fixture reopen. One package needed five attempts before the
+passing run, and the product code was correct in every one of them — three
+failures were the harness, one was the environment. Check these before the
+session rather than discovering them mid-run.
+
+**Reopen the fixture through AE's own Open Recent.** The macOS file-open
+dialog exposes its file rows to the accessibility tree as editable text, so
+clicking a row does not select it and Open stays disabled. One session spent
+roughly forty accessibility operations — path entry, search, filter, row
+containers, identifier refreshes — before falling back to File > Open Recent,
+which worked immediately. Do not reach for Finder or LaunchServices instead;
+they may route the project to Beta or another host.
+
+**Validate the driver's expectations against the published contract at T1 or
+T2.** A driver asserted `replayed=true` for a repeated write key where the
+public schema, the Core tests and the native dispatcher all specify
+`DUPLICATE_REQUEST`. The candidate behaved correctly; the assertion was wrong;
+it surfaced on real hardware at call four. A driver expectation that contradicts
+the contract is a lower-tier defect and must never reach T5.
+
+**The native replay fence lives as long as the host process, and Undo does not
+clear it.** A rerun that reuses an operation key from an earlier run in the same
+host will be refused, even after the earlier write was undone and the fixture
+restored. Either mint a fresh key per evidence session or restart the host
+before rerunning. Reconciliation still requires reusing the original key — the
+two rules do not conflict, but the driver has to distinguish them.
+
 ## 8. Merge and completion
 
 After candidate acceptance:
