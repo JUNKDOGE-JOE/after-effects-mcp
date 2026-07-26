@@ -149,6 +149,45 @@ def _shape_group_ref_input(value: Any) -> dict[str, Any]:
     }
 
 
+def _shape_fill_result(value: Any) -> dict[str, Any]:
+    """Project a frozen request fill into the public result schema."""
+
+    fill = mapping(value, "shape fill input is invalid")
+    require(
+        set(fill) == {"enabled", "color", "opacity_percent"},
+        "shape fill input is not closed",
+    )
+    return {
+        "enabled": fill["enabled"],
+        "color": copy.deepcopy(fill["color"]),
+        "opacityPercent": fill["opacity_percent"],
+    }
+
+
+def _shape_stroke_result(value: Any) -> dict[str, Any]:
+    """Project a frozen request stroke into the public result schema."""
+
+    stroke = mapping(value, "shape stroke input is invalid")
+    require(
+        set(stroke)
+        == {
+            "enabled",
+            "color",
+            "opacity_percent",
+            "width_pixels",
+            "stroke_over_fill",
+        },
+        "shape stroke input is not closed",
+    )
+    return {
+        "enabled": stroke["enabled"],
+        "color": copy.deepcopy(stroke["color"]),
+        "opacityPercent": stroke["opacity_percent"],
+        "widthPixels": stroke["width_pixels"],
+        "strokeOverFill": stroke["stroke_over_fill"],
+    }
+
+
 class TextShapeMarkerPackage:
     """Package-owned executor; the shared runtime remains package-neutral."""
 
@@ -620,13 +659,21 @@ class TextShapeMarkerPackage:
                 "shape group order/content is invalid before restyle",
             )
         elif key == "fill-restyle":
-            require(value.get("afterFill") == self._resolve(
+            expected = self._resolve(
                 next(row for row in CALL_PLAN if row.key == key).arguments["fill"]
-            ), "fill restyle readback mismatch")
+            )
+            require(
+                value.get("afterFill") == _shape_fill_result(expected),
+                "fill restyle readback mismatch",
+            )
         elif key == "stroke-restyle":
-            require(value.get("afterStroke") == self._resolve(
+            expected = self._resolve(
                 next(row for row in CALL_PLAN if row.key == key).arguments["stroke"]
-            ), "stroke restyle readback mismatch")
+            )
+            require(
+                value.get("afterStroke") == _shape_stroke_result(expected),
+                "stroke restyle readback mismatch",
+            )
         elif key in {"text-marker-isolation-read", "shape-marker-isolation-read"}:
             require(value.get("total") == 1 and len(value.get("markers", [])) == 1,
                     f"{key} did not prove target isolation")

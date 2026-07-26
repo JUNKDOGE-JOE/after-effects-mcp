@@ -449,6 +449,49 @@ def test_driver_converts_shape_group_result_refs_to_frozen_input_refs():
     )
 
 
+def test_driver_compares_shape_style_results_in_the_public_result_projection():
+    package = driver.TextShapeMarkerPackage(
+        SimpleNamespace(mode="t5", intent=lambda name: f"t5:{name}"),
+        fixture_name="TSM Acceptance Fixture",
+    )
+    package._assert_state(
+        "fill-restyle",
+        {
+            "value": {
+                "afterFill": {
+                    "enabled": True,
+                    "color": {
+                        "red": 40,
+                        "green": 80,
+                        "blue": 230,
+                        "alpha": 255,
+                    },
+                    "opacityPercent": "75",
+                }
+            }
+        },
+    )
+    package._assert_state(
+        "stroke-restyle",
+        {
+            "value": {
+                "afterStroke": {
+                    "enabled": True,
+                    "color": {
+                        "red": 250,
+                        "green": 250,
+                        "blue": 250,
+                        "alpha": 255,
+                    },
+                    "opacityPercent": "88",
+                    "widthPixels": "19.25",
+                    "strokeOverFill": True,
+                }
+            }
+        },
+    )
+
+
 def test_both_hardware_plans_reacquire_composition_after_text_writes():
     for plan, expected_reacquire, expected_shape in (
         (spec.T5_CALL_PLAN, 13, 14),
