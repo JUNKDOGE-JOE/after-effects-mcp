@@ -275,7 +275,9 @@ test('all twenty frozen #150/#155/#162 contracts accept their closed valid shape
     assert.deepEqual(
         Object.keys(packageContracts.CONTRACTS).filter(function (capabilityId) {
             return !capabilityId.startsWith('ae.layer.property.keyframe.')
-                && !capabilityId.startsWith('ae.native.media.');
+                && !capabilityId.startsWith('ae.native.media.')
+                && !capabilityId.startsWith('ae.shape.')
+                && !capabilityId.startsWith('ae.marker.');
         }).sort(),
         Object.keys(vectors).sort(),
     );
@@ -299,6 +301,68 @@ test('all twenty frozen #150/#155/#162 contracts accept their closed valid shape
             capabilityId + ' open value',
         );
     }
+});
+
+test('eleven Text/Shape/Marker contracts admit generated vectors and nested locators', () => {
+    const registry = JSON.parse(fs.readFileSync(path.join(
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
+    ), 'utf8')).response.result.items;
+    const descriptors = registry.filter(function (item) {
+        return item.id.startsWith('ae.shape.') || item.id.startsWith('ae.marker.');
+    });
+    assert.equal(descriptors.length, 11);
+    for (const descriptor of descriptors) {
+        const contract = packageContracts.getContract(descriptor.id);
+        const example = descriptor.examples[0];
+        const argumentsValue = example.arguments;
+        const value = example.expected.value;
+        assert.equal(contract.digest, descriptor.contractDigest, descriptor.id + ' digest');
+        assert.equal(contract.validArguments(argumentsValue), true, descriptor.id + ' arguments');
+        assert.equal(
+            contract.validValue(value, argumentsValue, HOST, SESSION),
+            true,
+            descriptor.id + ' value',
+        );
+        assert.equal(
+            contract.validArguments({ ...argumentsValue, extra: true }),
+            false,
+            descriptor.id + ' open arguments',
+        );
+        assert.equal(
+            contract.validValue(
+                { ...value, extra: true }, argumentsValue, HOST, SESSION,
+            ),
+            false,
+            descriptor.id + ' open value',
+        );
+    }
+
+    const composition = locator('composition', CREATED, 8);
+    const markerList = packageContracts.getContract('ae.marker.list');
+    const compositionArguments = {
+        target: { kind: 'composition', compositionLocator: composition },
+        offset: 0,
+        limit: 25,
+    };
+    const compositionValue = {
+        target: compositionArguments.target,
+        total: 0,
+        offset: 0,
+        limit: 25,
+        returned: 0,
+        hasMore: false,
+        nextOffset: null,
+        markers: [],
+    };
+    assert.equal(markerList.validArguments(compositionArguments), true);
+    assert.equal(
+        markerList.validValue(compositionValue, compositionArguments, HOST, SESSION),
+        true,
+    );
+    assert.deepEqual(
+        packageContracts.locatorChecks(markerList, compositionArguments),
+        [[composition, 'target.compositionLocator', 'ae_listProjectItems']],
+    );
 });
 
 test('#167 grouped media contracts admit closed read/write invokes and reject drift', () => {

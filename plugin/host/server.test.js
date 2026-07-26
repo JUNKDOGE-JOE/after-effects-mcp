@@ -127,6 +127,19 @@ const nativeMediaInvokeVectors = [
         },
     },
 ];
+const textShapeMarkerInvokeVectors = nativeCapabilitiesFixture.items.filter(function (item) {
+    return item.id.startsWith('ae.shape.') || item.id.startsWith('ae.marker.');
+}).map(function (descriptor) {
+    return {
+        request: {
+            params: {
+                capabilityId: descriptor.id,
+                capabilityVersion: 1,
+                arguments: descriptor.examples[0].arguments,
+            },
+        },
+    };
+});
 
 const authToken = require('./auth-token');
 
@@ -1006,7 +1019,7 @@ test('native routes auto-connect locally then preserve Core negotiation, registr
     }
 });
 
-test('native invoke HTTP gate accepts all #150/#155/#157/#162/#167 contracts and rejects closed-shape drift', async () => {
+test('native invoke HTTP gate accepts package contracts including TSM and rejects closed-shape drift', async () => {
     const nativeClient = fakeNativeClient();
     nativeClient.authorize();
     const { server, srv, port } = await startNativeApp(nativeClient);
@@ -1020,6 +1033,7 @@ test('native invoke HTTP gate accepts all #150/#155/#157/#162/#167 contracts and
         const packageVectors = projectCompositionVectors.concat(
             keyframeAuthoringVectors,
             nativeMediaInvokeVectors,
+            textShapeMarkerInvokeVectors,
         );
         for (const [index, vector] of packageVectors.entries()) {
             const request = {

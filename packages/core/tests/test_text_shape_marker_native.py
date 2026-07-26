@@ -226,6 +226,34 @@ async def test_marker_read_encodes_camel_wire_and_decodes_closed_page():
 
 
 @pytest.mark.asyncio
+async def test_composition_marker_read_encodes_closed_camel_target():
+    backend = Backend()
+    result = await TSM.invoke_tsm_native(
+        backend,
+        capability_id="ae.marker.list",
+        arguments={
+            "target": {
+                "kind": "composition",
+                "composition_locator": locator("composition", COMP),
+            },
+            "offset": 0,
+            "limit": 25,
+        },
+        request_id="tsm-composition-marker-list-1",
+        deadline_unix_ms=deadline(),
+    )
+    assert result.value.total == 0
+    assert backend.requests[0].arguments == {
+        "target": {
+            "kind": "composition",
+            "compositionLocator": locator("composition", COMP),
+        },
+        "offset": 0,
+        "limit": 25,
+    }
+
+
+@pytest.mark.asyncio
 async def test_shape_write_encodes_key_and_returns_verified_undo_boundary():
     backend = Backend()
     result = await TSM.invoke_tsm_native(
@@ -311,4 +339,3 @@ def test_marker_exact_time_is_canonical_and_duplicate_scaled_times_fail():
                 "markers": [first, second],
             }
         )
-
