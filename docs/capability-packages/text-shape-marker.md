@@ -649,11 +649,20 @@ Response `value`:
 Core resolves `composition_locator` internally. The template uses
 `comp.layers.addText("")` or
 `comp.layers.addBoxText([width,height])`, assigns the exact name, reads the
-new TextDocument, writes `text`, calls `setValue`, and returns a second
-independent readback from the layer. It never constructs a fresh styled
-TextDocument and assumes the fields stuck. Core then reacquires the created
-text layer through native project/layer reads and returns its fresh
-`compositionLocator` and `after.layerLocator`.
+new TextDocument, writes `text`, normalizes that package-created document to
+`applyFill=true`, `applyStroke=true`, black stroke color, and requested
+zero-width stroke, calls `setValue`, and returns a second independent readback
+from the layer. AE 26.3 normalizes the requested zero width to its minimum
+`0.01` pixels. This creation-only normalization is required because AE 26.3
+throws when `strokeColor` is read while stroke is disabled, while the frozen
+`TextDocumentSnapshot` requires a complete stroke style. It was added after
+replacement-candidate T5 reproduced that exact getter failure and public
+readback proved that the text layer had already been created. Existing text
+whose frozen getters throw remains an unrepresentable contract failure; the
+read path does not synthesize a color or mutate the document. The template
+never constructs a fresh styled TextDocument and assumes the fields stuck.
+Core then reacquires the created text layer through native project/layer reads
+and returns its fresh `compositionLocator` and `after.layerLocator`.
 
 ### `ae_getTextDocument`
 

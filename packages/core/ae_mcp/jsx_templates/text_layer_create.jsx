@@ -12,6 +12,13 @@ var sourceText = layer.property("ADBE Text Properties")
     .property("ADBE Text Document");
 var doc = sourceText.value;
 doc.text = request.text;
+// A fresh AE TextDocument has stroke disabled, and this AE build throws when
+// strokeColor is read in that state. Normalize only package-created text into
+// the complete, uniformly readable style required by TextDocumentSnapshot.
+doc.applyFill = true;
+doc.applyStroke = true;
+doc.strokeColor = [0, 0, 0];
+doc.strokeWidth = 0;
 sourceText.setValue(doc);
 var address = {
     project_item_index: Number(request._resolved.project_item_index),

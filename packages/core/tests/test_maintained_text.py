@@ -153,6 +153,13 @@ def test_all_six_templates_are_closed_and_writes_have_one_undo_boundary():
     assert rendered.count("app.beginUndoGroup") == 1
     assert rendered.count("app.endUndoGroup") >= 1
     assert "sourceText.setValue(doc)" in rendered
+    assert "doc.applyFill = true;" in rendered
+    assert "doc.applyStroke = true;" in rendered
+    assert "doc.strokeColor = [0, 0, 0];" in rendered
+    assert "doc.strokeWidth = 0;" in rendered
+    assert rendered.index("doc.applyStroke = true;") < rendered.index(
+        "sourceText.setValue(doc)"
+    )
     style = AeSetTextCharacterStyleArgs(
         layer_locator=LAYER_LOCATOR,
         style={
