@@ -9,7 +9,7 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 94, f"expected 94 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 111, f"expected 111 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
         "ae.init", "ae.overview", "ae.projectSummary",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
@@ -61,6 +61,14 @@ def test_registry_has_all_verbs():
         "ae.toolCreate", "ae.toolEdit", "ae.toolDelete", "ae.toolArchive",
         "ae.toolDuplicate", "ae.toolPromoteFromHistory",
         "ae.toolImport", "ae.toolExport",
+        "ae.listInstalledFonts", "ae.createTextLayer", "ae.getTextDocument",
+        "ae.setTextContent", "ae.setTextCharacterStyle",
+        "ae.setTextParagraphStyle",
+        "ae.createShapeLayer", "ae.listShapeGroups", "ae.createShapeGroup",
+        "ae.setShapePath", "ae.setShapeFillStyle",
+        "ae.setShapeStrokeStyle", "ae.reorderShapeGroup",
+        "ae.listMarkers", "ae.createMarker", "ae.setMarker",
+        "ae.deleteMarker",
     }
 
 

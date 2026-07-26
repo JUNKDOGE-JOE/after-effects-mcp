@@ -2402,6 +2402,17 @@ class AeDiagnoseArgs(_StrictModel):
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
 
+import sys as _sys
+
+_tsm_module = _sys.modules.get("ae_mcp.schemas_tsm")
+if _tsm_module is not None and not hasattr(_tsm_module, "PUBLIC_SCHEMAS"):
+    # schemas_tsm imports the established locator/path primitives above. When
+    # it is imported first, let this module finish its base registry; the TSM
+    # module extends SCHEMAS immediately after defining its closed models.
+    _TSM_PUBLIC_SCHEMAS = {}
+else:
+    from ae_mcp.schemas_tsm import PUBLIC_SCHEMAS as _TSM_PUBLIC_SCHEMAS
+
 
 SCHEMAS = {
     "ae.init": AeInitArgs,
@@ -2498,6 +2509,7 @@ SCHEMAS = {
     "ae.toolImport": AeToolImportArgs,
     "ae.toolExport": AeToolExportArgs,
     "ae.createRig": AeCreateRigArgs,
+    **_TSM_PUBLIC_SCHEMAS,
 }
 
-assert len(SCHEMAS) == 94, f"expected 94 verbs, got {len(SCHEMAS)}"
+assert len(SCHEMAS) in {94, 111}, f"expected base or full registry, got {len(SCHEMAS)}"

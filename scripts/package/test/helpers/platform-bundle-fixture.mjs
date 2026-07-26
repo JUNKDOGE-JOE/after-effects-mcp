@@ -443,6 +443,7 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
       platform,
       version: PRODUCT_VERSION,
       verificationProfile: 'release-audit',
+      candidateRepoRoot: repoRoot,
     },
     exists(relative) {
       return fs.existsSync(path.join(outDir, ...relative.split('/')));
