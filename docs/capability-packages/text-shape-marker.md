@@ -161,6 +161,20 @@ shape teardown reads, which still observe the authored shape state before
 removing each group. No public tool or write/Undo evidence is removed, and
 the T5/T6 fences remain 44/30.
 
+The following full T5 reached both marker creates and their independent public
+reads. Before native dispatch of `ae_setMarker`, the acceptance driver copied
+the result-only `secondsRational` field from `MarkerRefResult.time` into the
+strict `MarkerRefInput.time`, so public schema validation rejected call 32.
+The native audit contained no marker-set request and public reads proved both
+markers unchanged. Every completed write was then undone once in reverse
+order, and public reads proved zero markers, zero groups, and zero layers
+before the fixture was moved from `active` to recovery. The driver now treats
+marker refs like shape-group refs: it validates the closed result projection
+and canonical rational, then emits only `{value, scale}` in the public input
+projection. A bridge regression validates the resolved set and delete
+arguments through their published public schemas. No product contract, public
+call, native implementation, authored form, or 44/30 fence changes.
+
 A follow-up diagnostic real-AE probe isolated the next independent shape
 blocker before another candidate run. After the three authored children were
 inserted, AE exposed the new path through its property tree as a valid empty

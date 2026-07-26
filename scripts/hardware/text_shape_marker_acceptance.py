@@ -118,9 +118,41 @@ def _exact_time_matches(
 
 def _marker_ref(value: Any) -> dict[str, Any]:
     ref = mapping(value, "marker ref is invalid")
+    require(
+        set(ref) == {"target", "time"},
+        "marker result ref is not closed",
+    )
+    time = mapping(ref.get("time"), "marker time is invalid")
+    require(
+        set(time) == {"value", "scale", "secondsRational"},
+        "marker result time is not closed",
+    )
+    numerator = time.get("value")
+    scale = time.get("scale")
+    require(
+        type(numerator) is int
+        and -2_147_483_648 <= numerator <= 2_147_483_647,
+        "marker time value is invalid",
+    )
+    require(
+        type(scale) is int and 1 <= scale <= 4_294_967_295,
+        "marker time scale is invalid",
+    )
+    divisor = gcd(abs(numerator), scale)
+    reduced_numerator = numerator // divisor
+    reduced_scale = scale // divisor
+    canonical = (
+        str(reduced_numerator)
+        if reduced_scale == 1
+        else f"{reduced_numerator}/{reduced_scale}"
+    )
+    require(
+        time.get("secondsRational") == canonical,
+        "marker result time rational is not canonical",
+    )
     return {
         "target": _marker_target(ref.get("target")),
-        "time": mapping(ref.get("time"), "marker time is invalid"),
+        "time": {"value": numerator, "scale": scale},
     }
 
 

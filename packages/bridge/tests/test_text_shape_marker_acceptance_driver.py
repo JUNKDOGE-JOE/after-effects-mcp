@@ -449,6 +449,55 @@ def test_driver_converts_shape_group_result_refs_to_frozen_input_refs():
     )
 
 
+def test_driver_converts_marker_result_refs_to_strict_public_input_refs():
+    package = driver.TextShapeMarkerPackage(
+        SimpleNamespace(
+            mode="t5",
+            intent=lambda name: f"issue170:{name}:session-marker-contract",
+        ),
+        fixture_name="TSM Acceptance Fixture",
+    )
+    layer = _locator("layer", TEXT, 7)
+    result_ref = {
+        "target": {
+            "kind": "layer",
+            "layerLocator": layer,
+        },
+        "time": {
+            "value": 24,
+            "scale": 24,
+            "secondsRational": "1",
+        },
+    }
+    expected_input_ref = {
+        "target": {
+            "kind": "layer",
+            "layer_locator": layer,
+        },
+        "time": {
+            "value": 24,
+            "scale": 24,
+        },
+    }
+    rows = {row.key: row for row in spec.T5_CALL_PLAN}
+
+    package._capture(
+        "text-marker-isolation-read",
+        {"value": {"markers": [{"ref": result_ref}]}},
+    )
+    set_arguments = package._resolve(rows["text-marker-set"].arguments)
+    assert set_arguments["marker_ref"] == expected_input_ref
+    PUBLIC_SCHEMAS["ae.setMarker"].model_validate(set_arguments)
+
+    package._capture(
+        "shape-marker-isolation-read",
+        {"value": {"markers": [{"ref": result_ref}]}},
+    )
+    delete_arguments = package._resolve(rows["shape-marker-delete"].arguments)
+    assert delete_arguments["marker_ref"] == expected_input_ref
+    PUBLIC_SCHEMAS["ae.deleteMarker"].model_validate(delete_arguments)
+
+
 def test_driver_compares_shape_style_results_in_the_public_result_projection():
     package = driver.TextShapeMarkerPackage(
         SimpleNamespace(mode="t5", intent=lambda name: f"t5:{name}"),
