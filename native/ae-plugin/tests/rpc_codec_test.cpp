@@ -3210,6 +3210,40 @@ void native_media_package_parses_all_twenty_two_public_operations() {
               "\"undo\":{\"available\":true,\"verified\":false}")
               != std::string::npos,
       "native media write success lost committed effect or Undo boundary");
+
+  NativeMediaSuccess tsm_read_success = success;
+  tsm_read_success.request_id = "tsm-read-success-1";
+  tsm_read_success.capability_id = "ae.marker.list";
+  tsm_read_success.canonical_value_json = "{}";
+  tsm_read_success.postcondition_digest = digest_native_media_postcondition(
+      tsm_read_success.capability_id, tsm_read_success.canonical_value_json);
+  const std::string tsm_read_encoded =
+      body(encode_native_media_success(tsm_read_success));
+  require(
+      tsm_read_encoded.find("\"kind\":\"marker-list\"")
+              != std::string::npos
+          && tsm_read_encoded.find("\"effect\":\"none\"")
+              != std::string::npos
+          && tsm_read_encoded.find("\"undo\"") == std::string::npos,
+      "TSM read success lost its capability-specific postcondition kind");
+
+  NativeMediaSuccess tsm_write_success = success;
+  tsm_write_success.request_id = "tsm-write-success-1";
+  tsm_write_success.capability_id = "ae.shape.layer.create";
+  tsm_write_success.canonical_value_json = "{}";
+  tsm_write_success.postcondition_digest = digest_native_media_postcondition(
+      tsm_write_success.capability_id, tsm_write_success.canonical_value_json);
+  const std::string tsm_write_encoded =
+      body(encode_native_media_success(tsm_write_success));
+  require(
+      tsm_write_encoded.find("\"kind\":\"shape-layer-create\"")
+              != std::string::npos
+          && tsm_write_encoded.find("\"effect\":\"committed\"")
+              != std::string::npos
+          && tsm_write_encoded.find(
+              "\"undo\":{\"available\":true,\"verified\":false}")
+              != std::string::npos,
+      "TSM write success lost its capability-specific postcondition kind");
 }
 
 void text_shape_marker_codec_preserves_frozen_native_contracts() {

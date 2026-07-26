@@ -8447,6 +8447,13 @@ std::vector<std::uint8_t> encode_native_media_success(
           response.capability_id, response.canonical_value_json)) {
     invalid_argument("invalid or unvalidated native media evidence");
   }
+  std::string postcondition_kind = write
+      ? "native-media-write" : "native-media-read";
+  if (is_text_shape_marker_capability(response.capability_id)) {
+    postcondition_kind = response.capability_id.substr(3);
+    std::replace(
+        postcondition_kind.begin(), postcondition_kind.end(), '.', '-');
+  }
   std::string evidence = "\"capabilityId\":"
       + json_string(response.capability_id)
       + ",\"capabilityVersion\":1,\"completedAtUnixMs\":"
@@ -8456,8 +8463,7 @@ std::vector<std::uint8_t> encode_native_media_success(
       + json_string(response.host_instance_id)
       + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\","
         "\"digest\":" + json_string(response.postcondition_digest)
-      + ",\"kind\":" + json_string(
-          write ? "native-media-write" : "native-media-read")
+      + ",\"kind\":" + json_string(postcondition_kind)
       + ",\"verified\":true},\"requestDigest\":"
       + json_string(response.request_digest) + ",\"requestId\":"
       + json_string(response.request_id) + ",\"sessionId\":"
