@@ -1,3 +1,4 @@
+#include "aemcp_native/ae_path_numeric.hpp"
 #include "aemcp_native/effect_stack.hpp"
 #include "aemcp_native/host_dispatcher.hpp"
 #include "aemcp_native/project_epoch.hpp"
@@ -1989,6 +1990,16 @@ void text_shape_marker_dispatches_all_eleven_native_capabilities() {
   }
 }
 
+void ae_path_readback_accepts_only_the_observed_host_quantum() {
+  require(
+      aemcp::native::ae_path_values_equal(
+          -120.0, -119.99998474121094),
+      "AE one-quantum negative tangent readback was rejected");
+  require(
+      !aemcp::native::ae_path_values_equal(-120.0, -119.999),
+      "material path-coordinate drift was accepted");
+}
+
 void keyframe_value_owner_lifetime_is_bound_to_the_sdk_write() {
   const std::filesystem::path source_path =
       std::filesystem::path(__FILE__).parent_path().parent_path()
@@ -3313,6 +3324,7 @@ int main() {
   keyframe_authoring_package_admits_all_seven_closed_capabilities();
   native_media_overlapping_operations_admit_on_their_selected_plane();
   text_shape_marker_dispatches_all_eleven_native_capabilities();
+  ae_path_readback_accepts_only_the_observed_host_quantum();
   keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
   layer_compositing_writes_read_back_only_their_owned_sdk_fields();
   legacy_effect_metadata_is_utf8_normalized_before_json_evidence();

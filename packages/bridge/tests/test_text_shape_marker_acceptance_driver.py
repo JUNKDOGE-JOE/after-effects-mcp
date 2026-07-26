@@ -246,6 +246,56 @@ def test_text_schema_and_locator_chain_are_publicly_indistinguishable():
     }
 
 
+@pytest.mark.asyncio
+async def test_uncertain_second_invocation_overrides_an_earlier_passed_status():
+    events = []
+
+    class Evidence:
+        def record(self, event, payload):
+            events.append((event, payload))
+
+    class Session:
+        tool_names = frozenset({"ae_createShapeGroup"})
+
+        async def call(self, _tool, _arguments):
+            return True, {
+                "ok": False,
+                "error": {
+                    "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                    "sideEffect": "may-have-occurred",
+                },
+            }
+
+    runner = runtime_module.AcceptanceRuntime(
+        spec=spec.SPEC,
+        mode="t5",
+        identity=SimpleNamespace(),
+        fixture=SimpleNamespace(),
+        session_factory=lambda: None,
+        checkpoint=lambda _kind, _details: None,
+        evidence=Evidence(),
+    )
+    runner.mark_tool_passed("ae_createShapeGroup")
+
+    with pytest.raises(runtime_module.PossiblySideEffectingStop):
+        await runner.call(
+            Session(),
+            "ae_createShapeGroup",
+            {},
+            capability_id="ae.shape.group.create",
+            write=True,
+            phase="t5-curve-create",
+        )
+
+    row = runner.matrix["ae_createShapeGroup"]
+    assert row["status"] == "failed"
+    assert row["invocations"] == 1
+    assert [event for event, _payload in events] == [
+        "public-tool-request",
+        "public-tool-response",
+    ]
+
+
 def test_every_address_in_both_plans_points_backward_to_a_public_response():
     for plan, links in (
         (spec.T5_CALL_PLAN, spec.T5_ADDRESS_LINKS),

@@ -225,7 +225,11 @@ the public codec already used by `ae_setLayerMaskPath`
 (`packages/core/ae_mcp/schemas.py:2187-2230`), not a second path
 representation. Native readback compares numeric decimal values, as the
 existing adapter does (`packages/core/ae_mcp/backends/native_media.py:
-641-664`).
+641-664`). Immediate AEGP path-write verification additionally treats at most
+one `1/65536` coordinate unit as the same authored value. Real AE 26.3
+quantizes a negative relative `PF_PathVertex` tangent by exactly that single
+16.16 host quantum (`-120` reads back as `-119.99998474121094`); the response
+still reports the actual AE decimal and any larger difference fails closed.
 
 #### `ShapeGroupRefInput` and `ShapeGroupRef`
 
@@ -1835,10 +1839,11 @@ contains no tests.
    sequence without measuring UTF-16 code units as Unicode scalar length.
 6. TextDocument tests round-trip every frozen character/paragraph field and
    reject mixed/unrepresentable styles with expected field names.
-7. Reuse the exact existing mask-path request model and numeric comparator for
-   shape paths. Open/closed topology, 2/3/min/max vertices, relative tangents,
-   exponent decimals, signed-zero/noncanonical values, NaN, infinity, and
-   underflow are covered.
+7. Reuse the exact existing mask-path request model and decimal codec for shape
+   paths. Immediate AEGP write verification accepts only the observed one-unit
+   16.16 path-coordinate quantization and rejects larger drift. Open/closed
+   topology, 2/3/min/max vertices, relative tangents, exponent decimals,
+   signed-zero/noncanonical values, NaN, infinity, and underflow are covered.
 8. Shape construction/style fixtures assert add/reacquire ordering, closed
    match names, stream-ref disposal, unique stream ids, complete
    fill/stroke readback, independent active-eyeball state, color/opacity/width

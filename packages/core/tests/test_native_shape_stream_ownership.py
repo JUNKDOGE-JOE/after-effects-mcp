@@ -65,3 +65,13 @@ def test_shape_group_identity_uses_the_collision_checked_authored_name() -> None
     assert "group.name == command.name || group.stream_id == requested_token" in (
         create_preflight
     )
+
+
+def test_shape_path_readback_uses_only_the_observed_ae_quantum() -> None:
+    source = PLUGIN_ENTRY.read_text(encoding="utf-8")
+    comparator = source.split("const auto paths_equal =", 1)[1].split(
+        "\n      if (command.operation ==", 1
+    )[0]
+
+    assert comparator.count("path_decimal_values_equal(") == 6
+    assert "!decimal_values_equal(" not in comparator

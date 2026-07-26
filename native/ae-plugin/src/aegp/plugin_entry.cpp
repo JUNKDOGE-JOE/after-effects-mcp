@@ -1,3 +1,4 @@
+#include "aemcp_native/ae_path_numeric.hpp"
 #include "aemcp_native/effect_stack.hpp"
 #include "aemcp_native/host_dispatcher.hpp"
 #include "aemcp_native/endpoint_registry_macos.hpp"
@@ -1294,6 +1295,14 @@ class ProjectGraphRegistry final {
   const auto right_value = decimal_value(right);
   return left_value.has_value() && right_value.has_value()
       && *left_value == *right_value;
+}
+
+[[nodiscard]] bool path_decimal_values_equal(
+    std::string_view left, std::string_view right) {
+  const auto left_value = decimal_value(left);
+  const auto right_value = decimal_value(right);
+  return left_value.has_value() && right_value.has_value()
+      && aemcp::native::ae_path_values_equal(*left_value, *right_value);
 }
 
 [[nodiscard]] bool layer_property_values_equal(
@@ -8425,12 +8434,16 @@ class AegpHostApi final : public HostApi {
         for (std::size_t index = 0; index < actual.vertices.size(); ++index) {
           const auto& left = actual.vertices[index];
           const auto& right = command.mask_vertices[index];
-          if (!decimal_values_equal(left.position_x, right.position_x)
-              || !decimal_values_equal(left.position_y, right.position_y)
-              || !decimal_values_equal(left.in_tangent_x, right.in_tangent_x)
-              || !decimal_values_equal(left.in_tangent_y, right.in_tangent_y)
-              || !decimal_values_equal(left.out_tangent_x, right.out_tangent_x)
-              || !decimal_values_equal(left.out_tangent_y, right.out_tangent_y)) {
+          if (!path_decimal_values_equal(left.position_x, right.position_x)
+              || !path_decimal_values_equal(left.position_y, right.position_y)
+              || !path_decimal_values_equal(
+                  left.in_tangent_x, right.in_tangent_x)
+              || !path_decimal_values_equal(
+                  left.in_tangent_y, right.in_tangent_y)
+              || !path_decimal_values_equal(
+                  left.out_tangent_x, right.out_tangent_x)
+              || !path_decimal_values_equal(
+                  left.out_tangent_y, right.out_tangent_y)) {
             return false;
           }
         }

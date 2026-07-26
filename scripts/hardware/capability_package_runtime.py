@@ -835,6 +835,8 @@ class AcceptanceRuntime:
                 f"{tool} exceeded its declared primary-call bound",
             )
         if code == "POSSIBLY_SIDE_EFFECTING_FAILURE":
+            if case is not None:
+                self.matrix[tool]["status"] = "failed"
             raise PossiblySideEffectingStop(
                 f"{tool} may have changed AE; reconcile state and audit before retry"
             )
@@ -842,10 +844,17 @@ class AcceptanceRuntime:
             require(is_error and payload.get("ok") is False, f"{tool} unexpectedly succeeded")
             require(code == expected_error, f"{tool} returned {code!r}, expected {expected_error!r}")
             return payload
+        if case is not None and (is_error or code is not None):
+            self.matrix[tool]["status"] = "failed"
         require(not is_error and code is None, f"{tool} failed: {code or payload}")
-        self._validate_native_success(
-            payload, tool=tool, capability_id=capability_id, write=write
-        )
+        try:
+            self._validate_native_success(
+                payload, tool=tool, capability_id=capability_id, write=write
+            )
+        except AcceptanceFailure:
+            if case is not None:
+                self.matrix[tool]["status"] = "failed"
+            raise
         if expected_replayed is not None:
             require(payload.get("replayed") is expected_replayed, f"{tool} replay mismatch")
         if case is not None:
