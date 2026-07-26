@@ -8,6 +8,7 @@ import json
 import os
 import stat
 from collections.abc import Mapping, Sequence
+from math import gcd
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,6 @@ from text_shape_marker_spec import (
     CALL_PLAN,
     CONTRACTS,
     FIXTURE_RECIPE,
-    MARKER_TIME_A,
     MARKER_VALUE,
     PREFLIGHT_CALL_PLAN,
     REOPEN_PROCEDURE,
@@ -79,6 +79,41 @@ def _marker_target(value: Any) -> dict[str, Any]:
         "kind": "composition",
         "composition_locator": _locator(locator, "composition"),
     }
+
+
+def _exact_time_matches(
+    value: Any,
+    expected_seconds_rational: str,
+) -> bool:
+    if not isinstance(value, Mapping) or set(value) != {
+        "value",
+        "scale",
+        "secondsRational",
+    }:
+        return False
+    numerator = value.get("value")
+    scale = value.get("scale")
+    if (
+        not isinstance(numerator, int)
+        or isinstance(numerator, bool)
+        or not isinstance(scale, int)
+        or isinstance(scale, bool)
+        or scale <= 0
+    ):
+        return False
+    divisor = gcd(abs(numerator), scale)
+    reduced_numerator = numerator // divisor
+    reduced_scale = scale // divisor
+    canonical = (
+        str(reduced_numerator)
+        if reduced_scale == 1
+        else f"{reduced_numerator}/{reduced_scale}"
+    )
+    return (
+        value.get("secondsRational")
+        == canonical
+        == expected_seconds_rational
+    )
 
 
 def _marker_ref(value: Any) -> dict[str, Any]:
@@ -643,21 +678,11 @@ class TextShapeMarkerPackage:
             "T4 marker index drifted",
         )
         require(
-            time_value
-            == {
-                "value": MARKER_TIME_A["value"],
-                "scale": MARKER_TIME_A["scale"],
-                "secondsRational": "1",
-            },
+            _exact_time_matches(time_value, "1"),
             "T4 marker exact time drifted",
         )
         require(
-            duration
-            == {
-                "value": MARKER_VALUE["duration"]["value"],
-                "scale": MARKER_VALUE["duration"]["scale"],
-                "secondsRational": "1/2",
-            },
+            _exact_time_matches(duration, "1/2"),
             "T4 marker duration drifted",
         )
         require(

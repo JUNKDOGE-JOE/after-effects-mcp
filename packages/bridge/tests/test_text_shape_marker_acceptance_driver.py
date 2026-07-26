@@ -508,6 +508,29 @@ def test_t4_marker_assertion_matches_the_public_camel_case_contract():
     )
 
 
+def test_t4_marker_assertion_accepts_ae_normalized_exact_time_scale():
+    assert driver._exact_time_matches(
+        {"value": 24, "scale": 24, "secondsRational": "1"},
+        "1",
+    )
+    assert driver._exact_time_matches(
+        {"value": 24576, "scale": 24576, "secondsRational": "1"},
+        "1",
+    )
+    assert driver._exact_time_matches(
+        {"value": 12288, "scale": 24576, "secondsRational": "1/2"},
+        "1/2",
+    )
+    assert not driver._exact_time_matches(
+        {"value": 24576, "scale": 24576, "secondsRational": "24/24"},
+        "1",
+    )
+    assert not driver._exact_time_matches(
+        {"value": 24576, "scale": 24576, "secondsRational": "1"},
+        "1/2",
+    )
+
+
 def test_t6_has_one_real_undo_checkpoint_per_distinct_undo_model():
     undo_rows = {row.undo_of for row in spec.T6_CALL_PLAN if row.undo_of}
     representatives = {
