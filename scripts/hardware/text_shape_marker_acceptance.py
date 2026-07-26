@@ -683,6 +683,14 @@ class TextShapeMarkerPackage:
         }:
             require(value.get("total") == 0 and value.get("markers") == [],
                     f"{key} did not restore empty marker stream")
+        elif key == "cross-family-layers":
+            layers = value.get("layers")
+            require(
+                isinstance(layers, list)
+                and [layer.get("name") for layer in layers]
+                == ["TSM Shape", "TSM Text"],
+                "cross-family layer reacquisition did not return both package targets",
+            )
         elif key == "triangle-create-undo-read":
             require(value.get("total") == 0 and value.get("groups") == [],
                     "Triangle Undo did not restore empty shape layer")

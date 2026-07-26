@@ -141,6 +141,15 @@ The bounded native fix retains the unique matching `StreamRefOwner` obtained
 by index; it does not change the public shape address, authored form, call
 plan, or 44/30 fences.
 
+A later full T5 reached the marker phase only after every shape write and
+Undo had passed. The first marker write correctly rejected the text-layer
+locator captured before shape graph invalidation as `STALE_LOCATOR`,
+`sideEffect: not-started`. The already-budgeted cross-family
+`ae_listCompositionLayers` read therefore runs immediately after the shape
+path Undo read and supplies fresh public locators for both marker targets.
+Nothing synthesizes or patches an opaque locator, no call is added, and the
+T5/T6 fences remain 44/30.
+
 A follow-up diagnostic real-AE probe isolated the next independent shape
 blocker before another candidate run. After the three authored children were
 inserted, AE exposed the new path through its property tree as a valid empty
@@ -1763,14 +1772,17 @@ group, marker, cross-family, teardown, and post-restart addresses are similarly
 linked in `scripts/hardware/text_shape_marker_spec.py:T5_ADDRESS_LINKS`.
 Bridge-side construction tests require every producer ordinal to precede its
 consumer ordinal and require every address-bearing T5 call to have one such
-link.
+link. In particular, call 26 `ae_listCompositionLayers` runs after the final
+shape Undo read and supplies the fresh text/shape layer locators consumed by
+marker creates at calls 27 and 28.
 
 The T6 chain is constructed independently in
 `scripts/hardware/text_shape_marker_spec.py:T6_ADDRESS_LINKS`. In particular,
 the shorter plan records the empty baseline at call 3, creates text at call 5,
 reacquires the composition after its representative text setter at call 9,
 creates the shape layer from that fresh composition locator at call 10, and
-reacquires the composition again at call 29 before the final layer read.
+reacquires both marker-target layers at call 19, then reacquires the
+composition again at call 29 before the final layer read.
 Construction fails during module import if any T6 consumer loses its earlier
 producer.
 

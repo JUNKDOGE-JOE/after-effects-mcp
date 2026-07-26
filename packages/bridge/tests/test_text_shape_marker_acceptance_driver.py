@@ -526,6 +526,40 @@ def test_both_hardware_plans_reacquire_composition_after_text_writes():
         )
 
 
+def test_both_hardware_plans_reacquire_both_layers_before_marker_writes():
+    for plan, links, expected_refresh, expected_text, expected_shape, field in (
+        (spec.T5_CALL_PLAN, spec.T5_ADDRESS_LINKS, 26, 27, 28, "target.layer_locator"),
+        (spec.T6_CALL_PLAN, spec.T6_ADDRESS_LINKS, 19, 20, 21, "target"),
+    ):
+        rows = {row.key: row for row in plan}
+        assert rows["shape-path-undo-read"].ordinal == expected_refresh - 1
+        assert rows["cross-family-layers"].ordinal == expected_refresh
+        assert rows["text-marker-create"].ordinal == expected_text
+        assert rows["shape-marker-create"].ordinal == expected_shape
+        assert next(
+            link
+            for link in links
+            if link.consumer_call == expected_text
+            and link.consumer_field == field
+        ) == spec.AddressLink(
+            expected_text,
+            field,
+            expected_refresh,
+            "value.layers[TSM Text].locator",
+        )
+        assert next(
+            link
+            for link in links
+            if link.consumer_call == expected_shape
+            and link.consumer_field == field
+        ) == spec.AddressLink(
+            expected_shape,
+            field,
+            expected_refresh,
+            "value.layers[TSM Shape].locator",
+        )
+
+
 def test_operation_key_is_fresh_per_session_but_reconciliation_reuses_original():
     def make(prefix: str):
         count = 0
