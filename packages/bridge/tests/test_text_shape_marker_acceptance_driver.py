@@ -444,29 +444,36 @@ def test_t4_handoff_is_0600_and_bound_to_fixture_host_and_source(tmp_path):
     )
     package.context["composition_locator"] = _locator("composition", COMP)
     written = package._write_t4_handoff(HOST)
-    if os.name != "nt":
-        assert stat.S_IMODE(package._t4_handoff_path.stat().st_mode) == 0o600
     assert written["fixtureSha256"]
+    assert json.loads(package._t4_handoff_path.read_text()) == written
+    assert written["expectedSha"] == "a" * 40
+    assert written["hostInstanceId"] == HOST
+    assert written["compositionLocator"] == _locator("composition", COMP)
 
-    consumer = driver.TextShapeMarkerPackage(
-        SimpleNamespace(
-            mode="t4",
-            fixture=runtime.fixture,
-            identity=runtime.identity,
-            evidence=runtime.evidence,
-            intent=lambda name: f"t4:{name}",
-            saved_fixture_identity=runtime.saved_fixture_identity,
-        ),
-        fixture_name="TSM Acceptance Fixture",
-    )
-    loaded = consumer._load_t4_handoff(HOST)
-    assert loaded == written
-    assert consumer.context["t4_marker_target"] == {
-        "kind": "composition",
-        "composition_locator": _locator("composition", COMP),
-    }
-    consumer._delete_t4_handoff()
-    assert not consumer._t4_handoff_path.exists()
+    if os.name == "nt":
+        package._delete_t4_handoff()
+        assert not package._t4_handoff_path.exists()
+    else:
+        assert stat.S_IMODE(package._t4_handoff_path.stat().st_mode) == 0o600
+        consumer = driver.TextShapeMarkerPackage(
+            SimpleNamespace(
+                mode="t4",
+                fixture=runtime.fixture,
+                identity=runtime.identity,
+                evidence=runtime.evidence,
+                intent=lambda name: f"t4:{name}",
+                saved_fixture_identity=runtime.saved_fixture_identity,
+            ),
+            fixture_name="TSM Acceptance Fixture",
+        )
+        loaded = consumer._load_t4_handoff(HOST)
+        assert loaded == written
+        assert consumer.context["t4_marker_target"] == {
+            "kind": "composition",
+            "composition_locator": _locator("composition", COMP),
+        }
+        consumer._delete_t4_handoff()
+        assert not consumer._t4_handoff_path.exists()
 
 
 def test_t4_marker_assertion_matches_the_public_camel_case_contract():
