@@ -150,6 +150,17 @@ path Undo read and supplies fresh public locators for both marker targets.
 Nothing synthesizes or patches an opaque locator, no call is added, and the
 T5/T6 fences remain 44/30.
 
+The next full T5 proved that the layer refresh itself cannot consume the
+composition locator returned before the intervening shape graph mutations:
+`ae_listCompositionLayers` rejected it as `STALE_LOCATOR`,
+`sideEffect: not-started`. The three-call cross-family allocation is therefore
+`ae_listProjectItems` composition reacquisition, `ae_listCompositionLayers`
+layer/target reacquisition, and the post-marker complete text read. The
+post-marker shape-isolation assertion is folded into the already-required
+shape teardown reads, which still observe the authored shape state before
+removing each group. No public tool or write/Undo evidence is removed, and
+the T5/T6 fences remain 44/30.
+
 A follow-up diagnostic real-AE probe isolated the next independent shape
 blocker before another candidate run. After the three authored children were
 inserted, AE exposed the new path through its property tree as a valid empty
@@ -1702,7 +1713,7 @@ The 44-call ledger is closed:
 | 9 | all six text tools plus three independent setter post-Undo reads |
 | 15 | all seven shape tools, second group creation, fill/stroke/path/reorder Undo reads, group/layer teardown reads |
 | 10 | all four marker tools, text+shape targets, set/delete/create Undo reads, equal-time isolation |
-| 3 | explicit cross-family layer/text/shape state reads while both families coexist |
+| 3 | cross-family support/state reads: composition reacquisition, layer/target enumeration, and complete text state while both families coexist; shape isolation is checked by the required teardown shape reads |
 | 1 | text-layer create Undo and empty-composition verification |
 | 2 | post-restart project/composition reacquisition and final empty-baseline check |
 | **44** | total |
@@ -1715,7 +1726,7 @@ The T6 30-call ledger is closed:
 | 5 | font inventory, text create/read, representative character setter and Undo read |
 | 9 | shape layer, two groups, all distinct native shape primitives except the thin fill setter, and two Undo reads |
 | 7 | all four marker tools across two targets, isolation reads, and representative marker Undo read |
-| 3 | explicit cross-family layer/text/shape state reads |
+| 3 | cross-family support/state reads: composition reacquisition, layer/target enumeration, and complete text state; shape isolation is checked by the replayed shape reads |
 | 2 | post-restart project reacquisition and retained-family layer read |
 | **30** | total |
 

@@ -527,15 +527,27 @@ def test_both_hardware_plans_reacquire_composition_after_text_writes():
 
 
 def test_both_hardware_plans_reacquire_both_layers_before_marker_writes():
-    for plan, links, expected_refresh, expected_text, expected_shape, field in (
-        (spec.T5_CALL_PLAN, spec.T5_ADDRESS_LINKS, 26, 27, 28, "target.layer_locator"),
-        (spec.T6_CALL_PLAN, spec.T6_ADDRESS_LINKS, 19, 20, 21, "target"),
+    for plan, links, expected_project, expected_refresh, expected_text, expected_shape, field in (
+        (spec.T5_CALL_PLAN, spec.T5_ADDRESS_LINKS, 26, 27, 28, 29, "target.layer_locator"),
+        (spec.T6_CALL_PLAN, spec.T6_ADDRESS_LINKS, 19, 20, 21, 22, "target"),
     ):
         rows = {row.key: row for row in plan}
-        assert rows["shape-path-undo-read"].ordinal == expected_refresh - 1
+        assert rows["shape-path-undo-read"].ordinal == expected_project - 1
+        assert rows["marker-composition-reacquire"].ordinal == expected_project
         assert rows["cross-family-layers"].ordinal == expected_refresh
         assert rows["text-marker-create"].ordinal == expected_text
         assert rows["shape-marker-create"].ordinal == expected_shape
+        assert next(
+            link
+            for link in links
+            if link.consumer_call == expected_refresh
+            and link.consumer_field == "composition_locator"
+        ) == spec.AddressLink(
+            expected_refresh,
+            "composition_locator",
+            expected_project,
+            "value.items[TSM Acceptance Fixture].locator",
+        )
         assert next(
             link
             for link in links

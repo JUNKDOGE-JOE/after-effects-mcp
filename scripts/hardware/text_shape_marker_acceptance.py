@@ -454,7 +454,7 @@ class TextShapeMarkerPackage:
             self.context["composition_locator"] = _locator(
                 value.get("compositionLocator"), "composition"
             )
-        elif key == "composition-reacquire":
+        elif key in {"composition-reacquire", "marker-composition-reacquire"}:
             item = self._named(value.get("items"), self.fixture_name, "composition")
             self.context["composition_locator"] = _locator(
                 item.get("locator"), "composition"
