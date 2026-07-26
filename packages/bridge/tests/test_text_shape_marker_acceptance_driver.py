@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import stat
 import sys
 from pathlib import Path
@@ -443,7 +444,8 @@ def test_t4_handoff_is_0600_and_bound_to_fixture_host_and_source(tmp_path):
     )
     package.context["composition_locator"] = _locator("composition", COMP)
     written = package._write_t4_handoff(HOST)
-    assert stat.S_IMODE(package._t4_handoff_path.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(package._t4_handoff_path.stat().st_mode) == 0o600
     assert written["fixtureSha256"]
 
     consumer = driver.TextShapeMarkerPackage(
