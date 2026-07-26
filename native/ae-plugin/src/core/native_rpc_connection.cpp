@@ -500,7 +500,8 @@ void NativeRpcConnectionHandler::serve(
               postcondition_digest = rpc::digest_layer_effect_apply_postcondition(
                   completion.layer_effect_apply_result);
             } else if (completion.capability_id == kNativeMediaReadCapability
-                || completion.capability_id == kNativeMediaWriteCapability) {
+                || completion.capability_id == kNativeMediaWriteCapability
+                || is_text_shape_marker_capability(completion.capability_id)) {
               completion.native_media_result_json =
                   rpc::canonicalize_native_media_value(
                       completion.native_media_result_json);
@@ -559,7 +560,8 @@ void NativeRpcConnectionHandler::serve(
               || completion.capability_id == kLayerSwitchSetCapability
               || completion.capability_id == kLayerQualitySetCapability
               || completion.capability_id == kLayerBlendingModeSetCapability
-              || completion.capability_id == kNativeMediaWriteCapability;
+              || completion.capability_id == kNativeMediaWriteCapability
+              || is_text_shape_marker_write_capability(completion.capability_id);
           completion.error_code = mutating
               ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
               : graph_invalidation ? "NATIVE_UNAVAILABLE" : "CAPABILITY_FAILED";
@@ -839,7 +841,8 @@ void NativeRpcConnectionHandler::serve(
                 completion.replayed,
             });
           } else if (completion.capability_id == kNativeMediaReadCapability
-              || completion.capability_id == kNativeMediaWriteCapability) {
+              || completion.capability_id == kNativeMediaWriteCapability
+              || is_text_shape_marker_capability(completion.capability_id)) {
             response = rpc::encode_native_media_success({
                 completion.request_id,
                 connection.session_id,
@@ -1348,7 +1351,8 @@ void NativeRpcConnectionHandler::serve(
               invoke.layer_blending_mode,
           };
           if (invoke.capability_id == kNativeMediaReadCapability
-              || invoke.capability_id == kNativeMediaWriteCapability) {
+              || invoke.capability_id == kNativeMediaWriteCapability
+              || is_text_shape_marker_capability(invoke.capability_id)) {
             dispatch_request.native_media = invoke.native_media;
             dispatch_request.native_media.host_instance_id =
                 runtime_.host_instance_id;

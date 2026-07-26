@@ -5,6 +5,8 @@
 #include <bit>
 #include <chrono>
 #include <cmath>
+#include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <iomanip>
 #include <limits>
@@ -12,6 +14,7 @@
 #include <set>
 #include <sstream>
 #include <type_traits>
+#include <unordered_set>
 #include <utility>
 
 namespace aemcp::native::rpc {
@@ -1390,6 +1393,8 @@ std::string canonical_request(const ParsedRequest& request) {
           || value.capability_id == kNativeMediaWriteCapability) {
         arguments = canonical_native_media_arguments(
             value.native_media, value.idempotency_key);
+      } else if (is_text_shape_marker_capability(value.capability_id)) {
+        arguments = value.native_media_arguments_json;
       }
       params = "{\"arguments\":" + arguments + ",\"capabilityId\":"
           + json_string(value.capability_id)
@@ -2311,6 +2316,468 @@ ParsedRequest classify_request(const JsonValue& root) {
             *result.property_locator,
             result.property_value,
             result.idempotency_key);
+      } else if (is_text_shape_marker_capability(capability)) {
+        NativeMediaCommand& command = result.native_media;
+        command.operation = capability;
+        const bool write = is_text_shape_marker_write_capability(capability);
+        const auto parse_idempotency = [&] {
+          result.idempotency_key = required_string(
+              *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+          if (!valid_idempotency_key(result.idempotency_key)) {
+            invalid_argument("invalid Text/Shape/Marker idempotency key");
+          }
+        };
+        const auto parse_color = [&](const JsonValue& value) {
+          const JsonValue::Object* color = object_of(value);
+          if (color == nullptr || !exact_keys(
+                  *color, {"red", "green", "blue", "alpha"},
+                  {"red", "green", "blue", "alpha"})) {
+            invalid_argument("shape color must be a closed RGBA object");
+          }
+          return CompositionLayerCreateColor{
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "red", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "green", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "blue", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "alpha", CodecErrorKind::kInvalidArgument, 0, 255))};
+        };
+        const auto parse_decimal = [&](const JsonValue::Object& object,
+                                       std::string_view field,
+                                       double minimum,
+                                       double maximum) {
+          const std::string value = required_string(
+              object, field, CodecErrorKind::kInvalidArgument);
+          if (!valid_decimal_string(value)) {
+            invalid_argument("shape decimal field is not canonical finite data");
+          }
+          char* end = nullptr;
+          errno = 0;
+          const double numeric = std::strtod(value.c_str(), &end);
+          if (errno != 0 || end == value.c_str() || *end != '\0'
+              || !std::isfinite(numeric)
+              || numeric < minimum || numeric > maximum) {
+            invalid_argument("shape decimal field is outside its frozen range");
+          }
+          return value;
+        };
+        const auto parse_path = [&](const JsonValue& value) {
+          const JsonValue::Object* path = object_of(value);
+          if (path == nullptr || !exact_keys(
+                  *path, {"closed", "vertices"}, {"closed", "vertices"})) {
+            invalid_argument("shape path must be a closed Bezier object");
+          }
+          command.mask_closed = required_bool(
+              *path, "closed", CodecErrorKind::kInvalidArgument);
+          const JsonValue::Array* vertices = array_of(*member(*path, "vertices"));
+          const std::size_t minimum = *command.mask_closed ? 3 : 2;
+          if (vertices == nullptr || vertices->size() < minimum
+              || vertices->size() > 128) {
+            invalid_argument("shape vertices violate the shared path bounds");
+          }
+          const auto pair = [&](const JsonValue& pair_value) {
+            const JsonValue::Array* values = array_of(pair_value);
+            if (values == nullptr || values->size() != 2) {
+              invalid_argument("shape coordinate must contain two decimals");
+            }
+            const std::string* x = string_of((*values)[0]);
+            const std::string* y = string_of((*values)[1]);
+            if (x == nullptr || y == nullptr
+                || !valid_decimal_string(*x) || !valid_decimal_string(*y)) {
+              invalid_argument("shape coordinate must contain finite decimals");
+            }
+            return std::pair<std::string, std::string>{*x, *y};
+          };
+          command.mask_vertices.clear();
+          for (const JsonValue& vertex_value : *vertices) {
+            const JsonValue::Object* vertex = object_of(vertex_value);
+            if (vertex == nullptr || !exact_keys(
+                    *vertex, {"position", "inTangent", "outTangent"},
+                    {"position", "inTangent", "outTangent"})) {
+              invalid_argument("shape vertex is not closed");
+            }
+            const auto position = pair(*member(*vertex, "position"));
+            const auto in_tangent = pair(*member(*vertex, "inTangent"));
+            const auto out_tangent = pair(*member(*vertex, "outTangent"));
+            command.mask_vertices.push_back({
+                position.first, position.second,
+                in_tangent.first, in_tangent.second,
+                out_tangent.first, out_tangent.second});
+          }
+        };
+        const auto parse_group_ref = [&](const JsonValue& value) {
+          const JsonValue::Object* reference = object_of(value);
+          if (reference == nullptr || !exact_keys(
+                  *reference, {"layerLocator", "groupIndex", "streamId"},
+                  {"layerLocator", "groupIndex", "streamId"})) {
+            invalid_argument("shape group reference is not closed");
+          }
+          ShapeGroupReference parsed;
+          parsed.layer_locator =
+              parse_locator(*member(*reference, "layerLocator"), "layer");
+          parsed.group_index = required_uint(
+              *reference, "groupIndex", CodecErrorKind::kInvalidArgument,
+              1, kMaxSafeInteger);
+          parsed.stream_id = static_cast<std::int32_t>(required_int(
+              *reference, "streamId", CodecErrorKind::kInvalidArgument,
+              std::numeric_limits<std::int32_t>::min(),
+              std::numeric_limits<std::int32_t>::max()));
+          command.layer_locator = parsed.layer_locator;
+          command.shape_group_ref = std::move(parsed);
+        };
+        const auto parse_fill = [&](const JsonValue& value) {
+          const JsonValue::Object* fill = object_of(value);
+          if (fill == nullptr || !exact_keys(
+                  *fill, {"enabled", "color", "opacityPercent"},
+                  {"enabled", "color", "opacityPercent"})) {
+            invalid_argument("shape fill must be a complete replacement");
+          }
+          command.shape_fill = ShapeFillStyle{
+              required_bool(*fill, "enabled", CodecErrorKind::kInvalidArgument),
+              parse_color(*member(*fill, "color")),
+              parse_decimal(*fill, "opacityPercent", 0, 100)};
+        };
+        const auto parse_stroke = [&](const JsonValue& value) {
+          const JsonValue::Object* stroke = object_of(value);
+          if (stroke == nullptr || !exact_keys(
+                  *stroke,
+                  {"enabled", "color", "opacityPercent", "widthPixels",
+                   "strokeOverFill"},
+                  {"enabled", "color", "opacityPercent", "widthPixels",
+                   "strokeOverFill"})) {
+            invalid_argument("shape stroke must be a complete replacement");
+          }
+          command.shape_stroke = ShapeStrokeStyle{
+              required_bool(
+                  *stroke, "enabled", CodecErrorKind::kInvalidArgument),
+              parse_color(*member(*stroke, "color")),
+              parse_decimal(*stroke, "opacityPercent", 0, 100),
+              parse_decimal(*stroke, "widthPixels", 0, 1000),
+              required_bool(
+                  *stroke, "strokeOverFill", CodecErrorKind::kInvalidArgument)};
+        };
+        const auto parse_time = [&](const JsonValue& value,
+                                    bool non_negative) {
+          const JsonValue::Object* time = object_of(value);
+          if (time == nullptr || !exact_keys(
+                  *time, {"value", "scale"}, {"value", "scale"})) {
+            invalid_argument("marker time must be an exact closed object");
+          }
+          CompositionCurrentTime parsed;
+          parsed.value = static_cast<std::int32_t>(required_int(
+              *time, "value", CodecErrorKind::kInvalidArgument,
+              non_negative ? 0 : std::numeric_limits<std::int32_t>::min(),
+              std::numeric_limits<std::int32_t>::max()));
+          parsed.scale = static_cast<std::uint32_t>(required_uint(
+              *time, "scale", CodecErrorKind::kInvalidArgument, 1,
+              std::numeric_limits<std::uint32_t>::max()));
+          parsed.seconds_rational =
+              canonical_seconds_rational(parsed.value, parsed.scale);
+          return parsed;
+        };
+        const auto parse_target = [&](const JsonValue& value) {
+          const JsonValue::Object* target = object_of(value);
+          if (target == nullptr) invalid_argument("marker target must be an object");
+          command.marker_target_kind = required_string(
+              *target, "kind", CodecErrorKind::kInvalidArgument);
+          if (command.marker_target_kind == "layer") {
+            if (!exact_keys(
+                    *target, {"kind", "layerLocator"},
+                    {"kind", "layerLocator"})) {
+              invalid_argument("layer marker target is not closed");
+            }
+            command.layer_locator =
+                parse_locator(*member(*target, "layerLocator"), "layer");
+          } else if (command.marker_target_kind == "composition") {
+            if (!exact_keys(
+                    *target, {"kind", "compositionLocator"},
+                    {"kind", "compositionLocator"})) {
+              invalid_argument("composition marker target is not closed");
+            }
+            command.composition_locator = parse_locator(
+                *member(*target, "compositionLocator"), "composition");
+          } else {
+            invalid_argument("unknown marker target kind");
+          }
+        };
+        const auto parse_cue_parameters = [&](const JsonValue& value) {
+          const JsonValue::Array* parameters = array_of(value);
+          if (parameters == nullptr || parameters->size() > 64) {
+            invalid_argument("cue-point parameters violate the frozen bound");
+          }
+          std::vector<CuePointParameter> parsed;
+          std::unordered_set<std::string> keys;
+          for (const JsonValue& parameter_value : *parameters) {
+            const JsonValue::Object* parameter = object_of(parameter_value);
+            if (parameter == nullptr || !exact_keys(
+                    *parameter, {"key", "value"}, {"key", "value"})) {
+              invalid_argument("cue-point parameter is not closed");
+            }
+            CuePointParameter item{
+                required_string(
+                    *parameter, "key", CodecErrorKind::kInvalidArgument),
+                required_string(
+                    *parameter, "value", CodecErrorKind::kInvalidArgument)};
+            const std::size_t key_scalars = validate_utf8_and_count(item.key);
+            const std::size_t value_scalars = validate_utf8_and_count(item.value);
+            if (key_scalars < 1 || key_scalars > 255 || value_scalars > 1024
+                || !keys.insert(item.key).second) {
+              invalid_argument("cue-point parameter violates frozen bounds");
+            }
+            parsed.push_back(std::move(item));
+          }
+          return parsed;
+        };
+        const auto parse_marker_strings = [&](const JsonValue::Object& object,
+                                              MarkerValueInput& marker) {
+          marker.comment = required_string(
+              object, "comment", CodecErrorKind::kInvalidArgument);
+          marker.chapter = required_string(
+              object, "chapter", CodecErrorKind::kInvalidArgument);
+          marker.url = required_string(
+              object, "url", CodecErrorKind::kInvalidArgument);
+          marker.frame_target = required_string(
+              object, "frameTarget", CodecErrorKind::kInvalidArgument);
+          marker.cue_point_name = required_string(
+              object, "cuePointName", CodecErrorKind::kInvalidArgument);
+          if (validate_utf8_and_count(marker.comment) > 1024
+              || validate_utf8_and_count(marker.chapter) > 128
+              || validate_utf8_and_count(marker.url) > 1024
+              || validate_utf8_and_count(marker.frame_target) > 128
+              || validate_utf8_and_count(marker.cue_point_name) > 64) {
+            invalid_argument("marker string violates frozen bounds");
+          }
+        };
+
+        if (capability == kShapeLayerCreateCapability) {
+          if (!exact_keys(
+                  *arguments, {"compositionLocator", "name", "idempotencyKey"},
+                  {"compositionLocator", "name", "idempotencyKey"})) {
+            invalid_argument("shape layer create arguments are not closed");
+          }
+          command.composition_locator = parse_locator(
+              *member(*arguments, "compositionLocator"), "composition");
+          command.name = required_string(
+              *arguments, "name", CodecErrorKind::kInvalidArgument);
+          if (validate_utf8_and_count(command.name) < 1
+              || validate_utf8_and_count(command.name) > 255) {
+            invalid_argument("invalid shape layer name");
+          }
+          parse_idempotency();
+        } else if (capability == kShapeGroupsListCapability) {
+          if (!exact_keys(
+                  *arguments, {"layerLocator", "offset", "limit"},
+                  {"layerLocator", "offset", "limit"})) {
+            invalid_argument("shape group list arguments are not closed");
+          }
+          command.layer_locator =
+              parse_locator(*member(*arguments, "layerLocator"), "layer");
+          command.offset = required_uint(
+              *arguments, "offset", CodecErrorKind::kInvalidArgument,
+              0, kMaxSafeInteger);
+          command.limit = static_cast<std::uint16_t>(required_uint(
+              *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 50));
+        } else if (capability == kShapeGroupCreateCapability) {
+          if (!exact_keys(
+                  *arguments,
+                  {"layerLocator", "name", "path", "fill", "stroke",
+                   "idempotencyKey"},
+                  {"layerLocator", "name", "path", "fill", "stroke",
+                   "idempotencyKey"})) {
+            invalid_argument("shape group create arguments are not closed");
+          }
+          command.layer_locator =
+              parse_locator(*member(*arguments, "layerLocator"), "layer");
+          command.name = required_string(
+              *arguments, "name", CodecErrorKind::kInvalidArgument);
+          if (validate_utf8_and_count(command.name) < 1
+              || validate_utf8_and_count(command.name) > 255) {
+            invalid_argument("invalid shape group name");
+          }
+          parse_path(*member(*arguments, "path"));
+          parse_fill(*member(*arguments, "fill"));
+          parse_stroke(*member(*arguments, "stroke"));
+          parse_idempotency();
+        } else if (capability == kShapePathSetCapability) {
+          if (!exact_keys(
+                  *arguments, {"groupRef", "path", "idempotencyKey"},
+                  {"groupRef", "path", "idempotencyKey"})) {
+            invalid_argument("shape path set arguments are not closed");
+          }
+          parse_group_ref(*member(*arguments, "groupRef"));
+          parse_path(*member(*arguments, "path"));
+          parse_idempotency();
+        } else if (capability == kShapeFillStyleSetCapability) {
+          if (!exact_keys(
+                  *arguments, {"groupRef", "fill", "idempotencyKey"},
+                  {"groupRef", "fill", "idempotencyKey"})) {
+            invalid_argument("shape fill style arguments are not closed");
+          }
+          parse_group_ref(*member(*arguments, "groupRef"));
+          parse_fill(*member(*arguments, "fill"));
+          parse_idempotency();
+        } else if (capability == kShapeStrokeStyleSetCapability) {
+          if (!exact_keys(
+                  *arguments, {"groupRef", "stroke", "idempotencyKey"},
+                  {"groupRef", "stroke", "idempotencyKey"})) {
+            invalid_argument("shape stroke style arguments are not closed");
+          }
+          parse_group_ref(*member(*arguments, "groupRef"));
+          parse_stroke(*member(*arguments, "stroke"));
+          parse_idempotency();
+        } else if (capability == kShapeGroupReorderCapability) {
+          if (!exact_keys(
+                  *arguments, {"groupRef", "targetIndex", "idempotencyKey"},
+                  {"groupRef", "targetIndex", "idempotencyKey"})) {
+            invalid_argument("shape group reorder arguments are not closed");
+          }
+          parse_group_ref(*member(*arguments, "groupRef"));
+          command.target_index = required_uint(
+              *arguments, "targetIndex", CodecErrorKind::kInvalidArgument,
+              1, kMaxSafeInteger);
+          if (command.target_index == command.shape_group_ref->group_index) {
+            invalid_argument("shape group is already at targetIndex");
+          }
+          parse_idempotency();
+        } else if (capability == kMarkerListCapability) {
+          if (!exact_keys(
+                  *arguments, {"target", "offset", "limit"},
+                  {"target", "offset", "limit"})) {
+            invalid_argument("marker list arguments are not closed");
+          }
+          parse_target(*member(*arguments, "target"));
+          command.offset = required_uint(
+              *arguments, "offset", CodecErrorKind::kInvalidArgument,
+              0, kMaxSafeInteger);
+          command.limit = static_cast<std::uint16_t>(required_uint(
+              *arguments, "limit", CodecErrorKind::kInvalidArgument, 1, 50));
+        } else if (capability == kMarkerCreateCapability) {
+          if (!exact_keys(
+                  *arguments,
+                  {"target", "time", "marker", "idempotencyKey"},
+                  {"target", "time", "marker", "idempotencyKey"})) {
+            invalid_argument("marker create arguments are not closed");
+          }
+          parse_target(*member(*arguments, "target"));
+          command.marker_time = parse_time(*member(*arguments, "time"), false);
+          const JsonValue::Object* marker =
+              object_of(*member(*arguments, "marker"));
+          if (marker == nullptr || !exact_keys(
+                  *marker,
+                  {"duration", "comment", "chapter", "url", "frameTarget",
+                   "cuePointName", "cuePointParameters", "navigation",
+                   "protectedRegion", "labelId"},
+                  {"duration", "comment", "chapter", "url", "frameTarget",
+                   "cuePointName", "cuePointParameters", "navigation",
+                   "protectedRegion", "labelId"})) {
+            invalid_argument("marker value is not complete and closed");
+          }
+          MarkerValueInput value;
+          value.duration = parse_time(*member(*marker, "duration"), true);
+          parse_marker_strings(*marker, value);
+          value.cue_point_parameters =
+              parse_cue_parameters(*member(*marker, "cuePointParameters"));
+          value.navigation = required_bool(
+              *marker, "navigation", CodecErrorKind::kInvalidArgument);
+          value.protected_region = required_bool(
+              *marker, "protectedRegion", CodecErrorKind::kInvalidArgument);
+          value.label_id = static_cast<std::uint8_t>(required_uint(
+              *marker, "labelId", CodecErrorKind::kInvalidArgument, 0, 16));
+          command.marker_value = std::move(value);
+          parse_idempotency();
+        } else {
+          const bool deleting = capability == kMarkerDeleteCapability;
+          if (!exact_keys(
+                  *arguments,
+                  deleting
+                      ? std::initializer_list<std::string_view>{
+                          "markerRef", "idempotencyKey"}
+                      : std::initializer_list<std::string_view>{
+                          "markerRef", "patch", "idempotencyKey"},
+                  deleting
+                      ? std::initializer_list<std::string_view>{
+                          "markerRef", "idempotencyKey"}
+                      : std::initializer_list<std::string_view>{
+                          "markerRef", "patch", "idempotencyKey"})) {
+            invalid_argument("marker mutation arguments are not closed");
+          }
+          const JsonValue::Object* reference =
+              object_of(*member(*arguments, "markerRef"));
+          if (reference == nullptr || !exact_keys(
+                  *reference, {"target", "time"}, {"target", "time"})) {
+            invalid_argument("marker reference is not closed");
+          }
+          parse_target(*member(*reference, "target"));
+          command.marker_time =
+              parse_time(*member(*reference, "time"), false);
+          if (!deleting) {
+            const JsonValue::Object* patch =
+                object_of(*member(*arguments, "patch"));
+            if (patch == nullptr || patch->empty() || !exact_keys(
+                    *patch,
+                    {"duration", "comment", "chapter", "url", "frameTarget",
+                     "cuePointName", "cuePointParameters", "navigation",
+                     "protectedRegion", "labelId"})) {
+              invalid_argument("marker patch is empty or not closed");
+            }
+            MarkerPatchInput parsed;
+            if (const JsonValue* value = member(*patch, "duration")) {
+              parsed.duration = parse_time(*value, true);
+            }
+            const auto optional_string = [&](std::string_view field,
+                                             std::size_t maximum,
+                                             std::optional<std::string>& out) {
+              if (member(*patch, field) == nullptr) return;
+              out = required_string(
+                  *patch, field, CodecErrorKind::kInvalidArgument);
+              if (validate_utf8_and_count(*out) > maximum) {
+                invalid_argument("marker patch string violates frozen bounds");
+              }
+            };
+            optional_string("comment", 1024, parsed.comment);
+            optional_string("chapter", 128, parsed.chapter);
+            optional_string("url", 1024, parsed.url);
+            optional_string("frameTarget", 128, parsed.frame_target);
+            optional_string("cuePointName", 64, parsed.cue_point_name);
+            if (const JsonValue* value = member(*patch, "cuePointParameters")) {
+              parsed.cue_point_parameters = parse_cue_parameters(*value);
+            }
+            if (member(*patch, "navigation") != nullptr) {
+              parsed.navigation = required_bool(
+                  *patch, "navigation", CodecErrorKind::kInvalidArgument);
+            }
+            if (member(*patch, "protectedRegion") != nullptr) {
+              parsed.protected_region = required_bool(
+                  *patch, "protectedRegion", CodecErrorKind::kInvalidArgument);
+            }
+            if (member(*patch, "labelId") != nullptr) {
+              parsed.label_id = static_cast<std::uint8_t>(required_uint(
+                  *patch, "labelId", CodecErrorKind::kInvalidArgument, 0, 16));
+            }
+            command.marker_patch = std::move(parsed);
+          }
+          parse_idempotency();
+        }
+        command.host_instance_id =
+            command.layer_locator.has_value()
+            ? command.layer_locator->host_instance_id
+            : command.composition_locator.has_value()
+                ? command.composition_locator->host_instance_id : "";
+        command.session_id =
+            command.layer_locator.has_value()
+            ? command.layer_locator->session_id
+            : command.composition_locator.has_value()
+                ? command.composition_locator->session_id : "";
+        result.native_media_arguments_json = canonical_json(JsonValue{*arguments});
+        if (write) {
+          result.arguments_fingerprint_sha256 =
+              digest_native_media_arguments(result.native_media_arguments_json);
+        }
+        if (!write && !result.idempotency_key.empty()) {
+          invalid_argument("read capability cannot carry an idempotency key");
+        }
       } else if (capability == kNativeMediaReadCapability
           || capability == kNativeMediaWriteCapability) {
         const bool media_write = capability == kNativeMediaWriteCapability;
@@ -4949,7 +5416,8 @@ std::string digest_native_media_postcondition(
     std::string_view capability_id,
     std::string_view canonical_value_json) {
   if (capability_id != kNativeMediaReadCapability
-      && capability_id != kNativeMediaWriteCapability) {
+      && capability_id != kNativeMediaWriteCapability
+      && !is_text_shape_marker_capability(capability_id)) {
     invalid_argument("invalid native media postcondition capability");
   }
   const std::string normalized =
@@ -7951,9 +8419,13 @@ std::vector<std::uint8_t> encode_native_media_success(
   require_uuid(response.host_instance_id, "host instance ID");
   require_digest(response.request_digest, "request digest");
   require_digest(response.postcondition_digest, "postcondition digest");
-  const bool write = response.capability_id == kNativeMediaWriteCapability;
+  const bool write = response.capability_id == kNativeMediaWriteCapability
+      || is_text_shape_marker_write_capability(response.capability_id);
   if ((!write && response.capability_id != kNativeMediaReadCapability)
-      || response.replayed || response.started_at_unix_ms < 1
+      && !is_text_shape_marker_capability(response.capability_id)) {
+    invalid_argument("invalid native media success capability");
+  }
+  if (response.replayed || response.started_at_unix_ms < 1
       || response.started_at_unix_ms > kMaxSafeInteger
       || response.completed_at_unix_ms < response.started_at_unix_ms
       || response.completed_at_unix_ms > kMaxSafeInteger
