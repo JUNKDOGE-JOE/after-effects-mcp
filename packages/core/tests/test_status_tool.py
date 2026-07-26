@@ -7,6 +7,7 @@ from ae_mcp.backends.discovery import BackendSelectionError
 from ae_mcp.backends.mock import MockBackend
 from ae_mcp.backends.native import NativeInvokeBackend
 from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp.schemas_tsm import PUBLIC_SCHEMAS as TSM_PUBLIC_SCHEMAS
 from ae_mcp.server import _filtered_tool_names
 
 
@@ -112,6 +113,7 @@ async def test_status_reports_native_plane_without_claiming_active_routing(monke
     assert "ae.createComposition" in _filtered_tool_names()
     assert "ae.createCompositionLayer" in _filtered_tool_names()
     assert "ae.applyLayerEffect" in _filtered_tool_names()
+    assert set(TSM_PUBLIC_SCHEMAS) <= _filtered_tool_names()
     schema_cls, run_fn = _load_status_handler()
     result = await run_fn(schema_cls(), None)
 

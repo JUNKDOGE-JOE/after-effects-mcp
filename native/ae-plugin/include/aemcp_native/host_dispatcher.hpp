@@ -106,7 +106,51 @@ inline constexpr std::string_view kNativeMediaReadCapability =
     "ae.native.media.read";
 inline constexpr std::string_view kNativeMediaWriteCapability =
     "ae.native.media.write";
-inline constexpr std::array<std::string_view, 43> kAdvertisedNativeCapabilities{
+inline constexpr std::string_view kShapeLayerCreateCapability =
+    "ae.shape.layer.create";
+inline constexpr std::string_view kShapeGroupsListCapability =
+    "ae.shape.groups.list";
+inline constexpr std::string_view kShapeGroupCreateCapability =
+    "ae.shape.group.create";
+inline constexpr std::string_view kShapePathSetCapability =
+    "ae.shape.path.set";
+inline constexpr std::string_view kShapeFillStyleSetCapability =
+    "ae.shape.fill-style.set";
+inline constexpr std::string_view kShapeStrokeStyleSetCapability =
+    "ae.shape.stroke-style.set";
+inline constexpr std::string_view kShapeGroupReorderCapability =
+    "ae.shape.group.reorder";
+inline constexpr std::string_view kMarkerListCapability = "ae.marker.list";
+inline constexpr std::string_view kMarkerCreateCapability = "ae.marker.create";
+inline constexpr std::string_view kMarkerSetCapability = "ae.marker.set";
+inline constexpr std::string_view kMarkerDeleteCapability = "ae.marker.delete";
+inline constexpr std::array<std::string_view, 11> kTextShapeMarkerCapabilities{
+    kShapeLayerCreateCapability,
+    kShapeGroupsListCapability,
+    kShapeGroupCreateCapability,
+    kShapePathSetCapability,
+    kShapeFillStyleSetCapability,
+    kShapeStrokeStyleSetCapability,
+    kShapeGroupReorderCapability,
+    kMarkerListCapability,
+    kMarkerCreateCapability,
+    kMarkerSetCapability,
+    kMarkerDeleteCapability,
+};
+[[nodiscard]] inline constexpr bool is_text_shape_marker_capability(
+    std::string_view capability_id) noexcept {
+  for (const std::string_view candidate : kTextShapeMarkerCapabilities) {
+    if (candidate == capability_id) return true;
+  }
+  return false;
+}
+[[nodiscard]] inline constexpr bool is_text_shape_marker_write_capability(
+    std::string_view capability_id) noexcept {
+  return is_text_shape_marker_capability(capability_id)
+      && capability_id != kShapeGroupsListCapability
+      && capability_id != kMarkerListCapability;
+}
+inline constexpr std::array<std::string_view, 54> kAdvertisedNativeCapabilities{
     kProjectSummaryCapability,
     kProjectBitDepthReadCapability,
     kProjectBitDepthSetCapability,
@@ -150,6 +194,17 @@ inline constexpr std::array<std::string_view, 43> kAdvertisedNativeCapabilities{
     kLayerPropertyKeyframeDeleteCapability,
     kNativeMediaReadCapability,
     kNativeMediaWriteCapability,
+    kShapeLayerCreateCapability,
+    kShapeGroupsListCapability,
+    kShapeGroupCreateCapability,
+    kShapePathSetCapability,
+    kShapeFillStyleSetCapability,
+    kShapeStrokeStyleSetCapability,
+    kShapeGroupReorderCapability,
+    kMarkerListCapability,
+    kMarkerCreateCapability,
+    kMarkerSetCapability,
+    kMarkerDeleteCapability,
 };
 // Authenticated broker control-plane operation. This is deliberately omitted
 // from model-facing capability discovery and can only fence native locator
@@ -890,6 +945,69 @@ struct NativeMediaMaskVertex {
   std::string in_tangent_y;
   std::string out_tangent_x;
   std::string out_tangent_y;
+
+  [[nodiscard]] bool operator==(const NativeMediaMaskVertex&) const = default;
+};
+
+// Text/Shape/Marker keeps the proven native-media JSON result/evidence bridge,
+// but carries frozen typed arguments to the main-thread host implementation.
+// Shape paths deliberately reuse NativeMediaMaskVertex instead of defining a
+// second Bezier representation.
+struct ShapeGroupReference {
+  ObjectLocator layer_locator;
+  std::uint64_t group_index{0};
+  std::int32_t stream_id{0};
+};
+
+struct ShapeFillStyle {
+  bool enabled{false};
+  CompositionLayerCreateColor color;
+  std::string opacity_percent;
+
+  [[nodiscard]] bool operator==(const ShapeFillStyle&) const = default;
+};
+
+struct ShapeStrokeStyle {
+  bool enabled{false};
+  CompositionLayerCreateColor color;
+  std::string opacity_percent;
+  std::string width_pixels;
+  bool stroke_over_fill{false};
+
+  [[nodiscard]] bool operator==(const ShapeStrokeStyle&) const = default;
+};
+
+struct CuePointParameter {
+  std::string key;
+  std::string value;
+
+  [[nodiscard]] bool operator==(const CuePointParameter&) const = default;
+};
+
+struct MarkerValueInput {
+  CompositionCurrentTime duration;
+  std::string comment;
+  std::string chapter;
+  std::string url;
+  std::string frame_target;
+  std::string cue_point_name;
+  std::vector<CuePointParameter> cue_point_parameters;
+  bool navigation{false};
+  bool protected_region{false};
+  std::uint8_t label_id{0};
+};
+
+struct MarkerPatchInput {
+  std::optional<CompositionCurrentTime> duration;
+  std::optional<std::string> comment;
+  std::optional<std::string> chapter;
+  std::optional<std::string> url;
+  std::optional<std::string> frame_target;
+  std::optional<std::string> cue_point_name;
+  std::optional<std::vector<CuePointParameter>> cue_point_parameters;
+  std::optional<bool> navigation;
+  std::optional<bool> protected_region;
+  std::optional<std::uint8_t> label_id;
 };
 
 struct NativeMediaMaskProperties {
@@ -924,6 +1042,7 @@ struct NativeMediaCommand {
   std::string session_id;
   std::string operation;
   std::optional<ObjectLocator> layer_locator;
+  std::optional<ObjectLocator> composition_locator;
   std::optional<ObjectLocator> item_locator;
   std::optional<ObjectLocator> folder_locator;
   std::uint64_t offset{0};
@@ -941,6 +1060,14 @@ struct NativeMediaCommand {
   NativeMediaSequenceOptions sequence;
   bool proxy{false};
   std::optional<NativeMediaInterpretation> interpretation;
+  std::string name;
+  std::optional<ShapeGroupReference> shape_group_ref;
+  std::optional<ShapeFillStyle> shape_fill;
+  std::optional<ShapeStrokeStyle> shape_stroke;
+  std::string marker_target_kind;
+  CompositionCurrentTime marker_time;
+  std::optional<MarkerValueInput> marker_value;
+  std::optional<MarkerPatchInput> marker_patch;
 };
 
 struct LayerPropertiesQuery {

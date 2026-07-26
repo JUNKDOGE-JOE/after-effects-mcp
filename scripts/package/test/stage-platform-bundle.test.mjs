@@ -17,7 +17,7 @@ import {
   SOURCE_COMMIT_SHA,
 } from './helpers/platform-bundle-fixture.mjs';
 
-test('stage contains one platform and omits development files', async (t) => {
+test('stage contains one platform and only the required root development contract file', async (t) => {
   const h = await makeStageHarness(t, 'macos-arm64');
 
   await stagePlatformBundle(h.input);
@@ -25,7 +25,13 @@ test('stage contains one platform and omits development files', async (t) => {
   assert.equal(h.manifest().sourceCommitSha, SOURCE_COMMIT_SHA);
   assert.equal(h.exists('runtime/macos-arm64/runtime-manifest.json'), true);
   assert.equal(h.exists('runtime/windows-x64'), false);
-  assert.equal(h.exists('.debug'), false);
+  assert.equal(h.exists('.debug'), true);
+  assert.deepEqual(
+    await fs.promises.readFile(path.join(h.outDir, '.debug')),
+    await fs.promises.readFile(path.join(h.repoRoot, 'plugin', '.debug')),
+  );
+  const debugEntry = h.manifest().files.find(({ path: relative }) => relative === '.debug');
+  assert.equal(debugEntry.sha256.length, 64);
   assert.equal(h.exists('panel'), false);
   assert.equal(h.exists('sidecar/test'), false);
   assert.equal(h.exists('host/server.test.js'), false);
@@ -35,6 +41,71 @@ test('stage contains one platform and omits development files', async (t) => {
   assert.equal(h.manifest().files.some((entry) => entry.path.endsWith('.node')), false);
   assert.equal(Object.hasOwn(h.manifest(), 'nativePlugin'), false);
   assert.equal(h.exists('artifacts/native-plugin'), false);
+});
+
+test('production stage satisfies the unchanged macOS dev installer required-file contract', async (t) => {
+  const h = await makeStageHarness(t, 'macos-arm64');
+  await stagePlatformBundle(h.input);
+  const installer = await fs.promises.readFile(
+    path.join(h.repoRoot, 'scripts', 'install-plugin-dev-macos.sh'),
+    'utf8',
+  ).catch(async () => fs.promises.readFile(
+    path.resolve(import.meta.dirname, '../../install-plugin-dev-macos.sh'),
+    'utf8',
+  ));
+  const block = installer.match(/required_files=\(\n([\s\S]*?)\n\)/)?.[1];
+  assert.ok(block, 'installer required_files contract must remain parseable');
+  const required = [...block.matchAll(/^\s*'([^']+)'\s*$/gm)].map((match) => match[1]);
+  assert.deepEqual(required, [
+    'CSXS/manifest.xml',
+    'client/index.html',
+    'client/dist/app.js',
+    'host/server.js',
+    'jsx/runtime.jsx',
+    '.debug',
+  ]);
+  for (const relative of required) {
+    const stats = await fs.promises.lstat(path.join(h.outDir, ...relative.split('/')));
+    assert.equal(stats.isFile(), true, relative);
+    assert.equal(stats.isSymbolicLink(), false, relative);
+  }
+});
+
+test('stage fails closed for missing or symbolic tracked .debug', async (t) => {
+  for (const kind of ['missing', 'symbolic']) {
+    await t.test(kind, async (child) => {
+      const h = await makeStageHarness(child, 'macos-arm64');
+      const debugPath = path.join(h.repoRoot, 'plugin', '.debug');
+      await fs.promises.rm(debugPath);
+      if (kind === 'symbolic') await fs.promises.symlink('host/server.js', debugPath);
+      await assert.rejects(
+        stagePlatformBundle(h.input),
+        { code: 'BUNDLE_INPUT_MISSING' },
+      );
+      assert.equal(fs.existsSync(h.outDir), false);
+    });
+  }
+});
+
+test('production verifier rejects relocated or byte-different .debug', async (t) => {
+  for (const kind of ['relocated', 'byte-different']) {
+    await t.test(kind, async (child) => {
+      const h = await makeStageHarness(child, 'macos-arm64');
+      await stagePlatformBundle(h.input);
+      if (kind === 'relocated') {
+        await fs.promises.rename(
+          path.join(h.outDir, '.debug'),
+          path.join(h.outDir, 'host', '.debug'),
+        );
+      } else {
+        await fs.promises.writeFile(path.join(h.outDir, '.debug'), 'different\n');
+      }
+      await assert.rejects(
+        verifyPlatformBundle(h.verifyInput),
+        (error) => /^BUNDLE_(?:MANIFEST|DEBUG|HASH|FILE)/.test(error.code),
+      );
+    });
+  }
 });
 
 test('macOS stage explicitly opts in a verified native plug-in artifact', async (t) => {

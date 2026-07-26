@@ -103,6 +103,60 @@ const BIT_DEPTH_READ_DIGEST = CAPABILITIES_VECTOR.items.find(function (item) {
 const BIT_DEPTH_SET_DIGEST = CAPABILITIES_VECTOR.items.find(function (item) {
     return item.id === 'ae.project.bit-depth.set';
 }).contractDigest;
+const TSM_VECTORS = new Map(CAPABILITIES_VECTOR.items.filter(function (descriptor) {
+    return descriptor.id.startsWith('ae.shape.') || descriptor.id.startsWith('ae.marker.');
+}).map(function (descriptor) {
+    const example = structuredClone(descriptor.examples[0]);
+    if (descriptor.id === 'ae.marker.list') {
+        const compositionLocator = structuredClone(
+            CAPABILITIES_VECTOR.items.find(function (item) {
+                return item.id === 'ae.shape.layer.create';
+            }).examples[0].arguments.compositionLocator,
+        );
+        example.arguments.target = { kind: 'composition', compositionLocator };
+        example.expected.value.target = structuredClone(example.arguments.target);
+    }
+    const mutating = descriptor.risk === 'write';
+    const evidence = {
+        engine: 'native-aegp',
+        hostInstanceId: HOST,
+        sessionId: SESSION,
+        requestId: 'tsm-fixture-request',
+        capabilityId: descriptor.id,
+        capabilityVersion: 1,
+        startedAtUnixMs: 1900000000000,
+        completedAtUnixMs: 1900000000001,
+        effect: mutating ? 'committed' : 'none',
+        requestDigest: '0'.repeat(64),
+        postcondition: {
+            verified: true,
+            kind: descriptor.id.replace(/^ae\./, '').replaceAll('.', '-'),
+            algorithm: 'sha256-rfc8785-jcs-v1',
+            digest: '0'.repeat(64),
+        },
+    };
+    if (mutating) evidence.undo = { available: true, verified: false };
+    return [descriptor.id, {
+        request: {
+            params: {
+                capabilityId: descriptor.id,
+                capabilityVersion: 1,
+                arguments: example.arguments,
+            },
+        },
+        response: {
+            result: {
+                capabilityId: descriptor.id,
+                capabilityVersion: 1,
+                engine: 'native-aegp',
+                outcome: 'succeeded',
+                replayed: false,
+                evidence,
+                value: example.expected.value,
+            },
+        },
+    }];
+}));
 
 function descriptor(socketName) {
     return [
@@ -568,7 +622,7 @@ async function readyNativeClient(t, protocolOptions) {
     return { client, protocol };
 }
 
-test('CEP client negotiates the complete #150/#155/#157/#162/#167 registry and verifies frozen package vectors', {
+test('CEP client negotiates the complete native registry and verifies prior package vectors', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
 }, async (t) => {
     const { client, protocol } = await readyNativeClient(t, {
@@ -603,6 +657,50 @@ test('CEP client negotiates the complete #150/#155/#157/#162/#167 registry and v
         protocol.requests.filter(function (request) { return request.method === 'invoke'; })
             .map(function (request) { return request.params.capabilityId; }),
         Array.from(PROJECT_COMPOSITION_VECTORS.keys()),
+    );
+});
+
+test('CEP client dispatches and verifies all eleven TSM contracts', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client, protocol } = await readyNativeClient(t, {
+        projectCompositionVectors: TSM_VECTORS,
+    });
+    let index = 0;
+    for (const [capabilityId, vector] of TSM_VECTORS) {
+        index += 1;
+        const argumentsValue = structuredClone(vector.request.params.arguments);
+        if (capabilityId === 'ae.marker.set') {
+            argumentsValue.patch = {
+                comment: 'Synthetic marker edited',
+            };
+        }
+        const result = await client.invoke({
+            requestId: 'tsm-success-' + index,
+            capabilityId,
+            capabilityVersion: 1,
+            arguments: argumentsValue,
+            deadlineUnixMs: 1900000005000,
+        });
+        assert.deepEqual(result.value, vector.response.result.value, capabilityId);
+        assert.equal(result.replayed, false, capabilityId);
+    }
+    assert.deepEqual(
+        protocol.requests.filter(function (request) { return request.method === 'invoke'; })
+            .map(function (request) { return request.params.capabilityId; }),
+        Array.from(TSM_VECTORS.keys()),
+    );
+    assert.equal(
+        protocol.requests.find(function (request) {
+            return request.params.capabilityId === 'ae.marker.list';
+        }).params.arguments.target.kind,
+        'composition',
+    );
+    assert.deepEqual(
+        protocol.requests.find(function (request) {
+            return request.params.capabilityId === 'ae.marker.set';
+        }).params.arguments.patch,
+        { comment: 'Synthetic marker edited' },
     );
 });
 

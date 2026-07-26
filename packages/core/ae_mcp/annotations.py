@@ -91,6 +91,27 @@ VERB_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "ae.setFootageInterpretation": _ann(False, False, True),
     "ae.setFootageProxy": _ann(False, False, True),
     "ae.setItemUseProxy": _ann(False, False, True),
+    # Closed structured requests rendered by maintained repository templates.
+    # None accepts code, JSX, expressions, match names, or property paths.
+    "ae.listInstalledFonts": _ann(True, False, True),
+    "ae.createTextLayer": _ann(False, False, True),
+    "ae.getTextDocument": _ann(True, False, True),
+    "ae.setTextContent": _ann(False, False, True),
+    "ae.setTextCharacterStyle": _ann(False, False, True),
+    "ae.setTextParagraphStyle": _ann(False, False, True),
+    # Bounded native operations. Stable business keys make writes idempotent;
+    # deleteMarker is destructive because it removes authored state.
+    "ae.createShapeLayer": _ann(False, False, True),
+    "ae.listShapeGroups": _ann(True, False, True),
+    "ae.createShapeGroup": _ann(False, False, True),
+    "ae.setShapePath": _ann(False, False, True),
+    "ae.setShapeFillStyle": _ann(False, False, True),
+    "ae.setShapeStrokeStyle": _ann(False, False, True),
+    "ae.reorderShapeGroup": _ann(False, False, True),
+    "ae.listMarkers": _ann(True, False, True),
+    "ae.createMarker": _ann(False, False, True),
+    "ae.setMarker": _ann(False, False, True),
+    "ae.deleteMarker": _ann(False, True, True),
     "ae.listLayerProperties": _ann(True, False, True),
     "ae.listLayerPropertyKeyframes": _ann(True, False, True),
     "ae.setLayerPropertyValue": _ann(False, False, True),

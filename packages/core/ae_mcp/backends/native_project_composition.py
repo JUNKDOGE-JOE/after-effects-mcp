@@ -1173,6 +1173,7 @@ async def _invoke_package_write_request(
     inspect_hint: str,
     deadline_unix_ms: int,
     cancellation: NativeCancellationToken | None,
+    exclude_none: bool = False,
 ) -> tuple[NativeNegotiation, NativeCapabilityDescriptor, NativeInvokeRequest, NativeInvokeResult]:
     """Shared dispatch guard for only the five writes in this capability package."""
 
@@ -1228,7 +1229,11 @@ async def _invoke_package_write_request(
         request_id=request_id,
         capability_id=contract.capability_id,
         capability_version=CAPABILITY_VERSION,
-        arguments=arguments.model_dump(mode="json", by_alias=True),
+        arguments=arguments.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=exclude_none,
+        ),
         deadline_unix_ms=deadline_unix_ms,
     )
     try:

@@ -1,7 +1,7 @@
 'use strict';
 
-// Closed CEP-side verification for the #150, #155, #157, #162, and #167
-// capability packages.
+// Closed CEP-side verification for the native capability packages, including
+// Text/Shape/Marker authoring.
 // This is not a route resolver: it only validates the named native contracts.
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -78,6 +78,15 @@ function sameLocator(left, right) {
 
 function boundToSession(locator, hostInstanceId, sessionId) {
     return locator.hostInstanceId === hostInstanceId && locator.sessionId === sessionId;
+}
+
+function freshLocatorAfterGraphChange(locator, previous) {
+    return locator.kind === previous.kind
+        && locator.hostInstanceId === previous.hostInstanceId
+        && locator.sessionId === previous.sessionId
+        && locator.generation > previous.generation
+        && locator.projectId !== previous.projectId
+        && locator.objectId !== previous.objectId;
 }
 
 function reducedRational(value, scale) {
@@ -1213,6 +1222,377 @@ function validNativeMediaValue(value, argumentsValue, hostInstanceId, sessionId,
     return true;
 }
 
+function validColor8(value) {
+    return exactKeys(value, ['red', 'green', 'blue', 'alpha'])
+        && ['red', 'green', 'blue', 'alpha'].every(function (key) {
+            return Number.isInteger(value[key]) && value[key] >= 0 && value[key] <= 255;
+        });
+}
+
+function validDecimalPair(value) {
+    return Array.isArray(value) && value.length === 2 && value.every(validDecimalString);
+}
+
+function validBezierPath(value) {
+    return exactKeys(value, ['closed', 'vertices'])
+        && typeof value.closed === 'boolean'
+        && Array.isArray(value.vertices)
+        && value.vertices.length >= (value.closed ? 3 : 2)
+        && value.vertices.length <= 128
+        && value.vertices.every(function (vertex) {
+            return exactKeys(vertex, ['position', 'inTangent', 'outTangent'])
+                && validDecimalPair(vertex.position)
+                && validDecimalPair(vertex.inTangent)
+                && validDecimalPair(vertex.outTangent);
+        });
+}
+
+function validShapeFill(value) {
+    return exactKeys(value, ['enabled', 'color', 'opacityPercent'])
+        && typeof value.enabled === 'boolean'
+        && validColor8(value.color)
+        && validDecimalString(value.opacityPercent)
+        && Number(value.opacityPercent) >= 0
+        && Number(value.opacityPercent) <= 100;
+}
+
+function validShapeStroke(value) {
+    return exactKeys(value, [
+        'enabled', 'color', 'opacityPercent', 'widthPixels', 'strokeOverFill',
+    ])
+        && typeof value.enabled === 'boolean'
+        && validColor8(value.color)
+        && validDecimalString(value.opacityPercent)
+        && Number(value.opacityPercent) >= 0
+        && Number(value.opacityPercent) <= 100
+        && validDecimalString(value.widthPixels)
+        && Number(value.widthPixels) >= 0
+        && Number(value.widthPixels) <= 1000
+        && typeof value.strokeOverFill === 'boolean';
+}
+
+function validShapeGroupRef(value) {
+    return exactKeys(value, ['layerLocator', 'groupIndex', 'streamId'])
+        && validLocator(value.layerLocator, ['layer'])
+        && Number.isSafeInteger(value.groupIndex) && value.groupIndex >= 1
+        && Number.isInteger(value.streamId)
+        && value.streamId >= -2147483648 && value.streamId <= 2147483647;
+}
+
+function sameShapeGroupRef(left, right) {
+    return validShapeGroupRef(left) && validShapeGroupRef(right)
+        && sameLocator(left.layerLocator, right.layerLocator)
+        && left.groupIndex === right.groupIndex && left.streamId === right.streamId;
+}
+
+function validShapeGroup(value) {
+    return exactKeys(value, ['ref', 'name', 'path', 'fill', 'stroke'])
+        && validShapeGroupRef(value.ref)
+        && validString(value.name, 1, 255)
+        && validBezierPath(value.path)
+        && validShapeFill(value.fill)
+        && validShapeStroke(value.stroke);
+}
+
+function validShapeLayerCreateArguments(value) {
+    return exactKeys(value, ['compositionLocator', 'name', 'idempotencyKey'])
+        && validLocator(value.compositionLocator, ['composition'])
+        && validString(value.name, 1, 255)
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validShapeGroupsListArguments(value) {
+    return exactKeys(value, ['layerLocator', 'offset', 'limit'])
+        && validLocator(value.layerLocator, ['layer'])
+        && Number.isSafeInteger(value.offset) && value.offset >= 0
+        && Number.isInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
+}
+
+function validShapeGroupCreateArguments(value) {
+    return exactKeys(value, [
+        'layerLocator', 'name', 'path', 'fill', 'stroke', 'idempotencyKey',
+    ])
+        && validLocator(value.layerLocator, ['layer'])
+        && validString(value.name, 1, 255)
+        && validBezierPath(value.path)
+        && validShapeFill(value.fill)
+        && validShapeStroke(value.stroke)
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validShapeGroupWriteArguments(value, member, validator) {
+    return exactKeys(value, ['groupRef', member, 'idempotencyKey'])
+        && validShapeGroupRef(value.groupRef)
+        && validator(value[member])
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validShapeLayerCreateValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'changed', 'compositionLocator', 'layerLocator', 'name', 'stackIndex',
+        'layerCountBefore', 'layerCountAfter',
+    ])
+        && value.changed === true
+        && validLocator(value.compositionLocator, ['composition'])
+        && validLocator(value.layerLocator, ['layer'])
+        && boundToSession(value.compositionLocator, hostInstanceId, sessionId)
+        && sameContext(value.compositionLocator, value.layerLocator)
+        && validString(value.name, 1, 255)
+        && value.name === argumentsValue.name
+        && Number.isSafeInteger(value.stackIndex) && value.stackIndex >= 1
+        && Number.isSafeInteger(value.layerCountBefore) && value.layerCountBefore >= 0
+        && value.layerCountAfter === value.layerCountBefore + 1;
+}
+
+function validShapeGroupsListValue(value, argumentsValue, hostInstanceId, sessionId) {
+    if (!exactKeys(value, [
+        'layerLocator', 'total', 'offset', 'limit', 'returned', 'hasMore',
+        'nextOffset', 'groups',
+    ])
+        || !validLocator(value.layerLocator, ['layer'])
+        || !sameLocator(value.layerLocator, argumentsValue.layerLocator)
+        || !boundToSession(value.layerLocator, hostInstanceId, sessionId)
+        || !Number.isSafeInteger(value.total) || value.total < 0
+        || value.offset !== argumentsValue.offset || value.limit !== argumentsValue.limit
+        || !Number.isInteger(value.returned) || value.returned < 0
+        || !Array.isArray(value.groups) || value.returned !== value.groups.length
+        || value.returned > value.limit || !value.groups.every(validShapeGroup)) return false;
+    const consumed = value.offset + value.returned;
+    const expectedMore = consumed < value.total;
+    const identities = value.groups.map(function (group) {
+        return group.ref.groupIndex + ':' + group.ref.streamId;
+    });
+    return consumed <= value.total
+        && value.hasMore === expectedMore
+        && value.nextOffset === (expectedMore ? consumed : null)
+        && new Set(identities).size === identities.length
+        && value.groups.every(function (group) {
+            return sameLocator(group.ref.layerLocator, value.layerLocator);
+        });
+}
+
+function validShapeGroupCreateValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'changed', 'layerLocator', 'groupCountBefore', 'groupCountAfter', 'group',
+    ])
+        && value.changed === true
+        && validLocator(value.layerLocator, ['layer'])
+        && boundToSession(value.layerLocator, hostInstanceId, sessionId)
+        && freshLocatorAfterGraphChange(
+            value.layerLocator, argumentsValue.layerLocator,
+        )
+        && Number.isSafeInteger(value.groupCountBefore) && value.groupCountBefore >= 0
+        && value.groupCountAfter === value.groupCountBefore + 1
+        && validShapeGroup(value.group)
+        && sameLocator(value.group.ref.layerLocator, value.layerLocator);
+}
+
+function validShapeGroupMutationValue(
+    value, argumentsValue, hostInstanceId, sessionId, beforeMember, afterMember, validator,
+) {
+    return exactKeys(value, ['changed', 'groupRef', beforeMember, afterMember])
+        && value.changed === true
+        && validShapeGroupRef(value.groupRef)
+        && boundToSession(value.groupRef.layerLocator, hostInstanceId, sessionId)
+        && sameShapeGroupRef(value.groupRef, argumentsValue.groupRef)
+        && validator(value[beforeMember]) && validator(value[afterMember]);
+}
+
+function validShapeGroupReorderArguments(value) {
+    return exactKeys(value, ['groupRef', 'targetIndex', 'idempotencyKey'])
+        && validShapeGroupRef(value.groupRef)
+        && Number.isSafeInteger(value.targetIndex) && value.targetIndex >= 1
+        && value.targetIndex !== value.groupRef.groupIndex
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validShapeGroupReorderValue(value, argumentsValue, hostInstanceId, sessionId) {
+    if (!exactKeys(value, [
+        'changed', 'layerLocator', 'streamId', 'beforeIndex', 'afterIndex', 'groups',
+    ])
+        || value.changed !== true
+        || !validLocator(value.layerLocator, ['layer'])
+        || !boundToSession(value.layerLocator, hostInstanceId, sessionId)
+        || !sameLocator(value.layerLocator, argumentsValue.groupRef.layerLocator)
+        || !Number.isInteger(value.streamId) || value.streamId !== argumentsValue.groupRef.streamId
+        || !Number.isSafeInteger(value.beforeIndex) || value.beforeIndex < 1
+        || !Number.isSafeInteger(value.afterIndex) || value.afterIndex < 1
+        || value.beforeIndex === value.afterIndex
+        || !Array.isArray(value.groups)
+        || !value.groups.every(function (group) {
+            return exactKeys(group, ['groupIndex', 'streamId', 'name'])
+                && Number.isSafeInteger(group.groupIndex) && group.groupIndex >= 1
+                && Number.isInteger(group.streamId)
+                && group.streamId >= -2147483648 && group.streamId <= 2147483647
+                && validString(group.name, 1, 255);
+        })) return false;
+    const identities = value.groups.map(function (group) {
+        return group.groupIndex + ':' + group.streamId;
+    });
+    return new Set(identities).size === identities.length;
+}
+
+function validMarkerTarget(value) {
+    if (exactKeys(value, ['kind', 'layerLocator']) && value.kind === 'layer') {
+        return validLocator(value.layerLocator, ['layer']);
+    }
+    return exactKeys(value, ['kind', 'compositionLocator'])
+        && value.kind === 'composition'
+        && validLocator(value.compositionLocator, ['composition']);
+}
+
+function markerTargetLocator(value) {
+    return value.kind === 'layer' ? value.layerLocator : value.compositionLocator;
+}
+
+function sameMarkerTarget(left, right) {
+    return validMarkerTarget(left) && validMarkerTarget(right)
+        && left.kind === right.kind
+        && sameLocator(markerTargetLocator(left), markerTargetLocator(right));
+}
+
+function validMarkerRef(value, exact) {
+    return exactKeys(value, ['target', 'time'])
+        && validMarkerTarget(value.target)
+        && validTime(value.time, exact, -2147483648);
+}
+
+function validCuePointParameters(value) {
+    if (!Array.isArray(value) || value.length > 64) return false;
+    const keys = [];
+    for (const item of value) {
+        if (!exactKeys(item, ['key', 'value'])
+            || !validString(item.key, 1, 255) || !validString(item.value, 0, 1024)) return false;
+        keys.push(item.key);
+    }
+    return new Set(keys).size === keys.length;
+}
+
+function validMarkerFields(value, durationExact) {
+    return validTime(value.duration, durationExact, 0)
+        && validString(value.comment, 0, 1024)
+        && validString(value.chapter, 0, 128)
+        && validString(value.url, 0, 1024)
+        && validString(value.frameTarget, 0, 128)
+        && validString(value.cuePointName, 0, 64)
+        && validCuePointParameters(value.cuePointParameters)
+        && typeof value.navigation === 'boolean'
+        && typeof value.protectedRegion === 'boolean'
+        && Number.isInteger(value.labelId) && value.labelId >= 0 && value.labelId <= 16;
+}
+
+function validMarkerInput(value) {
+    return exactKeys(value, [
+        'duration', 'comment', 'chapter', 'url', 'frameTarget', 'cuePointName',
+        'cuePointParameters', 'navigation', 'protectedRegion', 'labelId',
+    ]) && validMarkerFields(value, false);
+}
+
+function validMarkerPatch(value) {
+    const fields = [
+        'duration', 'comment', 'chapter', 'url', 'frameTarget', 'cuePointName',
+        'cuePointParameters', 'navigation', 'protectedRegion', 'labelId',
+    ];
+    if (!closedKeys(value, [], fields)) return false;
+    const validators = {
+        duration: function (item) { return validTime(item, false, 0); },
+        comment: function (item) { return validString(item, 0, 1024); },
+        chapter: function (item) { return validString(item, 0, 128); },
+        url: function (item) { return validString(item, 0, 1024); },
+        frameTarget: function (item) { return validString(item, 0, 128); },
+        cuePointName: function (item) { return validString(item, 0, 64); },
+        cuePointParameters: validCuePointParameters,
+        navigation: function (item) { return typeof item === 'boolean'; },
+        protectedRegion: function (item) { return typeof item === 'boolean'; },
+        labelId: function (item) {
+            return Number.isInteger(item) && item >= 0 && item <= 16;
+        },
+    };
+    const requested = Object.keys(value);
+    return requested.every(function (field) {
+        return value[field] === null || validators[field](value[field]);
+    }) && requested.some(function (field) { return value[field] !== null; });
+}
+
+function validMarkerState(value) {
+    return exactKeys(value, [
+        'ref', 'markerIndex', 'duration', 'comment', 'chapter', 'url', 'frameTarget',
+        'cuePointName', 'cuePointParameters', 'navigation', 'protectedRegion', 'labelId',
+    ])
+        && validMarkerRef(value.ref, true)
+        && Number.isSafeInteger(value.markerIndex) && value.markerIndex >= 1
+        && validMarkerFields(value, true);
+}
+
+function validMarkersListArguments(value) {
+    return exactKeys(value, ['target', 'offset', 'limit'])
+        && validMarkerTarget(value.target)
+        && Number.isSafeInteger(value.offset) && value.offset >= 0
+        && Number.isInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
+}
+
+function validMarkerCreateArguments(value) {
+    return exactKeys(value, ['target', 'time', 'marker', 'idempotencyKey'])
+        && validMarkerTarget(value.target)
+        && validTime(value.time, false, -2147483648)
+        && validMarkerInput(value.marker)
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validMarkerSetArguments(value) {
+    return exactKeys(value, ['markerRef', 'patch', 'idempotencyKey'])
+        && validMarkerRef(value.markerRef, false)
+        && validMarkerPatch(value.patch)
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validMarkerDeleteArguments(value) {
+    return exactKeys(value, ['markerRef', 'idempotencyKey'])
+        && validMarkerRef(value.markerRef, false)
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validMarkersListValue(value, argumentsValue, hostInstanceId, sessionId) {
+    if (!exactKeys(value, [
+        'target', 'total', 'offset', 'limit', 'returned', 'hasMore',
+        'nextOffset', 'markers',
+    ])
+        || !validMarkerTarget(value.target)
+        || !sameMarkerTarget(value.target, argumentsValue.target)
+        || !boundToSession(markerTargetLocator(value.target), hostInstanceId, sessionId)
+        || !Number.isSafeInteger(value.total) || value.total < 0
+        || value.offset !== argumentsValue.offset || value.limit !== argumentsValue.limit
+        || !Number.isInteger(value.returned) || value.returned < 0
+        || !Array.isArray(value.markers) || value.returned !== value.markers.length
+        || value.returned > value.limit || !value.markers.every(validMarkerState)) return false;
+    const consumed = value.offset + value.returned;
+    const expectedMore = consumed < value.total;
+    if (consumed > value.total || value.hasMore !== expectedMore
+        || value.nextOffset !== (expectedMore ? consumed : null)) return false;
+    for (let index = 0; index < value.markers.length; index += 1) {
+        const marker = value.markers[index];
+        if (!sameMarkerTarget(marker.ref.target, value.target)) return false;
+        if (index > 0) {
+            const prior = value.markers[index - 1].ref.time;
+            if (BigInt(prior.value) * BigInt(marker.ref.time.scale)
+                >= BigInt(marker.ref.time.value) * BigInt(prior.scale)) return false;
+        }
+    }
+    return true;
+}
+
+function validMarkerMutationState(value, argumentsValue, hostInstanceId, sessionId) {
+    const locator = markerTargetLocator(value.ref.target);
+    const requestedRef = argumentsValue.markerRef || {
+        target: argumentsValue.target,
+        time: argumentsValue.time,
+    };
+    return validMarkerState(value)
+        && boundToSession(locator, hostInstanceId, sessionId)
+        && sameMarkerTarget(value.ref.target, requestedRef.target)
+        && timesEqual(value.ref.time, requestedRef.time);
+}
+
 const CONTRACTS = Object.freeze({
     'ae.project.context.read': Object.freeze({
         digest: 'ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca',
@@ -1628,6 +2008,175 @@ const CONTRACTS = Object.freeze({
             ['folderLocator', 'ae_listProjectItems'],
         ]),
     }),
+    'ae.shape.layer.create': Object.freeze({
+        digest: '29a65a9ab5c14cb6c59b58ea86c0e429f0f7a3443f3c4321f899b757825c4bac',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'shape-layer-create',
+        validArguments: validShapeLayerCreateArguments,
+        validValue: validShapeLayerCreateValue,
+        locatorFields: Object.freeze([
+            ['compositionLocator', 'ae_listProjectItems'],
+        ]),
+    }),
+    'ae.shape.groups.list': Object.freeze({
+        digest: 'b2da58b73680b5bf0453232029ce7c63dbc67e142d50b8d6f2fe15dd8048901c',
+        mutating: false,
+        allowReplay: false,
+        postconditionKind: 'shape-groups-list',
+        validArguments: validShapeGroupsListArguments,
+        validValue: validShapeGroupsListValue,
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listCompositionLayers'],
+        ]),
+    }),
+    'ae.shape.group.create': Object.freeze({
+        digest: '8429561a10bca988570aa54fae6a346e25adb4b295edb4e47de1ab6d900caa09',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'shape-group-create',
+        validArguments: validShapeGroupCreateArguments,
+        validValue: validShapeGroupCreateValue,
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listCompositionLayers'],
+        ]),
+    }),
+    'ae.shape.path.set': Object.freeze({
+        digest: '07f92613b963a421c61c7b678bc4e29a03915ac803a8bbb7274a7aacf808f85a',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'shape-path-set',
+        validArguments: function (value) {
+            return validShapeGroupWriteArguments(value, 'path', validBezierPath);
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validShapeGroupMutationValue(
+                value, argumentsValue, hostInstanceId, sessionId,
+                'beforePath', 'afterPath', validBezierPath,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['groupRef.layerLocator', 'ae_listShapeGroups'],
+        ]),
+    }),
+    'ae.shape.fill-style.set': Object.freeze({
+        digest: '61b0635e5133b8248956d6d1f4b0a094be043c49223f1f23b8b5223cc87d498b',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'shape-fill-style-set',
+        validArguments: function (value) {
+            return validShapeGroupWriteArguments(value, 'fill', validShapeFill);
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validShapeGroupMutationValue(
+                value, argumentsValue, hostInstanceId, sessionId,
+                'beforeFill', 'afterFill', validShapeFill,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['groupRef.layerLocator', 'ae_listShapeGroups'],
+        ]),
+    }),
+    'ae.shape.stroke-style.set': Object.freeze({
+        digest: 'b4e0234881af56c2642bf9786d66c2e8a9dcd81f1616e8bfc06e509690ceb246',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'shape-stroke-style-set',
+        validArguments: function (value) {
+            return validShapeGroupWriteArguments(value, 'stroke', validShapeStroke);
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validShapeGroupMutationValue(
+                value, argumentsValue, hostInstanceId, sessionId,
+                'beforeStroke', 'afterStroke', validShapeStroke,
+            );
+        },
+        locatorFields: Object.freeze([
+            ['groupRef.layerLocator', 'ae_listShapeGroups'],
+        ]),
+    }),
+    'ae.shape.group.reorder': Object.freeze({
+        digest: '1facddf375b8d84dfcfeea0a99468a9bb7f4be972a2802b5905b8b56e3c1f1d8',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'shape-group-reorder',
+        validArguments: validShapeGroupReorderArguments,
+        validValue: validShapeGroupReorderValue,
+        locatorFields: Object.freeze([
+            ['groupRef.layerLocator', 'ae_listShapeGroups'],
+        ]),
+    }),
+    'ae.marker.list': Object.freeze({
+        digest: '5406bdbf52ad8a5ab15053cb0f76218e8e54b11f3f1de11a69cd88686926dc5a',
+        mutating: false,
+        allowReplay: false,
+        postconditionKind: 'marker-list',
+        validArguments: validMarkersListArguments,
+        validValue: validMarkersListValue,
+        locatorFields: Object.freeze([
+            ['target.layerLocator', 'ae_listCompositionLayers'],
+            ['target.compositionLocator', 'ae_listProjectItems'],
+        ]),
+    }),
+    'ae.marker.create': Object.freeze({
+        digest: '25ca81478bcac6b2fb75e8350449d874b287ec4d07f26a7d2bb301bf743c3f7d',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'marker-create',
+        validArguments: validMarkerCreateArguments,
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return exactKeys(value, ['changed', 'before', 'after'])
+                && value.changed === true && value.before === null
+                && validMarkerMutationState(
+                    value.after, argumentsValue, hostInstanceId, sessionId,
+                );
+        },
+        locatorFields: Object.freeze([
+            ['target.layerLocator', 'ae_listCompositionLayers'],
+            ['target.compositionLocator', 'ae_listProjectItems'],
+        ]),
+    }),
+    'ae.marker.set': Object.freeze({
+        digest: '49710c3e304a569b0fa1f9b663beda800b7b62ad8e5df6bb37653f487b0435b0',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'marker-set',
+        validArguments: validMarkerSetArguments,
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return exactKeys(value, ['changed', 'before', 'after'])
+                && value.changed === true
+                && validMarkerMutationState(
+                    value.before, argumentsValue, hostInstanceId, sessionId,
+                )
+                && validMarkerMutationState(
+                    value.after, argumentsValue, hostInstanceId, sessionId,
+                )
+                && sameMarkerTarget(value.before.ref.target, value.after.ref.target)
+                && timesEqual(value.before.ref.time, value.after.ref.time);
+        },
+        locatorFields: Object.freeze([
+            ['markerRef.target.layerLocator', 'ae_listCompositionLayers'],
+            ['markerRef.target.compositionLocator', 'ae_listProjectItems'],
+        ]),
+    }),
+    'ae.marker.delete': Object.freeze({
+        digest: '19fabb0bd701cc914e26acd4f508f79dae601d35eec9c701f91b6aa2642b49a9',
+        mutating: true,
+        allowReplay: true,
+        postconditionKind: 'marker-delete',
+        validArguments: validMarkerDeleteArguments,
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return exactKeys(value, ['changed', 'before', 'after'])
+                && value.changed === true && value.after === null
+                && validMarkerMutationState(
+                    value.before, argumentsValue, hostInstanceId, sessionId,
+                );
+        },
+        locatorFields: Object.freeze([
+            ['markerRef.target.layerLocator', 'ae_listCompositionLayers'],
+            ['markerRef.target.compositionLocator', 'ae_listProjectItems'],
+        ]),
+    }),
 });
 
 function getContract(capabilityId) {
@@ -1666,7 +2215,10 @@ function validateCapabilityItems(items, requestedIds, detail) {
 
 function locatorChecks(contract, argumentsValue) {
     return contract.locatorFields.map(function (entry) {
-        return [argumentsValue[entry[0]], entry[0], entry[1]];
+        const locator = entry[0].split('.').reduce(function (value, field) {
+            return value === null || value === undefined ? undefined : value[field];
+        }, argumentsValue);
+        return [locator, entry[0], entry[1]];
     }).filter(function (entry) { return entry[0] !== null && entry[0] !== undefined; });
 }
 

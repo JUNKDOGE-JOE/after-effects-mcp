@@ -1,3 +1,4 @@
+#include "aemcp_native/ae_path_numeric.hpp"
 #include "aemcp_native/effect_stack.hpp"
 #include "aemcp_native/host_dispatcher.hpp"
 #include "aemcp_native/endpoint_registry_macos.hpp"
@@ -8,6 +9,7 @@
 #include "aemcp_native/rpc_codec.hpp"
 #include "aemcp_native/selection_collection.hpp"
 #include "aemcp_native/secure_random_macos.hpp"
+#include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -187,7 +189,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "ae72ee8f2244fa2ffb6a4f01590f17b83e782724504d981a88cbbc162ea1ac44";
+    aemcp::native::rpc::kCapabilitiesRegistryDigest;
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
@@ -905,6 +907,39 @@ class StreamValueOwner final {
   bool initialized_{false};
 };
 
+class MarkerOwner final {
+ public:
+  MarkerOwner(const AEGP_MarkerSuite3* suite, AEGP_MarkerValP marker)
+      : suite_(suite), marker_(marker) {}
+  ~MarkerOwner() {
+    if (suite_ != nullptr && marker_ != nullptr) {
+      (void)suite_->AEGP_DisposeMarker(marker_);
+    }
+  }
+  MarkerOwner(const MarkerOwner&) = delete;
+  MarkerOwner& operator=(const MarkerOwner&) = delete;
+  MarkerOwner(MarkerOwner&& other) noexcept
+      : suite_(other.suite_), marker_(other.marker_) {
+    other.marker_ = nullptr;
+  }
+  MarkerOwner& operator=(MarkerOwner&& other) noexcept {
+    if (this != &other) {
+      if (suite_ != nullptr && marker_ != nullptr) {
+        (void)suite_->AEGP_DisposeMarker(marker_);
+      }
+      suite_ = other.suite_;
+      marker_ = other.marker_;
+      other.marker_ = nullptr;
+    }
+    return *this;
+  }
+  [[nodiscard]] AEGP_MarkerValP get() const noexcept { return marker_; }
+
+ private:
+  const AEGP_MarkerSuite3* suite_{nullptr};
+  AEGP_MarkerValP marker_{nullptr};
+};
+
 class UndoGroupOwner final {
  public:
   explicit UndoGroupOwner(const AEGP_UtilitySuite6* suite) : suite_(suite) {}
@@ -1260,6 +1295,14 @@ class ProjectGraphRegistry final {
   const auto right_value = decimal_value(right);
   return left_value.has_value() && right_value.has_value()
       && *left_value == *right_value;
+}
+
+[[nodiscard]] bool path_decimal_values_equal(
+    std::string_view left, std::string_view right) {
+  const auto left_value = decimal_value(left);
+  const auto right_value = decimal_value(right);
+  return left_value.has_value() && right_value.has_value()
+      && aemcp::native::ae_path_values_equal(*left_value, *right_value);
 }
 
 [[nodiscard]] bool layer_property_values_equal(
@@ -7159,6 +7202,1827 @@ class AegpHostApi final : public HostApi {
     if (budget_expired()) {
       return HostNativeMediaResult::failure(
           "DEADLINE_EXCEEDED", "native media operation budget elapsed");
+    }
+
+    if (command.operation == aemcp::native::kMarkerListCapability
+        || command.operation == aemcp::native::kMarkerCreateCapability
+        || command.operation == aemcp::native::kMarkerSetCapability
+        || command.operation == aemcp::native::kMarkerDeleteCapability) {
+      const bool write =
+          aemcp::native::is_text_shape_marker_write_capability(command.operation);
+      SuiteLease<AEGP_ProjSuite6> project_suite(
+          basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+      SuiteLease<AEGP_ItemSuite9> item_suite(
+          basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+      SuiteLease<AEGP_CompSuite12> comp_suite(
+          basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+      SuiteLease<AEGP_LayerSuite9> layer_suite(
+          basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+      SuiteLease<AEGP_MemorySuite1> memory_suite(
+          basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+      SuiteLease<AEGP_StreamSuite6> stream_suite(
+          basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+      SuiteLease<AEGP_KeyframeSuite5> keyframe_suite(
+          basic_, kAEGPKeyframeSuite, kAEGPKeyframeSuiteVersion5);
+      SuiteLease<AEGP_UtilitySuite6> utility_suite(
+          basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+      // MarkerSuite3 is the package's sole new suite. SuiteLease guarantees
+      // the matching ReleaseSuite call on every return path.
+      SuiteLease<AEGP_MarkerSuite3> marker_suite(
+          basic_, kAEGPMarkerSuite, kAEGPMarkerSuiteVersion3);
+      if (project_suite.get() == nullptr || item_suite.get() == nullptr
+          || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+          || memory_suite.get() == nullptr || stream_suite.get() == nullptr
+          || keyframe_suite.get() == nullptr || utility_suite.get() == nullptr
+          || marker_suite.get() == nullptr) {
+        return HostNativeMediaResult::failure(
+            "NATIVE_UNSUPPORTED", "required MarkerSuite3 companion suites are unavailable");
+      }
+
+      AEGP_StreamRefH marker_stream_raw = nullptr;
+      if (command.marker_target_kind == "layer"
+          && command.layer_locator.has_value()) {
+        const auto resolved = resolve_layer(
+            project_suite.get(), item_suite.get(), comp_suite.get(),
+            layer_suite.get(), memory_suite.get(), *command.layer_locator,
+            command.host_instance_id, command.session_id, work_deadline);
+        if (!resolved.has_value()) {
+          return HostNativeMediaResult::failure(
+              "STALE_LOCATOR", "marker layer target is stale",
+              "params.arguments.target.layerLocator");
+        }
+        if (stream_suite->AEGP_GetNewLayerStream(
+                plugin_id_, resolved->layer, AEGP_LayerStream_MARKER,
+                &marker_stream_raw) != A_Err_NONE
+            || marker_stream_raw == nullptr) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "layer marker stream could not be acquired");
+        }
+      } else if (command.marker_target_kind == "composition"
+          && command.composition_locator.has_value()) {
+        const auto open = observe_open_project(
+            project_suite.get(), item_suite.get(), memory_suite.get());
+        const auto composition_id = graph_.resolve_composition(
+            *command.composition_locator,
+            command.host_instance_id,
+            command.session_id);
+        const auto item = open.has_value() && composition_id.has_value()
+            ? find_project_item(
+                item_suite.get(), open->project, open->root,
+                *composition_id, work_deadline)
+            : std::nullopt;
+        AEGP_CompH composition = nullptr;
+        if (!item.has_value()
+            || comp_suite->AEGP_GetCompFromItem(*item, &composition) != A_Err_NONE
+            || composition == nullptr) {
+          return HostNativeMediaResult::failure(
+              "STALE_LOCATOR", "marker composition target is stale",
+              "params.arguments.target.compositionLocator");
+        }
+        if (comp_suite->AEGP_GetNewCompMarkerStream(
+                plugin_id_, composition, &marker_stream_raw) != A_Err_NONE
+            || marker_stream_raw == nullptr) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "composition marker stream could not be acquired");
+        }
+      } else {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "marker target discriminator is invalid",
+            "params.arguments.target");
+      }
+      StreamRefOwner marker_stream(stream_suite.get(), marker_stream_raw);
+      AEGP_StreamType marker_type = AEGP_StreamType_NO_DATA;
+      A_long marker_count = 0;
+      if (stream_suite->AEGP_GetStreamType(marker_stream.get(), &marker_type)
+              != A_Err_NONE
+          || marker_type != AEGP_StreamType_MARKER
+          || keyframe_suite->AEGP_GetStreamNumKFs(
+              marker_stream.get(), &marker_count) != A_Err_NONE
+          || marker_count < 0 || marker_count > 100000) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "marker stream type or bounded count was unavailable");
+      }
+      const auto exact_time_json = [&](const A_Time& time) {
+        return std::string("{\"scale\":") + std::to_string(time.scale)
+            + ",\"secondsRational\":" + quoted(
+                aemcp::native::canonical_seconds_rational(
+                    time.value, static_cast<std::uint32_t>(time.scale)))
+            + ",\"value\":" + std::to_string(time.value) + "}";
+      };
+      const auto target_json = [&] {
+        return command.marker_target_kind == "layer"
+            ? std::string("{\"kind\":\"layer\",\"layerLocator\":")
+                + locator_json(*command.layer_locator) + "}"
+            : std::string("{\"compositionLocator\":")
+                + locator_json(*command.composition_locator)
+                + ",\"kind\":\"composition\"}";
+      };
+      const auto marker_text = [&](AEGP_ConstMarkerValP marker,
+                                   AEGP_MarkerStringType kind)
+          -> std::optional<std::string> {
+        AEGP_MemHandle handle = nullptr;
+        const A_Err error = marker_suite->AEGP_GetMarkerString(
+            plugin_id_, marker, kind, &handle);
+        MemHandleOwner owner(memory_suite.get(), handle);
+        if (error != A_Err_NONE || handle == nullptr) return std::nullopt;
+        return owner.utf8();
+      };
+      const auto marker_snapshot = [&](AEGP_ConstMarkerValP marker,
+                                       const A_Time& time,
+                                       A_long index)
+          -> std::optional<std::string> {
+        const auto comment = marker_text(marker, AEGP_MarkerString_COMMENT);
+        const auto chapter = marker_text(marker, AEGP_MarkerString_CHAPTER);
+        const auto url = marker_text(marker, AEGP_MarkerString_URL);
+        const auto frame_target =
+            marker_text(marker, AEGP_MarkerString_FRAME_TARGET);
+        const auto cue_name =
+            marker_text(marker, AEGP_MarkerString_CUE_POINT_NAME);
+        A_Boolean navigation = FALSE;
+        A_Boolean protected_region = FALSE;
+        A_Time duration{};
+        A_long label = 0;
+        A_long parameter_count = 0;
+        if (!comment || !chapter || !url || !frame_target || !cue_name
+            || marker_suite->AEGP_GetMarkerFlag(
+                marker, AEGP_MarkerFlag_NAVIGATION, &navigation) != A_Err_NONE
+            || marker_suite->AEGP_GetMarkerFlag(
+                marker, AEGP_MarkerFlag_PROTECT_REGION,
+                &protected_region) != A_Err_NONE
+            || marker_suite->AEGP_GetMarkerDuration(marker, &duration) != A_Err_NONE
+            || duration.value < 0 || duration.scale <= 0
+            || marker_suite->AEGP_GetMarkerLabel(marker, &label) != A_Err_NONE
+            || label < 0 || label > 16
+            || marker_suite->AEGP_CountCuePointParams(
+                marker, &parameter_count) != A_Err_NONE
+            || parameter_count < 0 || parameter_count > 64) {
+          return std::nullopt;
+        }
+        std::ostringstream output;
+        output << "{\"chapter\":" << quoted(*chapter)
+               << ",\"comment\":" << quoted(*comment)
+               << ",\"cuePointName\":" << quoted(*cue_name)
+               << ",\"cuePointParameters\":[";
+        std::unordered_set<std::string> cue_keys;
+        for (A_long parameter_index = 0;
+             parameter_index < parameter_count; ++parameter_index) {
+          AEGP_MemHandle key_handle = nullptr;
+          AEGP_MemHandle value_handle = nullptr;
+          const A_Err parameter_error = marker_suite->AEGP_GetIndCuePointParam(
+              plugin_id_, marker, parameter_index, &key_handle, &value_handle);
+          MemHandleOwner key_owner(memory_suite.get(), key_handle);
+          MemHandleOwner value_owner(memory_suite.get(), value_handle);
+          const auto key = parameter_error == A_Err_NONE
+              ? key_owner.utf8() : std::nullopt;
+          const auto value = parameter_error == A_Err_NONE
+              ? value_owner.utf8() : std::nullopt;
+          if (!key || key->empty() || !value || !cue_keys.insert(*key).second) {
+            return std::nullopt;
+          }
+          if (parameter_index != 0) output << ',';
+          output << "{\"key\":" << quoted(*key)
+                 << ",\"value\":" << quoted(*value) << "}";
+        }
+        output << "],\"duration\":" << exact_time_json(duration)
+               << ",\"frameTarget\":" << quoted(*frame_target)
+               << ",\"labelId\":" << label
+               << ",\"navigation\":" << (navigation ? "true" : "false")
+               << ",\"protectedRegion\":"
+               << (protected_region ? "true" : "false")
+               << ",\"ref\":{\"target\":" << target_json()
+               << ",\"time\":" << exact_time_json(time) << "}"
+               << ",\"markerIndex\":" << (index + 1)
+               << ",\"url\":" << quoted(*url) << "}";
+        return output.str();
+      };
+      const auto exact_equal = [](const A_Time& left,
+                                  const aemcp::native::CompositionCurrentTime& right) {
+        return left.scale > 0 && right.scale > 0
+            && aemcp::native::canonical_seconds_rational(
+                left.value, static_cast<std::uint32_t>(left.scale))
+                == right.seconds_rational;
+      };
+      const auto find_exact = [&](const aemcp::native::CompositionCurrentTime& time)
+          -> std::optional<A_long> {
+        std::optional<A_long> found;
+        for (A_long index = 0; index < marker_count; ++index) {
+          A_Time actual{};
+          if (keyframe_suite->AEGP_GetKeyframeTime(
+                  marker_stream.get(), index, AEGP_LTimeMode_CompTime,
+                  &actual) != A_Err_NONE
+              || actual.scale <= 0) {
+            return std::nullopt;
+          }
+          if (exact_equal(actual, time)) {
+            if (found.has_value()) return std::nullopt;
+            found = index;
+          }
+        }
+        return found;
+      };
+      const auto set_marker_string = [&](AEGP_MarkerValP marker,
+                                         AEGP_MarkerStringType kind,
+                                         std::string_view text) -> A_Err {
+        const auto utf16 = utf16_bounded_text(text, 1024, true);
+        return utf16.has_value()
+            ? marker_suite->AEGP_SetMarkerString(
+                marker, kind, utf16->data(),
+                static_cast<A_long>(utf16->size() - 1U))
+            : A_Err_GENERIC;
+      };
+      const auto replace_cue_parameters = [&](
+          AEGP_MarkerValP marker,
+          const std::vector<aemcp::native::CuePointParameter>& parameters)
+          -> A_Err {
+        A_long count = 0;
+        A_Err error =
+            marker_suite->AEGP_CountCuePointParams(marker, &count);
+        for (A_long index = count - 1; error == A_Err_NONE && index >= 0; --index) {
+          error = marker_suite->AEGP_DeleteIndCuePointParam(marker, index);
+        }
+        for (std::size_t index = 0;
+             error == A_Err_NONE && index < parameters.size(); ++index) {
+          const auto key = utf16_bounded_text(parameters[index].key, 255, false);
+          const auto value =
+              utf16_bounded_text(parameters[index].value, 1024, true);
+          if (!key || !value) return A_Err_GENERIC;
+          error = marker_suite->AEGP_InsertCuePointParam(
+              marker, static_cast<A_long>(index));
+          if (error == A_Err_NONE) {
+            error = marker_suite->AEGP_SetIndCuePointParam(
+                marker, static_cast<A_long>(index),
+                key->data(), static_cast<A_long>(key->size() - 1U),
+                value->data(), static_cast<A_long>(value->size() - 1U));
+          }
+        }
+        return error;
+      };
+      const auto apply_complete_marker = [&](AEGP_MarkerValP marker,
+                                             const aemcp::native::MarkerValueInput& value)
+          -> A_Err {
+        A_Time duration{value.duration.value, value.duration.scale};
+        A_Err error = set_marker_string(
+            marker, AEGP_MarkerString_COMMENT, value.comment);
+        if (error == A_Err_NONE) error = set_marker_string(
+            marker, AEGP_MarkerString_CHAPTER, value.chapter);
+        if (error == A_Err_NONE) error = set_marker_string(
+            marker, AEGP_MarkerString_URL, value.url);
+        if (error == A_Err_NONE) error = set_marker_string(
+            marker, AEGP_MarkerString_FRAME_TARGET, value.frame_target);
+        if (error == A_Err_NONE) error = set_marker_string(
+            marker, AEGP_MarkerString_CUE_POINT_NAME, value.cue_point_name);
+        if (error == A_Err_NONE) {
+          error = replace_cue_parameters(marker, value.cue_point_parameters);
+        }
+        if (error == A_Err_NONE) error = marker_suite->AEGP_SetMarkerFlag(
+            marker, AEGP_MarkerFlag_NAVIGATION,
+            value.navigation ? TRUE : FALSE);
+        if (error == A_Err_NONE) error = marker_suite->AEGP_SetMarkerFlag(
+            marker, AEGP_MarkerFlag_PROTECT_REGION,
+            value.protected_region ? TRUE : FALSE);
+        if (error == A_Err_NONE) {
+          error = marker_suite->AEGP_SetMarkerDuration(marker, &duration);
+        }
+        if (error == A_Err_NONE) {
+          error = marker_suite->AEGP_SetMarkerLabel(marker, value.label_id);
+        }
+        return error;
+      };
+
+      if (!write) {
+        const std::uint64_t start = std::min<std::uint64_t>(
+            command.offset, static_cast<std::uint64_t>(marker_count));
+        const std::uint64_t end = std::min<std::uint64_t>(
+            static_cast<std::uint64_t>(marker_count), start + command.limit);
+        std::ostringstream output;
+        output << "{\"hasMore\":"
+               << (end < static_cast<std::uint64_t>(marker_count)
+                    ? "true" : "false")
+               << ",\"limit\":" << command.limit << ",\"markers\":[";
+        std::optional<A_Time> previous;
+        for (std::uint64_t index = start; index < end; ++index) {
+          if (budget_expired()) {
+            return HostNativeMediaResult::failure(
+                "DEADLINE_EXCEEDED", "marker list traversal budget elapsed");
+          }
+          A_Time time{};
+          StreamValueOwner value(stream_suite.get());
+          if (keyframe_suite->AEGP_GetKeyframeTime(
+                  marker_stream.get(), static_cast<A_long>(index),
+                  AEGP_LTimeMode_CompTime, &time) != A_Err_NONE
+              || time.scale <= 0
+              || keyframe_suite->AEGP_GetNewKeyframeValue(
+                  plugin_id_, marker_stream.get(), static_cast<A_long>(index),
+                  value.out()) != A_Err_NONE) {
+            return HostNativeMediaResult::failure(
+                "CAPABILITY_FAILED", "marker list readback failed");
+          }
+          value.mark_initialized();
+          if (value.value().val.markerP == nullptr
+              || (previous.has_value()
+                  && aemcp::native::canonical_seconds_rational(
+                      previous->value,
+                      static_cast<std::uint32_t>(previous->scale))
+                      == aemcp::native::canonical_seconds_rational(
+                          time.value, static_cast<std::uint32_t>(time.scale)))) {
+            return HostNativeMediaResult::failure(
+                "CAPABILITY_FAILED", "marker times are not strictly ordered");
+          }
+          previous = time;
+          const auto snapshot = marker_snapshot(
+              value.value().val.markerP, time, static_cast<A_long>(index));
+          if (!snapshot) {
+            return HostNativeMediaResult::failure(
+                "CAPABILITY_FAILED", "marker state is unrepresentable");
+          }
+          if (index != start) output << ',';
+          output << *snapshot;
+        }
+        output << "],\"nextOffset\":";
+        if (end < static_cast<std::uint64_t>(marker_count)) output << end;
+        else output << "null";
+        output << ",\"offset\":" << start
+               << ",\"returned\":" << (end - start)
+               << ",\"target\":" << target_json()
+               << ",\"total\":" << marker_count << "}";
+        return HostNativeMediaResult::success(output.str());
+      }
+
+      const auto existing = find_exact(command.marker_time);
+      if (command.operation == aemcp::native::kMarkerCreateCapability
+          && existing.has_value()) {
+        return HostNativeMediaResult::failure(
+            "PRECONDITION_FAILED", "a marker already exists at the exact time",
+            "params.arguments.time");
+      }
+      if (command.operation != aemcp::native::kMarkerCreateCapability
+          && !existing.has_value()) {
+        return HostNativeMediaResult::failure(
+            "PRECONDITION_FAILED", "no marker exists at the exact time",
+            "params.arguments.markerRef.time");
+      }
+      A_Time exact_time{
+          command.marker_time.value,
+          static_cast<A_u_long>(command.marker_time.scale)};
+      std::optional<std::string> before;
+      StreamValueOwner existing_value(stream_suite.get());
+      if (existing.has_value()) {
+        A_Time actual_time{};
+        if (keyframe_suite->AEGP_GetKeyframeTime(
+                marker_stream.get(), *existing, AEGP_LTimeMode_CompTime,
+                &actual_time) != A_Err_NONE
+            || keyframe_suite->AEGP_GetNewKeyframeValue(
+                plugin_id_, marker_stream.get(), *existing,
+                existing_value.out()) != A_Err_NONE) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "marker before state could not be read");
+        }
+        existing_value.mark_initialized();
+        before = marker_snapshot(
+            existing_value.value().val.markerP, actual_time, *existing);
+        if (!before) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "marker before state is unrepresentable");
+        }
+      }
+
+      MarkerOwner marker(marker_suite.get(), nullptr);
+      A_Err prepare_error = A_Err_NONE;
+      if (command.operation == aemcp::native::kMarkerCreateCapability) {
+        AEGP_MarkerValP raw = nullptr;
+        prepare_error = marker_suite->AEGP_NewMarker(&raw);
+        marker = MarkerOwner(marker_suite.get(), raw);
+        if (prepare_error == A_Err_NONE
+            && command.marker_value.has_value()) {
+          prepare_error = apply_complete_marker(
+              marker.get(), *command.marker_value);
+        }
+      } else if (command.operation == aemcp::native::kMarkerSetCapability) {
+        AEGP_MarkerValP raw = nullptr;
+        prepare_error = marker_suite->AEGP_DuplicateMarker(
+            existing_value.value().val.markerP, &raw);
+        marker = MarkerOwner(marker_suite.get(), raw);
+        if (prepare_error == A_Err_NONE && command.marker_patch.has_value()) {
+          const auto& patch = *command.marker_patch;
+          if (patch.duration.has_value()) {
+            A_Time duration{patch.duration->value, patch.duration->scale};
+            prepare_error =
+                marker_suite->AEGP_SetMarkerDuration(marker.get(), &duration);
+          }
+          if (prepare_error == A_Err_NONE && patch.comment.has_value()) {
+            prepare_error = set_marker_string(
+                marker.get(), AEGP_MarkerString_COMMENT, *patch.comment);
+          }
+          if (prepare_error == A_Err_NONE && patch.chapter.has_value()) {
+            prepare_error = set_marker_string(
+                marker.get(), AEGP_MarkerString_CHAPTER, *patch.chapter);
+          }
+          if (prepare_error == A_Err_NONE && patch.url.has_value()) {
+            prepare_error = set_marker_string(
+                marker.get(), AEGP_MarkerString_URL, *patch.url);
+          }
+          if (prepare_error == A_Err_NONE && patch.frame_target.has_value()) {
+            prepare_error = set_marker_string(
+                marker.get(), AEGP_MarkerString_FRAME_TARGET,
+                *patch.frame_target);
+          }
+          if (prepare_error == A_Err_NONE && patch.cue_point_name.has_value()) {
+            prepare_error = set_marker_string(
+                marker.get(), AEGP_MarkerString_CUE_POINT_NAME,
+                *patch.cue_point_name);
+          }
+          if (prepare_error == A_Err_NONE
+              && patch.cue_point_parameters.has_value()) {
+            prepare_error = replace_cue_parameters(
+                marker.get(), *patch.cue_point_parameters);
+          }
+          if (prepare_error == A_Err_NONE && patch.navigation.has_value()) {
+            prepare_error = marker_suite->AEGP_SetMarkerFlag(
+                marker.get(), AEGP_MarkerFlag_NAVIGATION,
+                *patch.navigation ? TRUE : FALSE);
+          }
+          if (prepare_error == A_Err_NONE
+              && patch.protected_region.has_value()) {
+            prepare_error = marker_suite->AEGP_SetMarkerFlag(
+                marker.get(), AEGP_MarkerFlag_PROTECT_REGION,
+                *patch.protected_region ? TRUE : FALSE);
+          }
+          if (prepare_error == A_Err_NONE && patch.label_id.has_value()) {
+            prepare_error = marker_suite->AEGP_SetMarkerLabel(
+                marker.get(), *patch.label_id);
+          }
+        }
+        const auto projected = prepare_error == A_Err_NONE
+            ? marker_snapshot(marker.get(), exact_time, *existing)
+            : std::nullopt;
+        if (prepare_error == A_Err_NONE
+            && (!projected || *projected == *before)) {
+          return HostNativeMediaResult::failure(
+              "INVALID_ARGUMENT", "marker patch is a no-op",
+              "params.arguments.patch");
+        }
+      }
+      if (prepare_error != A_Err_NONE
+          || (command.operation != aemcp::native::kMarkerDeleteCapability
+              && marker.get() == nullptr)) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "marker value could not be prepared");
+      }
+      if (utility_suite->AEGP_StartUndoGroup(
+              "ae-mcp: Author marker") != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "could not start the marker Undo group");
+      }
+      UndoGroupOwner undo(utility_suite.get());
+      undo.mark_started();
+      A_Err mutation_error = A_Err_NONE;
+      if (command.operation == aemcp::native::kMarkerCreateCapability) {
+        A_long inserted_index = -1;
+        AEGP_StreamValue2 value{};
+        value.streamH = marker_stream.get();
+        value.val.markerP = marker.get();
+        // Marker streams reject the bulk AddKeyframes transaction's
+        // SetAddKeyframe operation. Adobe's Mangler AEGP sample uses the
+        // marker-supported InsertKeyframe + SetKeyframeValue sequence.
+        mutation_error = keyframe_suite->AEGP_InsertKeyframe(
+            marker_stream.get(), AEGP_LTimeMode_CompTime,
+            &exact_time, &inserted_index);
+        if (mutation_error == A_Err_NONE) {
+          mutation_error = keyframe_suite->AEGP_SetKeyframeValue(
+              marker_stream.get(), inserted_index, &value);
+        }
+      } else if (command.operation == aemcp::native::kMarkerSetCapability) {
+        AEGP_StreamValue2 value{};
+        value.streamH = marker_stream.get();
+        value.val.markerP = marker.get();
+        mutation_error = keyframe_suite->AEGP_SetKeyframeValue(
+            marker_stream.get(), *existing, &value);
+      } else {
+        mutation_error = keyframe_suite->AEGP_DeleteKeyframe(
+            marker_stream.get(), *existing);
+      }
+      const A_Err undo_error = undo.finish();
+      A_long after_count = 0;
+      if (mutation_error != A_Err_NONE || undo_error != A_Err_NONE
+          || keyframe_suite->AEGP_GetStreamNumKFs(
+              marker_stream.get(), &after_count) != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "marker mutation may have occurred but Undo close or readback failed");
+      }
+      const A_long expected_count =
+          command.operation == aemcp::native::kMarkerCreateCapability
+          ? marker_count + 1
+          : command.operation == aemcp::native::kMarkerDeleteCapability
+              ? marker_count - 1 : marker_count;
+      if (after_count != expected_count) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "marker count did not match the mutation");
+      }
+      marker_count = after_count;
+      const auto after_index = find_exact(command.marker_time);
+      if (command.operation == aemcp::native::kMarkerDeleteCapability) {
+        if (after_index.has_value()) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "deleted marker identity remains present");
+        }
+        return HostNativeMediaResult::success(
+            "{\"after\":null,\"before\":" + *before + ",\"changed\":true}");
+      }
+      if (!after_index.has_value()) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "marker identity was not preserved after mutation");
+      }
+      A_Time after_time{};
+      StreamValueOwner after_value(stream_suite.get());
+      if (keyframe_suite->AEGP_GetKeyframeTime(
+              marker_stream.get(), *after_index, AEGP_LTimeMode_CompTime,
+              &after_time) != A_Err_NONE
+          || !exact_equal(after_time, command.marker_time)
+          || keyframe_suite->AEGP_GetNewKeyframeValue(
+              plugin_id_, marker_stream.get(), *after_index,
+              after_value.out()) != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "marker exact-time readback failed");
+      }
+      after_value.mark_initialized();
+      const auto after = marker_snapshot(
+          after_value.value().val.markerP, after_time, *after_index);
+      if (!after || (before.has_value() && *after == *before)) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "marker after state did not verify a changed stable identity");
+      }
+      return HostNativeMediaResult::success(
+          "{\"after\":" + *after + ",\"before\":"
+          + (before.has_value() ? *before : "null") + ",\"changed\":true}");
+    }
+
+    if (command.operation == aemcp::native::kShapeLayerCreateCapability
+        || command.operation == aemcp::native::kShapeGroupsListCapability
+        || command.operation == aemcp::native::kShapeGroupCreateCapability
+        || command.operation == aemcp::native::kShapePathSetCapability
+        || command.operation == aemcp::native::kShapeFillStyleSetCapability
+        || command.operation == aemcp::native::kShapeStrokeStyleSetCapability
+        || command.operation == aemcp::native::kShapeGroupReorderCapability) {
+      SuiteLease<AEGP_ProjSuite6> project_suite(
+          basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+      SuiteLease<AEGP_ItemSuite9> item_suite(
+          basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+      SuiteLease<AEGP_CompSuite12> comp_suite(
+          basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+      SuiteLease<AEGP_LayerSuite9> layer_suite(
+          basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+      SuiteLease<AEGP_MemorySuite1> memory_suite(
+          basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+      SuiteLease<AEGP_StreamSuite6> stream_suite(
+          basic_, kAEGPStreamSuite, kAEGPStreamSuiteVersion6);
+      SuiteLease<AEGP_DynamicStreamSuite4> dynamic_suite(
+          basic_, kAEGPDynamicStreamSuite, kAEGPDynamicStreamSuiteVersion4);
+      SuiteLease<AEGP_KeyframeSuite5> keyframe_suite(
+          basic_, kAEGPKeyframeSuite, kAEGPKeyframeSuiteVersion5);
+      SuiteLease<AEGP_UtilitySuite6> utility_suite(
+          basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+      SuiteLease<AEGP_MaskOutlineSuite3> outline_suite(
+          basic_, kAEGPMaskOutlineSuite, kAEGPMaskOutlineSuiteVersion3);
+      if (project_suite.get() == nullptr || item_suite.get() == nullptr
+          || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+          || memory_suite.get() == nullptr || stream_suite.get() == nullptr
+          || dynamic_suite.get() == nullptr || keyframe_suite.get() == nullptr
+          || utility_suite.get() == nullptr || outline_suite.get() == nullptr) {
+        return HostNativeMediaResult::failure(
+            "NATIVE_UNSUPPORTED", "required proven shape suites are unavailable");
+      }
+
+      if (command.operation == aemcp::native::kShapeLayerCreateCapability) {
+        const auto utf16_name = utf16_layer_name(command.name);
+        const auto open = observe_open_project(
+            project_suite.get(), item_suite.get(), memory_suite.get());
+        const auto composition_id =
+            command.composition_locator.has_value()
+            ? graph_.resolve_composition(
+                *command.composition_locator,
+                command.host_instance_id,
+                command.session_id)
+            : std::nullopt;
+        const auto composition_item = open.has_value()
+                && composition_id.has_value()
+            ? find_project_item(
+                item_suite.get(), open->project, open->root,
+                *composition_id, work_deadline)
+            : std::nullopt;
+        AEGP_CompH composition = nullptr;
+        A_long before_count = 0;
+        if (!utf16_name || !composition_item
+            || comp_suite->AEGP_GetCompFromItem(
+                *composition_item, &composition) != A_Err_NONE
+            || composition == nullptr
+            || layer_suite->AEGP_GetCompNumLayers(
+                composition, &before_count) != A_Err_NONE
+            || before_count < 0) {
+          return HostNativeMediaResult::failure(
+              composition_id.has_value() ? "CAPABILITY_FAILED" : "STALE_LOCATOR",
+              "shape layer composition or before state could not be resolved",
+              "params.arguments.compositionLocator");
+        }
+        if (utility_suite->AEGP_StartUndoGroup(
+                "ae-mcp: Create shape layer") != A_Err_NONE) {
+          return HostNativeMediaResult::failure(
+              "CAPABILITY_FAILED", "could not start the shape layer Undo group");
+        }
+        UndoGroupOwner undo(utility_suite.get());
+        undo.mark_started();
+        AEGP_LayerH layer = nullptr;
+        A_Err mutation_error =
+            comp_suite->AEGP_CreateVectorLayerInComp(composition, &layer);
+        if (mutation_error == A_Err_NONE && layer != nullptr) {
+          mutation_error =
+              layer_suite->AEGP_SetLayerName(layer, utf16_name->data());
+        }
+        const A_Err undo_error = undo.finish();
+        A_long after_count = 0;
+        A_long layer_index = -1;
+        AEGP_LayerIDVal layer_id = 0;
+        std::string name_error;
+        const auto actual_name = layer != nullptr
+            ? read_effective_layer_name(
+                layer_suite.get(), item_suite.get(), memory_suite.get(),
+                plugin_id_, layer, name_error)
+            : std::nullopt;
+        if (mutation_error != A_Err_NONE || undo_error != A_Err_NONE
+            || layer == nullptr
+            || layer_suite->AEGP_GetCompNumLayers(
+                composition, &after_count) != A_Err_NONE
+            || after_count != before_count + 1
+            || layer_suite->AEGP_GetLayerIndex(
+                layer, &layer_index) != A_Err_NONE
+            || layer_index < 0
+            || layer_suite->AEGP_GetLayerID(layer, &layer_id) != A_Err_NONE
+            || layer_id == 0 || !actual_name || *actual_name != command.name) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "shape layer may have been created but exact readback failed");
+        }
+        bool invalidated = false;
+        try {
+          invalidated = graph_.invalidate_project();
+        } catch (...) {
+          invalidated = false;
+        }
+        if (!invalidated) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "shape layer was created but fresh locators could not be issued");
+        }
+        const ObjectLocator fresh_composition = graph_.item_locator(
+            *composition_id, true,
+            command.host_instance_id, command.session_id);
+        const ObjectLocator fresh_layer = graph_.layer_locator(
+            *composition_id, layer_id,
+            command.host_instance_id, command.session_id);
+        return HostNativeMediaResult::success(
+            "{\"changed\":true,\"compositionLocator\":"
+            + locator_json(fresh_composition)
+            + ",\"layerCountAfter\":" + std::to_string(after_count)
+            + ",\"layerCountBefore\":" + std::to_string(before_count)
+            + ",\"layerLocator\":" + locator_json(fresh_layer)
+            + ",\"name\":" + quoted(*actual_name)
+            + ",\"stackIndex\":" + std::to_string(layer_index + 1) + "}");
+      }
+
+      if (!command.layer_locator.has_value()) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "shape operation requires layerLocator",
+            "params.arguments.layerLocator");
+      }
+      const auto resolved = resolve_layer(
+          project_suite.get(), item_suite.get(), comp_suite.get(),
+          layer_suite.get(), memory_suite.get(), *command.layer_locator,
+          command.host_instance_id, command.session_id, work_deadline);
+      if (!resolved.has_value()) {
+        return HostNativeMediaResult::failure(
+            "STALE_LOCATOR", "shape layer locator is stale",
+            "params.arguments.layerLocator");
+      }
+      A_Time sample_time{};
+      if (layer_suite->AEGP_GetLayerCurrentTime(
+              resolved->layer, AEGP_LTimeMode_CompTime, &sample_time)
+              != A_Err_NONE
+          || sample_time.scale <= 0) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "shape sample time could not be read");
+      }
+      const auto root_contents = [&]() -> std::optional<StreamRefOwner> {
+        AEGP_StreamRefH root_raw = nullptr;
+        AEGP_StreamRefH contents_raw = nullptr;
+        if (dynamic_suite->AEGP_GetNewStreamRefForLayer(
+                plugin_id_, resolved->layer, &root_raw) != A_Err_NONE
+            || root_raw == nullptr) {
+          return std::nullopt;
+        }
+        StreamRefOwner root(stream_suite.get(), root_raw);
+        if (dynamic_suite->AEGP_GetNewStreamRefByMatchname(
+                plugin_id_, root.get(), "ADBE Root Vectors Group",
+                &contents_raw) != A_Err_NONE
+            || contents_raw == nullptr) {
+          return std::nullopt;
+        }
+        StreamRefOwner contents(stream_suite.get(), contents_raw);
+        AEGP_StreamGroupingType grouping = AEGP_StreamGroupingType_NONE;
+        if (dynamic_suite->AEGP_GetStreamGroupingType(
+                contents.get(), &grouping) != A_Err_NONE
+            || grouping != AEGP_StreamGroupingType_INDEXED_GROUP) {
+          return std::nullopt;
+        }
+        return contents;
+      };
+      const auto unique_child = [&](AEGP_StreamRefH parent,
+                                    std::string_view match_name)
+          -> std::optional<StreamRefOwner> {
+        A_long count = 0;
+        if (dynamic_suite->AEGP_GetNumStreamsInGroup(parent, &count) != A_Err_NONE
+            || count < 0 || count > 512) {
+          return std::nullopt;
+        }
+        std::optional<StreamRefOwner> found;
+        for (A_long index = 0; index < count; ++index) {
+          AEGP_StreamRefH raw = nullptr;
+          if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
+                  plugin_id_, parent, index, &raw) != A_Err_NONE
+              || raw == nullptr) {
+            return std::nullopt;
+          }
+          StreamRefOwner child(stream_suite.get(), raw);
+          std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> actual{};
+          if (dynamic_suite->AEGP_GetMatchName(child.get(), actual.data())
+                  != A_Err_NONE
+              || std::find(actual.begin(), actual.end(), '\0') == actual.end()) {
+            return std::nullopt;
+          }
+          if (std::string_view(actual.data()) == match_name) {
+            if (found.has_value()) return std::nullopt;
+            found.emplace(std::move(child));
+          }
+        }
+        return found;
+      };
+      const auto path_data = [&](AEGP_StreamRefH path_stream)
+          -> std::optional<std::pair<std::string,
+              std::vector<aemcp::native::NativeMediaMaskVertex>>> {
+        StreamValueOwner value(stream_suite.get());
+        if (stream_suite->AEGP_GetNewStreamValue(
+                plugin_id_, path_stream, AEGP_LTimeMode_CompTime,
+                &sample_time, TRUE, value.out()) != A_Err_NONE) {
+          return std::nullopt;
+        }
+        value.mark_initialized();
+        if (value.value().val.mask == nullptr) return std::nullopt;
+        A_Boolean open = FALSE;
+        A_long segments = 0;
+        if (outline_suite->AEGP_IsMaskOutlineOpen(
+                value.value().val.mask, &open) != A_Err_NONE
+            || outline_suite->AEGP_GetMaskOutlineNumSegments(
+                value.value().val.mask, &segments) != A_Err_NONE
+            || segments < 1 || segments > 128) {
+          return std::nullopt;
+        }
+        const A_long count = open ? segments + 1 : segments;
+        if (count < (open ? 2 : 3) || count > 128) return std::nullopt;
+        std::vector<aemcp::native::NativeMediaMaskVertex> vertices;
+        std::ostringstream json;
+        json << "{\"closed\":" << (open ? "false" : "true")
+             << ",\"vertices\":[";
+        for (A_long index = 0; index < count; ++index) {
+          AEGP_MaskVertex vertex{};
+          if (outline_suite->AEGP_GetMaskOutlineVertexInfo(
+                  value.value().val.mask, index, &vertex) != A_Err_NONE) {
+            return std::nullopt;
+          }
+          const auto x = decimal_string(vertex.x);
+          const auto y = decimal_string(vertex.y);
+          const auto in_x = decimal_string(vertex.tan_in_x);
+          const auto in_y = decimal_string(vertex.tan_in_y);
+          const auto out_x = decimal_string(vertex.tan_out_x);
+          const auto out_y = decimal_string(vertex.tan_out_y);
+          if (!x || !y || !in_x || !in_y || !out_x || !out_y) {
+            return std::nullopt;
+          }
+          vertices.push_back(
+              {*x, *y, *in_x, *in_y, *out_x, *out_y});
+          if (index != 0) json << ',';
+          json << "{\"inTangent\":[" << quoted(*in_x) << ',' << quoted(*in_y)
+               << "],\"outTangent\":[" << quoted(*out_x) << ','
+               << quoted(*out_y) << "],\"position\":[" << quoted(*x) << ','
+               << quoted(*y) << "]}";
+        }
+        json << "]}";
+        return std::pair{json.str(), std::move(vertices)};
+      };
+      const auto rgba8 = [](const AEGP_ColorVal& color) {
+        const auto channel = [](A_FpLong value) {
+          return static_cast<std::uint16_t>(std::lround(
+              std::clamp(static_cast<double>(value), 0.0, 1.0) * 255.0));
+        };
+        return aemcp::native::CompositionLayerCreateColor{
+            channel(color.redF), channel(color.greenF),
+            channel(color.blueF), channel(color.alphaF)};
+      };
+      const auto stable_group_token = [](std::string_view name) {
+        std::uint32_t hash = 2166136261U;
+        for (const char character : name) {
+          hash ^= static_cast<std::uint8_t>(character);
+          hash *= 16777619U;
+        }
+        const std::int64_t signed_hash =
+            hash <= static_cast<std::uint32_t>(
+                        std::numeric_limits<std::int32_t>::max())
+            ? static_cast<std::int64_t>(hash)
+            : static_cast<std::int64_t>(hash) - (INT64_C(1) << 32);
+        return static_cast<std::int32_t>(signed_hash);
+      };
+      struct ShapeSnapshot {
+        std::uint64_t index{0};
+        std::int32_t stream_id{0};
+        std::string name;
+        std::string path_json;
+        bool closed{false};
+        std::vector<aemcp::native::NativeMediaMaskVertex> vertices;
+        aemcp::native::ShapeFillStyle fill;
+        aemcp::native::ShapeStrokeStyle stroke;
+        A_long fill_index{-1};
+        A_long stroke_index{-1};
+        std::string json;
+      };
+      std::string read_group_stage = "not-started";
+      A_Err read_group_error = A_Err_NONE;
+      const auto read_leaf = [&](AEGP_StreamRefH stream,
+                                 AEGP_StreamType expected,
+                                 std::string_view label)
+          -> std::optional<AEGP_StreamValue2> {
+        A_long keyframes = 0;
+        AEGP_StreamType type = AEGP_StreamType_NO_DATA;
+        read_group_stage = std::string(label) + "-type";
+        read_group_error = stream_suite->AEGP_GetStreamType(stream, &type);
+        if (read_group_error != A_Err_NONE || type != expected) {
+          return std::nullopt;
+        }
+        read_group_stage = std::string(label) + "-keyframes";
+        read_group_error =
+            keyframe_suite->AEGP_GetStreamNumKFs(stream, &keyframes);
+        if (read_group_error != A_Err_NONE || keyframes != 0) {
+          return std::nullopt;
+        }
+        AEGP_StreamValue2 value{};
+        read_group_stage = std::string(label) + "-value";
+        read_group_error = stream_suite->AEGP_GetNewStreamValue(
+            plugin_id_, stream, AEGP_LTimeMode_CompTime,
+            &sample_time, TRUE, &value);
+        if (read_group_error != A_Err_NONE) {
+          return std::nullopt;
+        }
+        return value;
+      };
+      const auto read_group = [&](std::uint64_t group_index)
+          -> std::optional<ShapeSnapshot> {
+        read_group_error = A_Err_NONE;
+        read_group_stage = "root-contents";
+        auto contents = root_contents();
+        if (!contents) return std::nullopt;
+        A_long group_count = 0;
+        read_group_stage = "root-count";
+        read_group_error = dynamic_suite->AEGP_GetNumStreamsInGroup(
+            contents->get(), &group_count);
+        if (read_group_error != A_Err_NONE) return std::nullopt;
+        read_group_stage = "group-index-bound";
+        if (group_index < 1
+            || group_index > static_cast<std::uint64_t>(group_count)) {
+          return std::nullopt;
+        }
+        AEGP_StreamRefH group_raw = nullptr;
+        read_group_stage = "group-ref";
+        read_group_error = dynamic_suite->AEGP_GetNewStreamRefByIndex(
+            plugin_id_, contents->get(),
+            static_cast<A_long>(group_index - 1), &group_raw);
+        if (read_group_error != A_Err_NONE || group_raw == nullptr) {
+          return std::nullopt;
+        }
+        StreamRefOwner group(stream_suite.get(), group_raw);
+        std::array<A_char, AEGP_MAX_STREAM_MATCH_NAME_SIZE> group_match{};
+        std::int32_t stream_id = 0;
+        AEGP_MemHandle name_handle = nullptr;
+        read_group_stage = "group-match-name";
+        read_group_error =
+            dynamic_suite->AEGP_GetMatchName(group.get(), group_match.data());
+        if (read_group_error != A_Err_NONE
+            || std::string_view(group_match.data()) != "ADBE Vector Group") {
+          return std::nullopt;
+        }
+        read_group_stage = "group-name";
+        read_group_error = stream_suite->AEGP_GetStreamName(
+            plugin_id_, group.get(), FALSE, &name_handle);
+        if (read_group_error != A_Err_NONE || name_handle == nullptr) {
+          return std::nullopt;
+        }
+        MemHandleOwner name_owner(memory_suite.get(), name_handle);
+        read_group_stage = "group-name-utf8";
+        const auto name = name_owner.utf8();
+        if (!name) return std::nullopt;
+        // AE 25.6 returns success plus zero from AEGP_GetUniqueStreamID for
+        // both top-level vector groups and their authored descendants. The
+        // package does not expose group renaming, so a collision-checked token
+        // over the immutable UTF-8 group name supplies the stable int32
+        // identity required to detect a stale index after reordering.
+        read_group_stage = "group-identity-token";
+        stream_id = stable_group_token(*name);
+        read_group_stage = "vector-contents";
+        auto vector_contents =
+            unique_child(group.get(), "ADBE Vectors Group");
+        if (!vector_contents) return std::nullopt;
+        A_long authored_count = 0;
+        read_group_stage = "authored-count";
+        read_group_error = dynamic_suite->AEGP_GetNumStreamsInGroup(
+            vector_contents->get(), &authored_count);
+        if (read_group_error != A_Err_NONE || authored_count != 3) {
+          return std::nullopt;
+        }
+        read_group_stage = "authored-groups";
+        auto path_group = unique_child(
+            vector_contents->get(), "ADBE Vector Shape - Group");
+        auto fill_group = unique_child(
+            vector_contents->get(), "ADBE Vector Graphic - Fill");
+        auto stroke_group = unique_child(
+            vector_contents->get(), "ADBE Vector Graphic - Stroke");
+        if (!path_group || !fill_group || !stroke_group) return std::nullopt;
+        read_group_stage = "authored-leaves";
+        auto path_leaf =
+            unique_child(path_group->get(), "ADBE Vector Shape");
+        auto fill_color =
+            unique_child(fill_group->get(), "ADBE Vector Fill Color");
+        auto fill_opacity =
+            unique_child(fill_group->get(), "ADBE Vector Fill Opacity");
+        auto stroke_color =
+            unique_child(stroke_group->get(), "ADBE Vector Stroke Color");
+        auto stroke_opacity =
+            unique_child(stroke_group->get(), "ADBE Vector Stroke Opacity");
+        auto stroke_width =
+            unique_child(stroke_group->get(), "ADBE Vector Stroke Width");
+        if (!path_leaf || !fill_color || !fill_opacity || !stroke_color
+            || !stroke_opacity || !stroke_width) {
+          return std::nullopt;
+        }
+        read_group_stage = "path-data";
+        const auto path = path_data(path_leaf->get());
+        if (!path) return std::nullopt;
+        auto fill_color_value =
+            read_leaf(fill_color->get(), AEGP_StreamType_COLOR, "fill-color");
+        if (!fill_color_value) return std::nullopt;
+        auto fill_opacity_value =
+            read_leaf(
+                fill_opacity->get(), AEGP_StreamType_OneD, "fill-opacity");
+        if (!fill_opacity_value) {
+          (void)stream_suite->AEGP_DisposeStreamValue(&*fill_color_value);
+          return std::nullopt;
+        }
+        auto stroke_color_value =
+            read_leaf(
+                stroke_color->get(), AEGP_StreamType_COLOR, "stroke-color");
+        if (!stroke_color_value) {
+          (void)stream_suite->AEGP_DisposeStreamValue(&*fill_color_value);
+          (void)stream_suite->AEGP_DisposeStreamValue(&*fill_opacity_value);
+          return std::nullopt;
+        }
+        auto stroke_opacity_value =
+            read_leaf(
+                stroke_opacity->get(), AEGP_StreamType_OneD, "stroke-opacity");
+        if (!stroke_opacity_value) {
+          (void)stream_suite->AEGP_DisposeStreamValue(&*fill_color_value);
+          (void)stream_suite->AEGP_DisposeStreamValue(&*fill_opacity_value);
+          (void)stream_suite->AEGP_DisposeStreamValue(&*stroke_color_value);
+          return std::nullopt;
+        }
+        auto stroke_width_value =
+            read_leaf(
+                stroke_width->get(), AEGP_StreamType_OneD, "stroke-width");
+        if (!stroke_width_value) {
+          (void)stream_suite->AEGP_DisposeStreamValue(&*fill_color_value);
+          (void)stream_suite->AEGP_DisposeStreamValue(&*fill_opacity_value);
+          (void)stream_suite->AEGP_DisposeStreamValue(&*stroke_color_value);
+          (void)stream_suite->AEGP_DisposeStreamValue(&*stroke_opacity_value);
+          return std::nullopt;
+        }
+        const auto dispose_leaf_values = [&] {
+          if (fill_color_value) {
+            (void)stream_suite->AEGP_DisposeStreamValue(&*fill_color_value);
+          }
+          if (fill_opacity_value) {
+            (void)stream_suite->AEGP_DisposeStreamValue(&*fill_opacity_value);
+          }
+          if (stroke_color_value) {
+            (void)stream_suite->AEGP_DisposeStreamValue(&*stroke_color_value);
+          }
+          if (stroke_opacity_value) {
+            (void)stream_suite->AEGP_DisposeStreamValue(&*stroke_opacity_value);
+          }
+          if (stroke_width_value) {
+            (void)stream_suite->AEGP_DisposeStreamValue(&*stroke_width_value);
+          }
+        };
+        read_group_stage = "style-decimals";
+        const auto fill_opacity_decimal =
+            decimal_string(fill_opacity_value->val.one_d);
+        const auto stroke_opacity_decimal =
+            decimal_string(stroke_opacity_value->val.one_d);
+        const auto stroke_width_decimal =
+            decimal_string(stroke_width_value->val.one_d);
+        AEGP_DynStreamFlags fill_flags = 0;
+        AEGP_DynStreamFlags stroke_flags = 0;
+        A_long fill_index = -1;
+        A_long stroke_index = -1;
+        if (!fill_opacity_decimal || !stroke_opacity_decimal
+            || !stroke_width_decimal) {
+          dispose_leaf_values();
+          return std::nullopt;
+        }
+        read_group_stage = "fill-flags";
+        read_group_error = dynamic_suite->AEGP_GetDynamicStreamFlags(
+            fill_group->get(), &fill_flags);
+        if (read_group_error != A_Err_NONE) {
+          dispose_leaf_values();
+          return std::nullopt;
+        }
+        read_group_stage = "stroke-flags";
+        read_group_error = dynamic_suite->AEGP_GetDynamicStreamFlags(
+            stroke_group->get(), &stroke_flags);
+        if (read_group_error != A_Err_NONE) {
+          dispose_leaf_values();
+          return std::nullopt;
+        }
+        read_group_stage = "fill-index";
+        read_group_error = dynamic_suite->AEGP_GetStreamIndexInParent(
+            fill_group->get(), &fill_index);
+        if (read_group_error != A_Err_NONE) {
+          dispose_leaf_values();
+          return std::nullopt;
+        }
+        read_group_stage = "stroke-index";
+        read_group_error = dynamic_suite->AEGP_GetStreamIndexInParent(
+            stroke_group->get(), &stroke_index);
+        if (read_group_error != A_Err_NONE) {
+          dispose_leaf_values();
+          return std::nullopt;
+        }
+        read_group_stage = "style-index-bound";
+        if (fill_index < 0 || stroke_index < 0 || fill_index == stroke_index) {
+          dispose_leaf_values();
+          return std::nullopt;
+        }
+        ShapeSnapshot snapshot;
+        snapshot.index = group_index;
+        snapshot.stream_id = stream_id;
+        snapshot.name = *name;
+        snapshot.path_json = path->first;
+        snapshot.closed = snapshot.path_json.find("\"closed\":true") !=
+            std::string::npos;
+        snapshot.vertices = path->second;
+        snapshot.fill = {
+            (fill_flags & AEGP_DynStreamFlag_ACTIVE_EYEBALL) != 0,
+            rgba8(fill_color_value->val.color),
+            *fill_opacity_decimal};
+        snapshot.stroke = {
+            (stroke_flags & AEGP_DynStreamFlag_ACTIVE_EYEBALL) != 0,
+            rgba8(stroke_color_value->val.color),
+            *stroke_opacity_decimal,
+            *stroke_width_decimal,
+            stroke_index < fill_index};
+        snapshot.fill_index = fill_index;
+        snapshot.stroke_index = stroke_index;
+        dispose_leaf_values();
+        read_group_stage = "serialize";
+        const auto color_json = [&](const auto& color) {
+          return std::string("{\"alpha\":") + std::to_string(color.alpha)
+              + ",\"blue\":" + std::to_string(color.blue)
+              + ",\"green\":" + std::to_string(color.green)
+              + ",\"red\":" + std::to_string(color.red) + "}";
+        };
+        const std::string ref = "{\"groupIndex\":"
+            + std::to_string(group_index) + ",\"layerLocator\":"
+            + locator_json(*command.layer_locator) + ",\"streamId\":"
+            + std::to_string(stream_id) + "}";
+        snapshot.json = "{\"fill\":{\"color\":" + color_json(snapshot.fill.color)
+            + ",\"enabled\":"
+            + (snapshot.fill.enabled ? "true" : "false")
+            + ",\"opacityPercent\":" + quoted(snapshot.fill.opacity_percent)
+            + "},\"name\":" + quoted(snapshot.name)
+            + ",\"path\":" + snapshot.path_json + ",\"ref\":" + ref
+            + ",\"stroke\":{\"color\":" + color_json(snapshot.stroke.color)
+            + ",\"enabled\":"
+            + (snapshot.stroke.enabled ? "true" : "false")
+            + ",\"opacityPercent\":" + quoted(snapshot.stroke.opacity_percent)
+            + ",\"strokeOverFill\":"
+            + (snapshot.stroke.stroke_over_fill ? "true" : "false")
+            + ",\"widthPixels\":" + quoted(snapshot.stroke.width_pixels)
+            + "}}";
+        read_group_stage = "complete";
+        return snapshot;
+      };
+      const auto group_count = [&]() -> std::optional<A_long> {
+        auto contents = root_contents();
+        A_long count = 0;
+        if (!contents
+            || dynamic_suite->AEGP_GetNumStreamsInGroup(
+                contents->get(), &count) != A_Err_NONE
+            || count < 0 || count > 50) {
+          return std::nullopt;
+        }
+        return count;
+      };
+      const auto read_group_stack =
+          [&]() -> std::optional<std::vector<ShapeSnapshot>> {
+        const auto count = group_count();
+        if (!count) return std::nullopt;
+        std::vector<ShapeSnapshot> snapshots;
+        snapshots.reserve(static_cast<std::size_t>(*count));
+        std::unordered_map<std::int32_t, std::string> identities;
+        for (A_long index = 0; index < *count; ++index) {
+          auto snapshot =
+              read_group(static_cast<std::uint64_t>(index + 1));
+          if (!snapshot
+              || !identities.emplace(snapshot->stream_id, snapshot->name)
+                      .second) {
+            return std::nullopt;
+          }
+          snapshots.push_back(std::move(*snapshot));
+        }
+        return snapshots;
+      };
+      if (command.operation == aemcp::native::kShapeGroupsListCapability) {
+        const auto stack = read_group_stack();
+        if (!stack) {
+          return HostNativeMediaResult::failure(
+              "UNREPRESENTABLE_SHAPE_GROUP",
+              "shape contents are missing, exceed the package bound, or have "
+              "duplicate stable identities");
+        }
+        const auto count = static_cast<std::uint64_t>(stack->size());
+        const std::uint64_t start = std::min<std::uint64_t>(
+            command.offset, count);
+        const std::uint64_t end = std::min<std::uint64_t>(
+            count, start + command.limit);
+        std::ostringstream output;
+        output << "{\"groups\":[";
+        for (std::uint64_t index = start; index < end; ++index) {
+          if (index != start) output << ',';
+          output << (*stack)[static_cast<std::size_t>(index)].json;
+        }
+        output << "],\"hasMore\":"
+               << (end < count ? "true" : "false")
+               << ",\"layerLocator\":" << locator_json(*command.layer_locator)
+               << ",\"limit\":" << command.limit << ",\"nextOffset\":";
+        if (end < count) output << end;
+        else output << "null";
+        output << ",\"offset\":" << start
+               << ",\"returned\":" << (end - start)
+               << ",\"total\":" << count << "}";
+        return HostNativeMediaResult::success(output.str());
+      }
+
+      const auto before_stack = read_group_stack();
+      if (!before_stack) {
+        return HostNativeMediaResult::failure(
+            "UNREPRESENTABLE_SHAPE_GROUP",
+            "shape group stack is not bounded or has duplicate stable "
+            "identities");
+      }
+      const auto before_count = std::optional<A_long>(
+          static_cast<A_long>(before_stack->size()));
+      std::optional<ShapeSnapshot> before;
+      if (command.shape_group_ref.has_value()) {
+        const auto group_index = command.shape_group_ref->group_index;
+        if (group_index < 1 || group_index > before_stack->size()) {
+          return HostNativeMediaResult::failure(
+              "STALE_LOCATOR", "shape group index no longer exists",
+              "params.arguments.groupRef.groupIndex");
+        }
+        before = (*before_stack)[static_cast<std::size_t>(group_index - 1U)];
+        if (before->stream_id != command.shape_group_ref->stream_id) {
+          return HostNativeMediaResult::failure(
+              "STALE_LOCATOR", "shape group index no longer matches streamId",
+              "params.arguments.groupRef.streamId");
+        }
+      }
+      if (command.operation == aemcp::native::kShapeGroupCreateCapability) {
+        const std::int32_t requested_token = stable_group_token(command.name);
+        for (const ShapeSnapshot& group : *before_stack) {
+          if (group.name == command.name || group.stream_id == requested_token) {
+            return HostNativeMediaResult::failure(
+                "INVALID_ARGUMENT",
+                "shape group name must have a unique stable identity",
+                "params.arguments.name");
+          }
+        }
+      }
+      const auto paths_equal = [&](const ShapeSnapshot& actual) {
+        if (!command.mask_closed.has_value()
+            || actual.closed != *command.mask_closed
+            || actual.vertices.size() != command.mask_vertices.size()) {
+          return false;
+        }
+        for (std::size_t index = 0; index < actual.vertices.size(); ++index) {
+          const auto& left = actual.vertices[index];
+          const auto& right = command.mask_vertices[index];
+          if (!path_decimal_values_equal(left.position_x, right.position_x)
+              || !path_decimal_values_equal(left.position_y, right.position_y)
+              || !path_decimal_values_equal(
+                  left.in_tangent_x, right.in_tangent_x)
+              || !path_decimal_values_equal(
+                  left.in_tangent_y, right.in_tangent_y)
+              || !path_decimal_values_equal(
+                  left.out_tangent_x, right.out_tangent_x)
+              || !path_decimal_values_equal(
+                  left.out_tangent_y, right.out_tangent_y)) {
+            return false;
+          }
+        }
+        return true;
+      };
+      if (command.operation == aemcp::native::kShapePathSetCapability
+          && paths_equal(*before)) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "shape path already matches the request",
+            "params.arguments.path");
+      }
+      if (command.operation == aemcp::native::kShapeFillStyleSetCapability
+          && before->fill.enabled == command.shape_fill->enabled
+          && before->fill.color == command.shape_fill->color
+          && decimal_values_equal(
+              before->fill.opacity_percent,
+              command.shape_fill->opacity_percent)) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "shape fill already matches the request",
+            "params.arguments.fill");
+      }
+      if (command.operation == aemcp::native::kShapeStrokeStyleSetCapability
+          && before->stroke.enabled == command.shape_stroke->enabled
+          && before->stroke.color == command.shape_stroke->color
+          && decimal_values_equal(
+              before->stroke.opacity_percent,
+              command.shape_stroke->opacity_percent)
+          && decimal_values_equal(
+              before->stroke.width_pixels,
+              command.shape_stroke->width_pixels)
+          && before->stroke.stroke_over_fill
+              == command.shape_stroke->stroke_over_fill) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "shape stroke already matches the request",
+            "params.arguments.stroke");
+      }
+      if (command.operation == aemcp::native::kShapeGroupReorderCapability
+          && (command.target_index < 1
+              || command.target_index > static_cast<std::uint64_t>(*before_count))) {
+        return HostNativeMediaResult::failure(
+            "INVALID_ARGUMENT", "targetIndex is outside the shape group stack",
+            "params.arguments.targetIndex");
+      }
+
+      if (utility_suite->AEGP_StartUndoGroup(
+              "ae-mcp: Author shape") != A_Err_NONE) {
+        return HostNativeMediaResult::failure(
+            "CAPABILITY_FAILED", "could not start the shape Undo group");
+      }
+      UndoGroupOwner undo(utility_suite.get());
+      undo.mark_started();
+      A_Err mutation_error = A_Err_NONE;
+      std::string mutation_stage = "shape-structure";
+      std::uint64_t mutated_group_index =
+          command.shape_group_ref.has_value()
+          ? command.shape_group_ref->group_index
+          : static_cast<std::uint64_t>(*before_count) + 1U;
+
+      if (command.operation == aemcp::native::kShapeGroupCreateCapability) {
+        auto contents = root_contents();
+        A_Boolean can_add = FALSE;
+        AEGP_StreamRefH added_raw = nullptr;
+        if (!contents
+            || dynamic_suite->AEGP_CanAddStream(
+                contents->get(), "ADBE Vector Group", &can_add) != A_Err_NONE
+            || !can_add) {
+          mutation_error = A_Err_GENERIC;
+        } else {
+          mutation_error = dynamic_suite->AEGP_AddStream(
+              plugin_id_, contents->get(), "ADBE Vector Group", &added_raw);
+        }
+        StreamRefOwner added(stream_suite.get(), added_raw);
+        const auto name = utf16_layer_name(command.name);
+        if (mutation_error == A_Err_NONE
+            && (!name || added.get() == nullptr
+                || dynamic_suite->AEGP_SetStreamName(
+                    added.get(), name->data()) != A_Err_NONE)) {
+          mutation_error = A_Err_GENERIC;
+        }
+        static constexpr std::array<std::string_view, 3> children{
+            "ADBE Vector Shape - Group",
+            "ADBE Vector Graphic - Fill",
+            "ADBE Vector Graphic - Stroke"};
+        for (const std::string_view match_name : children) {
+          if (mutation_error != A_Err_NONE) break;
+          auto fresh_root = root_contents();
+          AEGP_StreamRefH group_raw = nullptr;
+          if (!fresh_root
+              || dynamic_suite->AEGP_GetNewStreamRefByIndex(
+                  plugin_id_, fresh_root->get(),
+                  static_cast<A_long>(mutated_group_index - 1U),
+                  &group_raw) != A_Err_NONE
+              || group_raw == nullptr) {
+            mutation_error = A_Err_GENERIC;
+            break;
+          }
+          StreamRefOwner fresh_group(stream_suite.get(), group_raw);
+          auto vector_contents =
+              unique_child(fresh_group.get(), "ADBE Vectors Group");
+          A_Boolean child_can_add = FALSE;
+          AEGP_StreamRefH child_raw = nullptr;
+          if (!vector_contents
+              || dynamic_suite->AEGP_CanAddStream(
+                  vector_contents->get(), std::string(match_name).c_str(),
+                  &child_can_add) != A_Err_NONE
+              || !child_can_add
+              || dynamic_suite->AEGP_AddStream(
+                  plugin_id_, vector_contents->get(),
+                  std::string(match_name).c_str(),
+                  &child_raw) != A_Err_NONE
+              || child_raw == nullptr) {
+            mutation_error = A_Err_GENERIC;
+            break;
+          }
+          StreamRefOwner child(stream_suite.get(), child_raw);
+        }
+      }
+
+      const auto reacquire_group_contents = [&]()
+          -> std::optional<StreamRefOwner> {
+        auto root = root_contents();
+        AEGP_StreamRefH group_raw = nullptr;
+        if (!root
+            || dynamic_suite->AEGP_GetNewStreamRefByIndex(
+                plugin_id_, root->get(),
+                static_cast<A_long>(mutated_group_index - 1U),
+                &group_raw) != A_Err_NONE
+            || group_raw == nullptr) {
+          return std::nullopt;
+        }
+        StreamRefOwner group(stream_suite.get(), group_raw);
+        return unique_child(group.get(), "ADBE Vectors Group");
+      };
+      const auto write_path = [&]() -> A_Err {
+        mutation_stage = "path-reacquire";
+        auto contents = reacquire_group_contents();
+        auto path_group = contents
+            ? unique_child(contents->get(), "ADBE Vector Shape - Group")
+            : std::nullopt;
+        auto path_leaf = path_group
+            ? unique_child(path_group->get(), "ADBE Vector Shape")
+            : std::nullopt;
+        if (!path_leaf || !command.mask_closed.has_value()) return A_Err_GENERIC;
+        mutation_stage = "path-get-value";
+        StreamValueOwner value(stream_suite.get());
+        if (stream_suite->AEGP_GetNewStreamValue(
+                plugin_id_, path_leaf->get(), AEGP_LTimeMode_CompTime,
+                &sample_time, TRUE, value.out()) != A_Err_NONE) {
+          return A_Err_GENERIC;
+        }
+        value.mark_initialized();
+        A_long segments = 0;
+        A_Boolean open = FALSE;
+        if (value.value().val.mask == nullptr) {
+          mutation_stage = "path-mask-null";
+          return A_Err_GENERIC;
+        }
+        mutation_stage = "path-is-open";
+        A_Err outline_error = outline_suite->AEGP_IsMaskOutlineOpen(
+            value.value().val.mask, &open);
+        if (outline_error != A_Err_NONE) return outline_error;
+        mutation_stage = "path-get-segments";
+        outline_error = outline_suite->AEGP_GetMaskOutlineNumSegments(
+            value.value().val.mask, &segments);
+        if (outline_error != A_Err_NONE) return outline_error;
+        // AE reports a newly added, still-empty vector shape as -1 segments.
+        // Normalize only that host empty state; any smaller value remains
+        // unrepresentable.
+        if (segments < -1 || segments > 128) {
+          mutation_stage = "path-segment-bound";
+          return A_Err_GENERIC;
+        }
+        A_long vertices = segments <= 0 ? 0 : open ? segments + 1 : segments;
+        const auto target_vertices = command.mask_vertices.size();
+        const auto mutation_plan = aemcp::native::plan_ae_path_vertex_mutation(
+            static_cast<std::size_t>(vertices), open != FALSE,
+            target_vertices, *command.mask_closed);
+        A_Err error = A_Err_NONE;
+        if (mutation_plan.open_before_resize) {
+          mutation_stage = "path-open-before-resize";
+          error = outline_suite->AEGP_SetMaskOutlineOpen(
+              value.value().val.mask, TRUE);
+        }
+        const A_long retained_vertices =
+            static_cast<A_long>(mutation_plan.retained_vertices);
+        for (A_long index = vertices - 1;
+             error == A_Err_NONE && index >= retained_vertices; --index) {
+          mutation_stage = "path-delete-vertex";
+          error = outline_suite->AEGP_DeleteVertex(
+              value.value().val.mask, index);
+        }
+        for (std::size_t index = mutation_plan.retained_vertices;
+             error == A_Err_NONE && index < target_vertices;
+             ++index) {
+          mutation_stage = "path-create-vertex";
+          error = outline_suite->AEGP_CreateVertex(
+              value.value().val.mask, static_cast<A_long>(index));
+        }
+        for (std::size_t index = 0;
+             error == A_Err_NONE && index < target_vertices; ++index) {
+          const auto& source = command.mask_vertices[index];
+          const auto x = decimal_value(source.position_x);
+          const auto y = decimal_value(source.position_y);
+          const auto in_x = decimal_value(source.in_tangent_x);
+          const auto in_y = decimal_value(source.in_tangent_y);
+          const auto out_x = decimal_value(source.out_tangent_x);
+          const auto out_y = decimal_value(source.out_tangent_y);
+          if (!x || !y || !in_x || !in_y || !out_x || !out_y) {
+            mutation_stage = "path-parse-vertex";
+            return A_Err_GENERIC;
+          }
+          const AEGP_MaskVertex vertex{
+              *x, *y, *in_x, *in_y, *out_x, *out_y};
+          mutation_stage = "path-set-vertex";
+          error = outline_suite->AEGP_SetMaskOutlineVertexInfo(
+              value.value().val.mask, static_cast<A_long>(index), &vertex);
+        }
+        if (error == A_Err_NONE && mutation_plan.close_after_resize) {
+          mutation_stage = "path-close-after-resize";
+          error = outline_suite->AEGP_SetMaskOutlineOpen(
+              value.value().val.mask, FALSE);
+        }
+        if (error == A_Err_NONE) {
+          mutation_stage = "path-set-stream-value";
+          error = stream_suite->AEGP_SetStreamValue(
+              plugin_id_, path_leaf->get(), &value.mutable_value());
+        }
+        return error;
+      };
+      const auto set_leaf = [&](AEGP_StreamRefH stream,
+                                AEGP_StreamType expected,
+                                const auto& assign) -> A_Err {
+        A_long keyframes = 0;
+        AEGP_StreamType type = AEGP_StreamType_NO_DATA;
+        StreamValueOwner value(stream_suite.get());
+        if (stream_suite->AEGP_GetStreamType(stream, &type) != A_Err_NONE
+            || type != expected
+            || keyframe_suite->AEGP_GetStreamNumKFs(stream, &keyframes)
+                != A_Err_NONE
+            || keyframes != 0
+            || stream_suite->AEGP_GetNewStreamValue(
+                plugin_id_, stream, AEGP_LTimeMode_CompTime,
+                &sample_time, TRUE, value.out()) != A_Err_NONE) {
+          return A_Err_GENERIC;
+        }
+        value.mark_initialized();
+        assign(value.mutable_value());
+        return stream_suite->AEGP_SetStreamValue(
+            plugin_id_, stream, &value.mutable_value());
+      };
+      const auto write_fill =
+          [&](const aemcp::native::ShapeFillStyle& style) -> A_Err {
+        auto contents = reacquire_group_contents();
+        auto fill = contents
+            ? unique_child(contents->get(), "ADBE Vector Graphic - Fill")
+            : std::nullopt;
+        auto color = fill
+            ? unique_child(fill->get(), "ADBE Vector Fill Color")
+            : std::nullopt;
+        auto opacity = fill
+            ? unique_child(fill->get(), "ADBE Vector Fill Opacity")
+            : std::nullopt;
+        const auto opacity_value = decimal_value(style.opacity_percent);
+        if (!fill || !color || !opacity || !opacity_value) return A_Err_GENERIC;
+        A_Err error = dynamic_suite->AEGP_SetDynamicStreamFlag(
+            fill->get(), AEGP_DynStreamFlag_ACTIVE_EYEBALL,
+            TRUE, style.enabled ? TRUE : FALSE);
+        if (error == A_Err_NONE) {
+          error = set_leaf(
+              color->get(), AEGP_StreamType_COLOR,
+              [&](AEGP_StreamValue2& value) {
+                value.val.color = {
+                    static_cast<A_FpLong>(style.color.alpha) / 255.0,
+                    static_cast<A_FpLong>(style.color.red) / 255.0,
+                    static_cast<A_FpLong>(style.color.green) / 255.0,
+                    static_cast<A_FpLong>(style.color.blue) / 255.0};
+              });
+        }
+        if (error == A_Err_NONE) {
+          error = set_leaf(
+              opacity->get(), AEGP_StreamType_OneD,
+              [&](AEGP_StreamValue2& value) {
+                value.val.one_d = *opacity_value;
+              });
+        }
+        return error;
+      };
+      const auto write_stroke =
+          [&](const aemcp::native::ShapeStrokeStyle& style) -> A_Err {
+        auto contents = reacquire_group_contents();
+        auto fill = contents
+            ? unique_child(contents->get(), "ADBE Vector Graphic - Fill")
+            : std::nullopt;
+        auto stroke = contents
+            ? unique_child(contents->get(), "ADBE Vector Graphic - Stroke")
+            : std::nullopt;
+        auto color = stroke
+            ? unique_child(stroke->get(), "ADBE Vector Stroke Color")
+            : std::nullopt;
+        auto opacity = stroke
+            ? unique_child(stroke->get(), "ADBE Vector Stroke Opacity")
+            : std::nullopt;
+        auto width = stroke
+            ? unique_child(stroke->get(), "ADBE Vector Stroke Width")
+            : std::nullopt;
+        const auto opacity_value = decimal_value(style.opacity_percent);
+        const auto width_value = decimal_value(style.width_pixels);
+        A_long fill_index = -1;
+        A_long stroke_index = -1;
+        if (!fill || !stroke || !color || !opacity || !width
+            || !opacity_value || !width_value
+            || dynamic_suite->AEGP_GetStreamIndexInParent(
+                fill->get(), &fill_index) != A_Err_NONE
+            || dynamic_suite->AEGP_GetStreamIndexInParent(
+                stroke->get(), &stroke_index) != A_Err_NONE) {
+          return A_Err_GENERIC;
+        }
+        A_Err error = dynamic_suite->AEGP_SetDynamicStreamFlag(
+            stroke->get(), AEGP_DynStreamFlag_ACTIVE_EYEBALL,
+            TRUE, style.enabled ? TRUE : FALSE);
+        if (error == A_Err_NONE) {
+          error = set_leaf(
+              color->get(), AEGP_StreamType_COLOR,
+              [&](AEGP_StreamValue2& value) {
+                value.val.color = {
+                    static_cast<A_FpLong>(style.color.alpha) / 255.0,
+                    static_cast<A_FpLong>(style.color.red) / 255.0,
+                    static_cast<A_FpLong>(style.color.green) / 255.0,
+                    static_cast<A_FpLong>(style.color.blue) / 255.0};
+              });
+        }
+        if (error == A_Err_NONE) {
+          error = set_leaf(
+              opacity->get(), AEGP_StreamType_OneD,
+              [&](AEGP_StreamValue2& value) {
+                value.val.one_d = *opacity_value;
+              });
+        }
+        if (error == A_Err_NONE) {
+          error = set_leaf(
+              width->get(), AEGP_StreamType_OneD,
+              [&](AEGP_StreamValue2& value) {
+                value.val.one_d = *width_value;
+              });
+        }
+        const bool current_over = stroke_index < fill_index;
+        if (error == A_Err_NONE && current_over != style.stroke_over_fill) {
+          error = dynamic_suite->AEGP_ReorderStream(
+              stroke->get(), fill_index);
+        }
+        return error;
+      };
+
+      if (mutation_error == A_Err_NONE
+          && (command.operation == aemcp::native::kShapeGroupCreateCapability
+              || command.operation == aemcp::native::kShapePathSetCapability)) {
+        mutation_error = write_path();
+      }
+      if (mutation_error == A_Err_NONE
+          && (command.operation == aemcp::native::kShapeGroupCreateCapability
+              || command.operation
+                  == aemcp::native::kShapeFillStyleSetCapability)) {
+        mutation_stage = "fill";
+        mutation_error = write_fill(*command.shape_fill);
+      }
+      if (mutation_error == A_Err_NONE
+          && (command.operation == aemcp::native::kShapeGroupCreateCapability
+              || command.operation
+                  == aemcp::native::kShapeStrokeStyleSetCapability)) {
+        mutation_stage = "stroke";
+        mutation_error = write_stroke(*command.shape_stroke);
+      }
+      if (mutation_error == A_Err_NONE
+          && command.operation
+              == aemcp::native::kShapeGroupReorderCapability) {
+        auto root = root_contents();
+        AEGP_StreamRefH group_raw = nullptr;
+        if (!root
+            || dynamic_suite->AEGP_GetNewStreamRefByIndex(
+                plugin_id_, root->get(),
+                static_cast<A_long>(mutated_group_index - 1U),
+                &group_raw) != A_Err_NONE
+            || group_raw == nullptr) {
+          mutation_error = A_Err_GENERIC;
+        } else {
+          StreamRefOwner group(stream_suite.get(), group_raw);
+          mutation_error = dynamic_suite->AEGP_ReorderStream(
+              group.get(), static_cast<A_long>(command.target_index - 1U));
+          mutated_group_index = command.target_index;
+        }
+      }
+      const A_Err undo_error = undo.finish();
+      const auto after_stack = read_group_stack();
+      const auto after_count = after_stack.has_value()
+          ? std::optional<A_long>(
+              static_cast<A_long>(after_stack->size()))
+          : std::nullopt;
+      const auto after = after_stack.has_value()
+              && mutated_group_index >= 1
+              && mutated_group_index <= after_stack->size()
+          ? std::optional<ShapeSnapshot>(
+              (*after_stack)[static_cast<std::size_t>(
+                  mutated_group_index - 1U)])
+          : std::nullopt;
+      if (mutation_error != A_Err_NONE || undo_error != A_Err_NONE
+          || !after_count || !after) {
+        const std::string diagnostic = mutation_error != A_Err_NONE
+            ? " (stage=" + mutation_stage + ", error="
+                + std::to_string(static_cast<long long>(mutation_error)) + ")"
+            : undo_error != A_Err_NONE
+                ? " (stage=undo-finish, error="
+                    + std::to_string(static_cast<long long>(undo_error)) + ")"
+                : !after_count
+                    ? " (stage=read-group-count)"
+                    : " (stage=read-authored-group/" + read_group_stage
+                        + ", error="
+                        + std::to_string(
+                            static_cast<long long>(read_group_error))
+                        + ")";
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "shape mutation may have occurred but complete readback failed"
+                + diagnostic);
+      }
+      if (command.operation == aemcp::native::kShapeGroupCreateCapability) {
+        if (*after_count != *before_count + 1
+            || after->name != command.name
+            || !paths_equal(*after)
+            || after->fill.enabled != command.shape_fill->enabled
+            || after->fill.color != command.shape_fill->color
+            || !decimal_values_equal(
+                after->fill.opacity_percent,
+                command.shape_fill->opacity_percent)
+            || after->stroke.enabled != command.shape_stroke->enabled
+            || after->stroke.color != command.shape_stroke->color
+            || !decimal_values_equal(
+                after->stroke.opacity_percent,
+                command.shape_stroke->opacity_percent)
+            || !decimal_values_equal(
+                after->stroke.width_pixels,
+                command.shape_stroke->width_pixels)
+            || after->stroke.stroke_over_fill
+                != command.shape_stroke->stroke_over_fill) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "created shape group did not match the complete requested state");
+        }
+        bool invalidated = false;
+        try {
+          invalidated = graph_.invalidate_project();
+        } catch (...) {
+          invalidated = false;
+        }
+        if (!invalidated) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "shape group was created but fresh locators could not be issued");
+        }
+        const ObjectLocator fresh_layer = graph_.layer_locator(
+            resolved->composition_item_id, resolved->layer_id,
+            command.host_instance_id, command.session_id);
+        std::string fresh_group = after->json;
+        const std::string old_locator = locator_json(*command.layer_locator);
+        const std::string new_locator = locator_json(fresh_layer);
+        std::size_t position = 0;
+        while ((position = fresh_group.find(old_locator, position))
+            != std::string::npos) {
+          fresh_group.replace(position, old_locator.size(), new_locator);
+          position += new_locator.size();
+        }
+        return HostNativeMediaResult::success(
+            "{\"changed\":true,\"group\":" + fresh_group
+            + ",\"groupCountAfter\":" + std::to_string(*after_count)
+            + ",\"groupCountBefore\":" + std::to_string(*before_count)
+            + ",\"layerLocator\":" + new_locator + "}");
+      }
+      if (*after_count != *before_count
+          || after->stream_id != before->stream_id
+          || after->name != before->name) {
+        return HostNativeMediaResult::failure(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "shape mutation changed preserved group identity or count");
+      }
+      const std::string group_ref =
+          "{\"groupIndex\":" + std::to_string(after->index)
+          + ",\"layerLocator\":" + locator_json(*command.layer_locator)
+          + ",\"streamId\":" + std::to_string(after->stream_id) + "}";
+      if (command.operation == aemcp::native::kShapePathSetCapability) {
+        if (!paths_equal(*after)
+            || after->fill != before->fill || after->stroke != before->stroke) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "shape path readback changed preserved style state");
+        }
+        return HostNativeMediaResult::success(
+            "{\"afterPath\":" + after->path_json
+            + ",\"beforePath\":" + before->path_json
+            + ",\"changed\":true,\"groupRef\":" + group_ref + "}");
+      }
+      if (command.operation
+          == aemcp::native::kShapeFillStyleSetCapability) {
+        if (after->fill.enabled != command.shape_fill->enabled
+            || after->fill.color != command.shape_fill->color
+            || !decimal_values_equal(
+                after->fill.opacity_percent,
+                command.shape_fill->opacity_percent)
+            || after->path_json != before->path_json
+            || after->stroke != before->stroke) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "shape fill replacement changed preserved group state");
+        }
+        const auto fill_json = [&](const aemcp::native::ShapeFillStyle& style) {
+          return std::string("{\"color\":{\"alpha\":")
+              + std::to_string(style.color.alpha)
+              + ",\"blue\":" + std::to_string(style.color.blue)
+              + ",\"green\":" + std::to_string(style.color.green)
+              + ",\"red\":" + std::to_string(style.color.red)
+              + "},\"enabled\":" + (style.enabled ? "true" : "false")
+              + ",\"opacityPercent\":" + quoted(style.opacity_percent) + "}";
+        };
+        return HostNativeMediaResult::success(
+            "{\"afterFill\":" + fill_json(after->fill)
+            + ",\"beforeFill\":" + fill_json(before->fill)
+            + ",\"changed\":true,\"groupRef\":" + group_ref + "}");
+      }
+      if (command.operation
+          == aemcp::native::kShapeStrokeStyleSetCapability) {
+        if (after->stroke.enabled != command.shape_stroke->enabled
+            || after->stroke.color != command.shape_stroke->color
+            || !decimal_values_equal(
+                after->stroke.opacity_percent,
+                command.shape_stroke->opacity_percent)
+            || !decimal_values_equal(
+                after->stroke.width_pixels,
+                command.shape_stroke->width_pixels)
+            || after->stroke.stroke_over_fill
+                != command.shape_stroke->stroke_over_fill
+            || after->path_json != before->path_json
+            || after->fill != before->fill) {
+          return HostNativeMediaResult::failure(
+              "POSSIBLY_SIDE_EFFECTING_FAILURE",
+              "shape stroke replacement changed preserved group state");
+        }
+        const auto stroke_json =
+            [&](const aemcp::native::ShapeStrokeStyle& style) {
+          return std::string("{\"color\":{\"alpha\":")
+              + std::to_string(style.color.alpha)
+              + ",\"blue\":" + std::to_string(style.color.blue)
+              + ",\"green\":" + std::to_string(style.color.green)
+              + ",\"red\":" + std::to_string(style.color.red)
+              + "},\"enabled\":" + (style.enabled ? "true" : "false")
+              + ",\"opacityPercent\":" + quoted(style.opacity_percent)
+              + ",\"strokeOverFill\":"
+              + (style.stroke_over_fill ? "true" : "false")
+              + ",\"widthPixels\":" + quoted(style.width_pixels) + "}";
+        };
+        return HostNativeMediaResult::success(
+            "{\"afterStroke\":" + stroke_json(after->stroke)
+            + ",\"beforeStroke\":" + stroke_json(before->stroke)
+            + ",\"changed\":true,\"groupRef\":" + group_ref + "}");
+      }
+      std::ostringstream groups;
+      groups << '[';
+      for (A_long index = 0; index < *after_count; ++index) {
+        const auto& group =
+            (*after_stack)[static_cast<std::size_t>(index)];
+        if (index != 0) groups << ',';
+        groups << "{\"groupIndex\":" << (index + 1)
+               << ",\"name\":" << quoted(group.name)
+               << ",\"streamId\":" << group.stream_id << "}";
+      }
+      groups << ']';
+      return HostNativeMediaResult::success(
+          "{\"afterIndex\":" + std::to_string(after->index)
+          + ",\"beforeIndex\":" + std::to_string(before->index)
+          + ",\"changed\":true,\"groups\":" + groups.str()
+          + ",\"layerLocator\":" + locator_json(*command.layer_locator)
+          + ",\"streamId\":" + std::to_string(after->stream_id) + "}");
     }
 
     SuiteLease<AEGP_EffectSuite5> effect_suite(

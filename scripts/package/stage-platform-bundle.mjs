@@ -35,7 +35,7 @@ const execFileAsync = promisify(execFile);
 function pluginFilter(relative) {
   const segments = relative.split('/');
   const basename = segments.at(-1);
-  if (relative === '.debug' || segments[0] === 'panel') return false;
+  if (segments[0] === 'panel') return false;
   if (segments.some((segment) => ['node_modules', 'test', 'tests', '__pycache__', '.cache'].includes(segment))) return false;
   if (/(?:^|\.)test\.[^/]+$/i.test(basename) || basename === '.gitignore' || basename === '.DS_Store') return false;
   return true;
@@ -179,6 +179,7 @@ export async function stagePlatformBundle({
     );
   }
   await requiredDirectory(pluginRoot, 'plugin');
+  await requiredFile(path.join(pluginRoot, '.debug'), 'tracked plugin .debug');
   await requiredDirectory(runtimeRoot, 'runtime');
   await requiredDirectory(helperRoot, 'helper');
   await requiredDirectory(toolsRoot, 'bundled tools');

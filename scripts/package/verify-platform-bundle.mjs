@@ -319,8 +319,7 @@ async function verifyNativeFiles(root, platform, entries) {
 
 function assertProductionFileSet(entries, platform) {
   const forbidden = entries.find((entry) => (
-    entry.path === '.debug'
-    || entry.path === 'panel'
+    entry.path === 'panel'
     || entry.path.startsWith('panel/')
     || (!entry.path.startsWith('runtime/') && /(^|\/)node_modules(?:\/|$)/.test(entry.path))
     || /(^|\/)(?:test|tests|__pycache__|\.cache)(?:\/|$)/.test(entry.path)
@@ -356,13 +355,52 @@ function assertProductionFileSet(entries, platform) {
   }
 }
 
+async function verifyDevelopmentDebugContract(root, candidateRepoRoot, entries) {
+  const entry = entries.find(({ path: relative }) => relative === '.debug');
+  const staged = path.join(root, '.debug');
+  const stagedStats = await fs.promises.lstat(staged).catch(() => null);
+  if (!entry || entry.type !== 'file' || !stagedStats?.isFile()
+      || stagedStats.isSymbolicLink() || stagedStats.nlink !== 1) {
+    throw bundleError(
+      'BUNDLE_DEBUG_CONTRACT_INVALID',
+      'production stage requires one regular root .debug file',
+    );
+  }
+  const stagedDigest = await sha256File(staged);
+  if (entry.sha256 !== stagedDigest) {
+    throw bundleError(
+      'BUNDLE_DEBUG_CONTRACT_INVALID',
+      'staged root .debug bytes do not match the signed bundle manifest',
+    );
+  }
+  // Staging supplies candidateRepoRoot and proves equality to the tracked
+  // source. Later signing/freeze verification may only have the immutable
+  // staged tree; its manifest binding preserves the already-proven bytes.
+  if (candidateRepoRoot === undefined) return;
+  const tracked = path.join(path.resolve(candidateRepoRoot), 'plugin', '.debug');
+  const trackedStats = await fs.promises.lstat(tracked).catch(() => null);
+  if (!trackedStats?.isFile() || trackedStats.isSymbolicLink() || trackedStats.nlink !== 1) {
+    throw bundleError(
+      'BUNDLE_DEBUG_CONTRACT_INVALID',
+      'tracked plugin/.debug input is missing, symbolic, or non-regular',
+    );
+  }
+  const trackedDigest = await sha256File(tracked);
+  if (stagedDigest !== trackedDigest) {
+    throw bundleError(
+      'BUNDLE_DEBUG_CONTRACT_INVALID',
+      'staged root .debug bytes do not match tracked plugin/.debug',
+    );
+  }
+}
+
 export async function verifyPlatformBundle({
   root,
   platform,
   version,
   sourceCommitSha,
   verificationProfile = DEVELOPMENT_IDENTITY_PROFILE,
-  candidateRepoRoot = REPO_ROOT,
+  candidateRepoRoot,
   dependencies = {},
 } = {}) {
   const profile = normalizeIdentityVerificationProfile(verificationProfile);
@@ -427,7 +465,7 @@ export async function verifyPlatformBundle({
       productVersion: manifest.version,
       sourceCommitSha: manifest.sourceCommitSha,
       verificationProfile: profile,
-      candidateRepoRoot,
+      candidateRepoRoot: candidateRepoRoot ?? REPO_ROOT,
       dependencies,
     });
   }
@@ -449,6 +487,7 @@ export async function verifyPlatformBundle({
   await verifyHostRuntime(resolvedRoot, platform, actual);
   await verifySupportContract(resolvedRoot, platform);
   await verifyHelper(resolvedRoot, platform, manifest, exactIdentity);
+  await verifyDevelopmentDebugContract(resolvedRoot, candidateRepoRoot, actual);
   assertProductionFileSet(actual, platform);
   await verifyNativeFiles(resolvedRoot, platform, actual);
   return manifest;

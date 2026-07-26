@@ -500,7 +500,8 @@ void NativeRpcConnectionHandler::serve(
               postcondition_digest = rpc::digest_layer_effect_apply_postcondition(
                   completion.layer_effect_apply_result);
             } else if (completion.capability_id == kNativeMediaReadCapability
-                || completion.capability_id == kNativeMediaWriteCapability) {
+                || completion.capability_id == kNativeMediaWriteCapability
+                || is_text_shape_marker_capability(completion.capability_id)) {
               completion.native_media_result_json =
                   rpc::canonicalize_native_media_value(
                       completion.native_media_result_json);
@@ -559,7 +560,8 @@ void NativeRpcConnectionHandler::serve(
               || completion.capability_id == kLayerSwitchSetCapability
               || completion.capability_id == kLayerQualitySetCapability
               || completion.capability_id == kLayerBlendingModeSetCapability
-              || completion.capability_id == kNativeMediaWriteCapability;
+              || completion.capability_id == kNativeMediaWriteCapability
+              || is_text_shape_marker_write_capability(completion.capability_id);
           completion.error_code = mutating
               ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
               : graph_invalidation ? "NATIVE_UNAVAILABLE" : "CAPABILITY_FAILED";
@@ -839,7 +841,8 @@ void NativeRpcConnectionHandler::serve(
                 completion.replayed,
             });
           } else if (completion.capability_id == kNativeMediaReadCapability
-              || completion.capability_id == kNativeMediaWriteCapability) {
+              || completion.capability_id == kNativeMediaWriteCapability
+              || is_text_shape_marker_capability(completion.capability_id)) {
             response = rpc::encode_native_media_success({
                 completion.request_id,
                 connection.session_id,
@@ -1089,6 +1092,19 @@ void NativeRpcConnectionHandler::serve(
               includes(kNativeMediaReadCapability);
           const bool include_native_media_write =
               includes(kNativeMediaWriteCapability);
+          const std::array<bool, 11> include_text_shape_marker{{
+              includes(kShapeLayerCreateCapability),
+              includes(kShapeGroupsListCapability),
+              includes(kShapeGroupCreateCapability),
+              includes(kShapePathSetCapability),
+              includes(kShapeFillStyleSetCapability),
+              includes(kShapeStrokeStyleSetCapability),
+              includes(kShapeGroupReorderCapability),
+              includes(kMarkerListCapability),
+              includes(kMarkerCreateCapability),
+              includes(kMarkerSetCapability),
+              includes(kMarkerDeleteCapability),
+          }};
           const std::size_t selected = static_cast<std::size_t>(include_summary)
               + static_cast<std::size_t>(include_bit_depth_read)
               + static_cast<std::size_t>(include_bit_depth_set)
@@ -1131,7 +1147,11 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_keyframe_behavior_set)
               + static_cast<std::size_t>(include_keyframe_delete)
               + static_cast<std::size_t>(include_native_media_read)
-              + static_cast<std::size_t>(include_native_media_write);
+              + static_cast<std::size_t>(include_native_media_write)
+              + static_cast<std::size_t>(std::count(
+                  include_text_shape_marker.begin(),
+                  include_text_shape_marker.end(),
+                  true));
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                     request,
@@ -1236,6 +1256,7 @@ void NativeRpcConnectionHandler::serve(
                   include_native_media_write,
                   runtime_.native_media_read_contract_digest,
                   runtime_.native_media_write_contract_digest,
+                  include_text_shape_marker,
               }))) {
             connected = false;
             break;
@@ -1348,7 +1369,8 @@ void NativeRpcConnectionHandler::serve(
               invoke.layer_blending_mode,
           };
           if (invoke.capability_id == kNativeMediaReadCapability
-              || invoke.capability_id == kNativeMediaWriteCapability) {
+              || invoke.capability_id == kNativeMediaWriteCapability
+              || is_text_shape_marker_capability(invoke.capability_id)) {
             dispatch_request.native_media = invoke.native_media;
             dispatch_request.native_media.host_instance_id =
                 runtime_.host_instance_id;

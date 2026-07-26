@@ -1,4 +1,5 @@
 #include "aemcp_native/native_rpc_connection.hpp"
+#include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <poll.h>
 #include <pthread.h>
@@ -760,7 +761,7 @@ NativeRpcRuntimeInfo runtime() {
       "26.3.0",
       87,
       std::string(kHost),
-      "ae72ee8f2244fa2ffb6a4f01590f17b83e782724504d981a88cbbc162ea1ac44",
+      std::string(aemcp::native::rpc::kCapabilitiesRegistryDigest),
       "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a",
       "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e",
       "d5d11180b22293db667353e0861485e1633c2881ed96891744fd94d69910d80a",
@@ -1181,6 +1182,18 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "capabilities response");
   require(idle_signal.calls() == 0,
       "hello or capabilities unexpectedly scheduled an idle wake");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-marker-create", "ae.marker.create"));
+  const std::string marker_create_capabilities = read_body(sockets[0]);
+  require_contains(marker_create_capabilities,
+      "\"id\":\"ae.marker.create\"", "marker-create capabilities response");
+  require_contains(marker_create_capabilities,
+      "\"contractDigest\":\"25ca81478bcac6b2fb75e8350449d874b287ec4d07f26a7d2bb301bf743c3f7d\"",
+      "marker-create capabilities response");
+  require_contains(marker_create_capabilities,
+      "aemcp.requirement.native.marker-create",
+      "marker-create capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-bit-depth-read", "ae.project.bit-depth.read"));

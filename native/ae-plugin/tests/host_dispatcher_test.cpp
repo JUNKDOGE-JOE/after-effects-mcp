@@ -1,3 +1,4 @@
+#include "aemcp_native/ae_path_numeric.hpp"
 #include "aemcp_native/effect_stack.hpp"
 #include "aemcp_native/host_dispatcher.hpp"
 #include "aemcp_native/project_epoch.hpp"
@@ -73,6 +74,7 @@ using aemcp::native::OwnedSelectionCollection;
 using aemcp::native::SelectionCollectionEntryKind;
 using aemcp::native::select_effective_layer_name;
 using aemcp::native::plan_indexed_group_reorder;
+using aemcp::native::plan_ae_path_vertex_mutation;
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -135,6 +137,44 @@ void indexed_group_reorder_skips_the_existing_position() {
   require(!plan_indexed_group_reorder(0, 1, 2).valid
           && !plan_indexed_group_reorder(2, 3, 2).valid,
       "indexed-group reorder accepted an out-of-range position");
+}
+
+void shape_path_vertex_mutation_preserves_valid_intermediate_topology() {
+  const auto closed_in_place =
+      plan_ae_path_vertex_mutation(3, false, 3, true);
+  require(!closed_in_place.open_before_resize
+          && closed_in_place.retained_vertices == 3
+          && closed_in_place.delete_count == 0
+          && closed_in_place.create_count == 0
+          && !closed_in_place.close_after_resize,
+      "same-size closed shape path planned a destructive rebuild");
+
+  const auto closed_to_open =
+      plan_ae_path_vertex_mutation(4, false, 2, false);
+  require(closed_to_open.open_before_resize
+          && closed_to_open.retained_vertices == 2
+          && closed_to_open.delete_count == 2
+          && closed_to_open.create_count == 0
+          && !closed_to_open.close_after_resize,
+      "closed-to-open shape path did not open before removing excess vertices");
+
+  const auto open_to_closed =
+      plan_ae_path_vertex_mutation(2, true, 3, true);
+  require(!open_to_closed.open_before_resize
+          && open_to_closed.retained_vertices == 2
+          && open_to_closed.delete_count == 0
+          && open_to_closed.create_count == 1
+          && open_to_closed.close_after_resize,
+      "open-to-closed shape path did not resize before closing");
+
+  const auto empty_shape =
+      plan_ae_path_vertex_mutation(0, false, 3, true);
+  require(!empty_shape.open_before_resize
+          && empty_shape.retained_vertices == 0
+          && empty_shape.delete_count == 0
+          && empty_shape.create_count == 3
+          && !empty_shape.close_after_resize,
+      "new empty shape path did not plan only the required vertex creation");
 }
 
 void effect_stack_transition_requires_one_unambiguous_insertion() {
@@ -1380,7 +1420,7 @@ void project_composition_package_dispatches_all_eight_capabilities() {
               .source_composition_locator.object_id
           != composition.object_id,
       "duplicate result did not reissue the source composition locator");
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 43);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 54);
   const std::array<std::string_view, 8> package_capabilities{
       aemcp::native::kProjectContextReadCapability,
       aemcp::native::kProjectItemMetadataReadCapability,
@@ -1703,7 +1743,7 @@ void keyframe_authoring_package_admits_all_seven_closed_capabilities() {
       aemcp::native::kLayerPropertyKeyframeBehaviorSetCapability,
       aemcp::native::kLayerPropertyKeyframeDeleteCapability,
   };
-  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 43);
+  static_assert(aemcp::native::kAdvertisedNativeCapabilities.size() == 54);
   for (const std::string_view expected : package_capabilities) {
     require(std::find(
                 aemcp::native::kAdvertisedNativeCapabilities.begin(),
@@ -1793,6 +1833,210 @@ void native_media_overlapping_operations_admit_on_their_selected_plane() {
 
   require(dispatcher.shutdown().size() == 4,
       "native media overlap admission did not retain all four requests");
+}
+
+class TextShapeMarkerHost final : public HostApi {
+ public:
+  [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
+    return HostReadResult::failure("NATIVE_UNSUPPORTED", "not used");
+  }
+
+  [[nodiscard]] aemcp::native::HostNativeMediaResult execute_native_media(
+      const aemcp::native::NativeMediaCommand& command,
+      TimePoint) override {
+    operations.push_back(command.operation);
+    if (command.operation == aemcp::native::kShapeGroupReorderCapability) {
+      require(command.shape_group_ref.has_value()
+              && command.shape_group_ref->group_index == 2
+              && command.target_index == 1,
+          "shape group order command lost stable identity or target");
+    }
+    if (command.operation == aemcp::native::kShapeFillStyleSetCapability) {
+      require(command.shape_fill.has_value()
+              && !command.shape_stroke.has_value(),
+          "fill complete replacement leaked stroke state");
+    }
+    if (command.operation == aemcp::native::kShapeStrokeStyleSetCapability) {
+      require(command.shape_stroke.has_value()
+              && !command.shape_fill.has_value(),
+          "stroke complete replacement leaked fill state");
+    }
+    if (command.operation == aemcp::native::kMarkerSetCapability) {
+      require(command.marker_time.value == 1000
+              && command.marker_time.scale == 1000
+              && command.marker_time.seconds_rational == "1"
+              && command.marker_patch.has_value(),
+          "marker edit changed target+exact-time identity");
+    }
+    return aemcp::native::HostNativeMediaResult::success(
+        "{\"changed\":true,\"operation\":\"" + command.operation + "\"}");
+  }
+
+  std::vector<std::string> operations;
+};
+
+void text_shape_marker_dispatches_all_eleven_native_capabilities() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(16, 16, 16ms));
+  TextShapeMarkerHost host;
+  const ObjectLocator layer = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const ObjectLocator composition = FakeHost::locator(
+      "composition", "66666666-6666-4666-8666-666666666666");
+  const aemcp::native::ShapeGroupReference group_ref{layer, 2, 91};
+  const aemcp::native::ShapeFillStyle fill{
+      true, {1, 2, 3, 255}, "75"};
+  const aemcp::native::ShapeStrokeStyle stroke{
+      false, {4, 5, 6, 255}, "50", "4", true};
+  const std::vector<aemcp::native::NativeMediaMaskVertex> vertices{
+      {"0", "0", "0", "0", "0", "0"},
+      {"100", "0", "0", "0", "0", "0"},
+      {"50", "100", "0", "0", "0", "0"},
+  };
+  std::size_t sequence = 0;
+  const auto base = [&](std::string capability) {
+    Request value;
+    value.request_id = "tsm-dispatch-" + std::to_string(++sequence);
+    value.capability_id = capability;
+    value.deadline = clock.now() + 1s;
+    value.route_id = "tsm-package";
+    value.session_generation = 1;
+    value.host_instance_id = "22222222-2222-4222-8222-222222222222";
+    value.session_id = "11111111-1111-4111-8111-111111111111";
+    value.native_media.host_instance_id = value.host_instance_id;
+    value.native_media.session_id = value.session_id;
+    value.native_media.operation = std::move(capability);
+    if (aemcp::native::is_text_shape_marker_write_capability(
+            value.capability_id)) {
+      value.idempotency_key =
+          "tsm-dispatch-intent-" + std::to_string(sequence);
+      value.arguments_fingerprint_sha256 =
+          std::string(64, static_cast<char>('a' + (sequence % 6)));
+    }
+    return value;
+  };
+  const auto admit = [&](Request value) {
+    const std::string capability = value.capability_id;
+    const auto admitted = dispatcher.enqueue(std::move(value));
+    require(admitted.code == EnqueueCode::kAccepted,
+        "frozen Text/Shape/Marker request was not admitted: " + capability + " / "
+            + admitted.message + " / " + admitted.error_field);
+  };
+
+  Request shape_layer = base(std::string(
+      aemcp::native::kShapeLayerCreateCapability));
+  shape_layer.native_media.composition_locator = composition;
+  shape_layer.native_media.name = "TSM Shape";
+  admit(std::move(shape_layer));
+
+  Request groups = base(std::string(
+      aemcp::native::kShapeGroupsListCapability));
+  groups.native_media.layer_locator = layer;
+  groups.native_media.limit = 25;
+  admit(std::move(groups));
+
+  Request group_create = base(std::string(
+      aemcp::native::kShapeGroupCreateCapability));
+  group_create.native_media.layer_locator = layer;
+  group_create.native_media.name = "Triangle";
+  group_create.native_media.mask_closed = true;
+  group_create.native_media.mask_vertices = vertices;
+  group_create.native_media.shape_fill = fill;
+  group_create.native_media.shape_stroke = stroke;
+  admit(std::move(group_create));
+
+  Request path = base(std::string(aemcp::native::kShapePathSetCapability));
+  path.native_media.layer_locator = layer;
+  path.native_media.shape_group_ref = group_ref;
+  path.native_media.mask_closed = true;
+  path.native_media.mask_vertices = vertices;
+  admit(std::move(path));
+
+  Request fill_set = base(std::string(
+      aemcp::native::kShapeFillStyleSetCapability));
+  fill_set.native_media.layer_locator = layer;
+  fill_set.native_media.shape_group_ref = group_ref;
+  fill_set.native_media.shape_fill = fill;
+  admit(std::move(fill_set));
+
+  Request stroke_set = base(std::string(
+      aemcp::native::kShapeStrokeStyleSetCapability));
+  stroke_set.native_media.layer_locator = layer;
+  stroke_set.native_media.shape_group_ref = group_ref;
+  stroke_set.native_media.shape_stroke = stroke;
+  admit(std::move(stroke_set));
+
+  Request reorder = base(std::string(
+      aemcp::native::kShapeGroupReorderCapability));
+  reorder.native_media.layer_locator = layer;
+  reorder.native_media.shape_group_ref = group_ref;
+  reorder.native_media.target_index = 1;
+  admit(std::move(reorder));
+
+  const auto target = [&](Request& value) {
+    value.native_media.marker_target_kind = "layer";
+    value.native_media.layer_locator = layer;
+  };
+  Request marker_list = base(std::string(
+      aemcp::native::kMarkerListCapability));
+  target(marker_list);
+  marker_list.native_media.limit = 25;
+  admit(std::move(marker_list));
+
+  Request marker_create = base(std::string(
+      aemcp::native::kMarkerCreateCapability));
+  target(marker_create);
+  marker_create.native_media.marker_time = {24, 24, "1"};
+  aemcp::native::MarkerValueInput marker_value;
+  marker_value.duration = {0, 1, "0"};
+  marker_create.native_media.marker_value = std::move(marker_value);
+  admit(std::move(marker_create));
+
+  Request marker_set = base(std::string(
+      aemcp::native::kMarkerSetCapability));
+  target(marker_set);
+  marker_set.native_media.marker_time = {1000, 1000, "1"};
+  aemcp::native::MarkerPatchInput patch;
+  patch.comment = "edited";
+  marker_set.native_media.marker_patch = std::move(patch);
+  admit(std::move(marker_set));
+
+  Request marker_delete = base(std::string(
+      aemcp::native::kMarkerDeleteCapability));
+  target(marker_delete);
+  marker_delete.native_media.marker_time = {24, 24, "1"};
+  admit(std::move(marker_delete));
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 11 && batch.remaining == 0
+          && host.operations.size() == 11,
+      "dispatcher did not execute the complete 7+4 native package");
+  for (const aemcp::native::Completion& completion : batch.completions) {
+    require(completion.ok
+            && completion.native_media_result_json.find(
+                "\"operation\":\"" + completion.capability_id + "\"")
+                != std::string::npos,
+        "Text/Shape/Marker result was not bound to its capability");
+  }
+  for (const std::string_view capability :
+       aemcp::native::kTextShapeMarkerCapabilities) {
+    require(std::find(
+                aemcp::native::kAdvertisedNativeCapabilities.begin(),
+                aemcp::native::kAdvertisedNativeCapabilities.end(), capability)
+            != aemcp::native::kAdvertisedNativeCapabilities.end(),
+        "Text/Shape/Marker capability is missing from native advertisement");
+  }
+}
+
+void ae_path_readback_accepts_only_the_observed_host_quantum() {
+  require(
+      aemcp::native::ae_path_values_equal(
+          -120.0, -119.99998474121094),
+      "AE one-quantum negative tangent readback was rejected");
+  require(
+      !aemcp::native::ae_path_values_equal(-120.0, -119.999),
+      "material path-coordinate drift was accepted");
 }
 
 void keyframe_value_owner_lifetime_is_bound_to_the_sdk_write() {
@@ -3109,6 +3353,7 @@ int main() {
   bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
   effective_layer_name_uses_sdk_source_fallback();
   indexed_group_reorder_skips_the_existing_position();
+  shape_path_vertex_mutation_preserves_valid_intermediate_topology();
   effect_stack_transition_requires_one_unambiguous_insertion();
   selected_collection_ownership_and_mixed_filter_are_portable_tested();
   composition_time_rational_is_exact_and_overflow_safe();
@@ -3118,6 +3363,8 @@ int main() {
   layer_compositing_package_dispatches_all_four_native_capabilities();
   keyframe_authoring_package_admits_all_seven_closed_capabilities();
   native_media_overlapping_operations_admit_on_their_selected_plane();
+  text_shape_marker_dispatches_all_eleven_native_capabilities();
+  ae_path_readback_accepts_only_the_observed_host_quantum();
   keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
   layer_compositing_writes_read_back_only_their_owned_sdk_fields();
   legacy_effect_metadata_is_utf8_normalized_before_json_evidence();

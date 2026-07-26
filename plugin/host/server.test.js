@@ -127,6 +127,19 @@ const nativeMediaInvokeVectors = [
         },
     },
 ];
+const textShapeMarkerInvokeVectors = nativeCapabilitiesFixture.items.filter(function (item) {
+    return item.id.startsWith('ae.shape.') || item.id.startsWith('ae.marker.');
+}).map(function (descriptor) {
+    return {
+        request: {
+            params: {
+                capabilityId: descriptor.id,
+                capabilityVersion: 1,
+                arguments: descriptor.examples[0].arguments,
+            },
+        },
+    };
+});
 
 const authToken = require('./auth-token');
 
@@ -1006,7 +1019,7 @@ test('native routes auto-connect locally then preserve Core negotiation, registr
     }
 });
 
-test('native invoke HTTP gate accepts all #150/#155/#157/#162/#167 contracts and rejects closed-shape drift', async () => {
+test('native invoke HTTP gate accepts package contracts including TSM and rejects closed-shape drift', async () => {
     const nativeClient = fakeNativeClient();
     nativeClient.authorize();
     const { server, srv, port } = await startNativeApp(nativeClient);
@@ -1020,6 +1033,7 @@ test('native invoke HTTP gate accepts all #150/#155/#157/#162/#167 contracts and
         const packageVectors = projectCompositionVectors.concat(
             keyframeAuthoringVectors,
             nativeMediaInvokeVectors,
+            textShapeMarkerInvokeVectors,
         );
         for (const [index, vector] of packageVectors.entries()) {
             const request = {
@@ -1029,6 +1043,12 @@ test('native invoke HTTP gate accepts all #150/#155/#157/#162/#167 contracts and
                 arguments: structuredClone(vector.request.params.arguments),
                 deadlineUnixMs,
             };
+            if (request.capabilityId === 'ae.marker.set') {
+                request.arguments.patch = {
+                    comment: 'TSM edited 😀',
+                    chapter: 'edited',
+                };
+            }
             const response = await post(port, '/native/invoke', headers, request);
             assert.strictEqual(response.status, 200, request.capabilityId);
             expectedRequests.push(['invoke', request]);
@@ -1335,6 +1355,61 @@ test('/exec awaits connected native project-graph invalidation before evalScript
         assert.equal(invalidationOptions.deadlineUnixMs > 0, true);
         assert.equal(invalidationOptions.deadlineUnixMs > Date.now(), true);
         assert.equal(invalidationOptions.deadlineUnixMs <= Date.now() + 30000, true);
+    } finally {
+        running.srv.close();
+        running.server._setNativeAegpClientForTest(null);
+    }
+});
+
+test('/exec preserves the connected native project graph only when explicitly requested', async () => {
+    const events = [];
+    const nativeClient = {
+        status: function () { return { state: 'connected' }; },
+        invalidateProjectGraph: async function () {
+            events.push('invalidate');
+            return { generation: 8, invalidated: true };
+        },
+        close: async function () {},
+    };
+    const running = await startExecAppWithNative(nativeClient, function (_jsx, cb) {
+        events.push('evalScript');
+        cb('{"ok":true,"result":"stub-result"}');
+    });
+    try {
+        const response = await post(
+            running.port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: '1', nativeProjectGraphEffect: 'preserve' },
+        );
+        assert.equal(response.status, 200);
+        assert.equal(response.body.ok, true);
+        assert.deepEqual(events, ['evalScript']);
+    } finally {
+        running.srv.close();
+        running.server._setNativeAegpClientForTest(null);
+    }
+});
+
+test('/exec rejects an unknown native project-graph effect before evalScript', async () => {
+    let evalCalls = 0;
+    const running = await startExecAppWithNative(
+        null,
+        function (_jsx, cb) {
+            evalCalls += 1;
+            cb('{"ok":true,"result":"must-not-run"}');
+        },
+    );
+    try {
+        const response = await post(
+            running.port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: '1', nativeProjectGraphEffect: 'unknown' },
+        );
+        assert.equal(response.status, 400);
+        assert.equal(response.body.ok, false);
+        assert.equal(evalCalls, 0);
     } finally {
         running.srv.close();
         running.server._setNativeAegpClientForTest(null);

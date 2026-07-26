@@ -33,6 +33,7 @@ from ae_mcp.backends.native import NativeBackendError, NativeInvokeBackend
 from ae_mcp.error_hints import append_hint
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.instructions import SERVER_INSTRUCTIONS, build_server_instructions
+from ae_mcp.schemas_tsm import PUBLIC_SCHEMAS as TSM_PUBLIC_SCHEMAS
 from ae_mcp.tool_history import (
     HistoryContext,
     capture_history_candidate,
@@ -52,6 +53,7 @@ _PANEL_DEVELOPER_SCHEMAS = {
     "ae.toolSearch": schemas.AePanelToolSearchArgs,
     "ae.toolInspect": schemas.AeToolInspectArgs,
 }
+_TEXT_SHAPE_MARKER_TOOLS = frozenset(TSM_PUBLIC_SCHEMAS)
 
 # Matches a leading dotted verb token at the very start of a docstring, e.g.
 # "ae.init — bootstrap …". Only the leading token is rewritten so the rest of
@@ -111,7 +113,7 @@ def _filtered_tool_names() -> set:
     if snapshotter is None:
         supported = supported - {"ae.snapshot"}
     if isinstance(backend, NativeInvokeBackend):
-        supported = supported | {
+        supported = supported | _TEXT_SHAPE_MARKER_TOOLS | {
             "ae.getProjectContext",
             "ae.getProjectItemMetadata",
             "ae.getCompositionSettings",

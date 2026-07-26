@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Union
 
-from ae_mcp.backends.base import Backend
+from ae_mcp.backends.base import Backend, NativeProjectGraphEffect
 
 
 class MockBackend(Backend):
@@ -33,17 +33,22 @@ class MockBackend(Backend):
         undo_group: Optional[str] = None,
         checkpoint_label: Optional[str] = None,
         timeout_sec: float = 30.0,
+        native_project_graph_effect: NativeProjectGraphEffect = "invalidate",
     ) -> str:
         self.calls.append({
             "code": code,
             "undo_group": undo_group,
             "checkpoint_label": checkpoint_label,
             "timeout_sec": timeout_sec,
+            "native_project_graph_effect": native_project_graph_effect,
         })
         if callable(self._response):
             return self._response(code=code, undo_group=undo_group,
                                   checkpoint_label=checkpoint_label,
-                                  timeout_sec=timeout_sec)
+                                  timeout_sec=timeout_sec,
+                                  native_project_graph_effect=(
+                                      native_project_graph_effect
+                                  ))
         return self._response
 
     async def health_check(self, timeout_sec: float = 5.0) -> bool:

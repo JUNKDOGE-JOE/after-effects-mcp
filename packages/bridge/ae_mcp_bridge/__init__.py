@@ -5,7 +5,7 @@ import os
 import re
 import time
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Literal, Mapping, Optional
 
 import httpx
 
@@ -610,6 +610,9 @@ class HttpBridge(Backend, NativeInvokeBackend):
         undo_group: Optional[str] = None,
         checkpoint_label: Optional[str] = None,
         timeout_sec: float = 30.0,
+        native_project_graph_effect: Literal[
+            "invalidate", "preserve"
+        ] = "invalidate",
     ) -> str:
         # Fail closed: if the token can't be read, raise before making the call.
         token = self._read_token()
@@ -618,6 +621,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
             "undoGroup": undo_group,
             "checkpointLabel": checkpoint_label,
             "timeoutMs": int(timeout_sec * 1000),
+            "nativeProjectGraphEffect": native_project_graph_effect,
         }
         headers = self._headers(token)
         try:

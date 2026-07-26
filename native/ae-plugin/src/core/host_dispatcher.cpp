@@ -109,6 +109,7 @@ bool has_native_media_arguments(const Request& request) {
   const NativeMediaCommand& command = request.native_media;
   return !command.host_instance_id.empty() || !command.session_id.empty()
       || !command.operation.empty() || command.layer_locator.has_value()
+      || command.composition_locator.has_value()
       || command.item_locator.has_value() || command.folder_locator.has_value()
       || command.offset != 0 || command.limit != 0 || command.effect_index != 0
       || command.installed_effect_key != 0 || command.mask_index != 0
@@ -125,7 +126,12 @@ bool has_native_media_arguments(const Request& request) {
       || !command.source_path.empty() || command.sequence.enabled
       || command.sequence.force_alphabetical || command.sequence.start_frame != -1
       || command.sequence.end_frame != -1 || command.proxy
-      || command.interpretation.has_value();
+      || command.interpretation.has_value() || !command.name.empty()
+      || command.shape_group_ref.has_value() || command.shape_fill.has_value()
+      || command.shape_stroke.has_value()
+      || !command.marker_target_kind.empty()
+      || command.marker_time != CompositionCurrentTime{}
+      || command.marker_value.has_value() || command.marker_patch.has_value();
 }
 
 bool valid_layer_switch_name(std::string_view value) {
@@ -324,6 +330,84 @@ bool valid_native_media_command(
     }
   }
   return true;
+}
+
+bool valid_text_shape_marker_command(
+    const NativeMediaCommand& command,
+    std::string_view capability_id,
+    bool mutation) {
+  if (command.operation != capability_id
+      || mutation != is_text_shape_marker_write_capability(capability_id)
+      || !valid_uuid(command.host_instance_id)
+      || !valid_uuid(command.session_id)) {
+    return false;
+  }
+  const auto valid_scoped_locator = [&](const std::optional<ObjectLocator>& locator,
+                                        std::string_view kind) {
+    return locator.has_value() && valid_locator(*locator)
+        && locator->kind == kind
+        && locator->host_instance_id == command.host_instance_id
+        && locator->session_id == command.session_id;
+  };
+  if (capability_id == kShapeLayerCreateCapability) {
+    return valid_scoped_locator(command.composition_locator, "composition")
+        && valid_bounded_text(command.name, 1024, false);
+  }
+  if (capability_id == kShapeGroupsListCapability) {
+    return valid_scoped_locator(command.layer_locator, "layer")
+        && command.limit >= 1 && command.limit <= 50;
+  }
+  if (capability_id == kShapeGroupCreateCapability) {
+    return valid_scoped_locator(command.layer_locator, "layer")
+        && valid_bounded_text(command.name, 1024, false)
+        && command.mask_closed.has_value()
+        && command.mask_vertices.size() >= (*command.mask_closed ? 3U : 2U)
+        && command.mask_vertices.size() <= 128
+        && command.shape_fill.has_value() && command.shape_stroke.has_value();
+  }
+  if (capability_id == kShapePathSetCapability
+      || capability_id == kShapeFillStyleSetCapability
+      || capability_id == kShapeStrokeStyleSetCapability
+      || capability_id == kShapeGroupReorderCapability) {
+    if (!command.shape_group_ref.has_value()
+        || !valid_scoped_locator(command.layer_locator, "layer")
+        || command.shape_group_ref->layer_locator != *command.layer_locator
+        || command.shape_group_ref->group_index < 1) {
+      return false;
+    }
+    if (capability_id == kShapePathSetCapability) {
+      return command.mask_closed.has_value()
+          && command.mask_vertices.size() >= (*command.mask_closed ? 3U : 2U)
+          && command.mask_vertices.size() <= 128;
+    }
+    if (capability_id == kShapeFillStyleSetCapability) {
+      return command.shape_fill.has_value() && !command.shape_stroke.has_value();
+    }
+    if (capability_id == kShapeStrokeStyleSetCapability) {
+      return command.shape_stroke.has_value() && !command.shape_fill.has_value();
+    }
+    return command.target_index >= 1
+        && command.target_index != command.shape_group_ref->group_index;
+  }
+  const bool marker_target =
+      (command.marker_target_kind == "layer"
+          && valid_scoped_locator(command.layer_locator, "layer"))
+      || (command.marker_target_kind == "composition"
+          && valid_scoped_locator(command.composition_locator, "composition"));
+  if (!marker_target) return false;
+  if (capability_id == kMarkerListCapability) {
+    return command.limit >= 1 && command.limit <= 50;
+  }
+  if (capability_id == kMarkerCreateCapability) {
+    return command.marker_time.scale >= 1 && command.marker_value.has_value()
+        && command.marker_value->duration.value >= 0
+        && command.marker_value->duration.scale >= 1;
+  }
+  if (capability_id == kMarkerSetCapability) {
+    return command.marker_time.scale >= 1 && command.marker_patch.has_value();
+  }
+  return capability_id == kMarkerDeleteCapability
+      && command.marker_time.scale >= 1 && !command.marker_patch.has_value();
 }
 
 bool has_composition_create_arguments(const Request& request) {
@@ -1543,6 +1627,10 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kNativeMediaReadCapability;
   const bool native_media_write =
       request.capability_id == kNativeMediaWriteCapability;
+  const bool text_shape_marker =
+      is_text_shape_marker_capability(request.capability_id);
+  const bool text_shape_marker_write =
+      is_text_shape_marker_write_capability(request.capability_id);
   const bool mutation = project_bit_depth_set || composition_time_set
       || composition_create
       || composition_layer_create
@@ -1553,7 +1641,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || layer_range_set || layer_start_time_set || layer_stretch_set
       || layer_order_set || layer_parent_set || layer_duplicate
       || layer_switch_set || layer_quality_set || layer_blending_mode_set
-      || native_media_write;
+      || native_media_write || text_shape_marker_write;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
   if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
@@ -1569,6 +1657,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !project_item_label_set && !composition_duplicate
       && !layer_timeline && !layer_compositing
       && !native_media_read && !native_media_write
+      && !text_shape_marker
       && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
   }
@@ -1795,15 +1884,24 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "native layer effect apply arguments failed closed validation",
         "params.arguments"};
   }
-  if ((native_media_read || native_media_write)
+  if ((native_media_read || native_media_write || text_shape_marker)
       && (request.target_depth != 0
-          || (native_media_read && (!request.idempotency_key.empty()
+          || ((native_media_read
+              || (text_shape_marker && !text_shape_marker_write))
+            && (!request.idempotency_key.empty()
             || !request.arguments_fingerprint_sha256.empty()))
-          || (native_media_write && (!valid_idempotency_key(request.idempotency_key)
+          || ((native_media_write || text_shape_marker_write)
+            && (!valid_idempotency_key(request.idempotency_key)
             || !valid_sha256(request.arguments_fingerprint_sha256)))
           || request.host_instance_id != request.native_media.host_instance_id
           || request.session_id != request.native_media.session_id
-          || !valid_native_media_command(request.native_media, native_media_write)
+          || (text_shape_marker
+              ? !valid_text_shape_marker_command(
+                  request.native_media,
+                  request.capability_id,
+                  text_shape_marker_write)
+              : !valid_native_media_command(
+                  request.native_media, native_media_write))
           || request.offset != 0 || request.limit != 0
           || request.project_locator.has_value()
           || request.composition_locator.has_value()
@@ -1833,7 +1931,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "native media arguments failed closed validation",
         "params.arguments"};
   }
-  if (!native_media_read && !native_media_write
+  if (!native_media_read && !native_media_write && !text_shape_marker
       && has_native_media_arguments(request)) {
     return {
         EnqueueCode::kInvalidRequest,
@@ -3411,9 +3509,11 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             }
           }
         } else if (request.capability_id == kNativeMediaReadCapability
-            || request.capability_id == kNativeMediaWriteCapability) {
+            || request.capability_id == kNativeMediaWriteCapability
+            || is_text_shape_marker_capability(request.capability_id)) {
           const bool media_write =
-              request.capability_id == kNativeMediaWriteCapability;
+              request.capability_id == kNativeMediaWriteCapability
+              || is_text_shape_marker_write_capability(request.capability_id);
           HostNativeMediaResult host_result = host.execute_native_media(
               request.native_media,
               media_write ? request.deadline
@@ -4203,7 +4303,8 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 || request.capability_id == kLayerOrderSetCapability
                 || request.capability_id == kLayerParentSetCapability
                 || request.capability_id == kLayerDuplicateCapability
-                || request.capability_id == kNativeMediaWriteCapability)
+                || request.capability_id == kNativeMediaWriteCapability
+                || is_text_shape_marker_write_capability(request.capability_id))
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
             "native host adapter raised an exception");
       }
@@ -4421,7 +4522,8 @@ void HostDispatcher::finish_idempotency_locked(
           && request.capability_id != kLayerOrderSetCapability
           && request.capability_id != kLayerParentSetCapability
           && request.capability_id != kLayerDuplicateCapability
-          && request.capability_id != kNativeMediaWriteCapability)
+          && request.capability_id != kNativeMediaWriteCapability
+          && !is_text_shape_marker_write_capability(request.capability_id))
       || request.idempotency_key.empty()) {
     return;
   }

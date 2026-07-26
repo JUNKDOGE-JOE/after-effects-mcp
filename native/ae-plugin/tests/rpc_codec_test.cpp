@@ -1,4 +1,5 @@
 #include "aemcp_native/rpc_codec.hpp"
+#include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <algorithm>
 #include <array>
@@ -145,6 +146,8 @@ using aemcp::native::rpc::encode_layer_property_keyframes_success;
 using aemcp::native::rpc::encode_layer_property_set_success;
 using aemcp::native::rpc::encode_project_items_success;
 using aemcp::native::rpc::kMaxFrameBytes;
+using aemcp::native::rpc::kCapabilitiesRegistryDigest;
+using aemcp::native::rpc::kTextShapeMarkerCapabilities;
 
 constexpr std::string_view kSession = "11111111-1111-4111-8111-111111111111";
 constexpr std::string_view kHost = "22222222-2222-4222-8222-222222222222";
@@ -231,9 +234,6 @@ constexpr std::string_view kNativeMediaReadContractDigest =
     "4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282";
 constexpr std::string_view kNativeMediaWriteContractDigest =
     "a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5";
-constexpr std::string_view kCapabilitiesRegistryDigest =
-    "ae72ee8f2244fa2ffb6a4f01590f17b83e782724504d981a88cbbc162ea1ac44";
-
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
   std::exit(1);
@@ -507,6 +507,18 @@ std::string layer_property_keyframes_invoke_json(
 }
 
 std::string keyframe_authoring_invoke_json(
+    std::string_view request_id,
+    std::string_view capability_id,
+    std::string_view arguments) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"" + std::string(capability_id)
+      + "\",\"capabilityVersion\":1,\"arguments\":" + std::string(arguments)
+      + "}}";
+}
+
+std::string tsm_invoke_json(
     std::string_view request_id,
     std::string_view capability_id,
     std::string_view arguments) {
@@ -2537,6 +2549,7 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kNativeMediaReadContractDigest);
   capabilities.native_media_write_contract_digest =
       std::string(kNativeMediaWriteContractDigest);
+  capabilities.include_text_shape_marker.fill(true);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -2698,6 +2711,16 @@ void response_helpers_are_bounded_and_typed() {
       && capabilities_body.find(std::string(kKeyframeBehaviorContractDigest))
           != std::string::npos
       && capabilities_body.find(std::string(kKeyframeDeleteContractDigest))
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.shape.layer.create\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.marker.delete\"")
+          != std::string::npos
+      && capabilities_body.find(
+          std::string(kTextShapeMarkerCapabilities.front().contract_digest))
+          != std::string::npos
+      && capabilities_body.find(
+          std::string(kTextShapeMarkerCapabilities.back().contract_digest))
           != std::string::npos
       && capabilities_body.find("\"temporalDimensionality\"")
           != std::string::npos
@@ -3187,6 +3210,211 @@ void native_media_package_parses_all_twenty_two_public_operations() {
               "\"undo\":{\"available\":true,\"verified\":false}")
               != std::string::npos,
       "native media write success lost committed effect or Undo boundary");
+
+  NativeMediaSuccess tsm_read_success = success;
+  tsm_read_success.request_id = "tsm-read-success-1";
+  tsm_read_success.capability_id = "ae.marker.list";
+  tsm_read_success.canonical_value_json = "{}";
+  tsm_read_success.postcondition_digest = digest_native_media_postcondition(
+      tsm_read_success.capability_id, tsm_read_success.canonical_value_json);
+  const std::string tsm_read_encoded =
+      body(encode_native_media_success(tsm_read_success));
+  require(
+      tsm_read_encoded.find("\"kind\":\"marker-list\"")
+              != std::string::npos
+          && tsm_read_encoded.find("\"effect\":\"none\"")
+              != std::string::npos
+          && tsm_read_encoded.find("\"undo\"") == std::string::npos,
+      "TSM read success lost its capability-specific postcondition kind");
+
+  NativeMediaSuccess tsm_write_success = success;
+  tsm_write_success.request_id = "tsm-write-success-1";
+  tsm_write_success.capability_id = "ae.shape.layer.create";
+  tsm_write_success.canonical_value_json = "{}";
+  tsm_write_success.postcondition_digest = digest_native_media_postcondition(
+      tsm_write_success.capability_id, tsm_write_success.canonical_value_json);
+  const std::string tsm_write_encoded =
+      body(encode_native_media_success(tsm_write_success));
+  require(
+      tsm_write_encoded.find("\"kind\":\"shape-layer-create\"")
+              != std::string::npos
+          && tsm_write_encoded.find("\"effect\":\"committed\"")
+              != std::string::npos
+          && tsm_write_encoded.find(
+              "\"undo\":{\"available\":true,\"verified\":false}")
+              != std::string::npos,
+      "TSM write success lost its capability-specific postcondition kind");
+}
+
+void text_shape_marker_codec_preserves_frozen_native_contracts() {
+  const std::string layer = locator_json(
+      "layer", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa");
+  const std::string composition = locator_json(
+      "composition", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+  const std::string color =
+      "{\"red\":1,\"green\":2,\"blue\":3,\"alpha\":255}";
+  const std::string path =
+      "{\"closed\":true,\"vertices\":["
+      "{\"position\":[\"0\",\"0\"],\"inTangent\":[\"-1e0\",\"0\"],"
+      "\"outTangent\":[\"1.0\",\"0\"]},"
+      "{\"position\":[\"100\",\"0\"],\"inTangent\":[\"0\",\"0\"],"
+      "\"outTangent\":[\"0\",\"0\"]},"
+      "{\"position\":[\"50\",\"100\"],\"inTangent\":[\"0\",\"0\"],"
+      "\"outTangent\":[\"0\",\"0\"]}]}";
+  const std::string fill =
+      "{\"enabled\":true,\"color\":" + color
+      + ",\"opacityPercent\":\"75.5\"}";
+  const std::string stroke =
+      "{\"enabled\":false,\"color\":" + color
+      + ",\"opacityPercent\":\"50\",\"widthPixels\":\"4.25\","
+        "\"strokeOverFill\":true}";
+  const std::string group_ref =
+      "{\"layerLocator\":" + layer + ",\"groupIndex\":2,\"streamId\":91}";
+  const auto decode = [&](std::string_view id, std::string arguments) {
+    return std::get<InvokeParams>(decode_request_frame(frame(tsm_invoke_json(
+        "tsm-codec-request", id, arguments))).params);
+  };
+
+  const InvokeParams create_layer = decode(
+      "ae.shape.layer.create",
+      "{\"compositionLocator\":" + composition
+          + ",\"name\":\"TSM Shape\",\"idempotencyKey\":\"tsm-layer-create-001\"}");
+  require(create_layer.native_media.composition_locator.has_value()
+          && create_layer.native_media.name == "TSM Shape",
+      "shape layer create lost its frozen typed arguments");
+
+  const InvokeParams list_groups = decode(
+      "ae.shape.groups.list",
+      "{\"layerLocator\":" + layer + ",\"offset\":0,\"limit\":25}");
+  require(list_groups.native_media.layer_locator.has_value()
+          && list_groups.native_media.limit == 25,
+      "shape group list lost its frozen pagination");
+
+  const InvokeParams create_group = decode(
+      "ae.shape.group.create",
+      "{\"layerLocator\":" + layer + ",\"name\":\"Triangle\",\"path\":"
+          + path + ",\"fill\":" + fill + ",\"stroke\":" + stroke
+          + ",\"idempotencyKey\":\"tsm-group-create-001\"}");
+  require(create_group.native_media.mask_closed == true
+          && create_group.native_media.mask_vertices.size() == 3
+          && create_group.native_media.mask_vertices[0].in_tangent_x == "-1e0"
+          && create_group.native_media.shape_fill->opacity_percent == "75.5"
+          && create_group.native_media.shape_stroke->width_pixels == "4.25",
+      "shape create did not reuse the complete shared Bezier/style codec");
+
+  const InvokeParams set_path = decode(
+      "ae.shape.path.set",
+      "{\"groupRef\":" + group_ref + ",\"path\":" + path
+          + ",\"idempotencyKey\":\"tsm-shape-path-001\"}");
+  require(set_path.native_media.shape_group_ref->stream_id == 91
+          && set_path.native_media.mask_vertices
+              == create_group.native_media.mask_vertices,
+      "shape path round-trip diverged from the shared Bezier representation");
+  const InvokeParams set_fill = decode(
+      "ae.shape.fill-style.set",
+      "{\"groupRef\":" + group_ref + ",\"fill\":" + fill
+          + ",\"idempotencyKey\":\"tsm-shape-fill-001\"}");
+  require(set_fill.native_media.shape_fill.has_value()
+          && !set_fill.native_media.shape_stroke.has_value(),
+      "fill complete replacement crossed into stroke state");
+  const InvokeParams set_stroke = decode(
+      "ae.shape.stroke-style.set",
+      "{\"groupRef\":" + group_ref + ",\"stroke\":" + stroke
+          + ",\"idempotencyKey\":\"tsm-shape-stroke-001\"}");
+  require(set_stroke.native_media.shape_stroke.has_value()
+          && !set_stroke.native_media.shape_fill.has_value(),
+      "stroke complete replacement crossed into fill state");
+  const InvokeParams reorder = decode(
+      "ae.shape.group.reorder",
+      "{\"groupRef\":" + group_ref
+          + ",\"targetIndex\":1,\"idempotencyKey\":\"tsm-shape-order-001\"}");
+  require(reorder.native_media.target_index == 1,
+      "shape group reorder lost its target index");
+
+  const std::string layer_target =
+      "{\"kind\":\"layer\",\"layerLocator\":" + layer + "}";
+  const std::string marker_time = "{\"value\":24,\"scale\":24}";
+  const std::string marker =
+      "{\"duration\":{\"value\":12,\"scale\":24},\"comment\":\"中😀\","
+      "\"chapter\":\"chapter\",\"url\":\"https://example.test\","
+      "\"frameTarget\":\"frame\",\"cuePointName\":\"cue\","
+      "\"cuePointParameters\":[{\"key\":\"k\",\"value\":\"v\"}],"
+      "\"navigation\":true,\"protectedRegion\":false,\"labelId\":4}";
+  const InvokeParams marker_list = decode(
+      "ae.marker.list",
+      "{\"target\":" + layer_target + ",\"offset\":0,\"limit\":25}");
+  require(marker_list.native_media.marker_target_kind == "layer",
+      "marker target discriminator was not retained");
+  const InvokeParams marker_create = decode(
+      "ae.marker.create",
+      "{\"target\":" + layer_target + ",\"time\":" + marker_time
+          + ",\"marker\":" + marker
+          + ",\"idempotencyKey\":\"tsm-marker-create-001\"}");
+  require(marker_create.native_media.marker_time.seconds_rational == "1"
+          && marker_create.native_media.marker_value->duration.seconds_rational
+              == "1/2"
+          && marker_create.native_media.marker_value->cue_point_parameters.size()
+              == 1,
+      "marker create lost exact time or complete MarkerSuite3 fields");
+  const std::string marker_ref =
+      "{\"target\":" + layer_target + ",\"time\":{\"value\":1000,\"scale\":1000}}";
+  const InvokeParams marker_set = decode(
+      "ae.marker.set",
+      "{\"markerRef\":" + marker_ref
+          + ",\"patch\":{\"comment\":\"edited\",\"labelId\":6},"
+            "\"idempotencyKey\":\"tsm-marker-set-001\"}");
+  require(marker_set.native_media.marker_time.seconds_rational == "1"
+          && marker_set.native_media.marker_patch->comment == "edited"
+          && marker_set.native_media.marker_patch->label_id == 6,
+      "marker patch did not preserve canonical target+time identity");
+  const InvokeParams marker_set_nullable = decode(
+      "ae.marker.set",
+      "{\"markerRef\":" + marker_ref
+          + ",\"patch\":{\"duration\":null,\"comment\":\"TSM edited 😀\","
+            "\"chapter\":\"edited\",\"url\":null,\"frameTarget\":null,"
+            "\"cuePointName\":null,\"cuePointParameters\":null,"
+            "\"navigation\":null,\"protectedRegion\":null,\"labelId\":null},"
+            "\"idempotencyKey\":\"tsm-marker-set-nullable-001\"}");
+  require(marker_set_nullable.native_media.marker_patch->comment
+              == "TSM edited 😀"
+          && marker_set_nullable.native_media.marker_patch->chapter == "edited"
+          && !marker_set_nullable.native_media.marker_patch->duration.has_value()
+          && !marker_set_nullable.native_media.marker_patch->label_id.has_value(),
+      "marker patch did not treat null fields as unrequested");
+  const InvokeParams marker_delete = decode(
+      "ae.marker.delete",
+      "{\"markerRef\":" + marker_ref
+          + ",\"idempotencyKey\":\"tsm-marker-delete-001\"}");
+  require(marker_delete.native_media.marker_time.seconds_rational == "1"
+          && !marker_delete.native_media.marker_patch.has_value(),
+      "marker delete did not retain exact marker identity");
+
+  expect_codec_error([&] {
+    (void)decode(
+        "ae.shape.fill-style.set",
+        "{\"groupRef\":" + group_ref
+            + ",\"fill\":{\"enabled\":true,\"color\":" + color
+            + "},\"idempotencyKey\":\"tsm-fill-incomplete-001\"}");
+  }, "INVALID_ARGUMENT", "incomplete shape fill replacement");
+  expect_codec_error([&] {
+    (void)decode(
+        "ae.marker.create",
+        "{\"target\":" + layer_target + ",\"time\":" + marker_time
+            + ",\"marker\":{\"duration\":{\"value\":0,\"scale\":1},"
+              "\"comment\":\"\",\"chapter\":\"\",\"url\":\"\","
+              "\"frameTarget\":\"\",\"cuePointName\":\"\","
+              "\"cuePointParameters\":[{\"key\":\"x\",\"value\":\"1\"},"
+              "{\"key\":\"x\",\"value\":\"2\"}],\"navigation\":false,"
+              "\"protectedRegion\":false,\"labelId\":0},"
+              "\"idempotencyKey\":\"tsm-marker-duplicate-cue-001\"}");
+  }, "INVALID_ARGUMENT", "duplicate cue-point parameter keys");
+  expect_codec_error([&] {
+    (void)decode(
+        "ae.marker.set",
+        "{\"markerRef\":" + marker_ref
+            + ",\"patch\":{\"comment\":null},"
+              "\"idempotencyKey\":\"tsm-marker-null-only-001\"}");
+  }, "INVALID_ARGUMENT", "null-only marker patch");
 }
 
 void fixed_seed_mutation_fuzz_is_bounded() {
@@ -3235,6 +3463,7 @@ int main() {
   project_composition_package_parses_and_serializes_all_eight_contracts();
   layer_timeline_package_parses_and_serializes_all_eight_contracts();
   native_media_package_parses_all_twenty_two_public_operations();
+  text_shape_marker_codec_preserves_frozen_native_contracts();
   layer_compositing_package_parses_and_serializes_closed_contracts();
   keyframe_authoring_package_parses_and_serializes_closed_contracts();
   framing_fragmentation_and_multiple_frames_work();
