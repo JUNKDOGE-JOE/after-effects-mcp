@@ -379,6 +379,76 @@ def test_driver_constructs_text_calls_only_from_prior_public_locators():
     )
 
 
+def test_driver_converts_shape_group_result_refs_to_frozen_input_refs():
+    counter = 0
+
+    def intent(name: str) -> str:
+        nonlocal counter
+        counter += 1
+        return f"issue170:{name}:session-a-{counter:02d}"
+
+    package = driver.TextShapeMarkerPackage(
+        SimpleNamespace(intent=intent, mode="t5"),
+        fixture_name="TSM Acceptance Fixture",
+    )
+    layer = _locator("layer", TEXT, 4)
+
+    def result_ref(group_index: int) -> dict:
+        return {
+            "layerLocator": layer,
+            "groupIndex": group_index,
+            "streamId": -444037467,
+        }
+
+    expected_input = {
+        "layer_locator": layer,
+        "group_index": 1,
+        "stream_id": -444037467,
+    }
+    rows = {row.key: row for row in spec.T5_CALL_PLAN}
+    package._capture(
+        "groups-before-restyle",
+        {
+            "value": {
+                "layerLocator": layer,
+                "groups": [{"name": "Triangle", "ref": result_ref(1)}],
+            }
+        },
+    )
+    assert package._resolve(rows["fill-restyle"].arguments)["group_ref"] == (
+        expected_input
+    )
+
+    package._capture(
+        "fill-restyle",
+        {"value": {"groupRef": result_ref(1)}},
+    )
+    assert package._resolve(rows["stroke-restyle"].arguments)["group_ref"] == (
+        expected_input
+    )
+
+    package._capture(
+        "stroke-restyle",
+        {"value": {"groupRef": result_ref(1)}},
+    )
+    assert package._resolve(rows["group-reorder"].arguments)["group_ref"] == (
+        expected_input
+    )
+
+    package._capture(
+        "group-reorder-undo-read",
+        {
+            "value": {
+                "layerLocator": layer,
+                "groups": [{"name": "Triangle", "ref": result_ref(1)}],
+            }
+        },
+    )
+    assert package._resolve(rows["shape-path-set"].arguments)["group_ref"] == (
+        expected_input
+    )
+
+
 def test_both_hardware_plans_reacquire_composition_after_text_writes():
     for plan, expected_reacquire, expected_shape in (
         (spec.T5_CALL_PLAN, 13, 14),

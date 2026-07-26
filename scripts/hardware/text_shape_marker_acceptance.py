@@ -124,6 +124,31 @@ def _marker_ref(value: Any) -> dict[str, Any]:
     }
 
 
+def _shape_group_ref_input(value: Any) -> dict[str, Any]:
+    """Convert the public result projection into the public input projection."""
+
+    ref = mapping(value, "shape group ref is invalid")
+    require(
+        set(ref) == {"layerLocator", "groupIndex", "streamId"},
+        "shape group result ref is not closed",
+    )
+    group_index = ref.get("groupIndex")
+    stream_id = ref.get("streamId")
+    require(
+        type(group_index) is int and 1 <= group_index <= 9_007_199_254_740_991,
+        "shape group index is invalid",
+    )
+    require(
+        type(stream_id) is int and -2_147_483_648 <= stream_id <= 2_147_483_647,
+        "shape group stream id is invalid",
+    )
+    return {
+        "layer_locator": _locator(ref.get("layerLocator"), "layer"),
+        "group_index": group_index,
+        "stream_id": stream_id,
+    }
+
+
 class TextShapeMarkerPackage:
     """Package-owned executor; the shared runtime remains package-neutral."""
 
@@ -468,17 +493,17 @@ class TextShapeMarkerPackage:
                 for group in groups
             ):
                 triangle = self._named(groups, "Triangle", "shape group")
-                self.context["triangle_ref"] = mapping(
-                    triangle.get("ref"), "Triangle ref is invalid"
+                self.context["triangle_ref"] = _shape_group_ref_input(
+                    triangle.get("ref")
                 )
                 self.context["triangle_other_index"] = (
-                    2 if self.context["triangle_ref"].get("groupIndex") == 1 else 1
+                    2 if self.context["triangle_ref"]["group_index"] == 1 else 1
                 )
         elif key in {"fill-restyle", "stroke-restyle", "shape-path-set"}:
-            ref = mapping(value.get("groupRef"), f"{key} groupRef is invalid")
+            ref = _shape_group_ref_input(value.get("groupRef"))
             self.context["triangle_ref"] = ref
-            self.context["shape_layer_locator"] = _locator(
-                ref.get("layerLocator"), "layer"
+            self.context["shape_layer_locator"] = copy.deepcopy(
+                ref["layer_locator"]
             )
             self.context["shape_marker_target"] = {
                 "kind": "layer",
