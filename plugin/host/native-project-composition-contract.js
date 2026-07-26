@@ -1493,7 +1493,7 @@ function validMarkerPatch(value) {
         'duration', 'comment', 'chapter', 'url', 'frameTarget', 'cuePointName',
         'cuePointParameters', 'navigation', 'protectedRegion', 'labelId',
     ];
-    if (!exactKeys(value, fields)) return false;
+    if (!closedKeys(value, [], fields)) return false;
     const validators = {
         duration: function (item) { return validTime(item, false, 0); },
         comment: function (item) { return validString(item, 0, 1024); },
@@ -1508,9 +1508,10 @@ function validMarkerPatch(value) {
             return Number.isInteger(item) && item >= 0 && item <= 16;
         },
     };
-    return fields.every(function (field) {
+    const requested = Object.keys(value);
+    return requested.every(function (field) {
         return value[field] === null || validators[field](value[field]);
-    }) && fields.some(function (field) { return value[field] !== null; });
+    }) && requested.some(function (field) { return value[field] !== null; });
 }
 
 function validMarkerState(value) {

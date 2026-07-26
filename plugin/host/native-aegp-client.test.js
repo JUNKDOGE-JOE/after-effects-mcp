@@ -669,11 +669,17 @@ test('CEP client dispatches and verifies all eleven TSM contracts', {
     let index = 0;
     for (const [capabilityId, vector] of TSM_VECTORS) {
         index += 1;
+        const argumentsValue = structuredClone(vector.request.params.arguments);
+        if (capabilityId === 'ae.marker.set') {
+            argumentsValue.patch = {
+                comment: 'Synthetic marker edited',
+            };
+        }
         const result = await client.invoke({
             requestId: 'tsm-success-' + index,
             capabilityId,
             capabilityVersion: 1,
-            arguments: structuredClone(vector.request.params.arguments),
+            arguments: argumentsValue,
             deadlineUnixMs: 1900000005000,
         });
         assert.deepEqual(result.value, vector.response.result.value, capabilityId);
@@ -689,6 +695,12 @@ test('CEP client dispatches and verifies all eleven TSM contracts', {
             return request.params.capabilityId === 'ae.marker.list';
         }).params.arguments.target.kind,
         'composition',
+    );
+    assert.deepEqual(
+        protocol.requests.find(function (request) {
+            return request.params.capabilityId === 'ae.marker.set';
+        }).params.arguments.patch,
+        { comment: 'Synthetic marker edited' },
     );
 });
 

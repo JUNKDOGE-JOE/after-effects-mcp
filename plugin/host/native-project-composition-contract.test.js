@@ -397,6 +397,31 @@ test('eleven Text/Shape/Marker contracts admit generated vectors and nested loca
     );
 });
 
+test('marker set admits a non-empty sparse patch and rejects unsafe patch shapes', () => {
+    const contract = packageContracts.getContract('ae.marker.set');
+    const descriptor = JSON.parse(fs.readFileSync(path.join(
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
+    ), 'utf8')).response.result.items.find(function (item) {
+        return item.id === 'ae.marker.set';
+    });
+    const argumentsValue = structuredClone(descriptor.examples[0].arguments);
+    argumentsValue.patch = {
+        comment: 'TSM edited 😀',
+        chapter: 'edited',
+    };
+
+    assert.equal(contract.validArguments(argumentsValue), true);
+    assert.equal(contract.validArguments({
+        ...argumentsValue,
+        patch: { comment: 'edited', unexpected: true },
+    }), false);
+    assert.equal(contract.validArguments({ ...argumentsValue, patch: {} }), false);
+    assert.equal(contract.validArguments({
+        ...argumentsValue,
+        patch: { comment: null, chapter: null },
+    }), false);
+});
+
 test('#167 grouped media contracts admit closed read/write invokes and reject drift', () => {
     const item = locator('item', SOURCE, 8);
     const readArguments = {

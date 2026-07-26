@@ -1043,6 +1043,12 @@ test('native invoke HTTP gate accepts package contracts including TSM and reject
                 arguments: structuredClone(vector.request.params.arguments),
                 deadlineUnixMs,
             };
+            if (request.capabilityId === 'ae.marker.set') {
+                request.arguments.patch = {
+                    comment: 'TSM edited 😀',
+                    chapter: 'edited',
+                };
+            }
             const response = await post(port, '/native/invoke', headers, request);
             assert.strictEqual(response.status, 200, request.capabilityId);
             expectedRequests.push(['invoke', request]);
