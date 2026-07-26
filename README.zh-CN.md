@@ -227,7 +227,8 @@ node native/ae-plugin/verify-macos.mjs \
 例行启动与验收按组件集记录各自的源码 revision 和安装回执，并校验 canonical path、组件/协议版本、
 文件大小、mode 与修改时间等有界信号；只有观察到矛盾、或明确执行 release/security 审计时才升级为内容哈希。
 
-安装前必须关闭所有 After Effects、AfterFX 和 aerender 进程。开发安装器会校验构建回执和安装后的副本，
+安装前必须关闭所有 After Effects、AfterFX 和 aerender 进程。开发安装器会校验回执结构、产品版本、
+协议元数据、平台、架构、入口点、签名和安装后的副本，
 最终安装位置为
 `~/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp/AeMcpNative.plugin`：
 
@@ -235,6 +236,11 @@ node native/ae-plugin/verify-macos.mjs \
 node native/ae-plugin/install-dev-macos.mjs install \
   --artifact-dir "$BUILD_DIR"
 ```
+
+默认的 `development` 身份档会记录源码 revision，但不会仅因源码提交或已记录 payload 哈希不同而拒绝
+其他方面兼容的本地构建。由于目前没有版本兼容区间，产品版本相等仍是硬门禁。显式 release/security
+审计使用 `--profile release-audit`，它恢复 exact-source、exact-receipt 和 exact-artifact 校验；
+发布工作流会自行选择该档。
 
 MediaCore 命名空间采用严格约束：事务进行中允许为空，其余时间只能包含当前生效的
 `AeMcpNative.plugin`。事务记录以及完整的 stage、backup、failed、replaced bundle 全部保存在 Adobe

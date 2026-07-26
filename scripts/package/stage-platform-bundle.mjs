@@ -22,6 +22,11 @@ import {
   NATIVE_PLUGIN_ROOT,
   stageNativePluginArtifact,
 } from './lib/native-plugin-manifest.mjs';
+import {
+  DEVELOPMENT_IDENTITY_PROFILE,
+  normalizeIdentityVerificationProfile,
+  requiresExactIdentity,
+} from './lib/identity-verification-profile.mjs';
 import { validateRuntimeManifest } from './lib/runtime-manifest.mjs';
 import { verifyPlatformBundle } from './verify-platform-bundle.mjs';
 
@@ -97,7 +102,7 @@ function validateHelperInput(value, platform) {
   return value;
 }
 
-async function copyHelperPayload(sourceRoot, destinationRoot, manifest) {
+async function copyHelperPayload(sourceRoot, destinationRoot, manifest, verificationProfile) {
   await fs.promises.mkdir(destinationRoot, { recursive: true });
   const sourceManifest = path.join(sourceRoot, 'helper-manifest.json');
   await fs.promises.copyFile(
@@ -118,7 +123,8 @@ async function copyHelperPayload(sourceRoot, destinationRoot, manifest) {
         `hard-linked helper payload is forbidden: ${record.path}`,
       );
     }
-    if (await sha256File(source) !== record.sha256) {
+    if (requiresExactIdentity(verificationProfile)
+        && await sha256File(source) !== record.sha256) {
       throw bundleError('BUNDLE_HASH_MISMATCH', `helper input SHA-256 mismatch: ${record.path}`);
     }
     await fs.promises.mkdir(path.dirname(destination), { recursive: true });
@@ -138,9 +144,11 @@ export async function stagePlatformBundle({
   outDir,
   repoRoot,
   sourceCommitSha,
+  verificationProfile = DEVELOPMENT_IDENTITY_PROFILE,
   inputs = {},
   dependencies = {},
 } = {}) {
+  const profile = normalizeIdentityVerificationProfile(verificationProfile);
   if (!PLATFORM_IDS.has(platform)) throw bundleError('BUNDLE_PLATFORM_INVALID', `unsupported platform: ${platform}`);
   if (!SEMVER_PATTERN.test(version ?? '')) throw bundleError('BUNDLE_VERSION_INVALID', `invalid semver: ${version}`);
   if (!SOURCE_SHA_PATTERN.test(sourceCommitSha ?? '')) {
@@ -193,7 +201,12 @@ export async function stagePlatformBundle({
   try {
     await copyTree(pluginRoot, temporary, { filter: pluginFilter });
     await copyTree(runtimeRoot, path.join(temporary, 'runtime', platform));
-    await copyHelperPayload(helperRoot, path.join(temporary, 'platform', platform), helperManifest);
+    await copyHelperPayload(
+      helperRoot,
+      path.join(temporary, 'platform', platform),
+      helperManifest,
+      profile,
+    );
     await copyTree(toolsRoot, path.join(temporary, 'bundled-tools'));
     await fs.promises.mkdir(path.join(temporary, 'metadata'), { recursive: true });
     await fs.promises.copyFile(
@@ -208,6 +221,7 @@ export async function stagePlatformBundle({
         destinationRoot: path.join(temporary, ...NATIVE_PLUGIN_ROOT.split('/')),
         productVersion: version,
         sourceCommitSha,
+        verificationProfile: profile,
         candidateRepoRoot: resolvedRepoRoot,
         dependencies,
       });
@@ -250,6 +264,7 @@ export async function stagePlatformBundle({
       platform,
       version,
       sourceCommitSha,
+      verificationProfile: profile,
       candidateRepoRoot: resolvedRepoRoot,
       dependencies,
     });
@@ -315,6 +330,7 @@ function parseArgs(argv) {
     '--native-plugin-artifact',
     '--out',
     '--platform',
+    '--profile',
     '--version',
   ]);
   for (let index = 0; index < argv.length; index += 1) {
@@ -332,7 +348,9 @@ function parseArgs(argv) {
     platform: values.get('--platform'),
     version: values.get('--version'),
     outDir: values.get('--out'),
+    verificationProfile: values.get('--profile') ?? DEVELOPMENT_IDENTITY_PROFILE,
   };
+  normalizeIdentityVerificationProfile(parsed.verificationProfile);
   if (values.has('--native-plugin-artifact')) {
     parsed.inputs = { nativePluginRoot: values.get('--native-plugin-artifact') };
   }

@@ -70,6 +70,53 @@ test('macOS stage explicitly opts in a verified native plug-in artifact', async 
   await assert.doesNotReject(verifyPlatformBundle(h.verifyInput));
 });
 
+test('development staging tolerates stale helper hashes while release-audit rejects them', async (t) => {
+  const development = await makeStageHarness(t, 'macos-arm64');
+  const developmentHelper = path.join(
+    development.helperRoot,
+    'bin',
+    'ae-mcp-platform-helper',
+  );
+  await fs.promises.appendFile(developmentHelper, Buffer.from([0]));
+  await assert.doesNotReject(stagePlatformBundle({
+    ...development.input,
+    verificationProfile: 'development',
+  }));
+
+  const release = await makeStageHarness(t, 'macos-arm64');
+  const releaseHelper = path.join(release.helperRoot, 'bin', 'ae-mcp-platform-helper');
+  await fs.promises.appendFile(releaseHelper, Buffer.from([0]));
+  await assert.rejects(
+    stagePlatformBundle(release.input),
+    { code: 'BUNDLE_HASH_MISMATCH' },
+  );
+});
+
+test('development native staging records source drift while release-audit rejects it', async (t) => {
+  const mismatchedSource = 'f'.repeat(40);
+  const development = await makeNativeStageHarness(
+    t,
+    'macos-arm64',
+    { sourceCommitSha: mismatchedSource },
+  );
+  await assert.doesNotReject(stagePlatformBundle({
+    ...development.input,
+    verificationProfile: 'development',
+  }));
+  assert.equal(development.manifest().sourceCommitSha, mismatchedSource);
+  assert.equal(development.nativeManifest().sourceCommitSha, SOURCE_COMMIT_SHA);
+
+  const release = await makeNativeStageHarness(
+    t,
+    'macos-arm64',
+    { sourceCommitSha: mismatchedSource },
+  );
+  await assert.rejects(
+    stagePlatformBundle(release.input),
+    { code: 'BUNDLE_NATIVE_PLUGIN_SOURCE_MISMATCH' },
+  );
+});
+
 test('identical native inputs produce byte-identical native and bundle manifests', async (t) => {
   const left = await makeNativeStageHarness(t);
   const right = await makeNativeStageHarness(t);
@@ -294,7 +341,12 @@ test('CLI candidate resolution requires exact clean HEAD and strict arguments', 
     parseStagePlatformBundleArgs([
       '--platform=macos-arm64', '--version', '0.9.2', '--out', 'build/stage',
     ]),
-    { platform: 'macos-arm64', version: '0.9.2', outDir: 'build/stage' },
+    {
+      platform: 'macos-arm64',
+      version: '0.9.2',
+      outDir: 'build/stage',
+      verificationProfile: 'development',
+    },
   );
   assert.deepEqual(
     parseStagePlatformBundleArgs([
@@ -307,8 +359,32 @@ test('CLI candidate resolution requires exact clean HEAD and strict arguments', 
       platform: 'macos-arm64',
       version: '0.9.2',
       outDir: 'build/stage',
+      verificationProfile: 'development',
       inputs: { nativePluginRoot: '/private/tmp/native-build' },
     },
+  );
+  assert.deepEqual(
+    parseStagePlatformBundleArgs([
+      '--platform', 'macos-arm64',
+      '--profile', 'release-audit',
+      '--version', '0.9.2',
+      '--out', 'build/stage',
+    ]),
+    {
+      platform: 'macos-arm64',
+      version: '0.9.2',
+      outDir: 'build/stage',
+      verificationProfile: 'release-audit',
+    },
+  );
+  assert.throws(
+    () => parseStagePlatformBundleArgs([
+      '--platform', 'macos-arm64',
+      '--profile', 'unknown',
+      '--version', '0.9.2',
+      '--out', 'build/stage',
+    ]),
+    { code: 'IDENTITY_VERIFICATION_PROFILE_INVALID' },
   );
   assert.throws(
     () => parseStagePlatformBundleArgs([

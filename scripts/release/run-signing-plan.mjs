@@ -830,6 +830,7 @@ export async function runReleaseSigning(input, dependencies = {}) {
       platform: validated.platform,
       version: validated.version,
       sourceCommitSha: validated.candidateSha,
+      verificationProfile: 'release-audit',
     });
   } catch {
     throw new Error('unsigned source stage changed during signing');

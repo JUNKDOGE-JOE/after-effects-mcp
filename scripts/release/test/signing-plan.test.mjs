@@ -1044,6 +1044,7 @@ test('signed RC workflow uses pinned platform, signing, evidence, and finalizati
 
   assert.equal((workflow.match(/stage-platform-bundle\.mjs/g) || []).length, 2);
   assert.ok((workflow.match(/verify-platform-bundle\.mjs/g) || []).length >= 2);
+  assert.equal((workflow.match(/--profile release-audit/g) || []).length, 4);
   assert.equal((workflow.match(/const report = await runReleaseSigning/g) || []).length, 2);
   assert.equal((workflow.match(/await writeSigningReport/g) || []).length, 2);
   assert.match(workflow, /buildArtifactManifest/);

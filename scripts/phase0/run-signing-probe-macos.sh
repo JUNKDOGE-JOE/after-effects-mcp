@@ -19,12 +19,12 @@ esac
 
 version="$(node -e 'const fs=require("node:fs"); const p=require("node:path"); process.stdout.write(JSON.parse(fs.readFileSync(p.join(process.argv[1],"bundle-manifest.json"),"utf8")).version)' "$stage_root")"
 source_commit_sha="$(node -e 'const fs=require("node:fs"); const p=require("node:path"); process.stdout.write(JSON.parse(fs.readFileSync(p.join(process.argv[1],"bundle-manifest.json"),"utf8")).sourceCommitSha)' "$stage_root")"
-node scripts/package/verify-platform-bundle.mjs --root "$stage_root" --platform macos-arm64 --version "$version" >/dev/null
+node scripts/package/verify-platform-bundle.mjs --root "$stage_root" --platform macos-arm64 --profile release-audit --version "$version" >/dev/null
 source_stage_sha="$(/usr/bin/shasum -a 256 "$stage_root/bundle-manifest.json" | /usr/bin/awk '{print $1}')"
 mkdir -p "$out_root"
 /usr/bin/ditto --noqtn "$stage_root" "$out_root/work"
 node scripts/package/verify-platform-bundle.mjs \
-  --root "$out_root/work" --platform macos-arm64 --version "$version" >/dev/null
+  --root "$out_root/work" --platform macos-arm64 --profile release-audit --version "$version" >/dev/null
 
 bash scripts/package/sign-macos-nested.sh \
   --root "$out_root/work" --evidence "$out_root/nested-evidence.json"
@@ -59,7 +59,7 @@ node --input-type=module -e '
 '
 
 node scripts/package/verify-platform-bundle.mjs \
-  --root "$stage_root" --platform macos-arm64 --version "$version" >/dev/null
+  --root "$stage_root" --platform macos-arm64 --profile release-audit --version "$version" >/dev/null
 unchanged_stage_sha="$(/usr/bin/shasum -a 256 "$stage_root/bundle-manifest.json" | /usr/bin/awk '{print $1}')"
 [[ "$unchanged_stage_sha" = "$source_stage_sha" ]] \
   || { printf '%s\n' 'PHASE0_STAGE_CHANGED: unsigned source stage changed during probe' >&2; exit 1; }
