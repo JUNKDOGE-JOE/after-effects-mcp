@@ -59,7 +59,7 @@ Use the lowest tier that can disprove the current edit. Escalate only at the lis
 | T3 | Frozen candidate | relevant full repository regression and required CI | Once after review |
 | T4 | New primitive only | narrow real-AE smoke for the unverified mechanism | Zero or one per package |
 | T5 | Candidate | full component-set public-MCP package acceptance | Once normally |
-| T6 | Clean main | rebuild/reinstall plus package smoke from merge SHA | Once |
+| T6 | Clean main | rebuild/reinstall from the merge SHA plus a distinct, smaller replay — see section 8 | Once |
 
 After a T3-T6 failure, first add or run the smallest reproducing T0-T2 test. Batch the complete fix set before returning to the expensive tier.
 
@@ -134,7 +134,7 @@ documents a risk that lower tiers cannot falsify.
 
 If a write returns `POSSIBLY_SIDE_EFFECTING_FAILURE`, stop retries and reconcile AE state plus audit first.
 
-Commit the package acceptance driver with the package and use the same driver for candidate and clean-`main` runs. The driver must call the public MCP surface, support the package's real dynamic locators and generation changes, create a fresh intent key for each new write while reusing that key for reconciliation, and bind its evidence to separately verified Core/CEP/native/runtime component identities and protocol compatibility. A hashed test plan is explicit authorization for the disposable fixture only; it does not prove the production approval/elicitation path unless the package explicitly exercises that path. Temporary `/private/tmp` clients are not acceptance assets.
+Commit the package acceptance driver with the package. The same driver serves both hardware tiers, running the full candidate plan at T5 and the smaller clean-`main` plan at T6; two drivers would let the tiers drift apart. The driver must call the public MCP surface, support the package's real dynamic locators and generation changes, create a fresh intent key for each new write while reusing that key for reconciliation, and bind its evidence to separately verified Core/CEP/native/runtime component identities and protocol compatibility. A hashed test plan is explicit authorization for the disposable fixture only; it does not prove the production approval/elicitation path unless the package explicitly exercises that path. Temporary `/private/tmp` clients are not acceptance assets.
 
 Do not introduce a generalized plan language speculatively. Promote repeated driver code into a shared runner only after at least two capability packages demonstrate the same stable need; a shared runner must not infer exact component identity from native self-report or model an invented response/Undo contract.
 
@@ -144,9 +144,40 @@ After candidate acceptance:
 
 1. Merge the single package PR.
 2. Build and install every relevant component from a clean merge commit.
-3. Run T6 with the same harness; the reduced smoke still touches every included public tool, covers every accepted optional child Issue, and verifies real Undo for every included write.
+3. Run T6 with the same harness on a **distinct, smaller plan** than T5. T6 exists to prove the merge and a clean build, not to repeat T5 — replaying every thin wrapper a second time buys little and costs a whole hardware session. See "What T6 must replay" below.
 4. Fill `docs/templates/capability-package-completion.md`.
 5. Close only optional child Issues that passed, then update the parent Epic.
+
+### What T6 must replay
+
+T5 proves the capability. T6 proves that merging it and rebuilding from clean
+`main` did not break it. Those are different questions, so the plans differ.
+
+T6 must replay:
+
+- every native primitive the package introduced, on its first clean build;
+- one representative tool per family that shares an already-proven primitive —
+  if one sibling works from a clean install, the others exercise the same path;
+- every tool whose implementation changed after the candidate hardware run,
+  including anything touched by a replacement candidate;
+- anything that touches install, staging, generated bundles or component
+  identity, because those are precisely what the merge and rebuild changed;
+- at least one real Undo per distinct Undo model in the package, not per tool.
+
+T6 may skip a thin setter that shares its primitive, its Undo model and its
+locator scheme with a tool already replayed, and whose implementation is
+byte-identical to the candidate. Record what was skipped and on which ground;
+an unexplained omission is not a reduction, it is a gap.
+
+This is a deliberate trade. A selective replay can miss an integration defect
+that only shows up on a clean install, which is why the qualifying list above is
+specific rather than left to judgement. If a package cannot say plainly which of
+its tools are thin wrappers over an already-replayed path, it does not yet
+understand its own shape and should replay everything.
+
+Component identity is recorded **once per session**, with per-tool records
+carrying only deltas. Repeating an invariant component set in every per-tool
+record inflates the evidence bundle without adding traceability.
 
 ## 9. Efficiency counters
 
