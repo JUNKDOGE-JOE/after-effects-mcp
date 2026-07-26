@@ -3,6 +3,162 @@
 These scripts call the same public MCP tools that a model sees. They do not
 call Core handlers, the CEP HTTP bridge, or the native socket directly.
 
+## Shared capability-package runtime contract
+
+This is the lookup contract for `capability_package_runtime.py`. It describes
+the checked-in implementation, not a broader runner design. The shortest map is:
+
+| Concern | Shared runtime owns | Package driver owns |
+| --- | --- | --- |
+| Public transport | MCP session creation and one-object JSON decoding | Requests, call order, and semantic assertions |
+| Package declaration | Tool rows, capability IDs, kinds, and call limits | The actual `PackageSpec` values |
+| Verification | Native envelope, provenance, audit, digest, effect, and basic Undo claims | Before/after projections, interaction invariants, and post-Undo readback |
+| Lifecycle | One active ephemeral fixture's admission, identity, counters, recovery, and archive move | The fixture recipe and every AE action requested at a checkpoint |
+| Evidence | Redacted event stream, summary, completion table, and public-call ledger | Calling `mark_tool_passed` only after package semantics really pass |
+
+The module intentionally stops before becoming a plan language: exact request
+builders, semantic projections, fixture recipes, Undo checks, and interaction
+order remain package code
+(`capability_package_runtime.py:2-9`).
+
+### What the runtime provides
+
+- `ToolCase` declares one public tool, native capability, read/write kind, and
+  maximum primary invocations. `PackageSpec` requires 5-15 package tools
+  (5-30 for a milestone), unique names/keys, and bounded T4/T5/T6 targets and
+  hard limits. Support tools contribute required capabilities but do not get
+  package matrix rows (`capability_package_runtime.py:127-206`).
+- `CallLedger` accepts only `preflight`, `t4`, `t5`, and `t6`. Preflight is
+  fixed at target/hard limit 7; other limits come from `PackageSpec`. Every call
+  routed through `AcceptanceRuntime.call` is counted by tool and phase, including
+  support calls and expected errors (`capability_package_runtime.py:247-294`,
+  `805-855`).
+- `LiveSessionFactory` launches only the supplied stable launcher, constructs a
+  deliberately small environment, initializes MCP over stdio with a 45-second
+  read timeout, and snapshots `tools/list`. A public result is accepted only
+  when it contains exactly one text block decoding to a JSON object
+  (`capability_package_runtime.py:422-476`).
+- `validate_machine_identity` delegates to the exact-identity checker and saves
+  its component signals, source revisions, contract digests, and formal-AE
+  identity. `bind_latest_native_load` separately binds subsequent results to the
+  newest valid formal-AE load record and optionally proves an AE restart changed
+  the native instance (`capability_package_runtime.py:557-629`).
+- Successful calls must agree on native engine, capability/version/contract,
+  source revision, host and session, audit/request identities, effect, and
+  verified postcondition digest. Writes additionally require the declared Undo
+  envelope and replay flag (`capability_package_runtime.py:647-803`).
+- `intent()` returns a run-scoped deterministic-shape idempotency key with a
+  per-runtime counter; it is not stable across runs because the evidence run ID
+  is part of its hash (`capability_package_runtime.py:631-636`).
+
+### What a package driver must implement
+
+The shared CLI constructs identity, fixture, evidence, session, and runtime
+objects, calls `package_factory(runtime, fixture_name)`, then awaits
+`package.run()` (`capability_package_cli.py:79-120`). A package driver therefore
+must supply:
+
+1. a concrete `PackageSpec` and factory;
+2. an async `run()` that selects the behavior for `runtime.mode`;
+3. the disposable fixture recipe, request arguments, operation ordering, and
+   semantic before/after projections;
+4. calls to `validate_machine_identity`, `bind_latest_native_load`,
+   `require_tools`, and `runtime.call` at the appropriate points;
+5. independent package assertions around every write and its real Undo or
+   documented alternative;
+6. `mark_tool_passed` only after that tool's complete acceptance row has passed;
+   and
+7. a details mapping returned from `run()` for the completion summary.
+
+The runtime validates the native response envelope, but it does not know whether
+a package-specific value is correct. `mark_tool_passed` merely changes the row
+and optional Undo counters; it performs no readback itself
+(`capability_package_runtime.py:857-870`). `EvidenceLog.finish` serializes the
+matrix it is given and does not require every row to be passed
+(`capability_package_runtime.py:348-390`). Matrix completeness is therefore a
+driver invariant, not an automatic runtime gate.
+
+### Checkpoint semantics
+
+`runtime.checkpoint(kind, details)` records `checkpoint-requested`, awaits the
+configured handler, then records `checkpoint-completed`
+(`capability_package_runtime.py:638-641`). The default stdin handler:
+
+1. emits one JSON `CHECKPOINT_REQUIRED` line with a random checkpoint ID;
+2. reads exactly one line from stdin; and
+3. accepts only JSON with that same ID and `status="completed"`.
+
+EOF, malformed JSON, a mismatched ID, or any other status fails the run
+(`capability_package_runtime.py:479-507`). Completion is only an
+acknowledgement. The handler does not inspect AE or prove the requested GUI
+action occurred; the driver must perform the public readback or other
+postcondition after the acknowledgement.
+
+### Fixture lifecycle hooks
+
+- `FixturePolicy` requires an absolute `.aep` path, absolute recovery root,
+  positive retention, and exactly the `ephemeral-validation` lifecycle
+  (`capability_package_runtime.py:209-222`).
+- Call `require_fixture_absent()` before creation. It rejects any existing path,
+  including a symlink, rather than overwriting it
+  (`capability_package_runtime.py:872-876`).
+- After the first in-place save, `mark_fixture_created()` requires a nonempty
+  regular non-symlink file, hashes it, sets `created=1`, and records
+  `activeFixtureCount=1` and `saveAsCopies=0`
+  (`capability_package_runtime.py:878-911`).
+- `recover_zero_call_fixture()` acts only when the ledger is still zero, the
+  fixture was marked created, and the path still exists. It moves that exact
+  file to a new run directory under recovery and records a cleanup condition;
+  it does not delete it (`capability_package_runtime.py:913-956`).
+- `archive_fixture()` first checkpoints a save-in-place, close, and formal-AE
+  quit. It rejects recovery roots inside Adobe scan roots, then moves the file
+  into a unique run directory and verifies size and SHA-256 after the move
+  (`capability_package_runtime.py:962-1020`).
+
+The shared CLI invokes zero-call recovery only from its failed-run `finally`
+block (`capability_package_cli.py:123-152`). A custom wrapper gets no automatic
+recovery merely by constructing `AcceptanceRuntime`; it must reproduce that
+finally-path or use the shared CLI.
+
+### Mode selection
+
+The ledger recognizes all four modes, but the runtime does not decide whether a
+package is entitled to T4 or what each mode does
+(`capability_package_runtime.py:247-266`). The shared CLI exposes all four
+choices (`capability_package_cli.py:37-50`); a package-specific CLI may expose a
+smaller set. The package's `run()` owns the mode branch and must reject an
+inapplicable mode.
+
+`EvidenceLog` labels only T5/T6 as candidate runs, and
+`candidateEvidence=true` is assigned only when such a run finishes with
+`passed=true`. Preflight and T4 remain non-candidate even when successful
+(`capability_package_runtime.py:300-317`, `348-373`).
+
+### Evidence emission and failure edges
+
+The evidence directory is forced to mode `0700`. The runtime writes an
+append-only NDJSON event stream and exclusive summary JSON/completion Markdown
+files at mode `0600`; values are redacted before persistence
+(`capability_package_runtime.py:297-390`). Keys matching token, secret,
+fingerprint, socket, private path, fixture/project path, or home are replaced
+entirely. Private macOS and Windows user-path substrings in other strings are
+also replaced (`capability_package_runtime.py:40-47`, `110-124`).
+
+Three edges are easy to misread:
+
+- `AcceptanceRuntime.call` checks capacity before dispatch but reserves the
+  ledger entry and emits request/response events only after `session.call`
+  returns. A transport exception can therefore leave the count unchanged; zero
+  new ledger entries do not prove a write was not dispatched
+  (`capability_package_runtime.py:805-827`).
+- A decoded `POSSIBLY_SIDE_EFFECTING_FAILURE` is recorded, then immediately
+  raises `PossiblySideEffectingStop`. The runtime never retries it
+  (`capability_package_runtime.py:828-840`).
+- Every individual NDJSON event carries `candidateEvidence=false`; only the
+  final summary can set it true after a passing T5/T6 run. Consumers must read
+  the summary rather than infer candidate status from an event row
+  (`capability_package_runtime.py:324-380`).
+
 ## Native editing milestone #167
 
 `issue167_native_media_acceptance.py` drives the frozen 22-tool Effect Stack,

@@ -26,4 +26,5 @@ Thumbs.db
 .worktrees/
 .local-workspace-archive/
 .superpowers/sdd/
+.cache/capability-package-index/
 plugin/panel/ae_viewer_*.png
