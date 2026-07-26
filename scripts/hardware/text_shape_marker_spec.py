@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Frozen 44-call Text, Shape, and Marker acceptance specification.
+"""Frozen Text, Shape, and Marker T5 and T6 acceptance specifications.
 
 Expectation sources are deliberately concrete. Public request schemas come
 from ``schemas_tsm.PUBLIC_SCHEMAS``; maintained text contracts come from
@@ -32,16 +32,20 @@ NATIVE_CONTRACT_SOURCE = (
     "packages/core/ae_mcp/backends/native_text_shape_marker.py:87-660"
 )
 BRIEF_CALL_BUDGET_SOURCE = (
-    "docs/capability-packages/text-shape-marker.md:1557-1610"
+    "docs/capability-packages/text-shape-marker.md:1566-1609"
 )
+T6_POLICY_SOURCE = "docs/CAPABILITY_PACKAGE_WORKFLOW.md:151-179"
+T6_BRIEF_SOURCE = "docs/capability-packages/text-shape-marker.md:1611-1640"
 
 CALL_CEILING_AUTHORIZATION = {
     "brief": BRIEF_CALL_BUDGET_SOURCE,
+    "tier": "t5",
     "authorizedCalls": 44,
     "normalWorkflowCeiling": 30,
     "reason": (
-        "The frozen brief explicitly authorizes T5 and T6 to use exactly 44 "
-        "public calls and requires abort before call 45."
+        "The frozen brief explicitly authorizes T5 to use exactly 44 public "
+        "calls and requires abort before call 45; this authorization must not "
+        "be re-clamped by downstream runners."
     ),
 }
 
@@ -369,7 +373,166 @@ _ROWS = (
     _call("post-restart-composition-reacquire", "ae_listProjectItems", {"offset": 0, "limit": 50}, "read", "After File > Open Recent, reacquire the composition in the new host/session."),
     _call("post-restart-empty-baseline", "ae_listCompositionLayers", {"composition_locator": "$composition_locator", "offset": 0, "limit": 25}, "read", "Final restarted layer state equals the original empty baseline."),
 )
-CALL_PLAN = tuple(dataclasses.replace(row, ordinal=index) for index, row in enumerate(_ROWS, 1))
+T5_CALL_PLAN = tuple(
+    dataclasses.replace(row, ordinal=index) for index, row in enumerate(_ROWS, 1)
+)
+
+
+def _t5_row(key: str) -> PlanCall:
+    matches = [row for row in T5_CALL_PLAN if row.key == key]
+    require(len(matches) == 1, f"T5 plan row {key!r} is not unique")
+    return matches[0]
+
+
+_T6_ROWS = tuple(
+    _t5_row(key)
+    for key in (
+        "readiness",
+        "composition-create",
+        "composition-reacquire",
+        "empty-layer-baseline",
+        "fonts",
+        "text-create",
+        "text-read",
+        "text-character-set",
+        "text-character-undo-read",
+        "shape-layer-create",
+        "triangle-create",
+        "curve-create",
+        "groups-before-restyle",
+        "stroke-restyle",
+        "group-reorder",
+        "group-reorder-undo-read",
+        "shape-path-set",
+        "shape-path-undo-read",
+        "text-marker-create",
+        "shape-marker-create",
+        "text-marker-isolation-read",
+        "shape-marker-isolation-read",
+        "text-marker-set",
+        "text-marker-set-undo-read",
+        "shape-marker-delete",
+        "cross-family-layers",
+        "cross-family-text",
+        "cross-family-shapes",
+        "post-restart-composition-reacquire",
+    )
+) + (
+    _call(
+        "post-restart-family-layers",
+        "ae_listCompositionLayers",
+        {"composition_locator": "$composition_locator", "offset": 0, "limit": 25},
+        "read",
+        "After File > Open Recent, both package-created layer families remain.",
+    ),
+)
+T6_CALL_PLAN = tuple(
+    dataclasses.replace(row, ordinal=index) for index, row in enumerate(_T6_ROWS, 1)
+)
+
+# Compatibility for package-owned semantic assertions that use the full
+# candidate plan as their source of exact expected arguments.
+CALL_PLAN = T5_CALL_PLAN
+
+T6_REPLAY_GROUNDS = {
+    "new-native-primitive-first-clean-build": (
+        "ae_createShapeLayer",
+        "ae_listShapeGroups",
+        "ae_createShapeGroup",
+        "ae_setShapePath",
+        "ae_setShapeStrokeStyle",
+        "ae_reorderShapeGroup",
+        "ae_listMarkers",
+        "ae_createMarker",
+        "ae_setMarker",
+        "ae_deleteMarker",
+    ),
+    "representative-shared-proven-primitive-family": (
+        "ae_listInstalledFonts",
+        "ae_createTextLayer",
+        "ae_getTextDocument",
+        "ae_setTextCharacterStyle",
+    ),
+    "changed-after-candidate": (),
+    "install-staging-generated-bundle-component-identity": (
+        "ae_projectSummary",
+    ),
+    "distinct-undo-model": (
+        "maintained-jsx-text-document",
+        "native-shape-graph",
+        "native-shape-stream",
+        "native-marker-keyframe",
+    ),
+}
+
+T6_SKIPS = {
+    "ae_setTextContent": {
+        "replayedBy": "ae_setTextCharacterStyle",
+        "grounds": (
+            "shared primitive",
+            "shared Undo model",
+            "shared locator scheme",
+            "byte-identical to the candidate",
+        ),
+        "detail": "thin maintained-JSX TextDocument setter",
+        "sources": (T6_POLICY_SOURCE, T6_BRIEF_SOURCE),
+    },
+    "ae_setTextParagraphStyle": {
+        "replayedBy": "ae_setTextCharacterStyle",
+        "grounds": (
+            "shared primitive",
+            "shared Undo model",
+            "shared locator scheme",
+            "byte-identical to the candidate",
+        ),
+        "detail": "thin maintained-JSX TextDocument setter",
+        "sources": (T6_POLICY_SOURCE, T6_BRIEF_SOURCE),
+    },
+    "ae_setShapeFillStyle": {
+        "replayedBy": "ae_setShapeStrokeStyle",
+        "grounds": (
+            "shared primitive",
+            "shared Undo model",
+            "shared locator scheme",
+            "byte-identical to the candidate",
+        ),
+        "detail": "thin native static-stream style setter",
+        "sources": (T6_POLICY_SOURCE, T6_BRIEF_SOURCE),
+    },
+}
+
+T6_UNDO_MODELS = {
+    "maintained-jsx-text-document": {
+        "representative": "text-character-set",
+        "tools": (
+            "ae_createTextLayer",
+            "ae_setTextCharacterStyle",
+        ),
+    },
+    "native-shape-graph": {
+        "representative": "group-reorder",
+        "tools": (
+            "ae_createShapeLayer",
+            "ae_createShapeGroup",
+            "ae_reorderShapeGroup",
+        ),
+    },
+    "native-shape-stream": {
+        "representative": "shape-path-set",
+        "tools": (
+            "ae_setShapePath",
+            "ae_setShapeStrokeStyle",
+        ),
+    },
+    "native-marker-keyframe": {
+        "representative": "text-marker-set",
+        "tools": (
+            "ae_createMarker",
+            "ae_setMarker",
+            "ae_deleteMarker",
+        ),
+    },
+}
 
 
 @dataclasses.dataclass(frozen=True)
@@ -380,7 +543,7 @@ class AddressLink:
     producer_path: str
 
 
-ADDRESS_LINKS = (
+T5_ADDRESS_LINKS = (
     AddressLink(4, "composition_locator", 3, "value.items[TSM Acceptance Fixture].locator"),
     AddressLink(6, "composition_locator", 3, "value.items[TSM Acceptance Fixture].locator"),
     AddressLink(7, "layer_locator", 6, "value.after.layerLocator"),
@@ -421,6 +584,125 @@ ADDRESS_LINKS = (
     AddressLink(42, "composition_locator", 41, "value.compositionLocator"),
     AddressLink(44, "composition_locator", 43, "value.items[TSM Acceptance Fixture].locator"),
 )
+ADDRESS_LINKS = T5_ADDRESS_LINKS
+
+_T6_PRODUCERS = {
+    "composition_locator": {
+        "composition-reacquire": "value.items[TSM Acceptance Fixture].locator",
+        "text-create": "value.compositionLocator",
+        "shape-layer-create": "value.compositionLocator",
+        "cross-family-layers": "value.compositionLocator",
+        "post-restart-composition-reacquire": (
+            "value.items[TSM Acceptance Fixture].locator"
+        ),
+    },
+    "text_layer_locator": {
+        "text-create": "value.after.layerLocator",
+        "text-read": "value.layerLocator",
+        "text-character-set": "value.layerLocator",
+        "text-character-undo-read": "value.layerLocator",
+        "cross-family-layers": "value.layers[TSM Text].locator",
+        "cross-family-text": "value.layerLocator",
+    },
+    "shape_layer_locator": {
+        "shape-layer-create": "value.layerLocator",
+        "triangle-create": "value.layerLocator",
+        "curve-create": "value.layerLocator",
+        "groups-before-restyle": "value.layerLocator",
+        "stroke-restyle": "value.groupRef.layerLocator",
+        "group-reorder": "value.layerLocator",
+        "group-reorder-undo-read": "value.layerLocator",
+        "shape-path-set": "value.groupRef.layerLocator",
+        "shape-path-undo-read": "value.layerLocator",
+        "cross-family-layers": "value.layers[TSM Shape].locator",
+        "cross-family-shapes": "value.layerLocator",
+    },
+    "triangle_ref": {
+        "groups-before-restyle": "value.groups[Triangle].ref",
+        "stroke-restyle": "value.groupRef",
+        "group-reorder-undo-read": "value.groups[Triangle].ref",
+        "shape-path-set": "value.groupRef",
+        "shape-path-undo-read": "value.groups[Triangle].ref",
+    },
+    "text_marker_target": {
+        "text-create": "value.after.layerLocator",
+        "text-character-undo-read": "value.layerLocator",
+        "text-marker-create": "value.after.ref.target",
+        "text-marker-isolation-read": "value.target",
+        "text-marker-set": "value.after.ref.target",
+        "text-marker-set-undo-read": "value.target",
+        "cross-family-layers": "value.layers[TSM Text].locator",
+    },
+    "shape_marker_target": {
+        "shape-layer-create": "value.layerLocator",
+        "shape-path-undo-read": "value.layerLocator",
+        "shape-marker-create": "value.after.ref.target",
+        "shape-marker-isolation-read": "value.target",
+        "shape-marker-delete": "value.before.ref.target",
+        "cross-family-layers": "value.layers[TSM Shape].locator",
+    },
+    "text_marker_ref": {
+        "text-marker-isolation-read": "value.markers[0].ref",
+    },
+    "shape_marker_ref": {
+        "shape-marker-isolation-read": "value.markers[0].ref",
+    },
+}
+
+_ADDRESS_FIELDS = {
+    "composition_locator",
+    "layer_locator",
+    "group_ref",
+    "target",
+    "marker_ref",
+}
+
+
+def _symbolic_addresses(
+    value: Any, *, field: str = ""
+) -> tuple[tuple[str, str], ...]:
+    if isinstance(value, str) and value.startswith("$") and not value.startswith(
+        "$operation_key:"
+    ):
+        return ((field, value[1:]),) if field in _ADDRESS_FIELDS else ()
+    if isinstance(value, Mapping):
+        return tuple(
+            address
+            for key, item in value.items()
+            for address in _symbolic_addresses(item, field=key)
+        )
+    if isinstance(value, (list, tuple)):
+        return tuple(
+            address
+            for item in value
+            for address in _symbolic_addresses(item, field=field)
+        )
+    return ()
+
+
+def _derive_address_links(
+    plan: tuple[PlanCall, ...],
+    producers: Mapping[str, Mapping[str, str]],
+) -> tuple[AddressLink, ...]:
+    latest: dict[str, tuple[int, str]] = {}
+    links: list[AddressLink] = []
+    for row in plan:
+        for field, context_key in _symbolic_addresses(row.arguments):
+            require(
+                context_key in latest,
+                f"{row.key} consumes ${context_key} before this plan produces it",
+            )
+            producer_call, producer_path = latest[context_key]
+            links.append(
+                AddressLink(row.ordinal, field, producer_call, producer_path)
+            )
+        for context_key, by_call in producers.items():
+            if row.key in by_call:
+                latest[context_key] = (row.ordinal, by_call[row.key])
+    return tuple(links)
+
+
+T6_ADDRESS_LINKS = _derive_address_links(T6_CALL_PLAN, _T6_PRODUCERS)
 
 TEXT_LOCATOR_CHAIN = {
     "ae_createTextLayer": "call 3 ae_listProjectItems supplies value.items[TSM Acceptance Fixture].locator",
@@ -441,15 +723,18 @@ SPEC = PackageSpec(
     t4_hard_limit=4,
     t5_target_calls=44,
     t5_hard_limit=44,
-    t6_target_calls=44,
-    t6_hard_limit=44,
+    t6_target_calls=30,
+    t6_hard_limit=30,
     tools=tuple(
         ToolCase(
             expectation.registry_name.removeprefix("ae.").replace(".", "-"),
             public_tool,
             expectation.contract_id,
             expectation.kind,
-            sum(row.tool == public_tool for row in CALL_PLAN),
+            max(
+                sum(row.tool == public_tool for row in T5_CALL_PLAN),
+                sum(row.tool == public_tool for row in T6_CALL_PLAN),
+            ),
         )
         for public_tool, expectation in CONTRACTS.items()
     ),
@@ -461,18 +746,44 @@ SPEC = PackageSpec(
     ),
 )
 
-require(len(CALL_PLAN) == 44, "TSM acceptance plan must contain exactly 44 calls")
+require(len(T5_CALL_PLAN) == 44, "TSM T5 plan must contain exactly 44 calls")
 require(
-    [row.ordinal for row in CALL_PLAN] == list(range(1, 45)),
-    "TSM acceptance ordinals must be exactly 1..44",
+    [row.ordinal for row in T5_CALL_PLAN] == list(range(1, 45)),
+    "TSM T5 ordinals must be exactly 1..44",
+)
+require(len(T6_CALL_PLAN) == 30, "TSM T6 plan must contain exactly 30 calls")
+require(
+    [row.ordinal for row in T6_CALL_PLAN] == list(range(1, 31)),
+    "TSM T6 ordinals must be exactly 1..30",
 )
 require(
     set(CONTRACTS) == set(PACKAGE_TOOLS),
     "TSM public contract expectations must cover all 17 package tools",
 )
 require(
-    all(link.producer_call < link.consumer_call for link in ADDRESS_LINKS),
-    "every TSM address must be produced by an earlier public call",
+    all(
+        link.producer_call < link.consumer_call
+        for links in (T5_ADDRESS_LINKS, T6_ADDRESS_LINKS)
+        for link in links
+    ),
+    "every TSM T5/T6 address must be produced by an earlier public call",
+)
+require(
+    set(T6_SKIPS) == set(PACKAGE_TOOLS) - {row.tool for row in T6_CALL_PLAN},
+    "every omitted T6 package tool must have exactly one skip justification",
+)
+require(
+    all(
+        set(skip["grounds"])
+        == {
+            "shared primitive",
+            "shared Undo model",
+            "shared locator scheme",
+            "byte-identical to the candidate",
+        }
+        for skip in T6_SKIPS.values()
+    ),
+    "every T6 skip must carry all four policy grounds",
 )
 
 
@@ -489,5 +800,14 @@ __all__ = [
     "PACKAGE_TOOLS",
     "REOPEN_PROCEDURE",
     "SPEC",
+    "T5_ADDRESS_LINKS",
+    "T5_CALL_PLAN",
+    "T6_ADDRESS_LINKS",
+    "T6_CALL_PLAN",
+    "T6_REPLAY_GROUNDS",
+    "T6_BRIEF_SOURCE",
+    "T6_POLICY_SOURCE",
+    "T6_SKIPS",
+    "T6_UNDO_MODELS",
     "TEXT_LOCATOR_CHAIN",
 ]

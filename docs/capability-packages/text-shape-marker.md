@@ -1410,7 +1410,7 @@ included in the frozen 44-call ledger, not appended ad hoc.
 
 ### Cross-family combinations
 
-T5 and T6 must exercise these combinations in the same fixture:
+T5 exercises all of these combinations in the same fixture:
 
 1. the text and shape layers coexist and are reacquired through public layer
    reads after each graph-changing create;
@@ -1431,6 +1431,13 @@ T5 and T6 must exercise these combinations in the same fixture:
    markers are created, edited, deleted, and undone; and
 8. a final composition-layer read proves family teardown returned the fixture
    to the recorded empty-composition baseline.
+
+T6 uses the same fixture recipe but the policy-reduced plan. It proves that
+both layer families coexist, both equal-time marker streams remain isolated,
+the representative stroke restyle survives shape-group reorder and independent
+readback, and both layers survive the formal-AE restart/reopen. T6 does not
+repeat the T5-only fill restyle, the two omitted text setters, or per-write
+teardown.
 
 ## Undo and uncertain-failure model
 
@@ -1462,9 +1469,11 @@ JSX `setValue` Undo is not accepted by assertion. Before candidate freeze:
 - T2 driver tests fail if a text write row omits the real-Undo checkpoint or
   accepts `undoAvailable` as `undoVerified`.
 
-T5/T6 then execute the same checkpoints against real AE. If AE does not record
-one expected text Undo, that row fails loudly with the complete expected and
-actual TextDocument snapshots; it is not skipped or relabeled.
+T5 executes every listed write checkpoint against real AE. T6 executes one
+real Undo for each distinct package Undo model: maintained-JSX TextDocument,
+native shape graph, native shape stream, and native marker keyframe. If AE does
+not record an expected Undo, that row fails loudly with the complete expected
+and actual snapshot; it is not skipped or relabeled.
 
 Any timeout/disconnect after a write dispatch is
 `POSSIBLY_SIDE_EFFECTING_FAILURE`, `sideEffect: may-have-occurred`. Stop that
@@ -1556,9 +1565,15 @@ failure before semantic acceptance.
 
 ### Public-call budget
 
-**T5 uses exactly 44 public MCP calls and aborts before call 45. T6 uses the
-same exactly 44-call plan and aborts before call 45.** This brief explicitly
-authorizes both sessions to exceed the workflow's normal 30-call ceiling.
+**T5 uses exactly 44 public MCP calls and aborts before call 45.** This brief
+explicitly authorizes T5 to exceed the workflow's normal 30-call ceiling. The
+authorization is carried by
+`scripts/hardware/text_shape_marker_spec.py:CALL_CEILING_AUTHORIZATION`; no
+downstream ledger or CLI may clamp T5 back to 30 calls.
+
+**T6 uses a distinct 30-call plan and aborts before call 31.** It uses the same
+driver and fixture recipe, selected by `--mode t6`; a second driver is
+forbidden because the tier plans must not drift apart.
 
 The exception is justified by 17 package tools, 13 write tools, independent
 post-Undo public readback for every write, two shape groups required to prove
@@ -1581,6 +1596,49 @@ The 44-call ledger is closed:
 | 2 | post-restart project/composition reacquisition and final empty-baseline check |
 | **44** | total |
 
+The T6 30-call ledger is closed:
+
+| Calls | Purpose |
+| ---: | --- |
+| 4 | readiness, create/reacquire composition, empty-layer baseline |
+| 5 | font inventory, text create/read, representative character setter and Undo read |
+| 9 | shape layer, two groups, all distinct native shape primitives except the thin fill setter, and two Undo reads |
+| 7 | all four marker tools across two targets, isolation reads, and representative marker Undo read |
+| 3 | explicit cross-family layer/text/shape state reads |
+| 2 | post-restart project reacquisition and retained-family layer read |
+| **30** | total |
+
+### T6 replay grounds and omissions
+
+The 30-call plan is derived from all five section-8 workflow grounds:
+
+1. First clean build: replay every new native shape/marker primitive. The fill
+   setter is the one permitted exception because it is the same static-stream
+   primitive as the replayed stroke setter.
+2. Shared proven families: replay font inventory, text creation, complete text
+   read, and the character-style setter as the maintained-JSX representative.
+3. Post-candidate changes: the frozen plan currently has none. If a tool
+   implementation changes after T5, including a replacement-candidate change,
+   it must be added to T6 before the clean-main run.
+4. Install/staging/generated/component identity: replay
+   `ae_projectSummary`, require all 17 public tools, and bind the separately
+   verified installed component set and generated contract digests.
+5. Undo models: execute and read back one real Undo for maintained-JSX
+   TextDocument, native shape graph, native shape stream, and native marker
+   keyframe mutation.
+
+Exactly three T5 package tools are omitted:
+
+| Skipped in T6 | Replayed representative | Required grounds |
+| --- | --- | --- |
+| `ae_setTextContent` | `ae_setTextCharacterStyle` | shared primitive, shared Undo model, shared layer-locator scheme, byte-identical to the candidate |
+| `ae_setTextParagraphStyle` | `ae_setTextCharacterStyle` | shared primitive, shared Undo model, shared layer-locator scheme, byte-identical to the candidate |
+| `ae_setShapeFillStyle` | `ae_setShapeStrokeStyle` | shared primitive, shared Undo model, shared shape-group-ref locator scheme, byte-identical to the candidate |
+
+Byte identity is a precondition for each omission, not an assumption that may
+survive a post-candidate edit. If it is not true at T6 preparation, replay the
+changed tool.
+
 ### Address-chain construction
 
 The executable plan contains no hand-authored AE numeric id and no locator
@@ -1598,10 +1656,18 @@ response. For the text family specifically:
 Call 6 also returns a fresh `value.compositionLocator`; call 14
 `ae_createShapeLayer` consumes it after text-layer creation. Shape group,
 marker, cross-family, teardown, and post-restart addresses are similarly
-linked in `scripts/hardware/text_shape_marker_spec.py:ADDRESS_LINKS`.
+linked in `scripts/hardware/text_shape_marker_spec.py:T5_ADDRESS_LINKS`.
 Bridge-side construction tests require every producer ordinal to precede its
-consumer ordinal and require every address-bearing call in the 44-call plan to
-have one such link.
+consumer ordinal and require every address-bearing T5 call to have one such
+link.
+
+The T6 chain is constructed independently in
+`scripts/hardware/text_shape_marker_spec.py:T6_ADDRESS_LINKS`. In particular,
+the shorter plan reacquires the composition at call 3, creates text at call 6,
+creates the shape layer from call 6's fresh composition locator at call 10,
+and reacquires the composition again at call 29 before the final layer read.
+Construction fails during module import if any T6 consumer loses its earlier
+producer.
 
 GUI Undo, save-in-place, File > Open Recent, AE quit/relaunch, and moving the
 closed `.aep` to recovery are checkpoints rather than public MCP dispatches,
@@ -1617,8 +1683,12 @@ candidate evidence.
 - Save in place, quit formal AE, relaunch that exact formal application, and
   reopen the fixture through **AE File > Open Recent**. Never use Finder,
   double-click, or LaunchServices.
-- Bind post-restart reads to the new formal host/session, reacquire every
-  locator/index, and compare the empty fixture baseline before archive.
+- Bind post-restart reads to the new formal host/session and reacquire every
+  locator/index. T5 compares the empty fixture baseline before archive; T6
+  verifies that both retained package layers survived restart.
+- Record the verified component identity once for each pre/post-restart
+  session. Per-tool evidence carries only component-identity deltas; it does
+  not repeat the invariant component set.
 - At T1/T2 the driver must load actual `tools/list`, compare each of the 17
   advertised input schemas to the frozen package expectation, and compare
   native capability/result contract digests or maintained-JSX
@@ -1686,9 +1756,11 @@ contains no tests.
 10. Marker time tests compare rationals by cross multiplication, reject
     duplicate exact times at different scales, and preserve target+time
     identity after `ae_setMarker`.
-11. The driver expectation tests validate both provenance branches, the
-    44-call abort-before-45 rule, all Undo checkpoints, File > Open Recent
-    checkpoint text, fresh-key-per-run behavior, and the frozen fixture recipe.
+11. The driver expectation tests validate both provenance branches, the T5
+    44-call abort-before-45 authorization, the T6 30-call count and every skip
+    ground, both address chains, tier-specific Undo checkpoints, File > Open
+    Recent checkpoint text, once-per-session component identity with per-tool
+    deltas, fresh-key-per-run behavior, and the frozen fixture recipe.
 
 ### T2: package integration and fail-loud host boundaries
 

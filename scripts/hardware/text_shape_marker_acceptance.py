@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the frozen Text, Shape, and Marker T4/T5/T6 acceptance plan."""
+"""Run the frozen tier-selected Text, Shape, and Marker acceptance plan."""
 
 from __future__ import annotations
 
@@ -23,6 +23,11 @@ from text_shape_marker_spec import (
     FIXTURE_RECIPE,
     REOPEN_PROCEDURE,
     SPEC,
+    T5_CALL_PLAN,
+    T6_CALL_PLAN,
+    T6_REPLAY_GROUNDS,
+    T6_SKIPS,
+    T6_UNDO_MODELS,
 )
 
 
@@ -86,6 +91,95 @@ class TextShapeMarkerPackage:
         self.operation_keys: dict[str, str] = {}
         self.context: dict[str, Any] = {}
         self.responses: dict[str, dict[str, Any]] = {}
+        self.plan = (
+            T6_CALL_PLAN if self.runtime.mode == "t6" else T5_CALL_PLAN
+        )
+        self.session_stage = ""
+        self.session_component_identities: dict[str, dict[str, Any]] = {}
+
+    def _record_component_identity(
+        self, tool: str, payload: Mapping[str, Any]
+    ) -> None:
+        """Record invariant identity once, then only observed per-tool deltas."""
+
+        require(bool(self.session_stage), "component identity session is not bound")
+        provenance = payload.get("provenance")
+        observed = (
+            {
+                key: provenance[key]
+                for key in (
+                    "selectedWireVersion",
+                    "pluginVersion",
+                    "compiledSdkVersion",
+                    "hostInstanceId",
+                    "sessionId",
+                    "capabilitiesDigest",
+                    "sourceCommit",
+                )
+                if isinstance(provenance, Mapping) and key in provenance
+            }
+            if isinstance(provenance, Mapping)
+            else {}
+        )
+        baseline = self.session_component_identities.get(self.session_stage)
+        if baseline is None:
+            baseline = {
+                "componentSignals": copy.deepcopy(self.runtime.component_signals),
+                "sourceRevisions": copy.deepcopy(self.runtime.source_revisions),
+                "formalAeIdentity": copy.deepcopy(self.runtime.formal_ae_identity),
+                "nativeResponseIdentity": observed,
+            }
+            self.session_component_identities[self.session_stage] = baseline
+            self.runtime.evidence.record(
+                "component-identity-session",
+                {"stage": self.session_stage, "identity": baseline},
+            )
+        native_baseline = baseline["nativeResponseIdentity"]
+        delta = {
+            key: value
+            for key, value in observed.items()
+            if key in native_baseline and native_baseline[key] != value
+        }
+        self.runtime.evidence.record(
+            "tool-component-identity-delta",
+            {
+                "stage": self.session_stage,
+                "tool": tool,
+                "delta": delta,
+            },
+        )
+
+    def _record_t6_reduction(self) -> None:
+        if self.runtime.mode != "t6":
+            return
+        for tool, skip in T6_SKIPS.items():
+            row = self.runtime.matrix[tool]
+            row["status"] = "skipped-t6"
+            row["t6Skip"] = copy.deepcopy(skip)
+        representatives = {
+            model: contract["representative"]
+            for model, contract in T6_UNDO_MODELS.items()
+        }
+        for model, contract in T6_UNDO_MODELS.items():
+            representative_tool = next(
+                row.tool
+                for row in self.plan
+                if row.key == contract["representative"]
+            )
+            for tool in contract["tools"]:
+                undo = self.runtime.matrix[tool]["undo"]
+                undo["model"] = model
+                undo["required"] = tool == representative_tool
+                undo["coveredBy"] = representative_tool
+        self.runtime.evidence.record(
+            "t6-plan-reduction",
+            {
+                "calls": len(self.plan),
+                "skips": T6_SKIPS,
+                "replayGrounds": T6_REPLAY_GROUNDS,
+                "undoRepresentatives": representatives,
+            },
+        )
 
     def operation_key(self, intent: str) -> str:
         """Mint once per evidence session; reconciliation reuses this exact key."""
@@ -211,21 +305,28 @@ class TextShapeMarkerPackage:
         phase: str,
     ) -> dict[str, Any]:
         if tool in CONTRACTS and CONTRACTS[tool].engine == "maintained-jsx":
-            return await self._text_call(session, tool, arguments, phase=phase)
-        expectation = CONTRACTS.get(tool)
-        case = SPEC.case_by_tool.get(tool) or self.support[tool]
-        capability_id = (
-            expectation.contract_id if expectation is not None else case.capability_id
-        )
-        return await self.runtime.call(
-            session,
-            tool,
-            arguments,
-            capability_id=capability_id,
-            write=case.kind == "write",
-            phase=phase,
-            expected_replayed=False if case.kind == "write" else None,
-        )
+            payload = await self._text_call(
+                session, tool, arguments, phase=phase
+            )
+        else:
+            expectation = CONTRACTS.get(tool)
+            case = SPEC.case_by_tool.get(tool) or self.support[tool]
+            capability_id = (
+                expectation.contract_id
+                if expectation is not None
+                else case.capability_id
+            )
+            payload = await self.runtime.call(
+                session,
+                tool,
+                arguments,
+                capability_id=capability_id,
+                write=case.kind == "write",
+                phase=phase,
+                expected_replayed=False if case.kind == "write" else None,
+            )
+        self._record_component_identity(tool, payload)
+        return payload
 
     def _named(self, rows: Any, name: str, label: str) -> dict[str, Any]:
         require(isinstance(rows, list), f"{label} rows are invalid")
@@ -357,7 +458,7 @@ class TextShapeMarkerPackage:
         elif key == "shape-marker-isolation-read":
             marker = mapping(value.get("markers")[0], "shape marker is invalid")
             self.context["shape_marker_ref"] = _marker_ref(marker.get("ref"))
-        elif key == "cross-family-layers":
+        elif key in {"cross-family-layers", "post-restart-family-layers"}:
             self.context["composition_locator"] = _locator(
                 value.get("compositionLocator"), "composition"
             )
@@ -448,6 +549,14 @@ class TextShapeMarkerPackage:
                 _semantic(value) == self.context["empty_baseline"],
                 f"{key} did not equal the empty baseline",
             )
+        elif key == "post-restart-family-layers":
+            layers = value.get("layers")
+            require(
+                isinstance(layers, list)
+                and {layer.get("name") for layer in layers}
+                == {"TSM Text", "TSM Shape"},
+                "post-restart family layers did not preserve both package targets",
+            )
 
     async def _undo(self, write_key: str) -> None:
         await self.runtime.checkpoint(
@@ -470,6 +579,36 @@ class TextShapeMarkerPackage:
                 "saveAsCopies": 0,
             },
         )
+
+    async def _execute_rows(
+        self,
+        session: PublicSession,
+        rows: Sequence[Any],
+    ) -> None:
+        for row in rows:
+            if row.undo_of is not None:
+                await self._undo(row.undo_of)
+            payload = await self._call(
+                session,
+                row.tool,
+                self._resolve(row.arguments),
+                phase=f"{self.runtime.mode}-{row.key}",
+            )
+            self.responses[row.key] = payload
+            self._assert_state(row.key, payload)
+            self._capture(row.key, payload)
+            if row.tool in CONTRACTS:
+                self.runtime.mark_tool_passed(row.tool)
+            if row.undo_of is not None:
+                self.runtime.mark_tool_passed(
+                    next(
+                        plan.tool
+                        for plan in self.plan
+                        if plan.key == row.undo_of
+                    ),
+                    undo_executed=True,
+                    undo_verified=True,
+                )
 
     async def run(self) -> dict[str, Any]:
         native_ids = tuple(
@@ -501,68 +640,60 @@ class TextShapeMarkerPackage:
                 "Use the dedicated four-call MarkerSuite3 novelty smoke before candidate acceptance"
             )
 
+        self._record_t6_reduction()
+        restart_index = next(
+            index
+            for index, row in enumerate(self.plan)
+            if row.key == "post-restart-composition-reacquire"
+        )
         first = self.runtime.bind_latest_native_load(stage="initial")
         required = [case.tool for case in (*SPEC.tools, *SPEC.support_tools)]
+        self.session_stage = "initial"
         async with self.runtime.session_factory() as session:
             self.runtime.require_tools(session, required)
-            for row in CALL_PLAN:
-                if row.ordinal == 43:
-                    await self._restart()
-                    break
-                if row.undo_of is not None:
-                    await self._undo(row.undo_of)
-                payload = await self._call(
-                    session,
-                    row.tool,
-                    self._resolve(row.arguments),
-                    phase=f"{self.runtime.mode}-{row.key}",
-                )
-                self.responses[row.key] = payload
-                self._assert_state(row.key, payload)
-                self._capture(row.key, payload)
-                if row.tool in CONTRACTS and row.disposition == "read":
-                    self.runtime.mark_tool_passed(row.tool)
-                if row.undo_of is not None:
-                    self.runtime.mark_tool_passed(
-                        next(
-                            plan.tool
-                            for plan in CALL_PLAN
-                            if plan.key == row.undo_of
-                        ),
-                        undo_executed=True,
-                        undo_verified=True,
-                    )
+            await self._execute_rows(session, self.plan[:restart_index])
 
+        await self._restart()
         second = self.runtime.bind_latest_native_load(
             stage="restart", previous_instance_id=first
         )
+        self.session_stage = "restart"
         async with self.runtime.session_factory() as session:
             self.runtime.require_tools(session, required)
-            for row in CALL_PLAN[42:]:
-                payload = await self._call(
-                    session,
-                    row.tool,
-                    self._resolve(row.arguments),
-                    phase=f"{self.runtime.mode}-{row.key}",
-                )
-                self.responses[row.key] = payload
-                self._assert_state(row.key, payload)
-                self._capture(row.key, payload)
+            await self._execute_rows(session, self.plan[restart_index:])
 
         require(
-            self.runtime.ledger.total == CALL_CEILING_AUTHORIZATION["authorizedCalls"],
-            "TSM T5/T6 must use exactly 44 public calls",
+            self.runtime.ledger.total == len(self.plan),
+            f"TSM {self.runtime.mode.upper()} must use exactly {len(self.plan)} public calls",
         )
         require(
-            self.runtime.ledger.hard_limit == 44,
-            "TSM call ceiling must abort before call 45",
+            self.runtime.ledger.hard_limit == len(self.plan),
+            (
+                "TSM T5 call ceiling must abort before call 45"
+                if self.runtime.mode == "t5"
+                else "TSM T6 call ceiling must abort before call 31"
+            ),
         )
         archived = await self.runtime.archive_fixture()
         return {
-            "callCeilingAuthorization": CALL_CEILING_AUTHORIZATION,
+            "selectedPlan": self.runtime.mode,
+            "selectedPlanCalls": len(self.plan),
+            "callCeilingAuthorization": (
+                CALL_CEILING_AUTHORIZATION
+                if self.runtime.mode == "t5"
+                else None
+            ),
+            "t6SkippedTools": T6_SKIPS if self.runtime.mode == "t6" else {},
+            "t6ReplayGrounds": (
+                T6_REPLAY_GROUNDS if self.runtime.mode == "t6" else {}
+            ),
             "firstHostInstanceId": first,
             "restartHostInstanceId": second,
             "restartVerified": True,
+            "componentIdentitySessions": tuple(
+                self.session_component_identities
+            ),
+            "perToolComponentIdentity": "deltas-only",
             "operationKeyCount": len(self.operation_keys),
             "reconciliationReusesOriginalKey": True,
             "archived": archived,

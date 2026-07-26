@@ -1,4 +1,4 @@
-"""Construction tests for the frozen 44-call Text/Shape/Marker driver."""
+"""Construction tests for both Text/Shape/Marker acceptance plans."""
 
 from __future__ import annotations
 
@@ -54,17 +54,18 @@ def _locator(kind: str, object_id: str, generation: int = 1) -> dict:
     }
 
 
-def test_plan_has_explicit_authorized_44_call_ceiling_and_restart_path():
-    assert [row.ordinal for row in spec.CALL_PLAN] == list(range(1, 45))
+def test_t5_has_explicit_authorized_44_call_fence_and_restart_path():
+    assert [row.ordinal for row in spec.T5_CALL_PLAN] == list(range(1, 45))
     assert spec.SPEC.t5_target_calls == spec.SPEC.t5_hard_limit == 44
-    assert spec.SPEC.t6_target_calls == spec.SPEC.t6_hard_limit == 44
     assert spec.CALL_CEILING_AUTHORIZATION == {
         "brief": spec.BRIEF_CALL_BUDGET_SOURCE,
+        "tier": "t5",
         "authorizedCalls": 44,
         "normalWorkflowCeiling": 30,
         "reason": (
-            "The frozen brief explicitly authorizes T5 and T6 to use exactly "
-            "44 public calls and requires abort before call 45."
+            "The frozen brief explicitly authorizes T5 to use exactly 44 "
+            "public calls and requires abort before call 45; this "
+            "authorization must not be re-clamped by downstream runners."
         ),
     }
     assert spec.REOPEN_PROCEDURE["requiredPath"] == "AE File > Open Recent"
@@ -73,8 +74,49 @@ def test_plan_has_explicit_authorized_44_call_ceiling_and_restart_path():
         "file double-click",
         "LaunchServices",
     }
-    assert spec.CALL_PLAN[42].key == "post-restart-composition-reacquire"
-    assert spec.CALL_PLAN[43].key == "post-restart-empty-baseline"
+    assert spec.T5_CALL_PLAN[42].key == "post-restart-composition-reacquire"
+    assert spec.T5_CALL_PLAN[43].key == "post-restart-empty-baseline"
+
+
+def test_t6_is_the_policy_derived_30_call_reduction_with_explained_skips():
+    assert [row.ordinal for row in spec.T6_CALL_PLAN] == list(range(1, 31))
+    assert spec.SPEC.t6_target_calls == spec.SPEC.t6_hard_limit == 30
+    assert spec.T6_CALL_PLAN[28].key == "post-restart-composition-reacquire"
+    assert spec.T6_CALL_PLAN[29].key == "post-restart-family-layers"
+    replayed = {
+        row.tool for row in spec.T6_CALL_PLAN if row.tool in spec.CONTRACTS
+    }
+    assert set(spec.T6_SKIPS) == set(spec.CONTRACTS) - replayed == {
+        "ae_setTextContent",
+        "ae_setTextParagraphStyle",
+        "ae_setShapeFillStyle",
+    }
+    required_grounds = {
+        "shared primitive",
+        "shared Undo model",
+        "shared locator scheme",
+        "byte-identical to the candidate",
+    }
+    assert all(
+        set(skip["grounds"]) == required_grounds
+        and skip["replayedBy"] in replayed
+        and skip["sources"] == (
+            spec.T6_POLICY_SOURCE,
+            spec.T6_BRIEF_SOURCE,
+        )
+        for skip in spec.T6_SKIPS.values()
+    )
+    assert set(spec.T6_REPLAY_GROUNDS) == {
+        "new-native-primitive-first-clean-build",
+        "representative-shared-proven-primitive-family",
+        "changed-after-candidate",
+        "install-staging-generated-bundle-component-identity",
+        "distinct-undo-model",
+    }
+    assert spec.T6_REPLAY_GROUNDS["changed-after-candidate"] == ()
+    assert spec.T6_REPLAY_GROUNDS[
+        "install-staging-generated-bundle-component-identity"
+    ] == ("ae_projectSummary",)
 
 
 def test_all_17_expectations_are_derived_from_the_published_contracts():
@@ -154,27 +196,20 @@ def test_text_schema_and_locator_chain_are_publicly_indistinguishable():
     }
 
 
-def test_every_address_link_points_strictly_backward_to_a_public_response():
-    assert all(
-        link.producer_call < link.consumer_call for link in spec.ADDRESS_LINKS
-    )
-    assert {link.consumer_call for link in spec.ADDRESS_LINKS} == {
-        row.ordinal
-        for row in spec.CALL_PLAN
-        if any(
-            key in row.arguments
-            for key in (
-                "composition_locator",
-                "layer_locator",
-                "group_ref",
-                "target",
-                "marker_ref",
-            )
-        )
-    }
-    for link in spec.ADDRESS_LINKS:
-        assert 1 <= link.producer_call < link.consumer_call <= 44
-        assert link.producer_path.startswith("value.")
+def test_every_address_in_both_plans_points_backward_to_a_public_response():
+    for plan, links in (
+        (spec.T5_CALL_PLAN, spec.T5_ADDRESS_LINKS),
+        (spec.T6_CALL_PLAN, spec.T6_ADDRESS_LINKS),
+    ):
+        assert all(link.producer_call < link.consumer_call for link in links)
+        assert {link.consumer_call for link in links} == {
+            row.ordinal
+            for row in plan
+            if spec._symbolic_addresses(row.arguments)
+        }
+        for link in links:
+            assert 1 <= link.producer_call < link.consumer_call <= len(plan)
+            assert link.producer_path.startswith("value.")
 
 
 def test_driver_constructs_text_calls_only_from_prior_public_locators():
@@ -185,7 +220,7 @@ def test_driver_constructs_text_calls_only_from_prior_public_locators():
         counter += 1
         return f"issue170:{name}:session-a-{counter:02d}"
 
-    runtime = SimpleNamespace(intent=intent)
+    runtime = SimpleNamespace(intent=intent, mode="t5")
     package = driver.TextShapeMarkerPackage(
         runtime, fixture_name="TSM Acceptance Fixture"
     )
@@ -205,7 +240,7 @@ def test_driver_constructs_text_calls_only_from_prior_public_locators():
             }
         },
     )
-    create_args = package._resolve(spec.CALL_PLAN[5].arguments)
+    create_args = package._resolve(spec.T5_CALL_PLAN[5].arguments)
     assert create_args["composition_locator"] == composition
     assert "composition_id" not in create_args
     package._capture(
@@ -217,10 +252,10 @@ def test_driver_constructs_text_calls_only_from_prior_public_locators():
             }
         },
     )
-    read_args = package._resolve(spec.CALL_PLAN[6].arguments)
+    read_args = package._resolve(spec.T5_CALL_PLAN[6].arguments)
     assert read_args == {"layer_locator": text}
     package._capture("text-read", {"value": {"layerLocator": text}})
-    content_args = package._resolve(spec.CALL_PLAN[7].arguments)
+    content_args = package._resolve(spec.T5_CALL_PLAN[7].arguments)
     assert content_args["layer_locator"] == text
     assert content_args["idempotency_key"].startswith(
         "issue170:text-content-set:session-a-"
@@ -237,7 +272,7 @@ def test_operation_key_is_fresh_per_session_but_reconciliation_reuses_original()
             return f"{prefix}:{name}:{count}"
 
         return driver.TextShapeMarkerPackage(
-            SimpleNamespace(intent=intent),
+            SimpleNamespace(intent=intent, mode="t5"),
             fixture_name="TSM Acceptance Fixture",
         )
 
@@ -249,8 +284,110 @@ def test_operation_key_is_fresh_per_session_but_reconciliation_reuses_original()
     assert first.operation_key("stroke-restyle") != original
 
 
+def test_one_driver_selects_the_tier_plan_and_keeps_the_fixture_recipe_frozen():
+    def runtime(mode: str):
+        return SimpleNamespace(mode=mode, intent=lambda name: f"{mode}:{name}")
+
+    assert driver.TextShapeMarkerPackage(
+        runtime("t5"), fixture_name="TSM Acceptance Fixture"
+    ).plan is spec.T5_CALL_PLAN
+    assert driver.TextShapeMarkerPackage(
+        runtime("t6"), fixture_name="TSM Acceptance Fixture"
+    ).plan is spec.T6_CALL_PLAN
+    assert spec.FIXTURE_RECIPE == (
+        "Start formal AE with a new empty project and complete a public readiness read.",
+        "Save once in place to the one active ephemeral-validation fixture path.",
+        (
+            "Create TSM Acceptance Fixture at 1920x1080, square pixels, "
+            "10 seconds, 24 fps through ae_createComposition."
+        ),
+        "Reacquire the composition through ae_listProjectItems.",
+        "Record ae_listCompositionLayers as the empty baseline.",
+        "Create TSM Text with A😀中 é and create TSM Shape through public MCP.",
+        "Create Triangle and Curve from the fixed paths and complete styles below.",
+        "Use exact marker times 24/24 and 1000/1000 on distinct layer targets.",
+        "Save only in place at the explicit restart checkpoint.",
+    )
+
+
+def test_t6_has_one_real_undo_checkpoint_per_distinct_undo_model():
+    undo_rows = {row.undo_of for row in spec.T6_CALL_PLAN if row.undo_of}
+    representatives = {
+        contract["representative"]
+        for contract in spec.T6_UNDO_MODELS.values()
+    }
+    assert undo_rows == representatives == {
+        "text-character-set",
+        "group-reorder",
+        "shape-path-set",
+        "text-marker-set",
+    }
+    assert set(spec.T6_REPLAY_GROUNDS["distinct-undo-model"]) == set(
+        spec.T6_UNDO_MODELS
+    )
+
+
+def test_component_identity_is_once_per_session_with_per_tool_deltas_only():
+    events = []
+
+    class Evidence:
+        def record(self, event, payload):
+            events.append((event, payload))
+
+    runtime = SimpleNamespace(
+        mode="t6",
+        intent=lambda name: f"t6:{name}",
+        evidence=Evidence(),
+        component_signals={"core": {"version": "1"}},
+        source_revisions={"core": "a" * 40},
+        formal_ae_identity={"version": "25.3"},
+    )
+    package = driver.TextShapeMarkerPackage(
+        runtime, fixture_name="TSM Acceptance Fixture"
+    )
+    package.session_stage = "initial"
+    provenance = {
+        "selectedWireVersion": "wire-v1",
+        "pluginVersion": "1.2.3",
+        "hostInstanceId": HOST,
+        "sessionId": SESSION,
+        "sourceCommit": "b" * 40,
+    }
+    package._record_component_identity(
+        "ae_projectSummary", {"provenance": provenance}
+    )
+    package._record_component_identity(
+        "ae_createShapeLayer", {"provenance": provenance}
+    )
+    package.session_stage = "restart"
+    package._record_component_identity(
+        "ae_listProjectItems",
+        {
+            "provenance": {
+                **provenance,
+                "hostInstanceId": "66666666-6666-4666-8666-666666666666",
+            }
+        },
+    )
+    session_events = [
+        payload for event, payload in events if event == "component-identity-session"
+    ]
+    delta_events = [
+        payload
+        for event, payload in events
+        if event == "tool-component-identity-delta"
+    ]
+    assert [event["stage"] for event in session_events] == [
+        "initial",
+        "restart",
+    ]
+    assert len(delta_events) == 3
+    assert all(event["delta"] == {} for event in delta_events)
+    assert all(set(event) == {"stage", "tool", "delta"} for event in delta_events)
+
+
 def test_fill_and_stroke_interactions_and_undo_boundaries_are_separate():
-    keys = [row.key for row in spec.CALL_PLAN]
+    keys = [row.key for row in spec.T5_CALL_PLAN]
     assert keys.index("triangle-create") < keys.index("fill-restyle")
     assert keys.index("fill-restyle") < keys.index("stroke-restyle")
     assert keys.index("stroke-restyle") < keys.index("group-reorder")
@@ -262,7 +399,7 @@ def test_fill_and_stroke_interactions_and_undo_boundaries_are_separate():
     )
     assertions = {
         row.key: row.state_assertion
-        for row in spec.CALL_PLAN
+        for row in spec.T5_CALL_PLAN
         if row.key
         in {
             "fill-restyle",
@@ -280,10 +417,10 @@ def test_fill_and_stroke_interactions_and_undo_boundaries_are_separate():
 
     package_write_keys = {
         row.key
-        for row in spec.CALL_PLAN
+        for row in spec.T5_CALL_PLAN
         if row.tool in spec.CONTRACTS
         and spec.CONTRACTS[row.tool].kind == "write"
     }
-    assert {row.undo_of for row in spec.CALL_PLAN if row.undo_of} == (
+    assert {row.undo_of for row in spec.T5_CALL_PLAN if row.undo_of} == (
         package_write_keys
     )
