@@ -4,6 +4,8 @@ Status: frozen for implementation
 
 Task: TASK-025
 
+Amendment: TASK-026 (in-place shape fill/stroke styling only)
+
 Base: `4fbc7b426cd6556c9849853ceb8fdeff368e7534`
 
 Delivery unit: one branch, one PR, one concentrated review, one frozen
@@ -16,9 +18,10 @@ without an explicit package re-freeze.
 
 ## User outcome and package boundary
 
-Models can create and style ordinary text, create editable filled Bezier shape
-groups, and author layer or composition markers through typed public MCP
-tools. Callers supply data, never source code.
+Models can create and style ordinary text, create editable filled/stroked
+Bezier shape groups, restyle those groups in place, and author layer or
+composition markers through typed public MCP tools. Callers supply data, never
+source code.
 
 The same PR also repairs the CEP stage/install contract that blocked the prior
 clean-`main` run: a production platform stage must contain the tracked
@@ -38,12 +41,12 @@ must copy the tracked `plugin/.debug` byte-for-byte, include it in the bundle
 manifest, and prove that the staged plug-in tree passes the unchanged dev
 installer's required-file check without a manual patch.
 
-The package freezes **15 public tools**:
+The package freezes **17 public tools**:
 
 | Family | Count | Tools | Execution |
 | --- | ---: | --- | --- |
 | Text | 6 | create, read, content, character style, paragraph style, fonts | typed template-generated JSX (`maintained-jsx`) |
-| Shape | 5 | create layer, list groups, create group, set path, reorder | native RPC / AEGP |
+| Shape | 7 | create layer, list groups, create group, set path, set fill style, set stroke style, reorder | native RPC / AEGP |
 | Marker | 4 | list, create, set, delete | native RPC / AEGP |
 
 The CEP `.debug` repair adds no public tool.
@@ -152,7 +155,8 @@ time or a shifting keyframe index.
 
 This reuses `AeMediaColor` (`packages/core/ae_mcp/schemas.py:2128-2136`).
 Text fill and stroke ignore `alpha` when AE exposes only RGB but preserve it as
-255 in readback; shape fill uses all four fields in the public contract.
+255 in readback; shape fill and stroke use all four fields in the public
+contract.
 
 #### `BezierPath`
 
@@ -198,6 +202,15 @@ vector group. The pair `groupIndex` + `streamId` follows the existing
 index-plus-stable-identity pattern used for masks. Writes reject a ref whose
 current index no longer has that stream id. Reorder returns a fresh ref with
 the new index.
+
+This same group ref is the complete public address for both style setters.
+`ae_listShapeGroups` returns it in every `ShapeGroup`; the setter name selects
+the one fill or stroke child, and native code resolves that child by its closed
+implementation match name only after validating the group index and stable
+stream id. No caller supplies a child index, match name, property path, or new
+style locator. A missing or duplicate fill/stroke child is
+`UNREPRESENTABLE_SHAPE_GROUP`, `sideEffect: not-started`, rather than a best
+guess.
 
 #### `MarkerTargetInput`, `MarkerTarget`, `MarkerRefInput`, and `MarkerRef`
 
@@ -775,11 +788,12 @@ in `[-30000,30000]`.
 Response `value` has the same before/after shape as
 `ae_setTextContent`. Only requested paragraph fields may differ.
 
-## Frozen public shape surface: 5 tools
+## Frozen public shape surface: 7 tools
 
 Shape tools are native-only. They use `AEGP_CreateVectorLayerInComp`
 (`AE_GeneralPlug.h:841-843`) and the already-proven Comp, Layer, Utility,
-Stream, DynamicStream, Memory, Project, Item, and MaskOutline suites.
+Stream, DynamicStream, Keyframe, Memory, Project, Item, and MaskOutline
+suites.
 
 DynamicStreamSuite4 supplies traversal, add, name, stable stream id, and
 reorder primitives (`AE_GeneralPlug.h:1640-1735`). MaskOutlineSuite3 supplies
@@ -787,6 +801,37 @@ open/closed state plus vertex create/read/write with relative tangents
 (`:2382-2419`). The current plug-in already leases Stream/DynamicStream in the
 native path (`native/ae-plugin/src/aegp/plugin_entry.cpp:7244-7259`) and
 leases MaskOutlineSuite3 together with them for path work (`:7632-7645`).
+
+The in-place style path stays inside this proven acquisition set. The current
+plug-in already:
+
+- resolves a layer root and a closed match-name child
+  (`native/ae-plugin/src/aegp/plugin_entry.cpp:4490-4508`), then traverses
+  indexed children, reads their dynamic flags and match names, and verifies
+  their unique stream ids with DynamicStreamSuite4 and StreamSuite6
+  (`:4905-4959`);
+- samples `OneD` and `COLOR` leaf streams (`:4990-5017`), with the concrete
+  scalar/color conversions at `:1321-1398`;
+- leases KeyframeSuite5 with StreamSuite6, DynamicStreamSuite4, and
+  UtilitySuite6 for an Undo-producing static primitive write
+  (`:5830-5849`) and performs before-read, mutation, and independent
+  after-readback at `:6097-6169`;
+- changes an existing dynamic child's active-eyeball flag through
+  `AEGP_SetDynamicStreamFlag` (`:7472-7518`); and
+- reorders an existing dynamic child through `AEGP_ReorderStream`
+  (`:7964-7975`).
+
+Those operations reach the fill/stroke groups and their color, opacity, and
+width leaves after resolving the already-addressable vector group. They cover
+fill/stroke enablement, primitive style values, and stroke-over-fill child
+ordering without another suite. The frozen create operation already writes
+the fill streams after adding them; this amendment adds the stroke child and
+freezes both creation and in-place restyling to use the same closed child
+resolution and primitive stream-write/readback path. The only difference for
+restyling is that it starts from an existing `ShapeGroupRefInput` instead of a
+newly added group. If implementation discovers that any frozen field cannot
+use this acquired set, it must stop and re-freeze; it may not acquire another
+suite.
 
 The top-level contents match names and child match names are implementation
 constants, not caller input. `scripts/demo_ball_roll.py:41-50,56-62` is the
@@ -799,17 +844,35 @@ the native codec; no public request accepts a match name.
 
 ```text
 ShapeFill = {
+  enabled: boolean,
   color: Color8,
   opacityPercent: DecimalString, numeric range [0,100]
+}
+
+ShapeStroke = {
+  enabled: boolean,
+  color: Color8,
+  opacityPercent: DecimalString, numeric range [0,100],
+  widthPixels: DecimalString, numeric range [0,1000],
+  strokeOverFill: boolean
 }
 
 ShapeGroup = {
   ref: ShapeGroupRef,
   name: string, 1..255 Unicode scalar values,
   path: BezierPath,
-  fill: ShapeFill
+  fill: ShapeFill,
+  stroke: ShapeStroke
 }
 ```
+
+Every package-authored group contains exactly one fill child and one stroke
+child even when either is disabled. `enabled` is the active-eyeball state of
+that child; disabling does not remove it or discard its other values.
+`strokeOverFill` is the canonical relative child order: `true` means the
+stroke child is above the fill child in the AE Contents list (the lower
+zero-based stream index), and `false` means it is below. Top-level group order
+is independent.
 
 ### `ae_createShapeLayer`
 
@@ -876,10 +939,12 @@ Response `value`:
 }
 ```
 
-Only package-authored groups containing exactly one freeform Bezier path and
-one fill are representable. Encountering another top-level shape construct is
-not silently flattened; return `UNREPRESENTABLE_SHAPE_GROUP` with its
-one-based index and observed child match names.
+Only package-authored groups containing exactly one freeform Bezier path, one
+fill, and one stroke are representable. The complete `ShapeGroup`, including
+its public `ref` and both style snapshots, is the independent readback for
+every shape write. Encountering another top-level shape construct is not
+silently flattened; return `UNREPRESENTABLE_SHAPE_GROUP` with its one-based
+index and observed child match names.
 
 ### `ae_createShapeGroup`
 
@@ -895,8 +960,16 @@ Request:
   name: string, 1..255 Unicode scalar values,
   path: BezierPath,
   fill: {
+    enabled: boolean,
     color: Color8,
     opacity_percent: DecimalString, numeric range [0,100] = "100"
+  },
+  stroke: {
+    enabled: boolean,
+    color: Color8,
+    opacity_percent: DecimalString, numeric range [0,100] = "100",
+    width_pixels: DecimalString, numeric range [0,1000],
+    stroke_over_fill: boolean
   },
   idempotency_key: IdempotencyKey
 }
@@ -917,11 +990,13 @@ Response `value`:
 Within one Undo group, perform two passes:
 
 1. call `AEGP_CanAddStream` and `AEGP_AddStream` to add the vector group,
-   freeform path child, and fill child, and set the group name; then dispose
-   every acquired stream ref;
+   freeform path child, fill child, and stroke child, and set the group name;
+   then dispose every acquired stream ref;
 2. reacquire all children by closed match name, build the path through the
-   shared `BezierPath`/MaskOutline codec, set fill values, and independently
-   enumerate/read back the complete `ShapeGroup`.
+   shared `BezierPath`/MaskOutline codec, set the complete fill and stroke
+   values/active-eyeball states/relative order through the same stream paths
+   used by the two in-place setters, and independently enumerate/read back the
+   complete `ShapeGroup`.
 
 This two-pass rule follows the repository's known add-property invalidation
 guard (`packages/core/ae_mcp/instructions.py:159-161`).
@@ -957,6 +1032,96 @@ This tool reuses the existing `ae.setLayerMaskPath` vertex conversion,
 MaskOutline mutation, decimal comparison, audit, and postcondition behavior.
 It adds only shape-group resolution. Requesting the current path is
 `INVALID_ARGUMENT`, `sideEffect: not-started`.
+
+### `ae_setShapeFillStyle`
+
+Canonical registry name: `ae.setShapeFillStyle`
+
+Native capability: `ae.shape.fill-style.set@1`.
+
+Request:
+
+```text
+{
+  group_ref: ShapeGroupRefInput,
+  fill: {
+    enabled: boolean,
+    color: Color8,
+    opacity_percent: DecimalString, numeric range [0,100]
+  },
+  idempotency_key: IdempotencyKey
+}
+```
+
+Response `value`:
+
+```text
+{
+  changed: true,
+  groupRef: ShapeGroupRef,
+  beforeFill: ShapeFill,
+  afterFill: ShapeFill
+}
+```
+
+This is a complete replacement of the representable fill style, not a patch:
+all three fields are required and none is silently ignored. Resolve the group
+ref, require exactly one fill child, read the complete before group, perform
+the active-eyeball and primitive stream writes in one native AE Undo group,
+then independently reacquire and read the complete `ShapeGroup`. The response
+projects that verified snapshot to `afterFill`; group ref, name, path, stroke,
+and top-level group order must be unchanged. A request equal to the current
+fill is `INVALID_ARGUMENT`, `sideEffect: not-started`.
+
+### `ae_setShapeStrokeStyle`
+
+Canonical registry name: `ae.setShapeStrokeStyle`
+
+Native capability: `ae.shape.stroke-style.set@1`.
+
+Request:
+
+```text
+{
+  group_ref: ShapeGroupRefInput,
+  stroke: {
+    enabled: boolean,
+    color: Color8,
+    opacity_percent: DecimalString, numeric range [0,100],
+    width_pixels: DecimalString, numeric range [0,1000],
+    stroke_over_fill: boolean
+  },
+  idempotency_key: IdempotencyKey
+}
+```
+
+Response `value`:
+
+```text
+{
+  changed: true,
+  groupRef: ShapeGroupRef,
+  beforeStroke: ShapeStroke,
+  afterStroke: ShapeStroke
+}
+```
+
+This is likewise a complete replacement: all five fields are required.
+Resolve exactly one stroke and one fill child within the verified group; write
+the stroke active-eyeball, color, opacity, and width streams and, when needed,
+use `AEGP_ReorderStream` to establish the requested fill/stroke relative
+order. One native AE Undo group covers the entire operation. Independent
+complete-group readback must prove the requested `ShapeStroke`; group ref,
+name, path, fill values/enabled state, and top-level group order must be
+unchanged. A request equal to the current stroke is `INVALID_ARGUMENT`,
+`sideEffect: not-started`.
+
+Two tools are frozen instead of one overloaded style patch because fill and
+stroke have different state and invariants, and stroke alone owns width and
+relative ordering. Each request is a closed, complete replacement with every
+field required; callers copy the current snapshot from
+`ae_listShapeGroups`, change intentional values, and cannot mistake an absent
+field for an ignored write.
 
 ### `ae_reorderShapeGroup`
 
@@ -1174,7 +1339,7 @@ The full package suite inventory is:
 | Area | Suites |
 | --- | --- |
 | Text | none; maintained JSX |
-| Shape | already-proven Comp12, DynamicStream4, Item9, Layer9, MaskOutline3, Memory1, Proj6, Stream6, Utility6 |
+| Shape | already-proven Comp12, DynamicStream4, Item9, Keyframe5, Layer9, MaskOutline3, Memory1, Proj6, Stream6, Utility6 |
 | Marker | the same proven Comp12, Item9, Keyframe5, Layer9, Memory1, Proj6, Stream6, Utility6, plus **new MarkerSuite3** |
 | CEP staging | none |
 
@@ -1197,13 +1362,17 @@ Exactly **one** narrow T4 is required, for MarkerSuite3:
 This is one four-public-call T4 smoke in one existing disposable preflight
 fixture. It is not candidate evidence.
 
-Shape property-group construction and reordering are new package operations
-but **not a second native mechanism and do not receive a separate T4**:
+Shape property-group construction, restyling, and reordering are new package
+operations but **not a second native mechanism and do not receive a separate
+T4**:
 
 - they use the already-acquired DynamicStreamSuite4 and existing
   `StreamRefOwner`/dispose lifecycle;
 - `AEGP_AddStream` returns the same `AEGP_StreamRefH` ownership type already
   traversed and disposed by the plug-in;
+- fill/stroke values reuse the proven `OneD`/`COLOR` primitive stream
+  conversion and Undo-producing static-write path; enablement and relative
+  order reuse the proven active-eyeball and dynamic-child reorder calls;
 - the two-pass reacquisition rule handles invalidated property references;
 - graph generation invalidation, fresh locator return, Utility Undo grouping,
   audit, postcondition, and main-thread dispatch are existing mechanisms; and
@@ -1231,16 +1400,18 @@ re-freeze rather than silently adding a second T4.
 Acceptance uses point text for the main sequence and T2 covers the complete
 box-text request/result contract. Hardware also creates one box text layer only
 if a point/box host fact remains unresolved after T2; that extra case must be
-included in the frozen 40-call ledger, not appended ad hoc.
+included in the frozen 44-call ledger, not appended ad hoc.
 
 ### Shape family
 
 | Tool | R/W | Primary state | Required interaction |
 | --- | --- | --- | --- |
 | `ae_createShapeLayer` | W | one empty vector layer | target for group and marker tools |
-| `ae_listShapeGroups` | R | ordered group refs, paths, fills | verifies every shape write |
-| `ae_createShapeGroup` | W | group + Bezier path + fill atomically | called twice to make ordering observable |
-| `ae_setShapePath` | W | open/closed topology, vertices, relative tangents | preserves group id, name, fill, and order |
+| `ae_listShapeGroups` | R | ordered group refs, paths, complete fill/stroke states | supplies every write address and verifies every shape write |
+| `ae_createShapeGroup` | W | group + Bezier path + fill + stroke atomically | called twice to make group and style ordering observable |
+| `ae_setShapePath` | W | open/closed topology, vertices, relative tangents | preserves group id, name, fill, stroke, and order |
+| `ae_setShapeFillStyle` | W | fill enabled, color, opacity | create-then-restyle; preserves path, stroke, and group order |
+| `ae_setShapeStrokeStyle` | W | stroke enabled, color, opacity, width, fill/stroke order | restyle-then-reorder and restyle-then-Undo |
 | `ae_reorderShapeGroup` | W | top-level group ordering | preserves stream ids and complete group content |
 
 ### Marker family
@@ -1262,11 +1433,18 @@ T5 and T6 must exercise these combinations in the same fixture:
    created at the numerically equal rational time on the new shape layer;
 3. the two target streams remain independent despite equal time and marker
    content;
-4. text content/style readback remains unchanged while shape groups are added
-   and reordered;
-5. shape group order/path/fill remains unchanged while text and shape markers
-   are created, edited, deleted, and undone; and
-6. a final composition-layer read proves family teardown returned the fixture
+4. create `Triangle`, then restyle its fill and stroke in place using the
+   `ShapeGroupRef` returned by `ae_listShapeGroups`; text content/style and the
+   group's path remain unchanged;
+5. restyle `Triangle`, then reorder the top-level shape groups; refreshed
+   list readback must preserve both restyled values and both stable group
+   stream ids;
+6. restyle fill and stroke separately, execute one real Undo after each, and
+   use `ae_listShapeGroups` to prove exact restoration while the text and
+   marker families remain unchanged;
+7. shape group order/path/fill/stroke remains unchanged while text and shape
+   markers are created, edited, deleted, and undone; and
+8. a final composition-layer read proves family teardown returned the fixture
    to the recorded empty-composition baseline.
 
 ## Undo and uncertain-failure model
@@ -1277,8 +1455,10 @@ T5 and T6 must exercise these combinations in the same fixture:
 | `ae_createTextLayer` | one maintained-JSX AE Undo group; Undo removes exactly the created layer |
 | the three text setters | one maintained-JSX AE Undo group around one TextDocument `setValue`; Undo restores the complete before snapshot |
 | `ae_createShapeLayer` | one native AE Undo group; Undo removes the created layer |
-| `ae_createShapeGroup` | one native AE Undo group for group/path/fill construction; Undo removes exactly that group |
+| `ae_createShapeGroup` | one native AE Undo group for group/path/fill/stroke construction; Undo removes exactly that group |
 | `ae_setShapePath` | one native AE Undo group; Undo restores exact topology and decimals |
+| `ae_setShapeFillStyle` | one native AE Undo group; Undo restores enabled, color, and opacity exactly |
+| `ae_setShapeStrokeStyle` | one native AE Undo group; Undo restores enabled, color, opacity, width, and stroke-over-fill order exactly |
 | `ae_reorderShapeGroup` | one native AE Undo group; Undo restores index order and stream ids |
 | marker create/set/delete | one native AE Undo group; Undo respectively removes, restores before, or restores deleted marker |
 
@@ -1328,7 +1508,8 @@ lifecycle counters—not another `.aep`.
 6. During the matrix, `ae_createTextLayer` creates `TSM Text` with
    `A😀中 é`; `ae_createShapeLayer` creates `TSM Shape`; two
    `ae_createShapeGroup` calls create `Triangle` and `Curve` with fixed paths
-   and distinct fills.
+   and distinct complete fill/stroke styles. `Triangle` is then restyled in
+   place through each explicit style setter.
 7. Marker cases use exact times `{value:24,scale:24}` and
    `{value:1000,scale:1000}` to prove canonical equality at one second without
    conflating target identity.
@@ -1341,9 +1522,10 @@ spec. No arbitrary JSX or GUI drawing constructs the tested state.
 
 - Text setters are invoked and individually undone immediately; each
   `ae_getTextDocument` must equal the pre-write snapshot.
-- Shape path and reorder are invoked and individually undone; group creation
-  remains only until cross-family marker checks finish, then each group create
-  is undone in reverse order and verified by `ae_listShapeGroups`.
+- Shape fill style, stroke style, path, and reorder are invoked and
+  individually undone; every Undo is verified by `ae_listShapeGroups`. Group
+  creation remains only until cross-family marker checks finish, then each
+  group create is undone in reverse order and verified by the same read.
 - Marker set and delete are invoked and individually undone. Marker creates
   are undone after cross-target checks, and `ae_listMarkers` must return each
   target to its empty baseline.
@@ -1389,29 +1571,30 @@ failure before semantic acceptance.
 
 ### Public-call budget
 
-**T5 uses exactly 40 public MCP calls and aborts before call 41. T6 uses the
-same exactly 40-call plan and aborts before call 41.** This brief explicitly
+**T5 uses exactly 44 public MCP calls and aborts before call 45. T6 uses the
+same exactly 44-call plan and aborts before call 45.** This brief explicitly
 authorizes both sessions to exceed the workflow's normal 30-call ceiling.
 
-The exception is justified by 15 package tools, 11 write tools, independent
+The exception is justified by 17 package tools, 13 write tools, independent
 post-Undo public readback for every write, two shape groups required to prove
-ordering, two marker targets required to prove cross-family isolation, and one
-formal-AE restart/reopen check. Removing calls would merge availability,
-write-readback, Undo verification, or cross-target identity into unsupported
-assumptions.
+top-level ordering, separate fill/stroke restyles required to prove independent
+enablement and stroke-over-fill ordering, two marker targets required to prove
+cross-family isolation, and one formal-AE restart/reopen check. Removing calls
+would merge availability, write-readback, Undo verification, style
+independence, or cross-target identity into unsupported assumptions.
 
-The 40-call ledger is closed:
+The 44-call ledger is closed:
 
 | Calls | Purpose |
 | ---: | --- |
 | 4 | readiness, create/reacquire composition, empty-layer baseline |
 | 9 | all six text tools plus three independent setter post-Undo reads |
-| 11 | all five shape tools, second group creation, path/reorder Undo reads, group/layer teardown reads |
+| 15 | all seven shape tools, second group creation, fill/stroke/path/reorder Undo reads, group/layer teardown reads |
 | 10 | all four marker tools, text+shape targets, set/delete/create Undo reads, equal-time isolation |
 | 3 | explicit cross-family layer/text/shape state reads while both families coexist |
 | 1 | text-layer create Undo and empty-composition verification |
 | 2 | post-restart project/composition reacquisition and final empty-baseline check |
-| **40** | total |
+| **44** | total |
 
 GUI Undo, save-in-place, File > Open Recent, AE quit/relaunch, and moving the
 closed `.aep` to recovery are checkpoints rather than public MCP dispatches,
@@ -1429,7 +1612,7 @@ candidate evidence.
   double-click, or LaunchServices.
 - Bind post-restart reads to the new formal host/session, reacquire every
   locator/index, and compare the empty fixture baseline before archive.
-- At T1/T2 the driver must load actual `tools/list`, compare each of the 15
+- At T1/T2 the driver must load actual `tools/list`, compare each of the 17
   advertised input schemas to the frozen package expectation, and compare
   native capability/result contract digests or maintained-JSX
   contract/template digests as appropriate. Missing fields, extra fields,
@@ -1462,7 +1645,7 @@ contains no tests.
 
 ### T1: public schema and adapter contracts
 
-1. Generate `tools/list`; assert all 15 exact exposed names, closed request
+1. Generate `tools/list`; assert all 17 exact exposed names, closed request
    schemas, defaults, bounds, enums, conditional invariants, annotations, and
    no caller-code field.
 2. Assert every response model is closed and rejects missing/extra fields,
@@ -1484,9 +1667,12 @@ contains no tests.
    shape paths. Open/closed topology, 2/3/min/max vertices, relative tangents,
    exponent decimals, signed-zero/noncanonical values, NaN, infinity, and
    underflow are covered.
-8. Shape construction fixtures assert add/reacquire ordering, closed match
-   names, stream-ref disposal, unique stream ids, group order, and graph
-   invalidation/fresh locators.
+8. Shape construction/style fixtures assert add/reacquire ordering, closed
+   match names, stream-ref disposal, unique stream ids, complete
+   fill/stroke readback, independent active-eyeball state, color/opacity/width
+   primitive types, both stroke-over-fill orders, top-level group order, and
+   graph invalidation/fresh locators. Each style request schema requires every
+   field and rejects omitted, extra, and no-op values.
 9. Marker codec tests map all five strings, both flags, ordered cue params,
    duration, label, exact time, target discriminator, and before/after/null
    write results to the MarkerSuite3/Keyframe wire shapes.
@@ -1494,7 +1680,7 @@ contains no tests.
     duplicate exact times at different scales, and preserve target+time
     identity after `ae_setMarker`.
 11. The driver expectation tests validate both provenance branches, the
-    40-call abort-before-41 rule, all Undo checkpoints, File > Open Recent
+    44-call abort-before-45 rule, all Undo checkpoints, File > Open Recent
     checkpoint text, fresh-key-per-run behavior, and the frozen fixture recipe.
 
 ### T2: package integration and fail-loud host boundaries
@@ -1502,15 +1688,19 @@ contains no tests.
 1. Core/CEP maintained-JSX integration proves typed rendering, one dispatch,
    idempotent replay/no redispatch, persisted redacted audit, structured
    before/after readback, and the text Undo callback/readback cycle.
-2. Native protocol/codec/dispatcher integration covers all nine native tools,
+2. Native protocol/codec/dispatcher integration covers all eleven native tools,
    every MarkerSuite3 call family, exact-time keyframe resolution, marker
    allocation/disposal, and structured error side-effect classification.
 3. Native shape integration covers `CanAddStream`/`AddStream`, two-pass
-   reacquisition, MaskOutline vertex construction, `ReorderStream`, fresh
-   locators, complete before/after, audit/postcondition, and one Undo boundary.
-4. Interaction corpus creates two shape groups, reorders and restores them,
-   edits and restores path topology, places equal-time markers on distinct
-   target kinds/layers, and proves no family changes another family's state.
+   reacquisition, MaskOutline vertex construction, fill/stroke child
+   resolution from `ShapeGroupRefInput`, primitive style writes,
+   active-eyeball changes, style-child and top-level `ReorderStream`, fresh
+   locators, complete before/after, audit/postcondition, and one Undo boundary
+   per write.
+4. Interaction corpus creates two shape groups, restyles and restores fill and
+   stroke independently, reorders and restores them, edits and restores path
+   topology, places equal-time markers on distinct target kinds/layers, and
+   proves no family changes another family's state.
 5. Staging integration changes the production fixture expectation to
    `.debug == present`, asserts byte equality and manifest hash against tracked
    `plugin/.debug`, lets the production verifier accept that one root file,
@@ -1528,8 +1718,9 @@ Facts that the non-AE tiers cannot settle must fail loudly in T4/T5/T6:
   requested value on the target AE build;
 - whether real AE records each maintained-JSX `setValue`/layer creation in one
   Undo step;
-- whether shape AddStream/reacquisition preserves the expected stream id and
-  ordering on the real host; and
+- whether shape AddStream/reacquisition preserves the expected stream ids,
+  style leaf types, active-eyeball states, and both child/top-level ordering
+  semantics on the real host; and
 - MarkerSuite3 allocation/string/parameter/duration/label fidelity.
 
 For each, the runner records the field or operation plus complete
@@ -1550,8 +1741,9 @@ guesses, substitutes a default, or weakens the schema during hardware.
   template fragment. `ae_exec` remains categorically separate.
 - No expression authoring. StreamSuite expression methods are not used.
 - No parametric rectangle/ellipse/star/polystar, gradient fill/stroke,
-  standalone fill/stroke editor, shape operator/repeater/trim path, merge
-  paths, or arbitrary unrepresentable shape group.
+  dash/cap/join/miter stroke controls, shape operator/repeater/trim path,
+  merge paths, or arbitrary unrepresentable shape group. Solid fill and
+  stroke editing is limited to the two frozen in-place style tools.
 - No marker time move, nearest-marker matching, marker bulk import/export, XMP
   synchronization, or render/output markers.
 - No new AEGP suite besides MarkerSuite3; no new locator framework, transport,
