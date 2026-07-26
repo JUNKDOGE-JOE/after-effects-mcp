@@ -64,21 +64,6 @@ class TsmWriteArgs(_StrictModel):
     )
 
 
-class AeJsxTextTarget(_StrictModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    composition_id: str = Field(..., pattern=r"^[1-9][0-9]*$")
-    layer_index: int = Field(..., ge=1, le=SAFE_MAX)
-    expected_name: str = Field(..., min_length=1, max_length=255)
-
-    @field_validator("expected_name")
-    @classmethod
-    def valid_name(cls, value: str) -> str:
-        return unicode_scalars(
-            value, field="expected_name", minimum=1, maximum=255
-        )
-
-
 class AeFontSelection(_StrictModel):
     preferred_postscript_name: str = Field(..., min_length=1, max_length=255)
     fallback_postscript_names: list[str] = Field(..., min_length=0, max_length=4)
@@ -223,7 +208,7 @@ class AeListInstalledFontsArgs(_StrictModel):
 
 
 class AeCreateTextLayerArgs(TsmWriteArgs):
-    composition_id: str = Field(..., pattern=r"^[1-9][0-9]*$")
+    composition_locator: AeCompositionLocator
     name: str = Field(..., min_length=1, max_length=255)
     text: str = Field(..., max_length=32_767)
     text_kind: Literal["point", "box"] = "point"
@@ -247,11 +232,11 @@ class AeCreateTextLayerArgs(TsmWriteArgs):
 
 
 class AeGetTextDocumentArgs(_StrictModel):
-    target: AeJsxTextTarget
+    layer_locator: AeLayerLocator
 
 
 class AeSetTextContentArgs(TsmWriteArgs):
-    target: AeJsxTextTarget
+    layer_locator: AeLayerLocator
     text: str = Field(..., max_length=32_767)
 
     @field_validator("text")
@@ -261,12 +246,12 @@ class AeSetTextContentArgs(TsmWriteArgs):
 
 
 class AeSetTextCharacterStyleArgs(TsmWriteArgs):
-    target: AeJsxTextTarget
+    layer_locator: AeLayerLocator
     style: AeTextCharacterStylePatch
 
 
 class AeSetTextParagraphStyleArgs(TsmWriteArgs):
-    target: AeJsxTextTarget
+    layer_locator: AeLayerLocator
     style: AeTextParagraphStylePatch
 
 

@@ -99,29 +99,14 @@ This is the current locator contract
 host, session, project, and generation, as existing property writes do
 (`packages/core/ae_mcp/schemas.py:1136-1185`).
 
-#### `JsxTextTarget`
-
-```text
-{
-  composition_id: string matching "^[1-9][0-9]*$",
-  layer_index: integer [1, 9007199254740991],
-  expected_name: string, 1..255 Unicode scalar values
-}
-```
-
-`composition_id` is the AE item id returned by the text create response.
-`layer_index` is deliberately named as an index, not a stable id. This follows
-the maintained-JSX targeting precedent: `AEMCP.compById` resolves
-`app.project.itemByID`, and `AEMCP.layerById` resolves the one-based
-`comp.layer(index)` (`packages/core/ae_mcp/jsx_templates/_aemcp_prelude.jsx:
-90-109`; existing public fields are at `packages/core/ae_mcp/schemas.py:
-1471-1494`).
-
-Every text template must re-resolve the composition and index, then require
-that the layer is a text layer and its current name equals `expected_name`
-before reading or writing. A mismatch is `STALE_TARGET`, `sideEffect:
-not-started`. After any layer-stack mutation, the caller must refresh
-`layer_index` from a public layer read before another text call.
+Text uses these same public locator types even though its implementation is
+maintained JSX. The Core handler resolves the opaque locator through typed
+native project/layer reads, passes only private project-item/layer coordinates
+to the closed template, and verifies the expected composition name, layer name,
+and text-layer type before reading or writing. The private coordinates are
+never part of a request or response schema. A mismatch is `STALE_LOCATOR`,
+`sideEffect: not-started`. After a text write, Core reacquires and returns the
+fresh native layer locator.
 
 #### `ExactTimeInput` and `ExactTime`
 
@@ -552,11 +537,7 @@ TextParagraphStyle = {
 }
 
 TextDocumentSnapshot = {
-  target: {
-    compositionId: string,
-    layerIndex: positive integer,
-    expectedName: string
-  },
+  layerLocator: LayerLocator,
   text: string, 0..32767 Unicode scalar values,
   textKind: "point" | "box",
   boxSize: null | {
@@ -624,7 +605,7 @@ Request:
 
 ```text
 {
-  composition_id: string matching "^[1-9][0-9]*$",
+  composition_locator: CompositionLocator,
   name: string, 1..255 Unicode scalar values,
   text: string, 0..32767 Unicode scalar values,
   text_kind: "point" | "box" = "point",
@@ -644,6 +625,7 @@ Response `value`:
 ```text
 {
   changed: true,
+  compositionLocator: CompositionLocator,
   layerCountBefore: non-negative integer,
   layerCountAfter: layerCountBefore + 1,
   before: null,
@@ -651,11 +633,14 @@ Response `value`:
 }
 ```
 
-The template uses `comp.layers.addText("")` or
+Core resolves `composition_locator` internally. The template uses
+`comp.layers.addText("")` or
 `comp.layers.addBoxText([width,height])`, assigns the exact name, reads the
 new TextDocument, writes `text`, calls `setValue`, and returns a second
 independent readback from the layer. It never constructs a fresh styled
-TextDocument and assumes the fields stuck.
+TextDocument and assumes the fields stuck. Core then reacquires the created
+text layer through native project/layer reads and returns its fresh
+`compositionLocator` and `after.layerLocator`.
 
 ### `ae_getTextDocument`
 
@@ -667,7 +652,7 @@ Execution: maintained JSX read, template id
 Request:
 
 ```text
-{ target: JsxTextTarget }
+{ layer_locator: LayerLocator }
 ```
 
 Response `value`: `TextDocumentSnapshot`.
@@ -687,7 +672,7 @@ Request:
 
 ```text
 {
-  target: JsxTextTarget,
+  layer_locator: LayerLocator,
   text: string, 0..32767 Unicode scalar values,
   idempotency_key: IdempotencyKey
 }
@@ -698,7 +683,7 @@ Response `value`:
 ```text
 {
   changed: true,
-  target: TextDocumentSnapshot.target,
+  layerLocator: LayerLocator,
   before: TextDocumentSnapshot,
   after: TextDocumentSnapshot
 }
@@ -718,7 +703,7 @@ Request:
 
 ```text
 {
-  target: JsxTextTarget,
+  layer_locator: LayerLocator,
   style: {
     font: FontSelection | null,
     font_size_pixels: DecimalString | null,       // (0,1296]
@@ -766,7 +751,7 @@ Request:
 
 ```text
 {
-  target: JsxTextTarget,
+  layer_locator: LayerLocator,
   style: {
     justification:
       "left" | "right" | "center" |
@@ -1595,6 +1580,28 @@ The 44-call ledger is closed:
 | 1 | text-layer create Undo and empty-composition verification |
 | 2 | post-restart project/composition reacquisition and final empty-baseline check |
 | **44** | total |
+
+### Address-chain construction
+
+The executable plan contains no hand-authored AE numeric id and no locator
+from outside the session. Every address is copied from an earlier public
+response. For the text family specifically:
+
+| Text tool | Earlier public call that supplies its locator |
+| --- | --- |
+| `ae_createTextLayer` | call 3 `ae_listProjectItems` → the named fixture composition's `locator` |
+| `ae_getTextDocument` | call 6 `ae_createTextLayer` → `value.after.layerLocator` |
+| `ae_setTextContent` | call 7 `ae_getTextDocument` → `value.layerLocator` |
+| `ae_setTextCharacterStyle` | call 9 post-Undo `ae_getTextDocument` → `value.layerLocator` |
+| `ae_setTextParagraphStyle` | call 11 post-Undo `ae_getTextDocument` → `value.layerLocator` |
+
+Call 6 also returns a fresh `value.compositionLocator`; call 14
+`ae_createShapeLayer` consumes it after text-layer creation. Shape group,
+marker, cross-family, teardown, and post-restart addresses are similarly
+linked in `scripts/hardware/text_shape_marker_spec.py:ADDRESS_LINKS`.
+Bridge-side construction tests require every producer ordinal to precede its
+consumer ordinal and require every address-bearing call in the 44-call plan to
+have one such link.
 
 GUI Undo, save-in-place, File > Open Recent, AE quit/relaunch, and moving the
 closed `.aep` to recovery are checkpoints rather than public MCP dispatches,

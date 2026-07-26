@@ -1,5 +1,5 @@
-var resolved = resolveTextLayer(request.target);
+var resolved = resolveTextLayer(request._resolved);
 return JSON.stringify({
     ok: true,
-    value: snapshot(request.target, resolved.layer)
+    value: snapshot(request._resolved, resolved.layer)
 });

@@ -54,23 +54,29 @@
         return [value.red / 255, value.green / 255, value.blue / 255];
     }
 
-    function resolveComp(compositionId) {
-        var comp = AEMCP.compById(compositionId);
-        if (!comp) {
+    function resolveComp(address) {
+        var comp = null;
+        try {
+            comp = app.project.item(Number(address.project_item_index));
+        } catch (ignore) {
+            comp = null;
+        }
+        if (!comp || !(comp instanceof CompItem) ||
+                comp.name !== address.expected_name) {
             throw new Error("STALE_TARGET:composition");
         }
         return comp;
     }
 
-    function resolveTextLayer(target) {
-        var comp = resolveComp(Number(target.composition_id));
+    function resolveTextLayer(address) {
+        var comp = resolveComp(address);
         var layer = null;
         try {
-            layer = AEMCP.layerById(comp, Number(target.layer_index));
+            layer = AEMCP.layerById(comp, Number(address.layer_index));
         } catch (ignore) {
             layer = null;
         }
-        if (!layer || layer.name !== target.expected_name) {
+        if (!layer || layer.name !== address.expected_layer_name) {
             throw new Error("STALE_TARGET:layer");
         }
         var textProperties = layer.property("ADBE Text Properties");
@@ -118,7 +124,7 @@
         return required(values[value], "justification");
     }
 
-    function snapshot(target, layer, requestedFont, usedFallback) {
+    function snapshot(address, layer, requestedFont, usedFallback) {
         var sourceText = layer.property("ADBE Text Properties")
             .property("ADBE Text Document");
         var doc = sourceText.value;
@@ -133,10 +139,11 @@
         }
         var fontName = String(required(doc.font, "font"));
         return {
-            target: {
-                compositionId: String(target.composition_id),
-                layerIndex: Number(target.layer_index),
-                expectedName: String(target.expected_name)
+            _address: {
+                projectItemIndex: Number(address.project_item_index),
+                expectedName: String(address.expected_name),
+                layerIndex: Number(address.layer_index),
+                expectedLayerName: String(address.expected_layer_name)
             },
             text: String(required(doc.text, "text")),
             textKind: isPoint ? "point" : "box",

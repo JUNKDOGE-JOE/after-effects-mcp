@@ -1,4 +1,4 @@
-var comp = resolveComp(Number(request.composition_id));
+var comp = resolveComp(request._resolved);
 var countBefore = comp.numLayers;
 beginWrite();
 var layer = request.text_kind === "box" ?
@@ -13,12 +13,13 @@ var sourceText = layer.property("ADBE Text Properties")
 var doc = sourceText.value;
 doc.text = request.text;
 sourceText.setValue(doc);
-var target = {
-    composition_id: String(request.composition_id),
+var address = {
+    project_item_index: Number(request._resolved.project_item_index),
+    expected_name: String(request._resolved.expected_name),
     layer_index: layer.index,
-    expected_name: request.name
+    expected_layer_name: request.name
 };
-var after = snapshot(target, layer);
+var after = snapshot(address, layer);
 app.endUndoGroup();
 undoOpen = false;
 return JSON.stringify({

@@ -71,6 +71,7 @@ def _text_runner(public_name: str):
         async def call():
             return await execute_text_tool(
                 _discovery.select_backend(),
+                None if public_name == "ae.listInstalledFonts" else _backend(),
                 tool=public_name,
                 args=args,
             )

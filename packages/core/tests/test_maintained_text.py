@@ -2,11 +2,15 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
+from ae_mcp.backends import maintained_text
 from ae_mcp.backends.maintained_text import (
+    ResolvedCompositionAddress,
+    ResolvedTextAddress,
     VALUE_MODELS,
     clear_replay_cache_for_tests,
     execute_text_tool,
@@ -23,20 +27,30 @@ from ae_mcp.schemas_tsm import (
 
 
 KEY = "text-tool-key-0001"
-TARGET = {
-    "composition_id": "42",
-    "layer_index": 3,
-    "expected_name": "TSM \"Text\" 😀\n",
+LAYER_LOCATOR = {
+    "kind": "layer",
+    "hostInstanceId": "11111111-1111-4111-8111-111111111111",
+    "sessionId": "22222222-2222-4222-8222-222222222222",
+    "projectId": "33333333-3333-4333-8333-333333333333",
+    "generation": 1,
+    "objectId": "44444444-4444-4444-8444-444444444444",
 }
+COMPOSITION_LOCATOR = {**LAYER_LOCATOR, "kind": "composition"}
+COMPOSITION_ADDRESS = ResolvedCompositionAddress(
+    project_item_index=2,
+    expected_name="TSM Composition",
+)
+TEXT_ADDRESS = ResolvedTextAddress(
+    project_item_index=2,
+    expected_name="TSM Composition",
+    layer_index=3,
+    expected_layer_name="TSM \"Text\" 😀\n",
+)
 
 
 def snapshot(text: str = "A😀中 e\u0301") -> dict:
     return {
-        "target": {
-            "compositionId": "42",
-            "layerIndex": 3,
-            "expectedName": TARGET["expected_name"],
-        },
+        "layerLocator": LAYER_LOCATOR,
         "text": text,
         "textKind": "box",
         "boxSize": {"widthPixels": "640", "heightPixels": "360"},
@@ -69,6 +83,13 @@ def snapshot(text: str = "A😀中 e\u0301") -> dict:
     }
 
 
+def internal_snapshot(text: str = "A😀中 e\u0301") -> dict:
+    value = snapshot(text)
+    value.pop("layerLocator")
+    value["_address"] = TEXT_ADDRESS.model_dump(mode="json", by_alias=True)
+    return value
+
+
 class Backend:
     def __init__(self, result: dict):
         self.result = result
@@ -89,13 +110,15 @@ def request_literal(rendered: str) -> dict:
 def test_hostile_text_is_one_json_literal_and_never_changes_program_structure():
     hostile = "\"\\\n\u2028😀中 e\u0301); app.project.close(); //"
     args = AeCreateTextLayerArgs(
-        composition_id="42",
+        composition_locator=COMPOSITION_LOCATOR,
         name=hostile,
         text=hostile,
         text_kind="point",
         idempotency_key=KEY,
     )
-    rendered, metadata = render_text_tool("ae.createTextLayer", args)
+    rendered, metadata = render_text_tool(
+        "ae.createTextLayer", args, resolved_address=COMPOSITION_ADDRESS
+    )
     literal = request_literal(rendered)
     assert literal["name"] == hostile
     assert literal["text"] == hostile
@@ -105,6 +128,11 @@ def test_hostile_text_is_one_json_literal_and_never_changes_program_structure():
     assert "\\ud83d\\ude00" in rendered
     assert metadata["templateId"] == "aemcp.text.layer.create.v1"
     assert len(metadata["templateDigest"]) == 64
+    assert "composition_locator" not in literal
+    assert literal["_resolved"] == {
+        "project_item_index": 2,
+        "expected_name": "TSM Composition",
+    }
     assert "caller" not in literal
     assert all(
         key not in literal
@@ -114,17 +142,19 @@ def test_hostile_text_is_one_json_literal_and_never_changes_program_structure():
 
 def test_all_six_templates_are_closed_and_writes_have_one_undo_boundary():
     create = AeCreateTextLayerArgs(
-        composition_id="42",
+        composition_locator=COMPOSITION_LOCATOR,
         name="Text",
         text="x",
         idempotency_key=KEY,
     )
-    rendered, _ = render_text_tool("ae.createTextLayer", create)
+    rendered, _ = render_text_tool(
+        "ae.createTextLayer", create, resolved_address=COMPOSITION_ADDRESS
+    )
     assert rendered.count("app.beginUndoGroup") == 1
     assert rendered.count("app.endUndoGroup") >= 1
     assert "sourceText.setValue(doc)" in rendered
     style = AeSetTextCharacterStyleArgs(
-        target={"composition_id": "42", "layer_index": 3, "expected_name": "Text"},
+        layer_locator=LAYER_LOCATOR,
         style={
             "font": {
                 "preferred_postscript_name": "MissingPS",
@@ -134,7 +164,12 @@ def test_all_six_templates_are_closed_and_writes_have_one_undo_boundary():
         },
         idempotency_key=KEY,
     )
-    style_rendered, _ = render_text_tool("ae.setTextCharacterStyle", style)
+    style_rendered, _ = render_text_tool(
+        "ae.setTextCharacterStyle", style, resolved_address=TEXT_ADDRESS
+    )
+    style_literal = request_literal(style_rendered)
+    assert "layer_locator" not in style_literal
+    assert style_literal["_resolved"]["expected_layer_name"] == 'TSM "Text" 😀\n'
     assert "FONT_NOT_INSTALLED" in style_rendered
     assert "FONT_FALLBACK_EXHAUSTED" in style_rendered
     assert "selection.fallback_postscript_names" in style_rendered
@@ -143,22 +178,31 @@ def test_all_six_templates_are_closed_and_writes_have_one_undo_boundary():
         "ae.listInstalledFonts": AeListInstalledFontsArgs(),
         "ae.createTextLayer": create,
         "ae.getTextDocument": AeGetTextDocumentArgs(
-            target={"composition_id": "42", "layer_index": 3, "expected_name": "Text"}
+            layer_locator=LAYER_LOCATOR
         ),
         "ae.setTextContent": AeSetTextContentArgs(
-            target={"composition_id": "42", "layer_index": 3, "expected_name": "Text"},
+            layer_locator=LAYER_LOCATOR,
             text="changed",
             idempotency_key=KEY,
         ),
         "ae.setTextCharacterStyle": style,
         "ae.setTextParagraphStyle": AeSetTextParagraphStyleArgs(
-            target={"composition_id": "42", "layer_index": 3, "expected_name": "Text"},
+            layer_locator=LAYER_LOCATOR,
             style={"justification": "center"},
             idempotency_key=KEY,
         ),
     }
     for tool, args in cases.items():
-        source, metadata = render_text_tool(tool, args)
+        address = (
+            None
+            if tool == "ae.listInstalledFonts"
+            else COMPOSITION_ADDRESS
+            if tool == "ae.createTextLayer"
+            else TEXT_ADDRESS
+        )
+        source, metadata = render_text_tool(
+            tool, args, resolved_address=address
+        )
         assert "__AEMCP_TEXT_" not in source
         assert source.count("var request = ") == 1
         assert metadata["templateId"].startswith("aemcp.text.")
@@ -183,31 +227,98 @@ def test_complete_text_document_style_and_unicode_round_trip():
 
 
 @pytest.mark.asyncio
+async def test_locator_resolver_derives_only_private_extend_script_coordinates(
+    monkeypatch,
+):
+    composition = maintained_text._native_locator(COMPOSITION_LOCATOR)
+    layer = maintained_text._native_locator(LAYER_LOCATOR)
+    item = SimpleNamespace(
+        locator=composition,
+        name="TSM Composition",
+        type="composition",
+    )
+    row = SimpleNamespace(
+        locator=layer,
+        stack_index=3,
+        name='TSM "Text" 😀\n',
+        type="text",
+    )
+
+    async def project_rows(*_args, **_kwargs):
+        return [(2, item)]
+
+    async def layer_rows(*_args, **_kwargs):
+        return [row]
+
+    monkeypatch.setattr(maintained_text, "_project_compositions", project_rows)
+    monkeypatch.setattr(
+        maintained_text, "_composition_layer_rows", layer_rows
+    )
+    cancellation = maintained_text.NativeCancellationToken()
+    resolved_comp = await maintained_text.resolve_composition_address(
+        object(),
+        COMPOSITION_LOCATOR,
+        deadline_unix_ms=1,
+        cancellation=cancellation,
+    )
+    resolved_layer = await maintained_text.resolve_text_address(
+        object(),
+        LAYER_LOCATOR,
+        deadline_unix_ms=1,
+        cancellation=cancellation,
+    )
+    assert resolved_comp == COMPOSITION_ADDRESS
+    assert resolved_layer == TEXT_ADDRESS
+    fresh_comp, fresh_layer = await maintained_text._reacquire_created_text_layer(
+        object(),
+        TEXT_ADDRESS,
+        deadline_unix_ms=1,
+        cancellation=cancellation,
+    )
+    assert fresh_comp == composition
+    assert fresh_layer == layer
+
+
+@pytest.mark.asyncio
 async def test_typed_execution_binds_template_audit_postcondition_and_replay(
     monkeypatch, tmp_path
 ):
     clear_replay_cache_for_tests()
     monkeypatch.setenv("AE_MCP_TEXT_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "a" * 40)
-    before = snapshot("before 😀")
-    after = snapshot("after 中")
+    before = internal_snapshot("before 😀")
+    after = internal_snapshot("after 中")
     result = {
         "ok": True,
         "value": {
             "changed": True,
-            "target": before["target"],
+            "_address": TEXT_ADDRESS.model_dump(mode="json", by_alias=True),
             "before": before,
             "after": after,
         },
     }
     backend = Backend(result)
+
+    async def resolve(*_args, **_kwargs):
+        return TEXT_ADDRESS
+
+    async def reacquire(*_args, **_kwargs):
+        return (
+            maintained_text._native_locator(COMPOSITION_LOCATOR),
+            maintained_text._native_locator(LAYER_LOCATOR),
+        )
+
+    monkeypatch.setattr(maintained_text, "resolve_text_address", resolve)
+    monkeypatch.setattr(
+        maintained_text, "_reacquire_created_text_layer", reacquire
+    )
     args = AeSetTextContentArgs(
-        target=TARGET,
+        layer_locator=LAYER_LOCATOR,
         text="after 中",
         idempotency_key=KEY,
     )
     response = await execute_text_tool(
-        backend, tool="ae.setTextContent", args=args
+        backend, object(), tool="ae.setTextContent", args=args
     )
     assert response["ok"] is True
     assert response["implementation"]["engine"] == "maintained-jsx"
@@ -220,7 +331,7 @@ async def test_typed_execution_binds_template_audit_postcondition_and_replay(
     assert response["evidence"]["postcondition"]["verified"] is True
     assert len(backend.calls) == 1
     replay = await execute_text_tool(
-        backend, tool="ae.setTextContent", args=args
+        backend, object(), tool="ae.setTextContent", args=args
     )
     assert replay["replayed"] is True
     assert replay["audit"]["replayed"] is True
@@ -239,26 +350,43 @@ async def test_idempotency_key_rebinding_fails_before_dispatch(monkeypatch, tmp_
     clear_replay_cache_for_tests()
     monkeypatch.setenv("AE_MCP_TEXT_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
     monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "b" * 40)
-    before = snapshot("before")
-    after = snapshot("one")
+    before = internal_snapshot("before")
+    after = internal_snapshot("one")
     backend = Backend(
         {
             "ok": True,
             "value": {
                 "changed": True,
-                "target": before["target"],
+                "_address": TEXT_ADDRESS.model_dump(mode="json", by_alias=True),
                 "before": before,
                 "after": after,
             },
         }
     )
-    first = AeSetTextContentArgs(target=TARGET, text="one", idempotency_key=KEY)
+    async def resolve(*_args, **_kwargs):
+        return TEXT_ADDRESS
+
+    async def reacquire(*_args, **_kwargs):
+        return (
+            maintained_text._native_locator(COMPOSITION_LOCATOR),
+            maintained_text._native_locator(LAYER_LOCATOR),
+        )
+
+    monkeypatch.setattr(maintained_text, "resolve_text_address", resolve)
+    monkeypatch.setattr(
+        maintained_text, "_reacquire_created_text_layer", reacquire
+    )
+    first = AeSetTextContentArgs(
+        layer_locator=LAYER_LOCATOR, text="one", idempotency_key=KEY
+    )
     assert (await execute_text_tool(
-        backend, tool="ae.setTextContent", args=first
+        backend, object(), tool="ae.setTextContent", args=first
     ))["ok"]
-    second = AeSetTextContentArgs(target=TARGET, text="two", idempotency_key=KEY)
+    second = AeSetTextContentArgs(
+        layer_locator=LAYER_LOCATOR, text="two", idempotency_key=KEY
+    )
     rejected = await execute_text_tool(
-        backend, tool="ae.setTextContent", args=second
+        backend, object(), tool="ae.setTextContent", args=second
     )
     assert rejected["error"]["code"] == "DUPLICATE_REQUEST"
     assert rejected["error"]["sideEffect"] == "not-started"

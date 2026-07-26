@@ -14,10 +14,13 @@ from ae_mcp.schemas_tsm import (
     AeCreateShapeGroupArgs,
     AeCreateTextLayerArgs,
     AeFontSelection,
+    AeGetTextDocumentArgs,
     AeMarkerPatch,
     AeSetShapeFillStyleArgs,
     AeSetShapePathArgs,
     AeSetTextCharacterStyleArgs,
+    AeSetTextContentArgs,
+    AeSetTextParagraphStyleArgs,
 )
 
 
@@ -49,6 +52,7 @@ LOCATOR = {
     "generation": 1,
     "objectId": "44444444-4444-4444-8444-444444444444",
 }
+COMPOSITION_LOCATOR = {**LOCATOR, "kind": "composition"}
 KEY = "tsm-test-key-0001"
 COLOR = {"red": 1, "green": 2, "blue": 3, "alpha": 255}
 VERTEX = {
@@ -91,6 +95,20 @@ def test_all_frozen_requests_are_closed_and_have_no_executable_or_path_inputs():
         assert inspect.iscoroutinefunction(handler)
 
 
+def test_text_addressing_is_indistinguishable_from_native_tool_families():
+    create_fields = AeCreateTextLayerArgs.model_fields
+    assert "composition_locator" in create_fields
+    assert "composition_id" not in create_fields
+    for schema in (
+        AeGetTextDocumentArgs,
+        AeSetTextContentArgs,
+        AeSetTextCharacterStyleArgs,
+        AeSetTextParagraphStyleArgs,
+    ):
+        assert "layer_locator" in schema.model_fields
+        assert "target" not in schema.model_fields
+
+
 def test_frozen_annotations_distinguish_reads_bounded_writes_and_delete():
     reads = {
         "ae.listInstalledFonts",
@@ -108,7 +126,7 @@ def test_frozen_annotations_distinguish_reads_bounded_writes_and_delete():
 def test_unicode_scalar_bounds_count_astral_and_combining_sequences_not_utf16_units():
     value = "A😀中 e\u0301"
     parsed = AeCreateTextLayerArgs(
-        composition_id="1",
+        composition_locator=COMPOSITION_LOCATOR,
         name="😀",
         text=value,
         idempotency_key=KEY,
@@ -117,14 +135,14 @@ def test_unicode_scalar_bounds_count_astral_and_combining_sequences_not_utf16_un
     assert len(parsed.name) == 1
     with pytest.raises(ValidationError, match="unicode|string"):
         AeCreateTextLayerArgs(
-            composition_id="1",
+            composition_locator=COMPOSITION_LOCATOR,
             name="\ud800",
             text=value,
             idempotency_key=KEY,
         )
     with pytest.raises(ValidationError, match="255"):
         AeCreateTextLayerArgs(
-            composition_id="1",
+            composition_locator=COMPOSITION_LOCATOR,
             name="😀" * 256,
             text=value,
             idempotency_key=KEY,
@@ -134,7 +152,7 @@ def test_unicode_scalar_bounds_count_astral_and_combining_sequences_not_utf16_un
 def test_box_text_and_character_leading_invariants_are_frozen():
     with pytest.raises(ValidationError, match="box_size"):
         AeCreateTextLayerArgs(
-            composition_id="1",
+            composition_locator=COMPOSITION_LOCATOR,
             name="Box",
             text="x",
             text_kind="box",
@@ -142,21 +160,13 @@ def test_box_text_and_character_leading_invariants_are_frozen():
         )
     with pytest.raises(ValidationError, match="auto_leading"):
         AeSetTextCharacterStyleArgs(
-            target={
-                "composition_id": "1",
-                "layer_index": 1,
-                "expected_name": "Text",
-            },
+            layer_locator=LOCATOR,
             style={"auto_leading": False},
             idempotency_key=KEY,
         )
     with pytest.raises(ValidationError, match="forbidden"):
         AeSetTextCharacterStyleArgs(
-            target={
-                "composition_id": "1",
-                "layer_index": 1,
-                "expected_name": "Text",
-            },
+            layer_locator=LOCATOR,
             style={"auto_leading": True, "leading_pixels": "12"},
             idempotency_key=KEY,
         )
