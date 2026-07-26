@@ -208,6 +208,23 @@ def test_all_six_templates_are_closed_and_writes_have_one_undo_boundary():
         assert metadata["templateId"].startswith("aemcp.text.")
 
 
+def test_font_inventory_collapses_identical_records_but_rejects_conflicts():
+    rendered, _ = render_text_tool(
+        "ae.listInstalledFonts", AeListInstalledFontsArgs()
+    )
+    assert 'var seenKey = "$" + postScriptName;' in rendered
+    assert 'var signature = record.family + "\\u0000" + record.style;' in rendered
+    assert "if (seen[seenKey] !== signature)" in rendered
+    assert (
+        'throw new Error("TEXT_CONTRACT_DUPLICATE_FONT:" + postScriptName);'
+        in rendered
+    )
+    conflict_index = rendered.index("if (seen[seenKey] !== signature)")
+    collapse_index = rendered.index("continue;", conflict_index)
+    append_index = rendered.index("fonts.push(record);", collapse_index)
+    assert conflict_index < collapse_index < append_index
+
+
 def test_complete_text_document_style_and_unicode_round_trip():
     model = VALUE_MODELS["ae.getTextDocument"].model_validate(snapshot())
     wire = model.model_dump(mode="json", by_alias=True)

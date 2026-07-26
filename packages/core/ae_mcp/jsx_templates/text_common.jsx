@@ -191,15 +191,21 @@
             for (fontIndex = 0; fontIndex < group.length; fontIndex += 1) {
                 var font = group[fontIndex];
                 var postScriptName = String(required(font.postScriptName, "postScriptName"));
-                if (seen[postScriptName]) {
-                    throw new Error("TEXT_CONTRACT_DUPLICATE_FONT:" + postScriptName);
-                }
-                seen[postScriptName] = true;
-                fonts.push({
+                var record = {
                     postScriptName: postScriptName,
                     family: String(required(font.familyName, "familyName")),
                     style: String(required(font.styleName, "styleName"))
-                });
+                };
+                var seenKey = "$" + postScriptName;
+                var signature = record.family + "\u0000" + record.style;
+                if (seen[seenKey] !== undefined) {
+                    if (seen[seenKey] !== signature) {
+                        throw new Error("TEXT_CONTRACT_DUPLICATE_FONT:" + postScriptName);
+                    }
+                    continue;
+                }
+                seen[seenKey] = signature;
+                fonts.push(record);
             }
         }
         fonts.sort(function (left, right) {

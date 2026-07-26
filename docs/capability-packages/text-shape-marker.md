@@ -591,8 +591,10 @@ Response `value`:
 ```
 
 `returned == fonts.length`; pagination is deterministic by
-`(postScriptName,family,style)`. Duplicate PostScript names are rejected as a
-contract mismatch.
+`(postScriptName,family,style)`. Repeated records with an identical
+`(postScriptName,family,style)` triple are collapsed before pagination. A
+PostScript name associated with different family or style values is rejected
+as a contract mismatch.
 
 ### `ae_createTextLayer`
 
@@ -1730,9 +1732,10 @@ contains no tests.
    malformed Unicode, non-finite decimals, duplicate cue keys, duplicate
    marker times, stale group ids, and no-op patches.
 3. Font tests cover preferred installed, preferred missing/error, ordered
-   fallback selection, exhausted fallback, duplicate inventory records, and
-   PostScript-name exactness. Tests must not depend on a particular maintainer
-   font being installed.
+   fallback selection, exhausted fallback, collapsing identical duplicate
+   inventory triples, rejecting conflicting triples for one PostScript name,
+   and PostScript-name exactness. Tests must not depend on a particular
+   maintainer font being installed.
 4. Render each text template with hostile strings (`"`, `\`, newline, U+2028,
    astral characters); assert they appear only as JSON literals and never
    change program structure. Verify template digest/audit binding.
