@@ -1355,6 +1355,61 @@ test('/exec awaits connected native project-graph invalidation before evalScript
     }
 });
 
+test('/exec preserves the connected native project graph only when explicitly requested', async () => {
+    const events = [];
+    const nativeClient = {
+        status: function () { return { state: 'connected' }; },
+        invalidateProjectGraph: async function () {
+            events.push('invalidate');
+            return { generation: 8, invalidated: true };
+        },
+        close: async function () {},
+    };
+    const running = await startExecAppWithNative(nativeClient, function (_jsx, cb) {
+        events.push('evalScript');
+        cb('{"ok":true,"result":"stub-result"}');
+    });
+    try {
+        const response = await post(
+            running.port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: '1', nativeProjectGraphEffect: 'preserve' },
+        );
+        assert.equal(response.status, 200);
+        assert.equal(response.body.ok, true);
+        assert.deepEqual(events, ['evalScript']);
+    } finally {
+        running.srv.close();
+        running.server._setNativeAegpClientForTest(null);
+    }
+});
+
+test('/exec rejects an unknown native project-graph effect before evalScript', async () => {
+    let evalCalls = 0;
+    const running = await startExecAppWithNative(
+        null,
+        function (_jsx, cb) {
+            evalCalls += 1;
+            cb('{"ok":true,"result":"must-not-run"}');
+        },
+    );
+    try {
+        const response = await post(
+            running.port,
+            '/exec',
+            { 'X-AE-MCP-Token': 'known-secret-token' },
+            { code: '1', nativeProjectGraphEffect: 'unknown' },
+        );
+        assert.equal(response.status, 400);
+        assert.equal(response.body.ok, false);
+        assert.equal(evalCalls, 0);
+    } finally {
+        running.srv.close();
+        running.server._setNativeAegpClientForTest(null);
+    }
+});
+
 test('/exec fails closed before evalScript when connected native invalidation fails', async () => {
     let evalCalls = 0;
     const nativeClient = {

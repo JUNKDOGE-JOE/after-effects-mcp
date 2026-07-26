@@ -878,7 +878,11 @@ async def _execute_text_tool_serialized(
         {"inputSchema": input_schema, "valueSchema": value_schema}
     )
     started = int(time.time() * 1000)
-    raw = await backend.exec(code=jsx, timeout_sec=30.0)
+    raw = await backend.exec(
+        code=jsx,
+        timeout_sec=30.0,
+        native_project_graph_effect="invalidate" if write else "preserve",
+    )
     completed = int(time.time() * 1000)
     parsed = parse_jsx_result(raw)
     if not isinstance(parsed, dict) or parsed.get("ok") is not True:

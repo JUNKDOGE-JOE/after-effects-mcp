@@ -92,16 +92,23 @@ async def test_health_check_connection_error():
 
 @pytest.mark.asyncio
 async def test_exec_returns_result(token_file):
+    captured = {}
+
+    async def _response(request):
+        import json
+
+        captured["body"] = json.loads(request.content)
+        return Response(200, json={"ok": True, "result": "42"})
+
     async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/exec").mock(
-            return_value=Response(200, json={"ok": True, "result": "42"})
-        )
+        mock.post("/exec").mock(side_effect=_response)
         b = HttpBridge("http://127.0.0.1:11488")
         try:
             r = await b.exec("40+2")
             assert r == "42"
         finally:
             await b.shutdown()
+    assert captured["body"]["nativeProjectGraphEffect"] == "invalidate"
 
 
 @pytest.mark.asyncio
@@ -145,7 +152,13 @@ async def test_exec_passes_undo_and_checkpoint_label(token_file):
         mock.post("/exec").mock(side_effect=_resp)
         b = HttpBridge("http://127.0.0.1:11488")
         try:
-            await b.exec("foo", undo_group="g", checkpoint_label="lab", timeout_sec=10.0)
+            await b.exec(
+                "foo",
+                undo_group="g",
+                checkpoint_label="lab",
+                timeout_sec=10.0,
+                native_project_graph_effect="preserve",
+            )
         finally:
             await b.shutdown()
 
@@ -153,6 +166,7 @@ async def test_exec_passes_undo_and_checkpoint_label(token_file):
     assert captured["body"]["undoGroup"] == "g"
     assert captured["body"]["checkpointLabel"] == "lab"
     assert captured["body"]["timeoutMs"] == 10000
+    assert captured["body"]["nativeProjectGraphEffect"] == "preserve"
 
 
 @pytest.mark.asyncio

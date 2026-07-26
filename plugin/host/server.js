@@ -872,7 +872,13 @@ function buildApp() {
             return res.status(401).json({ ok: false, error: 'unauthorized' });
         }
 
-        const { code, undoGroup, checkpointLabel, timeoutMs } = req.body || {};
+        const {
+            code,
+            undoGroup,
+            checkpointLabel,
+            timeoutMs,
+            nativeProjectGraphEffect = 'invalidate',
+        } = req.body || {};
         const client = req.get('x-ae-mcp-client') || 'unknown';
         const pythonVersion = req.get('x-ae-mcp-python');
         if (pythonVersion) lastPythonVersion = pythonVersion;
@@ -893,6 +899,13 @@ function buildApp() {
             activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
             return res.status(400).json({ ok: false, error: 'missing or empty `code`' });
         }
+        if (!['invalidate', 'preserve'].includes(nativeProjectGraphEffect)) {
+            activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
+            return res.status(400).json({
+                ok: false,
+                error: '`nativeProjectGraphEffect` must be invalidate or preserve',
+            });
+        }
         const t = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000;
 
         // Wrap user JSX in undo group if requested. checkpointLabel currently
@@ -907,7 +920,9 @@ function buildApp() {
                 Number.MAX_SAFE_INTEGER,
                 startedAt + Math.min(Math.ceil(t), NATIVE_MAX_REQUEST_WINDOW_MS),
             );
-            await invalidateConnectedNativeProjectGraph(invalidationDeadlineUnixMs);
+            if (nativeProjectGraphEffect === 'invalidate') {
+                await invalidateConnectedNativeProjectGraph(invalidationDeadlineUnixMs);
+            }
             const encoded = await jsxBridge.evalScript(transported, t);
             const result = decodeEvalScriptTransportResult(encoded);
             activity.record({

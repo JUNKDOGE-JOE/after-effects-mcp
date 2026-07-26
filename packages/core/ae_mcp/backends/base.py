@@ -6,6 +6,7 @@ from typing import Literal, Optional, Set
 
 
 ExecutionEngine = Literal["native-aegp", "maintained-jsx", "ephemeral-jsx"]
+NativeProjectGraphEffect = Literal["invalidate", "preserve"]
 EXECUTION_ENGINES: tuple[ExecutionEngine, ...] = (
     "native-aegp",
     "maintained-jsx",
@@ -85,8 +86,13 @@ class LegacyExtendScriptBackend(ABC):
         undo_group: Optional[str] = None,
         checkpoint_label: Optional[str] = None,
         timeout_sec: float = 30.0,
+        native_project_graph_effect: NativeProjectGraphEffect = "invalidate",
     ) -> str:
-        """Run JSX inside AE, return raw stdout text. Foundation primitive."""
+        """Run JSX inside AE, return raw stdout text.
+
+        Arbitrary JSX invalidates native locators by default. Only a closed,
+        repository-maintained read contract may request ``preserve``.
+        """
 
     @abstractmethod
     async def health_check(self, timeout_sec: float = 5.0) -> bool:

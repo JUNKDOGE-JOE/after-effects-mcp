@@ -108,6 +108,17 @@ never part of a request or response schema. A mismatch is `STALE_LOCATOR`,
 `sideEffect: not-started`. After a text write, Core reacquires and returns the
 fresh native layer locator.
 
+The local JSX bridge keeps arbitrary or mutating JSX fail-safe by invalidating
+the native project graph before execution. A closed maintained-JSX read passes
+the explicit `nativeProjectGraphEffect: preserve` transport metadata instead:
+its frozen read contract cannot mutate the project, and preserving the graph
+prevents `ae_listInstalledFonts` or `ae_getTextDocument` from making otherwise
+fresh public locators stale. Maintained text writes and every caller that omits
+the metadata retain the default `invalidate` behavior. This narrow bridge
+metadata repair was added after real-AE T5 reproduced a generation/object-id
+rollover between the font read and `ae_createTextLayer`; it does not add a new
+resolver, native suite, public request field, or caller-controlled JSX option.
+
 #### `ExactTimeInput` and `ExactTime`
 
 ```text

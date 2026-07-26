@@ -427,6 +427,7 @@ async def test_typed_execution_binds_template_audit_postcondition_and_replay(
     assert response["evidence"]["undo"]["verified"] is False
     assert response["evidence"]["postcondition"]["verified"] is True
     assert len(backend.calls) == 1
+    assert backend.calls[0]["native_project_graph_effect"] == "invalidate"
     replay = await execute_text_tool(
         backend, object(), tool="ae.setTextContent", args=args
     )
@@ -440,6 +441,42 @@ async def test_typed_execution_binds_template_audit_postcondition_and_replay(
     assert len(audit) == 1
     assert "arguments" not in audit[0]
     assert audit[0]["requestDigest"] == response["audit"]["requestDigest"]
+
+
+@pytest.mark.asyncio
+async def test_read_only_text_template_preserves_native_project_graph(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setenv("AE_MCP_TEXT_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "c" * 40)
+    backend = Backend(
+        {
+            "ok": True,
+            "value": {
+                "total": 1,
+                "offset": 0,
+                "limit": 100,
+                "returned": 1,
+                "hasMore": False,
+                "nextOffset": None,
+                "fonts": [
+                    {
+                        "postScriptName": "FixturePS-Regular",
+                        "family": "Fixture",
+                        "style": "Regular",
+                    }
+                ],
+            },
+        }
+    )
+    response = await execute_text_tool(
+        backend,
+        object(),
+        tool="ae.listInstalledFonts",
+        args=AeListInstalledFontsArgs(),
+    )
+    assert response["ok"] is True
+    assert backend.calls[0]["native_project_graph_effect"] == "preserve"
 
 
 @pytest.mark.asyncio
