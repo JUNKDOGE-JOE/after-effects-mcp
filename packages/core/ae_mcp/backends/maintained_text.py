@@ -6,6 +6,7 @@ import asyncio
 import hashlib
 import json
 import os
+import stat
 import subprocess
 import time
 import uuid
@@ -35,6 +36,10 @@ TEMPLATES = Path(__file__).resolve().parent.parent / "jsx_templates"
 COMMON_TEMPLATE = "text_common.jsx"
 AUDIT_ENV = "AE_MCP_TEXT_AUDIT_PATH"
 SOURCE_COMMIT_ENV = "AE_MCP_SOURCE_COMMIT_SHA"
+RUNTIME_HOME_ENV = "AE_MCP_HOME"
+SOURCE_SHA_LENGTH = 40
+MAX_RUNTIME_POINTER_BYTES = 1024
+MAX_INSTALL_RECORD_BYTES = 64 * 1024
 
 TEXT_TOOLS = {
     "ae.listInstalledFonts": (
@@ -83,9 +88,120 @@ def digest(value: Any) -> str:
     return hashlib.sha256(canonical_bytes(value)).hexdigest()
 
 
+def _valid_source_commit(value: object) -> bool:
+    return (
+        isinstance(value, str)
+        and len(value) == SOURCE_SHA_LENGTH
+        and all(character in "0123456789abcdef" for character in value)
+    )
+
+
+def _ordinary_bounded_file(path: Path, maximum_bytes: int) -> bytes | None:
+    try:
+        info = path.lstat()
+    except OSError:
+        return None
+    if (
+        path.is_symlink()
+        or not stat.S_ISREG(info.st_mode)
+        or info.st_size <= 0
+        or info.st_size > maximum_bytes
+    ):
+        return None
+    try:
+        payload = path.read_bytes()
+    except OSError:
+        return None
+    return payload if len(payload) == info.st_size else None
+
+
+def _managed_source_commit() -> str | None:
+    configured_home = os.environ.get(RUNTIME_HOME_ENV)
+    base = Path(configured_home) if configured_home else Path.home() / ".ae-mcp"
+    runtime_base = base / "runtime"
+    pointer_bytes = _ordinary_bounded_file(
+        runtime_base / "current", MAX_RUNTIME_POINTER_BYTES
+    )
+    if pointer_bytes is None:
+        return None
+    try:
+        relative = pointer_bytes.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return None
+    parts = relative.split("/")
+    portable = (
+        len(parts) == 2
+        and all(part and part not in {".", ".."} for part in parts)
+        and "\\" not in relative
+        and "\x00" not in relative
+    )
+    generation_id = parts[1] if portable and parts[0] == "generations" else ""
+    is_generation = (
+        len(generation_id) == 18
+        and generation_id.startswith("g-")
+        and all(character in "0123456789abcdef" for character in generation_id[2:])
+    )
+    is_legacy = portable and parts[1] in {"macos-arm64", "windows-x64"}
+    if not is_generation and not is_legacy:
+        return None
+
+    generation_root = (
+        runtime_base / relative
+        if is_generation
+        else runtime_base / parts[0]
+    )
+    if (
+        generation_root == runtime_base
+        or not generation_root.is_relative_to(runtime_base)
+    ):
+        return None
+
+    record_bytes = _ordinary_bounded_file(
+        generation_root / "install-record.json", MAX_INSTALL_RECORD_BYTES
+    )
+    if record_bytes is None:
+        return None
+    try:
+        record = json.loads(record_bytes)
+    except (UnicodeDecodeError, ValueError):
+        return None
+    if (
+        not isinstance(record, dict)
+        or record.get("relative") != relative
+        or not _valid_source_commit(record.get("sourceCommitSha"))
+    ):
+        return None
+    schema_version = record.get("schemaVersion")
+    if schema_version == 2:
+        if (
+            record.get("owner") != "ae-mcp-runtime-manager"
+            or not is_generation
+            or record.get("generationId") != generation_id
+        ):
+            return None
+    elif schema_version != 1 or not is_legacy:
+        return None
+
+    selected_runtime = (
+        generation_root / "runtime"
+        if is_generation
+        else runtime_base / relative
+    )
+    try:
+        Path(__file__).resolve(strict=True).relative_to(
+            selected_runtime.resolve(strict=True)
+        )
+    except (OSError, ValueError):
+        return None
+    return record["sourceCommitSha"]
+
+
 def _source_commit() -> str:
+    managed = _managed_source_commit()
+    if managed is not None:
+        return managed
     configured = os.environ.get(SOURCE_COMMIT_ENV, "")
-    if len(configured) == 40 and all(character in "0123456789abcdef" for character in configured):
+    if _valid_source_commit(configured):
         return configured
     try:
         resolved = subprocess.run(
@@ -98,7 +214,7 @@ def _source_commit() -> str:
         ).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         resolved = ""
-    if len(resolved) != 40 or any(character not in "0123456789abcdef" for character in resolved):
+    if not _valid_source_commit(resolved):
         raise RuntimeError(
             "maintained JSX provenance requires AE_MCP_SOURCE_COMMIT_SHA"
         )

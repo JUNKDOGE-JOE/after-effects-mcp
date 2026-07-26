@@ -226,6 +226,86 @@ def test_complete_text_document_style_and_unicode_round_trip():
         VALUE_MODELS["ae.getTextDocument"].model_validate(mixed)
 
 
+def test_source_commit_uses_selected_managed_runtime_without_git_or_env(
+    monkeypatch, tmp_path
+):
+    managed_home = tmp_path / ".ae-mcp"
+    relative = "generations/g-0123456789abcdef"
+    generation = managed_home / "runtime" / relative
+    runtime = generation / "runtime"
+    module = (
+        runtime
+        / "python/lib/python3.13/site-packages/ae_mcp/backends/maintained_text.py"
+    )
+    module.parent.mkdir(parents=True)
+    module.write_text("# installed fixture\n", encoding="utf-8")
+    (managed_home / "runtime/current").write_text(
+        f"{relative}\n", encoding="utf-8"
+    )
+    (generation / "install-record.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 2,
+                "owner": "ae-mcp-runtime-manager",
+                "generationId": "g-0123456789abcdef",
+                "relative": relative,
+                "sourceCommitSha": "c" * 40,
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("AE_MCP_HOME", str(managed_home))
+    monkeypatch.delenv("AE_MCP_SOURCE_COMMIT_SHA", raising=False)
+    monkeypatch.setattr(maintained_text, "__file__", str(module))
+
+    def unexpected_git(*_args, **_kwargs):
+        raise AssertionError("managed runtime provenance must not consult Git")
+
+    monkeypatch.setattr(maintained_text.subprocess, "run", unexpected_git)
+
+    assert maintained_text._source_commit() == "c" * 40
+
+
+def test_source_commit_rejects_receipt_for_a_different_runtime(
+    monkeypatch, tmp_path
+):
+    managed_home = tmp_path / ".ae-mcp"
+    relative = "generations/g-0123456789abcdef"
+    generation = managed_home / "runtime" / relative
+    (generation / "runtime").mkdir(parents=True)
+    (managed_home / "runtime/current").write_text(
+        f"{relative}\n", encoding="utf-8"
+    )
+    (generation / "install-record.json").write_text(
+        json.dumps(
+            {
+                "schemaVersion": 2,
+                "owner": "ae-mcp-runtime-manager",
+                "generationId": "g-0123456789abcdef",
+                "relative": relative,
+                "sourceCommitSha": "c" * 40,
+            }
+        ),
+        encoding="utf-8",
+    )
+    outside_module = tmp_path / "other/ae_mcp/backends/maintained_text.py"
+    outside_module.parent.mkdir(parents=True)
+    outside_module.write_text("# wrong runtime\n", encoding="utf-8")
+    monkeypatch.setenv("AE_MCP_HOME", str(managed_home))
+    monkeypatch.delenv("AE_MCP_SOURCE_COMMIT_SHA", raising=False)
+    monkeypatch.setattr(maintained_text, "__file__", str(outside_module))
+
+    def missing_git(*_args, **_kwargs):
+        raise OSError("git unavailable")
+
+    monkeypatch.setattr(maintained_text.subprocess, "run", missing_git)
+
+    with pytest.raises(
+        RuntimeError, match="requires AE_MCP_SOURCE_COMMIT_SHA"
+    ):
+        maintained_text._source_commit()
+
+
 @pytest.mark.asyncio
 async def test_locator_resolver_derives_only_private_extend_script_coordinates(
     monkeypatch,
