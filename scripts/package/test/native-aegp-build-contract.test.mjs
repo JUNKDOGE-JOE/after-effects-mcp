@@ -230,6 +230,45 @@ test('native standard transform writes reacquire canonical layer streams before 
   assert.match(setter, /time_varying_after != FALSE/u);
 });
 
+test('native marker creation uses the marker-supported keyframe sequence', () => {
+  const mediaStart = PLUGIN_ENTRY.indexOf(
+    'HostNativeMediaResult execute_native_media(',
+  );
+  const markerWriteStart = PLUGIN_ENTRY.indexOf(
+    'const auto existing = find_exact(command.marker_time);',
+    mediaStart,
+  );
+  const markerMutationStart = PLUGIN_ENTRY.indexOf(
+    'A_Err mutation_error = A_Err_NONE;',
+    markerWriteStart,
+  );
+  const markerCreateStart = PLUGIN_ENTRY.indexOf(
+    'if (command.operation == aemcp::native::kMarkerCreateCapability) {',
+    markerMutationStart,
+  );
+  const markerSetStart = PLUGIN_ENTRY.indexOf(
+    '} else if (command.operation == aemcp::native::kMarkerSetCapability) {',
+    markerCreateStart,
+  );
+  assert.notEqual(mediaStart, -1);
+  assert.notEqual(markerWriteStart, -1);
+  assert.notEqual(markerMutationStart, -1);
+  assert.notEqual(markerCreateStart, -1);
+  assert.notEqual(markerSetStart, -1);
+
+  const markerCreate = PLUGIN_ENTRY.slice(markerCreateStart, markerSetStart);
+  const insert = markerCreate.indexOf('AEGP_InsertKeyframe(');
+  const set = markerCreate.indexOf('AEGP_SetKeyframeValue(', insert);
+  assert.ok(
+    insert !== -1 && set > insert,
+    'marker creation must insert first and then set the marker value',
+  );
+  assert.doesNotMatch(markerCreate, /AEGP_StartAddKeyframes\(/u);
+  assert.doesNotMatch(markerCreate, /AEGP_AddKeyframes\(/u);
+  assert.doesNotMatch(markerCreate, /AEGP_SetAddKeyframe\(/u);
+  assert.doesNotMatch(markerCreate, /AEGP_EndAddKeyframes\(/u);
+});
+
 test('native layer-parent adapter distinguishes stale, cross-composition, and self-parent failures', () => {
   const start = PLUGIN_ENTRY.indexOf('HostLayerParentWriteResult set_layer_parent(');
   const end = PLUGIN_ENTRY.indexOf('HostLayerDuplicateResult duplicate_layer(', start);

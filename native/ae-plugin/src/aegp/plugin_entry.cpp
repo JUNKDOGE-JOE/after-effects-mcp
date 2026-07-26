@@ -7668,27 +7668,20 @@ class AegpHostApi final : public HostApi {
       undo.mark_started();
       A_Err mutation_error = A_Err_NONE;
       if (command.operation == aemcp::native::kMarkerCreateCapability) {
-        AEGP_AddKeyframesInfoH transaction = nullptr;
-        A_long transaction_index = -1;
+        A_long inserted_index = -1;
         AEGP_StreamValue2 value{};
         value.streamH = marker_stream.get();
         value.val.markerP = marker.get();
-        mutation_error = keyframe_suite->AEGP_StartAddKeyframes(
-            marker_stream.get(), &transaction);
+        // Marker streams reject the bulk AddKeyframes transaction's
+        // SetAddKeyframe operation. Adobe's Mangler AEGP sample uses the
+        // marker-supported InsertKeyframe + SetKeyframeValue sequence.
+        mutation_error = keyframe_suite->AEGP_InsertKeyframe(
+            marker_stream.get(), AEGP_LTimeMode_CompTime,
+            &exact_time, &inserted_index);
         if (mutation_error == A_Err_NONE) {
-          mutation_error = keyframe_suite->AEGP_AddKeyframes(
-              transaction, AEGP_LTimeMode_CompTime,
-              &exact_time, &transaction_index);
+          mutation_error = keyframe_suite->AEGP_SetKeyframeValue(
+              marker_stream.get(), inserted_index, &value);
         }
-        if (mutation_error == A_Err_NONE) {
-          mutation_error = keyframe_suite->AEGP_SetAddKeyframe(
-              transaction, transaction_index, &value);
-        }
-        const A_Err end_add_error = transaction != nullptr
-            ? keyframe_suite->AEGP_EndAddKeyframes(
-                mutation_error == A_Err_NONE ? TRUE : FALSE, transaction)
-            : mutation_error;
-        if (mutation_error == A_Err_NONE) mutation_error = end_add_error;
       } else if (command.operation == aemcp::native::kMarkerSetCapability) {
         AEGP_StreamValue2 value{};
         value.streamH = marker_stream.get();
