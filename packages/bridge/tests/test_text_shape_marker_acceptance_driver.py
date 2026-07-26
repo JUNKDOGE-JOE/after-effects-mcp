@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import stat
 import sys
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
+
+import pytest
 
 from ae_mcp.backends import maintained_text
 from ae_mcp.backends import native_text_shape_marker as native_tsm
@@ -76,6 +80,18 @@ def test_t5_has_explicit_authorized_44_call_fence_and_restart_path():
     }
     assert spec.T5_CALL_PLAN[42].key == "post-restart-composition-reacquire"
     assert spec.T5_CALL_PLAN[43].key == "post-restart-empty-baseline"
+
+
+def test_t4_is_the_exact_four_call_markersuite3_plan():
+    assert [row.ordinal for row in spec.T4_CALL_PLAN] == [1, 2, 3, 4]
+    assert [row.tool for row in spec.T4_CALL_PLAN] == [
+        "ae_listMarkers",
+        "ae_createMarker",
+        "ae_listMarkers",
+        "ae_listMarkers",
+    ]
+    assert spec.T4_CALL_PLAN[3].undo_of == "t4-marker-create"
+    assert spec.SPEC.t4_target_calls == spec.SPEC.t4_hard_limit == 4
 
 
 def test_t6_is_the_policy_derived_30_call_reduction_with_explained_skips():
@@ -289,6 +305,12 @@ def test_one_driver_selects_the_tier_plan_and_keeps_the_fixture_recipe_frozen():
         return SimpleNamespace(mode=mode, intent=lambda name: f"{mode}:{name}")
 
     assert driver.TextShapeMarkerPackage(
+        runtime("preflight"), fixture_name="TSM Acceptance Fixture"
+    ).plan is spec.PREFLIGHT_CALL_PLAN
+    assert driver.TextShapeMarkerPackage(
+        runtime("t4"), fixture_name="TSM Acceptance Fixture"
+    ).plan is spec.T4_CALL_PLAN
+    assert driver.TextShapeMarkerPackage(
         runtime("t5"), fixture_name="TSM Acceptance Fixture"
     ).plan is spec.T5_CALL_PLAN
     assert driver.TextShapeMarkerPackage(
@@ -307,6 +329,149 @@ def test_one_driver_selects_the_tier_plan_and_keeps_the_fixture_recipe_frozen():
         "Create Triangle and Curve from the fixed paths and complete styles below.",
         "Use exact marker times 24/24 and 1000/1000 on distinct layer targets.",
         "Save only in place at the explicit restart checkpoint.",
+    )
+
+
+@pytest.mark.asyncio
+async def test_runtime_fixture_order_is_public_readiness_then_save_then_build(
+    tmp_path,
+):
+    events = []
+    fixture_path = tmp_path / "tsm.aep"
+
+    class Runtime:
+        mode = "preflight"
+        fixture = SimpleNamespace(path=fixture_path)
+
+        def intent(self, name):
+            return f"preflight:{name}"
+
+        async def checkpoint(self, kind, _details):
+            events.append(("checkpoint", kind))
+            fixture_path.write_bytes(b"fixture")
+
+        def mark_fixture_created(self):
+            events.append(("fixture", "marked"))
+
+    package = driver.TextShapeMarkerPackage(
+        Runtime(), fixture_name="TSM Acceptance Fixture"
+    )
+
+    async def execute(_session, rows):
+        events.append(("public", tuple(row.key for row in rows)))
+
+    package._execute_rows = execute
+    await package._create_fixture_after_readiness(
+        SimpleNamespace(), spec.PREFLIGHT_CALL_PLAN
+    )
+    assert events == [
+        ("public", ("readiness",)),
+        ("checkpoint", "save-fixture"),
+        ("fixture", "marked"),
+        (
+            "public",
+            (
+                "composition-create",
+                "composition-reacquire",
+                "empty-layer-baseline",
+            ),
+        ),
+    ]
+
+
+def test_t4_handoff_is_0600_and_bound_to_fixture_host_and_source(tmp_path):
+    fixture_path = tmp_path / "tsm.aep"
+    fixture_path.write_bytes(b"fixture")
+    records = []
+
+    class Runtime:
+        mode = "preflight"
+        fixture = SimpleNamespace(
+            path=fixture_path,
+            fixture_id="TSM Acceptance Fixture",
+        )
+        identity = SimpleNamespace(expected_sha="a" * 40)
+        evidence = SimpleNamespace(
+            record=lambda event, payload: records.append((event, payload))
+        )
+
+        def intent(self, name):
+            return f"preflight:{name}"
+
+        def saved_fixture_identity(self):
+            return (
+                fixture_path.stat().st_size,
+                hashlib.sha256(fixture_path.read_bytes()).hexdigest(),
+            )
+
+    runtime = Runtime()
+    package = driver.TextShapeMarkerPackage(
+        runtime, fixture_name="TSM Acceptance Fixture"
+    )
+    package.context["composition_locator"] = _locator("composition", COMP)
+    written = package._write_t4_handoff(HOST)
+    assert stat.S_IMODE(package._t4_handoff_path.stat().st_mode) == 0o600
+    assert written["fixtureSha256"]
+
+    consumer = driver.TextShapeMarkerPackage(
+        SimpleNamespace(
+            mode="t4",
+            fixture=runtime.fixture,
+            identity=runtime.identity,
+            evidence=runtime.evidence,
+            intent=lambda name: f"t4:{name}",
+            saved_fixture_identity=runtime.saved_fixture_identity,
+        ),
+        fixture_name="TSM Acceptance Fixture",
+    )
+    loaded = consumer._load_t4_handoff(HOST)
+    assert loaded == written
+    assert consumer.context["t4_marker_target"] == {
+        "kind": "composition",
+        "composition_locator": _locator("composition", COMP),
+    }
+    consumer._delete_t4_handoff()
+    assert not consumer._t4_handoff_path.exists()
+
+
+def test_t4_marker_assertion_matches_the_public_camel_case_contract():
+    package = driver.TextShapeMarkerPackage(
+        SimpleNamespace(mode="t4", intent=lambda name: f"t4:{name}"),
+        fixture_name="TSM Acceptance Fixture",
+    )
+    target = {
+        "kind": "composition",
+        "composition_locator": _locator("composition", COMP),
+    }
+    package.context["t4_marker_target"] = target
+    package._assert_t4_marker(
+        {
+            "ref": {
+                "target": {
+                    "kind": "composition",
+                    "compositionLocator": {
+                        **_locator("composition", COMP),
+                        "generation": 2,
+                    },
+                },
+                "time": {"value": 24, "scale": 24, "secondsRational": "1"},
+            },
+            "markerIndex": 1,
+            "duration": {
+                "value": 12,
+                "scale": 24,
+                "secondsRational": "1/2",
+            },
+            "comment": spec.MARKER_VALUE["comment"],
+            "chapter": spec.MARKER_VALUE["chapter"],
+            "url": spec.MARKER_VALUE["url"],
+            "frameTarget": spec.MARKER_VALUE["frame_target"],
+            "cuePointName": spec.MARKER_VALUE["cue_point_name"],
+            "cuePointParameters": spec.MARKER_VALUE["cue_point_parameters"],
+            "navigation": spec.MARKER_VALUE["navigation"],
+            "protectedRegion": spec.MARKER_VALUE["protected_region"],
+            "labelId": spec.MARKER_VALUE["label_id"],
+        }
     )
 
 

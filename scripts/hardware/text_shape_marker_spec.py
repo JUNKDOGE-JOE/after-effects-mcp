@@ -377,6 +377,54 @@ T5_CALL_PLAN = tuple(
     dataclasses.replace(row, ordinal=index) for index, row in enumerate(_ROWS, 1)
 )
 
+PREFLIGHT_CALL_PLAN = T5_CALL_PLAN[:4]
+
+T4_CALL_PLAN = tuple(
+    dataclasses.replace(row, ordinal=index)
+    for index, row in enumerate(
+        (
+            _call(
+                "t4-marker-empty",
+                "ae_listMarkers",
+                {"target": "$t4_marker_target", "offset": 0, "limit": 25},
+                "read",
+                "The existing preflight composition marker stream is empty.",
+            ),
+            _call(
+                "t4-marker-create",
+                "ae_createMarker",
+                {
+                    "target": "$t4_marker_target",
+                    "time": MARKER_TIME_A,
+                    "marker": MARKER_VALUE,
+                    "idempotency_key": "$operation_key:t4-marker-create",
+                },
+                "write",
+                (
+                    "MarkerSuite3 writes the complete Unicode marker with exact "
+                    "duration, cue parameter, flag, and label."
+                ),
+            ),
+            _call(
+                "t4-marker-readback",
+                "ae_listMarkers",
+                {"target": "$t4_marker_target", "offset": 0, "limit": 25},
+                "read",
+                "Every T4 marker field and the exact canonical time read back.",
+            ),
+            _call(
+                "t4-marker-undo-read",
+                "ae_listMarkers",
+                {"target": "$t4_marker_target", "offset": 0, "limit": 25},
+                "read",
+                "One real AE Undo restores the empty marker stream.",
+                undo_of="t4-marker-create",
+            ),
+        ),
+        1,
+    )
+)
+
 
 def _t5_row(key: str) -> PlanCall:
     matches = [row for row in T5_CALL_PLAN if row.key == key]
@@ -757,6 +805,27 @@ require(
     "TSM T6 ordinals must be exactly 1..30",
 )
 require(
+    [row.tool for row in PREFLIGHT_CALL_PLAN]
+    == [
+        "ae_projectSummary",
+        "ae_createComposition",
+        "ae_listProjectItems",
+        "ae_listCompositionLayers",
+    ],
+    "TSM preflight must freeze readiness before the fixture-building calls",
+)
+require(
+    [row.ordinal for row in T4_CALL_PLAN] == [1, 2, 3, 4]
+    and [row.tool for row in T4_CALL_PLAN]
+    == [
+        "ae_listMarkers",
+        "ae_createMarker",
+        "ae_listMarkers",
+        "ae_listMarkers",
+    ],
+    "TSM T4 must be the frozen four-call MarkerSuite3 smoke",
+)
+require(
     set(CONTRACTS) == set(PACKAGE_TOOLS),
     "TSM public contract expectations must cover all 17 package tools",
 )
@@ -798,8 +867,10 @@ __all__ = [
     "MARKER_TIME_B",
     "MARKER_VALUE",
     "PACKAGE_TOOLS",
+    "PREFLIGHT_CALL_PLAN",
     "REOPEN_PROCEDURE",
     "SPEC",
+    "T4_CALL_PLAN",
     "T5_ADDRESS_LINKS",
     "T5_CALL_PLAN",
     "T6_ADDRESS_LINKS",

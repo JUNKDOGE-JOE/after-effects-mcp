@@ -4,7 +4,11 @@
 from __future__ import annotations
 
 import copy
+import json
+import os
+import stat
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any
 
 from capability_package_cli import run_cli
@@ -21,8 +25,12 @@ from text_shape_marker_spec import (
     CALL_PLAN,
     CONTRACTS,
     FIXTURE_RECIPE,
+    MARKER_TIME_A,
+    MARKER_VALUE,
+    PREFLIGHT_CALL_PLAN,
     REOPEN_PROCEDURE,
     SPEC,
+    T4_CALL_PLAN,
     T5_CALL_PLAN,
     T6_CALL_PLAN,
     T6_REPLAY_GROUNDS,
@@ -91,9 +99,12 @@ class TextShapeMarkerPackage:
         self.operation_keys: dict[str, str] = {}
         self.context: dict[str, Any] = {}
         self.responses: dict[str, dict[str, Any]] = {}
-        self.plan = (
-            T6_CALL_PLAN if self.runtime.mode == "t6" else T5_CALL_PLAN
-        )
+        self.plan = {
+            "preflight": PREFLIGHT_CALL_PLAN,
+            "t4": T4_CALL_PLAN,
+            "t5": T5_CALL_PLAN,
+            "t6": T6_CALL_PLAN,
+        }[self.runtime.mode]
         self.session_stage = ""
         self.session_component_identities: dict[str, dict[str, Any]] = {}
 
@@ -447,6 +458,11 @@ class TextShapeMarkerPackage:
             self.context["text_marker_target"] = _marker_target(
                 mapping(after.get("ref"), "text marker ref invalid").get("target")
             )
+        elif key == "t4-marker-create":
+            after = mapping(value.get("after"), "T4 marker create omitted after")
+            self.context["t4_marker_target"] = _marker_target(
+                mapping(after.get("ref"), "T4 marker ref invalid").get("target")
+            )
         elif key == "shape-marker-create":
             after = mapping(value.get("after"), "shape marker create omitted after")
             self.context["shape_marker_target"] = _marker_target(
@@ -495,7 +511,29 @@ class TextShapeMarkerPackage:
 
     def _assert_state(self, key: str, payload: Mapping[str, Any]) -> None:
         value = native_value(payload)
-        if key == "empty-layer-baseline":
+        if key in {"t4-marker-empty", "t4-marker-undo-read"}:
+            require(
+                value.get("total") == 0 and value.get("markers") == [],
+                f"{key} did not prove an empty marker stream",
+            )
+        elif key == "t4-marker-create":
+            require(
+                value.get("changed") is True
+                and value.get("before") is None
+                and isinstance(value.get("after"), Mapping),
+                "T4 marker create did not report a committed insertion",
+            )
+            self._assert_t4_marker(value["after"])
+        elif key == "t4-marker-readback":
+            markers = value.get("markers")
+            require(
+                value.get("total") == 1
+                and isinstance(markers, list)
+                and len(markers) == 1,
+                "T4 marker readback did not return exactly one marker",
+            )
+            self._assert_t4_marker(markers[0])
+        elif key == "empty-layer-baseline":
             require(value.get("total") == 0 and value.get("layers") == [], "baseline is not empty")
             self.context["empty_baseline"] = _semantic(value)
         elif key == "text-read":
@@ -558,6 +596,99 @@ class TextShapeMarkerPackage:
                 "post-restart family layers did not preserve both package targets",
             )
 
+    def _assert_t4_marker(self, candidate: Any) -> None:
+        marker = mapping(candidate, "T4 marker state is invalid")
+        ref = mapping(marker.get("ref"), "T4 marker ref is invalid")
+        target = _marker_target(ref.get("target"))
+        expected_target = mapping(
+            self.context.get("t4_marker_target"),
+            "T4 marker expected target is missing",
+        )
+        actual_locator = mapping(
+            target.get("composition_locator"),
+            "T4 marker target locator is invalid",
+        )
+        expected_locator = mapping(
+            expected_target.get("composition_locator"),
+            "T4 marker expected locator is invalid",
+        )
+        time_value = mapping(ref.get("time"), "T4 marker time is invalid")
+        duration = mapping(marker.get("duration"), "T4 marker duration is invalid")
+        require(
+            target.get("kind") == expected_target.get("kind") == "composition"
+            and {
+                key: actual_locator.get(key)
+                for key in (
+                    "kind",
+                    "hostInstanceId",
+                    "sessionId",
+                    "projectId",
+                    "objectId",
+                )
+            }
+            == {
+                key: expected_locator.get(key)
+                for key in (
+                    "kind",
+                    "hostInstanceId",
+                    "sessionId",
+                    "projectId",
+                    "objectId",
+                )
+            },
+            "T4 marker target identity drifted",
+        )
+        require(
+            marker.get("markerIndex") == 1,
+            "T4 marker index drifted",
+        )
+        require(
+            time_value
+            == {
+                "value": MARKER_TIME_A["value"],
+                "scale": MARKER_TIME_A["scale"],
+                "secondsRational": "1",
+            },
+            "T4 marker exact time drifted",
+        )
+        require(
+            duration
+            == {
+                "value": MARKER_VALUE["duration"]["value"],
+                "scale": MARKER_VALUE["duration"]["scale"],
+                "secondsRational": "1/2",
+            },
+            "T4 marker duration drifted",
+        )
+        require(
+            {
+                "comment": marker.get("comment"),
+                "chapter": marker.get("chapter"),
+                "url": marker.get("url"),
+                "frame_target": marker.get("frameTarget"),
+                "cue_point_name": marker.get("cuePointName"),
+                "cue_point_parameters": marker.get("cuePointParameters"),
+                "navigation": marker.get("navigation"),
+                "protected_region": marker.get("protectedRegion"),
+                "label_id": marker.get("labelId"),
+            }
+            == {
+                key: MARKER_VALUE[key]
+                for key in (
+                    "comment",
+                    "chapter",
+                    "url",
+                    "frame_target",
+                    "cue_point_name",
+                    "cue_point_parameters",
+                    "navigation",
+                    "protected_region",
+                    "label_id",
+                )
+            },
+            "T4 marker complete field projection drifted",
+        )
+
     async def _undo(self, write_key: str) -> None:
         await self.runtime.checkpoint(
             f"undo-{write_key}",
@@ -610,16 +741,21 @@ class TextShapeMarkerPackage:
                     undo_verified=True,
                 )
 
-    async def run(self) -> dict[str, Any]:
-        native_ids = tuple(
-            expectation.contract_id
-            for expectation in CONTRACTS.values()
-            if expectation.native_provenance
-        ) + tuple(case.capability_id for case in SPEC.support_tools)
-        self.runtime.validate_machine_identity(
-            required_capability_ids=tuple(dict.fromkeys(native_ids))
+    @property
+    def _t4_handoff_path(self) -> Path:
+        fixture = self.runtime.fixture.path
+        return fixture.with_name(f"{fixture.name}.tsm-preflight.json")
+
+    async def _create_fixture_after_readiness(
+        self,
+        session: PublicSession,
+        rows: Sequence[Any],
+    ) -> None:
+        require(
+            rows and rows[0].key == "readiness",
+            "fixture creation must begin with the frozen public readiness row",
         )
-        self.runtime.require_fixture_absent()
+        await self._execute_rows(session, rows[:1])
         await self.runtime.checkpoint(
             "save-fixture",
             {
@@ -630,28 +766,207 @@ class TextShapeMarkerPackage:
             },
         )
         self.runtime.mark_fixture_created()
+        await self._execute_rows(session, rows[1:])
 
-        if self.runtime.mode == "preflight":
+    def _write_t4_handoff(self, host_instance_id: str) -> dict[str, Any]:
+        path = self._t4_handoff_path
+        require(not os.path.lexists(path), "T4 preflight handoff already exists")
+        size, digest = self.runtime.saved_fixture_identity()
+        locator = _locator(self.context.get("composition_locator"), "composition")
+        require(
+            locator["hostInstanceId"] == host_instance_id,
+            "preflight composition locator does not belong to the bound AE host",
+        )
+        payload = {
+            "schemaVersion": 1,
+            "fixtureId": self.runtime.fixture.fixture_id,
+            "fixtureBytes": size,
+            "fixtureSha256": digest,
+            "expectedSha": self.runtime.identity.expected_sha,
+            "hostInstanceId": host_instance_id,
+            "compositionLocator": locator,
+        }
+        descriptor = os.open(
+            path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            stat.S_IRUSR | stat.S_IWUSR,
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(payload, stream, ensure_ascii=False, separators=(",", ":"))
+            stream.write("\n")
+        os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
+        self.runtime.evidence.record(
+            "t4-preflight-handoff-created",
+            {
+                "path": path,
+                "fixtureId": payload["fixtureId"],
+                "fixtureBytes": size,
+                "fixtureSha256": digest,
+                "hostInstanceId": host_instance_id,
+            },
+        )
+        return payload
+
+    def _load_t4_handoff(self, host_instance_id: str) -> dict[str, Any]:
+        path = self._t4_handoff_path
+        try:
+            info = path.lstat()
+        except FileNotFoundError as error:
             raise AcceptanceFailure(
-                "TSM zero-evidence preflight is owned by the prepared runtime workflow"
-            )
+                "T4 requires the handoff from the immediately preceding TSM preflight"
+            ) from error
+        require(
+            stat.S_ISREG(info.st_mode)
+            and not path.is_symlink()
+            and stat.S_IMODE(info.st_mode) == 0o600
+            and 0 < info.st_size <= 64 * 1024,
+            "T4 preflight handoff is invalid",
+        )
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError) as error:
+            raise AcceptanceFailure("T4 preflight handoff is unreadable") from error
+        handoff = mapping(payload, "T4 preflight handoff is not an object")
+        require(
+            set(handoff)
+            == {
+                "schemaVersion",
+                "fixtureId",
+                "fixtureBytes",
+                "fixtureSha256",
+                "expectedSha",
+                "hostInstanceId",
+                "compositionLocator",
+            },
+            "T4 preflight handoff is not closed",
+        )
+        require(
+            handoff["schemaVersion"] == 1
+            and handoff["fixtureId"] == self.runtime.fixture.fixture_id
+            and handoff["expectedSha"] == self.runtime.identity.expected_sha
+            and handoff["hostInstanceId"] == host_instance_id,
+            "T4 preflight handoff identity drifted",
+        )
+        require(
+            self.runtime.saved_fixture_identity()
+            == (handoff["fixtureBytes"], handoff["fixtureSha256"]),
+            "T4 preflight fixture identity drifted",
+        )
+        locator = _locator(handoff["compositionLocator"], "composition")
+        require(
+            locator["hostInstanceId"] == host_instance_id,
+            "T4 preflight locator belongs to another AE host",
+        )
+        self.context["t4_marker_target"] = {
+            "kind": "composition",
+            "composition_locator": locator,
+        }
+        self.runtime.evidence.record(
+            "t4-preflight-handoff-consumed",
+            {
+                "path": path,
+                "fixtureId": handoff["fixtureId"],
+                "fixtureSha256": handoff["fixtureSha256"],
+                "hostInstanceId": host_instance_id,
+            },
+        )
+        return dict(handoff)
+
+    def _delete_t4_handoff(self) -> None:
+        path = self._t4_handoff_path
+        info = path.lstat()
+        require(
+            stat.S_ISREG(info.st_mode) and not path.is_symlink(),
+            "refusing to remove an invalid T4 handoff",
+        )
+        path.unlink()
+        self.runtime.evidence.record(
+            "t4-preflight-handoff-removed",
+            {"path": path, "sourceAbsent": True},
+        )
+
+    async def run(self) -> dict[str, Any]:
+        native_ids = tuple(
+            expectation.contract_id
+            for expectation in CONTRACTS.values()
+            if expectation.native_provenance
+        ) + tuple(case.capability_id for case in SPEC.support_tools)
+        self.runtime.validate_machine_identity(
+            required_capability_ids=tuple(dict.fromkeys(native_ids))
+        )
         if self.runtime.mode == "t4":
-            raise AcceptanceFailure(
-                "Use the dedicated four-call MarkerSuite3 novelty smoke before candidate acceptance"
+            require(
+                os.path.lexists(self.runtime.fixture.path),
+                "T4 requires the existing disposable preflight fixture",
             )
-
-        self._record_t6_reduction()
-        restart_index = next(
-            index
-            for index, row in enumerate(self.plan)
-            if row.key == "post-restart-composition-reacquire"
+        else:
+            self.runtime.require_fixture_absent()
+            require(
+                not os.path.lexists(self._t4_handoff_path),
+                "stale T4 preflight handoff exists without an active fixture",
+            )
+        await self.runtime.checkpoint(
+            "prepare-formal-ae",
+            {
+                "instruction": (
+                    "Keep the immediately preceding preflight fixture open in the "
+                    "same formal AE process; do not save, reopen, or use Finder."
+                    if self.runtime.mode == "t4"
+                    else FIXTURE_RECIPE[0]
+                ),
+                "formalAeApp": self.runtime.identity.formal_ae_app,
+                "fixturePath": self.runtime.fixture.path,
+                "activeFixtureCount": 1,
+                "saveAsCopies": 0,
+                "candidateRun": self.runtime.mode in {"t5", "t6"},
+                "candidateEvidence": False,
+            },
         )
         first = self.runtime.bind_latest_native_load(stage="initial")
         required = [case.tool for case in (*SPEC.tools, *SPEC.support_tools)]
         self.session_stage = "initial"
         async with self.runtime.session_factory() as session:
             self.runtime.require_tools(session, required)
-            await self._execute_rows(session, self.plan[:restart_index])
+            if self.runtime.mode == "preflight":
+                await self._create_fixture_after_readiness(session, self.plan)
+                handoff = self._write_t4_handoff(first)
+                require(
+                    self.runtime.ledger.total == len(PREFLIGHT_CALL_PLAN),
+                    "TSM preflight must use exactly four public calls",
+                )
+                return {
+                    "firstHostInstanceId": first,
+                    "publicReadinessBeforeFirstSave": True,
+                    "activeFixtureForT4": True,
+                    "t4Handoff": handoff,
+                }
+            if self.runtime.mode == "t4":
+                self._load_t4_handoff(first)
+                self.runtime.mark_fixture_created()
+                await self._execute_rows(session, self.plan)
+                require(
+                    self.runtime.ledger.total == 4
+                    and self.runtime.ledger.hard_limit == 4,
+                    "TSM T4 must use exactly four public calls",
+                )
+                archived = await self.runtime.archive_fixture()
+                self._delete_t4_handoff()
+                return {
+                    "firstHostInstanceId": first,
+                    "nativeNoveltySmoke": "MarkerSuite3",
+                    "undoVerified": True,
+                    "archived": archived,
+                }
+
+            self._record_t6_reduction()
+            restart_index = next(
+                index
+                for index, row in enumerate(self.plan)
+                if row.key == "post-restart-composition-reacquire"
+            )
+            await self._create_fixture_after_readiness(
+                session, self.plan[:restart_index]
+            )
 
         await self._restart()
         second = self.runtime.bind_latest_native_load(
