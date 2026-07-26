@@ -74,6 +74,7 @@ using aemcp::native::OwnedSelectionCollection;
 using aemcp::native::SelectionCollectionEntryKind;
 using aemcp::native::select_effective_layer_name;
 using aemcp::native::plan_indexed_group_reorder;
+using aemcp::native::plan_ae_path_vertex_mutation;
 
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
@@ -136,6 +137,44 @@ void indexed_group_reorder_skips_the_existing_position() {
   require(!plan_indexed_group_reorder(0, 1, 2).valid
           && !plan_indexed_group_reorder(2, 3, 2).valid,
       "indexed-group reorder accepted an out-of-range position");
+}
+
+void shape_path_vertex_mutation_preserves_valid_intermediate_topology() {
+  const auto closed_in_place =
+      plan_ae_path_vertex_mutation(3, false, 3, true);
+  require(!closed_in_place.open_before_resize
+          && closed_in_place.retained_vertices == 3
+          && closed_in_place.delete_count == 0
+          && closed_in_place.create_count == 0
+          && !closed_in_place.close_after_resize,
+      "same-size closed shape path planned a destructive rebuild");
+
+  const auto closed_to_open =
+      plan_ae_path_vertex_mutation(4, false, 2, false);
+  require(closed_to_open.open_before_resize
+          && closed_to_open.retained_vertices == 2
+          && closed_to_open.delete_count == 2
+          && closed_to_open.create_count == 0
+          && !closed_to_open.close_after_resize,
+      "closed-to-open shape path did not open before removing excess vertices");
+
+  const auto open_to_closed =
+      plan_ae_path_vertex_mutation(2, true, 3, true);
+  require(!open_to_closed.open_before_resize
+          && open_to_closed.retained_vertices == 2
+          && open_to_closed.delete_count == 0
+          && open_to_closed.create_count == 1
+          && open_to_closed.close_after_resize,
+      "open-to-closed shape path did not resize before closing");
+
+  const auto empty_shape =
+      plan_ae_path_vertex_mutation(0, false, 3, true);
+  require(!empty_shape.open_before_resize
+          && empty_shape.retained_vertices == 0
+          && empty_shape.delete_count == 0
+          && empty_shape.create_count == 3
+          && !empty_shape.close_after_resize,
+      "new empty shape path did not plan only the required vertex creation");
 }
 
 void effect_stack_transition_requires_one_unambiguous_insertion() {
@@ -3314,6 +3353,7 @@ int main() {
   bounded_page_budget_counts_codec_escaping_and_stops_before_overflow();
   effective_layer_name_uses_sdk_source_fallback();
   indexed_group_reorder_skips_the_existing_position();
+  shape_path_vertex_mutation_preserves_valid_intermediate_topology();
   effect_stack_transition_requires_one_unambiguous_insertion();
   selected_collection_ownership_and_mixed_filter_are_portable_tested();
   composition_time_rational_is_exact_and_overflow_safe();

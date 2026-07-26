@@ -1109,6 +1109,13 @@ MaskOutline mutation, decimal comparison, audit, and postcondition behavior.
 It adds only shape-group resolution. Requesting the current path is
 `INVALID_ARGUMENT`, `sideEffect: not-started`.
 
+AE 26.3 hardware amendment: a non-empty vector-shape outline rejects the
+mask-style delete-all/recreate sequence at the first `AEGP_DeleteVertex`
+(`8197`). Shape path replacement therefore preserves the common vertex prefix,
+deletes or creates only the count difference, writes every requested vertex in
+place, opens a closed-to-open path before shrinking, and closes an
+open-to-closed path after growing. Mask path mutation remains unchanged.
+
 ### `ae_setShapeFillStyle`
 
 Canonical registry name: `ae.setShapeFillStyle`

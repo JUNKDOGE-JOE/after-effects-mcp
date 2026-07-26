@@ -8617,16 +8617,33 @@ class AegpHostApi final : public HostApi {
           return A_Err_GENERIC;
         }
         A_long vertices = segments <= 0 ? 0 : open ? segments + 1 : segments;
+        const auto target_vertices = command.mask_vertices.size();
+        const auto mutation_plan = aemcp::native::plan_ae_path_vertex_mutation(
+            static_cast<std::size_t>(vertices), open != FALSE,
+            target_vertices, *command.mask_closed);
         A_Err error = A_Err_NONE;
-        for (A_long index = vertices - 1; error == A_Err_NONE && index >= 0;
-             --index) {
+        if (mutation_plan.open_before_resize) {
+          mutation_stage = "path-open-before-resize";
+          error = outline_suite->AEGP_SetMaskOutlineOpen(
+              value.value().val.mask, TRUE);
+        }
+        const A_long retained_vertices =
+            static_cast<A_long>(mutation_plan.retained_vertices);
+        for (A_long index = vertices - 1;
+             error == A_Err_NONE && index >= retained_vertices; --index) {
           mutation_stage = "path-delete-vertex";
           error = outline_suite->AEGP_DeleteVertex(
               value.value().val.mask, index);
         }
-        for (std::size_t index = 0;
-             error == A_Err_NONE && index < command.mask_vertices.size();
+        for (std::size_t index = mutation_plan.retained_vertices;
+             error == A_Err_NONE && index < target_vertices;
              ++index) {
+          mutation_stage = "path-create-vertex";
+          error = outline_suite->AEGP_CreateVertex(
+              value.value().val.mask, static_cast<A_long>(index));
+        }
+        for (std::size_t index = 0;
+             error == A_Err_NONE && index < target_vertices; ++index) {
           const auto& source = command.mask_vertices[index];
           const auto x = decimal_value(source.position_x);
           const auto y = decimal_value(source.position_y);
@@ -8638,21 +8655,16 @@ class AegpHostApi final : public HostApi {
             mutation_stage = "path-parse-vertex";
             return A_Err_GENERIC;
           }
-          mutation_stage = "path-create-vertex";
-          error = outline_suite->AEGP_CreateVertex(
-              value.value().val.mask, static_cast<A_long>(index));
-          if (error == A_Err_NONE) {
-            const AEGP_MaskVertex vertex{
-                *x, *y, *in_x, *in_y, *out_x, *out_y};
-            mutation_stage = "path-set-vertex";
-            error = outline_suite->AEGP_SetMaskOutlineVertexInfo(
-                value.value().val.mask, static_cast<A_long>(index), &vertex);
-          }
+          const AEGP_MaskVertex vertex{
+              *x, *y, *in_x, *in_y, *out_x, *out_y};
+          mutation_stage = "path-set-vertex";
+          error = outline_suite->AEGP_SetMaskOutlineVertexInfo(
+              value.value().val.mask, static_cast<A_long>(index), &vertex);
         }
-        if (error == A_Err_NONE) {
-          mutation_stage = "path-set-open";
+        if (error == A_Err_NONE && mutation_plan.close_after_resize) {
+          mutation_stage = "path-close-after-resize";
           error = outline_suite->AEGP_SetMaskOutlineOpen(
-              value.value().val.mask, *command.mask_closed ? FALSE : TRUE);
+              value.value().val.mask, FALSE);
         }
         if (error == A_Err_NONE) {
           mutation_stage = "path-set-stream-value";
