@@ -20680,9 +20680,9 @@
                     "kind": "layer",
                     "hostInstanceId": "22222222-2222-4222-8222-222222222222",
                     "sessionId": "11111111-1111-4111-8111-111111111111",
-                    "projectId": "44444444-4444-4444-8444-444444444444",
-                    "generation": 8,
-                    "objectId": "88888888-8888-4888-8888-888888888888"
+                    "projectId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                    "generation": 9,
+                    "objectId": "99999999-9999-4999-8999-999999999999"
                   },
                   "groupCountBefore": 0,
                   "groupCountAfter": 1,
@@ -20692,9 +20692,9 @@
                         "kind": "layer",
                         "hostInstanceId": "22222222-2222-4222-8222-222222222222",
                         "sessionId": "11111111-1111-4111-8111-111111111111",
-                        "projectId": "44444444-4444-4444-8444-444444444444",
-                        "generation": 8,
-                        "objectId": "88888888-8888-4888-8888-888888888888"
+                        "projectId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                        "generation": 9,
+                        "objectId": "99999999-9999-4999-8999-999999999999"
                       },
                       "groupIndex": 1,
                       "streamId": 101
@@ -25495,7 +25495,7 @@
       ],
       "nextCursor": null,
       "queryDigest": "1c9d06b8b5f876c7b41fb00204efe2f5c5e62502bb188fa8a1e5eae5e59d0c3b",
-      "capabilitiesDigest": "cb6c0a1e183a7e0b26425b4333e83702f636e0fc1ea0c12e70e78860a72bfaf8"
+      "capabilitiesDigest": "9f6ff7138e4aefd60e5e5369fef6cfdd98673c5fab510850d591258fee90b787"
     }
   }
 }

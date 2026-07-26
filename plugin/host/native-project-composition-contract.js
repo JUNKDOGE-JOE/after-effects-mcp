@@ -80,6 +80,15 @@ function boundToSession(locator, hostInstanceId, sessionId) {
     return locator.hostInstanceId === hostInstanceId && locator.sessionId === sessionId;
 }
 
+function freshLocatorAfterGraphChange(locator, previous) {
+    return locator.kind === previous.kind
+        && locator.hostInstanceId === previous.hostInstanceId
+        && locator.sessionId === previous.sessionId
+        && locator.generation > previous.generation
+        && locator.projectId !== previous.projectId
+        && locator.objectId !== previous.objectId;
+}
+
 function reducedRational(value, scale) {
     const divisor = gcd(value, scale);
     const numerator = value / divisor;
@@ -1369,7 +1378,9 @@ function validShapeGroupCreateValue(value, argumentsValue, hostInstanceId, sessi
         && value.changed === true
         && validLocator(value.layerLocator, ['layer'])
         && boundToSession(value.layerLocator, hostInstanceId, sessionId)
-        && sameLocator(value.layerLocator, argumentsValue.layerLocator)
+        && freshLocatorAfterGraphChange(
+            value.layerLocator, argumentsValue.layerLocator,
+        )
         && Number.isSafeInteger(value.groupCountBefore) && value.groupCountBefore >= 0
         && value.groupCountAfter === value.groupCountBefore + 1
         && validShapeGroup(value.group)

@@ -1596,9 +1596,9 @@ export const TEXT_SHAPE_MARKER_CAPABILITIES = Object.freeze([
               "kind": "layer",
               "hostInstanceId": "22222222-2222-4222-8222-222222222222",
               "sessionId": "11111111-1111-4111-8111-111111111111",
-              "projectId": "44444444-4444-4444-8444-444444444444",
-              "generation": 8,
-              "objectId": "88888888-8888-4888-8888-888888888888"
+              "projectId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+              "generation": 9,
+              "objectId": "99999999-9999-4999-8999-999999999999"
             },
             "groupCountBefore": 0,
             "groupCountAfter": 1,
@@ -1608,9 +1608,9 @@ export const TEXT_SHAPE_MARKER_CAPABILITIES = Object.freeze([
                   "kind": "layer",
                   "hostInstanceId": "22222222-2222-4222-8222-222222222222",
                   "sessionId": "11111111-1111-4111-8111-111111111111",
-                  "projectId": "44444444-4444-4444-8444-444444444444",
-                  "generation": 8,
-                  "objectId": "88888888-8888-4888-8888-888888888888"
+                  "projectId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                  "generation": 9,
+                  "objectId": "99999999-9999-4999-8999-999999999999"
                 },
                 "groupIndex": 1,
                 "streamId": 101

@@ -141,6 +141,34 @@ The bounded native fix retains the unique matching `StreamRefOwner` obtained
 by index; it does not change the public shape address, authored form, call
 plan, or 44/30 fences.
 
+A follow-up diagnostic real-AE probe isolated the next independent shape
+blocker before another candidate run. After the three authored children were
+inserted, AE exposed the new path through its property tree as a valid empty
+Shape while `AEGP_GetMaskOutlineNumSegments` reported the host's `-1` empty
+outline sentinel. The shape writer rejected every negative segment count, so
+it stopped before creating the first vertex and never reached fill or stroke.
+Each probe was undone once and verified through public MCP reads back to zero
+groups, zero layers, and zero project items. The bounded repair normalizes only
+`-1` to zero vertices for initial shape authoring; values below `-1` and values
+above the 128-vertex package bound remain rejected. Stage-specific failure
+diagnostics are retained for future state reconciliation without changing the
+public request, authored form, or 44/30 call fences.
+
+Two further reconciled real-AE probes proved that AE 25.6 returns
+`A_Err_NONE` with the reserved value `0` from `AEGP_GetUniqueStreamID` for
+both a newly authored top-level `ADBE Vector Group` and its required path
+leaf. Treating either successful zero as stable identity would let a stale
+index survive a reorder. The bounded address therefore derives the int32
+identity token from the UTF-8 authored group name and requires every
+package-representable group on a layer to have a unique name token. Group
+creation rejects a duplicate name or token collision before mutation; list
+and writes reject a pre-existing collision as
+`UNREPRESENTABLE_SHAPE_GROUP`. This is safe for the package because it exposes
+no group-renaming operation, while path, style, and reorder writes preserve
+the name. The public `ShapeGroupRef` shape and int32 bounds do not change.
+Each diagnostic write was undone once and public MCP verified zero groups,
+zero layers, and zero project items before repair.
+
 #### `ExactTimeInput` and `ExactTime`
 
 ```text
@@ -215,11 +243,17 @@ ShapeGroupRef = {
 }
 ```
 
-`streamId` is the `AEGP_GetUniqueStreamID` value for the top-level
-vector group. The pair `groupIndex` + `streamId` follows the existing
+`streamId` is the collision-checked stable int32 identity token derived from
+the top-level vector group's UTF-8 authored name. AE 25.6 returns success plus
+the reserved zero id from `AEGP_GetUniqueStreamID` for both these dynamic
+groups and their path leaves, so that SDK value is not usable as identity on
+the accepted host. Package-representable groups on one layer must therefore
+have unique authored names and unique derived tokens. The package exposes no
+group rename; every supported path, style, and reorder write preserves the
+name and token. The pair `groupIndex` + `streamId` follows the existing
 index-plus-stable-identity pattern used for masks. Writes reject a ref whose
-current index no longer has that stream id. Reorder returns a fresh ref with
-the new index.
+current index no longer has that identity token. Reorder returns a fresh ref
+with the new index.
 
 This same group ref is the complete public address for both style setters.
 `ae_listShapeGroups` returns it in every `ShapeGroup`; the setter name selects
@@ -901,7 +935,10 @@ that child; disabling does not remove it or discard its other values.
 `strokeOverFill` is the canonical relative child order: `true` means the
 stroke child is above the fill child in the AE Contents list (the lower
 zero-based stream index), and `false` means it is below. Top-level group order
-is independent.
+is independent. Package-representable top-level groups on one layer also have
+unique authored names and unique derived int32 identity tokens; this is the
+bounded stable-address fallback required on hosts whose dynamic vector streams
+all report `AEGP_GetUniqueStreamID == 0`.
 
 ### `ae_createShapeLayer`
 
@@ -1009,12 +1046,18 @@ Response `value`:
 ```text
 {
   changed: true,
-  layerLocator: LayerLocator,       // fresh if graph generation changes
+  layerLocator: LayerLocator,       // fresh after this graph-changing write
   groupCountBefore: non-negative integer,
   groupCountAfter: groupCountBefore + 1,
   group: ShapeGroup
 }
 ```
+
+Creating a top-level group invalidates the project graph. The returned
+`layerLocator` therefore has a newer generation and fresh project/object
+identity in the same host session; `group.ref.layerLocator` must equal that
+fresh locator. Host verification must not compare either result locator to the
+now-stale request locator.
 
 Within one Undo group, perform two passes:
 

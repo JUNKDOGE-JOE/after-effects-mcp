@@ -81,7 +81,17 @@ def _locator(kind: str, object_id: str) -> dict[str, Any]:
 
 COMPOSITION = _locator("composition", "77777777-7777-4777-8777-777777777777")
 LAYER = _locator("layer", "88888888-8888-4888-8888-888888888888")
+FRESH_LAYER = {
+    **_locator("layer", "99999999-9999-4999-8999-999999999999"),
+    "projectId": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    "generation": 9,
+}
 GROUP_REF = {"layerLocator": LAYER, "groupIndex": 1, "streamId": 101}
+FRESH_GROUP_REF = {
+    "layerLocator": FRESH_LAYER,
+    "groupIndex": 1,
+    "streamId": 101,
+}
 PATH_A = {
     "closed": False,
     "vertices": [
@@ -143,6 +153,7 @@ GROUP = {
     "fill": FILL_A,
     "stroke": STROKE_A,
 }
+FRESH_GROUP = {**GROUP, "ref": FRESH_GROUP_REF}
 MARKER_TARGET = {"kind": "layer", "layerLocator": LAYER}
 MARKER_REF_INPUT = {"target": MARKER_TARGET, "time": {"value": 1, "scale": 1}}
 MARKER_REF = {
@@ -214,10 +225,10 @@ def _examples() -> dict[str, tuple[dict[str, Any], dict[str, Any]]]:
             },
             {
                 "changed": True,
-                "layerLocator": LAYER,
+                "layerLocator": FRESH_LAYER,
                 "groupCountBefore": 0,
                 "groupCountAfter": 1,
-                "group": GROUP,
+                "group": FRESH_GROUP,
             },
         ),
         "ae.shape.path.set": (

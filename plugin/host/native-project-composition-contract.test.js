@@ -335,6 +335,38 @@ test('eleven Text/Shape/Marker contracts admit generated vectors and nested loca
             false,
             descriptor.id + ' open value',
         );
+        if (descriptor.id === 'ae.shape.group.create') {
+            assert.equal(
+                value.layerLocator.generation > argumentsValue.layerLocator.generation,
+                true,
+                'shape group create returns a newer graph generation',
+            );
+            assert.notEqual(
+                value.layerLocator.projectId,
+                argumentsValue.layerLocator.projectId,
+                'shape group create returns a fresh project epoch',
+            );
+            assert.notEqual(
+                value.layerLocator.objectId,
+                argumentsValue.layerLocator.objectId,
+                'shape group create returns a fresh layer locator',
+            );
+            assert.equal(
+                contract.validValue({
+                    ...value,
+                    layerLocator: argumentsValue.layerLocator,
+                    group: {
+                        ...value.group,
+                        ref: {
+                            ...value.group.ref,
+                            layerLocator: argumentsValue.layerLocator,
+                        },
+                    },
+                }, argumentsValue, HOST, SESSION),
+                false,
+                'shape group create rejects the invalidated request locator',
+            );
+        }
     }
 
     const composition = locator('composition', CREATED, 8);
