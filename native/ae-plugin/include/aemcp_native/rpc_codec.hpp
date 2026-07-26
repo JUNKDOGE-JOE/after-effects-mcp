@@ -2,6 +2,7 @@
 
 #include "aemcp_native/host_dispatcher.hpp"
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -556,6 +557,7 @@ struct CapabilitiesSuccess {
   bool include_native_media_write{false};
   std::string native_media_read_contract_digest;
   std::string native_media_write_contract_digest;
+  std::array<bool, 11> include_text_shape_marker{};
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };

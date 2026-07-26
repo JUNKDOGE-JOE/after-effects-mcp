@@ -404,6 +404,7 @@ async function buildMacPluginInternal({
       'native/ae-plugin/include/aemcp_native/rpc_codec.hpp',
       'native/ae-plugin/include/aemcp_native/selection_collection.hpp',
       'native/ae-plugin/include/aemcp_native/secure_random_macos.hpp',
+      'native/ae-plugin/include/aemcp_native/text_shape_marker_capabilities.generated.hpp',
       'native/ae-plugin/include/aemcp_native/transport_auth.hpp',
       'native/ae-plugin/src/core/host_dispatcher.cpp',
       'native/ae-plugin/src/core/native_rpc_connection.cpp',

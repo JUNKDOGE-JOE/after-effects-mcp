@@ -216,10 +216,21 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "ae.layer.property.keyframe.interpolation.set",
         "ae.layer.property.keyframe.temporal-ease.set",
         "ae.layer.property.keyframe.behavior.set",
-        "ae.layer.property.keyframe.delete",
-        "ae.native.media.read",
-        "ae.native.media.write",
-    ]
+            "ae.layer.property.keyframe.delete",
+            "ae.native.media.read",
+            "ae.native.media.write",
+            "ae.shape.layer.create",
+            "ae.shape.groups.list",
+            "ae.shape.group.create",
+            "ae.shape.path.set",
+            "ae.shape.fill-style.set",
+            "ae.shape.stroke-style.set",
+            "ae.shape.group.reorder",
+            "ae.marker.list",
+            "ae.marker.create",
+            "ae.marker.set",
+            "ae.marker.delete",
+        ]
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
         "response"
     ]["result"]["capabilitiesDigest"]

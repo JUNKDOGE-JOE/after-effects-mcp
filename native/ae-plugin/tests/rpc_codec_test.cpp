@@ -1,4 +1,5 @@
 #include "aemcp_native/rpc_codec.hpp"
+#include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <algorithm>
 #include <array>
@@ -145,6 +146,8 @@ using aemcp::native::rpc::encode_layer_property_keyframes_success;
 using aemcp::native::rpc::encode_layer_property_set_success;
 using aemcp::native::rpc::encode_project_items_success;
 using aemcp::native::rpc::kMaxFrameBytes;
+using aemcp::native::rpc::kCapabilitiesRegistryDigest;
+using aemcp::native::rpc::kTextShapeMarkerCapabilities;
 
 constexpr std::string_view kSession = "11111111-1111-4111-8111-111111111111";
 constexpr std::string_view kHost = "22222222-2222-4222-8222-222222222222";
@@ -231,9 +234,6 @@ constexpr std::string_view kNativeMediaReadContractDigest =
     "4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282";
 constexpr std::string_view kNativeMediaWriteContractDigest =
     "a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5";
-constexpr std::string_view kCapabilitiesRegistryDigest =
-    "ae72ee8f2244fa2ffb6a4f01590f17b83e782724504d981a88cbbc162ea1ac44";
-
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
   std::exit(1);
@@ -2549,6 +2549,7 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kNativeMediaReadContractDigest);
   capabilities.native_media_write_contract_digest =
       std::string(kNativeMediaWriteContractDigest);
+  capabilities.include_text_shape_marker.fill(true);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -2710,6 +2711,16 @@ void response_helpers_are_bounded_and_typed() {
       && capabilities_body.find(std::string(kKeyframeBehaviorContractDigest))
           != std::string::npos
       && capabilities_body.find(std::string(kKeyframeDeleteContractDigest))
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.shape.layer.create\"")
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.marker.delete\"")
+          != std::string::npos
+      && capabilities_body.find(
+          std::string(kTextShapeMarkerCapabilities.front().contract_digest))
+          != std::string::npos
+      && capabilities_body.find(
+          std::string(kTextShapeMarkerCapabilities.back().contract_digest))
           != std::string::npos
       && capabilities_body.find("\"temporalDimensionality\"")
           != std::string::npos

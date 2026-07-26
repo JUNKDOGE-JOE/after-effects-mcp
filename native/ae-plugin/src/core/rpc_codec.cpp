@@ -1,4 +1,5 @@
 #include "aemcp_native/rpc_codec.hpp"
+#include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <algorithm>
 #include <array>
@@ -21,6 +22,7 @@ namespace aemcp::native::rpc {
 namespace {
 
 using Bytes = std::span<const std::uint8_t>;
+static_assert(kTextShapeMarkerCapabilityCount == 11);
 
 [[noreturn]] void invalid_request(std::string message) {
   throw CodecError(CodecErrorKind::kInvalidRequest, std::move(message));
@@ -7656,6 +7658,14 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
     items += native_media_descriptor(response, true);
     needs_comma = true;
   }
+  for (std::size_t index = 0; index < kTextShapeMarkerCapabilityCount; ++index) {
+    if (!response.include_text_shape_marker[index]) continue;
+    if (needs_comma) items.push_back(',');
+    const auto& descriptor = kTextShapeMarkerCapabilities[index];
+    items += response.detail == CapabilityDetail::kFull
+        ? descriptor.full_json : descriptor.summary_json;
+    needs_comma = true;
+  }
   items.push_back(']');
   const bool complete_full_registry = response.detail == CapabilityDetail::kFull
       && response.include_project_summary
@@ -7700,7 +7710,11 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
       && response.include_layer_property_keyframe_behavior_set
       && response.include_layer_property_keyframe_delete
       && response.include_native_media_read
-      && response.include_native_media_write;
+      && response.include_native_media_write
+      && std::all_of(
+          response.include_text_shape_marker.begin(),
+          response.include_text_shape_marker.end(),
+          [](bool included) { return included; });
   if (complete_full_registry) {
     const std::string encoded_digest = sha256_hex(
         canonical_json(JsonParser(items).parse()));

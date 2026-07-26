@@ -1,5 +1,10 @@
 import crypto from 'node:crypto';
 
+import {
+  TEXT_SHAPE_MARKER_CAPABILITIES,
+  TEXT_SHAPE_MARKER_CAPABILITY_IDS,
+} from './text_shape_marker_capabilities.generated.mjs';
+
 export const LIMITS = Object.freeze({
   maxFrameBytes: 524288,
   maxJsonDepth: 32,
@@ -266,6 +271,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.native.media.write.input.v1',
     resultContractId: 'aemcp.contract.ae.native.media.write.result.v1',
   }),
+  ...TEXT_SHAPE_MARKER_CAPABILITIES.map((descriptor) => Object.freeze({
+    id: descriptor.id,
+    version: descriptor.version,
+    inputContractId: descriptor.inputContractId,
+    resultContractId: descriptor.resultContractId,
+  })),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -394,6 +405,9 @@ const NATIVE_MEDIA_WRITE_OPERATIONS = Object.freeze([
   'footage-import', 'footage-replace', 'footage-interpretation', 'footage-proxy',
   'item-use-proxy',
 ]);
+const TEXT_SHAPE_MARKER_CAPABILITY_SET = new Set(
+  TEXT_SHAPE_MARKER_CAPABILITY_IDS,
+);
 
 function isKeyframeTimeInput(value) {
   return isTimeInput(value, -2147483648);
@@ -1274,6 +1288,18 @@ export function classifyRequest(message) {
         ? NATIVE_MEDIA_READ_OPERATIONS : NATIVE_MEDIA_WRITE_OPERATIONS;
       if (!isPlainObject(params.arguments)
           || !operations.includes(params.arguments.operation)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (TEXT_SHAPE_MARKER_CAPABILITY_SET.has(params.capabilityId)) {
+      const descriptor = TEXT_SHAPE_MARKER_CAPABILITIES.find(
+        (item) => item.id === params.capabilityId,
+      );
+      if (!descriptor
+          || !schemaAccepts(
+            descriptor.inputSchema,
+            params.arguments,
+            descriptor.inputSchema,
+          )) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
     } else {
@@ -3377,6 +3403,9 @@ export function nativeCapabilityRegistry(schema) {
     ...layerCompositingDescriptors(schema),
     ...keyframeAuthoringDescriptors(schema),
     ...nativeMediaDescriptors(schema),
+    ...TEXT_SHAPE_MARKER_CAPABILITIES.map((descriptor) => (
+      structuredClone(descriptor)
+    )),
   ];
 }
 

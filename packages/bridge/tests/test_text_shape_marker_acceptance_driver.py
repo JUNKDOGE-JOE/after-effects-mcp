@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib.util
+import json
 import stat
 import sys
 from pathlib import Path
@@ -37,6 +38,10 @@ spec = _load("text_shape_marker_spec", HARDWARE / "text_shape_marker_spec.py")
 driver = _load(
     "text_shape_marker_acceptance",
     HARDWARE / "text_shape_marker_acceptance.py",
+)
+capability_generator = _load(
+    "generate_text_shape_marker_capabilities",
+    ROOT / "scripts/generate_text_shape_marker_capabilities.py",
 )
 
 
@@ -173,6 +178,34 @@ def test_all_17_expectations_are_derived_from_the_published_contracts():
             assert expectation.engine == "native-aegp"
             assert expectation.native_provenance is True
             assert expectation.contract_digest == contract.contract_digest
+
+
+def test_native_protocol_registry_advertises_all_11_frozen_contracts():
+    fixture = json.loads(
+        (
+            ROOT
+            / "native/ae-plugin/protocol/fixtures/capabilities.json"
+        ).read_text()
+    )
+    items = {
+        item["id"]: item
+        for item in fixture["response"]["result"]["items"]
+    }
+    assert len(items) == 54
+    assert set(native_tsm.CAPABILITY_CONTRACTS) <= set(items)
+    for capability_id, contract in native_tsm.CAPABILITY_CONTRACTS.items():
+        descriptor = items[capability_id]
+        assert descriptor["contractDigest"] == contract.contract_digest
+        assert descriptor["inputSchema"] == contract.input_schema
+        assert descriptor["resultSchema"] == contract.result_schema
+        assert descriptor["requirements"] == [
+            {"id": contract.requirement_id, "contractVersion": 1}
+        ]
+
+
+def test_native_protocol_registry_generated_projections_are_current():
+    for path, expected in capability_generator._outputs().items():
+        assert path.read_text() == expected, path.relative_to(ROOT)
 
 
 def test_text_schema_and_locator_chain_are_publicly_indistinguishable():

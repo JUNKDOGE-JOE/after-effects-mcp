@@ -686,7 +686,23 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 43);
+  assert.equal(nativeCapabilityRegistry(schema).length, 54);
+  assert.deepEqual(
+    nativeCapabilityRegistry(schema).slice(-11).map((item) => item.id),
+    [
+      'ae.shape.layer.create',
+      'ae.shape.groups.list',
+      'ae.shape.group.create',
+      'ae.shape.path.set',
+      'ae.shape.fill-style.set',
+      'ae.shape.stroke-style.set',
+      'ae.shape.group.reorder',
+      'ae.marker.list',
+      'ae.marker.create',
+      'ae.marker.set',
+      'ae.marker.delete',
+    ],
+  );
   assert.doesNotMatch(JSON.stringify(golden('capabilities.json')), /invalidateGraph/u);
   const disguisedInvoke = structuredClone(golden('invoke-project-summary.json').request);
   disguisedInvoke.params.capabilityId = 'ae.invalidateGraph';
@@ -881,6 +897,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const layerCompositingCapabilities = layerCompositingDescriptors(schema);
   const keyframeAuthoringCapabilities = keyframeAuthoringDescriptors(schema);
   const nativeMediaCapabilities = nativeMediaDescriptors(schema);
+  const textShapeMarkerCapabilities = nativeCapabilityRegistry(schema).slice(-11);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -969,6 +986,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     ...layerCompositingCapabilities,
     ...keyframeAuthoringCapabilities,
     ...nativeMediaCapabilities,
+    ...textShapeMarkerCapabilities,
   ]), capabilityDigest(nativeCapabilityRegistry(schema)));
   assert.equal(projectCompositionCapabilities.length, 8);
   for (const descriptor of projectCompositionCapabilities) {
@@ -1007,6 +1025,15 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     }));
   }
   assert.equal(nativeMediaCapabilities.length, 2);
+  assert.equal(textShapeMarkerCapabilities.length, 11);
+  for (const textShapeMarkerDescriptor of textShapeMarkerCapabilities) {
+    assert.equal(validateCapabilityDescriptor(textShapeMarkerDescriptor, schema), true,
+      textShapeMarkerDescriptor.id);
+    assert.equal(textShapeMarkerDescriptor.contractDigest, sha256Jcs({
+      inputSchema: textShapeMarkerDescriptor.inputSchema,
+      resultSchema: textShapeMarkerDescriptor.resultSchema,
+    }));
+  }
   for (const mediaDescriptor of nativeMediaCapabilities) {
     assert.equal(validateCapabilityDescriptor(mediaDescriptor, schema), true,
       mediaDescriptor.id);
@@ -1163,7 +1190,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 43);
+  assert.equal(exchange.response.result.items.length, 54);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);
@@ -1205,6 +1232,26 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
 test('invoke is a closed capability-specific allowlist, including nested executable aliases', () => {
   const request = golden('invoke-project-summary.json').request;
   assert.equal(schemaAccepts(schema.$defs.request, request), true);
+  const markerDescriptor = nativeCapabilityRegistry(schema).find(
+    (item) => item.id === 'ae.marker.create',
+  );
+  const markerRequest = {
+    ...request,
+    requestId: 'invoke-marker-create-schema',
+    params: {
+      capabilityId: markerDescriptor.id,
+      capabilityVersion: markerDescriptor.version,
+      arguments: structuredClone(markerDescriptor.examples[0].arguments),
+    },
+  };
+  assert.equal(schemaAccepts(schema.$defs.request, markerRequest), true);
+  assert.deepEqual(classifyRequest(markerRequest), { ok: true });
+  markerRequest.params.arguments.callerCode = 'forbidden';
+  assert.equal(schemaAccepts(schema.$defs.request, markerRequest), false);
+  assert.deepEqual(
+    classifyRequest(markerRequest),
+    { ok: false, errorCode: 'INVALID_ARGUMENT' },
+  );
   for (const argumentsValue of [
     { jsx: 'synthetic' },
     { Code: 'synthetic' },

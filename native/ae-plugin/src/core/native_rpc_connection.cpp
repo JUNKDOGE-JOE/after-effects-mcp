@@ -1092,6 +1092,19 @@ void NativeRpcConnectionHandler::serve(
               includes(kNativeMediaReadCapability);
           const bool include_native_media_write =
               includes(kNativeMediaWriteCapability);
+          const std::array<bool, 11> include_text_shape_marker{{
+              includes(kShapeLayerCreateCapability),
+              includes(kShapeGroupsListCapability),
+              includes(kShapeGroupCreateCapability),
+              includes(kShapePathSetCapability),
+              includes(kShapeFillStyleSetCapability),
+              includes(kShapeStrokeStyleSetCapability),
+              includes(kShapeGroupReorderCapability),
+              includes(kMarkerListCapability),
+              includes(kMarkerCreateCapability),
+              includes(kMarkerSetCapability),
+              includes(kMarkerDeleteCapability),
+          }};
           const std::size_t selected = static_cast<std::size_t>(include_summary)
               + static_cast<std::size_t>(include_bit_depth_read)
               + static_cast<std::size_t>(include_bit_depth_set)
@@ -1134,7 +1147,11 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_keyframe_behavior_set)
               + static_cast<std::size_t>(include_keyframe_delete)
               + static_cast<std::size_t>(include_native_media_read)
-              + static_cast<std::size_t>(include_native_media_write);
+              + static_cast<std::size_t>(include_native_media_write)
+              + static_cast<std::size_t>(std::count(
+                  include_text_shape_marker.begin(),
+                  include_text_shape_marker.end(),
+                  true));
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
                     request,
@@ -1239,6 +1256,7 @@ void NativeRpcConnectionHandler::serve(
                   include_native_media_write,
                   runtime_.native_media_read_contract_digest,
                   runtime_.native_media_write_contract_digest,
+                  include_text_shape_marker,
               }))) {
             connected = false;
             break;

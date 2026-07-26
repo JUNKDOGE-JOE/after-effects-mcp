@@ -8,6 +8,7 @@
 #include "aemcp_native/rpc_codec.hpp"
 #include "aemcp_native/selection_collection.hpp"
 #include "aemcp_native/secure_random_macos.hpp"
+#include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -187,7 +188,7 @@ constexpr std::string_view kSdkVersion = "25.6.61";
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::string_view kCapabilitiesDigest =
-    "ae72ee8f2244fa2ffb6a4f01590f17b83e782724504d981a88cbbc162ea1ac44";
+    aemcp::native::rpc::kCapabilitiesRegistryDigest;
 constexpr std::string_view kProjectSummaryContractDigest =
     "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
