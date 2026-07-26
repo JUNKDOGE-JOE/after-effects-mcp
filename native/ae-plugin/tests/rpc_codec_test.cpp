@@ -3367,6 +3367,20 @@ void text_shape_marker_codec_preserves_frozen_native_contracts() {
           && marker_set.native_media.marker_patch->comment == "edited"
           && marker_set.native_media.marker_patch->label_id == 6,
       "marker patch did not preserve canonical target+time identity");
+  const InvokeParams marker_set_nullable = decode(
+      "ae.marker.set",
+      "{\"markerRef\":" + marker_ref
+          + ",\"patch\":{\"duration\":null,\"comment\":\"TSM edited 😀\","
+            "\"chapter\":\"edited\",\"url\":null,\"frameTarget\":null,"
+            "\"cuePointName\":null,\"cuePointParameters\":null,"
+            "\"navigation\":null,\"protectedRegion\":null,\"labelId\":null},"
+            "\"idempotencyKey\":\"tsm-marker-set-nullable-001\"}");
+  require(marker_set_nullable.native_media.marker_patch->comment
+              == "TSM edited 😀"
+          && marker_set_nullable.native_media.marker_patch->chapter == "edited"
+          && !marker_set_nullable.native_media.marker_patch->duration.has_value()
+          && !marker_set_nullable.native_media.marker_patch->label_id.has_value(),
+      "marker patch did not treat null fields as unrequested");
   const InvokeParams marker_delete = decode(
       "ae.marker.delete",
       "{\"markerRef\":" + marker_ref
@@ -3394,6 +3408,13 @@ void text_shape_marker_codec_preserves_frozen_native_contracts() {
               "\"protectedRegion\":false,\"labelId\":0},"
               "\"idempotencyKey\":\"tsm-marker-duplicate-cue-001\"}");
   }, "INVALID_ARGUMENT", "duplicate cue-point parameter keys");
+  expect_codec_error([&] {
+    (void)decode(
+        "ae.marker.set",
+        "{\"markerRef\":" + marker_ref
+            + ",\"patch\":{\"comment\":null},"
+              "\"idempotencyKey\":\"tsm-marker-null-only-001\"}");
+  }, "INVALID_ARGUMENT", "null-only marker patch");
 }
 
 void fixed_seed_mutation_fuzz_is_bounded() {

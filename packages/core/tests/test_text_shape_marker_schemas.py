@@ -277,3 +277,5 @@ def test_marker_defaults_exact_time_bounds_and_unique_cue_keys():
         )
     with pytest.raises(ValidationError, match="at least one"):
         AeMarkerPatch()
+    with pytest.raises(ValidationError, match="at least one"):
+        AeMarkerPatch(comment=None)

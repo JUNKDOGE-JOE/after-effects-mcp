@@ -636,6 +636,7 @@ async def invoke_tsm_native(
         inspect_hint=inspect_hint,
         deadline_unix_ms=deadline_unix_ms,
         cancellation=cancellation,
+        exclude_none=capability_id == "ae.marker.set",
     )
     value = _validate_write_value(
         contract=contract,

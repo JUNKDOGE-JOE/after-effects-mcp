@@ -502,7 +502,10 @@ class AeMarkerPatch(_StrictModel):
 
     @model_validator(mode="after")
     def valid_patch(self) -> "AeMarkerPatch":
-        if not any(getattr(self, field) is not None for field in self.model_fields_set):
+        if not any(
+            getattr(self, field) is not None
+            for field in type(self).model_fields
+        ):
             raise ValueError("patch must contain at least one requested field")
         if self.duration is not None and self.duration.value < 0:
             raise ValueError("marker duration must be non-negative")

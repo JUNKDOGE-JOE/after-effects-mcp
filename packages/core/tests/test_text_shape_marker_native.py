@@ -122,6 +122,18 @@ class Backend(N.NativeInvokeBackend):
                 "layerCountBefore": 0,
                 "layerCountAfter": 1,
             }
+        if request.capability_id == "ae.marker.set":
+            before = marker_state(24, 24, "1")
+            after = {
+                **before,
+                "comment": request.arguments["patch"]["comment"],
+                "chapter": request.arguments["patch"]["chapter"],
+            }
+            return {
+                "changed": True,
+                "before": before,
+                "after": after,
+            }
         raise AssertionError(request.capability_id)
 
     async def invoke(self, request, *, cancellation=None):
@@ -250,6 +262,36 @@ async def test_composition_marker_read_encodes_closed_camel_target():
         },
         "offset": 0,
         "limit": 25,
+    }
+
+
+@pytest.mark.asyncio
+async def test_marker_set_omits_null_unrequested_fields_from_native_wire():
+    backend = Backend()
+    result = await TSM.invoke_tsm_native(
+        backend,
+        capability_id="ae.marker.set",
+        arguments={
+            "marker_ref": {
+                "target": {
+                    "kind": "layer",
+                    "layer_locator": locator("layer", LAYER),
+                },
+                "time": {"value": 24, "scale": 24},
+            },
+            "patch": {
+                "comment": "TSM edited 😀",
+                "chapter": "edited",
+            },
+            "idempotency_key": "marker-set-key-0001",
+        },
+        request_id="tsm-marker-set-1",
+        deadline_unix_ms=deadline(),
+    )
+    assert result.value.after.comment == "TSM edited 😀"
+    assert backend.requests[0].arguments["patch"] == {
+        "comment": "TSM edited 😀",
+        "chapter": "edited",
     }
 
 

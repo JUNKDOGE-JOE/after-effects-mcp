@@ -175,6 +175,24 @@ projection. A bridge regression validates the resolved set and delete
 arguments through their published public schemas. No product contract, public
 call, native implementation, authored form, or 44/30 fence changes.
 
+The replacement T5 at `4684744` reached public call 32, where
+`ae_setMarker` closed the native connection before capability dispatch.
+Fresh-session public reads proved both created markers still held their
+original values, and the native log contained no `ae.marker.set` invoke, so
+the possible write was reconciled as not performed. The failure was a wire
+projection mismatch: Core serialized every unset optional marker-patch field
+as explicit JSON `null`, while the frozen contract defines null as
+unrequested; the native codec treated member presence as requested and tried
+to parse `duration: null`. The bounded repair omits unset marker-patch fields
+from the Core request, makes the native codec treat explicit null as
+unrequested for compatibility, and rejects all-null patches at both schema
+and codec boundaries. Exact nullable-wire and Core request regressions cover
+the emoji comment/chapter case. Every completed T5 write was then undone once
+in reverse order; independent public reads proved zero markers, zero groups,
+and zero layers before the saved fixture was moved from `active` to recovery.
+No public schema shape, authored marker form, tool count, or 44/30 fence
+changes.
+
 A follow-up diagnostic real-AE probe isolated the next independent shape
 blocker before another candidate run. After the three authored children were
 inserted, AE exposed the new path through its property tree as a valid empty

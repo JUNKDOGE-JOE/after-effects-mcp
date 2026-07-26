@@ -2724,14 +2724,21 @@ ParsedRequest classify_request(const JsonValue& root) {
                      "protectedRegion", "labelId"})) {
               invalid_argument("marker patch is empty or not closed");
             }
+            const auto requested = [&](std::string_view field)
+                -> const JsonValue* {
+              const JsonValue* value = member(*patch, field);
+              return value != nullptr
+                      && !std::holds_alternative<std::nullptr_t>(value->value)
+                  ? value : nullptr;
+            };
             MarkerPatchInput parsed;
-            if (const JsonValue* value = member(*patch, "duration")) {
+            if (const JsonValue* value = requested("duration")) {
               parsed.duration = parse_time(*value, true);
             }
             const auto optional_string = [&](std::string_view field,
                                              std::size_t maximum,
                                              std::optional<std::string>& out) {
-              if (member(*patch, field) == nullptr) return;
+              if (requested(field) == nullptr) return;
               out = required_string(
                   *patch, field, CodecErrorKind::kInvalidArgument);
               if (validate_utf8_and_count(*out) > maximum) {
@@ -2743,20 +2750,32 @@ ParsedRequest classify_request(const JsonValue& root) {
             optional_string("url", 1024, parsed.url);
             optional_string("frameTarget", 128, parsed.frame_target);
             optional_string("cuePointName", 64, parsed.cue_point_name);
-            if (const JsonValue* value = member(*patch, "cuePointParameters")) {
+            if (const JsonValue* value = requested("cuePointParameters")) {
               parsed.cue_point_parameters = parse_cue_parameters(*value);
             }
-            if (member(*patch, "navigation") != nullptr) {
+            if (requested("navigation") != nullptr) {
               parsed.navigation = required_bool(
                   *patch, "navigation", CodecErrorKind::kInvalidArgument);
             }
-            if (member(*patch, "protectedRegion") != nullptr) {
+            if (requested("protectedRegion") != nullptr) {
               parsed.protected_region = required_bool(
                   *patch, "protectedRegion", CodecErrorKind::kInvalidArgument);
             }
-            if (member(*patch, "labelId") != nullptr) {
+            if (requested("labelId") != nullptr) {
               parsed.label_id = static_cast<std::uint8_t>(required_uint(
                   *patch, "labelId", CodecErrorKind::kInvalidArgument, 0, 16));
+            }
+            if (!parsed.duration.has_value()
+                && !parsed.comment.has_value()
+                && !parsed.chapter.has_value()
+                && !parsed.url.has_value()
+                && !parsed.frame_target.has_value()
+                && !parsed.cue_point_name.has_value()
+                && !parsed.cue_point_parameters.has_value()
+                && !parsed.navigation.has_value()
+                && !parsed.protected_region.has_value()
+                && !parsed.label_id.has_value()) {
+              invalid_argument("marker patch has no requested fields");
             }
             command.marker_patch = std::move(parsed);
           }
