@@ -119,6 +119,17 @@ metadata repair was added after real-AE T5 reproduced a generation/object-id
 rollover between the font read and `ae_createTextLayer`; it does not add a new
 resolver, native suite, public request field, or caller-controlled JSX option.
 
+Maintained text writes still invalidate the native project graph, so the
+composition locator returned by text creation is not reusable after a later
+setter. A subsequent real-AE T5 sweep reproduced that exact condition:
+`ae_createShapeLayer` rejected the pre-setter locator as `STALE_LOCATOR`,
+`sideEffect: not-started`. The bounded plan therefore uses the
+`CompositionLocator` returned by `ae_createComposition` for the initial empty
+layer read, uses that read's fresh `compositionLocator` for text creation, and
+defers the already-budgeted `ae_listProjectItems` composition reacquisition
+until after the last text setter and Undo read. No locator is synthesized, no
+evidence call is removed, and the T5/T6 fences remain 44/30.
+
 #### `ExactTimeInput` and `ExactTime`
 
 ```text
@@ -1519,8 +1530,12 @@ lifecycle counters—not another `.aep`.
    roots.
 3. Through public MCP, create one composition named
    `TSM Acceptance Fixture`, 1920x1080, square pixels, 10 seconds, 24 fps.
-4. Reacquire the composition through `ae_listProjectItems`.
-5. Record the empty composition layer list as baseline.
+4. Record the empty composition layer list as baseline from the fresh
+   `compositionLocator` returned by creation. The separate four-call preflight
+   retains its create → project-item reacquire → baseline sequence.
+5. In T5/T6, after maintained text writes invalidate the native project graph,
+   reacquire the composition through `ae_listProjectItems` before shape
+   creation.
 6. During the matrix, `ae_createTextLayer` creates `TSM Text` with
    `A😀中 é`; `ae_createShapeLayer` creates `TSM Shape`; two
    `ae_createShapeGroup` calls create `Triangle` and `Curve` with fixed paths
@@ -1669,15 +1684,17 @@ response. For the text family specifically:
 
 | Text tool | Earlier public call that supplies its locator |
 | --- | --- |
-| `ae_createTextLayer` | call 3 `ae_listProjectItems` → the named fixture composition's `locator` |
-| `ae_getTextDocument` | call 6 `ae_createTextLayer` → `value.after.layerLocator` |
-| `ae_setTextContent` | call 7 `ae_getTextDocument` → `value.layerLocator` |
-| `ae_setTextCharacterStyle` | call 9 post-Undo `ae_getTextDocument` → `value.layerLocator` |
-| `ae_setTextParagraphStyle` | call 11 post-Undo `ae_getTextDocument` → `value.layerLocator` |
+| `ae_createTextLayer` | call 3 `ae_listCompositionLayers` → `value.compositionLocator` |
+| `ae_getTextDocument` | call 5 `ae_createTextLayer` → `value.after.layerLocator` |
+| `ae_setTextContent` | call 6 `ae_getTextDocument` → `value.layerLocator` |
+| `ae_setTextCharacterStyle` | call 8 post-Undo `ae_getTextDocument` → `value.layerLocator` |
+| `ae_setTextParagraphStyle` | call 10 post-Undo `ae_getTextDocument` → `value.layerLocator` |
 
-Call 6 also returns a fresh `value.compositionLocator`; call 14
-`ae_createShapeLayer` consumes it after text-layer creation. Shape group,
-marker, cross-family, teardown, and post-restart addresses are similarly
+Call 2 `ae_createComposition` supplies call 3's initial
+`composition_locator`. After all maintained text writes and their Undo
+readbacks, call 13 `ae_listProjectItems` reacquires the named fixture
+composition; call 14 `ae_createShapeLayer` consumes that fresh locator. Shape
+group, marker, cross-family, teardown, and post-restart addresses are similarly
 linked in `scripts/hardware/text_shape_marker_spec.py:T5_ADDRESS_LINKS`.
 Bridge-side construction tests require every producer ordinal to precede its
 consumer ordinal and require every address-bearing T5 call to have one such
@@ -1685,9 +1702,10 @@ link.
 
 The T6 chain is constructed independently in
 `scripts/hardware/text_shape_marker_spec.py:T6_ADDRESS_LINKS`. In particular,
-the shorter plan reacquires the composition at call 3, creates text at call 6,
-creates the shape layer from call 6's fresh composition locator at call 10,
-and reacquires the composition again at call 29 before the final layer read.
+the shorter plan records the empty baseline at call 3, creates text at call 5,
+reacquires the composition after its representative text setter at call 9,
+creates the shape layer from that fresh composition locator at call 10, and
+reacquires the composition again at call 29 before the final layer read.
 Construction fails during module import if any T6 consumer loses its earlier
 producer.
 

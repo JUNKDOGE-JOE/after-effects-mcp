@@ -32,10 +32,10 @@ NATIVE_CONTRACT_SOURCE = (
     "packages/core/ae_mcp/backends/native_text_shape_marker.py:87-660"
 )
 BRIEF_CALL_BUDGET_SOURCE = (
-    "docs/capability-packages/text-shape-marker.md:1566-1609"
+    "docs/capability-packages/text-shape-marker.md:1603-1646"
 )
 T6_POLICY_SOURCE = "docs/CAPABILITY_PACKAGE_WORKFLOW.md:151-179"
-T6_BRIEF_SOURCE = "docs/capability-packages/text-shape-marker.md:1611-1640"
+T6_BRIEF_SOURCE = "docs/capability-packages/text-shape-marker.md:1611-1646"
 
 CALL_CEILING_AUTHORIZATION = {
     "brief": BRIEF_CALL_BUDGET_SOURCE,
@@ -56,8 +56,14 @@ FIXTURE_RECIPE = (
         "Create TSM Acceptance Fixture at 1920x1080, square pixels, 10 seconds, "
         "24 fps through ae_createComposition."
     ),
-    "Reacquire the composition through ae_listProjectItems.",
-    "Record ae_listCompositionLayers as the empty baseline.",
+    (
+        "Record ae_listCompositionLayers as the empty baseline from a fresh "
+        "public composition locator."
+    ),
+    (
+        "After maintained text writes, reacquire the composition through "
+        "ae_listProjectItems before shape creation."
+    ),
     "Create TSM Text with A😀中 é and create TSM Shape through public MCP.",
     "Create Triangle and Curve from the fixed paths and complete styles below.",
     "Use exact marker times 24/24 and 1000/1000 on distinct layer targets.",
@@ -273,7 +279,6 @@ _ROWS = (
         "pixel_aspect_ratio": {"numerator": 1, "denominator": 1},
         "idempotency_key": "$operation_key:composition-create",
     }, "write", "Create the one empty 10-second fixture composition."),
-    _call("composition-reacquire", "ae_listProjectItems", {"offset": 0, "limit": 50}, "read", "Reacquire the named composition through a public project read."),
     _call("empty-layer-baseline", "ae_listCompositionLayers", {"composition_locator": "$composition_locator", "offset": 0, "limit": 25}, "read", "Record an empty composition layer list."),
     _call("fonts", "ae_listInstalledFonts", {"offset": 0, "limit": 100}, "read", "Record deterministic installed-font inventory."),
     _call("text-create", "ae_createTextLayer", {
@@ -306,6 +311,7 @@ _ROWS = (
         }, "idempotency_key": "$operation_key:text-paragraph-set",
     }, "write", "Only the requested paragraph projection changes."),
     _call("text-paragraph-undo-read", "ae_getTextDocument", {"layer_locator": "$text_layer_locator"}, "read", "Undo restores the complete pre-paragraph-style TextDocument.", undo_of="text-paragraph-set"),
+    _call("composition-reacquire", "ae_listProjectItems", {"offset": 0, "limit": 50}, "read", "After maintained text writes, reacquire the named composition through a public project read."),
     _call("shape-layer-create", "ae_createShapeLayer", {
         "composition_locator": "$composition_locator", "name": "TSM Shape",
         "idempotency_key": "$operation_key:shape-layer-create",
@@ -377,7 +383,22 @@ T5_CALL_PLAN = tuple(
     dataclasses.replace(row, ordinal=index) for index, row in enumerate(_ROWS, 1)
 )
 
-PREFLIGHT_CALL_PLAN = T5_CALL_PLAN[:4]
+_PREFLIGHT_ROWS = (
+    next(row for row in _ROWS if row.key == "readiness"),
+    next(row for row in _ROWS if row.key == "composition-create"),
+    _call(
+        "composition-reacquire",
+        "ae_listProjectItems",
+        {"offset": 0, "limit": 50},
+        "read",
+        "Reacquire the named composition through a public project read.",
+    ),
+    next(row for row in _ROWS if row.key == "empty-layer-baseline"),
+)
+PREFLIGHT_CALL_PLAN = tuple(
+    dataclasses.replace(row, ordinal=index)
+    for index, row in enumerate(_PREFLIGHT_ROWS, 1)
+)
 
 T4_CALL_PLAN = tuple(
     dataclasses.replace(row, ordinal=index)
@@ -437,13 +458,13 @@ _T6_ROWS = tuple(
     for key in (
         "readiness",
         "composition-create",
-        "composition-reacquire",
         "empty-layer-baseline",
         "fonts",
         "text-create",
         "text-read",
         "text-character-set",
         "text-character-undo-read",
+        "composition-reacquire",
         "shape-layer-create",
         "triangle-create",
         "curve-create",
@@ -592,16 +613,16 @@ class AddressLink:
 
 
 T5_ADDRESS_LINKS = (
-    AddressLink(4, "composition_locator", 3, "value.items[TSM Acceptance Fixture].locator"),
-    AddressLink(6, "composition_locator", 3, "value.items[TSM Acceptance Fixture].locator"),
-    AddressLink(7, "layer_locator", 6, "value.after.layerLocator"),
+    AddressLink(3, "composition_locator", 2, "value.compositionLocator"),
+    AddressLink(5, "composition_locator", 3, "value.compositionLocator"),
+    AddressLink(6, "layer_locator", 5, "value.after.layerLocator"),
+    AddressLink(7, "layer_locator", 6, "value.layerLocator"),
     AddressLink(8, "layer_locator", 7, "value.layerLocator"),
     AddressLink(9, "layer_locator", 8, "value.layerLocator"),
     AddressLink(10, "layer_locator", 9, "value.layerLocator"),
     AddressLink(11, "layer_locator", 10, "value.layerLocator"),
     AddressLink(12, "layer_locator", 11, "value.layerLocator"),
-    AddressLink(13, "layer_locator", 12, "value.layerLocator"),
-    AddressLink(14, "composition_locator", 6, "value.compositionLocator"),
+    AddressLink(14, "composition_locator", 13, "value.items[TSM Acceptance Fixture].locator"),
     AddressLink(15, "layer_locator", 14, "value.layerLocator"),
     AddressLink(16, "layer_locator", 15, "value.layerLocator"),
     AddressLink(17, "layer_locator", 16, "value.layerLocator"),
@@ -613,7 +634,7 @@ T5_ADDRESS_LINKS = (
     AddressLink(23, "layer_locator", 22, "value.layerLocator"),
     AddressLink(24, "group_ref", 23, "value.groups[Triangle].ref"),
     AddressLink(25, "layer_locator", 24, "value.groupRef.layerLocator"),
-    AddressLink(26, "target.layer_locator", 13, "value.layerLocator"),
+    AddressLink(26, "target.layer_locator", 12, "value.layerLocator"),
     AddressLink(27, "target.layer_locator", 25, "value.layerLocator"),
     AddressLink(28, "target", 26, "value.after.ref.target"),
     AddressLink(29, "target", 27, "value.after.ref.target"),
@@ -636,6 +657,8 @@ ADDRESS_LINKS = T5_ADDRESS_LINKS
 
 _T6_PRODUCERS = {
     "composition_locator": {
+        "composition-create": "value.compositionLocator",
+        "empty-layer-baseline": "value.compositionLocator",
         "composition-reacquire": "value.items[TSM Acceptance Fixture].locator",
         "text-create": "value.compositionLocator",
         "shape-layer-create": "value.compositionLocator",
@@ -753,11 +776,11 @@ def _derive_address_links(
 T6_ADDRESS_LINKS = _derive_address_links(T6_CALL_PLAN, _T6_PRODUCERS)
 
 TEXT_LOCATOR_CHAIN = {
-    "ae_createTextLayer": "call 3 ae_listProjectItems supplies value.items[TSM Acceptance Fixture].locator",
-    "ae_getTextDocument": "call 6 ae_createTextLayer supplies value.after.layerLocator",
-    "ae_setTextContent": "call 7 ae_getTextDocument supplies value.layerLocator",
-    "ae_setTextCharacterStyle": "call 9 ae_getTextDocument supplies value.layerLocator",
-    "ae_setTextParagraphStyle": "call 11 ae_getTextDocument supplies value.layerLocator",
+    "ae_createTextLayer": "call 3 ae_listCompositionLayers supplies value.compositionLocator",
+    "ae_getTextDocument": "call 5 ae_createTextLayer supplies value.after.layerLocator",
+    "ae_setTextContent": "call 6 ae_getTextDocument supplies value.layerLocator",
+    "ae_setTextCharacterStyle": "call 8 ae_getTextDocument supplies value.layerLocator",
+    "ae_setTextParagraphStyle": "call 10 ae_getTextDocument supplies value.layerLocator",
 }
 
 PACKAGE_TOOLS = tuple(CONTRACTS)

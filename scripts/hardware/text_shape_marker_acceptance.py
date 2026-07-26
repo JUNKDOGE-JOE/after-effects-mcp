@@ -386,7 +386,11 @@ class TextShapeMarkerPackage:
 
     def _capture(self, key: str, payload: Mapping[str, Any]) -> None:
         value = native_value(payload)
-        if key == "composition-reacquire":
+        if key == "composition-create":
+            self.context["composition_locator"] = _locator(
+                value.get("compositionLocator"), "composition"
+            )
+        elif key == "composition-reacquire":
             item = self._named(value.get("items"), self.fixture_name, "composition")
             self.context["composition_locator"] = _locator(
                 item.get("locator"), "composition"

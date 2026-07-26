@@ -228,20 +228,20 @@ def test_text_schema_and_locator_chain_are_publicly_indistinguishable():
         assert "target" not in PUBLIC_SCHEMAS[name].model_fields
     assert spec.TEXT_LOCATOR_CHAIN == {
         "ae_createTextLayer": (
-            "call 3 ae_listProjectItems supplies "
-            "value.items[TSM Acceptance Fixture].locator"
+            "call 3 ae_listCompositionLayers supplies "
+            "value.compositionLocator"
         ),
         "ae_getTextDocument": (
-            "call 6 ae_createTextLayer supplies value.after.layerLocator"
+            "call 5 ae_createTextLayer supplies value.after.layerLocator"
         ),
         "ae_setTextContent": (
-            "call 7 ae_getTextDocument supplies value.layerLocator"
+            "call 6 ae_getTextDocument supplies value.layerLocator"
         ),
         "ae_setTextCharacterStyle": (
-            "call 9 ae_getTextDocument supplies value.layerLocator"
+            "call 8 ae_getTextDocument supplies value.layerLocator"
         ),
         "ae_setTextParagraphStyle": (
-            "call 11 ae_getTextDocument supplies value.layerLocator"
+            "call 10 ae_getTextDocument supplies value.layerLocator"
         ),
     }
 
@@ -275,41 +275,92 @@ def test_driver_constructs_text_calls_only_from_prior_public_locators():
         runtime, fixture_name="TSM Acceptance Fixture"
     )
     composition = _locator("composition", COMP)
+    baseline_composition = {**composition, "generation": 2}
     text = _locator("layer", TEXT, 2)
     package._capture(
-        "composition-reacquire",
+        "composition-create",
+        {"value": {"compositionLocator": composition}},
+    )
+    baseline_args = package._resolve(
+        next(
+            row.arguments
+            for row in spec.T5_CALL_PLAN
+            if row.key == "empty-layer-baseline"
+        )
+    )
+    assert baseline_args["composition_locator"] == composition
+    package._capture(
+        "empty-layer-baseline",
         {
             "value": {
-                "items": [
-                    {
-                        "name": "TSM Acceptance Fixture",
-                        "type": "composition",
-                        "locator": composition,
-                    }
-                ]
+                "compositionLocator": baseline_composition,
             }
         },
     )
-    create_args = package._resolve(spec.T5_CALL_PLAN[5].arguments)
-    assert create_args["composition_locator"] == composition
+    create_args = package._resolve(
+        next(row.arguments for row in spec.T5_CALL_PLAN if row.key == "text-create")
+    )
+    assert create_args["composition_locator"] == baseline_composition
     assert "composition_id" not in create_args
     package._capture(
         "text-create",
         {
             "value": {
-                "compositionLocator": {**composition, "generation": 2},
+                "compositionLocator": {**composition, "generation": 3},
                 "after": {"layerLocator": text},
             }
         },
     )
-    read_args = package._resolve(spec.T5_CALL_PLAN[6].arguments)
+    read_args = package._resolve(
+        next(row.arguments for row in spec.T5_CALL_PLAN if row.key == "text-read")
+    )
     assert read_args == {"layer_locator": text}
     package._capture("text-read", {"value": {"layerLocator": text}})
-    content_args = package._resolve(spec.T5_CALL_PLAN[7].arguments)
+    content_args = package._resolve(
+        next(
+            row.arguments
+            for row in spec.T5_CALL_PLAN
+            if row.key == "text-content-set"
+        )
+    )
     assert content_args["layer_locator"] == text
     assert content_args["idempotency_key"].startswith(
         "issue170:text-content-set:session-a-"
     )
+
+
+def test_both_hardware_plans_reacquire_composition_after_text_writes():
+    for plan, expected_reacquire, expected_shape in (
+        (spec.T5_CALL_PLAN, 13, 14),
+        (spec.T6_CALL_PLAN, 9, 10),
+    ):
+        rows = {row.key: row for row in plan}
+        assert rows["composition-reacquire"].ordinal == expected_reacquire
+        assert rows["shape-layer-create"].ordinal == expected_shape
+        assert (
+            rows["text-character-undo-read"].ordinal
+            < rows["composition-reacquire"].ordinal
+            < rows["shape-layer-create"].ordinal
+        )
+        if plan is spec.T5_CALL_PLAN:
+            assert (
+                rows["text-paragraph-undo-read"].ordinal
+                < rows["composition-reacquire"].ordinal
+            )
+        link = next(
+            item
+            for item in (
+                spec.T5_ADDRESS_LINKS
+                if plan is spec.T5_CALL_PLAN
+                else spec.T6_ADDRESS_LINKS
+            )
+            if item.consumer_call == expected_shape
+            and item.consumer_field == "composition_locator"
+        )
+        assert link.producer_call == expected_reacquire
+        assert link.producer_path == (
+            "value.items[TSM Acceptance Fixture].locator"
+        )
 
 
 def test_operation_key_is_fresh_per_session_but_reconciliation_reuses_original():
@@ -357,8 +408,14 @@ def test_one_driver_selects_the_tier_plan_and_keeps_the_fixture_recipe_frozen():
             "Create TSM Acceptance Fixture at 1920x1080, square pixels, "
             "10 seconds, 24 fps through ae_createComposition."
         ),
-        "Reacquire the composition through ae_listProjectItems.",
-        "Record ae_listCompositionLayers as the empty baseline.",
+        (
+            "Record ae_listCompositionLayers as the empty baseline from a fresh "
+            "public composition locator."
+        ),
+        (
+            "After maintained text writes, reacquire the composition through "
+            "ae_listProjectItems before shape creation."
+        ),
         "Create TSM Text with A😀中 é and create TSM Shape through public MCP.",
         "Create Triangle and Curve from the fixed paths and complete styles below.",
         "Use exact marker times 24/24 and 1000/1000 on distinct layer targets.",
