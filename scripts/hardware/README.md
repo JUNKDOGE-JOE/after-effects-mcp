@@ -205,6 +205,15 @@ Routine starts verify canonical paths, component/protocol versions, sizes,
 modes, and modification times; content hashing is reserved for a contradictory
 signal or an explicitly requested release/security audit.
 
+The package staging/verifier and native development installer use the
+`development` identity profile by default. It keeps protocol, product-version,
+platform, architecture, entrypoint, load, and Adobe scan-root protections, but
+records source-revision drift and does not gate on full payload hashes or deep
+receipt identity. Release and security-audit entry points must select
+`--profile release-audit`; the release workflows and signing freeze do so
+explicitly. Product-version equality remains strict in both profiles because
+the current product contract has no version compatibility range.
+
 The frozen package matrix has eight public acceptance rows: three reads and
 five writes. `ae_listProjectItems` is an existing support read used only for
 independent project-count and duplicate readback; its descriptor is pinned by

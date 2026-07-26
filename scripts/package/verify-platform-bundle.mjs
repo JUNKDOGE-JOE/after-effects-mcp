@@ -27,6 +27,11 @@ import {
   NATIVE_PLUGIN_ROOT,
   verifyNativePluginStage,
 } from './lib/native-plugin-manifest.mjs';
+import {
+  DEVELOPMENT_IDENTITY_PROFILE,
+  normalizeIdentityVerificationProfile,
+  requiresExactIdentity,
+} from './lib/identity-verification-profile.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const ADOBE_SDK_LOCKED_FILE_DIGESTS = new Set([
@@ -77,7 +82,7 @@ function validateHelperManifest(value, platform) {
   return value;
 }
 
-async function verifyEntry(expected, actual) {
+async function verifyEntry(expected, actual, exactIdentity) {
   if (!actual || expected.type !== actual.type || expected.size !== actual.size
       || expected.mode !== actual.mode
       || (expected.type === 'symlink'
@@ -85,12 +90,12 @@ async function verifyEntry(expected, actual) {
         && expected.linkTarget !== actual.linkTarget)) {
     throw bundleError('BUNDLE_FILE_METADATA_MISMATCH', `bundle metadata mismatch: ${expected.path}`);
   }
-  if (expected.sha256 !== actual.sha256) {
+  if (exactIdentity && expected.sha256 !== actual.sha256) {
     throw bundleError('BUNDLE_HASH_MISMATCH', `bundle SHA-256 mismatch: ${expected.path}`);
   }
 }
 
-async function verifyRuntimeInventory(root, platform, runtimeManifest) {
+async function verifyRuntimeInventory(root, platform, runtimeManifest, exactIdentity) {
   const runtimeRoot = path.join(root, 'runtime', platform);
   const actual = await collectManifestEntries(runtimeRoot, { omit: ['runtime-manifest.json'] });
   const actualByPath = new Map(actual.map((entry) => [entry.path, entry]));
@@ -103,7 +108,9 @@ async function verifyRuntimeInventory(root, platform, runtimeManifest) {
       || expected.some((entry) => !actualByPath.has(entry.path))) {
     throw bundleError('BUNDLE_RUNTIME_MANIFEST_INVALID', 'runtime manifest file set does not match payload');
   }
-  for (const entry of expected) await verifyEntry(entry, actualByPath.get(entry.path));
+  for (const entry of expected) {
+    await verifyEntry(entry, actualByPath.get(entry.path), exactIdentity);
+  }
 }
 
 async function verifySupportContract(root, platform) {
@@ -129,14 +136,20 @@ async function verifySupportContract(root, platform) {
   }
 }
 
-async function verifyRuntimeEvidence(root, platform, runtimeManifest, bundleManifest) {
+async function verifyRuntimeEvidence(
+  root,
+  platform,
+  runtimeManifest,
+  bundleManifest,
+  exactIdentity,
+) {
   const runtimeRoot = path.join(root, 'runtime', platform);
   const sbomPath = path.join(runtimeRoot, 'sbom.spdx.json');
   const licenseInventoryPath = path.join(runtimeRoot, 'license-inventory.json');
-  if (await sha256File(sbomPath) !== bundleManifest.runtime.sbomSha256) {
+  if (exactIdentity && await sha256File(sbomPath) !== bundleManifest.runtime.sbomSha256) {
     throw bundleError('BUNDLE_HASH_MISMATCH', 'runtime SPDX SBOM SHA-256 mismatch');
   }
-  if (await sha256File(licenseInventoryPath)
+  if (exactIdentity && await sha256File(licenseInventoryPath)
       !== bundleManifest.runtime.licenseInventorySha256) {
     throw bundleError('BUNDLE_HASH_MISMATCH', 'runtime license inventory SHA-256 mismatch');
   }
@@ -209,10 +222,10 @@ async function verifyHostRuntime(root, platform, entries) {
   requireFile(`node_modules/express/${entryRelative.split(path.sep).join('/')}`);
 }
 
-async function verifyHelper(root, platform, manifest) {
+async function verifyHelper(root, platform, manifest, exactIdentity) {
   const helperRoot = path.join(root, 'platform', platform);
   const helperManifestPath = path.join(helperRoot, 'helper-manifest.json');
-  if (await sha256File(helperManifestPath) !== manifest.helper.manifestSha256) {
+  if (exactIdentity && await sha256File(helperManifestPath) !== manifest.helper.manifestSha256) {
     throw bundleError('BUNDLE_HASH_MISMATCH', 'helper manifest SHA-256 mismatch');
   }
   const helper = validateHelperManifest(await readJsonFile(helperManifestPath), platform);
@@ -235,7 +248,7 @@ async function verifyHelper(root, platform, manifest) {
     if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw bundleError('BUNDLE_HELPER_IDENTITY_INVALID', 'helper file path escapes helper root');
     }
-    if (await sha256File(filePath) !== record.sha256) {
+    if (exactIdentity && await sha256File(filePath) !== record.sha256) {
       throw bundleError('BUNDLE_HASH_MISMATCH', `helper payload SHA-256 mismatch: ${record.path}`);
     }
     if (record.architecture === 'script') {
@@ -348,9 +361,12 @@ export async function verifyPlatformBundle({
   platform,
   version,
   sourceCommitSha,
+  verificationProfile = DEVELOPMENT_IDENTITY_PROFILE,
   candidateRepoRoot = REPO_ROOT,
   dependencies = {},
 } = {}) {
+  const profile = normalizeIdentityVerificationProfile(verificationProfile);
+  const exactIdentity = requiresExactIdentity(profile);
   if (!PLATFORM_IDS.has(platform)) throw bundleError('BUNDLE_PLATFORM_INVALID', `unsupported platform: ${platform}`);
   const resolvedRoot = path.resolve(String(root ?? ''));
   const manifestPath = path.join(resolvedRoot, 'bundle-manifest.json');
@@ -361,7 +377,8 @@ export async function verifyPlatformBundle({
   if (manifest.version !== version) {
     throw bundleError('BUNDLE_VERSION_MISMATCH', `expected ${version}, received ${manifest.version}`);
   }
-  if (sourceCommitSha !== undefined && manifest.sourceCommitSha !== sourceCommitSha) {
+  if (exactIdentity && sourceCommitSha !== undefined
+      && manifest.sourceCommitSha !== sourceCommitSha) {
     throw bundleError('BUNDLE_SOURCE_COMMIT_MISMATCH', 'bundle source commit does not match candidate');
   }
   const actual = await collectManifestEntries(resolvedRoot, { omit: ['bundle-manifest.json'] });
@@ -370,7 +387,9 @@ export async function verifyPlatformBundle({
       || manifest.files.some((entry) => !actualByPath.has(entry.path))) {
     throw bundleError('BUNDLE_FILE_SET_MISMATCH', 'bundle file set does not match manifest');
   }
-  for (const entry of manifest.files) await verifyEntry(entry, actualByPath.get(entry.path));
+  for (const entry of manifest.files) {
+    await verifyEntry(entry, actualByPath.get(entry.path), exactIdentity);
+  }
   const nativeNamespace = path.posix.dirname(NATIVE_PLUGIN_ROOT);
   const nativeNamespaceEntries = actual.filter((entry) => (
     entry.path === nativeNamespace
@@ -396,7 +415,8 @@ export async function verifyPlatformBundle({
     const nativeManifestEntry = actualByPath.get(NATIVE_PLUGIN_MANIFEST_PATH);
     if (!nativeManifestEntry
         || nativeManifestEntry.type !== 'file'
-        || nativeManifestEntry.sha256 !== manifest.nativePlugin.manifestSha256) {
+        || (exactIdentity
+          && nativeManifestEntry.sha256 !== manifest.nativePlugin.manifestSha256)) {
       throw bundleError(
         'BUNDLE_NATIVE_PLUGIN_HASH_MISMATCH',
         'native plug-in manifest reference does not match the staged file',
@@ -406,21 +426,29 @@ export async function verifyPlatformBundle({
       root: path.join(resolvedRoot, ...NATIVE_PLUGIN_ROOT.split('/')),
       productVersion: manifest.version,
       sourceCommitSha: manifest.sourceCommitSha,
+      verificationProfile: profile,
       candidateRepoRoot,
       dependencies,
     });
   }
 
   const runtimeManifestPath = path.join(resolvedRoot, 'runtime', platform, 'runtime-manifest.json');
-  if (await sha256File(runtimeManifestPath) !== manifest.runtime.manifestSha256) {
+  if (exactIdentity
+      && await sha256File(runtimeManifestPath) !== manifest.runtime.manifestSha256) {
     throw bundleError('BUNDLE_HASH_MISMATCH', 'runtime manifest SHA-256 mismatch');
   }
   const runtimeManifest = validateRuntimeManifest(await readJsonFile(runtimeManifestPath), platform);
-  await verifyRuntimeInventory(resolvedRoot, platform, runtimeManifest);
-  await verifyRuntimeEvidence(resolvedRoot, platform, runtimeManifest, manifest);
+  await verifyRuntimeInventory(resolvedRoot, platform, runtimeManifest, exactIdentity);
+  await verifyRuntimeEvidence(
+    resolvedRoot,
+    platform,
+    runtimeManifest,
+    manifest,
+    exactIdentity,
+  );
   await verifyHostRuntime(resolvedRoot, platform, actual);
   await verifySupportContract(resolvedRoot, platform);
-  await verifyHelper(resolvedRoot, platform, manifest);
+  await verifyHelper(resolvedRoot, platform, manifest, exactIdentity);
   assertProductionFileSet(actual, platform);
   await verifyNativeFiles(resolvedRoot, platform, actual);
   return manifest;
@@ -428,7 +456,7 @@ export async function verifyPlatformBundle({
 
 function parseArgs(argv) {
   const values = new Map();
-  const allowed = new Set(['--root', '--platform', '--version']);
+  const allowed = new Set(['--root', '--platform', '--profile', '--version']);
   for (let index = 0; index < argv.length; index += 1) {
     const item = argv[index];
     const equal = item.indexOf('=');
@@ -437,8 +465,17 @@ function parseArgs(argv) {
     if (!allowed.has(key) || !value || values.has(key)) throw new Error(`invalid argument: ${item}`);
     values.set(key, value);
   }
-  for (const key of allowed) if (!values.has(key)) throw new Error(`${key} is required`);
-  return { root: values.get('--root'), platform: values.get('--platform'), version: values.get('--version') };
+  for (const key of ['--root', '--platform', '--version']) {
+    if (!values.has(key)) throw new Error(`${key} is required`);
+  }
+  const verificationProfile = values.get('--profile') ?? DEVELOPMENT_IDENTITY_PROFILE;
+  normalizeIdentityVerificationProfile(verificationProfile);
+  return {
+    root: values.get('--root'),
+    platform: values.get('--platform'),
+    version: values.get('--version'),
+    verificationProfile,
+  };
 }
 
 async function main() {

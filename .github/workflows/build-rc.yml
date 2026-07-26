@@ -449,11 +449,13 @@ jobs:
           [[ -x "$runtime_node" ]]
           "$runtime_node" scripts/package/stage-platform-bundle.mjs \
             --platform macos-arm64 \
+            --profile release-audit \
             --version "$VERSION" \
             --out "$GITHUB_WORKSPACE/build/stage/macos-arm64"
           "$runtime_node" scripts/package/verify-platform-bundle.mjs \
             --root "$GITHUB_WORKSPACE/build/stage/macos-arm64" \
             --platform macos-arm64 \
+            --profile release-audit \
             --version "$VERSION"
 
       - name: Import ephemeral Developer ID and notarization credentials
@@ -712,12 +714,14 @@ jobs:
           if (-not (Test-Path -LiteralPath $runtimeNode -PathType Leaf)) { throw 'bundled Node is missing' }
           & $runtimeNode scripts/package/stage-platform-bundle.mjs `
             --platform windows-x64 `
+            --profile release-audit `
             --version $env:VERSION `
             --out (Join-Path $env:GITHUB_WORKSPACE 'build\stage\windows-x64')
           if ($LASTEXITCODE -ne 0) { throw 'Windows bundle staging failed' }
           & $runtimeNode scripts/package/verify-platform-bundle.mjs `
             --root (Join-Path $env:GITHUB_WORKSPACE 'build\stage\windows-x64') `
             --platform windows-x64 `
+            --profile release-audit `
             --version $env:VERSION
           if ($LASTEXITCODE -ne 0) { throw 'Windows bundle verification failed' }
 

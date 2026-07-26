@@ -428,6 +428,7 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
     outDir,
     repoRoot,
     sourceCommitSha: SOURCE_COMMIT_SHA,
+    verificationProfile: 'release-audit',
     ...overrides,
   };
   return {
@@ -437,7 +438,12 @@ export async function makeStageHarness(t, platform = 'macos-arm64', overrides = 
     runtimeRoot,
     helperRoot,
     input,
-    verifyInput: { root: outDir, platform, version: PRODUCT_VERSION },
+    verifyInput: {
+      root: outDir,
+      platform,
+      version: PRODUCT_VERSION,
+      verificationProfile: 'release-audit',
+    },
     exists(relative) {
       return fs.existsSync(path.join(outDir, ...relative.split('/')));
     },

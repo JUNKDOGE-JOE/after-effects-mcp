@@ -201,13 +201,20 @@ endpoint and peer identity, but there is no connection code, fingerprint
 confirmation, or build flag on the single-user development path.
 
 Close every After Effects, AfterFX, and aerender process before installing. The development
-installer verifies the build receipt and installed copy, and installs the loadable bundle at
+installer validates the receipt shape, product version, protocol metadata, platform, architecture,
+entrypoint, signature, and installed copy, and installs the loadable bundle at
 `~/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp/AeMcpNative.plugin`:
 
 ```bash
 node native/ae-plugin/install-dev-macos.mjs install \
   --artifact-dir "$BUILD_DIR"
 ```
+
+The default `development` identity profile records source revisions but does not reject an
+otherwise compatible locally built artifact only because its source commit or recorded payload
+hashes differ. Product-version equality remains required because no compatibility range exists.
+Use `--profile release-audit` for an explicit exact-source, exact-receipt, and exact-artifact audit;
+release workflows select that profile themselves.
 
 That MediaCore namespace is kept strict: it is either empty during a transaction or contains only
 the active `AeMcpNative.plugin`. Transaction records and every complete stage, backup, failed, or

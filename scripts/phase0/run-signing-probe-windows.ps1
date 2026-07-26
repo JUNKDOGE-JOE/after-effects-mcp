@@ -32,7 +32,7 @@ if (Test-Path -LiteralPath $out) { throw 'PHASE0_OUTPUT_EXISTS: disposable outpu
 $manifestPath = Join-Path $stage 'bundle-manifest.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 $sourceCommitSha = [string]$manifest.sourceCommitSha
-& node scripts/package/verify-platform-bundle.mjs --root $stage --platform windows-x64 --version ([string]$manifest.version) | Out-Null
+& node scripts/package/verify-platform-bundle.mjs --root $stage --platform windows-x64 --profile release-audit --version ([string]$manifest.version) | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'PHASE0_STAGE_INVALID: unsigned stage verification failed' }
 $sourceStageSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 
@@ -40,7 +40,7 @@ $sourceStageSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256)
 $work = Join-Path $out 'work'
 & robocopy.exe $stage $work /E /COPY:DAT /DCOPY:DAT /R:0 /W:0 /NFL /NDL /NJH /NJS /NP | Out-Null
 if ($LASTEXITCODE -gt 7) { throw 'PHASE0_COPY_FAILED: unsigned stage copy failed' }
-& node scripts/package/verify-platform-bundle.mjs --root $work --platform windows-x64 --version ([string]$manifest.version) | Out-Null
+& node scripts/package/verify-platform-bundle.mjs --root $work --platform windows-x64 --profile release-audit --version ([string]$manifest.version) | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'PHASE0_COPY_INVALID: copied work verification failed' }
 
 & scripts/package/sign-windows-nested.ps1 -Root $work -Evidence (Join-Path $out 'nested-evidence.json')
@@ -74,7 +74,7 @@ await assemblePhase0SigningEvidence({
 '@
 if ($LASTEXITCODE -ne 0) { throw 'PHASE0_EVIDENCE_INVALID: aggregate evidence failed' }
 
-& node scripts/package/verify-platform-bundle.mjs --root $stage --platform windows-x64 --version ([string]$manifest.version) | Out-Null
+& node scripts/package/verify-platform-bundle.mjs --root $stage --platform windows-x64 --profile release-audit --version ([string]$manifest.version) | Out-Null
 if ($LASTEXITCODE -ne 0) { throw 'PHASE0_STAGE_CHANGED: source stage verification failed after probe' }
 $unchangedStageSha256 = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($unchangedStageSha256 -ne $sourceStageSha256) {

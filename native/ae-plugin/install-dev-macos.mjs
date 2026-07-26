@@ -9,6 +9,11 @@ import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
 import { verifyMacPlugin } from './verify-macos.mjs';
+import {
+  DEVELOPMENT_IDENTITY_PROFILE,
+  normalizeIdentityVerificationProfile,
+  requiresExactIdentity,
+} from '../../scripts/package/lib/identity-verification-profile.mjs';
 
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const BUNDLE_NAME = 'AeMcpNative.plugin';
@@ -312,14 +317,16 @@ async function loadSourceArtifact(artifactDir, dependencies) {
     }),
     'verified source artifact',
   );
-  if (!isDeepStrictEqual(observed, receipt.artifact)) {
+  const exactIdentity = requiresExactIdentity(dependencies.verificationProfile);
+  if (exactIdentity && !isDeepStrictEqual(observed, receipt.artifact)) {
     throw installerError(
       'AE_PLUGIN_RECEIPT_MISMATCH',
       'verified source bundle does not match its complete build receipt artifact record',
     );
   }
-  await assertEmbeddedSourceCommit(bundlePath, receipt.sourceCommit);
+  if (exactIdentity) await assertEmbeddedSourceCommit(bundlePath, receipt.sourceCommit);
   return {
+    artifact: exactIdentity ? receipt.artifact : observed,
     bundlePath,
     receipt,
     receiptSha256: crypto.createHash('sha256').update(receiptBytes).digest('hex'),
@@ -727,7 +734,7 @@ function defaultIsProcessAlive(pid) {
   }
 }
 
-function dependenciesFor(overrides = {}) {
+function dependenciesFor(overrides = {}, verificationProfile = DEVELOPMENT_IDENTITY_PROFILE) {
   return {
     acquireStateGuard: overrides.acquireStateGuard ?? defaultAcquireStateGuard,
     assertAeStopped: overrides.assertAeStopped ?? defaultAssertAeStopped,
@@ -752,6 +759,7 @@ function dependenciesFor(overrides = {}) {
     )),
     syncDirectory: overrides.syncDirectory ?? syncDirectory,
     verifyBundle: overrides.verifyBundle ?? verifyMacPlugin,
+    verificationProfile: normalizeIdentityVerificationProfile(verificationProfile),
   };
 }
 
@@ -792,10 +800,13 @@ async function verifyDisabled(bundlePath, expected, dependencies, label, sourceC
     await dependencies.verifyBundle({ bundlePath, allowManagedDisabledName: true }),
     label,
   );
-  if (!isDeepStrictEqual(observed, expected)) {
+  const exactIdentity = requiresExactIdentity(dependencies.verificationProfile);
+  if (exactIdentity && !isDeepStrictEqual(observed, expected)) {
     throw installerError('AE_PLUGIN_RECEIPT_MISMATCH', `${label} does not match its recorded hash set`);
   }
-  if (sourceCommit) await assertEmbeddedSourceCommit(bundlePath, sourceCommit);
+  if (exactIdentity && sourceCommit) {
+    await assertEmbeddedSourceCommit(bundlePath, sourceCommit);
+  }
   return observed;
 }
 
@@ -804,10 +815,11 @@ async function verifyTarget(target, expected, dependencies, label, sourceCommit 
     await dependencies.verifyBundle({ bundlePath: target }),
     label,
   );
-  if (!isDeepStrictEqual(observed, expected)) {
+  const exactIdentity = requiresExactIdentity(dependencies.verificationProfile);
+  if (exactIdentity && !isDeepStrictEqual(observed, expected)) {
     throw installerError('AE_PLUGIN_RECEIPT_MISMATCH', `${label} does not match its recorded hash set`);
   }
-  if (sourceCommit) await assertEmbeddedSourceCommit(target, sourceCommit);
+  if (exactIdentity && sourceCommit) await assertEmbeddedSourceCommit(target, sourceCommit);
   return observed;
 }
 
@@ -1451,9 +1463,10 @@ export async function installDevMacPlugin({
   artifactDir,
   mediaCoreRoot = defaultMediaCoreRoot(),
   stateBaseRoot = defaultStateBaseRoot(mediaCoreRoot),
+  verificationProfile = DEVELOPMENT_IDENTITY_PROFILE,
   dependencies: dependencyOverrides,
 }) {
-  const dependencies = dependenciesFor(dependencyOverrides);
+  const dependencies = dependenciesFor(dependencyOverrides, verificationProfile);
   requireMac(dependencies);
   await dependencies.assertAeStopped();
   const source = await loadSourceArtifact(artifactDir, dependencies);
@@ -1510,7 +1523,7 @@ export async function installDevMacPlugin({
     await dependencies.copyBundle(source.bundlePath, stage);
     await verifyDisabled(
       stage,
-      source.receipt.artifact,
+      source.artifact,
       dependencies,
       'staged native artifact',
       source.receipt.sourceCommit,
@@ -1533,7 +1546,7 @@ export async function installDevMacPlugin({
       targetName: BUNDLE_NAME,
       sourceCommit: source.receipt.sourceCommit,
       buildReceiptSha256: source.receiptSha256,
-      installedArtifact: source.receipt.artifact,
+      installedArtifact: source.artifact,
       previous: {
         present: previousArtifact !== null,
         artifact: previousArtifact,
@@ -1585,7 +1598,7 @@ export async function installDevMacPlugin({
       await writeJsonAtomic(transactionPath, transaction);
       await verifyTarget(
         target,
-        source.receipt.artifact,
+        source.artifact,
         dependencies,
         'installed native artifact',
         source.receipt.sourceCommit,
@@ -1607,7 +1620,7 @@ export async function installDevMacPlugin({
         target,
         productVersion: source.receipt.productVersion,
         sourceCommit: source.receipt.sourceCommit,
-        artifact: source.receipt.artifact,
+        artifact: source.artifact,
         previous: {
           present: previousArtifact !== null,
           artifact: previousArtifact,
@@ -2047,7 +2060,7 @@ async function reconcileCurrentTransaction({ dependencies, stateStore, target, t
       }
       desired = matchingTips[0]?.value.transactionId ?? null;
     }
-    if (desired) {
+    if (desired && requiresExactIdentity(dependencies.verificationProfile)) {
       await assertEmbeddedSourceCommit(target, byId.get(desired).value.sourceCommit);
     }
   }
@@ -2151,10 +2164,11 @@ export async function rollbackDevMacPlugin({
   transactionId,
   mediaCoreRoot = defaultMediaCoreRoot(),
   stateBaseRoot = defaultStateBaseRoot(mediaCoreRoot),
+  verificationProfile = DEVELOPMENT_IDENTITY_PROFILE,
   dependencies: dependencyOverrides,
 }) {
   assertTransactionId(transactionId);
-  const dependencies = dependenciesFor(dependencyOverrides);
+  const dependencies = dependenciesFor(dependencyOverrides, verificationProfile);
   requireMac(dependencies);
   await dependencies.assertAeStopped();
   const roots = await prepareRoots(mediaCoreRoot, stateBaseRoot);
@@ -2329,9 +2343,10 @@ export async function rollbackDevMacPlugin({
 export async function recoverDevMacPlugin({
   mediaCoreRoot = defaultMediaCoreRoot(),
   stateBaseRoot = defaultStateBaseRoot(mediaCoreRoot),
+  verificationProfile = DEVELOPMENT_IDENTITY_PROFILE,
   dependencies: dependencyOverrides,
 } = {}) {
-  const dependencies = dependenciesFor(dependencyOverrides);
+  const dependencies = dependenciesFor(dependencyOverrides, verificationProfile);
   requireMac(dependencies);
   await dependencies.assertAeStopped();
   const roots = await prepareRoots(mediaCoreRoot, stateBaseRoot);
@@ -2359,20 +2374,35 @@ export async function recoverDevMacPlugin({
 }
 
 function parseCli(argv) {
-  if (argv.length === 3 && argv[0] === 'install' && argv[1] === '--artifact-dir'
-      && path.isAbsolute(argv[2])) {
-    return { action: 'install', artifactDir: argv[2] };
+  const args = [...argv];
+  let verificationProfile = DEVELOPMENT_IDENTITY_PROFILE;
+  const profileIndex = args.indexOf('--profile');
+  if (profileIndex !== -1) {
+    if (profileIndex + 1 >= args.length || args.indexOf('--profile', profileIndex + 1) !== -1) {
+      throw installerError('AE_PLUGIN_ARGUMENT_INVALID', 'verification profile is invalid');
+    }
+    verificationProfile = args[profileIndex + 1];
+    args.splice(profileIndex, 2);
   }
-  if (argv.length === 3 && argv[0] === 'rollback' && argv[1] === '--transaction'
-      && UUID_V4.test(argv[2])) {
-    return { action: 'rollback', transactionId: argv[2] };
+  try {
+    normalizeIdentityVerificationProfile(verificationProfile);
+  } catch {
+    throw installerError('AE_PLUGIN_ARGUMENT_INVALID', 'verification profile is invalid');
   }
-  if (argv.length === 1 && argv[0] === 'recover') {
-    return { action: 'recover' };
+  if (args.length === 3 && args[0] === 'install' && args[1] === '--artifact-dir'
+      && path.isAbsolute(args[2])) {
+    return { action: 'install', artifactDir: args[2], verificationProfile };
+  }
+  if (args.length === 3 && args[0] === 'rollback' && args[1] === '--transaction'
+      && UUID_V4.test(args[2])) {
+    return { action: 'rollback', transactionId: args[2], verificationProfile };
+  }
+  if (args.length === 1 && args[0] === 'recover') {
+    return { action: 'recover', verificationProfile };
   }
   throw installerError(
     'AE_PLUGIN_ARGUMENT_INVALID',
-    'usage: install --artifact-dir /absolute/build-output | rollback --transaction <uuid> | recover',
+    'usage: install --artifact-dir /absolute/build-output [--profile development|release-audit] | rollback --transaction <uuid> [--profile development|release-audit] | recover [--profile development|release-audit]',
   );
 }
 
@@ -2395,11 +2425,19 @@ if (path.resolve(process.argv[1] ?? '') === MODULE_PATH) {
     const command = parseCli(process.argv.slice(2));
     let result;
     if (command.action === 'install') {
-      result = await installDevMacPlugin({ artifactDir: command.artifactDir });
+      result = await installDevMacPlugin({
+        artifactDir: command.artifactDir,
+        verificationProfile: command.verificationProfile,
+      });
     } else if (command.action === 'rollback') {
-      result = await rollbackDevMacPlugin({ transactionId: command.transactionId });
+      result = await rollbackDevMacPlugin({
+        transactionId: command.transactionId,
+        verificationProfile: command.verificationProfile,
+      });
     } else {
-      result = await recoverDevMacPlugin();
+      result = await recoverDevMacPlugin({
+        verificationProfile: command.verificationProfile,
+      });
     }
     process.stdout.write(`${JSON.stringify({ ok: true, result })}\n`);
   } catch (error) {

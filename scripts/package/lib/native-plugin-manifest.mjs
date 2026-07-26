@@ -16,6 +16,11 @@ import {
   sha256File,
   writeCanonicalJson,
 } from './manifest.mjs';
+import {
+  DEVELOPMENT_IDENTITY_PROFILE,
+  normalizeIdentityVerificationProfile,
+  requiresExactIdentity,
+} from './identity-verification-profile.mjs';
 
 export const NATIVE_PLUGIN_ROOT = path.posix.dirname(NATIVE_PLUGIN_MANIFEST_PATH);
 export const NATIVE_PLUGIN_MANIFEST_NAME = path.posix.basename(NATIVE_PLUGIN_MANIFEST_PATH);
@@ -276,7 +281,7 @@ export function validateNativePluginManifest(value) {
   return value;
 }
 
-async function assertExactDirectoryEntries(directory, expected, label) {
+async function assertDirectoryEntries(directory, expected, label, exactIdentity) {
   const metadata = await fs.promises.lstat(directory).catch(() => null);
   if (!metadata?.isDirectory() || metadata.isSymbolicLink()) {
     throw nativeError(
@@ -286,10 +291,15 @@ async function assertExactDirectoryEntries(directory, expected, label) {
   }
   const entries = (await fs.promises.readdir(directory)).sort();
   const wanted = [...expected].sort();
-  if (JSON.stringify(entries) !== JSON.stringify(wanted)) {
+  const matches = exactIdentity
+    ? JSON.stringify(entries) === JSON.stringify(wanted)
+    : wanted.every((entry) => entries.includes(entry));
+  if (!matches) {
     throw nativeError(
       'BUNDLE_NATIVE_PLUGIN_FILE_SET_MISMATCH',
-      label + ' file set is not exact',
+      exactIdentity
+        ? label + ' file set is not exact'
+        : label + ' is missing a required entry',
     );
   }
 }
@@ -330,6 +340,7 @@ function assertReceiptMatchesCandidate(
   expectedVersion,
   expectedSourceCommit,
   evidence,
+  exactIdentity,
 ) {
   if (receipt.productVersion !== expectedVersion) {
     throw nativeError(
@@ -337,7 +348,7 @@ function assertReceiptMatchesCandidate(
       'native product version does not match the platform bundle',
     );
   }
-  if (receipt.sourceCommit !== expectedSourceCommit) {
+  if (exactIdentity && receipt.sourceCommit !== expectedSourceCommit) {
     throw nativeError(
       'BUNDLE_NATIVE_PLUGIN_SOURCE_MISMATCH',
       'native source commit does not match the platform bundle',
@@ -442,7 +453,7 @@ function assertManifestMatchesReceipt(manifest, receipt, evidence) {
   }
 }
 
-async function verifyArtifact(bundlePath, receipt, dependencies) {
+async function verifyArtifact(bundlePath, receipt, dependencies, exactIdentity) {
   const actual = validateNativeArtifact(
     await verifierFrom(dependencies)({
       bundlePath,
@@ -450,13 +461,13 @@ async function verifyArtifact(bundlePath, receipt, dependencies) {
     }),
     'observed native artifact',
   );
-  if (!sameCanonical(actual, receipt.artifact)) {
+  if (exactIdentity && !sameCanonical(actual, receipt.artifact)) {
     throw nativeError(
       'BUNDLE_NATIVE_PLUGIN_ARTIFACT_MISMATCH',
       'observed native artifact does not match its build receipt',
     );
   }
-  await assertEmbeddedSourceCommit(bundlePath, receipt.sourceCommit);
+  if (exactIdentity) await assertEmbeddedSourceCommit(bundlePath, receipt.sourceCommit);
   return actual;
 }
 
@@ -464,20 +475,25 @@ export async function verifyNativePluginStage({
   root,
   productVersion,
   sourceCommitSha,
+  verificationProfile = DEVELOPMENT_IDENTITY_PROFILE,
   candidateRepoRoot,
   dependencies = {},
 } = {}) {
+  const profile = normalizeIdentityVerificationProfile(verificationProfile);
+  const exactIdentity = requiresExactIdentity(profile);
   const nativeRoot = path.resolve(String(root ?? ''));
-  await assertExactDirectoryEntries(
+  await assertDirectoryEntries(
     nativeRoot,
     [NATIVE_PLUGIN_MANIFEST_NAME, NATIVE_PLUGIN_PAYLOAD_ROOT],
     'native plug-in stage',
+    exactIdentity,
   );
   const payloadRoot = path.join(nativeRoot, NATIVE_PLUGIN_PAYLOAD_ROOT);
-  await assertExactDirectoryEntries(
+  await assertDirectoryEntries(
     payloadRoot,
     [NATIVE_PLUGIN_BUNDLE_NAME, NATIVE_PLUGIN_RECEIPT_NAME],
     'native plug-in payload',
+    exactIdentity,
   );
   const manifestPath = path.join(nativeRoot, NATIVE_PLUGIN_MANIFEST_NAME);
   const manifest = validateNativePluginManifest(
@@ -489,15 +505,22 @@ export async function verifyNativePluginStage({
       'native manifest version does not match the platform bundle',
     );
   }
-  if (manifest.sourceCommitSha !== sourceCommitSha) {
+  if (exactIdentity && manifest.sourceCommitSha !== sourceCommitSha) {
     throw nativeError(
       'BUNDLE_NATIVE_PLUGIN_SOURCE_MISMATCH',
       'native manifest source does not match the platform bundle',
     );
   }
   const evidence = await candidateEvidence(path.resolve(String(candidateRepoRoot ?? '')));
+  if (manifest.protocol.schemaSha256 !== evidence.protocolSchemaSha256) {
+    throw nativeError(
+      'BUNDLE_NATIVE_PLUGIN_PROTOCOL_MISMATCH',
+      'native manifest RPC protocol digest does not match the candidate schema',
+    );
+  }
   const receiptPath = path.join(payloadRoot, NATIVE_PLUGIN_RECEIPT_NAME);
-  if (await sha256File(receiptPath) !== manifest.artifact.receiptSha256) {
+  if (exactIdentity
+      && await sha256File(receiptPath) !== manifest.artifact.receiptSha256) {
     throw nativeError(
       'BUNDLE_NATIVE_PLUGIN_HASH_MISMATCH',
       'native build receipt digest does not match its manifest',
@@ -506,12 +529,19 @@ export async function verifyNativePluginStage({
   const receipt = validateNativeBuildReceipt(
     await readJsonFile(receiptPath, 'BUNDLE_NATIVE_PLUGIN_RECEIPT_INVALID'),
   );
-  assertReceiptMatchesCandidate(receipt, productVersion, sourceCommitSha, evidence);
-  assertManifestMatchesReceipt(manifest, receipt, evidence);
+  assertReceiptMatchesCandidate(
+    receipt,
+    productVersion,
+    sourceCommitSha,
+    evidence,
+    exactIdentity,
+  );
+  if (exactIdentity) assertManifestMatchesReceipt(manifest, receipt, evidence);
   await verifyArtifact(
     path.join(payloadRoot, NATIVE_PLUGIN_BUNDLE_NAME),
     receipt,
     dependencies,
+    exactIdentity,
   );
   return manifest;
 }
@@ -521,9 +551,12 @@ export async function stageNativePluginArtifact({
   destinationRoot,
   productVersion,
   sourceCommitSha,
+  verificationProfile = DEVELOPMENT_IDENTITY_PROFILE,
   candidateRepoRoot,
   dependencies = {},
 } = {}) {
+  const profile = normalizeIdentityVerificationProfile(verificationProfile);
+  const exactIdentity = requiresExactIdentity(profile);
   if (!PRODUCT_VERSION_PATTERN.test(productVersion ?? '')) {
     throw nativeError(
       'BUNDLE_NATIVE_PLUGIN_VERSION_MISMATCH',
@@ -538,10 +571,11 @@ export async function stageNativePluginArtifact({
   }
   const source = path.resolve(String(sourceRoot ?? ''));
   const destination = path.resolve(String(destinationRoot ?? ''));
-  await assertExactDirectoryEntries(
+  await assertDirectoryEntries(
     source,
     [NATIVE_PLUGIN_BUNDLE_NAME, NATIVE_PLUGIN_RECEIPT_NAME],
     'native build output',
+    exactIdentity,
   );
   const evidence = await candidateEvidence(path.resolve(String(candidateRepoRoot ?? '')));
   const sourceReceipt = validateNativeBuildReceipt(
@@ -555,11 +589,13 @@ export async function stageNativePluginArtifact({
     productVersion,
     sourceCommitSha,
     evidence,
+    exactIdentity,
   );
   await verifyArtifact(
     path.join(source, NATIVE_PLUGIN_BUNDLE_NAME),
     sourceReceipt,
     dependencies,
+    exactIdentity,
   );
   const existing = await fs.promises.lstat(destination).catch(() => null);
   if (existing) {
@@ -589,6 +625,7 @@ export async function stageNativePluginArtifact({
       root: destination,
       productVersion,
       sourceCommitSha,
+      verificationProfile: profile,
       candidateRepoRoot,
       dependencies,
     });

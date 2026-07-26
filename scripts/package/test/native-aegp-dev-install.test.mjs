@@ -742,7 +742,7 @@ test('rollback restores the installed target after target-to-replaced post-renam
   await assert.rejects(payloadAt(replaced), { code: 'ENOENT' });
 });
 
-test('complete artifact receipt comparison rejects a single changed hash', async (t) => {
+test('release-audit profile rejects a single changed receipt hash', async (t) => {
   const state = await fixture(t);
   const mismatched = {
     ...artifactFor('one'),
@@ -758,6 +758,7 @@ test('complete artifact receipt comparison rejects a single changed hash', async
     installDevMacPlugin({
       artifactDir,
       mediaCoreRoot: state.mediaCoreRoot,
+      verificationProfile: 'release-audit',
       dependencies: dependencies(),
     }),
     { code: 'AE_PLUGIN_RECEIPT_MISMATCH' },
@@ -782,7 +783,7 @@ test('receipt product version is bound to the verified native bundle identity', 
   );
 });
 
-test('receipt source commit must also be embedded in the native executable bytes', async (t) => {
+test('release-audit profile requires the receipt source in executable bytes', async (t) => {
   const state = await fixture(t);
   const artifactDir = await makeArtifact(state.root, 'build-unbound', 'one');
   await writeFile(
@@ -794,10 +795,40 @@ test('receipt source commit must also be embedded in the native executable bytes
     installDevMacPlugin({
       artifactDir,
       mediaCoreRoot: state.mediaCoreRoot,
+      verificationProfile: 'release-audit',
       dependencies: dependencies(),
     }),
     { code: 'AE_PLUGIN_RECEIPT_MISMATCH' },
   );
+});
+
+test('development profile trusts the verified artifact over stale receipt identity', async (t) => {
+  const state = await fixture(t);
+  const mismatched = {
+    ...artifactFor('one'),
+    bundleTreeSha256: 'c'.repeat(64),
+  };
+  const artifactDir = await makeArtifact(
+    state.root,
+    'build-development-profile',
+    'one',
+    { receiptArtifact: mismatched },
+  );
+  await writeFile(
+    path.join(artifactDir, 'AeMcpNative.plugin', 'Contents', 'MacOS', 'AeMcpNative'),
+    'fake-mach-o-without-the-receipt-source',
+    'utf8',
+  );
+
+  const installed = await installDevMacPlugin({
+    artifactDir,
+    mediaCoreRoot: state.mediaCoreRoot,
+    dependencies: dependencies(),
+  });
+
+  assert.deepEqual(installed.artifact, artifactFor('one'));
+  assert.equal(await payloadAt(state.target), 'one');
+  await assertScanRootExactly(state, true);
 });
 
 for (const transition of ['install.prepared', 'install.old_moved', 'install.candidate_moved']) {
@@ -1658,6 +1689,20 @@ test('production CLI exposes no target override and returns structured errors', 
       assert.equal(response.ok, false);
       assert.equal(response.error.code, 'AE_PLUGIN_ARGUMENT_INVALID');
       assert.doesNotMatch(response.error.message, /--target/u);
+      return true;
+    },
+  );
+  await assert.rejects(
+    execFileAsync(process.execPath, [
+      installerPath,
+      'recover',
+      '--profile',
+      'unknown',
+    ]),
+    (error) => {
+      const response = JSON.parse(error.stderr);
+      assert.equal(response.ok, false);
+      assert.equal(response.error.code, 'AE_PLUGIN_ARGUMENT_INVALID');
       return true;
     },
   );

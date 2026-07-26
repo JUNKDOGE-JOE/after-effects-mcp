@@ -115,6 +115,7 @@ export async function freezeSignedManifests({
     platform,
     version,
     sourceCommitSha,
+    verificationProfile: 'release-audit',
   });
   return Object.freeze({
     sourceStageSha256,

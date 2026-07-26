@@ -4,7 +4,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { stagePlatformBundle } from '../stage-platform-bundle.mjs';
-import { verifyPlatformBundle } from '../verify-platform-bundle.mjs';
+import {
+  parseVerifyPlatformBundleArgs,
+  verifyPlatformBundle,
+} from '../verify-platform-bundle.mjs';
 import { canonicalJson, sha256File, validateBundleManifest } from '../lib/manifest.mjs';
 import { buildLicenseInventory, buildRuntimeSpdx } from '../lib/runtime-evidence.mjs';
 import {
@@ -22,6 +25,39 @@ function universalMachOBytes(cpuTypes) {
   cpuTypes.forEach((cpu, index) => bytes.writeUInt32BE(cpu, 8 + (index * 20)));
   return bytes;
 }
+
+test('verification CLI defaults to development and accepts explicit release-audit', () => {
+  assert.deepEqual(
+    parseVerifyPlatformBundleArgs([
+      '--root', '/tmp/stage', '--platform', 'macos-arm64', '--version', '0.9.2',
+    ]),
+    {
+      root: '/tmp/stage',
+      platform: 'macos-arm64',
+      version: '0.9.2',
+      verificationProfile: 'development',
+    },
+  );
+  assert.deepEqual(
+    parseVerifyPlatformBundleArgs([
+      '--root', '/tmp/stage', '--platform', 'macos-arm64',
+      '--profile', 'release-audit', '--version', '0.9.2',
+    ]),
+    {
+      root: '/tmp/stage',
+      platform: 'macos-arm64',
+      version: '0.9.2',
+      verificationProfile: 'release-audit',
+    },
+  );
+  assert.throws(
+    () => parseVerifyPlatformBundleArgs([
+      '--root', '/tmp/stage', '--platform', 'macos-arm64',
+      '--profile', 'unknown', '--version', '0.9.2',
+    ]),
+    { code: 'IDENTITY_VERIFICATION_PROFILE_INVALID' },
+  );
+});
 
 test('verification accepts an untouched platform bundle without network access', async (t) => {
   const h = await makeStageHarness(t, 'macos-arm64');
@@ -116,6 +152,124 @@ test('verification rejects a tampered native executable byte', async (t) => {
     verifyPlatformBundle(h.verifyInput),
     { code: 'BUNDLE_HASH_MISMATCH' },
   );
+});
+
+test('development profile skips exact byte identity while release-audit remains strict', async (t) => {
+  const h = await makeStageHarness(t, 'macos-arm64');
+  await stagePlatformBundle(h.input);
+  await h.flipByte('client/index.html');
+
+  await assert.doesNotReject(verifyPlatformBundle({
+    ...h.verifyInput,
+    verificationProfile: 'development',
+  }));
+  await assert.rejects(
+    verifyPlatformBundle(h.verifyInput),
+    { code: 'BUNDLE_HASH_MISMATCH' },
+  );
+});
+
+test('development profile records source drift while release-audit gates it', async (t) => {
+  const h = await makeStageHarness(t, 'macos-arm64');
+  await stagePlatformBundle(h.input);
+  const mismatchedSource = 'f'.repeat(40);
+
+  await assert.doesNotReject(verifyPlatformBundle({
+    ...h.verifyInput,
+    sourceCommitSha: mismatchedSource,
+    verificationProfile: 'development',
+  }));
+  await assert.rejects(
+    verifyPlatformBundle({
+      ...h.verifyInput,
+      sourceCommitSha: mismatchedSource,
+    }),
+    { code: 'BUNDLE_SOURCE_COMMIT_MISMATCH' },
+  );
+});
+
+test('development native verification relaxes identity but preserves compatibility gates', async (t) => {
+  await t.test('source revision drift is accepted', async (subtest) => {
+    const h = await makeNativeStageHarness(subtest);
+    await stagePlatformBundle(h.input);
+    await h.mutateNativeReceipt((receipt) => {
+      receipt.sourceCommit = 'f'.repeat(40);
+      receipt.source.commit = receipt.sourceCommit;
+    });
+
+    await assert.doesNotReject(verifyPlatformBundle({
+      ...h.verifyInput,
+      verificationProfile: 'development',
+    }));
+  });
+
+  await t.test('extra staged native evidence is accepted but scan-root siblings are not', async (subtest) => {
+    const h = await makeNativeStageHarness(subtest);
+    await stagePlatformBundle(h.input);
+    await fs.promises.writeFile(h.nativePath('unexpected.txt'), 'development evidence\n');
+    await rewriteStageManifests(h);
+
+    await assert.doesNotReject(verifyPlatformBundle({
+      ...h.verifyInput,
+      verificationProfile: 'development',
+    }));
+
+    const sibling = path.join(h.outDir, 'artifacts', 'native-plugin', 'unbound.txt');
+    await fs.promises.writeFile(sibling, 'unexpected scan-root sibling\n');
+    await rewriteStageManifests(h);
+    await assert.rejects(
+      verifyPlatformBundle({
+        ...h.verifyInput,
+        verificationProfile: 'development',
+      }),
+      { code: 'BUNDLE_NATIVE_PLUGIN_FILE_SET_MISMATCH' },
+    );
+  });
+
+  for (const fixture of [
+    {
+      name: 'RPC protocol digest',
+      code: 'BUNDLE_NATIVE_PLUGIN_PROTOCOL_MISMATCH',
+      mutate(receipt) {
+        receipt.protocolSchemaSha256 = 'f'.repeat(64);
+      },
+    },
+    {
+      name: 'product version',
+      code: 'BUNDLE_NATIVE_PLUGIN_VERSION_MISMATCH',
+      mutate(receipt) {
+        receipt.productVersion = '0.1.0';
+      },
+    },
+    {
+      name: 'entrypoint',
+      code: 'BUNDLE_NATIVE_PLUGIN_ARTIFACT_INVALID',
+      mutate(receipt) {
+        receipt.artifact.entryPoint = 'WrongNativeMain';
+      },
+    },
+    {
+      name: 'architecture',
+      code: 'BUNDLE_NATIVE_PLUGIN_ARTIFACT_INVALID',
+      mutate(receipt) {
+        receipt.artifact.architecture = 'x86_64';
+      },
+    },
+  ]) {
+    await t.test(`${fixture.name} still blocks`, async (subtest) => {
+      const h = await makeNativeStageHarness(subtest);
+      await stagePlatformBundle(h.input);
+      await h.mutateNativeReceipt(fixture.mutate);
+
+      await assert.rejects(
+        verifyPlatformBundle({
+          ...h.verifyInput,
+          verificationProfile: 'development',
+        }),
+        { code: fixture.code },
+      );
+    });
+  }
 });
 
 test('verification rejects native semantic drift after outer digests are refreshed', async (t) => {
