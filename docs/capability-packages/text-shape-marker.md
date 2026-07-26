@@ -130,6 +130,17 @@ defers the already-budgeted `ae_listProjectItems` composition reacquisition
 until after the last text setter and Undo read. No locator is synthesized, no
 evidence call is removed, and the T5/T6 fences remain 44/30.
 
+A later real-AE T5 sweep reached `ae_createShapeGroup` and reproduced an AE
+internal validation failure: the native helper enumerated an indexed shape
+group child with `AEGP_GetNewStreamRefByIndex`, then tried to reacquire that
+same child with `AEGP_GetNewStreamRefByMatchname`. AE permits the latter only
+on named groups, while vector contents are indexed groups. The timed-out write
+was reconciled against public shape-group state, undone once in AE, and the
+fixture was restored through public reads to an empty project before repair.
+The bounded native fix retains the unique matching `StreamRefOwner` obtained
+by index; it does not change the public shape address, authored form, call
+plan, or 44/30 fences.
+
 #### `ExactTimeInput` and `ExactTime`
 
 ```text

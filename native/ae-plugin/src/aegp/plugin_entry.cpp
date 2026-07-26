@@ -7939,7 +7939,7 @@ class AegpHostApi final : public HostApi {
             || count < 0 || count > 512) {
           return std::nullopt;
         }
-        bool found = false;
+        std::optional<StreamRefOwner> found;
         for (A_long index = 0; index < count; ++index) {
           AEGP_StreamRefH raw = nullptr;
           if (dynamic_suite->AEGP_GetNewStreamRefByIndex(
@@ -7955,21 +7955,11 @@ class AegpHostApi final : public HostApi {
             return std::nullopt;
           }
           if (std::string_view(actual.data()) == match_name) {
-            if (found) return std::nullopt;
-            found = true;
+            if (found.has_value()) return std::nullopt;
+            found.emplace(std::move(child));
           }
         }
-        if (!found) return std::nullopt;
-        // Reacquire by match name after uniqueness verification so ownership
-        // does not depend on a loop-local temporary.
-        AEGP_StreamRefH reacquired = nullptr;
-        if (dynamic_suite->AEGP_GetNewStreamRefByMatchname(
-                plugin_id_, parent, std::string(match_name).c_str(),
-                &reacquired) != A_Err_NONE
-            || reacquired == nullptr) {
-          return std::nullopt;
-        }
-        return StreamRefOwner(stream_suite.get(), reacquired);
+        return found;
       };
       const auto path_data = [&](AEGP_StreamRefH path_stream)
           -> std::optional<std::pair<std::string,
