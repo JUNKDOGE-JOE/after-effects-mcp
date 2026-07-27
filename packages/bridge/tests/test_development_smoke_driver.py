@@ -240,9 +240,7 @@ def _config(tmp_path: Path) -> object:
         fixture_path=fixture,
         recovery_root=tmp_path / "recovery",
         evidence_dir=tmp_path / "evidence",
-        formal_ae_app=Path(
-            "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
-        ),
+        formal_ae_app=tmp_path / "formal-ae.app",
         plugin_url="http://127.0.0.1:11488",
     )
 
@@ -366,9 +364,10 @@ def test_candidate_evidence_is_permanently_false_and_files_are_private(tmp_path)
     event = json.loads(evidence.events_path.read_text().splitlines()[0])
     assert event["candidateRun"] is False
     assert event["candidateEvidence"] is False
-    assert stat.S_IMODE(evidence.root.stat().st_mode) == 0o700
-    assert stat.S_IMODE(evidence.events_path.stat().st_mode) == 0o600
-    assert stat.S_IMODE(evidence.summary_path.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(evidence.root.stat().st_mode) == 0o700
+        assert stat.S_IMODE(evidence.events_path.stat().st_mode) == 0o600
+        assert stat.S_IMODE(evidence.summary_path.stat().st_mode) == 0o600
 
 
 def test_component_disposition_is_closed_disjoint_and_complete(tmp_path):
@@ -401,6 +400,10 @@ def test_driver_starts_under_the_isolated_interpreter_used_by_the_cli():
     assert "core-native-write-undo@1" not in completed.stderr
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="a bare interpreter symlink cannot model a Windows virtualenv entrypoint",
+)
 def test_checkout_verification_preserves_the_virtualenv_entrypoint(tmp_path):
     checkout = tmp_path / "checkout"
     interpreter = checkout / ".venv/bin/python3"
