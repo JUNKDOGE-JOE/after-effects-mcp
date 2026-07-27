@@ -1292,6 +1292,33 @@ test('frame-rate mutation accepts equivalent time rescaling and rejects changed 
     );
 });
 
+test('background mutation compares RGBA channels independently of JSON key order', () => {
+    const vector = cases()['ae.composition.background-color.set'];
+    const contract = packageContracts.getContract(
+        'ae.composition.background-color.set',
+    );
+    const nativeOrdered = structuredClone(vector.value);
+    nativeOrdered.after.backgroundColor = {
+        alpha: vector.arguments.backgroundColor.alpha,
+        blue: vector.arguments.backgroundColor.blue,
+        green: vector.arguments.backgroundColor.green,
+        red: vector.arguments.backgroundColor.red,
+    };
+
+    assert.equal(
+        contract.validValue(nativeOrdered, vector.arguments, HOST, SESSION),
+        true,
+        'native canonical key order must not change RGBA equality',
+    );
+
+    nativeOrdered.after.backgroundColor.red += 1;
+    assert.equal(
+        contract.validValue(nativeOrdered, vector.arguments, HOST, SESSION),
+        false,
+        'a real channel change must still fail verification',
+    );
+});
+
 test('mutation readback tampering is rejected by package-specific validators', () => {
     const vectors = cases();
     const workArea = vectors['ae.composition.work-area.set'];

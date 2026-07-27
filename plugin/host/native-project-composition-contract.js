@@ -408,6 +408,12 @@ function validCompositionSettingArguments(value, fields, validateTarget) {
         && validateTarget(value);
 }
 
+function colorsEqual(left, right) {
+    return ['red', 'green', 'blue', 'alpha'].every(function (channel) {
+        return left[channel] === right[channel];
+    });
+}
+
 function compositionSettingFieldsEqual(field, left, right) {
     if (['duration', 'frameDuration', 'displayStartTime'].includes(field)) {
         return timesEqual(left, right);
@@ -1781,8 +1787,10 @@ const CONTRACTS = Object.freeze({
             return validCompositionSettingValue(
                 value, argumentsValue, hostInstanceId, sessionId,
                 ['backgroundColor'], function (after, input) {
-                    return JSON.stringify(after.backgroundColor)
-                        === JSON.stringify(input.backgroundColor);
+                    return colorsEqual(
+                        after.backgroundColor,
+                        input.backgroundColor,
+                    );
                 },
             );
         },
