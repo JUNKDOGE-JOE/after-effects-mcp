@@ -2443,7 +2443,8 @@ function createNativeAegpClient(options) {
                 && (packageContract.mutating
                     ? (evidence.effect === 'committed'
                         && exactKeys(evidence.undo, ['available', 'verified'])
-                        && evidence.undo.available === true
+                        && evidence.undo.available
+                            === (packageContract.undoAvailable !== false)
                         && evidence.undo.verified === false)
                     : (evidence.effect === 'none' && evidence.undo === undefined));
             const valueValid = packageContract.validValue(

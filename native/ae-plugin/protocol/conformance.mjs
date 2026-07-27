@@ -3,6 +3,7 @@ import crypto from 'node:crypto';
 import {
   COMPOSITION_SETTING_CAPABILITIES,
   COMPOSITION_SETTING_CAPABILITY_IDS,
+  COMPOSITION_SNAPSHOT_CAPABILITIES,
   TEXT_SHAPE_MARKER_CAPABILITIES,
   TEXT_SHAPE_MARKER_CAPABILITY_IDS,
 } from './text_shape_marker_capabilities.generated.mjs';
@@ -2787,7 +2788,11 @@ function packageExample(spec) {
 }
 
 export function projectCompositionDescriptors(schema) {
+  const generated = new Map(
+    COMPOSITION_SNAPSHOT_CAPABILITIES.map((descriptor) => [descriptor.id, descriptor]),
+  );
   return PROJECT_COMPOSITION_SPECS.map((spec) => {
+    if (generated.has(spec.id)) return structuredClone(generated.get(spec.id));
     const registration = INVOKE_REGISTRY.find((candidate) => candidate.id === spec.id);
     const example = packageExample(spec);
     const inputSchema = structuredClone(schema.$defs[`${spec.schema}InputSchemaContract`].const);

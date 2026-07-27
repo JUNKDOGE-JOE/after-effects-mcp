@@ -6225,6 +6225,25 @@ std::string package_descriptor(
     const CapabilitiesSuccess& response,
     const PackageDescriptorSpec& spec,
     std::string_view contract_digest) {
+  const CoreCapabilityContractProjection* projection = nullptr;
+  for (const auto& candidate : kCompositionSnapshotCapabilities) {
+    if (candidate.id == spec.id) {
+      projection = &candidate;
+      break;
+    }
+  }
+  if (projection != nullptr) {
+    if (response.detail == CapabilityDetail::kFull
+        && contract_digest != projection->contract_digest) {
+      invalid_argument(
+          std::string(spec.id)
+          + " contract digest does not match the generated Core projection");
+    }
+    return std::string(
+        response.detail == CapabilityDetail::kFull
+        ? projection->full_json
+        : projection->summary_json);
+  }
   const std::string mutability = spec.mutating ? "mutating" : "read-only";
   const std::string risk = spec.mutating ? "write" : "read";
   const std::string idempotency = spec.mutating ? "idempotency-key" : "idempotent";
@@ -6387,7 +6406,7 @@ std::string composition_settings_descriptor(const CapabilitiesSuccess& response)
   static constexpr std::string_view arguments = R"aemcp({"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"}})aemcp";
   static constexpr std::string_view positive_value = R"aemcp({"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"name":"SYNTHETIC_COMPOSITION","width":1920,"height":1080,"duration":{"value":5,"scale":1,"secondsRational":"5"},"frameDuration":{"value":1,"scale":24,"secondsRational":"1/24"},"frameRate":{"numerator":24,"denominator":1,"rational":"24"},"pixelAspectRatio":{"numerator":1,"denominator":1,"rational":"1"},"workArea":{"start":{"value":0,"scale":1,"secondsRational":"0"},"duration":{"value":5,"scale":1,"secondsRational":"5"}},"displayStartTime":{"value":0,"scale":1,"secondsRational":"0"},"layerCount":0})aemcp";
   if (response.detail == CapabilityDetail::kFull
-      && response.composition_settings_read_contract_digest != "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b") {
+      && response.composition_settings_read_contract_digest != "ceda810aba822f06ac05534ccbcb485a5866f094bb9f682de699009f4bdc4631") {
     invalid_argument("ae.composition.settings.read contract digest does not match the compiled descriptor");
   }
   return package_descriptor(response, {
@@ -6500,7 +6519,7 @@ std::string composition_duplicate_descriptor(const CapabilitiesSuccess& response
       "\"objectId\":\"66666666-6666-4666-8666-666666666666\"",
       "\"objectId\":\"77777777-7777-4777-8777-777777777777\"");
   if (response.detail == CapabilityDetail::kFull
-      && response.composition_duplicate_contract_digest != "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3") {
+      && response.composition_duplicate_contract_digest != "ff929d2ea5b499d279f9e86a5757f0be6b04561dfabd8e1e3e7443616e82f2ab") {
     invalid_argument("ae.composition.duplicate contract digest does not match the compiled descriptor");
   }
   return package_descriptor(response, {

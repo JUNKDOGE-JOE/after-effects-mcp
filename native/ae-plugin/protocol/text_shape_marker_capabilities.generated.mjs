@@ -11536,3 +11536,1380 @@ export const COMPOSITION_SETTING_CAPABILITIES = Object.freeze([
 export const COMPOSITION_SETTING_CAPABILITY_IDS = Object.freeze(
   COMPOSITION_SETTING_CAPABILITIES.map((item) => item.id),
 );
+export const COMPOSITION_SNAPSHOT_CAPABILITIES = Object.freeze([
+  {
+    "detail": "full",
+    "id": "ae.composition.settings.read",
+    "version": 1,
+    "schemaVersion": 1,
+    "summary": "Read exact settings for one After Effects composition.",
+    "risk": "read",
+    "mutability": "read-only",
+    "idempotency": "idempotent",
+    "cancellation": "before-dispatch",
+    "undo": "not-applicable",
+    "sideEffectSummary": "Reads composition settings without changing After Effects state.",
+    "preconditions": [
+      "An After Effects project must be open.",
+      "compositionLocator must come from ae.project.context.read@1 or ae.project.items.list@1."
+    ],
+    "compatibility": {
+      "status": "unverified",
+      "intendedPlatforms": [
+        "macos-arm64",
+        "windows-x64"
+      ]
+    },
+    "inputContractId": "aemcp.contract.ae.composition.settings.read.input.v1",
+    "resultContractId": "aemcp.contract.ae.composition.settings.read.result.v1",
+    "contractDigest": "ceda810aba822f06ac05534ccbcb485a5866f094bb9f682de699009f4bdc4631",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compositionLocator"
+      ],
+      "properties": {
+        "compositionLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "composition"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        }
+      }
+    },
+    "resultSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compositionLocator",
+        "name",
+        "width",
+        "height",
+        "duration",
+        "frameDuration",
+        "frameRate",
+        "pixelAspectRatio",
+        "backgroundColor",
+        "workArea",
+        "displayStartTime",
+        "layerCount"
+      ],
+      "properties": {
+        "compositionLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "composition"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000
+        },
+        "duration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "scale",
+            "secondsRational"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            "secondsRational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+            }
+          }
+        },
+        "frameDuration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "scale",
+            "secondsRational"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            "secondsRational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+            }
+          }
+        },
+        "frameRate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "numerator",
+            "denominator",
+            "rational"
+          ],
+          "properties": {
+            "numerator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "denominator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "rational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+            }
+          }
+        },
+        "pixelAspectRatio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "numerator",
+            "denominator",
+            "rational"
+          ],
+          "properties": {
+            "numerator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "denominator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "rational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+            }
+          }
+        },
+        "backgroundColor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "red",
+            "green",
+            "blue",
+            "alpha"
+          ],
+          "properties": {
+            "red": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "green": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "blue": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "alpha": {
+              "const": 255
+            }
+          }
+        },
+        "workArea": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "start",
+            "duration"
+          ],
+          "properties": {
+            "start": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            },
+            "duration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            }
+          }
+        },
+        "displayStartTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "scale",
+            "secondsRational"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            "secondsRational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+            }
+          }
+        },
+        "layerCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "requirements": [
+      {
+        "id": "aemcp.requirement.native.composition-settings-read",
+        "contractVersion": 1
+      }
+    ],
+    "examples": [
+      {
+        "id": "aemcp-example-composition-settings-read",
+        "kind": "positive",
+        "summary": "Synthetic success demonstrates the typed result contract.",
+        "arguments": {
+          "compositionLocator": {
+            "kind": "composition",
+            "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+            "sessionId": "11111111-1111-4111-8111-111111111111",
+            "projectId": "44444444-4444-4444-8444-444444444444",
+            "generation": 8,
+            "objectId": "77777777-7777-4777-8777-777777777777"
+          }
+        },
+        "expected": {
+          "outcome": "succeeded",
+          "value": {
+            "name": "SYNTHETIC_COMPOSITION",
+            "width": 1920,
+            "height": 1080,
+            "duration": {
+              "value": 240,
+              "scale": 24,
+              "secondsRational": "10"
+            },
+            "frameDuration": {
+              "value": 1,
+              "scale": 24,
+              "secondsRational": "1/24"
+            },
+            "frameRate": {
+              "numerator": 24,
+              "denominator": 1,
+              "rational": "24"
+            },
+            "pixelAspectRatio": {
+              "numerator": 1,
+              "denominator": 1,
+              "rational": "1"
+            },
+            "backgroundColor": {
+              "red": 0,
+              "green": 0,
+              "blue": 0,
+              "alpha": 255
+            },
+            "workArea": {
+              "start": {
+                "value": 0,
+                "scale": 24,
+                "secondsRational": "0"
+              },
+              "duration": {
+                "value": 240,
+                "scale": 24,
+                "secondsRational": "10"
+              }
+            },
+            "displayStartTime": {
+              "value": 0,
+              "scale": 24,
+              "secondsRational": "0"
+            },
+            "layerCount": 0,
+            "compositionLocator": {
+              "kind": "composition",
+              "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+              "sessionId": "11111111-1111-4111-8111-111111111111",
+              "projectId": "44444444-4444-4444-8444-444444444444",
+              "generation": 8,
+              "objectId": "77777777-7777-4777-8777-777777777777"
+            }
+          }
+        }
+      },
+      {
+        "id": "aemcp-example-composition-settings-read-stale",
+        "kind": "negative",
+        "summary": "Synthetic failure exercises the documented recovery path.",
+        "arguments": {
+          "compositionLocator": {
+            "kind": "composition",
+            "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+            "sessionId": "11111111-1111-4111-8111-111111111111",
+            "projectId": "44444444-4444-4444-8444-444444444444",
+            "generation": 8,
+            "objectId": "66666666-6666-4666-8666-666666666666"
+          }
+        },
+        "expected": {
+          "errorCode": "STALE_LOCATOR",
+          "recoveryAction": "refresh-locator"
+        }
+      }
+    ]
+  },
+  {
+    "detail": "full",
+    "id": "ae.composition.duplicate",
+    "version": 1,
+    "schemaVersion": 1,
+    "summary": "Duplicate one After Effects composition with an explicit new name.",
+    "risk": "write",
+    "mutability": "mutating",
+    "idempotency": "idempotency-key",
+    "cancellation": "before-dispatch",
+    "undo": "ae-undo-group",
+    "sideEffectSummary": "Adds one composition and creates one After Effects Undo step.",
+    "preconditions": [
+      "An After Effects project must be open.",
+      "compositionLocator must come from ae.project.context.read@1 or ae.project.items.list@1."
+    ],
+    "compatibility": {
+      "status": "unverified",
+      "intendedPlatforms": [
+        "macos-arm64",
+        "windows-x64"
+      ]
+    },
+    "inputContractId": "aemcp.contract.ae.composition.duplicate.input.v1",
+    "resultContractId": "aemcp.contract.ae.composition.duplicate.result.v1",
+    "contractDigest": "ff929d2ea5b499d279f9e86a5757f0be6b04561dfabd8e1e3e7443616e82f2ab",
+    "inputSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compositionLocator",
+        "newName",
+        "idempotencyKey"
+      ],
+      "properties": {
+        "compositionLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "composition"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "newName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "resultSchema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "sourceCompositionLocator",
+        "newCompositionLocator",
+        "projectItemCountBefore",
+        "projectItemCountAfter",
+        "sourceSettings",
+        "newSettings"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "sourceCompositionLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "composition"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "newCompositionLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "composition"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "projectItemCountBefore": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "projectItemCountAfter": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "sourceSettings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "width",
+            "height",
+            "duration",
+            "frameDuration",
+            "frameRate",
+            "pixelAspectRatio",
+            "backgroundColor",
+            "workArea",
+            "displayStartTime",
+            "layerCount"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30000
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30000
+            },
+            "duration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            },
+            "frameDuration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            },
+            "frameRate": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "numerator",
+                "denominator",
+                "rational"
+              ],
+              "properties": {
+                "numerator": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "denominator": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "rational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+                }
+              }
+            },
+            "pixelAspectRatio": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "numerator",
+                "denominator",
+                "rational"
+              ],
+              "properties": {
+                "numerator": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "denominator": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "rational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+                }
+              }
+            },
+            "backgroundColor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "red",
+                "green",
+                "blue",
+                "alpha"
+              ],
+              "properties": {
+                "red": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "green": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "blue": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "alpha": {
+                  "const": 255
+                }
+              }
+            },
+            "workArea": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "start",
+                "duration"
+              ],
+              "properties": {
+                "start": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "value",
+                    "scale",
+                    "secondsRational"
+                  ],
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    },
+                    "secondsRational": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 28,
+                      "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                    }
+                  }
+                },
+                "duration": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "value",
+                    "scale",
+                    "secondsRational"
+                  ],
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    },
+                    "secondsRational": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 28,
+                      "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                    }
+                  }
+                }
+              }
+            },
+            "displayStartTime": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            },
+            "layerCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        },
+        "newSettings": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "name",
+            "width",
+            "height",
+            "duration",
+            "frameDuration",
+            "frameRate",
+            "pixelAspectRatio",
+            "backgroundColor",
+            "workArea",
+            "displayStartTime",
+            "layerCount"
+          ],
+          "properties": {
+            "name": {
+              "type": "string",
+              "maxLength": 1024
+            },
+            "width": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30000
+            },
+            "height": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30000
+            },
+            "duration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            },
+            "frameDuration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            },
+            "frameRate": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "numerator",
+                "denominator",
+                "rational"
+              ],
+              "properties": {
+                "numerator": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "denominator": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "rational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+                }
+              }
+            },
+            "pixelAspectRatio": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "numerator",
+                "denominator",
+                "rational"
+              ],
+              "properties": {
+                "numerator": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "denominator": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 2147483647
+                },
+                "rational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+                }
+              }
+            },
+            "backgroundColor": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "red",
+                "green",
+                "blue",
+                "alpha"
+              ],
+              "properties": {
+                "red": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "green": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "blue": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 255
+                },
+                "alpha": {
+                  "const": 255
+                }
+              }
+            },
+            "workArea": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "start",
+                "duration"
+              ],
+              "properties": {
+                "start": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "value",
+                    "scale",
+                    "secondsRational"
+                  ],
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    },
+                    "secondsRational": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 28,
+                      "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                    }
+                  }
+                },
+                "duration": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "value",
+                    "scale",
+                    "secondsRational"
+                  ],
+                  "properties": {
+                    "value": {
+                      "type": "integer",
+                      "minimum": -2147483648,
+                      "maximum": 2147483647
+                    },
+                    "scale": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 4294967295
+                    },
+                    "secondsRational": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 28,
+                      "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                    }
+                  }
+                }
+              }
+            },
+            "displayStartTime": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            },
+            "layerCount": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            }
+          }
+        }
+      }
+    },
+    "requirements": [
+      {
+        "id": "aemcp.requirement.native.composition-duplicate",
+        "contractVersion": 1
+      }
+    ],
+    "examples": [
+      {
+        "id": "aemcp-example-composition-duplicate",
+        "kind": "positive",
+        "summary": "Synthetic success demonstrates the typed result contract.",
+        "arguments": {
+          "compositionLocator": {
+            "kind": "composition",
+            "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+            "sessionId": "11111111-1111-4111-8111-111111111111",
+            "projectId": "44444444-4444-4444-8444-444444444444",
+            "generation": 8,
+            "objectId": "77777777-7777-4777-8777-777777777777"
+          },
+          "newName": "SYNTHETIC_COPY",
+          "idempotencyKey": "synthetic-composition-duplicate-0001"
+        },
+        "expected": {
+          "outcome": "succeeded",
+          "value": {
+            "changed": true,
+            "sourceCompositionLocator": {
+              "kind": "composition",
+              "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+              "sessionId": "11111111-1111-4111-8111-111111111111",
+              "projectId": "44444444-4444-4444-8444-444444444444",
+              "generation": 8,
+              "objectId": "77777777-7777-4777-8777-777777777777"
+            },
+            "newCompositionLocator": {
+              "kind": "composition",
+              "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+              "sessionId": "11111111-1111-4111-8111-111111111111",
+              "projectId": "44444444-4444-4444-8444-444444444444",
+              "generation": 8,
+              "objectId": "99999999-9999-4999-8999-999999999999"
+            },
+            "projectItemCountBefore": 1,
+            "projectItemCountAfter": 2,
+            "sourceSettings": {
+              "name": "SYNTHETIC_COMPOSITION",
+              "width": 1920,
+              "height": 1080,
+              "duration": {
+                "value": 240,
+                "scale": 24,
+                "secondsRational": "10"
+              },
+              "frameDuration": {
+                "value": 1,
+                "scale": 24,
+                "secondsRational": "1/24"
+              },
+              "frameRate": {
+                "numerator": 24,
+                "denominator": 1,
+                "rational": "24"
+              },
+              "pixelAspectRatio": {
+                "numerator": 1,
+                "denominator": 1,
+                "rational": "1"
+              },
+              "backgroundColor": {
+                "red": 0,
+                "green": 0,
+                "blue": 0,
+                "alpha": 255
+              },
+              "workArea": {
+                "start": {
+                  "value": 0,
+                  "scale": 24,
+                  "secondsRational": "0"
+                },
+                "duration": {
+                  "value": 240,
+                  "scale": 24,
+                  "secondsRational": "10"
+                }
+              },
+              "displayStartTime": {
+                "value": 0,
+                "scale": 24,
+                "secondsRational": "0"
+              },
+              "layerCount": 0
+            },
+            "newSettings": {
+              "name": "SYNTHETIC_COPY",
+              "width": 1920,
+              "height": 1080,
+              "duration": {
+                "value": 240,
+                "scale": 24,
+                "secondsRational": "10"
+              },
+              "frameDuration": {
+                "value": 1,
+                "scale": 24,
+                "secondsRational": "1/24"
+              },
+              "frameRate": {
+                "numerator": 24,
+                "denominator": 1,
+                "rational": "24"
+              },
+              "pixelAspectRatio": {
+                "numerator": 1,
+                "denominator": 1,
+                "rational": "1"
+              },
+              "backgroundColor": {
+                "red": 0,
+                "green": 0,
+                "blue": 0,
+                "alpha": 255
+              },
+              "workArea": {
+                "start": {
+                  "value": 0,
+                  "scale": 24,
+                  "secondsRational": "0"
+                },
+                "duration": {
+                  "value": 240,
+                  "scale": 24,
+                  "secondsRational": "10"
+                }
+              },
+              "displayStartTime": {
+                "value": 0,
+                "scale": 24,
+                "secondsRational": "0"
+              },
+              "layerCount": 0
+            }
+          }
+        }
+      },
+      {
+        "id": "aemcp-example-composition-duplicate-stale",
+        "kind": "negative",
+        "summary": "Synthetic failure exercises the documented recovery path.",
+        "arguments": {
+          "compositionLocator": {
+            "kind": "composition",
+            "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+            "sessionId": "11111111-1111-4111-8111-111111111111",
+            "projectId": "44444444-4444-4444-8444-444444444444",
+            "generation": 8,
+            "objectId": "66666666-6666-4666-8666-666666666666"
+          },
+          "newName": "SYNTHETIC_COPY",
+          "idempotencyKey": "synthetic-comp-duplicate-0001"
+        },
+        "expected": {
+          "errorCode": "STALE_LOCATOR",
+          "recoveryAction": "refresh-locator"
+        }
+      }
+    ]
+  }
+]);

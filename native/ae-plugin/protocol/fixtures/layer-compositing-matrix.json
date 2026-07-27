@@ -4,7 +4,7 @@
     "runtimeEvidence": false,
     "compatibilityEvidence": false
   },
-  "expectedRegistryDigest": "e2dcfe40c8fc42b48dea3a6306e8fedf51eed17e3d75f934450cce00be9f27db",
+  "expectedRegistryDigest": "2421e07b2ece78beb943c9121203b4d4aecef39d3df9434000cbe792bfe32517",
   "cases": [
     {
       "capabilityId": "ae.layer.compositing.read",

@@ -184,7 +184,7 @@ constexpr std::string_view kProjectContextReadContractDigest =
 constexpr std::string_view kProjectItemMetadataReadContractDigest =
     "b13139c0b2e8073f6606bfbead1e59eb7fea63ec10a164b500e19ff8babd0f69";
 constexpr std::string_view kCompositionSettingsReadContractDigest =
-    "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b";
+    "ceda810aba822f06ac05534ccbcb485a5866f094bb9f682de699009f4bdc4631";
 constexpr std::string_view kCompositionWorkAreaSetContractDigest =
     "a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997";
 constexpr std::string_view kProjectItemNameSetContractDigest =
@@ -194,7 +194,7 @@ constexpr std::string_view kProjectItemCommentSetContractDigest =
 constexpr std::string_view kProjectItemLabelSetContractDigest =
     "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f";
 constexpr std::string_view kCompositionDuplicateContractDigest =
-    "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3";
+    "ff929d2ea5b499d279f9e86a5757f0be6b04561dfabd8e1e3e7443616e82f2ab";
 constexpr std::string_view kLayerDetailsContractDigest =
     "b1b7a5f313bbf72eb6b33ac4a0507f9f925ef6873d53fd07d93d861164ac15d9";
 constexpr std::string_view kLayerNameContractDigest =
