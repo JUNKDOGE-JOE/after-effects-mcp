@@ -126,6 +126,8 @@ VALUE_MODELS = {
     PC.COMPOSITION_DUPLICATE_CAPABILITY_ID: PC.CompositionDuplicateValue,
     PC.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID:
         PC.CompositionSettingsSetValue,
+    PC.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID:
+        PC.CompositionSettingsSetValue,
 }
 
 
@@ -345,6 +347,34 @@ class PackageBackend(N.NativeInvokeBackend):
         )
 
 
+class RescaledFrameRateBackend(PackageBackend):
+    def __init__(self, *, after_duration_value: int = 250) -> None:
+        super().__init__()
+        self.after_duration_value = after_duration_value
+
+    def _value(self, request: N.NativeInvokeRequest) -> dict[str, Any]:
+        if request.capability_id != PC.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID:
+            return super()._value(request)
+        before = _settings("Fixture Comp")
+        after = {
+            **before,
+            "duration": _time(self.after_duration_value, 25),
+            "frameDuration": _time(1, 25),
+            "frameRate": _ratio(25, 1),
+            "workArea": {
+                "start": _time(0, 25),
+                "duration": _time(250, 25),
+            },
+            "displayStartTime": _time(0, 25),
+        }
+        return {
+            "changed": True,
+            "compositionLocator": request.arguments["compositionLocator"],
+            "before": before,
+            "after": after,
+        }
+
+
 def _deadline() -> int:
     return int(time.time() * 1000) + 5_000
 
@@ -429,6 +459,50 @@ async def test_display_start_time_reports_non_undoable_write():
     assert execution.value.after.display_start_time == PC.ExactTime(
         value=-1, scale=24, seconds_rational="-1/24"
     )
+
+
+@pytest.mark.asyncio
+async def test_frame_rate_accepts_equivalent_ae_timebase_rescaling():
+    execution = await PC.invoke_composition_setting_set(
+        RescaledFrameRateBackend(),
+        request_id="package-frame-rate-rescale-1",
+        capability_id=PC.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID,
+        arguments={
+            "compositionLocator": _locator("composition", COMP_OBJECT),
+            "frameRate": {"numerator": 25, "denominator": 1},
+            "idempotencyKey": "frame-rate-rescale-intent-0001",
+        },
+        deadline_unix_ms=_deadline(),
+    )
+
+    assert execution.value.after.frame_rate == PC.ExactRatio(
+        numerator=25, denominator=1, rational="25"
+    )
+    assert execution.value.after.duration == PC.ExactTime(
+        value=250, scale=25, seconds_rational="10"
+    )
+    assert execution.value.after.work_area.duration == PC.ExactTime(
+        value=250, scale=25, seconds_rational="10"
+    )
+
+
+@pytest.mark.asyncio
+async def test_frame_rate_rejects_a_real_untargeted_time_change():
+    with pytest.raises(N.NativeBackendError) as raised:
+        await PC.invoke_composition_setting_set(
+            RescaledFrameRateBackend(after_duration_value=251),
+            request_id="package-frame-rate-duration-drift-1",
+            capability_id=PC.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID,
+            arguments={
+                "compositionLocator": _locator("composition", COMP_OBJECT),
+                "frameRate": {"numerator": 25, "denominator": 1},
+                "idempotencyKey": "frame-rate-duration-drift-intent-0001",
+            },
+            deadline_unix_ms=_deadline(),
+        )
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
 
 
 def test_project_item_metadata_preserves_native_optional_fact_omission():

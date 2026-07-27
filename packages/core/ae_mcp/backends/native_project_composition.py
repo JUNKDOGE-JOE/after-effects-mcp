@@ -393,6 +393,51 @@ def _work_areas_equal(left: WorkArea, right: WorkArea) -> bool:
     return _times_equal(left.start, right.start) and _times_equal(left.duration, right.duration)
 
 
+def _ratios_equal(left: ExactRatio | RatioInput, right: ExactRatio | RatioInput) -> bool:
+    return (
+        left.numerator * right.denominator
+        == right.numerator * left.denominator
+    )
+
+
+def _composition_settings_equal_except(
+    left: CompositionSettingsSnapshot,
+    right: CompositionSettingsSnapshot,
+    excluded_fields: set[str],
+) -> bool:
+    exact_fields = (
+        "name",
+        "width",
+        "height",
+        "background_color",
+        "layer_count",
+    )
+    if any(
+        field not in excluded_fields
+        and getattr(left, field) != getattr(right, field)
+        for field in exact_fields
+    ):
+        return False
+    time_fields = ("duration", "frame_duration", "display_start_time")
+    if any(
+        field not in excluded_fields
+        and not _times_equal(getattr(left, field), getattr(right, field))
+        for field in time_fields
+    ):
+        return False
+    ratio_fields = ("frame_rate", "pixel_aspect_ratio")
+    if any(
+        field not in excluded_fields
+        and not _ratios_equal(getattr(left, field), getattr(right, field))
+        for field in ratio_fields
+    ):
+        return False
+    return (
+        "work_area" in excluded_fields
+        or _work_areas_equal(left.work_area, right.work_area)
+    )
+
+
 class CompositionWorkAreaSetValue(_NativeModel):
     changed: Literal[True]
     composition_locator: NativeLocator
@@ -1651,7 +1696,6 @@ async def invoke_composition_setting_set(
     )
     before_payload = _snapshot_payload(value.before)
     expected_before = _snapshot_payload(before)
-    after_payload = _snapshot_payload(value.after)
     if value.composition_locator != parsed.composition_locator or before_payload != expected_before:
         raise NativeBackendError(
             "POSSIBLY_SIDE_EFFECTING_FAILURE",
@@ -1670,30 +1714,27 @@ async def invoke_composition_setting_set(
         target_fields = {"duration"}
         target_ok = _times_equal(value.after.duration, parsed.duration)
     elif isinstance(parsed, CompositionFrameRateSetArguments):
-        target_fields = {"frameRate", "frameDuration"}
+        target_fields = {"frame_rate", "frame_duration"}
         target_ok = (
-            value.after.frame_rate.numerator * parsed.frame_rate.denominator
-            == parsed.frame_rate.numerator * value.after.frame_rate.denominator
+            _ratios_equal(value.after.frame_rate, parsed.frame_rate)
             and value.after.frame_duration.value * value.after.frame_rate.numerator
             == value.after.frame_duration.scale * value.after.frame_rate.denominator
         )
     elif isinstance(parsed, CompositionPixelAspectRatioSetArguments):
-        target_fields = {"pixelAspectRatio"}
-        target_ok = (
-            value.after.pixel_aspect_ratio.numerator * parsed.pixel_aspect_ratio.denominator
-            == parsed.pixel_aspect_ratio.numerator * value.after.pixel_aspect_ratio.denominator
+        target_fields = {"pixel_aspect_ratio"}
+        target_ok = _ratios_equal(
+            value.after.pixel_aspect_ratio, parsed.pixel_aspect_ratio
         )
     elif isinstance(parsed, CompositionBackgroundColorSetArguments):
-        target_fields = {"backgroundColor"}
+        target_fields = {"background_color"}
         target_ok = value.after.background_color == parsed.background_color
     else:
         assert isinstance(parsed, CompositionDisplayStartTimeSetArguments)
-        target_fields = {"displayStartTime"}
+        target_fields = {"display_start_time"}
         target_ok = _times_equal(value.after.display_start_time, parsed.display_start_time)
-    for field in target_fields:
-        before_payload.pop(field)
-        after_payload.pop(field)
-    if not target_ok or before_payload != after_payload:
+    if not target_ok or not _composition_settings_equal_except(
+        value.before, value.after, target_fields
+    ):
         raise NativeBackendError(
             "POSSIBLY_SIDE_EFFECTING_FAILURE",
             "Native composition setting readback did not satisfy the exact postcondition.",
