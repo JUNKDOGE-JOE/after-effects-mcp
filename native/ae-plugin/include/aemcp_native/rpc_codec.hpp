@@ -558,6 +558,7 @@ struct CapabilitiesSuccess {
   std::string native_media_read_contract_digest;
   std::string native_media_write_contract_digest;
   std::array<bool, 11> include_text_shape_marker{};
+  std::array<bool, 6> include_composition_settings{};
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };

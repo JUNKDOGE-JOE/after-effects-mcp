@@ -147,6 +147,7 @@ using aemcp::native::rpc::encode_layer_property_set_success;
 using aemcp::native::rpc::encode_project_items_success;
 using aemcp::native::rpc::kMaxFrameBytes;
 using aemcp::native::rpc::kCapabilitiesRegistryDigest;
+using aemcp::native::rpc::kCompositionSettingCapabilities;
 using aemcp::native::rpc::kTextShapeMarkerCapabilities;
 
 constexpr std::string_view kSession = "11111111-1111-4111-8111-111111111111";
@@ -2434,6 +2435,7 @@ void response_helpers_are_bounded_and_typed() {
   capabilities.detail = CapabilityDetail::kFull;
   capabilities.query_digest = std::string(kDigest);
   capabilities.capabilities_digest = std::string(kCapabilitiesRegistryDigest);
+  capabilities.include_composition_settings.fill(true);
   capabilities.project_summary_contract_digest = std::string(kContractDigest);
   capabilities.project_bit_depth_read_contract_digest =
       std::string(kProjectBitDepthReadContractDigest);
@@ -2721,6 +2723,17 @@ void response_helpers_are_bounded_and_typed() {
           != std::string::npos
       && capabilities_body.find(
           std::string(kTextShapeMarkerCapabilities.back().contract_digest))
+          != std::string::npos
+      && capabilities_body.find("\"id\":\"ae.composition.dimensions.set\"")
+          != std::string::npos
+      && capabilities_body.find(
+          "\"id\":\"ae.composition.display-start-time.set\"")
+          != std::string::npos
+      && capabilities_body.find(
+          std::string(kCompositionSettingCapabilities.front().contract_digest))
+          != std::string::npos
+      && capabilities_body.find(
+          std::string(kCompositionSettingCapabilities.back().contract_digest))
           != std::string::npos
       && capabilities_body.find("\"temporalDimensionality\"")
           != std::string::npos

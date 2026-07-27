@@ -686,9 +686,9 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 54);
+  assert.equal(nativeCapabilityRegistry(schema).length, 60);
   assert.deepEqual(
-    nativeCapabilityRegistry(schema).slice(-11).map((item) => item.id),
+    nativeCapabilityRegistry(schema).slice(-17, -6).map((item) => item.id),
     [
       'ae.shape.layer.create',
       'ae.shape.groups.list',
@@ -897,7 +897,8 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const layerCompositingCapabilities = layerCompositingDescriptors(schema);
   const keyframeAuthoringCapabilities = keyframeAuthoringDescriptors(schema);
   const nativeMediaCapabilities = nativeMediaDescriptors(schema);
-  const textShapeMarkerCapabilities = nativeCapabilityRegistry(schema).slice(-11);
+  const textShapeMarkerCapabilities = nativeCapabilityRegistry(schema).slice(-17, -6);
+  const compositionSettingCapabilities = nativeCapabilityRegistry(schema).slice(-6);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -987,6 +988,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     ...keyframeAuthoringCapabilities,
     ...nativeMediaCapabilities,
     ...textShapeMarkerCapabilities,
+    ...compositionSettingCapabilities,
   ]), capabilityDigest(nativeCapabilityRegistry(schema)));
   assert.equal(projectCompositionCapabilities.length, 8);
   for (const descriptor of projectCompositionCapabilities) {
@@ -1032,6 +1034,15 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     assert.equal(textShapeMarkerDescriptor.contractDigest, sha256Jcs({
       inputSchema: textShapeMarkerDescriptor.inputSchema,
       resultSchema: textShapeMarkerDescriptor.resultSchema,
+    }));
+  }
+  assert.equal(compositionSettingCapabilities.length, 6);
+  for (const compositionSettingDescriptor of compositionSettingCapabilities) {
+    assert.equal(validateCapabilityDescriptor(compositionSettingDescriptor, schema), true,
+      compositionSettingDescriptor.id);
+    assert.equal(compositionSettingDescriptor.contractDigest, sha256Jcs({
+      inputSchema: compositionSettingDescriptor.inputSchema,
+      resultSchema: compositionSettingDescriptor.resultSchema,
     }));
   }
   for (const mediaDescriptor of nativeMediaCapabilities) {
@@ -1190,7 +1201,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 54);
+  assert.equal(exchange.response.result.items.length, 60);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);

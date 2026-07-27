@@ -4,6 +4,7 @@
 #include "aemcp_native/mac_ipc_server.hpp"
 #include "aemcp_native/rpc_codec.hpp"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -61,6 +62,7 @@ struct NativeRpcRuntimeInfo {
   std::string layer_property_keyframe_delete_contract_digest;
   std::string native_media_read_contract_digest;
   std::string native_media_write_contract_digest;
+  std::array<std::string, 6> composition_setting_contract_digests;
 };
 
 class NativeRpcObserver {

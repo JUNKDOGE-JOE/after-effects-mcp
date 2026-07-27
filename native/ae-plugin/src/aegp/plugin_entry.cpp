@@ -236,17 +236,17 @@ constexpr std::string_view kCompositionSettingsReadContractDigest =
 constexpr std::string_view kCompositionWorkAreaSetContractDigest =
     "a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997";
 constexpr std::string_view kCompositionDimensionsSetContractDigest =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+    "67a37903067278c0fbdf1fb265da232da825ef3250b8b256882de5ee294d5588";
 constexpr std::string_view kCompositionDurationSetContractDigest =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+    "16c8b84de5fb7652a6983b7cb1a0739e46c9b0ca7abd59c904969c45f786b1bc";
 constexpr std::string_view kCompositionFrameRateSetContractDigest =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+    "f8fcdba94a605ab30854ebe3f10584b22c842c4c7cf6cca2a0df5b8bbcb5e454";
 constexpr std::string_view kCompositionPixelAspectRatioSetContractDigest =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+    "1f9b1c3ac10ed58c5ed3ed42ccc55f783238e4d020d0cf5bb812ce54081b18bd";
 constexpr std::string_view kCompositionBackgroundColorSetContractDigest =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+    "e9daa022135fa244fb132e92ec7aa5cbcac4fddade2783bb43ba6ec2e494cf11";
 constexpr std::string_view kCompositionDisplayStartTimeSetContractDigest =
-    "0000000000000000000000000000000000000000000000000000000000000000";
+    "3001a8a910ed8fe425b85157a8ccad48fe1ff4e4966729ba9dba0e108344bb37";
 constexpr std::string_view kProjectItemNameSetContractDigest =
     "b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538";
 constexpr std::string_view kProjectItemCommentSetContractDigest =
@@ -11667,6 +11667,14 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kLayerPropertyKeyframeDeleteContractDigest),
             std::string(kNativeMediaReadContractDigest),
             std::string(kNativeMediaWriteContractDigest),
+            {
+                std::string(kCompositionDimensionsSetContractDigest),
+                std::string(kCompositionDurationSetContractDigest),
+                std::string(kCompositionFrameRateSetContractDigest),
+                std::string(kCompositionPixelAspectRatioSetContractDigest),
+                std::string(kCompositionBackgroundColorSetContractDigest),
+                std::string(kCompositionDisplayStartTimeSetContractDigest),
+            },
         },
         *this,
         idle_signal);

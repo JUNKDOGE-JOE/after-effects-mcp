@@ -1,4 +1,5 @@
 #include "aemcp_native/native_rpc_connection.hpp"
+#include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <poll.h>
 #include <sys/socket.h>
@@ -228,6 +229,21 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       runtime_(std::move(runtime)),
       observer_(observer),
       idle_signal_(idle_signal) {
+  static_assert(
+      std::tuple_size_v<decltype(runtime_.composition_setting_contract_digests)>
+      == rpc::kCompositionSettingCapabilityCount);
+  bool composition_setting_contracts_valid = true;
+  for (std::size_t index = 0;
+      index < runtime_.composition_setting_contract_digests.size();
+      ++index) {
+    const std::string& digest =
+        runtime_.composition_setting_contract_digests[index];
+    composition_setting_contracts_valid =
+        composition_setting_contracts_valid
+        && digest.size() == 64
+        && digest
+            == rpc::kCompositionSettingCapabilities[index].contract_digest;
+  }
   if (runtime_.plugin_version.empty() || runtime_.compiled_sdk_version.empty()
       || runtime_.compiled_sdk_build == 0 || runtime_.host_version.empty()
       || runtime_.host_build == 0 || runtime_.host_instance_id.empty()
@@ -272,7 +288,8 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.layer_property_keyframe_behavior_set_contract_digest.size() != 64
       || runtime_.layer_property_keyframe_delete_contract_digest.size() != 64
       || runtime_.native_media_read_contract_digest.size() != 64
-      || runtime_.native_media_write_contract_digest.size() != 64) {
+      || runtime_.native_media_write_contract_digest.size() != 64
+      || !composition_setting_contracts_valid) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
 }
@@ -1105,6 +1122,14 @@ void NativeRpcConnectionHandler::serve(
               includes(kMarkerSetCapability),
               includes(kMarkerDeleteCapability),
           }};
+          const std::array<bool, 6> include_composition_settings_writes{{
+              includes(kCompositionDimensionsSetCapability),
+              includes(kCompositionDurationSetCapability),
+              includes(kCompositionFrameRateSetCapability),
+              includes(kCompositionPixelAspectRatioSetCapability),
+              includes(kCompositionBackgroundColorSetCapability),
+              includes(kCompositionDisplayStartTimeSetCapability),
+          }};
           const std::size_t selected = static_cast<std::size_t>(include_summary)
               + static_cast<std::size_t>(include_bit_depth_read)
               + static_cast<std::size_t>(include_bit_depth_set)
@@ -1151,6 +1176,10 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(std::count(
                   include_text_shape_marker.begin(),
                   include_text_shape_marker.end(),
+                  true))
+              + static_cast<std::size_t>(std::count(
+                  include_composition_settings_writes.begin(),
+                  include_composition_settings_writes.end(),
                   true));
           if (selected > query.limit) {
             if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
@@ -1257,6 +1286,7 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.native_media_read_contract_digest,
                   runtime_.native_media_write_contract_digest,
                   include_text_shape_marker,
+                  include_composition_settings_writes,
               }))) {
             connected = false;
             break;

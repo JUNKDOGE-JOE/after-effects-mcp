@@ -7685,6 +7685,14 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
         ? descriptor.full_json : descriptor.summary_json;
     needs_comma = true;
   }
+  for (std::size_t index = 0; index < kCompositionSettingCapabilityCount; ++index) {
+    if (!response.include_composition_settings[index]) continue;
+    if (needs_comma) items.push_back(',');
+    const auto& descriptor = kCompositionSettingCapabilities[index];
+    items += response.detail == CapabilityDetail::kFull
+        ? descriptor.full_json : descriptor.summary_json;
+    needs_comma = true;
+  }
   items.push_back(']');
   const bool complete_full_registry = response.detail == CapabilityDetail::kFull
       && response.include_project_summary
@@ -7733,6 +7741,10 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
       && std::all_of(
           response.include_text_shape_marker.begin(),
           response.include_text_shape_marker.end(),
+          [](bool included) { return included; })
+      && std::all_of(
+          response.include_composition_settings.begin(),
+          response.include_composition_settings.end(),
           [](bool included) { return included; });
   if (complete_full_registry) {
     const std::string encoded_digest = sha256_hex(

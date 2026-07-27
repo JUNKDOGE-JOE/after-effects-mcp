@@ -805,6 +805,14 @@ NativeRpcRuntimeInfo runtime() {
       "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9",
       "4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282",
       "a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5",
+      {
+          "67a37903067278c0fbdf1fb265da232da825ef3250b8b256882de5ee294d5588",
+          "16c8b84de5fb7652a6983b7cb1a0739e46c9b0ca7abd59c904969c45f786b1bc",
+          "f8fcdba94a605ab30854ebe3f10584b22c842c4c7cf6cca2a0df5b8bbcb5e454",
+          "1f9b1c3ac10ed58c5ed3ed42ccc55f783238e4d020d0cf5bb812ce54081b18bd",
+          "e9daa022135fa244fb132e92ec7aa5cbcac4fddade2783bb43ba6ec2e494cf11",
+          "3001a8a910ed8fe425b85157a8ccad48fe1ff4e4966729ba9dba0e108344bb37",
+      },
   };
 }
 
@@ -1194,6 +1202,20 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(marker_create_capabilities,
       "aemcp.requirement.native.marker-create",
       "marker-create capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-composition-dimensions",
+      "ae.composition.dimensions.set"));
+  const std::string composition_dimensions_capabilities = read_body(sockets[0]);
+  require_contains(composition_dimensions_capabilities,
+      "\"id\":\"ae.composition.dimensions.set\"",
+      "composition-dimensions capabilities response");
+  require_contains(composition_dimensions_capabilities,
+      "\"contractDigest\":\"67a37903067278c0fbdf1fb265da232da825ef3250b8b256882de5ee294d5588\"",
+      "composition-dimensions capabilities response");
+  require_contains(composition_dimensions_capabilities,
+      "aemcp.requirement.native.composition-dimensions-set",
+      "composition-dimensions capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-bit-depth-read", "ae.project.bit-depth.read"));
@@ -2596,6 +2618,32 @@ void construction_failure_is_contained_by_noexcept_boundary() {
   (void)dispatcher.shutdown();
 }
 
+void composition_setting_contract_mismatch_is_rejected() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcRuntimeInfo invalid_runtime = runtime();
+  invalid_runtime.composition_setting_contract_digests[0] =
+      std::string(64, '0');
+  bool rejected = false;
+  try {
+    NativeRpcConnectionHandler handler(
+        dispatcher,
+        dispatcher_clock,
+        session_clock,
+        std::move(invalid_runtime),
+        observer,
+        idle_signal);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected,
+      "composition-setting contract mismatch did not block native RPC startup");
+  (void)dispatcher.shutdown();
+}
+
 }  // namespace
 
 int main() {
@@ -2606,6 +2654,7 @@ int main() {
   invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced();
   invalid_postcondition_becomes_structured_failure();
   construction_failure_is_contained_by_noexcept_boundary();
+  composition_setting_contract_mismatch_is_rejected();
   std::cout << "native_rpc_connection_test: PASS\n";
   return 0;
 }
