@@ -44,16 +44,18 @@ T5_CALL_JUSTIFICATION = {
     "toolCount": 7,
     "packageWrites": 6,
     "previewReads": 4,
-    "supportAndIndependentReadbacks": 14,
-    "totalCalls": 24,
+    "supportAndIndependentReadbacks": 18,
+    "totalCalls": 28,
     "normalWorkflowCeiling": NORMAL_WORKFLOW_CALL_CEILING,
     "withinDefaultCeiling": True,
     "reason": (
         "The six settings tools require one combined interaction sequence, five "
         "intermediate Undo readbacks, one compensating display-start write, "
-        "fixture address discovery, and four image-bearing preview checkpoints. "
-        "Exactly 24 calls fit under the default 30-call ceiling; no extra "
-        "authorization or invented headroom is used."
+        "fixture address discovery, four image-bearing preview checkpoints, and "
+        "four project-item reads that reacquire locators after previewFrame "
+        "invalidates the native project graph generation. Exactly 28 calls fit "
+        "under the default 30-call ceiling; no extra authorization or invented "
+        "headroom is used."
     ),
     "sources": (BRIEF_SOURCE, T6_POLICY_SOURCE),
 }
@@ -298,6 +300,9 @@ _T5_ROWS = (
           "Verify the complete frozen baseline settings snapshot."),
     _call("baseline-preview", "ae_previewFrame", _PREVIEW, "read",
           "Decode a 1920x1080 PNG containing the baseline background colour."),
+    _call("baseline-preview-reacquire", "ae_listProjectItems",
+          {"offset": 0, "limit": 50}, "read",
+          "Reacquire the composition after preview invalidates native locators."),
     _call("timing-layers", "ae_listCompositionLayers",
           {"composition_locator": "$composition_locator", "offset": 0, "limit": 25},
           "read", "Locate exactly the Timing Witness layer."),
@@ -356,11 +361,17 @@ _T5_ROWS = (
           "Verify every paired interaction and the complete combined state."),
     _call("combined-preview", "ae_previewFrame", _PREVIEW, "read",
           "Decode 1440x1080 PNG containing the changed background."),
+    _call("combined-preview-reacquire", "ae_listProjectItems",
+          {"offset": 0, "limit": 50}, "read",
+          "Reacquire the composition after preview invalidates native locators."),
     _call("background-undo-read", "ae_getCompositionSettings",
           {"composition_locator": "$composition_locator"}, "read",
           "After one real Undo, only background is restored.", undo_of="background-set"),
     _call("background-undo-preview", "ae_previewFrame", _PREVIEW, "read",
           "Decode 1440x1080 PNG containing the baseline background."),
+    _call("background-undo-preview-reacquire", "ae_listProjectItems",
+          {"offset": 0, "limit": 50}, "read",
+          "Reacquire the composition after preview invalidates native locators."),
     _call("pixel-aspect-undo-read", "ae_getCompositionSettings",
           {"composition_locator": "$composition_locator"}, "read",
           "After one real Undo, only pixel aspect is additionally restored.",
@@ -371,6 +382,9 @@ _T5_ROWS = (
           undo_of="dimensions-set"),
     _call("dimensions-undo-preview", "ae_previewFrame", _PREVIEW, "read",
           "Decode 1920x1080 PNG containing the already-restored background."),
+    _call("dimensions-undo-preview-reacquire", "ae_listProjectItems",
+          {"offset": 0, "limit": 50}, "read",
+          "Reacquire the composition after preview invalidates native locators."),
     _call("duration-undo-read", "ae_getCompositionSettings",
           {"composition_locator": "$composition_locator"}, "read",
           "After one real Undo, duration is additionally restored.",
@@ -389,6 +403,7 @@ _T6_KEYS = (
     "composition-reacquire",
     "baseline-settings",
     "baseline-preview",
+    "baseline-preview-reacquire",
     "display-start-set",
     "display-start-read",
     "display-start-compensate",
@@ -396,8 +411,10 @@ _T6_KEYS = (
     "background-set",
     "combined-read",
     "combined-preview",
+    "combined-preview-reacquire",
     "background-undo-read",
     "background-undo-preview",
+    "background-undo-preview-reacquire",
     "dimensions-undo-read",
     "dimensions-undo-preview",
 )
@@ -496,6 +513,14 @@ def _symbolic_addresses(
 _PRODUCERS = {
     "composition_locator": {
         "composition-reacquire": "value.items[Comp Settings Fixture].locator",
+        "baseline-preview-reacquire":
+            "value.items[Comp Settings Fixture].locator",
+        "combined-preview-reacquire":
+            "value.items[Comp Settings Fixture].locator",
+        "background-undo-preview-reacquire":
+            "value.items[Comp Settings Fixture].locator",
+        "dimensions-undo-preview-reacquire":
+            "value.items[Comp Settings Fixture].locator",
         "baseline-settings": "value.compositionLocator",
         "timing-layers": "value.compositionLocator",
         "display-start-set": "value.compositionLocator",
@@ -526,6 +551,27 @@ _PRODUCERS = {
         "timing-keyframes": "value.propertyLocator",
     },
 }
+
+
+def _preview_locator_violations(
+    plan: tuple[PlanCall, ...],
+) -> tuple[str, ...]:
+    """Return consumers that reuse a locator invalidated by previewFrame."""
+
+    stale = set[str]()
+    violations: list[str] = []
+    for row in plan:
+        for field, context_key in _symbolic_addresses(row.arguments):
+            if context_key in stale:
+                violations.append(
+                    f"{row.key}.{field} reuses stale ${context_key}"
+                )
+        for context_key, producers in _PRODUCERS.items():
+            if row.key in producers:
+                stale.discard(context_key)
+        if row.tool == "ae_previewFrame":
+            stale.update(_PRODUCERS)
+    return tuple(violations)
 
 
 def _derive_address_links(
@@ -580,7 +626,9 @@ SPEC = PackageSpec(
         for public_tool, expectation in CONTRACTS.items()
     ),
     support_tools=(
-        ToolCase("items", "ae_listProjectItems", "ae.project.items.list", "read"),
+        ToolCase(
+            "items", "ae_listProjectItems", "ae.project.items.list", "read", 5,
+        ),
         ToolCase(
             "settings", "ae_getCompositionSettings",
             project_composition.COMPOSITION_SETTINGS_READ_CAPABILITY_ID, "read", 8,
@@ -600,18 +648,23 @@ SPEC = PackageSpec(
     ),
 )
 
-require(len(T5_CALL_PLAN) == 24, "Composition Settings T5 must be exactly 24 calls")
-require(len(T6_CALL_PLAN) == 14, "Composition Settings T6 must be exactly 14 calls")
+require(len(T5_CALL_PLAN) == 28, "Composition Settings T5 must be exactly 28 calls")
+require(len(T6_CALL_PLAN) == 17, "Composition Settings T6 must be exactly 17 calls")
 require(T5_CALL_PLAN != T6_CALL_PLAN, "T5 and T6 plans must be distinct")
 require(
-    [row.ordinal for row in T5_CALL_PLAN] == list(range(1, 25))
-    and [row.ordinal for row in T6_CALL_PLAN] == list(range(1, 15)),
+    [row.ordinal for row in T5_CALL_PLAN] == list(range(1, 29))
+    and [row.ordinal for row in T6_CALL_PLAN] == list(range(1, 18)),
     "Composition Settings plan ordinals are not contiguous",
 )
 require(
     T5_CALL_JUSTIFICATION["withinDefaultCeiling"] is True
     and len(T5_CALL_PLAN) <= NORMAL_WORKFLOW_CALL_CEILING,
     "T5 must fit under the default workflow ceiling",
+)
+require(
+    not _preview_locator_violations(T5_CALL_PLAN)
+    and not _preview_locator_violations(T6_CALL_PLAN),
+    "T5/T6 must reacquire every locator consumed after previewFrame",
 )
 require(
     all(

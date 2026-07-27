@@ -294,7 +294,7 @@ class CompositionSettingsPackage:
         if key.endswith("-preview"):
             return
         value = native_value(payload)
-        if key == "composition-reacquire":
+        if key == "composition-reacquire" or key.endswith("-preview-reacquire"):
             item = self._named(value.get("items"), self.fixture_name, "composition")
             self.context["composition_locator"] = _locator(
                 item.get("locator"), "composition"

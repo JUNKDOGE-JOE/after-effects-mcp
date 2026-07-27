@@ -115,8 +115,13 @@ reciprocal frame-duration evidence. A still PNG requested in decimal seconds
 cannot independently prove the composition's rational frame rate, so the
 visual evidence must not overclaim that it can.
 
-These four calls raise the future T5/T6 public-call budget from 20 to 24. The
-acceptance driver remains a separate next task and is not implemented here.
+These four calls raise the visual-check portion of the public-call budget from
+20 to 24. Real-AE T5 then proved that each `ae_previewFrame` call advances the
+native project graph generation: a locator acquired before the preview is stale
+after it. The executable plan therefore follows every preview that has a later
+locator consumer with a fresh `ae_listProjectItems` call. T5 uses four such
+reacquisitions for 28 calls total; selective T6 needs three because its final
+preview has no later locator consumer, for 17 calls total.
 
 ### Named risk dispositions
 
@@ -1001,9 +1006,14 @@ IDs.
   formal AE, reacquires every locator, re-verifies the baseline and resumes
   only from the last verified case. This is the direct guard for #157's
   **restart-state surprise**.
-- `test_comp_settings_runner_call_budget_is_twenty_four`: counts the original
-  20 support/package/restore/Undo-readback calls plus the four amended
-  `ae_previewFrame` calls and fails at call 25.
+- `test_comp_settings_runner_call_budget_is_twenty_eight`: counts the original
+  20 support/package/restore/Undo-readback calls, four amended
+  `ae_previewFrame` calls and four required post-preview locator reacquisitions;
+  it remains within the default 30-call ceiling and fails before call 29.
+- `test_preview_invalidates_locators_until_project_items_reacquires_them`:
+  dynamically walks both plans and fails if any locator consumer follows a
+  preview without the relevant locator first being produced by a fresh public
+  read. Its mutation case removes one reacquisition and must fail.
 - `test_comp_settings_fixture_reset_is_single_slot`: proves no Save As,
   deterministic same-path rebuild, reconciliation before reset and final
   lifecycle counts.
@@ -1033,9 +1043,9 @@ public request
 ```
 
 T5 and T6 use **distinct plans**, per section 8 of
-`docs/CAPABILITY_PACKAGE_WORKFLOW.md`. T5 is the full candidate acceptance at 24
+`docs/CAPABILITY_PACKAGE_WORKFLOW.md`. T5 is the full candidate acceptance at 28
 public calls — within the default 30-call ceiling, so this brief claims no
-authorization to exceed it. T6 is the clean-`main` replay at 14 calls, skipping
+authorization to exceed it. T6 is the clean-`main` replay at 17 calls, skipping
 `ae_setCompositionFrameRate`, `ae_setCompositionDuration` and
 `ae_setCompositionPixelAspectRatio`, each replayed by
 `ae_setCompositionDimensions`, and each recording the grounds that permit the
@@ -1053,40 +1063,51 @@ placed at the checkpoints defined by the #177 amendment above:
 | ---: | --- | --- |
 | 1 | `ae_listProjectItems` | fresh composition locator |
 | 2 | `ae_getCompositionSettings` | full deterministic baseline |
-| 3 | `ae_listCompositionLayers` | fresh timing-witness layer locator |
-| 4 | `ae_listLayerProperties` | locate Transform group |
-| 5 | `ae_listLayerProperties` | locate Opacity property |
-| 6 | `ae_setCompositionDisplayStartTime` | set -1/1; non-Undoable write, no AE Undo group, `undo.available=false`, `undo.verified=false` |
-| 7 | `ae_getCompositionSettings` | display origin changed, other settings stable |
-| 8 | `ae_listLayerPropertyKeyframes` | keyframe times remain 1/1, 4/1, 7/1 |
-| 9 | `ae_setCompositionDisplayStartTime` | labelled `compensating-public-write` restore to 0/1 with new key; independently verify full postcondition |
-| 10 | `ae_setCompositionFrameRate` | 24/1 -> 25/1 |
-| 11 | `ae_setCompositionDuration` | 10/1 -> 8/1 after new frame duration |
-| 12 | `ae_setCompositionDimensions` | 1920x1080 -> 1440x1080 |
-| 13 | `ae_setCompositionPixelAspectRatio` | 1/1 -> 4/3 |
-| 14 | `ae_setCompositionBackgroundColor` | `(16,32,48,255)` -> `(64,96,128,255)` |
-| 15 | `ae_getCompositionSettings` | verify all paired/combined interactions |
-| 16 | `ae_getCompositionSettings` | after real Undo background |
-| 17 | `ae_getCompositionSettings` | after real Undo pixel aspect |
-| 18 | `ae_getCompositionSettings` | after real Undo dimensions |
-| 19 | `ae_getCompositionSettings` | after real Undo duration |
-| 20 | `ae_getCompositionSettings` | after real Undo frame rate; baseline restored |
+| 3 | `ae_previewFrame` | baseline 1920x1080/background visual proof |
+| 4 | `ae_listProjectItems` | reacquire after preview invalidates native locators |
+| 5 | `ae_listCompositionLayers` | fresh timing-witness layer locator |
+| 6 | `ae_listLayerProperties` | locate Transform group |
+| 7 | `ae_listLayerProperties` | locate Opacity property |
+| 8 | `ae_setCompositionDisplayStartTime` | set -1/1; non-Undoable write, no AE Undo group, `undo.available=false`, `undo.verified=false` |
+| 9 | `ae_getCompositionSettings` | display origin changed, other settings stable |
+| 10 | `ae_listLayerPropertyKeyframes` | keyframe times remain 1/1, 4/1, 7/1 |
+| 11 | `ae_setCompositionDisplayStartTime` | labelled `compensating-public-write` restore to 0/1 with new key; independently verify full postcondition |
+| 12 | `ae_setCompositionFrameRate` | 24/1 -> 25/1 |
+| 13 | `ae_setCompositionDuration` | 10/1 -> 8/1 after new frame duration |
+| 14 | `ae_setCompositionDimensions` | 1920x1080 -> 1440x1080 |
+| 15 | `ae_setCompositionPixelAspectRatio` | 1/1 -> 4/3 |
+| 16 | `ae_setCompositionBackgroundColor` | `(16,32,48,255)` -> `(64,96,128,255)` |
+| 17 | `ae_getCompositionSettings` | verify all paired/combined interactions |
+| 18 | `ae_previewFrame` | changed 1440x1080/background visual proof |
+| 19 | `ae_listProjectItems` | reacquire after preview invalidates native locators |
+| 20 | `ae_getCompositionSettings` | after real Undo background |
+| 21 | `ae_previewFrame` | restored-background visual proof |
+| 22 | `ae_listProjectItems` | reacquire after preview invalidates native locators |
+| 23 | `ae_getCompositionSettings` | after real Undo pixel aspect |
+| 24 | `ae_getCompositionSettings` | after real Undo dimensions |
+| 25 | `ae_previewFrame` | restored-dimensions visual proof |
+| 26 | `ae_listProjectItems` | reacquire after preview invalidates native locators |
+| 27 | `ae_getCompositionSettings` | after real Undo duration |
+| 28 | `ae_getCompositionSettings` | after real Undo frame rate; baseline restored |
 
-Between calls 15-20, the runner performs the five real AE Undo UI actions
+Between calls 17-28, the runner performs the five real AE Undo UI actions
 described in DONE-WHEN 4; GUI actions are evidence events, not public MCP calls.
-Call 20 must equal call 2 in every settings field, and the display-start
-compensation at call 9 must already have restored that field. Each write's
-embedded full native readback proves its immediate result; calls 15-20 provide
+Call 28 must equal call 2 in every settings field, and the display-start
+compensation at call 11 must already have restored that field. Each write's
+embedded full native readback proves its immediate result; calls 17-28 provide
 independent public state verification and exact intermediate Undo states.
 
-T5 and T6 budgets are **24 public calls each, hard stop before call 25**:
-the unchanged 20-call settings sequence above plus four image-bearing
-`ae_previewFrame` checks.
+T5 is **28 public calls, hard stop before call 29**: the original 20-call
+settings sequence, four image-bearing `ae_previewFrame` checks, and four
+post-preview locator reacquisitions. T6 is an independent **17-call** plan:
+its original 14 selective-replay calls plus three reacquisitions after the
+previews that still have later locator consumers. Its final preview remains the
+terminal call and needs no otherwise-unused reacquisition.
 Preflight produces no candidate evidence. Planned T4 count is zero because
 CompSuite12, locator reacquisition, main-thread dispatch, setter invocation,
 readback, audit and Undo-group machinery are already hardware-proven. T6
 rebuilds/reinstalls clean `main`, reopens the deterministic fixture from formal
-AE, reacquires locators and executes the same script rather than reusing the
+AE, reacquires locators and executes its selective plan rather than reusing the
 T5 installation.
 
 Per tool, acceptance requires:

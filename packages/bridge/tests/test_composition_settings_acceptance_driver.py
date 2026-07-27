@@ -62,13 +62,13 @@ def _locator(kind: str, object_id: str = COMP) -> dict:
     }
 
 
-def test_two_plans_have_exact_distinct_call_counts_and_t5_needs_no_exception():
-    assert [row.ordinal for row in spec.T5_CALL_PLAN] == list(range(1, 25))
-    assert [row.ordinal for row in spec.T6_CALL_PLAN] == list(range(1, 15))
+def test_comp_settings_runner_call_budget_is_twenty_eight():
+    assert [row.ordinal for row in spec.T5_CALL_PLAN] == list(range(1, 29))
+    assert [row.ordinal for row in spec.T6_CALL_PLAN] == list(range(1, 18))
     assert spec.T5_CALL_PLAN != spec.T6_CALL_PLAN
-    assert spec.SPEC.t5_target_calls == spec.SPEC.t5_hard_limit == 24
-    assert spec.SPEC.t6_target_calls == spec.SPEC.t6_hard_limit == 14
-    assert spec.T5_CALL_JUSTIFICATION["totalCalls"] == 24
+    assert spec.SPEC.t5_target_calls == spec.SPEC.t5_hard_limit == 28
+    assert spec.SPEC.t6_target_calls == spec.SPEC.t6_hard_limit == 17
+    assert spec.T5_CALL_JUSTIFICATION["totalCalls"] == 28
     assert spec.T5_CALL_JUSTIFICATION["toolCount"] == 7
     assert spec.T5_CALL_JUSTIFICATION["normalWorkflowCeiling"] == 30
     assert spec.T5_CALL_JUSTIFICATION["withinDefaultCeiling"] is True
@@ -163,6 +163,17 @@ def test_both_plans_chain_every_consumed_address_to_an_earlier_public_call():
         )
 
 
+def test_preview_invalidates_locators_until_project_items_reacquires_them():
+    for plan in (spec.T5_CALL_PLAN, spec.T6_CALL_PLAN):
+        assert spec._preview_locator_violations(plan) == ()
+
+    mutated = tuple(
+        row for row in spec.T5_CALL_PLAN
+        if row.key != "baseline-preview-reacquire"
+    )
+    assert spec._preview_locator_violations(mutated)
+
+
 def test_fixture_recipe_is_single_slot_reopened_in_formal_ae_and_archived():
     recipe = " ".join(spec.FIXTURE_RECIPE)
     assert "exactly one ephemeral-validation" in recipe
@@ -238,6 +249,30 @@ def test_operation_keys_are_fresh_per_run_and_reconciliation_reuses_original():
     assert record["action"] == "read-state-and-audit-without-redispatch"
     assert "DUPLICATE_REQUEST" in record["duplicateContract"]
     assert "replayed=true is not assumed" in record["duplicateContract"]
+
+
+def test_driver_captures_every_preview_reacquired_composition_locator():
+    package = driver.CompositionSettingsPackage(
+        SimpleNamespace(mode="t5"), fixture_name="Comp Settings Fixture"
+    )
+    fresh = {
+        **_locator("composition"),
+        "projectId": "55555555-5555-4555-8555-555555555555",
+        "generation": 2,
+        "objectId": "66666666-6666-4666-8666-666666666666",
+    }
+    package._capture(
+        "baseline-preview-reacquire",
+        {
+            "value": {
+                "items": [{
+                    "name": "Comp Settings Fixture",
+                    "locator": fresh,
+                }]
+            }
+        },
+    )
+    assert package.context["composition_locator"] == fresh
 
 
 class _Evidence:
