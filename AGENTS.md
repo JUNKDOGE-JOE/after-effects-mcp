@@ -14,10 +14,10 @@ These rules apply to human developers and coding agents working in this reposito
 - Do not implement issues by issue number or creation order. Maintain P0/P1/P2/P3 priorities based on dependency and user value.
 - Work on one dependent P0 capability package at a time. A capability package normally groups about 5-15 tightly related tools that share an AEGP SDK suite, dispatcher, fixture, Undo model, or user scenario. Small infrastructure changes and isolated fixes may remain single-Issue packages when they do not belong to a tool family.
 - Prefer 6-10 tools for a normal capability package. Before implementation, freeze a short package brief containing any optional child Issues, public MCP schemas, capability/interaction matrix, native novelty, disposable fixture, Undo model, executable acceptance path, and explicit non-goals. Do not split the frozen package into one branch or PR per simple tool.
-- A capability package may retain multiple child Issues and acceptance checklists, but it uses one branch/worktree, one PR, one concentrated review, one exact-candidate hardware acceptance run, and one clean-`main` hardware revalidation. Close each child Issue only when its own acceptance result passed in the package evidence.
-- The package closure loop is: design the public MCP schemas and interaction matrix -> implement with incremental unit/contract/compile tests -> independent diff review -> CI -> exact-build package hardware validation -> merge -> rebuild/reinstall from `main` -> package hardware revalidation -> close accepted child Issues and update their parent epic.
+- A capability package may retain multiple child Issues and acceptance checklists, but it uses one branch/worktree, one PR, one concentrated review, and one bounded HDEV real-AE run. HDEV is development evidence only. Close each child Issue only when its own development acceptance result passed; the target release milestone separately aggregates changed capabilities for packaged acceptance.
+- The ordinary package closure loop is: design the public MCP schemas and interaction matrix -> implement with incremental unit/contract/compile tests -> independent diff review -> T3/CI -> bounded HDEV real-AE validation -> merge -> publish `development-verified` evidence -> close accepted implementation Issues and update the target release milestone. At release freeze, build one packaged candidate, run the aggregate changed-capability T5 matrix, then run packaged clean-install/upgrade/rollback T6.
 - Parallel work is allowed only when it is genuinely independent and cannot cause mixed builds, shared-fixture conflicts, or premature assumptions about an unmerged interface.
-- The WIP limit is one dependent native capability package. That package may use at most three coordinated implementation tracks (native, Core/bridge/public MCP, and tests/fixture), but they share one schema freeze, one branch/worktree, and one acceptance matrix. Do not begin the next dependent package before the current package passes clean-`main` revalidation.
+- The WIP limit is one dependent native capability package. That package may use at most three coordinated implementation tracks (native, Core/bridge/public MCP, and tests/fixture), but they share one schema freeze, one branch/worktree, and one acceptance matrix. Do not begin the next dependent package before the current package is merged with required HDEV evidence and reaches the product-direction checkpoint.
 - Treat schedule targets as scope alarms, not permission to weaken evidence: package framing should normally take 2-4 hours, implementation 1-2.5 working days, concentrated review and CI 0.5-1 day, and the prepared hardware session 60-90 minutes excluding deterministic build time. When a target is exceeded, cut unrelated scope or repair the environment instead of accumulating more infrastructure inside the package.
 - Workflow infrastructure must remove a measured repeated cost from the active acceptance path and is timeboxed to one working day unless the user explicitly promotes it. Otherwise record it as a follow-up and continue the capability package.
 
@@ -42,21 +42,21 @@ public MCP tool
 
 ## 4. Layer hardware validation by native novelty and capability package
 
-- **Local development trust model:** on the maintainer's single-user development Mac, files just built, copied, or atomically installed by the active agent-owned workflow are trusted by default. Routine development, AE restart, T4, T5, and T6 must not rehash the complete runtime tree or require Core, CEP, native, protocol, runner, and evidence to share one full repository SHA. Use the install receipt, canonical path, component version, file size, and modification time as inexpensive change signals; escalate to content hashing only after an observed inconsistency or for an explicitly requested release/security audit. Hash verification for external downloads such as the Adobe SDK archive remains allowed.
+- **Local development trust model:** on the maintainer's single-user development Mac, files just built, copied, or atomically installed by the active agent-owned workflow are trusted by default. Routine development, AE restart, T4, and HDEV must not rehash the complete runtime tree or require Core, CEP, native, protocol, runner, and evidence to share one full repository SHA. Use the install receipt, canonical path, component version, file size, and modification time as inexpensive change signals; escalate to content hashing only after an observed inconsistency. Packaged release-candidate T5/T6 use the strict release-audit identity boundary, including exact source/artifact identity, complete payload verification, RuntimeManager manifest alignment, and the existing release gates. Hash verification for external downloads such as the Adobe SDK archive remains allowed.
 - The local development MCP path must not require a connection code, fingerprint confirmation, or pairing ceremony. Same-user local IPC and filesystem permissions are sufficient during development. Authentication, pairing, signing, and hostile same-UID process defenses belong to a later release/remote/multi-user security milestone unless a concrete exploit is reproduced on the active path.
 - When a package introduces a new AEGP SDK suite, object-lifecycle rule, main-thread mechanism, or other unverified native primitive, run one narrow intermediate hardware smoke as soon as that primitive is testable. Once the mechanism is proven, do not redeploy for each simple tool built on it.
-- Complete the package with one prepared real-machine run through the public MCP surface that exercises every included tool and their important interactions in the same disposable AE fixture. Batch the structured response, AE state, native provenance, audit, recovery, and write-tool Undo evidence.
+- Complete the package with one prepared HDEV run through the public MCP surface that exercises every new native primitive and one justified representative per shared adapter, locator, and Undo family in the same disposable AE fixture. Batch the structured response, AE state, native provenance, audit, recovery, and representative write-tool Undo evidence.
 - Any package whose acceptance depends on AE loading, lifecycle, GUI state, main-thread behavior, CEP/native communication, or project mutation still requires this package-level real-machine validation before merge.
 - Automated tests and CI never substitute for hardware validation.
-- Record the candidate source revision and installed component receipts for traceability, but do not make full-repository SHA equality a runtime or acceptance gate. Abort only on an observed incompatible protocol/component version, wrong canonical path, failed load, or contradictory AE result.
-- After merge, repeat the public MCP package smoke from a clean `main` build. It must touch every included public tool, cover each accepted optional child Issue, and verify real Undo for every included write. Do not rely on the pre-merge installation.
+- Record each development component's source revision and installed receipt for traceability, but do not make full-repository SHA equality an HDEV gate. Abort on an observed incompatible protocol/component version, wrong canonical path, failed load, or contradictory AE result. The later packaged release boundary retains exact identity checks.
+- After merge, add the package's changed-capability matrix and HDEV disposition to the target release milestone. Do not relabel or reuse HDEV as packaged T5/T6 evidence.
 - Use a dedicated disposable AE project. Never use the user's production project for write testing.
 - Prepare GUI access, permissions, no-sleep state, fixture path, canonical plugin path, and log locations in one preflight instead of discovering them through repeated user interruptions.
-- Before T4 or T5, complete a zero-evidence hardware preflight that proves the selected runtime/current pointer, stable launcher, CEP, native plug-in, and protocol metadata can communicate; the formal AE absolute path, GUI, fixture runner, and log directories are usable; and the runner can create or reset, save, reopen from inside AE, and archive its single disposable fixture. The preflight uses lightweight receipts/metadata and does not perform a full runtime hash walk or a pairing ceremony. A preflight creates no candidate acceptance evidence and does not count as a T4/T5 hardware run.
-- A failure before the first public MCP tool call is a T0-T2 environment or runner failure, not a failed candidate hardware acceptance. Repair and falsify it at the lowest applicable tier before returning to T4/T5.
-- After concentrated review has no unresolved blocker and all source, generated bundles, documentation, license metadata, fixtures, and evidence schemas are committed, designate that source revision/build as the candidate freeze. Run T3 and required CI once; except for the single narrow smoke allowed for a genuinely new native primitive, do not begin candidate hardware acceptance until they pass.
+- Before T4, HDEV, or packaged T5, complete a zero-evidence hardware preflight that proves the selected Core/CEP/native component set and protocol metadata can communicate; the formal AE absolute path, GUI, fixture runner, and log directories are usable; and the runner can create or reset, save, reopen from inside AE, and archive its single disposable fixture. Development preflight uses lightweight receipts/metadata and does not perform a full runtime hash walk or a pairing ceremony. It creates no candidate acceptance evidence.
+- A failure before the first public MCP tool call is a T0-T2 environment or runner failure, not a failed HDEV or packaged candidate acceptance. Repair and falsify it at the lowest applicable tier before returning to hardware.
+- After concentrated review has no unresolved blocker and all source, generated bundles, documentation, fixtures, and evidence schemas are committed, run T3 and required CI once before HDEV. A packaged candidate freeze is a later release-milestone boundary covering all changed capabilities since the previous release.
 - After candidate freeze, create a replacement only for a reproduced acceptance blocker or a defect that demonstrably invalidates the package evidence. Batch all known blockers into one fix set, rerun only the affected lower test tiers, perform a focused re-review, and then create one replacement candidate. The replacement must pass required CI before any T5 acceptance evidence is collected.
-- The normal target is one candidate and one full CI run. At most one replacement candidate is allowed for a reproduced blocker; that replacement gets its own required CI run, while already-passing unaffected local tiers need not be repeated. The normal hardware target remains one successful candidate session and one clean-`main` session. Exceeding these targets must be explained in the completion evidence; it is not a reason to weaken a gate.
+- The ordinary PR target is one T3/CI run and one successful HDEV session. A packaged release normally uses one candidate T5 session and one T6 clean-install/upgrade/rollback session. Exceeding either budget must be explained in the applicable completion evidence; it is not a reason to weaken a gate.
 
 ## 5. Keep review feedback from expanding P0
 
@@ -78,18 +78,19 @@ Use the lowest test tier that can falsify the current change, then escalate at p
 - **T0, every edit:** formatting, syntax, lint, or a single focused unit test; target seconds.
 - **T1, each tool or adapter:** schema, codec, suite adapter, structured-error, and postcondition contract tests; target 1-5 minutes.
 - **T2, package integration:** affected native compile tests, Core/CEP integration, shared fixture, interaction corpus, and generated-file checks; target 10-30 minutes.
-- **T3, frozen candidate:** the relevant full repository regression plus required CI; run once for each candidate or approved replacement after concentrated or focused replacement review.
+- **T3, reviewed source or release freeze:** the relevant full repository regression plus required CI; run once for the ordinary reviewed source and once for each packaged release candidate or approved replacement.
 - **T4, optional native-novelty smoke:** one narrow real-AE check only when the package introduces an unverified suite, object lifecycle, or main-thread mechanism.
-- **T5, candidate acceptance:** one public-MCP package run on real AE using the recorded candidate build receipts.
-- **T6, clean-main acceptance:** one rebuild/reinstall and package smoke from the merge commit that touches every included public tool, covers each accepted optional child Issue, and verifies real Undo for every included write.
+- **HDEV, ordinary development real-AE smoke:** reuse the current compatible development installation, exercise every new native primitive and one justified representative per shared adapter/locator/Undo family, and always emit `validationProfile=development`, `candidateRun=false`, and `candidateEvidence=false`.
+- **T5, packaged release-candidate acceptance:** run the complete changed-capability matrix accumulated since the previous release against the frozen release-audit artifact.
+- **T6, packaged release revalidation:** prove clean install, upgrade, rollback, and the release artifact boundary. It is not a per-PR clean-`main` replay.
 
-Do not rerun T3, T5, or T6 after every small fix. A failed higher tier should drive the smallest reproducing lower-tier test first; return to the higher tier only after the fix set is complete.
+Do not rerun T3, HDEV, T5, or T6 after every small fix. A failed higher tier should drive the smallest reproducing lower-tier test first; return to the higher tier only after the fix set is complete.
 
-For an agent-owned installed generation on the single-user development machine, reuse is the default. Check only the canonical pointer, install receipt, component version, size, and modification time on routine starts. Do not perform a full payload hash walk at T4, T5, T6, or AE restart. Escalate to selective/content verification only when those inexpensive signals change, AE reports an incompatible component/protocol, an actual result is contradictory, or a release/security audit explicitly requests it.
+For an agent-owned development installation on the single-user machine, reuse is the default. Check only the canonical path, install receipt, component version, size, and modification time on routine starts. Do not perform a full payload hash walk at T4, HDEV, or AE restart. Escalate to selective/content verification when those inexpensive signals change, AE reports an incompatible component/protocol, or an actual result is contradictory. Packaged T5/T6 deliberately cross the strict release-audit boundary.
 
 ### 5.2 Batch independent acceptance defects before repair
 
-During a diagnostic T4, or after a T5/T6 run has already failed, do not stop and modify source after the first ordinary assertion failure. Continue every independent case whose evidence remains trustworthy and whose fixture state is either unchanged or restored, then repair the collected blockers as one fix set.
+During a diagnostic T4, or after an HDEV/T5/T6 run has already failed, do not stop and modify source after the first ordinary assertion failure. Continue every independent case whose evidence remains trustworthy and whose fixture state is either unchanged or restored, then repair the collected blockers as one fix set.
 
 - The runner must record each case as `PASS`, `FAIL`, `BLOCKED`, or `INDETERMINATE`, together with the failing layer, side-effect status, state-reconciliation result, dependency impact, and evidence identifiers.
 - Continue after a failure only when it is read-only or definitively `not-started`, or when any completed write has been reconciled against AE state and audit evidence and the fixture baseline has been verified as restored.
@@ -135,7 +136,7 @@ Before creating, retaining, moving, or archiving an `.aep`, determine and record
 5. whether the user explicitly requested persistent retention.
 
 - If long-term value cannot be demonstrated, do not retain the project permanently under an Issue or candidate directory; use a dated recovery archive with a cleanup condition.
-- One T5/T6 hardware session may have only one active fixture. Retry by resetting or deterministically rebuilding that fixture; do not accumulate projects through repeated Save As operations.
+- One HDEV/T5/T6 hardware session may have only one active fixture. Retry by resetting or deterministically rebuilding that fixture; do not accumulate projects through repeated Save As operations.
 - If an agent-created `ephemeral-validation` fixture fails before the first public tool call, has no AE mutation, and has no unresolved diagnostic value, the runner must move it to recovery and clear the active slot before exit. Once any public call or possible write dispatch occurred, reconcile AE state and audit evidence before resetting, archiving, or retrying.
 - Issue and evidence directories should normally store the fixture ID, lifecycle, owner, rebuild recipe, source revision/build receipt, public MCP request/response, before/after state, audit, Undo, and result—not a complete `.aep`.
 - When a candidate is superseded, archive its ephemeral project by default. An old build identifier is traceability metadata, not a reason for permanent retention.
@@ -176,7 +177,7 @@ Treat this Skip -> Continue sequence as established project knowledge. Do not re
 
 ## 9. Completion evidence
 
-A capability-package completion report must include:
+A capability-package development completion report must include:
 
 - package PR, parent Epic, any optional child Issue links and dispositions, per-tool acceptance disposition, tested source revision/build receipt, and merge commit;
 - the public MCP request and structured response;
@@ -184,21 +185,23 @@ A capability-package completion report must include:
 - native/AEGP provenance and observed component/protocol versions;
 - audit evidence with sensitive values and private paths redacted;
 - Undo and recovery evidence for writes;
-- CI/review status and the clean-`main` hardware revalidation;
+- CI/review status, the required HDEV disposition, and the explicit status `development-verified` rather than `release-accepted`;
 - remaining risks and their follow-up issue classification.
-- package-efficiency counters: included tools, review rounds, candidate builds, full CI runs, candidate/main hardware runs, first-hardware-pass result, environment/pairing interruptions, and elapsed time from scope freeze to clean-`main` acceptance.
+- package-efficiency counters: included tools, review rounds, T3/CI runs, HDEV runs, first-hardware-pass result, environment/pairing interruptions, and elapsed time from scope freeze to merged development verification.
 - a machine-generated per-tool summary containing public-call counts, request/result disposition, before/after state, Undo result, component build receipts/versions, host instances, audit/postcondition IDs, and fixture lifecycle. PR and Issue updates should consume this generated summary instead of manually transcribing repeated evidence.
 
 Do not claim completion using only "tests passed", "CI is green", "the plugin compiled", or "the PR merged".
+
+The target release milestone retains the complete changed-capability matrix since the previous release. Its separate release completion report adds the frozen packaged source/artifact identity, strict release-audit results, aggregate T5, clean-install/upgrade/rollback T6, and the status `release-accepted`. Only packaged T5/T6 may use that status.
 
 ## 10. Stop conditions before starting the next dependent capability package
 
 Do not proceed to the next dependent capability package when any of the following is true:
 
-- the current public MCP acceptance test has not passed on real AE;
+- the current required HDEV public MCP smoke has not passed on real AE;
 - an installed component or protocol is observed to be incompatible with the active public-MCP path;
 - a write produced an indeterminate result whose AE state and audit outcome are unreconciled;
-- the PR is merged but clean `main` has not been rebuilt, reinstalled, and reverified;
+- the PR is merged but its development evidence, Issue disposition, or fixture disposition is incomplete;
 - the test fixture, logs, or workspace state cannot distinguish the tested build from an older installation;
 - a new task would hide or work around the current failure instead of resolving it.
 
@@ -206,11 +209,11 @@ These stop conditions are delivery controls, not reasons to add unrelated harden
 
 ## 11. Require user approval before the next PR package
 
-After every capability-package or standalone product PR completes its full closure loop—including merge, clean-`main` revalidation, Issue/Epic updates, evidence publication, and fixture disposition—stop work before beginning another PR package.
+After every capability-package or standalone product PR completes its ordinary closure loop—including merge, required HDEV, Issue/release-milestone updates, evidence publication, and fixture disposition—stop work before beginning another PR package.
 
 - Perform only the bounded read-only inventory needed to prepare the decision. Do not create the next Issue, branch, worktree, schema, fixture, candidate, or implementation, and do not mutate backlog priorities before approval.
 - Present the user with the just-completed package status and any remaining risks, followed by two to four next-package candidates ordered by dependency and user value.
-- For each candidate, state the target user workflow, proposed 6-10 public tools or bounded standalone outcome, shared SDK suite/primitive, native novelty, dependencies, expected T5/T6 call budget, principal risks, and explicit non-goals.
+- For each candidate, state the target user workflow, proposed 6-10 public tools or bounded standalone outcome, shared SDK suite/primitive, native novelty, dependencies, expected HDEV budget and contribution to the later packaged release matrix, principal risks, and explicit non-goals.
 - Recommend one direction with concrete reasoning, but treat it as a proposal rather than authorization.
 - Wait for the user's explicit selection or approval before creating or implementing the next PR package. Silence, an earlier backlog order, an existing open Issue, or a previous instruction to continue sequentially does not satisfy this approval gate.
 

@@ -58,6 +58,13 @@ The checkout must contain `pyproject.toml`, `packages/core/ae_mcp/__main__.py`,
 and an executable `.venv/bin/python3` or selection fails closed with
 `RUNTIME_DEVELOPMENT_RUNTIME_INVALID`.
 
+Daily doctor, launch, component sync, and HDEV use only this development
+boundary and never package a portable runtime or align the checkout to a
+RuntimeManager generation manifest. HDEV evidence is always non-candidate.
+Packaged release T5/T6 retain exact source/artifact identity, complete payload
+hashing, RuntimeManager manifest alignment, and the existing strict release
+gates; the development override does not weaken that boundary.
+
 Connection diagnostics label this state `DEVELOPMENT CHECKOUT`, report both the
 checkout and resolved interpreter paths, and include
 `RUNTIME_DEVELOPMENT_RUNTIME_SELECTED`. A packaged release extension rejects

@@ -183,9 +183,23 @@ node scripts/dev/ae-mcp-dev.mjs doctor --repo-root "$PWD" \
   --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
 node scripts/dev/ae-mcp-dev.mjs sync --component core --repo-root "$PWD" \
   --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
+node scripts/dev/ae-mcp-dev.mjs launch-ae --repo-root "$PWD" \
+  --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
+node scripts/dev/ae-mcp-dev.mjs smoke --component core \
+  --scenario core-native-write-undo@1 \
+  --repo-root "$PWD" \
+  --fixture-path "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active/hdev-core-native.aep" \
+  --recovery-archive-root "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/recovery" \
+  --evidence-dir "$HOME/Library/Application Support/AfterEffectsMCP/evidence/hdev-core-native" \
+  --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
 ```
 
 Core sync performs no copy and asks the caller to restart the MCP session. CEP sync rebuilds the panel and uses the existing off-scan, atomic development installer. Native sync keeps the existing clean-commit, stopped-AE, SDK, installer, and formal-restart requirements. If a required dependency is absent, a daily command fails with a bootstrap recovery code instead of installing it.
+
+HDEV is ordinary development proof only. Its seven-call evidence always says
+`candidateRun=false` and `candidateEvidence=false`; it must never be promoted
+or copied into packaged release T5/T6 evidence. Packaged release candidates
+continue to use the strict release-audit identity and installation workflows.
 
 On macOS, the CEP installer preflights required source files and non-destructively moves strictly named transaction artifacts left by older installers out of Adobe's CEP scan root. It then creates its unique staging tree in the private off-scan state directory `~/Library/Application Support/AfterEffectsMCP/cep-panel-dev-v1/`. After copying and verifying the complete tree, it atomically renames the candidate into place; the scan root retains only the active `com.aemcp.panel`. The old panel remains as the unique backup in that private state directory, is restored automatically on swap failure, and is named in an absolute restore command after success.
 
