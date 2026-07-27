@@ -747,7 +747,7 @@ def _verify_checkout_core(checkout: Path) -> tuple[Path, Path]:
         imported.is_relative_to(core_root),
         "isolated Core import did not resolve beneath checkout",
     )
-    return interpreter.resolve(strict=True), core_root
+    return interpreter, core_root
 
 
 @contextlib.asynccontextmanager

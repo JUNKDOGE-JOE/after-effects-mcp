@@ -399,3 +399,20 @@ def test_driver_starts_under_the_isolated_interpreter_used_by_the_cli():
 
     assert completed.returncode == 0, completed.stderr
     assert "core-native-write-undo@1" not in completed.stderr
+
+
+def test_checkout_verification_preserves_the_virtualenv_entrypoint(tmp_path):
+    checkout = tmp_path / "checkout"
+    interpreter = checkout / ".venv/bin/python3"
+    core_package = checkout / "packages/core/ae_mcp"
+    interpreter.parent.mkdir(parents=True)
+    core_package.mkdir(parents=True)
+    interpreter.symlink_to(Path(sys.executable))
+    (core_package / "__init__.py").write_text("", encoding="utf-8")
+    (core_package / "__main__.py").write_text("", encoding="utf-8")
+
+    verified_interpreter, core_root = driver._verify_checkout_core(checkout)
+
+    assert verified_interpreter == interpreter
+    assert verified_interpreter.resolve() == Path(sys.executable).resolve()
+    assert core_root == checkout / "packages/core"
