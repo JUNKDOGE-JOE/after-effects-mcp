@@ -289,6 +289,43 @@ test('plan execution uses execFile and reports bounded invocation counts', async
   });
 });
 
+test('public smoke inherits the current terminal instead of buffering checkpoints', async () => {
+  const calls = [];
+  const plan = {
+    action: 'smoke',
+    components: ['core', 'cep'],
+    steps: [{
+      id: 'hdev-core-native-write-undo',
+      component: 'core',
+      kind: 'public-smoke',
+      executable: '/checkout/.venv/bin/python3',
+      args: ['-B', '-I', '/checkout/scripts/hardware/development_smoke.py'],
+      cwd: '/checkout',
+    }],
+    actions: [],
+    dependencyBootstrapInvocations: 0,
+    releasePackagingInvocations: 0,
+  };
+
+  await executeDevelopmentPlan(plan, {
+    execFile: async () => {
+      throw new Error('interactive smoke must not use buffered execFile');
+    },
+    runInteractive: async (file, args, options) => {
+      calls.push({ file, args, options });
+    },
+    environment: { HOME: '/private/home' },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].file, '/checkout/.venv/bin/python3');
+  assert.deepEqual(calls[0].args, [
+    '-B', '-I', '/checkout/scripts/hardware/development_smoke.py',
+  ]);
+  assert.equal(calls[0].options.cwd, '/checkout');
+  assert.equal(calls[0].options.shell, false);
+});
+
 test('daily execution refuses dependency installation even for a forged plan', async () => {
   await assert.rejects(
     executeDevelopmentPlan({

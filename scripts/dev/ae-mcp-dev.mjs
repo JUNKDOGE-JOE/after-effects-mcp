@@ -170,6 +170,7 @@ export async function main(
     const execute = dependencies.executeDevelopmentPlan || executeDevelopmentPlan;
     const receipt = await execute(plan, {
       execFile: dependencies.execFile,
+      runInteractive: dependencies.runInteractive,
       environment,
     });
     if (command.action === 'sync' && command.components.includes('cep')) {
