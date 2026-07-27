@@ -1207,6 +1207,13 @@ def _validate_descriptor(
     contract: CapabilityContract,
 ) -> None:
     requirements = tuple((item.id, item.contract_version) for item in descriptor.requirements)
+    expected_undo = (
+        "not-applicable"
+        if contract.risk == "read"
+        else "none"
+        if contract.capability_id == COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID
+        else "ae-undo-group"
+    )
     expected = (
         descriptor.capability_id == contract.capability_id
         and descriptor.capability_version == CAPABILITY_VERSION
@@ -1217,7 +1224,7 @@ def _validate_descriptor(
         and descriptor.mutability == ("read-only" if contract.risk == "read" else "mutating")
         and descriptor.idempotency == contract.idempotency
         and descriptor.cancellation == "before-dispatch"
-        and descriptor.undo == ("not-applicable" if contract.risk == "read" else "ae-undo-group")
+        and descriptor.undo == expected_undo
         and descriptor.side_effect_summary == contract.side_effect_summary
         and descriptor.preconditions == contract.preconditions
         and descriptor.input_contract_id == contract.input_contract_id
