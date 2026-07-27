@@ -53,6 +53,38 @@ test('indexes every tracked capability brief deterministically', () => {
   assert.equal(fs.statSync(indexPath).mtimeMs, firstMtime);
 });
 
+test('indexes a split public-tool registry without admitting unrelated tool tables', () => {
+  const result = runGenerator([
+    path.join(repositoryRoot, 'docs/capability-packages/text-shape-marker.md'),
+    '--stdout',
+  ]);
+  assert.equal(result.status, 0, result.stderr);
+
+  const parsed = JSON.parse(result.stdout);
+  assert.deepEqual(
+    parsed.tools.map((entry) => entry.name),
+    [
+      'ae_listInstalledFonts',
+      'ae_createTextLayer',
+      'ae_getTextDocument',
+      'ae_setTextContent',
+      'ae_setTextCharacterStyle',
+      'ae_setTextParagraphStyle',
+      'ae_createShapeLayer',
+      'ae_listShapeGroups',
+      'ae_createShapeGroup',
+      'ae_setShapePath',
+      'ae_setShapeFillStyle',
+      'ae_setShapeStrokeStyle',
+      'ae_reorderShapeGroup',
+      'ae_listMarkers',
+      'ae_createMarker',
+      'ae_setMarker',
+      'ae_deleteMarker',
+    ],
+  );
+});
+
 test('fails closed and writes no index when required brief structure is absent', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-bad-brief-'));
   const brief = path.join(root, 'bad.md');
