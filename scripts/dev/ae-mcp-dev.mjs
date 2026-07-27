@@ -93,6 +93,16 @@ function executionResult(plan, receipt) {
   });
 }
 
+function replaceableCepInstallState(command, report) {
+  if (command.action !== 'sync' || !command.components.includes('cep')) return false;
+  const allowed = new Set([
+    'DEV_CEP_MARKER_MISSING',
+    'DEV_CEP_RELEASE_MANIFEST_PRESENT',
+  ]);
+  return report.blockers.length > 0
+    && report.blockers.every((item) => allowed.has(item.code));
+}
+
 export async function main(
   argv = process.argv.slice(2),
   dependencies = createDefaultMacosDependencies(),
@@ -115,7 +125,8 @@ export async function main(
       environment,
       dependencies,
     });
-    if (!report.ok && command.action !== 'bootstrap') {
+    const replacingCepInstall = replaceableCepInstallState(command, report);
+    if (!report.ok && command.action !== 'bootstrap' && !replacingCepInstall) {
       const error = Object.assign(
         new Error('development doctor reported blockers'),
         {
@@ -161,6 +172,25 @@ export async function main(
       execFile: dependencies.execFile,
       environment,
     });
+    if (command.action === 'sync' && command.components.includes('cep')) {
+      const postSyncReport = await inspect({
+        repoRoot: command.repoRoot,
+        home: command.home,
+        formalAeApp: command.formalAeApp,
+        components: command.components,
+        environment,
+        dependencies,
+      });
+      if (!postSyncReport.ok) {
+        throw Object.assign(
+          new Error('development CEP sync did not pass post-install doctor'),
+          {
+            code: 'DEV_POST_SYNC_DOCTOR_BLOCKED',
+            recovery: postSyncReport.blockers,
+          },
+        );
+      }
+    }
     return Object.freeze({
       exitCode: 0,
       output: Object.freeze({

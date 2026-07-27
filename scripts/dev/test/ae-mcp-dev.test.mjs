@@ -25,12 +25,13 @@ function harness({
   launchError = null,
 } = {}) {
   const calls = [];
+  const reports = Array.isArray(report) ? [...report] : null;
   const dependencies = {
     defaults: DEFAULTS,
     environment: { PATH: '/usr/bin:/bin' },
     async inspectDevelopmentEnvironment(options) {
       calls.push({ kind: 'doctor', options });
-      return report;
+      return reports ? reports.shift() : report;
     },
     async launchDevelopmentAe(_report, options) {
       calls.push({ kind: 'launch', options });
@@ -173,6 +174,45 @@ test('CEP sync stops when component-scoped doctor finds missing dependencies', a
     id: 'cep-panel-dependencies',
     code: 'DEV_CEP_DEPENDENCIES_MISSING',
   }]);
+});
+
+test('CEP sync may replace only a packaged install and must pass post-sync doctor', async () => {
+  const packaged = {
+    schemaVersion: 1,
+    profile: 'development',
+    ok: false,
+    checkoutPath: '/checkout',
+    interpreterPath: '/checkout/.venv/bin/python3',
+    formalAeExecutable: '/Applications/After Effects',
+    checks: [],
+    blockers: [
+      {
+        id: 'cep-development-marker',
+        ok: false,
+        code: 'DEV_CEP_MARKER_MISSING',
+        path: '/installed/.debug',
+      },
+      {
+        id: 'cep-release-manifest-absent',
+        ok: false,
+        code: 'DEV_CEP_RELEASE_MANIFEST_PRESENT',
+        path: '/installed/bundle-manifest.json',
+      },
+    ],
+  };
+  const development = {
+    ...packaged,
+    ok: true,
+    blockers: [],
+  };
+  const h = harness({ report: [packaged, development] });
+  const result = await main(['sync', '--component', 'cep'], h);
+
+  assert.equal(result.exitCode, 0, JSON.stringify(result.output));
+  assert.equal(h.calls.filter((call) => call.kind === 'doctor').length, 2);
+  assert.equal(h.calls.filter((call) => call.kind === 'execute').length, 1);
+  assert.equal(result.output.result.dependencyBootstrapInvocations, 0);
+  assert.equal(result.output.result.releasePackagingInvocations, 0);
 });
 
 test('every daily plan preserves zero dependency and release invocations', async () => {
