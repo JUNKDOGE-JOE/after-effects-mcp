@@ -162,12 +162,23 @@ async def test_list_tools_descriptions_lead_with_exposed_name(_full_tool_listing
         )
 
 
-async def test_preview_frame_registration_and_tools_list_exposure(
-    _full_tool_listing,
-):
-    assert "ae.previewFrame" in HANDLERS
+async def test_preview_frame_registration_and_tools_list_exposure(monkeypatch):
+    from ae_mcp import server as srv
+    from ae_mcp.backends.mock import MockBackend
 
-    tools = await _full_tool_listing._ae_list_tools()
+    assert "ae.previewFrame" in HANDLERS
+    backend = MockBackend()
+    assert "ae.previewFrame" in backend.supported_verbs()
+    monkeypatch.setattr(
+        "ae_mcp.backends.discovery.select_backend",
+        lambda: backend,
+    )
+    monkeypatch.setattr(
+        "ae_mcp.snapshot.discovery.select_snapshotter",
+        lambda: None,
+    )
+
+    tools = await srv.build_server()._ae_list_tools()
     preview = next(tool for tool in tools if tool.name == "ae_previewFrame")
     description = " ".join(preview.description.split())
     assert "before and after visible edits" in description
