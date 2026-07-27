@@ -22,6 +22,10 @@ from fractions import Fraction
 from pathlib import Path
 from typing import Any, Protocol
 
+HARDWARE_ROOT = Path(__file__).resolve().parent
+if os.fspath(HARDWARE_ROOT) not in sys.path:
+    sys.path.insert(0, os.fspath(HARDWARE_ROOT))
+
 from development_smoke_spec import (
     BASELINE_COLOR,
     CALL_HARD_LIMIT,

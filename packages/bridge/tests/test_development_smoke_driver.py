@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import stat
+import subprocess
 import sys
 from pathlib import Path
 from types import ModuleType
@@ -379,3 +380,22 @@ def test_component_disposition_is_closed_disjoint_and_complete(tmp_path):
                 "reused_components": ("cep", "native"),
             }
         )
+
+
+def test_driver_starts_under_the_isolated_interpreter_used_by_the_cli():
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-I",
+            str(HARDWARE / "development_smoke.py"),
+            "--help",
+        ],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert "core-native-write-undo@1" not in completed.stderr
