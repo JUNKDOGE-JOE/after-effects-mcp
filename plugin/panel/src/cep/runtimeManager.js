@@ -218,6 +218,7 @@ export function createRuntimeManager({
       checkoutPath: checkout,
       launcher: interpreter,
       args: ['-B', '-I', '-m', 'ae_mcp'],
+      cwd: checkout,
       interpreter: {
         path: interpreter,
         resolvedPath: resolvedInterpreter,

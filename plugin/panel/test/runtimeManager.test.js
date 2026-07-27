@@ -243,6 +243,7 @@ macosRuntimeTest('development checkout bypasses manifests, generations, pointers
   assert.equal(selected.action, 'development-runtime');
   assert.equal(selected.developmentRuntime, true);
   assert.equal(selected.checkoutPath, canonicalCheckout);
+  assert.equal(selected.cwd, canonicalCheckout);
   assert.equal(selected.launcher, canonicalInterpreter);
   assert.deepEqual(selected.args, ['-B', '-I', '-m', 'ae_mcp']);
   assert.equal(selected.interpreter.path, canonicalInterpreter);

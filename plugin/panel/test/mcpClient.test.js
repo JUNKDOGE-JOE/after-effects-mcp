@@ -121,6 +121,7 @@ test('resolveMcpCommand lets the macOS RuntimeManager verify and activate before
 
   assert.deepEqual(calls, ['ensureReady']);
   assert.equal(result.command, platform.paths.launcher);
+  assert.equal(result.cwd, undefined);
   assert.equal(result.source, 'runtime-manager');
   assert.equal(result.runtime.version, '0.9.3');
 });
@@ -137,6 +138,7 @@ test('resolveMcpCommand launches a selected development checkout interpreter dir
           developmentRuntime: true,
           launcher: '/Users/a/src/ae-mcp/.venv/bin/python3',
           args: ['-B', '-I', '-m', 'ae_mcp'],
+          cwd: '/Users/a/src/ae-mcp',
         };
       },
     },
@@ -144,6 +146,7 @@ test('resolveMcpCommand launches a selected development checkout interpreter dir
 
   assert.equal(result.command, '/Users/a/src/ae-mcp/.venv/bin/python3');
   assert.deepEqual(result.args, ['-B', '-I', '-m', 'ae_mcp']);
+  assert.equal(result.cwd, '/Users/a/src/ae-mcp');
   assert.equal(result.source, 'development-runtime');
 });
 
@@ -245,6 +248,24 @@ function spawnReplying(initResult) {
   };
   return { spawnImpl, getProc: () => proc };
 }
+
+test('createMcpClient spawns a selected development runtime in its checkout', async () => {
+  const { spawnImpl, getProc } = spawnReplying({});
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({
+      command: '/checkout/.venv/bin/python3',
+      args: ['-B', '-I', '-m', 'ae_mcp'],
+      cwd: '/checkout',
+      source: 'development-runtime',
+    }),
+  });
+
+  await client.start();
+  assert.equal(getProc().spawnOptions.cwd, '/checkout');
+  assert.equal(getProc().spawnOptions.shell, false);
+  client.stop();
+});
 
 test('createMcpClient captures server instructions from the initialize result', async () => {
   const { spawnImpl } = spawnReplying({ instructions: 'SERVER_GUIDE' });

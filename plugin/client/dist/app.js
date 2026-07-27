@@ -17607,6 +17607,7 @@
         checkoutPath: checkout,
         launcher: interpreter,
         args: ["-B", "-I", "-m", "ae_mcp"],
+        cwd: checkout,
         interpreter: {
           path: interpreter,
           resolvedPath: resolvedInterpreter
@@ -19003,6 +19004,7 @@
       return {
         command: selected.launcher,
         args: selected.args || [],
+        cwd: selected.cwd,
         source: selected.developmentRuntime ? "development-runtime" : selected.action === "fallback" ? "runtime-fallback" : "runtime-manager",
         runtime: selected
       };
@@ -19224,7 +19226,8 @@
         const options = {
           stdio: "pipe",
           windowsHide: true,
-          env: spawnEnv
+          env: spawnEnv,
+          ...commandSpec.cwd ? { cwd: commandSpec.cwd } : {}
         };
         if (adapter) {
           const executable = { ok: true, id: "ae-mcp", path: commandSpec.command, argsPrefix: [], source: commandSpec.source || "runtime", version: null, arch: null };
