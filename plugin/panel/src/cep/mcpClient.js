@@ -1,7 +1,7 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
-import { createRuntimeManager } from './runtimeManager.js';
+import { createRuntimeManager, hasDevelopmentRuntimeOverride } from './runtimeManager.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const INITIALIZE_TIMEOUT_MS = 120000;
@@ -53,13 +53,18 @@ export async function resolveMcpCommand({
     && debugMarker
     && adapter.fs.existsSync(debugMarker)
     && !adapter.fs.existsSync(bundleManifest);
-  if (adapter.id === 'macos-arm64' && (runtimeManager || (extRoot && !developmentFallback))) {
+  const developmentRuntimeOverride = hasDevelopmentRuntimeOverride(adapter.env);
+  if (adapter.id === 'macos-arm64'
+      && (runtimeManager || (extRoot && (!developmentFallback || developmentRuntimeOverride)))) {
     const manager = runtimeManager || createRuntimeManager({ platform: adapter, extensionRoot: extRoot });
     const selected = await manager.ensureReady();
     return {
       command: selected.launcher,
-      args: [],
-      source: selected.action === 'fallback' ? 'runtime-fallback' : 'runtime-manager',
+      args: selected.args || [],
+      cwd: selected.cwd,
+      source: selected.developmentRuntime
+        ? 'development-runtime'
+        : (selected.action === 'fallback' ? 'runtime-fallback' : 'runtime-manager'),
       runtime: selected,
     };
   }
@@ -305,6 +310,7 @@ export function createMcpClient({
         stdio: 'pipe',
         windowsHide: true,
         env: spawnEnv,
+        ...(commandSpec.cwd ? { cwd: commandSpec.cwd } : {}),
       };
       if (adapter) {
         const executable = { ok: true, id: 'ae-mcp', path: commandSpec.command, argsPrefix: [], source: commandSpec.source || 'runtime', version: null, arch: null };

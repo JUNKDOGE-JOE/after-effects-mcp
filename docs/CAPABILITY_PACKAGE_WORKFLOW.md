@@ -15,7 +15,7 @@ The default delivery unit is one capability package containing 6-10 related publ
 
 An isolated bug or infrastructure fix may remain a single-Issue package. Do not create one PR per simple tool merely because each tool has a child Issue.
 
-The package owns one branch/worktree, one PR, one acceptance matrix, one concentrated review, one frozen candidate, one candidate hardware session, and one clean-`main` revalidation. T4-T6 apply to AE-dependent packages; a non-AE isolated fix uses the applicable lower tiers and records its observable acceptance check instead of manufacturing hardware evidence.
+The package owns one branch/worktree, one PR, one acceptance matrix, one concentrated review, and one bounded HDEV real-AE session. HDEV is permanently non-candidate development evidence. The target release milestone aggregates every changed-capability matrix since the previous release and later owns the strict packaged T5/T6 boundary. A non-AE isolated fix uses the applicable lower tiers and records its observable acceptance check instead of manufacturing hardware evidence.
 
 ## 2. Scope freeze before implementation
 
@@ -59,13 +59,13 @@ Do not open the group merely to test this: source evidence cannot distinguish no
 | Frame | 2-4 hours | Freeze schemas, matrix, fixture, native novelty, acceptance harness skeleton, exclusions | Matrix is reviewable and every included public tool has an observable result |
 | Native novelty smoke | 0-1 focused run | Only for an unverified suite, lifecycle, or main-thread mechanism | Primitive works in real AE or the package is redesigned |
 | Implement | 1-2.5 working days | Up to three coordinated tracks: native; Core/bridge/public MCP; tests/fixture | All matrix rows pass T0-T2 and generated artifacts are current |
-| Review, freeze, and CI | 0.5-1 day | Concentrated review and blocker fixes, freeze the candidate source and component receipts, then run T3 and required CI | No unresolved in-scope blocker; the candidate source passes T3 and CI |
-| Candidate hardware | 60-90 minutes plus deterministic build time | One continuous component-set package session on real AE | Every included public tool has evidence; writes have verified Undo, or the documented compensation evidence where the SDK provides none |
-| Merge and main | 0.5-1.5 hours plus build time | Merge, rebuild/reinstall from clean `main`, rerun package smoke | Merge SHA passes; any accepted child Issues can close |
+| Review and CI | 0.5-1 day | Concentrated review and blocker fixes, commit the development source and component receipts, then run T3 and required CI | No unresolved in-scope blocker; the reviewed source passes T3 and CI |
+| HDEV hardware | Bounded scenario, normally under 30 public calls | Reuse the compatible development installation; exercise every new native primitive and one representative per shared adapter/locator/Undo family | Public MCP, AE state, provenance, audit, postcondition, and representative real Undo agree; evidence says `candidateEvidence=false` |
+| Merge and milestone | 0.5-1 hour | Merge, close development-verified implementation Issues, add the changed-capability matrix to the target release milestone | PR is `development-verified`; it is not called `release-accepted` |
 
 These are scope alarms, not promises and not permission to drop evidence. When a phase exceeds its target, first remove unrelated work, repair the environment, or split a genuinely oversized package.
 
-Keep edit-level work local to the package worktree and run T0-T2 there. Complete the concentrated review, resolve blockers, and freeze the candidate source plus component receipts before the first branch publication and required CI run. Do not push every small edit and trigger a full remote matrix repeatedly. If a genuinely required human review can only occur on GitHub, publish a Draft explicitly as pre-candidate review input; any CI run on that unfrozen source is not candidate evidence and the completion report must explain the extra run.
+Keep edit-level work local to the package worktree and run T0-T2 there. Complete the concentrated review and resolve blockers before the required T3/CI run and HDEV. Do not push every small edit and trigger a full remote matrix repeatedly. If a genuinely required human review can only occur on GitHub, publish a Draft explicitly as review input.
 
 ## 4. Test escalation
 
@@ -76,12 +76,13 @@ Use the lowest tier that can disprove the current edit. Escalate only at the lis
 | T0 | Every edit | syntax, formatting, lint, one focused unit | Many times |
 | T1 | Each tool/adapter | schema, codec, suite adapter, error and postcondition contract | Per matrix row |
 | T2 | Package integration | affected native compile, Core/CEP bridge, fixture and interaction corpus, generated-file checks | At integration checkpoints |
-| T3 | Frozen candidate | relevant full repository regression and required CI | Once after review |
+| T3 | Reviewed development source | relevant full repository regression and required CI | Once after review |
 | T4 | New primitive only | narrow real-AE smoke for the unverified mechanism | Zero or one per package |
-| T5 | Candidate | full component-set public-MCP package acceptance | Once normally |
-| T6 | Clean main | rebuild/reinstall from the merge SHA plus a distinct, smaller replay — see section 8 | Once |
+| HDEV | Ordinary AE-changing PR | current compatible development install, every new native primitive plus justified representatives, always non-candidate | Once normally |
+| T5 | Packaged release candidate | full aggregate changed-capability matrix since the prior release under strict release-audit identity | Once normally per release candidate |
+| T6 | Packaged release artifact | clean install, upgrade, rollback, and release-boundary replay | Once normally per release |
 
-After a T3-T6 failure, first add or run the smallest reproducing T0-T2 test. Batch the complete fix set before returning to the expensive tier.
+After a T3/HDEV/T5/T6 failure, first add or run the smallest reproducing T0-T2 test. Batch the complete fix set before returning to the expensive tier.
 
 ## 5. Review disposition and timebox
 
@@ -89,7 +90,7 @@ Every finding receives one of three dispositions:
 
 | Class | Required evidence | Action in active package |
 |---|---|---|
-| Current blocker | Reproduced on the package acceptance path, or demonstrably breaks correctness, recovery, audit, Undo, or safe use | Fix before candidate freeze |
+| Current blocker | Reproduced on the package acceptance path, or demonstrably breaks correctness, recovery, audit, Undo, or safe use | Fix before HDEV or packaged release freeze, whichever boundary it affects |
 | Follow-up | Credible improvement that does not block the frozen outcome | Record a P1/P2 Issue and keep it out of the PR |
 | Out of scope | Hypothetical, duplicated, unsupported, or contrary to the product decision | Document why; do not implement |
 
@@ -97,64 +98,79 @@ Use no more than two concentrated review rounds by default. Investigation of a n
 
 Concurrency hardening, power-loss behavior, extreme installer recovery, signing/notarization, Windows expansion, generalized frameworks, Provider routing, Tool Library work, and AEGP/JSX resolution do not become P0 without acceptance-path evidence or an explicit user priority change.
 
-## 6. Candidate freeze
+## 6. Development review and release-candidate freeze
 
-Freeze the candidate source revision and installed component set after:
+Before ordinary HDEV:
 
 - all product source and generated bundles are committed;
 - schemas, fixtures, docs, license/policy metadata, and evidence format are final;
 - T0-T2 pass for the source and generated files under review;
-- concentrated review has no unresolved blocker;
-- the worktree is clean and every component has a compatible protocol/version
-  plus its own source revision and install receipt.
+- concentrated review has no unresolved blocker; and
+- every selected or reused component has a compatible protocol/version plus
+  its own source revision and development install receipt.
 
-Run the relevant T3 full regression and required CI on that frozen SHA. T5 hardware starts only after they pass. If T3 or CI finds a blocker, unfreeze the candidate, collect and batch the complete fix set, run focused lower-tier tests and review, then freeze one replacement candidate. The replacement SHA must pass required CI before T5; already-passing unaffected local tiers need not be repeated. After freeze, a new SHA is otherwise allowed only for a reproduced acceptance blocker or an evidence-invalidating defect. Do not deploy once per small fix.
+Run the relevant T3 regression and required CI, then HDEV. HDEV records the
+component revisions but remains `validationProfile=development`,
+`candidateRun=false`, and `candidateEvidence=false`. If it finds a blocker,
+collect the bounded trustworthy sweep, repair one batch, rerun affected lower
+tiers, and replay HDEV. It never becomes release evidence.
 
-Normal budget: one candidate build and one full CI run. A reproduced blocker may justify one replacement build and its required CI run. The hardware budget remains one successful candidate session and one clean-main session. Record the reason for any excess.
+At target-release freeze, aggregate all changed-capability matrices since the
+previous release and build one packaged candidate. This boundary retains exact
+source/artifact identity, full payload hashes, RuntimeManager manifest
+alignment, complete cross-component SHA checks, and all existing strict
+protocol/product/platform/architecture/entrypoint/load, signing, and scan-root
+gates. T5 starts only after the frozen artifact passes its required regression
+and CI. A reproduced release blocker may justify one replacement candidate.
 
 ## 7. Continuous hardware session
 
-Prepare before launching AE:
+Prepare before launching AE for HDEV:
 
 - formal AE absolute path, version, and build;
 - target machine unlocked/awake, required OS permissions, and normal GUI control;
 - Beta and unrelated AE processes closed;
 - canonical CEP/native paths and scan-root audit;
-- requested source revision, clean state, component versions, and installed receipts;
+- selected/reused component revisions, compatibility versions, and development
+  install receipts;
 - bounded canonical-path, size, mode, and modification-time signals for the
-  runtime generation, shared layer, and stable launcher;
+  selected Core checkout, CEP extension, and native plug-in;
 - disposable project/fixture, evidence root, logs, and known optional dialogs.
 
-Run the package in one continuous window:
+Run HDEV in one continuous window:
 
-1. Launch formal AE and verify host identity and canonical plug-in mapping.
-2. Verify automatic same-user/current-AE ancestry admission and the native
-   endpoint/peer-bound challenge.
-3. Create the disposable fixture once.
-4. Run every read tool and record the real AE state.
-5. For every write: record before state, invoke once, and record response/audit/after state; execute and verify real Undo only for Undoable operations, or run the documented compensating public write for an explicitly non-Undoable operation.
-6. Exercise the important inter-tool combinations from the matrix.
-7. Quit and relaunch AE once; verify a new host/session and repeat the package smoke.
-8. Emit one machine-readable evidence bundle and a redacted completion summary.
+1. Run read-only doctor, then launch the exact formal AE executable with the
+   child-only checkout override.
+2. Verify host identity, canonical plug-in mapping, compatible
+   protocol/product versions, and automatic same-user/current-AE admission.
+3. Save one empty `ephemeral-validation` project once.
+4. Exercise every new native primitive and one justified representative per
+   shared adapter, locator, and Undo family through public MCP.
+5. For each representative write, record before state, invoke once, record
+   response/audit/after state, execute real Undo when guaranteed, reacquire
+   locators, and independently verify restoration.
+6. Emit one machine-readable bundle with `candidateEvidence=false`, close AE,
+   and archive exactly one fixture with no Save As copies.
 
-Before candidate freeze, run a non-evidentiary hardware preflight for the
-actual prepared session. It must prove that the recorded Core/CEP/native/runtime
-component set is protocol-compatible and deployable, the formal AE path and GUI are available,
-the driver can create/reset/archive its one fixture, and any locator assumption
-needed by the package survives its planned Undo flow. Mark the output
-`candidateEvidence=false`; repair failures at T0-T2 and do not count them as
-T4/T5 candidate attempts.
+Before HDEV, run the read-only doctor for the selected components. It must
+prove that checkout Core, CEP/native development installation, formal AE path,
+and protocol metadata are compatible and usable without installing
+dependencies. Repair failures at T0-T2; they are not hardware attempts.
 
-One ledger must count every public MCP dispatch, including setup/support reads,
-expected-error probes, recovery calls, and package rows. Put stress, repeated
-calls, parameter combinations, and the broad error matrix in T2. T5/T6 should
-normally invoke each package tool only once or twice and stay at or below 30
-total public calls; abort before dispatching call 31 unless the frozen brief
-documents a risk that lower tiers cannot falsify.
+One ledger must count every public MCP dispatch. Put stress, repeated calls,
+parameter combinations, and the broad error matrix in T2. HDEV uses a frozen
+bounded plan; `core-native-write-undo@1` has exactly seven public calls and
+aborts before call eight. Release T5/T6 own separate frozen aggregate budgets.
 
 If a write returns `POSSIBLY_SIDE_EFFECTING_FAILURE`, stop retries and reconcile AE state plus audit first.
 
-Commit the package acceptance driver with the package. The same driver serves both hardware tiers, running the full candidate plan at T5 and the smaller clean-`main` plan at T6; two drivers would let the tiers drift apart. The driver must call the public MCP surface, support the package's real dynamic locators and generation changes, create a fresh intent key for each new write while reusing that key for reconciliation, and bind its evidence to separately verified Core/CEP/native/runtime component identities and protocol compatibility. A hashed test plan is explicit authorization for the disposable fixture only; it does not prove the production approval/elicitation path unless the package explicitly exercises that path. Temporary `/private/tmp` clients are not acceptance assets.
+Commit the HDEV plan and driver with the workflow. It must call public MCP,
+support real dynamic locators and generation changes, use a fresh intent key
+for each new write while reusing that key for reconciliation, and bind evidence
+to separately recorded selected/reused component identities and protocol
+compatibility. HDEV evidence cannot be copied into or promoted as packaged
+candidate evidence. Release T5/T6 use the aggregate release harness and strict
+artifact identity boundary.
 
 Do not introduce a generalized plan language speculatively. Promote repeated driver code into a shared runner only after at least two capability packages demonstrate the same stable need; a shared runner must not infer exact component identity from native self-report or model an invented response/Undo contract.
 
@@ -177,9 +193,9 @@ they may route the project to Beta or another host.
 **Validate the driver's expectations against the published contract at T1 or
 T2.** A driver asserted `replayed=true` for a repeated write key where the
 public schema, the Core tests and the native dispatcher all specify
-`DUPLICATE_REQUEST`. The candidate behaved correctly; the assertion was wrong;
+`DUPLICATE_REQUEST`. The tool behavior was correct; the assertion was wrong;
 it surfaced on real hardware at call four. A driver expectation that contradicts
-the contract is a lower-tier defect and must never reach T5.
+the contract is a lower-tier defect and must never reach HDEV or packaged T5.
 
 **The native replay fence lives as long as the host process, and Undo does not
 clear it.** A rerun that reuses an operation key from an earlier run in the same
@@ -190,33 +206,42 @@ two rules do not conflict, but the driver has to distinguish them.
 
 ## 8. Merge and completion
 
-After candidate acceptance:
+After HDEV:
 
-1. Merge the single package PR.
-2. Build and install every relevant component from a clean merge commit.
-3. Run T6 with the same harness on a **distinct, smaller plan** than T5. T6 exists to prove the merge and a clean build, not to repeat T5 — replaying every thin wrapper a second time buys little and costs a whole hardware session. See "What T6 must replay" below.
-4. Fill `docs/templates/capability-package-completion.md`.
-5. Close only optional child Issues that passed, then update the parent Epic.
+1. Publish the machine-generated summary and mark the PR
+   `development-verified`, never `release-accepted`.
+2. Merge the single package PR.
+3. Close only implementation Issues whose development matrix passed.
+4. Add the complete changed-capability matrix and HDEV disposition to the
+   target release milestone.
+5. Finish fixture disposition and stop at the next-package direction checkpoint.
+
+At release freeze, T5 runs the aggregate matrix against the packaged
+release-audit artifact. T6 then uses a distinct plan to prove clean install,
+upgrade, rollback, and the packaged boundary rather than replaying every thin
+wrapper.
 
 ### What T6 must replay
 
-T5 proves the capability. T6 proves that merging it and rebuilding from clean
-`main` did not break it. Those are different questions, so the plans differ.
+T5 proves the aggregate changed-capability release candidate. T6 proves that
+the packaged artifact installs, upgrades, rolls back, and still exposes its
+critical paths. Those are different questions, so the plans differ.
 
 T6 must replay:
 
-- every native primitive the package introduced, on its first clean build;
+- every native primitive introduced since the previous release, on its first
+  packaged clean install;
 - one representative tool per family that shares an already-proven primitive —
   if one sibling works from a clean install, the others exercise the same path;
-- every tool whose implementation changed after the candidate hardware run,
+- every tool whose implementation changed after packaged T5,
   including anything touched by a replacement candidate;
 - anything that touches install, staging, generated bundles or component
-  identity, because those are precisely what the merge and rebuild changed;
-- at least one real Undo per distinct Undo model in the package, not per tool.
+  identity, because those are precisely what packaging and installation change;
+- at least one real Undo per distinct Undo model in the release matrix, not per tool.
 
-T6 may skip a thin setter that shares its primitive, its Undo model and its
-locator scheme with a tool already replayed, and whose implementation is
-byte-identical to the candidate. Record what was skipped and on which ground;
+T6 may skip a thin setter that shares its primitive, Undo model, and locator
+scheme with a tool already replayed, and whose packaged implementation is
+byte-identical to T5. Record what was skipped and on which ground;
 an unexplained omission is not a reduction, it is a gap.
 
 This is a deliberate trade. A selective replay can miss an integration defect
@@ -225,7 +250,7 @@ specific rather than left to judgement. If a package cannot say plainly which of
 its tools are thin wrappers over an already-replayed path, it does not yet
 understand its own shape and should replay everything.
 
-Component identity is recorded **once per session**, with per-tool records
+Packaged component identity is recorded **once per session**, with per-tool records
 carrying only deltas. Repeating an invariant component set in every per-tool
 record inflates the evidence bundle without adding traceability.
 
@@ -234,21 +259,26 @@ record inflates the evidence bundle without adding traceability.
 Record these counters in the completion report:
 
 - included tools and accepted optional child Issues;
-- elapsed time from scope freeze to clean-main acceptance;
+- elapsed time from scope freeze to merged development verification;
 - review rounds and finding dispositions;
-- candidate builds and candidate SHA changes;
-- full CI runs;
-- T4, T5, and T6 hardware runs;
-- first candidate hardware pass/fail;
+- development component syncs and source revisions;
+- T3/CI runs;
+- T4 and HDEV hardware runs;
+- first HDEV pass/fail;
 - environment, GUI, and permission interruptions;
 - follow-up work created outside the active package.
 
-Useful targets are 6-10 tools per package, no more than two review rounds, no more than two candidate builds, and exactly one T5 plus one T6 run under normal conditions. These counters diagnose process waste; they are not substitutes for functional evidence.
+Useful ordinary-PR targets are 6-10 tools per package, no more than two review
+rounds, one T3/CI run, and one successful HDEV. Release-level counters
+separately record candidate builds, aggregate T5, and packaged T6. These
+counters diagnose process waste; they are not substitutes for functional evidence.
 
 ## 10. WIP and exceptions
 
 - Keep one dependent native capability package in flight.
 - The package may have up to three coordinated implementation tracks, but only one schema freeze and acceptance matrix.
 - One truly independent auxiliary package may proceed only if it cannot mix builds, fixtures, interfaces, or hardware state.
-- Do not start the next dependent package until clean-main acceptance finishes.
+- Do not start the next dependent package until the current PR is merged,
+  development evidence and Issue/release-milestone dispositions are published,
+  the fixture is archived, and the user selects the next direction.
 - A one-day workflow improvement is allowed only when it removes a measured repeated cost on the active path. Larger infrastructure work needs explicit user promotion.

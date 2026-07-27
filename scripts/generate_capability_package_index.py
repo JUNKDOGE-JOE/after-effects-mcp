@@ -183,58 +183,84 @@ def _has_ancestor(
     )
 
 
-def _tool_registry(tables: Sequence[Table]) -> tuple[Table, list[dict[str, Any]]]:
-    registries = [
+def _tool_registry(tables: Sequence[Table]) -> tuple[dict[str, Table], list[dict[str, Any]]]:
+    canonical = [
         table
         for table in tables
         if any(_normalized(cell) == "public mcp tool" for cell in table.header)
     ]
-    if len(registries) != 1:
+    if len(canonical) > 1:
         raise ParseFailure(
-            f"expected one 'Public MCP tool' registry table, found {len(registries)}"
+            f"expected at most one 'Public MCP tool' registry table, found {len(canonical)}"
         )
-    table = registries[0]
-    tool_column = next(
-        index
-        for index, cell in enumerate(table.header)
-        if _normalized(cell) == "public mcp tool"
-    )
+    registries = canonical or [
+        table
+        for table in tables
+        if {_normalized(cell) for cell in table.header} >= {"tool", "r w"}
+    ]
+    if not registries:
+        raise ParseFailure(
+            "expected one 'Public MCP tool' registry table or split 'Tool | R/W' tables"
+        )
+
     tools: list[dict[str, Any]] = []
-    for line, cells in table.rows:
-        matches = PUBLIC_TOOL.findall(_plain(cells[tool_column]))
-        if len(matches) != 1:
-            raise ParseFailure(f"public-tool row at line {line} does not name exactly one tool")
-        name = matches[0]
-        capabilities = [
-            match
-            for cell in cells
-            for match in CAPABILITY_ID.findall(_plain(cell))
-        ]
-        kinds = [
-            _normalized(cell)
-            for cell in cells
-            if _normalized(cell) in {"read", "write"}
-        ]
-        if kinds:
-            kind = kinds[0]
-        elif name.startswith(("ae_get", "ae_list", "ae_read", "ae_inspect")):
-            kind = "read"
-        elif name.startswith(("ae_add", "ae_create", "ae_delete", "ae_set", "ae_apply")):
-            kind = "write"
-        else:
-            raise ParseFailure(f"cannot determine read/write kind for {name} at line {line}")
-        tools.append(
-            {
-                "name": name,
-                "kind": kind,
-                "nativeCapability": capabilities[0] if capabilities else None,
-                "registryLine": line,
-            }
+    registry_by_tool: dict[str, Table] = {}
+    for table in registries:
+        normalized_header = [_normalized(cell) for cell in table.header]
+        tool_column = normalized_header.index(
+            "public mcp tool" if canonical else "tool"
         )
+        kind_column = normalized_header.index("r w") if not canonical else None
+        for line, cells in table.rows:
+            matches = PUBLIC_TOOL.findall(_plain(cells[tool_column]))
+            if len(matches) != 1:
+                raise ParseFailure(
+                    f"public-tool row at line {line} does not name exactly one tool"
+                )
+            name = matches[0]
+            capabilities = [
+                match
+                for cell in cells
+                for match in CAPABILITY_ID.findall(_plain(cell))
+            ]
+            if kind_column is not None:
+                kind_value = _normalized(cells[kind_column])
+                if kind_value not in {"r", "w"}:
+                    raise ParseFailure(
+                        f"public-tool row at line {line} has an invalid R/W value"
+                    )
+                kind = "read" if kind_value == "r" else "write"
+            else:
+                kinds = [
+                    _normalized(cell)
+                    for cell in cells
+                    if _normalized(cell) in {"read", "write"}
+                ]
+                if kinds:
+                    kind = kinds[0]
+                elif name.startswith(("ae_get", "ae_list", "ae_read", "ae_inspect")):
+                    kind = "read"
+                elif name.startswith(
+                    ("ae_add", "ae_create", "ae_delete", "ae_set", "ae_apply")
+                ):
+                    kind = "write"
+                else:
+                    raise ParseFailure(
+                        f"cannot determine read/write kind for {name} at line {line}"
+                    )
+            tools.append(
+                {
+                    "name": name,
+                    "kind": kind,
+                    "nativeCapability": capabilities[0] if capabilities else None,
+                    "registryLine": line,
+                }
+            )
+            registry_by_tool[name] = table
     names = [tool["name"] for tool in tools]
     if not names or len(names) != len(set(names)):
         raise ParseFailure("public-tool registry is empty or contains duplicate tool names")
-    return table, tools
+    return registry_by_tool, tools
 
 
 def _json_property_range(lines: Sequence[str], fence: FenceRange, tool: str) -> tuple[int, int] | None:
@@ -516,7 +542,7 @@ def build_index(text: str, source_name: str) -> dict[str, Any]:
     headings = _headings(lines)
     fences = _fences(lines)
     tables = _tables(lines)
-    registry, tools = _tool_registry(tables)
+    registries, tools = _tool_registry(tables)
     execution = _execution_path(lines, headings, fences)
 
     indexed_tools = []
@@ -524,7 +550,9 @@ def build_index(text: str, source_name: str) -> dict[str, Any]:
         indexed_tools.append(
             {
                 **tool,
-                "schema": _schema_contract(lines, headings, fences, registry, tool["name"]),
+                "schema": _schema_contract(
+                    lines, headings, fences, registries[tool["name"]], tool["name"]
+                ),
                 "executionPath": execution,
                 "undoModel": _undo_model(lines, headings, tables, tool),
                 "acceptance": _acceptance_disposition(headings, tables, tool),

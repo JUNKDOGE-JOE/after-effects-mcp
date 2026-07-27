@@ -167,11 +167,20 @@ export async function runDiagnostics({
     try {
       const state = await runtimeManager.inspect();
       const current = state.current?.ok ? state.current.record : null;
+      const developmentRuntime = state.developmentRuntime === true;
       items.push({
         id: 'ae-mcp',
         ok: state.ok,
-        detail: state.ok
-          ? `${current.version} · ${state.launcher.path} · ${current.sourceCommitSha}`
+        detail: state.ok && developmentRuntime
+          ? [
+            'DEVELOPMENT CHECKOUT',
+            state.checkoutPath,
+            state.interpreter?.path,
+            state.interpreter?.resolvedPath,
+            state.diagnostics?.[0]?.code,
+          ].filter(Boolean).join(' · ')
+          : state.ok
+            ? `${current.version} · ${state.launcher.path} · ${current.sourceCommitSha}`
           : [state.current?.code, state.launcher?.code].filter(Boolean).join(' · '),
         fixHint: HINTS['ae-mcp'],
         action: { kind: 'repair-runtime' },

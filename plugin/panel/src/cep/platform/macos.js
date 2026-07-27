@@ -8,6 +8,10 @@ export function createMacosAdapter(deps) {
   const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: 'standard', version: null, arch: 'arm64' });
   return Object.freeze({
     id: 'macos-arm64',
+    // RuntimeManager needs the CEP process environment for its explicit,
+    // development-only direct-checkout override.  Keep it on the adapter so
+    // callers do not need to reach around the platform boundary.
+    env: deps.env,
     paths,
     fs: deps.fs,
     ...boundary,

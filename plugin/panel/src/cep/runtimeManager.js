@@ -10,6 +10,13 @@ const LAYER_INSTANCE_ID = /^i-[0-9a-f]{16}$/;
 const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
 const SOURCE_SHA = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
+const DEVELOPMENT_RUNTIME_ENV = 'AE_MCP_DEV_RUNTIME';
+const DEVELOPMENT_CORE_BOOTSTRAP = [
+  'import runpy,sys',
+  'sys.path.insert(0,sys.argv[1])',
+  'sys.path.insert(0,sys.argv[2])',
+  'runpy.run_module("ae_mcp",run_name="__main__")',
+].join(';');
 
 export class RuntimeManagerError extends Error {
   constructor(code, message, details = {}) {
@@ -88,6 +95,11 @@ function randomHex(randomBytes, size = 8) {
   return Buffer.from(randomBytes(size)).toString('hex');
 }
 
+export function hasDevelopmentRuntimeOverride(environment = {}) {
+  return typeof environment?.[DEVELOPMENT_RUNTIME_ENV] === 'string'
+    && environment[DEVELOPMENT_RUNTIME_ENV].trim().length > 0;
+}
+
 export function createRuntimeManager({
   platform,
   extensionRoot,
@@ -108,6 +120,7 @@ export function createRuntimeManager({
   },
   lockTimeoutMs = 10000,
   lockPollMs = 25,
+  environment = platform?.env || globalThis.window?.cep_node?.process?.env || globalThis.process?.env || {},
 } = {}) {
   if (!platform || platform.id !== RUNTIME_PLATFORM) {
     failure('RUNTIME_PLATFORM_UNSUPPORTED', 'RuntimeManager currently supports Apple Silicon macOS only');
@@ -136,6 +149,97 @@ export function createRuntimeManager({
   const packagedRuntimeManifest = paths.join([packagedRuntimeRoot, 'runtime-manifest.json']);
   const packagedLauncher = paths.join([extensionRoot, 'platform', platform.id, 'bin', 'ae-mcp']);
   const stableLauncherRecordPath = paths.join([root, STABLE_LAUNCHER_RECORD]);
+  const developmentMarkerPath = paths.join([extensionRoot, '.debug']);
+  const developmentRuntimeInput = hasDevelopmentRuntimeOverride(environment)
+    ? environment[DEVELOPMENT_RUNTIME_ENV].trim() : '';
+
+  function developmentBuild() {
+    return fs.existsSync(developmentMarkerPath) && !fs.existsSync(packageManifestPath);
+  }
+
+  async function selectDevelopmentRuntime() {
+    if (!developmentRuntimeInput) return null;
+    // This is deliberately the same development/release boundary used by the
+    // panel's existing PATH fallback. A packaged extension must never accept
+    // an unverified source checkout merely because its process has this env.
+    if (!developmentBuild()) {
+      failure(
+        'RUNTIME_DEVELOPMENT_RUNTIME_RELEASE_REFUSED',
+        `${DEVELOPMENT_RUNTIME_ENV} is refused by a packaged release build`,
+      );
+    }
+    if (!paths.isAbsolute(developmentRuntimeInput)) {
+      failure(
+        'RUNTIME_DEVELOPMENT_RUNTIME_INVALID',
+        `${DEVELOPMENT_RUNTIME_ENV} must name an absolute source checkout path`,
+      );
+    }
+
+    let checkout;
+    try {
+      checkout = await promises.realpath(developmentRuntimeInput);
+      const info = await promises.stat(checkout);
+      if (!info.isDirectory()) throw new Error('not a directory');
+    } catch {
+      failure(
+        'RUNTIME_DEVELOPMENT_RUNTIME_INVALID',
+        `${DEVELOPMENT_RUNTIME_ENV} does not resolve to a usable source checkout`,
+        { path: developmentRuntimeInput },
+      );
+    }
+
+    const projectManifest = paths.join([checkout, 'pyproject.toml']);
+    const coreRoot = paths.join([checkout, 'packages', 'core']);
+    const coreEntrypoint = paths.join([coreRoot, 'ae_mcp', '__main__.py']);
+    const bridgeRoot = paths.join([checkout, 'packages', 'bridge']);
+    const bridgeEntrypoint = paths.join([bridgeRoot, 'ae_mcp_bridge', '__init__.py']);
+    const interpreter = paths.join([checkout, '.venv', 'bin', 'python3']);
+    let resolvedInterpreter;
+    try {
+      const [manifestInfo, entrypointInfo, bridgeInfo, interpreterInfo] = await Promise.all([
+        promises.lstat(projectManifest),
+        promises.lstat(coreEntrypoint),
+        promises.lstat(bridgeEntrypoint),
+        promises.lstat(interpreter),
+      ]);
+      if (!manifestInfo.isFile() || manifestInfo.isSymbolicLink?.()
+          || !entrypointInfo.isFile() || entrypointInfo.isSymbolicLink?.()
+          || !bridgeInfo.isFile() || bridgeInfo.isSymbolicLink?.()
+          || (!interpreterInfo.isFile() && !interpreterInfo.isSymbolicLink?.())
+          || (interpreterInfo.mode & 0o111) === 0) {
+        throw new Error('required checkout entrypoint is invalid');
+      }
+      resolvedInterpreter = await promises.realpath(interpreter);
+      const resolvedInfo = await promises.stat(resolvedInterpreter);
+      if (!resolvedInfo.isFile() || (resolvedInfo.mode & 0o111) === 0) {
+        throw new Error('resolved interpreter is not executable');
+      }
+    } catch {
+      failure(
+        'RUNTIME_DEVELOPMENT_RUNTIME_INVALID',
+        `${DEVELOPMENT_RUNTIME_ENV} does not contain the Core/bridge entrypoints and an executable .venv/bin/python3`,
+        { path: checkout },
+      );
+    }
+
+    return {
+      ok: true,
+      action: 'development-runtime',
+      developmentRuntime: true,
+      checkoutPath: checkout,
+      launcher: interpreter,
+      args: ['-B', '-I', '-c', DEVELOPMENT_CORE_BOOTSTRAP, coreRoot, bridgeRoot],
+      cwd: checkout,
+      interpreter: {
+        path: interpreter,
+        resolvedPath: resolvedInterpreter,
+      },
+      diagnostics: [{
+        code: 'RUNTIME_DEVELOPMENT_RUNTIME_SELECTED',
+        message: `Development runtime selected from ${checkout}; no packaged runtime was verified or installed.`,
+      }],
+    };
+  }
 
   async function sha256File(filePath) {
     const info = await promises.lstat(filePath);
@@ -1226,7 +1330,9 @@ export function createRuntimeManager({
 
   function ensureReady() {
     if (readinessPromise) return readinessPromise;
-    const pending = withLock(async () => {
+    const pending = developmentRuntimeInput
+      ? selectDevelopmentRuntime()
+      : withLock(async () => {
       let current = await pointerState(paths.currentPointer);
       const previous = await pointerState(paths.previousPointer);
       if (!current.ok && previous.ok) {
@@ -1350,7 +1456,7 @@ export function createRuntimeManager({
           failedCode: current.code,
         }] : [],
       };
-    });
+      });
     const shared = pending.finally(() => {
       if (readinessPromise === shared) readinessPromise = null;
     });
@@ -1359,6 +1465,12 @@ export function createRuntimeManager({
   }
 
   async function repair() {
+    if (developmentRuntimeInput) {
+      failure(
+        'RUNTIME_DEVELOPMENT_RUNTIME_OPERATION_UNAVAILABLE',
+        'Repair is unavailable while AE_MCP_DEV_RUNTIME selects a source checkout.',
+      );
+    }
     return withLock(async () => {
       const packaged = await verifyPackagedPayload();
       const current = await pointerState(paths.currentPointer);
@@ -1382,6 +1494,12 @@ export function createRuntimeManager({
   }
 
   async function rollback() {
+    if (developmentRuntimeInput) {
+      failure(
+        'RUNTIME_DEVELOPMENT_RUNTIME_OPERATION_UNAVAILABLE',
+        'Rollback is unavailable while AE_MCP_DEV_RUNTIME selects a source checkout.',
+      );
+    }
     return withLock(async () => {
       const current = await pointerState(paths.currentPointer);
       const previous = await pointerState(paths.previousPointer);
@@ -1408,6 +1526,12 @@ export function createRuntimeManager({
   }
 
   async function uninstall() {
+    if (developmentRuntimeInput) {
+      failure(
+        'RUNTIME_DEVELOPMENT_RUNTIME_OPERATION_UNAVAILABLE',
+        'Uninstall is unavailable while AE_MCP_DEV_RUNTIME selects a source checkout.',
+      );
+    }
     return withLock(async () => {
       await removePointer(paths.currentPointer);
       await removePointer(paths.previousPointer);
@@ -1449,6 +1573,29 @@ export function createRuntimeManager({
   }
 
   async function inspect() {
+    if (developmentRuntimeInput) {
+      try {
+        const selected = await selectDevelopmentRuntime();
+        return {
+          ok: true,
+          developmentRuntime: true,
+          checkoutPath: selected.checkoutPath,
+          interpreter: selected.interpreter,
+          launcher: { ok: true, path: selected.launcher },
+          diagnostics: selected.diagnostics,
+        };
+      } catch (error) {
+        const normalized = runtimeError(error);
+        return {
+          ok: false,
+          developmentRuntime: true,
+          code: normalized.code,
+          detail: normalized.message,
+          launcher: { ok: false, code: normalized.code },
+          diagnostics: [{ code: normalized.code, message: normalized.message }],
+        };
+      }
+    }
     const current = await pointerState(paths.currentPointer);
     const previous = await pointerState(paths.previousPointer);
     let launcher = { ok: false, code: 'RUNTIME_LAUNCHER_MISSING', path: paths.launcher };
@@ -1467,6 +1614,25 @@ export function createRuntimeManager({
 
   async function resolveNode() {
     const selected = await ensureReady();
+    if (selected.developmentRuntime) {
+      const node = await platform.resolveExecutable('node', {
+        minimumVersion: '24.17.0',
+        requiredArch: 'arm64',
+      });
+      if (!node.ok) {
+        failure('RUNTIME_NODE_INVALID', 'A development runtime requires an available Node 24 arm64 executable');
+      }
+      return {
+        ok: true,
+        nodePath: node.path,
+        version: node.version,
+        runtime: selected,
+        executable: {
+          ...node,
+          source: 'development-path',
+        },
+      };
+    }
     const inspected = await inspectInstalled(selected.relative);
     const nodePath = paths.join([inspected.directory, 'node', 'bin', 'node']);
     const info = await promises.lstat(nodePath);

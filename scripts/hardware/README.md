@@ -159,6 +159,41 @@ Three edges are easy to misread:
   the summary rather than infer candidate status from an event row
   (`capability_package_runtime.py:324-380`).
 
+## Ordinary development HDEV
+
+`development_smoke.py` is the permanently non-candidate real-AE proof for
+ordinary AE-changing PRs. Scenario `core-native-write-undo@1` performs exactly
+seven public MCP calls: readiness, composition creation, complete settings
+before/after one background write, post-Undo locator reacquisition, and
+complete restored settings. It never runs T5/T6, never uses the stable
+RuntimeManager launcher, and every event and summary records
+`validationProfile=development`, `candidateRun=false`, and
+`candidateEvidence=false`.
+
+Run it through the component-selective CLI after read-only doctor and exact
+formal-AE launch, or directly:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python3 -B -I \
+  scripts/hardware/development_smoke.py \
+  --scenario core-native-write-undo@1 \
+  --selected-components core \
+  --reused-components cep,native \
+  --checkout "$PWD" \
+  --fixture-path "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active/hdev-core-native.aep" \
+  --recovery-archive-root "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/recovery" \
+  --evidence-dir "$HOME/Library/Application Support/AfterEffectsMCP/evidence/hdev-core-native" \
+  --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
+```
+
+The first checkpoint saves one empty `ephemeral-validation` project. The
+driver never creates a Save As copy. After one explicit real Undo and
+independent public readback, the final checkpoint closes formal AE; only then
+does the driver archive the exact fixture. Stop immediately on an incompatible
+wire/capability/RPC digest, strict product-version mismatch, failed native load,
+`POSSIBLY_SIDE_EFFECTING_FAILURE`, corrupted fixture baseline, or AE crash.
+Never retry an uncertain write.
+
 ## Native editing milestone #167
 
 `issue167_native_media_acceptance.py` drives the frozen 22-tool Effect Stack,

@@ -121,8 +121,36 @@ test('resolveMcpCommand lets the macOS RuntimeManager verify and activate before
 
   assert.deepEqual(calls, ['ensureReady']);
   assert.equal(result.command, platform.paths.launcher);
+  assert.equal(result.cwd, undefined);
   assert.equal(result.source, 'runtime-manager');
   assert.equal(result.runtime.version, '0.9.3');
+});
+
+test('resolveMcpCommand launches a selected development checkout interpreter directly', async () => {
+  const platform = fakeCommandPlatform({ launcher: '/Users/a/.ae-mcp/bin/ae-mcp' });
+  const bootstrap = 'import runpy,sys;sys.path.insert(0,sys.argv[1]);runpy.run_module("ae_mcp",run_name="__main__")';
+  const result = await resolveMcpCommand({
+    platform,
+    extRoot: '/Users/a/Development/AE MCP',
+    runtimeManager: {
+      async ensureReady() {
+        return {
+          action: 'development-runtime',
+          developmentRuntime: true,
+          launcher: '/Users/a/src/ae-mcp/.venv/bin/python3',
+          args: ['-B', '-I', '-c', bootstrap, '/Users/a/src/ae-mcp/packages/core'],
+          cwd: '/Users/a/src/ae-mcp',
+        };
+      },
+    },
+  });
+
+  assert.equal(result.command, '/Users/a/src/ae-mcp/.venv/bin/python3');
+  assert.deepEqual(result.args, [
+    '-B', '-I', '-c', bootstrap, '/Users/a/src/ae-mcp/packages/core',
+  ]);
+  assert.equal(result.cwd, '/Users/a/src/ae-mcp');
+  assert.equal(result.source, 'development-runtime');
 });
 
 test('resolveMcpCommand allows PATH only for an explicit .debug install without a bundle', async () => {
@@ -223,6 +251,26 @@ function spawnReplying(initResult) {
   };
   return { spawnImpl, getProc: () => proc };
 }
+
+test('createMcpClient spawns a selected development runtime in its checkout', async () => {
+  const { spawnImpl, getProc } = spawnReplying({});
+  const bootstrap = 'import runpy,sys;sys.path.insert(0,sys.argv[1]);runpy.run_module("ae_mcp",run_name="__main__")';
+  const client = createMcpClient({
+    spawnImpl,
+    resolveCommand: async () => ({
+      command: '/checkout/.venv/bin/python3',
+      args: ['-B', '-I', '-c', bootstrap, '/checkout/packages/core'],
+      cwd: '/checkout',
+      source: 'development-runtime',
+    }),
+  });
+
+  await client.start();
+  assert.deepEqual(getProc().clientWrites[0].method, 'initialize');
+  assert.equal(getProc().spawnOptions.cwd, '/checkout');
+  assert.equal(getProc().spawnOptions.shell, false);
+  client.stop();
+});
 
 test('createMcpClient captures server instructions from the initialize result', async () => {
   const { spawnImpl } = spawnReplying({ instructions: 'SERVER_GUIDE' });

@@ -43,6 +43,34 @@ The Connection diagnostics report the selected version, full source commit, abso
 
 连接诊断会报告所选版本、完整 source commit、绝对 launcher 路径、current/previous 健康状态和结构化错误码。`RUNTIME_HASH_MISMATCH`、`RUNTIME_INCOMPLETE`、`RUNTIME_POINTER_INVALID` 需要离线修复或回滚；`RUNTIME_MANAGER_LOCKED` 表示另一 Panel 正在修改 runtime 状态，应在该有界操作结束后重试。
 
+### Development checkout override / 开发 checkout 覆盖
+
+For a development-installed CEP extension only (the existing `.debug` marker is
+present and `bundle-manifest.json` is absent), setting `AE_MCP_DEV_RUNTIME` to
+an absolute source-checkout path starts that checkout's `.venv/bin/python3`
+with `-B -I -c` and a closed bootstrap that prepends only the checkout's
+`packages/core` before running `ae_mcp` as `__main__`, using the canonical
+checkout as the child working directory. This explicit path is required
+because isolated Python does not use the working directory or editable-install
+path files for module discovery. This bypasses RuntimeManager installation and takes no
+RuntimeManager lock; it never reads, writes, or repairs `current` or `previous`.
+The checkout must contain `pyproject.toml`, `packages/core/ae_mcp/__main__.py`,
+and an executable `.venv/bin/python3` or selection fails closed with
+`RUNTIME_DEVELOPMENT_RUNTIME_INVALID`.
+
+Daily doctor, launch, component sync, and HDEV use only this development
+boundary and never package a portable runtime or align the checkout to a
+RuntimeManager generation manifest. HDEV evidence is always non-candidate.
+Packaged release T5/T6 retain exact source/artifact identity, complete payload
+hashing, RuntimeManager manifest alignment, and the existing strict release
+gates; the development override does not weaken that boundary.
+
+Connection diagnostics label this state `DEVELOPMENT CHECKOUT`, report both the
+checkout and resolved interpreter paths, and include
+`RUNTIME_DEVELOPMENT_RUNTIME_SELECTED`. A packaged release extension rejects
+the variable with `RUNTIME_DEVELOPMENT_RUNTIME_RELEASE_REFUSED`; it never
+falls back to the production runtime manager.
+
 Initial support is Apple Silicon on macOS 14 or newer. Intel/Rosetta, signing/notarization, the formal installer, and Windows RuntimeManager changes are separate work.
 
 首期支持范围是 macOS 14 或更高版本的 Apple Silicon。Intel/Rosetta、签名与公证、正式安装器以及 Windows RuntimeManager 改动属于独立工作。
