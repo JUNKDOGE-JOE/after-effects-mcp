@@ -8,6 +8,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <iterator>
 #include <limits>
 #include <span>
 #include <string>
@@ -532,6 +533,110 @@ std::string tsm_invoke_json(
         "\"params\":{\"capabilityId\":\"" + std::string(capability_id)
       + "\",\"capabilityVersion\":1,\"arguments\":" + std::string(arguments)
       + "}}";
+}
+
+std::string extract_object_at(
+    const std::string& document,
+    std::size_t object_start,
+    const std::string& label) {
+  require(
+      object_start < document.size() && document[object_start] == '{',
+      label + " does not start with an object");
+  std::size_t depth = 0;
+  bool in_string = false;
+  bool escaped = false;
+  for (std::size_t index = object_start; index < document.size(); ++index) {
+    const char character = document[index];
+    if (in_string) {
+      if (escaped) {
+        escaped = false;
+      } else if (character == '\\') {
+        escaped = true;
+      } else if (character == '"') {
+        in_string = false;
+      }
+      continue;
+    }
+    if (character == '"') {
+      in_string = true;
+    } else if (character == '{') {
+      ++depth;
+    } else if (character == '}') {
+      require(depth > 0, label + " has an unmatched closing brace");
+      --depth;
+      if (depth == 0) {
+        return document.substr(object_start, index - object_start + 1);
+      }
+    }
+  }
+  fail(label + " has an unterminated object");
+}
+
+std::string positive_arguments_for(
+    const std::string& capability_fixture,
+    std::string_view capability_id) {
+  const std::string id_token = "\"id\": \"" + std::string(capability_id) + "\"";
+  const std::size_t capability_position = capability_fixture.find(id_token);
+  require(
+      capability_position != std::string::npos,
+      "advertised capability has no descriptor fixture: "
+          + std::string(capability_id));
+  const std::size_t examples_position =
+      capability_fixture.find("\"examples\": [", capability_position);
+  require(
+      examples_position != std::string::npos,
+      "advertised capability has no example corpus: "
+          + std::string(capability_id));
+  const std::size_t arguments_key =
+      capability_fixture.find("\"arguments\":", examples_position);
+  require(
+      arguments_key != std::string::npos,
+      "advertised capability has no positive invoke arguments: "
+          + std::string(capability_id));
+  const std::size_t object_start =
+      capability_fixture.find('{', arguments_key + std::strlen("\"arguments\":"));
+  require(
+      object_start != std::string::npos,
+      "advertised capability arguments are not an object: "
+          + std::string(capability_id));
+  return extract_object_at(
+      capability_fixture,
+      object_start,
+      "positive invoke arguments for " + std::string(capability_id));
+}
+
+void advertised_native_capabilities_are_parseable_from_invoke_requests() {
+  std::ifstream fixture("native/ae-plugin/protocol/fixtures/capabilities.json");
+  require(fixture.good(), "advertised capability request corpus is unavailable");
+  const std::string capability_fixture{
+      std::istreambuf_iterator<char>(fixture),
+      std::istreambuf_iterator<char>()};
+  std::size_t parsed_count = 0;
+  for (const std::string_view capability_id
+       : aemcp::native::kAdvertisedNativeCapabilities) {
+    const std::string arguments =
+        positive_arguments_for(capability_fixture, capability_id);
+    try {
+      const ParsedRequest parsed = decode_request_frame(frame(
+          package150_invoke_json(
+              "advertised-invoke-" + std::to_string(++parsed_count),
+              capability_id,
+              arguments)));
+      const auto& invoke = std::get<InvokeParams>(parsed.params);
+      require(
+          parsed.method == RpcMethod::kInvoke
+              && invoke.capability_id == capability_id,
+          "advertised capability parsed as the wrong invoke: "
+              + std::string(capability_id));
+    } catch (const CodecError& error) {
+      fail(
+          "advertised capability is not parseable from invoke request: "
+          + std::string(capability_id) + ": " + error.what());
+    }
+  }
+  require(
+      parsed_count == aemcp::native::kAdvertisedNativeCapabilities.size(),
+      "advertised invoke corpus did not cover the complete native registry");
 }
 
 void golden_requests_are_typed_and_closed() {
@@ -1560,6 +1665,62 @@ void project_composition_package_parses_and_serializes_all_eight_contracts() {
             && std::get<InvokeParams>(parsed.params).capability_id == capability_id,
         "package-150 invoke parser lost its typed capability: " + capability_id);
   }
+
+  const std::array<std::tuple<std::string, std::string, std::string>, 6>
+      setting_requests{{
+          {"package-dimensions", "ae.composition.dimensions.set",
+              "{\"compositionLocator\":" + composition
+                + ",\"width\":1280,\"height\":720,"
+                  "\"idempotencyKey\":\"package-dimensions-0001\"}"},
+          {"package-duration", "ae.composition.duration.set",
+              "{\"compositionLocator\":" + composition
+                + ",\"duration\":{\"value\":8,\"scale\":1},"
+                  "\"idempotencyKey\":\"package-duration-0001\"}"},
+          {"package-frame-rate", "ae.composition.frame-rate.set",
+              "{\"compositionLocator\":" + composition
+                + ",\"frameRate\":{\"numerator\":30,\"denominator\":1},"
+                  "\"idempotencyKey\":\"package-frame-rate-0001\"}"},
+          {"package-pixel-aspect", "ae.composition.pixel-aspect-ratio.set",
+              "{\"compositionLocator\":" + composition
+                + ",\"pixelAspectRatio\":{\"numerator\":2,\"denominator\":1},"
+                  "\"idempotencyKey\":\"package-pixel-aspect-0001\"}"},
+          {"package-background", "ae.composition.background-color.set",
+              "{\"compositionLocator\":" + composition
+                + ",\"backgroundColor\":{\"red\":10,\"green\":20,"
+                  "\"blue\":30,\"alpha\":255},"
+                  "\"idempotencyKey\":\"package-background-0001\"}"},
+          {"package-display-start", "ae.composition.display-start-time.set",
+              "{\"compositionLocator\":" + composition
+                + ",\"displayStartTime\":{\"value\":-1,\"scale\":1},"
+                  "\"idempotencyKey\":\"package-display-start-0001\"}"},
+      }};
+  std::array<InvokeParams, 6> setting_params;
+  for (std::size_t index = 0; index < setting_requests.size(); ++index) {
+    const auto& [request_id, capability_id, arguments] = setting_requests[index];
+    const ParsedRequest parsed = decode_request_frame(frame(package150_invoke_json(
+        request_id, capability_id, arguments)));
+    setting_params[index] = std::get<InvokeParams>(parsed.params);
+    require(
+        setting_params[index].capability_id == capability_id
+            && setting_params[index].composition_locator.has_value()
+            && setting_params[index].arguments_fingerprint_sha256.size() == 64,
+        "composition setting invoke parser lost identity or mutation fence: "
+            + capability_id);
+  }
+  require(
+      setting_params[0].composition_create_width == 1280
+          && setting_params[0].composition_create_height == 720
+          && setting_params[1].composition_create_duration
+              == aemcp::native::CompositionCurrentTime{8, 1, "8"}
+          && setting_params[2].composition_create_frame_rate
+              == aemcp::native::CompositionPositiveRatio{30, 1, "30"}
+          && setting_params[3].composition_create_pixel_aspect_ratio
+              == aemcp::native::CompositionPositiveRatio{2, 1, "2"}
+          && setting_params[4].layer_create_color
+              == aemcp::native::CompositionLayerCreateColor{10, 20, 30, 255}
+          && setting_params[5].target_time
+              == aemcp::native::CompositionCurrentTime{-1, 1, "-1"},
+      "composition setting invoke parser dropped a typed target field");
 
   const ParsedRequest comment_fixture = decode_request_frame(frame(package150_invoke_json(
       "invoke-item-comment-set-1",
@@ -3518,6 +3679,7 @@ void fixed_seed_mutation_fuzz_is_bounded() {
 }  // namespace
 
 int main() {
+  advertised_native_capabilities_are_parseable_from_invoke_requests();
   golden_requests_are_typed_and_closed();
   project_bit_depth_invokes_are_closed_and_explicitly_mapped();
   invalidate_graph_requests_and_results_are_closed_and_deterministic();

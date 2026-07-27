@@ -830,6 +830,65 @@ std::string canonical_project_item_text_set_arguments(
   return "{" + members[0] + "," + members[1] + "," + members[2] + "}";
 }
 
+std::string canonical_composition_setting_set_arguments(
+    const InvokeParams& value) {
+  if (!value.composition_locator.has_value()
+      || !valid_output_locator(*value.composition_locator)
+      || value.composition_locator->kind != "composition"
+      || !valid_idempotency_key(value.idempotency_key)) {
+    invalid_argument("invalid composition setting arguments digest input");
+  }
+  if (value.capability_id == kCompositionDimensionsSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"height\":" + std::to_string(value.composition_create_height)
+        + ",\"idempotencyKey\":" + json_string(value.idempotency_key)
+        + ",\"width\":" + std::to_string(value.composition_create_width) + "}";
+  }
+  if (value.capability_id == kCompositionDurationSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"duration\":{\"scale\":"
+        + std::to_string(value.composition_create_duration.scale)
+        + ",\"value\":" + std::to_string(value.composition_create_duration.value)
+        + "},\"idempotencyKey\":" + json_string(value.idempotency_key) + "}";
+  }
+  if (value.capability_id == kCompositionFrameRateSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"frameRate\":{\"denominator\":"
+        + std::to_string(value.composition_create_frame_rate.denominator)
+        + ",\"numerator\":"
+        + std::to_string(value.composition_create_frame_rate.numerator)
+        + "},\"idempotencyKey\":" + json_string(value.idempotency_key) + "}";
+  }
+  if (value.capability_id == kCompositionPixelAspectRatioSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"idempotencyKey\":" + json_string(value.idempotency_key)
+        + ",\"pixelAspectRatio\":{\"denominator\":"
+        + std::to_string(
+            value.composition_create_pixel_aspect_ratio.denominator)
+        + ",\"numerator\":"
+        + std::to_string(
+            value.composition_create_pixel_aspect_ratio.numerator) + "}}";
+  }
+  if (value.capability_id == kCompositionBackgroundColorSetCapability
+      && value.layer_create_color.has_value()) {
+    const auto& color = *value.layer_create_color;
+    return "{\"backgroundColor\":{\"alpha\":" + std::to_string(color.alpha)
+        + ",\"blue\":" + std::to_string(color.blue)
+        + ",\"green\":" + std::to_string(color.green)
+        + ",\"red\":" + std::to_string(color.red) + "}"
+        + ",\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"idempotencyKey\":" + json_string(value.idempotency_key) + "}";
+  }
+  if (value.capability_id == kCompositionDisplayStartTimeSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"displayStartTime\":{\"scale\":"
+        + std::to_string(value.target_time.scale)
+        + ",\"value\":" + std::to_string(value.target_time.value)
+        + "},\"idempotencyKey\":" + json_string(value.idempotency_key) + "}";
+  }
+  invalid_argument("invalid composition setting capability");
+}
+
 std::string canonical_layer_time_input(const CompositionCurrentTime& value) {
   if (value.scale == 0
       || value.seconds_rational
@@ -1262,6 +1321,13 @@ std::string canonical_request(const ParsedRequest& request) {
             + ",\"start\":{\"scale\":"
             + std::to_string(value.work_area_start.scale) + ",\"value\":"
             + std::to_string(value.work_area_start.value) + "}}";
+      } else if (value.capability_id == kCompositionDimensionsSetCapability
+          || value.capability_id == kCompositionDurationSetCapability
+          || value.capability_id == kCompositionFrameRateSetCapability
+          || value.capability_id == kCompositionPixelAspectRatioSetCapability
+          || value.capability_id == kCompositionBackgroundColorSetCapability
+          || value.capability_id == kCompositionDisplayStartTimeSetCapability) {
+        arguments = canonical_composition_setting_set_arguments(value);
       } else if (value.capability_id == "ae.project.item.name.set"
           || value.capability_id == "ae.project.item.comment.set") {
         const std::string_view field = value.capability_id == "ae.project.item.name.set"
@@ -1795,6 +1861,149 @@ ParsedRequest classify_request(const JsonValue& root) {
             result.work_area_start,
             result.work_area_duration,
             result.idempotency_key);
+      } else if (capability == "ae.composition.dimensions.set"
+          || capability == "ae.composition.duration.set"
+          || capability == "ae.composition.frame-rate.set"
+          || capability == "ae.composition.pixel-aspect-ratio.set"
+          || capability == "ae.composition.background-color.set"
+          || capability == "ae.composition.display-start-time.set") {
+        const bool dimensions =
+            capability == kCompositionDimensionsSetCapability;
+        const bool duration =
+            capability == kCompositionDurationSetCapability;
+        const bool frame_rate =
+            capability == kCompositionFrameRateSetCapability;
+        const bool pixel_aspect_ratio =
+            capability == kCompositionPixelAspectRatioSetCapability;
+        const bool background_color =
+            capability == kCompositionBackgroundColorSetCapability;
+        const std::string_view field = dimensions
+            ? "width"
+            : duration
+                ? "duration"
+                : frame_rate
+                    ? "frameRate"
+                    : pixel_aspect_ratio
+                        ? "pixelAspectRatio"
+                        : background_color
+                            ? "backgroundColor" : "displayStartTime";
+        const bool closed = dimensions
+            ? exact_keys(
+                *arguments,
+                {"compositionLocator", "width", "height", "idempotencyKey"},
+                {"compositionLocator", "width", "height", "idempotencyKey"})
+            : duration
+                ? exact_keys(
+                    *arguments,
+                    {"compositionLocator", "duration", "idempotencyKey"},
+                    {"compositionLocator", "duration", "idempotencyKey"})
+                : frame_rate
+                    ? exact_keys(
+                        *arguments,
+                        {"compositionLocator", "frameRate", "idempotencyKey"},
+                        {"compositionLocator", "frameRate", "idempotencyKey"})
+                    : pixel_aspect_ratio
+                        ? exact_keys(
+                            *arguments,
+                            {"compositionLocator", "pixelAspectRatio",
+                                "idempotencyKey"},
+                            {"compositionLocator", "pixelAspectRatio",
+                                "idempotencyKey"})
+                        : background_color
+                            ? exact_keys(
+                                *arguments,
+                                {"compositionLocator", "backgroundColor",
+                                    "idempotencyKey"},
+                                {"compositionLocator", "backgroundColor",
+                                    "idempotencyKey"})
+                            : exact_keys(
+                                *arguments,
+                                {"compositionLocator", "displayStartTime",
+                                    "idempotencyKey"},
+                                {"compositionLocator", "displayStartTime",
+                                    "idempotencyKey"});
+        if (!closed) {
+          invalid_argument("composition setting arguments are not closed");
+        }
+        result.composition_locator = parse_locator(
+            *member(*arguments, "compositionLocator"), "composition");
+        if (dimensions) {
+          result.composition_create_width =
+              static_cast<std::uint32_t>(required_uint(
+                  *arguments, "width", CodecErrorKind::kInvalidArgument,
+                  1, 30'000));
+          result.composition_create_height =
+              static_cast<std::uint32_t>(required_uint(
+                  *arguments, "height", CodecErrorKind::kInvalidArgument,
+                  1, 30'000));
+        } else if (duration) {
+          result.composition_create_duration = parse_exact_time_input(
+              *member(*arguments, "duration"), "duration", false);
+        } else if (frame_rate || pixel_aspect_ratio) {
+          const JsonValue* ratio_value = member(*arguments, field);
+          const JsonValue::Object* ratio =
+              ratio_value == nullptr ? nullptr : object_of(*ratio_value);
+          if (ratio == nullptr
+              || !exact_keys(
+                  *ratio,
+                  {"numerator", "denominator"},
+                  {"numerator", "denominator"})) {
+            invalid_argument(
+                std::string(field) + " must be a closed positive ratio");
+          }
+          CompositionPositiveRatio parsed_ratio;
+          parsed_ratio.numerator = static_cast<std::int32_t>(required_uint(
+              *ratio, "numerator", CodecErrorKind::kInvalidArgument,
+              1, std::numeric_limits<std::int32_t>::max()));
+          parsed_ratio.denominator = static_cast<std::int32_t>(required_uint(
+              *ratio, "denominator", CodecErrorKind::kInvalidArgument,
+              1, std::numeric_limits<std::int32_t>::max()));
+          if (frame_rate && parsed_ratio.denominator != 1) {
+            invalid_argument(
+                "fractional frame rates require a pinned-host normalization measurement");
+          }
+          parsed_ratio.rational = canonical_seconds_rational(
+              parsed_ratio.numerator,
+              static_cast<std::uint32_t>(parsed_ratio.denominator));
+          if (frame_rate) {
+            result.composition_create_frame_rate = parsed_ratio;
+          } else {
+            result.composition_create_pixel_aspect_ratio = parsed_ratio;
+          }
+        } else if (background_color) {
+          const JsonValue* color_value = member(*arguments, "backgroundColor");
+          const JsonValue::Object* color =
+              color_value == nullptr ? nullptr : object_of(*color_value);
+          if (color == nullptr
+              || !exact_keys(
+                  *color,
+                  {"red", "green", "blue", "alpha"},
+                  {"red", "green", "blue", "alpha"})) {
+            invalid_argument("backgroundColor must be closed opaque RGBA");
+          }
+          result.layer_create_color = CompositionLayerCreateColor{
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "red", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "green", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "blue", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "alpha", CodecErrorKind::kInvalidArgument, 255, 255)),
+          };
+        } else {
+          result.target_time = parse_layer_exact_time_input(
+              *member(*arguments, "displayStartTime"),
+              "displayStartTime",
+              false);
+        }
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid composition setting idempotency key");
+        }
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            canonical_composition_setting_set_arguments(result));
       } else if (capability == "ae.project.item.name.set"
           || capability == "ae.project.item.comment.set") {
         const std::string field = capability == "ae.project.item.name.set"
