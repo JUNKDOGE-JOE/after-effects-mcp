@@ -9559,6 +9559,10 @@
     const fixed = (id, path, argsPrefix = []) => ({ ok: true, id, path, argsPrefix, source: "standard", version: null, arch: "arm64" });
     return Object.freeze({
       id: "macos-arm64",
+      // RuntimeManager needs the CEP process environment for its explicit,
+      // development-only direct-checkout override.  Keep it on the adapter so
+      // callers do not need to reach around the platform boundary.
+      env: deps.env,
       paths,
       fs: deps.fs,
       ...boundary,
@@ -17427,6 +17431,7 @@
   var SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/;
   var SOURCE_SHA = /^[0-9a-f]{40}$/;
   var SHA256 = /^[0-9a-f]{64}$/;
+  var DEVELOPMENT_RUNTIME_ENV = "AE_MCP_DEV_RUNTIME";
   var RuntimeManagerError = class extends Error {
     constructor(code, message, details = {}) {
       super(message);
@@ -17487,6 +17492,9 @@
   function randomHex(randomBytes, size = 8) {
     return Buffer.from(randomBytes(size)).toString("hex");
   }
+  function hasDevelopmentRuntimeOverride(environment = {}) {
+    return typeof (environment == null ? void 0 : environment[DEVELOPMENT_RUNTIME_ENV]) === "string" && environment[DEVELOPMENT_RUNTIME_ENV].trim().length > 0;
+  }
   function createRuntimeManager({
     platform,
     extensionRoot,
@@ -17507,7 +17515,8 @@
       }
     },
     lockTimeoutMs = 1e4,
-    lockPollMs = 25
+    lockPollMs = 25,
+    environment = (platform == null ? void 0 : platform.env) || ((_g) => (_g = ((_f) => (_f = ((_e) => (_e = globalThis.window) == null ? void 0 : _e.cep_node)()) == null ? void 0 : _f.process)()) == null ? void 0 : _g.env)() || ((_h) => (_h = globalThis.process) == null ? void 0 : _h.env)() || {}
   } = {}) {
     if (!platform || platform.id !== RUNTIME_PLATFORM) {
       failure("RUNTIME_PLATFORM_UNSUPPORTED", "RuntimeManager currently supports Apple Silicon macOS only");
@@ -17534,6 +17543,80 @@
     const packagedRuntimeManifest = paths.join([packagedRuntimeRoot, "runtime-manifest.json"]);
     const packagedLauncher = paths.join([extensionRoot, "platform", platform.id, "bin", "ae-mcp"]);
     const stableLauncherRecordPath = paths.join([root, STABLE_LAUNCHER_RECORD]);
+    const developmentMarkerPath = paths.join([extensionRoot, ".debug"]);
+    const developmentRuntimeInput = hasDevelopmentRuntimeOverride(environment) ? environment[DEVELOPMENT_RUNTIME_ENV].trim() : "";
+    function developmentBuild() {
+      return fs.existsSync(developmentMarkerPath) && !fs.existsSync(packageManifestPath);
+    }
+    async function selectDevelopmentRuntime() {
+      var _a2, _b2, _c2;
+      if (!developmentRuntimeInput) return null;
+      if (!developmentBuild()) {
+        failure(
+          "RUNTIME_DEVELOPMENT_RUNTIME_RELEASE_REFUSED",
+          `${DEVELOPMENT_RUNTIME_ENV} is refused by a packaged release build`
+        );
+      }
+      if (!paths.isAbsolute(developmentRuntimeInput)) {
+        failure(
+          "RUNTIME_DEVELOPMENT_RUNTIME_INVALID",
+          `${DEVELOPMENT_RUNTIME_ENV} must name an absolute source checkout path`
+        );
+      }
+      let checkout;
+      try {
+        checkout = await promises.realpath(developmentRuntimeInput);
+        const info = await promises.stat(checkout);
+        if (!info.isDirectory()) throw new Error("not a directory");
+      } catch {
+        failure(
+          "RUNTIME_DEVELOPMENT_RUNTIME_INVALID",
+          `${DEVELOPMENT_RUNTIME_ENV} does not resolve to a usable source checkout`,
+          { path: developmentRuntimeInput }
+        );
+      }
+      const projectManifest = paths.join([checkout, "pyproject.toml"]);
+      const coreEntrypoint = paths.join([checkout, "packages", "core", "ae_mcp", "__main__.py"]);
+      const interpreter = paths.join([checkout, ".venv", "bin", "python3"]);
+      let resolvedInterpreter;
+      try {
+        const [manifestInfo, entrypointInfo, interpreterInfo] = await Promise.all([
+          promises.lstat(projectManifest),
+          promises.lstat(coreEntrypoint),
+          promises.lstat(interpreter)
+        ]);
+        if (!manifestInfo.isFile() || ((_a2 = manifestInfo.isSymbolicLink) == null ? void 0 : _a2.call(manifestInfo)) || !entrypointInfo.isFile() || ((_b2 = entrypointInfo.isSymbolicLink) == null ? void 0 : _b2.call(entrypointInfo)) || !interpreterInfo.isFile() && !((_c2 = interpreterInfo.isSymbolicLink) == null ? void 0 : _c2.call(interpreterInfo)) || (interpreterInfo.mode & 73) === 0) {
+          throw new Error("required checkout entrypoint is invalid");
+        }
+        resolvedInterpreter = await promises.realpath(interpreter);
+        const resolvedInfo = await promises.stat(resolvedInterpreter);
+        if (!resolvedInfo.isFile() || (resolvedInfo.mode & 73) === 0) {
+          throw new Error("resolved interpreter is not executable");
+        }
+      } catch {
+        failure(
+          "RUNTIME_DEVELOPMENT_RUNTIME_INVALID",
+          `${DEVELOPMENT_RUNTIME_ENV} does not contain pyproject.toml, the core entrypoint, and an executable .venv/bin/python3`,
+          { path: checkout }
+        );
+      }
+      return {
+        ok: true,
+        action: "development-runtime",
+        developmentRuntime: true,
+        checkoutPath: checkout,
+        launcher: interpreter,
+        args: ["-B", "-I", "-m", "ae_mcp"],
+        interpreter: {
+          path: interpreter,
+          resolvedPath: resolvedInterpreter
+        },
+        diagnostics: [{
+          code: "RUNTIME_DEVELOPMENT_RUNTIME_SELECTED",
+          message: `Development runtime selected from ${checkout}; no packaged runtime was verified or installed.`
+        }]
+      };
+    }
     async function sha256File(filePath) {
       var _a2;
       const info = await promises.lstat(filePath);
@@ -18552,7 +18635,7 @@
     let readinessPromise = null;
     function ensureReady() {
       if (readinessPromise) return readinessPromise;
-      const pending = withLock(async () => {
+      const pending = developmentRuntimeInput ? selectDevelopmentRuntime() : withLock(async () => {
         let current = await pointerState(paths.currentPointer);
         const previous = await pointerState(paths.previousPointer);
         if (!current.ok && previous.ok) {
@@ -18675,6 +18758,12 @@
       return shared;
     }
     async function repair() {
+      if (developmentRuntimeInput) {
+        failure(
+          "RUNTIME_DEVELOPMENT_RUNTIME_OPERATION_UNAVAILABLE",
+          "Repair is unavailable while AE_MCP_DEV_RUNTIME selects a source checkout."
+        );
+      }
       return withLock(async () => {
         const packaged = await verifyPackagedPayload();
         const current = await pointerState(paths.currentPointer);
@@ -18701,6 +18790,12 @@
       });
     }
     async function rollback() {
+      if (developmentRuntimeInput) {
+        failure(
+          "RUNTIME_DEVELOPMENT_RUNTIME_OPERATION_UNAVAILABLE",
+          "Rollback is unavailable while AE_MCP_DEV_RUNTIME selects a source checkout."
+        );
+      }
       return withLock(async () => {
         const current = await pointerState(paths.currentPointer);
         const previous = await pointerState(paths.previousPointer);
@@ -18729,6 +18824,12 @@
       });
     }
     async function uninstall() {
+      if (developmentRuntimeInput) {
+        failure(
+          "RUNTIME_DEVELOPMENT_RUNTIME_OPERATION_UNAVAILABLE",
+          "Uninstall is unavailable while AE_MCP_DEV_RUNTIME selects a source checkout."
+        );
+      }
       return withLock(async () => {
         await removePointer(paths.currentPointer);
         await removePointer(paths.previousPointer);
@@ -18769,6 +18870,29 @@
     }
     async function inspect() {
       var _a2;
+      if (developmentRuntimeInput) {
+        try {
+          const selected = await selectDevelopmentRuntime();
+          return {
+            ok: true,
+            developmentRuntime: true,
+            checkoutPath: selected.checkoutPath,
+            interpreter: selected.interpreter,
+            launcher: { ok: true, path: selected.launcher },
+            diagnostics: selected.diagnostics
+          };
+        } catch (error) {
+          const normalized = runtimeError(error);
+          return {
+            ok: false,
+            developmentRuntime: true,
+            code: normalized.code,
+            detail: normalized.message,
+            launcher: { ok: false, code: normalized.code },
+            diagnostics: [{ code: normalized.code, message: normalized.message }]
+          };
+        }
+      }
       const current = await pointerState(paths.currentPointer);
       const previous = await pointerState(paths.previousPointer);
       let launcher = { ok: false, code: "RUNTIME_LAUNCHER_MISSING", path: paths.launcher };
@@ -18784,6 +18908,25 @@
     async function resolveNode() {
       var _a2;
       const selected = await ensureReady();
+      if (selected.developmentRuntime) {
+        const node = await platform.resolveExecutable("node", {
+          minimumVersion: "24.17.0",
+          requiredArch: "arm64"
+        });
+        if (!node.ok) {
+          failure("RUNTIME_NODE_INVALID", "A development runtime requires an available Node 24 arm64 executable");
+        }
+        return {
+          ok: true,
+          nodePath: node.path,
+          version: node.version,
+          runtime: selected,
+          executable: {
+            ...node,
+            source: "development-path"
+          }
+        };
+      }
       const inspected = await inspectInstalled(selected.relative);
       const nodePath = paths.join([inspected.directory, "node", "bin", "node"]);
       const info = await promises.lstat(nodePath);
@@ -18853,13 +18996,14 @@
     const debugMarker = extRoot && adapter.paths.join([extRoot, ".debug"]);
     const bundleManifest = extRoot && adapter.paths.join([extRoot, "bundle-manifest.json"]);
     const developmentFallback = adapter.id === "macos-arm64" && debugMarker && adapter.fs.existsSync(debugMarker) && !adapter.fs.existsSync(bundleManifest);
-    if (adapter.id === "macos-arm64" && (runtimeManager || extRoot && !developmentFallback)) {
+    const developmentRuntimeOverride = hasDevelopmentRuntimeOverride(adapter.env);
+    if (adapter.id === "macos-arm64" && (runtimeManager || extRoot && (!developmentFallback || developmentRuntimeOverride))) {
       const manager = runtimeManager || createRuntimeManager({ platform: adapter, extensionRoot: extRoot });
       const selected = await manager.ensureReady();
       return {
         command: selected.launcher,
-        args: [],
-        source: selected.action === "fallback" ? "runtime-fallback" : "runtime-manager",
+        args: selected.args || [],
+        source: selected.developmentRuntime ? "development-runtime" : selected.action === "fallback" ? "runtime-fallback" : "runtime-manager",
         runtime: selected
       };
     }
@@ -34678,7 +34822,7 @@ data: ${JSON.stringify(payload)}
     runtimeManager,
     allowDevelopmentPath = false
   }) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f, _g;
     const adapter = platform || createPlatformAdapter();
     const fileSystem = fs || adapter.fs;
     const fetcher = fetchImpl || globalThis.fetch;
@@ -34762,10 +34906,17 @@ data: ${JSON.stringify(payload)}
       try {
         const state = await runtimeManager.inspect();
         const current = ((_a = state.current) == null ? void 0 : _a.ok) ? state.current.record : null;
+        const developmentRuntime = state.developmentRuntime === true;
         items.push({
           id: "ae-mcp",
           ok: state.ok,
-          detail: state.ok ? `${current.version} \xB7 ${state.launcher.path} \xB7 ${current.sourceCommitSha}` : [(_b = state.current) == null ? void 0 : _b.code, (_c = state.launcher) == null ? void 0 : _c.code].filter(Boolean).join(" \xB7 "),
+          detail: state.ok && developmentRuntime ? [
+            "DEVELOPMENT CHECKOUT",
+            state.checkoutPath,
+            (_b = state.interpreter) == null ? void 0 : _b.path,
+            (_c = state.interpreter) == null ? void 0 : _c.resolvedPath,
+            (_e = (_d = state.diagnostics) == null ? void 0 : _d[0]) == null ? void 0 : _e.code
+          ].filter(Boolean).join(" \xB7 ") : state.ok ? `${current.version} \xB7 ${state.launcher.path} \xB7 ${current.sourceCommitSha}` : [(_f = state.current) == null ? void 0 : _f.code, (_g = state.launcher) == null ? void 0 : _g.code].filter(Boolean).join(" \xB7 "),
           fixHint: HINTS["ae-mcp"],
           action: { kind: "repair-runtime" }
         });
@@ -36157,7 +36308,11 @@ ${baseUrl}`),
       const bundleManifest = platform.paths.join([extRoot, "bundle-manifest.json"]);
       return platform.fs.existsSync(debugMarker) && !platform.fs.existsSync(bundleManifest);
     }, [extRoot, platform]);
-    const runtimeManager = import_react45.default.useMemo(() => platform.id === "macos-arm64" && !developmentRuntimeFallback ? createRuntimeManager({ platform, extensionRoot: extRoot }) : null, [developmentRuntimeFallback, extRoot, platform]);
+    const developmentRuntimeOverride = import_react45.default.useMemo(
+      () => hasDevelopmentRuntimeOverride(platform.env),
+      [platform]
+    );
+    const runtimeManager = import_react45.default.useMemo(() => platform.id === "macos-arm64" && (!developmentRuntimeFallback || developmentRuntimeOverride) ? createRuntimeManager({ platform, extensionRoot: extRoot }) : null, [developmentRuntimeFallback, developmentRuntimeOverride, extRoot, platform]);
     const [runtimeActivation, setRuntimeActivation] = import_react45.default.useState(() => ({
       state: runtimeManager ? "starting" : "ready",
       result: null,

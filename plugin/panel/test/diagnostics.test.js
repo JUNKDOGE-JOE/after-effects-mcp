@@ -149,6 +149,39 @@ test('runDiagnostics reports RuntimeManager provenance and corruption diagnostic
   assert.match(corrupt.find((item) => item.id === 'ae-mcp').detail, /RUNTIME_HASH_MISMATCH/);
 });
 
+test('runDiagnostics visibly labels a selected development checkout and interpreter', async () => {
+  const runtimeManager = {
+    async resolveNode() {
+      return {
+        ok: true,
+        version: '24.17.0',
+        nodePath: '/Users/tester/.local/bin/node',
+        runtime: { developmentRuntime: true },
+      };
+    },
+    async inspect() {
+      return {
+        ok: true,
+        developmentRuntime: true,
+        checkoutPath: '/Users/tester/Documents/ae-mcp',
+        interpreter: {
+          path: '/Users/tester/Documents/ae-mcp/.venv/bin/python3',
+          resolvedPath: '/Users/tester/.local/share/uv/python/python3.13',
+        },
+        launcher: { ok: true, path: '/Users/tester/Documents/ae-mcp/.venv/bin/python3' },
+        diagnostics: [{ code: 'RUNTIME_DEVELOPMENT_RUNTIME_SELECTED' }],
+      };
+    },
+  };
+
+  const items = await runDiagnostics({ ...makeDeps(), port: 11488, runtimeManager });
+  const runtime = items.find((item) => item.id === 'ae-mcp');
+  assert.equal(runtime.ok, true);
+  assert.match(runtime.detail, /DEVELOPMENT CHECKOUT/);
+  assert.match(runtime.detail, /Documents\/ae-mcp/);
+  assert.match(runtime.detail, /RUNTIME_DEVELOPMENT_RUNTIME_SELECTED/);
+});
+
 test('runDiagnostics inspects the RuntimeManager after resolveNode repairs it', async () => {
   const calls = [];
   let repaired = false;

@@ -182,9 +182,141 @@ function managerFor(h, extensionRoot, options = {}) {
     extensionRoot,
     cryptoImpl: crypto,
     randomBytes: crypto.randomBytes,
+    environment: {},
     ...options,
   });
 }
+
+async function developmentExtension(h) {
+  const extensionRoot = path.join(h.root, 'AE MCP development extension');
+  await writeFile(extensionRoot, '.debug', '<ExtensionList />\n');
+  return extensionRoot;
+}
+
+async function developmentCheckout(h, marker = 'development') {
+  const checkout = path.join(h.root, 'source checkout');
+  await writeFile(checkout, 'pyproject.toml', '[tool.uv]\n');
+  await writeFile(checkout, 'packages/core/ae_mcp/__main__.py', 'def main(): pass\n');
+  const interpreter = await writeFile(
+    checkout,
+    '.venv/bin/python3',
+    `#!/bin/sh\nprintf 'development-core:${marker}:%s\\n' "$*"\n`,
+    0o755,
+  );
+  return { checkout, interpreter };
+}
+
+macosRuntimeTest('development checkout bypasses manifests, generations, pointers, and RuntimeManager lock', async (t) => {
+  const h = await harness(t);
+  const extensionRoot = await developmentExtension(h);
+  const checkout = await developmentCheckout(h);
+  const current = 'sentinel-current\n';
+  const previous = 'sentinel-previous\n';
+  await fs.promises.mkdir(h.platform.paths.runtimeRoot, { recursive: true });
+  await fs.promises.writeFile(h.platform.paths.currentPointer, current);
+  await fs.promises.writeFile(h.platform.paths.previousPointer, previous);
+  let lockOpenCalls = 0;
+  const trackedPromises = new Proxy(fs.promises, {
+    get(target, property) {
+      const value = Reflect.get(target, property);
+      if (property === 'open') {
+        return async function trackedOpen(targetPath, ...args) {
+          if (path.resolve(String(targetPath))
+              === path.join(h.platform.paths.runtimeRoot, '.runtime-manager.lock')) {
+            lockOpenCalls += 1;
+          }
+          return value.call(target, targetPath, ...args);
+        };
+      }
+      return typeof value === 'function' ? value.bind(target) : value;
+    },
+  });
+  const manager = managerFor(h, extensionRoot, {
+    fsImpl: { ...fs, promises: trackedPromises },
+    environment: { AE_MCP_DEV_RUNTIME: checkout.checkout },
+  });
+
+  const selected = await manager.ensureReady();
+  const canonicalCheckout = await fs.promises.realpath(checkout.checkout);
+  const canonicalInterpreter = path.join(canonicalCheckout, '.venv', 'bin', 'python3');
+
+  assert.equal(selected.action, 'development-runtime');
+  assert.equal(selected.developmentRuntime, true);
+  assert.equal(selected.checkoutPath, canonicalCheckout);
+  assert.equal(selected.launcher, canonicalInterpreter);
+  assert.deepEqual(selected.args, ['-B', '-I', '-m', 'ae_mcp']);
+  assert.equal(selected.interpreter.path, canonicalInterpreter);
+  assert.equal(selected.interpreter.resolvedPath, canonicalInterpreter);
+  assert.equal(selected.diagnostics[0].code, 'RUNTIME_DEVELOPMENT_RUNTIME_SELECTED');
+  assert.equal(lockOpenCalls, 0);
+  assert.equal(await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8'), current);
+  assert.equal(await fs.promises.readFile(h.platform.paths.previousPointer, 'utf8'), previous);
+  await assert.rejects(
+    fs.promises.lstat(path.join(h.platform.paths.runtimeRoot, 'generations')),
+    { code: 'ENOENT' },
+  );
+  await assert.rejects(
+    fs.promises.lstat(path.join(h.platform.paths.runtimeRoot, '.runtime-manager.lock')),
+    { code: 'ENOENT' },
+  );
+  const launched = await execFileAsync(selected.launcher, selected.args);
+  assert.match(launched.stdout, /development-core:development:-B -I -m ae_mcp/);
+  const inspected = await manager.inspect();
+  assert.equal(inspected.ok, true);
+  assert.equal(inspected.developmentRuntime, true);
+  assert.equal(inspected.checkoutPath, canonicalCheckout);
+});
+
+macosRuntimeTest('unset development runtime keeps the packaged RuntimeManager path unchanged', async (t) => {
+  const h = await harness(t);
+  const payload = await packageFixture(h.root, {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'production',
+  });
+  const manager = managerFor(h, payload.extensionRoot, { environment: {} });
+
+  const selected = await manager.ensureReady();
+
+  assert.equal(selected.action, 'install');
+  assert.equal(selected.developmentRuntime, undefined);
+  assert.equal(selected.launcher, h.platform.paths.launcher);
+  assert.match(await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8'), /^generations\/g-/);
+});
+
+macosRuntimeTest('a packaged release build refuses AE_MCP_DEV_RUNTIME without falling back', async (t) => {
+  const h = await harness(t);
+  const payload = await packageFixture(h.root, {
+    version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'release',
+  });
+  const checkout = await developmentCheckout(h, 'release');
+  const manager = managerFor(h, payload.extensionRoot, {
+    environment: { AE_MCP_DEV_RUNTIME: checkout.checkout },
+  });
+
+  await assert.rejects(
+    manager.ensureReady(),
+    (error) => error?.code === 'RUNTIME_DEVELOPMENT_RUNTIME_RELEASE_REFUSED',
+  );
+  await assert.rejects(fs.promises.lstat(h.platform.paths.runtimeRoot), { code: 'ENOENT' });
+});
+
+macosRuntimeTest('an invalid development checkout fails closed with a structured code', async (t) => {
+  const h = await harness(t);
+  const extensionRoot = await developmentExtension(h);
+  const missingCheckout = path.join(h.root, 'missing checkout');
+  const manager = managerFor(h, extensionRoot, {
+    environment: { AE_MCP_DEV_RUNTIME: missingCheckout },
+  });
+
+  await assert.rejects(
+    manager.ensureReady(),
+    (error) => error?.code === 'RUNTIME_DEVELOPMENT_RUNTIME_INVALID'
+      && /usable source checkout/i.test(error.message),
+  );
+  const inspected = await manager.inspect();
+  assert.equal(inspected.ok, false);
+  assert.equal(inspected.code, 'RUNTIME_DEVELOPMENT_RUNTIME_INVALID');
+  await assert.rejects(fs.promises.lstat(h.platform.paths.runtimeRoot), { code: 'ENOENT' });
+});
 
 async function seedLegacyGeneration(h, payload) {
   const generation = `${payload.version}-${payload.sourceCommitSha}`;

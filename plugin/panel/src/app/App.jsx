@@ -65,7 +65,7 @@ import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
 import { readCepSystemPath } from '../cep/platform/paths.js';
-import { createRuntimeManager } from '../cep/runtimeManager.js';
+import { createRuntimeManager, hasDevelopmentRuntimeOverride } from '../cep/runtimeManager.js';
 import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 
@@ -572,11 +572,15 @@ function Shell({ cs }) {
     return platform.fs.existsSync(debugMarker)
       && !platform.fs.existsSync(bundleManifest);
   }, [extRoot, platform]);
+  const developmentRuntimeOverride = React.useMemo(
+    () => hasDevelopmentRuntimeOverride(platform.env),
+    [platform],
+  );
   const runtimeManager = React.useMemo(() => (
-    platform.id === 'macos-arm64' && !developmentRuntimeFallback
+    platform.id === 'macos-arm64' && (!developmentRuntimeFallback || developmentRuntimeOverride)
       ? createRuntimeManager({ platform, extensionRoot: extRoot })
       : null
-  ), [developmentRuntimeFallback, extRoot, platform]);
+  ), [developmentRuntimeFallback, developmentRuntimeOverride, extRoot, platform]);
   const [runtimeActivation, setRuntimeActivation] = React.useState(() => ({
     state: runtimeManager ? 'starting' : 'ready',
     result: null,

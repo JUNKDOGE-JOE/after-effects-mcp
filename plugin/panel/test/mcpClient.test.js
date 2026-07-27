@@ -125,6 +125,28 @@ test('resolveMcpCommand lets the macOS RuntimeManager verify and activate before
   assert.equal(result.runtime.version, '0.9.3');
 });
 
+test('resolveMcpCommand launches a selected development checkout interpreter directly', async () => {
+  const platform = fakeCommandPlatform({ launcher: '/Users/a/.ae-mcp/bin/ae-mcp' });
+  const result = await resolveMcpCommand({
+    platform,
+    extRoot: '/Users/a/Development/AE MCP',
+    runtimeManager: {
+      async ensureReady() {
+        return {
+          action: 'development-runtime',
+          developmentRuntime: true,
+          launcher: '/Users/a/src/ae-mcp/.venv/bin/python3',
+          args: ['-B', '-I', '-m', 'ae_mcp'],
+        };
+      },
+    },
+  });
+
+  assert.equal(result.command, '/Users/a/src/ae-mcp/.venv/bin/python3');
+  assert.deepEqual(result.args, ['-B', '-I', '-m', 'ae_mcp']);
+  assert.equal(result.source, 'development-runtime');
+});
+
 test('resolveMcpCommand allows PATH only for an explicit .debug install without a bundle', async () => {
   const calls = [];
   const platform = fakeCommandPlatform({
