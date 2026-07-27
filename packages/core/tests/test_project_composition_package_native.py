@@ -43,6 +43,27 @@ PUBLIC_TOOLS = {
     ),
 }
 
+COMPOSITION_SETTING_PUBLIC_TOOLS = {
+    "ae.setCompositionDimensions": (
+        "composition_locator", "width", "height", "idempotency_key",
+    ),
+    "ae.setCompositionDuration": (
+        "composition_locator", "duration", "idempotency_key",
+    ),
+    "ae.setCompositionFrameRate": (
+        "composition_locator", "frame_rate", "idempotency_key",
+    ),
+    "ae.setCompositionPixelAspectRatio": (
+        "composition_locator", "pixel_aspect_ratio", "idempotency_key",
+    ),
+    "ae.setCompositionBackgroundColor": (
+        "composition_locator", "background_color", "idempotency_key",
+    ),
+    "ae.setCompositionDisplayStartTime": (
+        "composition_locator", "display_start_time", "idempotency_key",
+    ),
+}
+
 
 def _locator(
     kind: str,
@@ -87,6 +108,7 @@ def _settings(name: str) -> dict[str, Any]:
         "frameDuration": _time(1, 24),
         "frameRate": _ratio(24, 1),
         "pixelAspectRatio": _ratio(1, 1),
+        "backgroundColor": {"red": 0, "green": 0, "blue": 0, "alpha": 255},
         "workArea": {"start": _time(0, 1), "duration": _time(10, 1)},
         "displayStartTime": _time(0, 1),
         "layerCount": 2,
@@ -309,7 +331,7 @@ def test_public_schema_names_are_frozen_closed_and_annotated():
 
 
 def test_native_contracts_are_closed_and_digest_bound():
-    assert len(PC.CAPABILITY_CONTRACTS) == 8
+    assert len(PC.CAPABILITY_CONTRACTS) == 14
     for contract in PC.CAPABILITY_CONTRACTS.values():
         assert contract.input_schema["additionalProperties"] is False
         assert contract.result_schema["additionalProperties"] is False
@@ -317,6 +339,27 @@ def test_native_contracts_are_closed_and_digest_bound():
             "inputSchema": contract.input_schema,
             "resultSchema": contract.result_schema,
         })
+
+
+@pytest.mark.asyncio
+async def test_composition_setting_tools_are_registered_and_listed(monkeypatch):
+    load_all()
+    assert set(COMPOSITION_SETTING_PUBLIC_TOOLS) <= set(HANDLERS)
+    for verb, expected_fields in COMPOSITION_SETTING_PUBLIC_TOOLS.items():
+        schema_cls, _handler = HANDLERS[verb]
+        schema = schema_cls.model_json_schema()
+        assert schema["additionalProperties"] is False
+        assert set(schema["properties"]) == set(expected_fields)
+    monkeypatch.setattr(
+        server_module,
+        "_filtered_tool_names",
+        lambda: set(COMPOSITION_SETTING_PUBLIC_TOOLS),
+    )
+    server = server_module.build_server()
+    listed = await server._ae_list_tools()
+    assert {tool.name for tool in listed} == {
+        name.replace(".", "_") for name in COMPOSITION_SETTING_PUBLIC_TOOLS
+    }
 
 
 def test_project_item_metadata_preserves_native_optional_fact_omission():
