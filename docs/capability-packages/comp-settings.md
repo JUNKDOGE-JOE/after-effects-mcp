@@ -6,6 +6,126 @@ Base: `7d983f2`
 Native novelty: none  
 Fixture lifecycle: `ephemeral-validation`
 
+## Amendment — `ae_previewFrame` image content (#177)
+
+This amendment does not redesign the six-tool Composition Settings package.
+The six public writes, schemas, native capabilities, suite, Undo model and
+non-goals below remain intact. `ae_previewFrame` is an existing synchronous
+read from another tool family; it accompanies the settings writes so the model
+can inspect the pixels those writes affect.
+
+### Additive MCP response shape and compatibility
+
+The canonical handler result remains the existing JSON object:
+
+```json
+{
+  "ok": true,
+  "compId": "7",
+  "compName": "Comp Settings Fixture",
+  "captureId": "7a5fc9e3d2604f85a3d8469bd469ec6f",
+  "frames": [
+    {
+      "time": 0,
+      "path": "/temporary/session/frame.png",
+      "width": 1440,
+      "height": 1080,
+      "sizeBytes": 10482,
+      "sha256": "64 lower-case hex characters",
+      "source": "comp",
+      "method": "saveFrameToPng",
+      "compId": "7"
+    }
+  ]
+}
+```
+
+At the public MCP boundary a successful `ae_previewFrame` call returns:
+
+1. the existing JSON object serialized as the first `TextContent` item; then
+2. one `ImageContent` item with `mimeType="image/png"` for each entry in
+   `frames`, in the same order.
+
+`captureId` and each frame's `sha256` are additive structured fields. Existing
+callers that parse `content[0].text`, use `path`, or opt into the existing
+`include_base64=true` field continue to work. `include_base64` retains its old
+meaning: it controls duplication of PNG bytes inside the JSON frame object; it
+does not turn first-class MCP image content on or off. The default remains
+false so a normal call carries one inline copy of each image, not two.
+
+The packaging layer reads the PNG produced by the existing render path. It
+must decode as PNG, its decoded dimensions must equal the frame's structured
+`width` and `height`, and its bytes must match the structured `sha256`. A
+missing, corrupt, non-PNG or dimension-mismatched file is a failed tool call,
+not a text-only success. This changes no renderer, capture method, fallback or
+AE operation.
+
+### Image-bearing acceptance evidence
+
+For each preview call, evidence records the public request and the complete
+MCP `CallToolResult`, then independently:
+
+- parses item 0 as the backward-compatible JSON result;
+- asserts the number of following `ImageContent` items equals
+  `len(frames)`;
+- base64-decodes each image item and verifies the PNG signature and complete
+  Pillow decode;
+- checks decoded dimensions against both the corresponding frame metadata and
+  the expected composition dimensions;
+- checks SHA-256 against the corresponding frame metadata; and
+- records `captureId`, requested time, source/method and the settings-readback
+  audit/postcondition IDs that precede the preview.
+
+Checking only that image data is a non-empty string is explicitly
+insufficient.
+
+The cross-family acceptance cases added to the otherwise unchanged settings
+sequence are:
+
+1. **Before:** after the baseline settings read, preview the unobscured
+   background at 1920x1080 and record its baseline colour.
+2. **After combined writes:** after the independent readback of dimensions
+   1440x1080 and background `(64,96,128,255)`, take a fresh preview and verify
+   both the decoded 1440x1080 PNG dimensions and the visible background.
+3. **Intermediate Undo:** after real Undo restores the background but before
+   dimensions are Undone, take a fresh preview proving the baseline background
+   at 1440x1080.
+4. **Dimensions restored:** after real Undo restores dimensions, take a fresh
+   preview proving 1920x1080 while the already-restored background remains
+   visible.
+
+The fixture's `Timing Witness` must leave a deterministic background sample
+area unobscured; this is a clarification of its layout, not another setting or
+tool. Frame-rate correctness continues to use exact settings readback and
+reciprocal frame-duration evidence. A still PNG requested in decimal seconds
+cannot independently prove the composition's rational frame rate, so the
+visual evidence must not overclaim that it can.
+
+These four calls raise the future T5/T6 public-call budget from 20 to 24. The
+acceptance driver remains a separate next task and is not implemented here.
+
+### Named risk dispositions
+
+- **Payload size:** first-class MCP images necessarily carry base64 PNG data,
+  but the default no longer duplicates those bytes in the JSON because
+  `include_base64` remains false. Existing caller-selected `scale` and selected
+  `times` remain the controls for contact-sheet or reduced-size reviews. The
+  server does not silently downscale or truncate a requested frame: that would
+  change what visual acceptance can prove. A native-resolution single frame
+  remains supported, as it already was through `include_base64=true`.
+- **Privacy:** a rendered frame can contain private project material. The tool
+  description must say so and direct the model to preview only the
+  user-authorized composition/times. No new desktop capture or wider data
+  source is added. Default files remain in the per-session temporary preview
+  directory with the existing age cleanup; an explicit `out_dir` remains the
+  caller's responsibility.
+- **Stale-frame confusion:** every call uses a fresh `captureId` and unique
+  output names, and the structured SHA-256 binds each image item to the current
+  call's frame metadata. The tool description must instruct the model to call
+  preview after the latest write and use the newest `captureId`, never a prior
+  image. Synchronous dispatch plus the existing wait for the newly named PNG
+  means packaging cannot reuse an older call's file.
+
 ## Package outcome and frozen scope
 
 A model can change the six ordinary composition settings that already have a
@@ -823,6 +943,12 @@ IDs.
   non-target field in each after snapshot and requires failure.
 - `test_comp_settings_idempotent_replay_is_byte_stable`: same key/request
   returns the same transition/evidence and never dispatches twice.
+- `test_preview_frame_registration_and_tools_list_exposure`: proves
+  `ae.previewFrame` remains in `HANDLERS` and `ae_previewFrame` is emitted by
+  the actual `tools/list` path with the visual-loop/privacy guidance.
+- `test_preview_frame_mcp_content_decodes_at_reported_dimensions`: calls the
+  public dispatch boundary, preserves item 0's JSON shape, decodes every
+  following `ImageContent` item as PNG, and verifies dimensions and SHA-256.
 
 ### T2 — package integration and runner
 
@@ -861,8 +987,9 @@ IDs.
   formal AE, reacquires every locator, re-verifies the baseline and resumes
   only from the last verified case. This is the direct guard for #157's
   **restart-state surprise**.
-- `test_comp_settings_runner_call_budget_is_twenty`: counts support,
-  package, restore, Undo-readback and restart calls and fails at call 21.
+- `test_comp_settings_runner_call_budget_is_twenty_four`: counts the original
+  20 support/package/restore/Undo-readback calls plus the four amended
+  `ae_previewFrame` calls and fails at call 25.
 - `test_comp_settings_fixture_reset_is_single_slot`: proves no Save As,
   deterministic same-path rebuild, reconciliation before reset and final
   lifecycle counts.
@@ -891,7 +1018,9 @@ public request
 -> verified postcondition digest
 ```
 
-The T5 candidate and clean-main T6 use the identical 20-call script:
+The T5 candidate and clean-main T6 use the identical 20-call settings script
+below, with the four `ae_previewFrame` calls placed at the checkpoints defined
+by the #177 amendment above:
 
 | Call | Public tool | Purpose |
 | ---: | --- | --- |
@@ -923,7 +1052,9 @@ compensation at call 9 must already have restored that field. Each write's
 embedded full native readback proves its immediate result; calls 15-20 provide
 independent public state verification and exact intermediate Undo states.
 
-T5 and T6 budgets are **20 public calls each, hard stop before call 21**.
+T5 and T6 budgets are **24 public calls each, hard stop before call 25**:
+the unchanged 20-call settings sequence above plus four image-bearing
+`ae_previewFrame` checks.
 Preflight produces no candidate evidence. Planned T4 count is zero because
 CompSuite12, locator reacquisition, main-thread dispatch, setter invocation,
 readback, audit and Undo-group machinery are already hardware-proven. T6
