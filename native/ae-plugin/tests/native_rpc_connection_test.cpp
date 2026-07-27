@@ -446,6 +446,19 @@ class FakeHost final : public HostApi {
         {0, 1, "0"}, {5, 1, "5"}, command.start, command.duration});
   }
 
+  [[nodiscard]] aemcp::native::HostCompositionSettingsWriteResult
+  set_composition_setting(
+      const aemcp::native::CompositionSettingsSetCommand& command,
+      TimePoint) override {
+    ++composition_settings_write_calls;
+    auto before = package_settings(
+        command.composition_locator, std::string(1025, 'B'));
+    auto after = before;
+    after.width = 1280;
+    return aemcp::native::HostCompositionSettingsWriteResult::success({
+        true, command.composition_locator, std::move(before), std::move(after)});
+  }
+
   [[nodiscard]] aemcp::native::HostProjectItemTextWriteResult set_project_item_name(
       const aemcp::native::ProjectItemTextSetCommand& command,
       TimePoint) override {
@@ -665,6 +678,7 @@ class FakeHost final : public HostApi {
   int composition_time_write_calls{0};
   int composition_create_calls{0};
   int composition_layer_create_calls{0};
+  int composition_settings_write_calls{0};
   int layer_effect_apply_calls{0};
   int layer_properties_calls{0};
   int layer_property_keyframes_calls{0};
@@ -2599,6 +2613,75 @@ void invalid_postcondition_becomes_structured_failure() {
   (void)dispatcher.shutdown();
 }
 
+void composition_setting_post_mutation_evidence_failures_are_ambiguous() {
+  const std::array<std::string_view, 6> capabilities{{
+      "ae.composition.dimensions.set",
+      "ae.composition.duration.set",
+      "ae.composition.frame-rate.set",
+      "ae.composition.pixel-aspect-ratio.set",
+      "ae.composition.background-color.set",
+      "ae.composition.display-start-time.set",
+  }};
+  for (std::size_t index = 0; index < capabilities.size(); ++index) {
+    FakeDispatcherClock dispatcher_clock;
+    HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+    Request request;
+    request.request_id = "invalid-composition-setting-" + std::to_string(index);
+    request.capability_id = std::string(capabilities[index]);
+    request.deadline = dispatcher_clock.now() + 1s;
+    request.route_id = "route-setting-" + std::to_string(index);
+    request.session_generation = 3;
+    request.idempotency_key =
+        "composition-setting-invalid-" + std::to_string(index);
+    request.arguments_fingerprint_sha256 = std::string(kZeroDigest);
+    request.host_instance_id = std::string(kHost);
+    request.session_id = std::string(kSession);
+    request.composition_locator = FakeHost::package_locator(
+        "composition", "66666666-6666-4666-8666-666666666666");
+    if (capabilities[index] == "ae.composition.dimensions.set") {
+      request.composition_create_width = 1280;
+      request.composition_create_height = 720;
+    } else if (capabilities[index] == "ae.composition.duration.set") {
+      request.composition_create_duration = {8, 1, "8"};
+    } else if (capabilities[index] == "ae.composition.frame-rate.set") {
+      request.composition_create_frame_rate = {30, 1, "30"};
+    } else if (
+        capabilities[index] == "ae.composition.pixel-aspect-ratio.set") {
+      request.composition_create_pixel_aspect_ratio = {2, 1, "2"};
+    } else if (capabilities[index] == "ae.composition.background-color.set") {
+      request.layer_create_color =
+          aemcp::native::CompositionLayerCreateColor{10, 20, 30, 255};
+    } else {
+      request.target_time = {1, 1, "1"};
+    }
+    const aemcp::native::EnqueueResult enqueued =
+        dispatcher.enqueue(std::move(request));
+    require(enqueued.code == EnqueueCode::kAccepted,
+        "composition setting mutation was not accepted by HostDispatcher: "
+            + std::string(capabilities[index]) + " " + enqueued.message);
+    FakeHost host;
+    const aemcp::native::DrainBatch batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1 && batch.completions[0].ok
+            && host.composition_settings_write_calls == 1,
+        "composition setting host mutation did not complete before evidence validation");
+    bool evidence_failed = false;
+    try {
+      (void)aemcp::native::rpc::digest_composition_settings_set_postcondition(
+          capabilities[index],
+          batch.completions[0].composition_settings_change_result);
+    } catch (const aemcp::native::rpc::CodecError&) {
+      evidence_failed = true;
+    }
+    require(evidence_failed,
+        "composition setting test did not create a post-mutation evidence failure");
+    require(aemcp::native::post_dispatch_evidence_failure_code(
+                capabilities[index])
+            == "POSSIBLY_SIDE_EFFECTING_FAILURE",
+        "post-mutation composition setting failure was classified as safe");
+    (void)dispatcher.shutdown();
+  }
+}
+
 void construction_failure_is_contained_by_noexcept_boundary() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
@@ -2653,6 +2736,7 @@ int main() {
   layer_compositing_package_crosses_the_authenticated_wire_boundary();
   invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced();
   invalid_postcondition_becomes_structured_failure();
+  composition_setting_post_mutation_evidence_failures_are_ambiguous();
   construction_failure_is_contained_by_noexcept_boundary();
   composition_setting_contract_mismatch_is_rejected();
   std::cout << "native_rpc_connection_test: PASS\n";

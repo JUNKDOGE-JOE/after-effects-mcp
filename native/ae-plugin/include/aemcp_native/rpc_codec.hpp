@@ -192,6 +192,9 @@ struct ParsedRequest {
     std::string_view idempotency_key);
 [[nodiscard]] std::string digest_composition_work_area_set_postcondition(
     const CompositionWorkAreaChanged& value);
+[[nodiscard]] std::string digest_composition_settings_set_postcondition(
+    std::string_view capability_id,
+    const CompositionSettingsChanged& value);
 [[nodiscard]] std::string digest_project_item_text_set_arguments(
     std::string_view capability_id,
     const ObjectLocator& item_locator,
@@ -679,6 +682,7 @@ using ProjectContextSuccess = NativeValueSuccess<ProjectContext>;
 using ProjectItemMetadataSuccess = NativeValueSuccess<ProjectItemMetadata>;
 using CompositionSettingsSuccess = NativeValueSuccess<CompositionSettings>;
 using CompositionWorkAreaSetSuccess = NativeValueSuccess<CompositionWorkAreaChanged>;
+using CompositionSettingsSetSuccess = NativeValueSuccess<CompositionSettingsChanged>;
 using ProjectItemNameSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
 using ProjectItemCommentSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
 using ProjectItemLabelSetSuccess = NativeValueSuccess<ProjectItemLabelChanged>;
@@ -895,6 +899,9 @@ struct ErrorResponse {
     const CompositionSettingsSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_work_area_set_success(
     const CompositionWorkAreaSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_settings_set_success(
+    std::string_view capability_id,
+    const CompositionSettingsSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_item_name_set_success(
     const ProjectItemNameSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_item_comment_set_success(

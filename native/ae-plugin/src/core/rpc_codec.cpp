@@ -3848,7 +3848,12 @@ std::string canonical_composition_settings_value(const CompositionSettings& valu
       || value.layer_count > kMaxSafeInteger) {
     invalid_argument("invalid composition settings result");
   }
-  return "{\"compositionLocator\":" + locator_json(value.composition_locator)
+  return "{\"backgroundColor\":{\"alpha\":"
+      + std::to_string(value.background_color.alpha)
+      + ",\"blue\":" + std::to_string(value.background_color.blue)
+      + ",\"green\":" + std::to_string(value.background_color.green)
+      + ",\"red\":" + std::to_string(value.background_color.red)
+      + "},\"compositionLocator\":" + locator_json(value.composition_locator)
       + ",\"displayStartTime\":" + canonical_current_time(value.display_start_time)
       + ",\"duration\":" + canonical_current_time(value.duration)
       + ",\"frameDuration\":" + canonical_current_time(value.frame_duration)
@@ -3866,7 +3871,12 @@ std::string canonical_composition_settings_value(const CompositionSettings& valu
 
 std::string canonical_composition_settings_snapshot(const CompositionSettings& value) {
   (void)canonical_composition_settings_value(value);
-  return "{\"displayStartTime\":" + canonical_current_time(value.display_start_time)
+  return "{\"backgroundColor\":{\"alpha\":"
+      + std::to_string(value.background_color.alpha)
+      + ",\"blue\":" + std::to_string(value.background_color.blue)
+      + ",\"green\":" + std::to_string(value.background_color.green)
+      + ",\"red\":" + std::to_string(value.background_color.red)
+      + "},\"displayStartTime\":" + canonical_current_time(value.display_start_time)
       + ",\"duration\":" + canonical_current_time(value.duration)
       + ",\"frameDuration\":" + canonical_current_time(value.frame_duration)
       + ",\"frameRate\":" + canonical_positive_ratio(value.frame_rate, true)
@@ -3903,6 +3913,22 @@ std::string canonical_composition_work_area_set_value(
       + canonical_work_area_pair(value.after_start, value.after_duration)
       + ",\"beforeWorkArea\":"
       + canonical_work_area_pair(value.before_start, value.before_duration)
+      + ",\"changed\":true,\"compositionLocator\":"
+      + locator_json(value.composition_locator) + "}";
+}
+
+std::string canonical_composition_settings_set_value(
+    const CompositionSettingsChanged& value) {
+  if (!value.changed
+      || !valid_output_locator(value.composition_locator)
+      || value.composition_locator.kind != "composition"
+      || value.before.composition_locator != value.composition_locator
+      || value.after.composition_locator != value.composition_locator
+      || value.before == value.after) {
+    invalid_argument("invalid composition settings mutation result");
+  }
+  return "{\"after\":" + canonical_composition_settings_snapshot(value.after)
+      + ",\"before\":" + canonical_composition_settings_snapshot(value.before)
       + ",\"changed\":true,\"compositionLocator\":"
       + locator_json(value.composition_locator) + "}";
 }
@@ -5103,6 +5129,39 @@ std::string digest_composition_work_area_set_postcondition(
   return sha256_hex(
       "{\"capabilityId\":\"ae.composition.work-area.set\",\"capabilityVersion\":1,\"value\":"
       + canonical_composition_work_area_set_value(value) + "}");
+}
+
+std::string composition_settings_set_postcondition_kind(
+    std::string_view capability_id) {
+  if (capability_id == kCompositionDimensionsSetCapability) {
+    return "composition-dimensions-set";
+  }
+  if (capability_id == kCompositionDurationSetCapability) {
+    return "composition-duration-set";
+  }
+  if (capability_id == kCompositionFrameRateSetCapability) {
+    return "composition-frame-rate-set";
+  }
+  if (capability_id == kCompositionPixelAspectRatioSetCapability) {
+    return "composition-pixel-aspect-ratio-set";
+  }
+  if (capability_id == kCompositionBackgroundColorSetCapability) {
+    return "composition-background-color-set";
+  }
+  if (capability_id == kCompositionDisplayStartTimeSetCapability) {
+    return "composition-display-start-time-set";
+  }
+  invalid_argument("invalid composition settings mutation capability");
+}
+
+std::string digest_composition_settings_set_postcondition(
+    std::string_view capability_id,
+    const CompositionSettingsChanged& value) {
+  (void)composition_settings_set_postcondition_kind(capability_id);
+  return sha256_hex(
+      "{\"capabilityId\":" + json_string(capability_id)
+      + ",\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_settings_set_value(value) + "}");
 }
 
 std::string digest_project_item_text_set_arguments(
@@ -7338,7 +7397,8 @@ std::vector<std::uint8_t> encode_native_value_success(
     const ObjectLocator& scope_locator,
     std::string value_json,
     std::string expected_postcondition_digest,
-    bool mutating) {
+    bool mutating,
+    bool undo_available = true) {
   require_request_id(response.request_id);
   require_uuid(response.session_id, "session ID");
   require_uuid(response.host_instance_id, "host instance ID");
@@ -7375,7 +7435,9 @@ std::vector<std::uint8_t> encode_native_value_success(
       + json_string(response.request_id) + ",\"sessionId\":"
       + json_string(response.session_id) + ",\"startedAtUnixMs\":"
       + std::to_string(response.started_at_unix_ms);
-  if (mutating) json += ",\"undo\":{\"available\":true,\"verified\":false}";
+  if (mutating && undo_available) {
+    json += ",\"undo\":{\"available\":true,\"verified\":false}";
+  }
   json += "},\"outcome\":\"succeeded\",\"value\":" + value_json
       + "},\"sessionId\":" + json_string(response.session_id)
       + ",\"wireVersion\":1}";
@@ -8152,6 +8214,20 @@ std::vector<std::uint8_t> encode_composition_work_area_set_success(
       canonical_composition_work_area_set_value(response.value),
       digest_composition_work_area_set_postcondition(response.value),
       true);
+}
+
+std::vector<std::uint8_t> encode_composition_settings_set_success(
+    std::string_view capability_id,
+    const CompositionSettingsSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      capability_id,
+      composition_settings_set_postcondition_kind(capability_id),
+      response.value.composition_locator,
+      canonical_composition_settings_set_value(response.value),
+      digest_composition_settings_set_postcondition(capability_id, response.value),
+      true,
+      capability_id != kCompositionDisplayStartTimeSetCapability);
 }
 
 std::vector<std::uint8_t> encode_project_item_name_set_success(

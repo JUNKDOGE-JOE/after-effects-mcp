@@ -28,6 +28,7 @@ using aemcp::native::rpc::ProjectContextSuccess;
 using aemcp::native::rpc::ProjectItemMetadataSuccess;
 using aemcp::native::rpc::CompositionSettingsSuccess;
 using aemcp::native::rpc::CompositionWorkAreaSetSuccess;
+using aemcp::native::rpc::CompositionSettingsSetSuccess;
 using aemcp::native::rpc::ProjectItemNameSetSuccess;
 using aemcp::native::rpc::ProjectItemCommentSetSuccess;
 using aemcp::native::rpc::ProjectItemLabelSetSuccess;
@@ -82,6 +83,7 @@ using aemcp::native::rpc::digest_composition_layers_postcondition;
 using aemcp::native::rpc::digest_composition_selected_layers_postcondition;
 using aemcp::native::rpc::digest_composition_time_postcondition;
 using aemcp::native::rpc::digest_composition_time_set_postcondition;
+using aemcp::native::rpc::digest_composition_settings_set_postcondition;
 using aemcp::native::rpc::digest_composition_create_postcondition;
 using aemcp::native::rpc::digest_layer_details_postcondition;
 using aemcp::native::rpc::digest_layer_name_set_postcondition;
@@ -125,6 +127,7 @@ using aemcp::native::rpc::encode_project_context_success;
 using aemcp::native::rpc::encode_project_item_metadata_success;
 using aemcp::native::rpc::encode_composition_settings_success;
 using aemcp::native::rpc::encode_composition_work_area_set_success;
+using aemcp::native::rpc::encode_composition_settings_set_success;
 using aemcp::native::rpc::encode_project_item_name_set_success;
 using aemcp::native::rpc::encode_project_item_comment_set_success;
 using aemcp::native::rpc::encode_project_item_label_set_success;
@@ -1589,6 +1592,7 @@ void project_composition_package_parses_and_serializes_all_eight_contracts() {
     value.frame_duration = {1, 24, "1/24"};
     value.frame_rate = {24, 1, "24"};
     value.pixel_aspect_ratio = {1, 1, "1"};
+    value.background_color = {10, 20, 30, 40};
     value.work_area_start = {0, 1, "0"};
     value.work_area_duration = {5, 1, "5"};
     value.display_start_time = {0, 1, "0"};
@@ -1720,6 +1724,51 @@ void project_composition_package_parses_and_serializes_all_eight_contracts() {
     require(encoded[index].find("\"capabilityId\":\""
             + std::get<1>(requests[index]) + "\"") != std::string::npos,
         "package-150 success encoder emitted the wrong capability branch");
+  }
+  require(encoded[2].find(
+      "\"value\":{\"backgroundColor\":{\"alpha\":40,\"blue\":30,"
+      "\"green\":20,\"red\":10},\"compositionLocator\":")
+          != std::string::npos,
+      "composition settings success dropped or misordered backgroundColor");
+
+  auto changed_settings = composition_settings;
+  changed_settings.width = 1280;
+  const aemcp::native::CompositionSettingsChanged settings_change{
+      true, composition_locator, composition_settings, changed_settings};
+  const std::array<std::string_view, 6> setting_capabilities{{
+      "ae.composition.dimensions.set",
+      "ae.composition.duration.set",
+      "ae.composition.frame-rate.set",
+      "ae.composition.pixel-aspect-ratio.set",
+      "ae.composition.background-color.set",
+      "ae.composition.display-start-time.set",
+  }};
+  for (const std::string_view capability_id : setting_capabilities) {
+    const std::string encoded_change = body(encode_composition_settings_set_success(
+        capability_id,
+        success(
+            settings_change,
+            "package-settings-change",
+            digest_composition_settings_set_postcondition(
+                capability_id, settings_change))));
+    require(encoded_change.find(
+        "\"after\":{\"backgroundColor\":{\"alpha\":40,\"blue\":30,"
+        "\"green\":20,\"red\":10},\"displayStartTime\":")
+            != std::string::npos
+            && encoded_change.find(
+                "\"before\":{\"backgroundColor\":{\"alpha\":40,\"blue\":30,"
+                "\"green\":20,\"red\":10},\"displayStartTime\":")
+            != std::string::npos,
+        "composition settings mutation snapshots dropped backgroundColor");
+    require(encoded_change.find(
+        "\"capabilityId\":\"" + std::string(capability_id) + "\"")
+            != std::string::npos,
+        "composition settings mutation used the wrong typed success branch");
+    const bool has_undo = encoded_change.find("\"undo\":") != std::string::npos;
+    require(
+        has_undo
+            == (capability_id != "ae.composition.display-start-time.set"),
+        "composition settings mutation encoded the wrong Undo availability");
   }
 
   auto invalid_metadata = metadata;

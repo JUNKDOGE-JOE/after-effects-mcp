@@ -89,6 +89,12 @@ class HostIdleSignal {
   [[nodiscard]] virtual bool request_idle() noexcept = 0;
 };
 
+// Classifies a terminal-evidence failure after host dispatch. Mutating
+// capabilities must remain ambiguous because the host write may have landed.
+[[nodiscard]] std::string_view post_dispatch_evidence_failure_code(
+    std::string_view capability_id,
+    bool graph_invalidation = false) noexcept;
+
 // Owns #72 framing/session state on the single IPC worker and bridges only
 // admitted invoke/cancel requests to HostDispatcher. It never calls HostApi;
 // after a queued progress frame is delivered it only schedules AE's idle hook.

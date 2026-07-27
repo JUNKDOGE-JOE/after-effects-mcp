@@ -216,6 +216,44 @@ bool valid_timing_evidence(
 
 }  // namespace
 
+std::string_view post_dispatch_evidence_failure_code(
+    std::string_view capability_id,
+    bool graph_invalidation) noexcept {
+  const bool mutating = capability_id == kProjectBitDepthSetCapability
+      || capability_id == kCompositionTimeSetCapability
+      || capability_id == kCompositionCreateCapability
+      || capability_id == kCompositionLayerCreateCapability
+      || capability_id == kLayerEffectApplyCapability
+      || capability_id == kLayerPropertySetCapability
+      || keyframe_write_capability(capability_id)
+      || capability_id == kCompositionWorkAreaSetCapability
+      || capability_id == kCompositionDimensionsSetCapability
+      || capability_id == kCompositionDurationSetCapability
+      || capability_id == kCompositionFrameRateSetCapability
+      || capability_id == kCompositionPixelAspectRatioSetCapability
+      || capability_id == kCompositionBackgroundColorSetCapability
+      || capability_id == kCompositionDisplayStartTimeSetCapability
+      || capability_id == kProjectItemNameSetCapability
+      || capability_id == kProjectItemCommentSetCapability
+      || capability_id == kProjectItemLabelSetCapability
+      || capability_id == kCompositionDuplicateCapability
+      || capability_id == kLayerNameSetCapability
+      || capability_id == kLayerRangeSetCapability
+      || capability_id == kLayerStartTimeSetCapability
+      || capability_id == kLayerStretchSetCapability
+      || capability_id == kLayerOrderSetCapability
+      || capability_id == kLayerParentSetCapability
+      || capability_id == kLayerDuplicateCapability
+      || capability_id == kLayerSwitchSetCapability
+      || capability_id == kLayerQualitySetCapability
+      || capability_id == kLayerBlendingModeSetCapability
+      || capability_id == kNativeMediaWriteCapability
+      || is_text_shape_marker_write_capability(capability_id);
+  return mutating
+      ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
+      : graph_invalidation ? "NATIVE_UNAVAILABLE" : "CAPABILITY_FAILED";
+}
+
 NativeRpcConnectionHandler::NativeRpcConnectionHandler(
     HostDispatcher& dispatcher,
     Clock& dispatcher_clock,
@@ -382,6 +420,16 @@ void NativeRpcConnectionHandler::serve(
             } else if (completion.capability_id == kCompositionWorkAreaSetCapability) {
               postcondition_digest = rpc::digest_composition_work_area_set_postcondition(
                   completion.composition_work_area_change_result);
+            } else if (completion.capability_id == kCompositionDimensionsSetCapability
+                || completion.capability_id == kCompositionDurationSetCapability
+                || completion.capability_id == kCompositionFrameRateSetCapability
+                || completion.capability_id == kCompositionPixelAspectRatioSetCapability
+                || completion.capability_id == kCompositionBackgroundColorSetCapability
+                || completion.capability_id == kCompositionDisplayStartTimeSetCapability) {
+              postcondition_digest =
+                  rpc::digest_composition_settings_set_postcondition(
+                      completion.capability_id,
+                      completion.composition_settings_change_result);
             } else if (completion.capability_id == kProjectItemNameSetCapability
                 || completion.capability_id == kProjectItemCommentSetCapability) {
               postcondition_digest = rpc::digest_project_item_text_set_postcondition(
@@ -555,36 +603,11 @@ void NativeRpcConnectionHandler::serve(
         }
         if (!evidence_valid) {
           completion.ok = false;
-          const bool mutating = completion.capability_id == kProjectBitDepthSetCapability
-              || completion.capability_id == kCompositionTimeSetCapability
-              || completion.capability_id == kCompositionCreateCapability
-              || completion.capability_id == kCompositionLayerCreateCapability
-              || completion.capability_id == kLayerEffectApplyCapability
-              || completion.capability_id == kLayerPropertySetCapability
-              || keyframe_write_capability(completion.capability_id)
-              || completion.capability_id == kCompositionWorkAreaSetCapability
-              || completion.capability_id == kProjectItemNameSetCapability
-              || completion.capability_id == kProjectItemCommentSetCapability
-              || completion.capability_id == kProjectItemLabelSetCapability
-              || completion.capability_id == kCompositionDuplicateCapability
-              || completion.capability_id == kLayerNameSetCapability
-              || completion.capability_id == kLayerRangeSetCapability
-              || completion.capability_id == kLayerStartTimeSetCapability
-              || completion.capability_id == kLayerStretchSetCapability
-              || completion.capability_id == kLayerOrderSetCapability
-              || completion.capability_id == kLayerParentSetCapability
-              || completion.capability_id == kLayerDuplicateCapability
-              || completion.capability_id == kLayerSwitchSetCapability
-              || completion.capability_id == kLayerQualitySetCapability
-              || completion.capability_id == kLayerBlendingModeSetCapability
-              || completion.capability_id == kNativeMediaWriteCapability
-              || is_text_shape_marker_write_capability(completion.capability_id);
-          completion.error_code = mutating
-              ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
-              : graph_invalidation ? "NATIVE_UNAVAILABLE" : "CAPABILITY_FAILED";
+          completion.error_code = post_dispatch_evidence_failure_code(
+              completion.capability_id, graph_invalidation);
           completion.message = "native result evidence failed validation";
           postcondition_digest.clear();
-          if (mutating) {
+          if (completion.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE") {
             dispatcher_.mark_idempotency_ambiguous(completion.idempotency_key);
           }
           observer_.on_rpc_event(
@@ -730,6 +753,19 @@ void NativeRpcConnectionHandler::serve(
                 completion.request_id, connection.session_id, runtime_.host_instance_id,
                 completion.composition_work_area_change_result, started_at, completed_at,
                 request_digest, postcondition_digest, completion.replayed});
+          } else if (completion.capability_id == kCompositionDimensionsSetCapability
+              || completion.capability_id == kCompositionDurationSetCapability
+              || completion.capability_id == kCompositionFrameRateSetCapability
+              || completion.capability_id == kCompositionPixelAspectRatioSetCapability
+              || completion.capability_id == kCompositionBackgroundColorSetCapability
+              || completion.capability_id == kCompositionDisplayStartTimeSetCapability) {
+            response = rpc::encode_composition_settings_set_success(
+                completion.capability_id,
+                {completion.request_id, connection.session_id,
+                    runtime_.host_instance_id,
+                    completion.composition_settings_change_result,
+                    started_at, completed_at, request_digest,
+                    postcondition_digest, completion.replayed});
           } else if (completion.capability_id == kProjectItemNameSetCapability) {
             response = rpc::encode_project_item_name_set_success({
                 completion.request_id, connection.session_id, runtime_.host_instance_id,

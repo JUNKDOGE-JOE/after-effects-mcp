@@ -261,6 +261,55 @@ def test_native_capabilities_fixture_covers_every_core_capability_contract():
     assert not violations, "\n".join(violations)
 
 
+def test_every_core_capability_contract_has_a_valid_native_result_vector():
+    descriptors = {
+        item["id"]: item
+        for item in _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"][
+            "items"
+        ]
+    }
+    violations = []
+    for capability_id, (module_name, contract) in _core_capability_contracts().items():
+        descriptor = descriptors.get(capability_id)
+        if descriptor is None:
+            violations.append(
+                f"{capability_id} from {module_name}: MISSING descriptor"
+            )
+            continue
+        if descriptor["resultSchema"] != contract.result_schema:
+            violations.append(
+                f"{capability_id} from {module_name}: resultSchema mismatch"
+            )
+        carriers = [
+            example["expected"]["value"]
+            for example in descriptor.get("examples", ())
+            if example.get("expected", {}).get("outcome") == "succeeded"
+            and "value" in example["expected"]
+        ]
+        if not carriers:
+            violations.append(
+                f"{capability_id} from {module_name}: MISSING native result vector"
+            )
+            continue
+        if len(carriers) != 1:
+            violations.append(
+                f"{capability_id} from {module_name}: "
+                f"expected exactly one native result vector, got {len(carriers)}"
+            )
+            continue
+        errors = sorted(
+            Draft202012Validator(contract.result_schema).iter_errors(carriers[0]),
+            key=lambda error: tuple(str(part) for part in error.absolute_path),
+        )
+        for error in errors:
+            location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+            violations.append(
+                f"{capability_id} from {module_name}: "
+                f"native result vector {location}: {error.message}"
+            )
+    assert not violations, "\n".join(violations)
+
+
 def test_bit_depth_mutation_success_can_never_be_a_transport_replay():
     schema = _json(SCHEMA_PATH)
     validator = Draft202012Validator(schema)
