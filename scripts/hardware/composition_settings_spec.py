@@ -78,7 +78,8 @@ FIXTURE_RECIPE = (
     "Save once in place; never use Save As and never create a second .aep.",
     (
         "Close and reopen the same fixture from formal After Effects through "
-        "AE File > Open, then obtain only fresh public locators."
+        "AE File > Open, open Comp Settings Fixture in the active Composition "
+        "viewer, then obtain only fresh public locators."
     ),
     (
         "After evidence extraction archive the one fixture to short-lived "

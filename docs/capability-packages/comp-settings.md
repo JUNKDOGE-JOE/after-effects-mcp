@@ -922,8 +922,10 @@ runner fixture ID rather than by candidate SHA. The deterministic recipe is:
 3. add one solid named `Timing Witness`;
 4. add Opacity keyframes at 1/1, 4/1 and 7/1 seconds with deterministic values;
 5. save once to the centralized active-fixture path;
-6. close and reopen it from the formal AE process using AE File/Open; and
-7. obtain fresh locators and verify the complete recipe through public reads.
+6. close and reopen it from the formal AE process using AE File/Open;
+7. open `Comp Settings Fixture` in the active Composition viewer, because
+   `ae_previewFrame` omits `comp_id` and therefore targets the active comp; and
+8. obtain fresh locators and verify the complete recipe through public reads.
 
 Reset never uses Save As and never creates another `.aep`. With reconciled
 state, it repeatedly Undoes to the saved baseline or closes without saving and

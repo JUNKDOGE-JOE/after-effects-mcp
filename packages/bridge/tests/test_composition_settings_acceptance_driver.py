@@ -182,6 +182,7 @@ def test_fixture_recipe_is_single_slot_reopened_in_formal_ae_and_archived():
     assert "1/1, 4/1, and 7/1" in recipe
     assert "never use Save As" in recipe
     assert "AE File > Open" in recipe
+    assert "open Comp Settings Fixture in the active Composition viewer" in recipe
     assert "created 1" in recipe and "archived 1" in recipe
 
 
