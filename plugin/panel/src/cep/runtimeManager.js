@@ -14,6 +14,7 @@ const DEVELOPMENT_RUNTIME_ENV = 'AE_MCP_DEV_RUNTIME';
 const DEVELOPMENT_CORE_BOOTSTRAP = [
   'import runpy,sys',
   'sys.path.insert(0,sys.argv[1])',
+  'sys.path.insert(0,sys.argv[2])',
   'runpy.run_module("ae_mcp",run_name="__main__")',
 ].join(';');
 
@@ -190,16 +191,20 @@ export function createRuntimeManager({
     const projectManifest = paths.join([checkout, 'pyproject.toml']);
     const coreRoot = paths.join([checkout, 'packages', 'core']);
     const coreEntrypoint = paths.join([coreRoot, 'ae_mcp', '__main__.py']);
+    const bridgeRoot = paths.join([checkout, 'packages', 'bridge']);
+    const bridgeEntrypoint = paths.join([bridgeRoot, 'ae_mcp_bridge', '__init__.py']);
     const interpreter = paths.join([checkout, '.venv', 'bin', 'python3']);
     let resolvedInterpreter;
     try {
-      const [manifestInfo, entrypointInfo, interpreterInfo] = await Promise.all([
+      const [manifestInfo, entrypointInfo, bridgeInfo, interpreterInfo] = await Promise.all([
         promises.lstat(projectManifest),
         promises.lstat(coreEntrypoint),
+        promises.lstat(bridgeEntrypoint),
         promises.lstat(interpreter),
       ]);
       if (!manifestInfo.isFile() || manifestInfo.isSymbolicLink?.()
           || !entrypointInfo.isFile() || entrypointInfo.isSymbolicLink?.()
+          || !bridgeInfo.isFile() || bridgeInfo.isSymbolicLink?.()
           || (!interpreterInfo.isFile() && !interpreterInfo.isSymbolicLink?.())
           || (interpreterInfo.mode & 0o111) === 0) {
         throw new Error('required checkout entrypoint is invalid');
@@ -212,7 +217,7 @@ export function createRuntimeManager({
     } catch {
       failure(
         'RUNTIME_DEVELOPMENT_RUNTIME_INVALID',
-        `${DEVELOPMENT_RUNTIME_ENV} does not contain pyproject.toml, the core entrypoint, and an executable .venv/bin/python3`,
+        `${DEVELOPMENT_RUNTIME_ENV} does not contain the Core/bridge entrypoints and an executable .venv/bin/python3`,
         { path: checkout },
       );
     }
@@ -223,7 +228,7 @@ export function createRuntimeManager({
       developmentRuntime: true,
       checkoutPath: checkout,
       launcher: interpreter,
-      args: ['-B', '-I', '-c', DEVELOPMENT_CORE_BOOTSTRAP, coreRoot],
+      args: ['-B', '-I', '-c', DEVELOPMENT_CORE_BOOTSTRAP, coreRoot, bridgeRoot],
       cwd: checkout,
       interpreter: {
         path: interpreter,

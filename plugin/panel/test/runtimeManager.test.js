@@ -16,6 +16,7 @@ const macosRuntimeTest = process.platform === 'win32' ? test.skip : test;
 const DEVELOPMENT_CORE_BOOTSTRAP = [
   'import runpy,sys',
   'sys.path.insert(0,sys.argv[1])',
+  'sys.path.insert(0,sys.argv[2])',
   'runpy.run_module("ae_mcp",run_name="__main__")',
 ].join(';');
 
@@ -202,6 +203,7 @@ async function developmentCheckout(h, marker = 'development') {
   const checkout = path.join(h.root, 'source checkout');
   await writeFile(checkout, 'pyproject.toml', '[tool.uv]\n');
   await writeFile(checkout, 'packages/core/ae_mcp/__main__.py', 'def main(): pass\n');
+  await writeFile(checkout, 'packages/bridge/ae_mcp_bridge/__init__.py', '');
   const interpreter = await writeFile(
     checkout,
     '.venv/bin/python3',
@@ -256,6 +258,7 @@ macosRuntimeTest('development checkout bypasses manifests, generations, pointers
     '-c',
     DEVELOPMENT_CORE_BOOTSTRAP,
     path.join(canonicalCheckout, 'packages', 'core'),
+    path.join(canonicalCheckout, 'packages', 'bridge'),
   ]);
   assert.equal(selected.interpreter.path, canonicalInterpreter);
   assert.equal(selected.interpreter.resolvedPath, canonicalInterpreter);
@@ -274,6 +277,7 @@ macosRuntimeTest('development checkout bypasses manifests, generations, pointers
   const launched = await execFileAsync(selected.launcher, selected.args);
   assert.match(launched.stdout, /development-core:development:-B -I -c/);
   assert.match(launched.stdout, /packages\/core/);
+  assert.match(launched.stdout, /packages\/bridge/);
   const inspected = await manager.inspect();
   assert.equal(inspected.ok, true);
   assert.equal(inspected.developmentRuntime, true);

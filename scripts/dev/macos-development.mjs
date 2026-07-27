@@ -12,8 +12,10 @@ const execFileAsync = promisify(childProcess.execFile);
 const CORE_IMPORT_PROBE = [
   'import pathlib,sys',
   'sys.path.insert(0,sys.argv[1])',
-  'import ae_mcp',
+  'sys.path.insert(0,sys.argv[2])',
+  'import ae_mcp,ae_mcp_bridge',
   'print(pathlib.Path(ae_mcp.__file__).resolve())',
+  'print(pathlib.Path(ae_mcp_bridge.__file__).resolve())',
 ].join(';');
 
 function frozenCheck(id, ok, pathValue, code, details = {}) {
@@ -132,6 +134,7 @@ async function inspectRequiredPaths({
   ));
 
   const coreRoot = path.join(checkoutPath, 'packages', 'core');
+  const bridgeRoot = path.join(checkoutPath, 'packages', 'bridge');
   const coreEntrypoint = path.join(coreRoot, 'ae_mcp', '__main__.py');
   await inspectPath(checks, dependencies, {
     id: 'core-entrypoint',
@@ -152,7 +155,7 @@ async function inspectRequiredPaths({
     try {
       const result = await dependencies.execFile(
         interpreterPath,
-        ['-B', '-I', '-c', CORE_IMPORT_PROBE, coreRoot],
+        ['-B', '-I', '-c', CORE_IMPORT_PROBE, coreRoot, bridgeRoot],
         {
           cwd: checkoutPath,
           env: environment,
@@ -160,15 +163,20 @@ async function inspectRequiredPaths({
           encoding: 'utf8',
         },
       );
-      const importedPath = String(result.stdout || '').trim();
-      const canonicalImported = await dependencies.realpath(importedPath);
-      if (!inside(canonicalImported, coreRoot)) throw new Error('import escaped checkout');
+      const importedPaths = String(result.stdout || '').trim().split(/\r?\n/);
+      if (importedPaths.length !== 2) throw new Error('import probe was incomplete');
+      const canonicalImported = await dependencies.realpath(importedPaths[0]);
+      const canonicalBridge = await dependencies.realpath(importedPaths[1]);
+      if (!inside(canonicalImported, coreRoot)
+          || !inside(canonicalBridge, bridgeRoot)) {
+        throw new Error('import escaped checkout');
+      }
       checks.push(frozenCheck(
         'core-import',
         true,
         canonicalImported,
         undefined,
-        { interpreterPath },
+        { interpreterPath, bridgePath: canonicalBridge },
       ));
     } catch {
       checks.push(frozenCheck(

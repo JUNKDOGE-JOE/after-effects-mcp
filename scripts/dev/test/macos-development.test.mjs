@@ -35,6 +35,7 @@ async function fixture(t) {
     'print("fixture")\n',
   );
   await writeFile(repoRoot, 'packages/core/ae_mcp/__init__.py', '');
+  await writeFile(repoRoot, 'packages/bridge/ae_mcp_bridge/__init__.py', '');
   const interpreterTarget = await writeFile(
     repoRoot,
     '.venv/bin/python3.13',
@@ -70,9 +71,14 @@ async function fixture(t) {
     }
     if (file.includes('/.venv/bin/python3')) {
       return {
-        stdout: `${await fs.promises.realpath(
-          path.join(repoRoot, 'packages/core/ae_mcp/__init__.py'),
-        )}\n`,
+        stdout: [
+          await fs.promises.realpath(
+            path.join(repoRoot, 'packages/core/ae_mcp/__init__.py'),
+          ),
+          await fs.promises.realpath(
+            path.join(repoRoot, 'packages/bridge/ae_mcp_bridge/__init__.py'),
+          ),
+        ].join('\n'),
         stderr: '',
       };
     }
@@ -145,8 +151,14 @@ test('doctor returns the closed read-only development report', async (t) => {
     h.calls.some((call) => call.file.includes('/.venv/bin/python3')
       && call.args.slice(0, 3).join(' ') === '-B -I -c'
       && call.args[3].includes('sys.path.insert(0,sys.argv[1])')
-      && call.args.at(-1) === path.join(report.checkoutPath, 'packages', 'core')),
+      && call.args[3].includes('sys.path.insert(0,sys.argv[2])')
+      && call.args.at(-2) === path.join(report.checkoutPath, 'packages', 'core')
+      && call.args.at(-1) === path.join(report.checkoutPath, 'packages', 'bridge')),
     true,
+  );
+  assert.equal(
+    report.checks.find((check) => check.id === 'core-import').bridgePath,
+    path.join(report.checkoutPath, 'packages/bridge/ae_mcp_bridge/__init__.py'),
   );
 });
 

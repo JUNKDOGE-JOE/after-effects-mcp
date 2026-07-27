@@ -40,13 +40,16 @@ FIXTURE_NAME = "HDEV Core Native Fixture"
 CORE_BOOTSTRAP = (
     "import runpy,sys;"
     "sys.path.insert(0,sys.argv[1]);"
+    "sys.path.insert(0,sys.argv[2]);"
     'runpy.run_module("ae_mcp",run_name="__main__")'
 )
 CORE_IMPORT_PROBE = (
     "import pathlib,sys;"
     "sys.path.insert(0,sys.argv[1]);"
-    "import ae_mcp;"
-    "print(pathlib.Path(ae_mcp.__file__).resolve())"
+    "sys.path.insert(0,sys.argv[2]);"
+    "import ae_mcp,ae_mcp_bridge;"
+    "print(pathlib.Path(ae_mcp.__file__).resolve());"
+    "print(pathlib.Path(ae_mcp_bridge.__file__).resolve())"
 )
 
 
@@ -708,15 +711,20 @@ class _LiveSession:
         return bool(result.isError), payload
 
 
-def _verify_checkout_core(checkout: Path) -> tuple[Path, Path]:
+def _verify_checkout_core(checkout: Path) -> tuple[Path, Path, Path]:
     require(checkout.is_dir() and not checkout.is_symlink(), "checkout is invalid")
     canonical = checkout.resolve(strict=True)
     interpreter = canonical / ".venv/bin/python3"
     core_root = canonical / "packages/core"
+    bridge_root = canonical / "packages/bridge"
     require(interpreter.exists() and os.access(interpreter, os.X_OK), "interpreter missing")
     require(
         (core_root / "ae_mcp/__main__.py").is_file(),
         "checkout Core entrypoint missing",
+    )
+    require(
+        (bridge_root / "ae_mcp_bridge/__init__.py").is_file(),
+        "checkout bridge entrypoint missing",
     )
     import subprocess
 
@@ -728,6 +736,7 @@ def _verify_checkout_core(checkout: Path) -> tuple[Path, Path]:
             "-c",
             CORE_IMPORT_PROBE,
             os.fspath(core_root),
+            os.fspath(bridge_root),
         ],
         cwd=canonical,
         env={
@@ -742,12 +751,19 @@ def _verify_checkout_core(checkout: Path) -> tuple[Path, Path]:
         capture_output=True,
         text=True,
     )
-    imported = Path(result.stdout.strip()).resolve(strict=True)
+    imported_lines = result.stdout.strip().splitlines()
+    require(len(imported_lines) == 2, "isolated Core import probe was incomplete")
+    imported = Path(imported_lines[0]).resolve(strict=True)
+    imported_bridge = Path(imported_lines[1]).resolve(strict=True)
     require(
         imported.is_relative_to(core_root),
         "isolated Core import did not resolve beneath checkout",
     )
-    return interpreter, core_root
+    require(
+        imported_bridge.is_relative_to(bridge_root),
+        "isolated bridge import did not resolve beneath checkout",
+    )
+    return interpreter, core_root, bridge_root
 
 
 @contextlib.asynccontextmanager
@@ -758,7 +774,7 @@ async def live_session(config: DevelopmentSmokeConfig) -> AsyncIterator[PublicSe
         from mcp.types import Implementation
     except ImportError as error:  # pragma: no cover - hardware environment only
         raise DevelopmentSmokeFailure("HDEV requires the bootstrapped mcp SDK") from error
-    interpreter, core_root = _verify_checkout_core(config.checkout)
+    interpreter, core_root, bridge_root = _verify_checkout_core(config.checkout)
     environment = {
         "AE_MCP_BACKEND": "ae-mcp",
         "AE_MCP_PLUGIN_URL": config.plugin_url,
@@ -771,7 +787,10 @@ async def live_session(config: DevelopmentSmokeConfig) -> AsyncIterator[PublicSe
     }
     params = StdioServerParameters(
         command=os.fspath(interpreter),
-        args=["-B", "-I", "-c", CORE_BOOTSTRAP, os.fspath(core_root)],
+        args=[
+            "-B", "-I", "-c", CORE_BOOTSTRAP,
+            os.fspath(core_root), os.fspath(bridge_root),
+        ],
         cwd=os.fspath(config.checkout),
         env=environment,
     )

@@ -405,14 +405,18 @@ def test_checkout_verification_preserves_the_virtualenv_entrypoint(tmp_path):
     checkout = tmp_path / "checkout"
     interpreter = checkout / ".venv/bin/python3"
     core_package = checkout / "packages/core/ae_mcp"
+    bridge_package = checkout / "packages/bridge/ae_mcp_bridge"
     interpreter.parent.mkdir(parents=True)
     core_package.mkdir(parents=True)
+    bridge_package.mkdir(parents=True)
     interpreter.symlink_to(Path(sys.executable))
     (core_package / "__init__.py").write_text("", encoding="utf-8")
     (core_package / "__main__.py").write_text("", encoding="utf-8")
+    (bridge_package / "__init__.py").write_text("", encoding="utf-8")
 
-    verified_interpreter, core_root = driver._verify_checkout_core(checkout)
+    verified_interpreter, core_root, bridge_root = driver._verify_checkout_core(checkout)
 
     assert verified_interpreter == interpreter
     assert verified_interpreter.resolve() == Path(sys.executable).resolve()
     assert core_root == checkout / "packages/core"
+    assert bridge_root == checkout / "packages/bridge"
