@@ -81,14 +81,6 @@
       "engine": "native-aegp",
       "outcome": "succeeded",
       "value": {
-        "compositionLocator": {
-          "kind": "composition",
-          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
-          "sessionId": "11111111-1111-4111-8111-111111111111",
-          "projectId": "44444444-4444-4444-8444-444444444444",
-          "generation": 8,
-          "objectId": "66666666-6666-4666-8666-666666666666"
-        },
         "name": "SYNTHETIC_COMPOSITION",
         "width": 1920,
         "height": 1080,
@@ -112,6 +104,12 @@
           "denominator": 1,
           "rational": "1"
         },
+        "backgroundColor": {
+          "red": 0,
+          "green": 0,
+          "blue": 0,
+          "alpha": 255
+        },
         "workArea": {
           "start": {
             "value": 0,
@@ -129,7 +127,15 @@
           "scale": 1,
           "secondsRational": "0"
         },
-        "layerCount": 0
+        "layerCount": 0,
+        "compositionLocator": {
+          "kind": "composition",
+          "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+          "sessionId": "11111111-1111-4111-8111-111111111111",
+          "projectId": "44444444-4444-4444-8444-444444444444",
+          "generation": 8,
+          "objectId": "66666666-6666-4666-8666-666666666666"
+        }
       },
       "evidence": {
         "engine": "native-aegp",
@@ -146,7 +152,7 @@
           "verified": true,
           "kind": "composition-settings-read",
           "algorithm": "sha256-rfc8785-jcs-v1",
-          "digest": "c60be6be60eecabc9b682e81eeeaa29cbb546f61ef369fe32327a3c22a323d94"
+          "digest": "cf0bb73747ff1ad5d9ea75fcdc03fbbbb0ca5cdb354622ae1bfdbb5eb59ac48d"
         }
       }
     }

@@ -88,12 +88,12 @@ POSTCONDITION_KIND_BY_TOOL = {
 FROZEN_DESCRIPTOR_BY_TOOL = {
     "ae_getProjectContext": ("ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca", "read", "read-only", "idempotent", "not-applicable", "none"),
     "ae_getProjectItemMetadata": ("b13139c0b2e8073f6606bfbead1e59eb7fea63ec10a164b500e19ff8babd0f69", "read", "read-only", "idempotent", "not-applicable", "none"),
-    "ae_getCompositionSettings": ("a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b", "read", "read-only", "idempotent", "not-applicable", "none"),
+    "ae_getCompositionSettings": ("ceda810aba822f06ac05534ccbcb485a5866f094bb9f682de699009f4bdc4631", "read", "read-only", "idempotent", "not-applicable", "none"),
     "ae_setCompositionWorkArea": ("a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997", "write", "mutating", "idempotency-key", "ae-undo-group", "committed"),
     "ae_renameProjectItem": ("b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538", "write", "mutating", "idempotency-key", "ae-undo-group", "committed"),
     "ae_setProjectItemComment": ("957985628474caa9c9cef3de76a2839e59691232b062b776ff800a79dd3cc35c", "write", "mutating", "idempotency-key", "ae-undo-group", "committed"),
     "ae_setProjectItemLabel": ("4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f", "write", "mutating", "idempotency-key", "ae-undo-group", "committed"),
-    "ae_duplicateComposition": ("96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3", "write", "mutating", "idempotency-key", "ae-undo-group", "committed"),
+    "ae_duplicateComposition": ("ff929d2ea5b499d279f9e86a5757f0be6b04561dfabd8e1e3e7443616e82f2ab", "write", "mutating", "idempotency-key", "ae-undo-group", "committed"),
     "ae_listProjectItems": ("64e87abb4beec44bf6ad3223002602222f1efcd6c1dc4f27383c617dfa2d444e", "read", "read-only", "idempotent", "not-applicable", "none"),
 }
 

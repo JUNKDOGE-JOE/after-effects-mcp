@@ -192,6 +192,9 @@ struct ParsedRequest {
     std::string_view idempotency_key);
 [[nodiscard]] std::string digest_composition_work_area_set_postcondition(
     const CompositionWorkAreaChanged& value);
+[[nodiscard]] std::string digest_composition_settings_set_postcondition(
+    std::string_view capability_id,
+    const CompositionSettingsChanged& value);
 [[nodiscard]] std::string digest_project_item_text_set_arguments(
     std::string_view capability_id,
     const ObjectLocator& item_locator,
@@ -255,6 +258,9 @@ struct ParsedRequest {
     const ProjectItemMetadata& value);
 [[nodiscard]] std::string composition_settings_persistent_diagnostic_fields(
     const CompositionSettings& value);
+[[nodiscard]] std::string composition_settings_change_persistent_diagnostic_fields(
+    std::string_view capability_id,
+    const CompositionSettingsChanged& value);
 [[nodiscard]] std::string composition_work_area_persistent_diagnostic_fields(
     const CompositionWorkAreaChanged& value);
 [[nodiscard]] std::string project_item_name_persistent_diagnostic_fields(
@@ -558,6 +564,7 @@ struct CapabilitiesSuccess {
   std::string native_media_read_contract_digest;
   std::string native_media_write_contract_digest;
   std::array<bool, 11> include_text_shape_marker{};
+  std::array<bool, 6> include_composition_settings{};
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
@@ -678,6 +685,7 @@ using ProjectContextSuccess = NativeValueSuccess<ProjectContext>;
 using ProjectItemMetadataSuccess = NativeValueSuccess<ProjectItemMetadata>;
 using CompositionSettingsSuccess = NativeValueSuccess<CompositionSettings>;
 using CompositionWorkAreaSetSuccess = NativeValueSuccess<CompositionWorkAreaChanged>;
+using CompositionSettingsSetSuccess = NativeValueSuccess<CompositionSettingsChanged>;
 using ProjectItemNameSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
 using ProjectItemCommentSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
 using ProjectItemLabelSetSuccess = NativeValueSuccess<ProjectItemLabelChanged>;
@@ -894,6 +902,9 @@ struct ErrorResponse {
     const CompositionSettingsSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_composition_work_area_set_success(
     const CompositionWorkAreaSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_composition_settings_set_success(
+    std::string_view capability_id,
+    const CompositionSettingsSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_item_name_set_success(
     const ProjectItemNameSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_item_comment_set_success(

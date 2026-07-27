@@ -127,6 +127,18 @@ class ExactRatio(_NativeModel):
         return self
 
 
+class RatioInput(_NativeModel):
+    numerator: Annotated[StrictInt, Field(ge=1, le=2_147_483_647)]
+    denominator: Annotated[StrictInt, Field(ge=1, le=2_147_483_647)]
+
+
+class CompositionColor(_NativeModel):
+    red: Annotated[StrictInt, Field(ge=0, le=255)]
+    green: Annotated[StrictInt, Field(ge=0, le=255)]
+    blue: Annotated[StrictInt, Field(ge=0, le=255)]
+    alpha: Literal[255]
+
+
 class WorkArea(_NativeModel):
     start: ExactTime
     duration: ExactTime
@@ -271,6 +283,7 @@ class CompositionSettingsSnapshot(_NativeModel):
     frame_duration: ExactTime
     frame_rate: ExactRatio
     pixel_aspect_ratio: ExactRatio
+    background_color: CompositionColor
     work_area: WorkArea
     display_start_time: ExactTime
     layer_count: NonNegativeInt
@@ -328,12 +341,101 @@ class CompositionWorkAreaSetArguments(_NativeModel):
         return self
 
 
+class _CompositionSettingArguments(_NativeModel):
+    composition_locator: NativeLocator
+    idempotency_key: IdempotencyKey
+
+    @model_validator(mode="after")
+    def _composition_kind(self) -> "_CompositionSettingArguments":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must identify a composition")
+        return self
+
+
+class CompositionDimensionsSetArguments(_CompositionSettingArguments):
+    width: Annotated[StrictInt, Field(ge=1, le=30_000)]
+    height: Annotated[StrictInt, Field(ge=1, le=30_000)]
+
+
+class CompositionDurationSetArguments(_CompositionSettingArguments):
+    duration: PositiveTimeInput
+
+
+class CompositionFrameRateSetArguments(_CompositionSettingArguments):
+    frame_rate: RatioInput
+
+    @model_validator(mode="after")
+    def _supported_fp_policy(self) -> "CompositionFrameRateSetArguments":
+        if self.frame_rate.denominator != 1:
+            raise ValueError(
+                "fractional frame rates require a pinned-host normalization measurement"
+            )
+        return self
+
+
+class CompositionPixelAspectRatioSetArguments(_CompositionSettingArguments):
+    pixel_aspect_ratio: RatioInput
+
+
+class CompositionBackgroundColorSetArguments(_CompositionSettingArguments):
+    background_color: CompositionColor
+
+
+class CompositionDisplayStartTimeSetArguments(_CompositionSettingArguments):
+    display_start_time: ExactTimeInput
+
+
 def _times_equal(left: ExactTime | ExactTimeInput, right: ExactTime | ExactTimeInput) -> bool:
     return left.value * right.scale == right.value * left.scale
 
 
 def _work_areas_equal(left: WorkArea, right: WorkArea) -> bool:
     return _times_equal(left.start, right.start) and _times_equal(left.duration, right.duration)
+
+
+def _ratios_equal(left: ExactRatio | RatioInput, right: ExactRatio | RatioInput) -> bool:
+    return (
+        left.numerator * right.denominator
+        == right.numerator * left.denominator
+    )
+
+
+def _composition_settings_equal_except(
+    left: CompositionSettingsSnapshot,
+    right: CompositionSettingsSnapshot,
+    excluded_fields: set[str],
+) -> bool:
+    exact_fields = (
+        "name",
+        "width",
+        "height",
+        "background_color",
+        "layer_count",
+    )
+    if any(
+        field not in excluded_fields
+        and getattr(left, field) != getattr(right, field)
+        for field in exact_fields
+    ):
+        return False
+    time_fields = ("duration", "frame_duration", "display_start_time")
+    if any(
+        field not in excluded_fields
+        and not _times_equal(getattr(left, field), getattr(right, field))
+        for field in time_fields
+    ):
+        return False
+    ratio_fields = ("frame_rate", "pixel_aspect_ratio")
+    if any(
+        field not in excluded_fields
+        and not _ratios_equal(getattr(left, field), getattr(right, field))
+        for field in ratio_fields
+    ):
+        return False
+    return (
+        "work_area" in excluded_fields
+        or _work_areas_equal(left.work_area, right.work_area)
+    )
 
 
 class CompositionWorkAreaSetValue(_NativeModel):
@@ -348,6 +450,21 @@ class CompositionWorkAreaSetValue(_NativeModel):
             raise ValueError("compositionLocator must identify a composition")
         if _work_areas_equal(self.before_work_area, self.after_work_area):
             raise ValueError("composition work area did not change")
+        return self
+
+
+class CompositionSettingsSetValue(_NativeModel):
+    changed: Literal[True]
+    composition_locator: NativeLocator
+    before: CompositionSettingsSnapshot
+    after: CompositionSettingsSnapshot
+
+    @model_validator(mode="after")
+    def _verified_transition(self) -> "CompositionSettingsSetValue":
+        if self.composition_locator.kind != "composition":
+            raise ValueError("compositionLocator must identify a composition")
+        if self.before == self.after:
+            raise ValueError("composition settings did not change")
         return self
 
 
@@ -556,6 +673,10 @@ class CompositionWorkAreaSetExecution(_WriteExecution):
     value: CompositionWorkAreaSetValue
 
 
+class CompositionSettingsSetExecution(_WriteExecution):
+    value: CompositionSettingsSetValue
+
+
 class ProjectItemNameSetExecution(_WriteExecution):
     value: ProjectItemNameSetValue
 
@@ -576,6 +697,12 @@ PROJECT_CONTEXT_READ_CAPABILITY_ID = "ae.project.context.read"
 PROJECT_ITEM_METADATA_READ_CAPABILITY_ID = "ae.project.item.metadata.read"
 COMPOSITION_SETTINGS_READ_CAPABILITY_ID = "ae.composition.settings.read"
 COMPOSITION_WORK_AREA_SET_CAPABILITY_ID = "ae.composition.work-area.set"
+COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID = "ae.composition.dimensions.set"
+COMPOSITION_DURATION_SET_CAPABILITY_ID = "ae.composition.duration.set"
+COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID = "ae.composition.frame-rate.set"
+COMPOSITION_PIXEL_ASPECT_RATIO_SET_CAPABILITY_ID = "ae.composition.pixel-aspect-ratio.set"
+COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID = "ae.composition.background-color.set"
+COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID = "ae.composition.display-start-time.set"
 PROJECT_ITEM_NAME_SET_CAPABILITY_ID = "ae.project.item.name.set"
 PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID = "ae.project.item.comment.set"
 PROJECT_ITEM_LABEL_SET_CAPABILITY_ID = "ae.project.item.label.set"
@@ -636,6 +763,27 @@ def _ratio_schema() -> dict[str, Any]:
     }
 
 
+def _ratio_input_schema() -> dict[str, Any]:
+    schema = _ratio_schema()
+    schema["required"].remove("rational")
+    del schema["properties"]["rational"]
+    return schema
+
+
+def _color_schema() -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["red", "green", "blue", "alpha"],
+        "properties": {
+            "red": {"type": "integer", "minimum": 0, "maximum": 255},
+            "green": {"type": "integer", "minimum": 0, "maximum": 255},
+            "blue": {"type": "integer", "minimum": 0, "maximum": 255},
+            "alpha": {"const": 255},
+        },
+    }
+
+
 def _work_area_schema() -> dict[str, Any]:
     return {
         "type": "object",
@@ -665,7 +813,8 @@ def _settings_snapshot_schema() -> dict[str, Any]:
         "additionalProperties": False,
         "required": [
             "name", "width", "height", "duration", "frameDuration", "frameRate",
-            "pixelAspectRatio", "workArea", "displayStartTime", "layerCount",
+            "pixelAspectRatio", "backgroundColor", "workArea",
+            "displayStartTime", "layerCount",
         ],
         "properties": {
             "name": {"type": "string", "maxLength": 1024},
@@ -675,6 +824,7 @@ def _settings_snapshot_schema() -> dict[str, Any]:
             "frameDuration": _exact_time_schema(),
             "frameRate": _ratio_schema(),
             "pixelAspectRatio": _ratio_schema(),
+            "backgroundColor": _color_schema(),
             "workArea": _work_area_schema(),
             "displayStartTime": _exact_time_schema(),
             "layerCount": {"type": "integer", "minimum": 0, "maximum": _SAFE_MAX},
@@ -778,6 +928,57 @@ _COMPOSITION_WORK_AREA_SET_RESULT_SCHEMA = {
         "compositionLocator": _locator_schema("composition"),
         "beforeWorkArea": _work_area_schema(),
         "afterWorkArea": _work_area_schema(),
+    },
+}
+
+def _composition_setting_input(field: str, schema: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["compositionLocator", field, "idempotencyKey"],
+        "properties": {
+            "compositionLocator": _locator_schema("composition"),
+            field: schema,
+            "idempotencyKey": _IDEMPOTENCY_SCHEMA,
+        },
+    }
+
+
+_COMPOSITION_DIMENSIONS_SET_INPUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["compositionLocator", "width", "height", "idempotencyKey"],
+    "properties": {
+        "compositionLocator": _locator_schema("composition"),
+        "width": {"type": "integer", "minimum": 1, "maximum": 30_000},
+        "height": {"type": "integer", "minimum": 1, "maximum": 30_000},
+        "idempotencyKey": _IDEMPOTENCY_SCHEMA,
+    },
+}
+_COMPOSITION_DURATION_SET_INPUT_SCHEMA = _composition_setting_input(
+    "duration", _time_input_schema(positive=True)
+)
+_COMPOSITION_FRAME_RATE_SET_INPUT_SCHEMA = _composition_setting_input(
+    "frameRate", _ratio_input_schema()
+)
+_COMPOSITION_PIXEL_ASPECT_RATIO_SET_INPUT_SCHEMA = _composition_setting_input(
+    "pixelAspectRatio", _ratio_input_schema()
+)
+_COMPOSITION_BACKGROUND_COLOR_SET_INPUT_SCHEMA = _composition_setting_input(
+    "backgroundColor", _color_schema()
+)
+_COMPOSITION_DISPLAY_START_TIME_SET_INPUT_SCHEMA = _composition_setting_input(
+    "displayStartTime", _time_input_schema()
+)
+_COMPOSITION_SETTINGS_SET_RESULT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["changed", "compositionLocator", "before", "after"],
+    "properties": {
+        "changed": {"const": True},
+        "compositionLocator": _locator_schema("composition"),
+        "before": _settings_snapshot_schema(),
+        "after": _settings_snapshot_schema(),
     },
 }
 
@@ -926,6 +1127,66 @@ CAPABILITY_CONTRACTS: dict[str, CapabilityContract] = {
         _COMPOSITION_WORK_AREA_SET_INPUT_SCHEMA, _COMPOSITION_WORK_AREA_SET_RESULT_SCHEMA,
         "composition-work-area-set",
     ),
+    COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID: CapabilityContract(
+        COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID,
+        "Set exact dimensions for one After Effects composition.",
+        "write", "idempotency-key",
+        "Changes composition dimensions and creates one After Effects Undo step.",
+        ("compositionLocator must be current.", "width and height must differ from the current dimensions."),
+        "aemcp.requirement.native.composition-dimensions-set",
+        _COMPOSITION_DIMENSIONS_SET_INPUT_SCHEMA, _COMPOSITION_SETTINGS_SET_RESULT_SCHEMA,
+        "composition-dimensions-set",
+    ),
+    COMPOSITION_DURATION_SET_CAPABILITY_ID: CapabilityContract(
+        COMPOSITION_DURATION_SET_CAPABILITY_ID,
+        "Set the exact duration of one After Effects composition.",
+        "write", "idempotency-key",
+        "Changes composition duration and creates one After Effects Undo step.",
+        ("compositionLocator must be current.", "duration must be frame-aligned and contain the work area."),
+        "aemcp.requirement.native.composition-duration-set",
+        _COMPOSITION_DURATION_SET_INPUT_SCHEMA, _COMPOSITION_SETTINGS_SET_RESULT_SCHEMA,
+        "composition-duration-set",
+    ),
+    COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID: CapabilityContract(
+        COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID,
+        "Set the exact frame rate of one After Effects composition.",
+        "write", "idempotency-key",
+        "Changes composition frame rate and creates one After Effects Undo step.",
+        ("compositionLocator must be current.", "frameRate must satisfy the pinned normalization policy."),
+        "aemcp.requirement.native.composition-frame-rate-set",
+        _COMPOSITION_FRAME_RATE_SET_INPUT_SCHEMA, _COMPOSITION_SETTINGS_SET_RESULT_SCHEMA,
+        "composition-frame-rate-set",
+    ),
+    COMPOSITION_PIXEL_ASPECT_RATIO_SET_CAPABILITY_ID: CapabilityContract(
+        COMPOSITION_PIXEL_ASPECT_RATIO_SET_CAPABILITY_ID,
+        "Set the exact pixel aspect ratio of one After Effects composition.",
+        "write", "idempotency-key",
+        "Changes composition pixel aspect ratio and creates one After Effects Undo step.",
+        ("compositionLocator must be current.", "pixelAspectRatio must differ from the current ratio."),
+        "aemcp.requirement.native.composition-pixel-aspect-ratio-set",
+        _COMPOSITION_PIXEL_ASPECT_RATIO_SET_INPUT_SCHEMA, _COMPOSITION_SETTINGS_SET_RESULT_SCHEMA,
+        "composition-pixel-aspect-ratio-set",
+    ),
+    COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID: CapabilityContract(
+        COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID,
+        "Set the exact RGBA8 background colour of one After Effects composition.",
+        "write", "idempotency-key",
+        "Changes composition background colour and creates one After Effects Undo step.",
+        ("compositionLocator must be current.", "backgroundColor must differ from the current colour."),
+        "aemcp.requirement.native.composition-background-color-set",
+        _COMPOSITION_BACKGROUND_COLOR_SET_INPUT_SCHEMA, _COMPOSITION_SETTINGS_SET_RESULT_SCHEMA,
+        "composition-background-color-set",
+    ),
+    COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID: CapabilityContract(
+        COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID,
+        "Set the exact display start time of one After Effects composition.",
+        "write", "idempotency-key",
+        "Changes composition display start time without creating an After Effects Undo step.",
+        ("compositionLocator must be current.", "displayStartTime must be frame-aligned and differ from the current time."),
+        "aemcp.requirement.native.composition-display-start-time-set",
+        _COMPOSITION_DISPLAY_START_TIME_SET_INPUT_SCHEMA, _COMPOSITION_SETTINGS_SET_RESULT_SCHEMA,
+        "composition-display-start-time-set",
+    ),
     PROJECT_ITEM_NAME_SET_CAPABILITY_ID: CapabilityContract(
         PROJECT_ITEM_NAME_SET_CAPABILITY_ID,
         "Rename one After Effects project item.",
@@ -991,6 +1252,13 @@ def _validate_descriptor(
     contract: CapabilityContract,
 ) -> None:
     requirements = tuple((item.id, item.contract_version) for item in descriptor.requirements)
+    expected_undo = (
+        "not-applicable"
+        if contract.risk == "read"
+        else "none"
+        if contract.capability_id == COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID
+        else "ae-undo-group"
+    )
     expected = (
         descriptor.capability_id == contract.capability_id
         and descriptor.capability_version == CAPABILITY_VERSION
@@ -1001,7 +1269,7 @@ def _validate_descriptor(
         and descriptor.mutability == ("read-only" if contract.risk == "read" else "mutating")
         and descriptor.idempotency == contract.idempotency
         and descriptor.cancellation == "before-dispatch"
-        and descriptor.undo == ("not-applicable" if contract.risk == "read" else "ae-undo-group")
+        and descriptor.undo == expected_undo
         and descriptor.side_effect_summary == contract.side_effect_summary
         and descriptor.preconditions == contract.preconditions
         and descriptor.input_contract_id == contract.input_contract_id
@@ -1174,6 +1442,7 @@ async def _invoke_package_write_request(
     deadline_unix_ms: int,
     cancellation: NativeCancellationToken | None,
     exclude_none: bool = False,
+    undo_available: bool = True,
 ) -> tuple[NativeNegotiation, NativeCapabilityDescriptor, NativeInvokeRequest, NativeInvokeResult]:
     """Shared dispatch guard for only the five writes in this capability package."""
 
@@ -1253,7 +1522,7 @@ async def _invoke_package_write_request(
         or result.evidence.session_id != negotiation.session_id
         or result.evidence.effect != "committed"
         or undo is None
-        or undo.available is not True
+        or undo.available is not undo_available
         or undo.verified is not False
         or undo.group_id is not None
         or result.evidence.completed_at_unix_ms > deadline_unix_ms
@@ -1343,6 +1612,145 @@ async def invoke_composition_work_area_set(
     return CompositionWorkAreaSetExecution(
         implementation=descriptor, negotiation=negotiation, transport_request_id=request.request_id,
         idempotency_key=arguments.idempotency_key, replayed=result.replayed, value=value, evidence=result.evidence,
+    )
+
+_COMPOSITION_SETTING_ARGUMENT_MODELS: dict[str, type[_CompositionSettingArguments]] = {
+    COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID: CompositionDimensionsSetArguments,
+    COMPOSITION_DURATION_SET_CAPABILITY_ID: CompositionDurationSetArguments,
+    COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID: CompositionFrameRateSetArguments,
+    COMPOSITION_PIXEL_ASPECT_RATIO_SET_CAPABILITY_ID: CompositionPixelAspectRatioSetArguments,
+    COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID: CompositionBackgroundColorSetArguments,
+    COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID: CompositionDisplayStartTimeSetArguments,
+}
+
+
+def _frame_aligned(value: ExactTimeInput, frame: ExactTime) -> bool:
+    return (value.value * frame.scale) % (value.scale * frame.value) == 0
+
+
+def _snapshot_payload(value: CompositionSettingsSnapshot) -> dict[str, Any]:
+    return value.model_dump(mode="json", by_alias=True)
+
+
+async def invoke_composition_setting_set(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    capability_id: str,
+    arguments: Mapping[str, Any],
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> CompositionSettingsSetExecution:
+    model_type = _COMPOSITION_SETTING_ARGUMENT_MODELS[capability_id]
+    parsed = model_type.model_validate(arguments)
+    before_read = await invoke_composition_settings_read(
+        backend,
+        request_id=f"{request_id}-pre",
+        composition_locator=parsed.composition_locator,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    before = CompositionSettingsSnapshot.model_validate(
+        before_read.value.model_dump(mode="json", by_alias=True, exclude={"composition_locator"})
+    )
+    if isinstance(parsed, (CompositionDurationSetArguments, CompositionDisplayStartTimeSetArguments)):
+        requested = parsed.duration if isinstance(parsed, CompositionDurationSetArguments) else parsed.display_start_time
+        if not _frame_aligned(requested, before.frame_duration):
+            raise _structured_error(
+                "INVALID_ARGUMENT",
+                "Requested composition time must be exactly frame-aligned.",
+                details={"field": "params.arguments", "capabilityId": capability_id},
+            )
+    if isinstance(parsed, CompositionDurationSetArguments):
+        work_end_num = (
+            before.work_area.start.value * before.work_area.duration.scale
+            + before.work_area.duration.value * before.work_area.start.scale
+        )
+        work_end_den = before.work_area.start.scale * before.work_area.duration.scale
+        if work_end_num * parsed.duration.scale > parsed.duration.value * work_end_den:
+            raise _structured_error(
+                "INVALID_ARGUMENT",
+                "Duration must not end before the current work-area end.",
+                details={"field": "params.arguments.duration", "capabilityId": capability_id},
+            )
+    contract = CAPABILITY_CONTRACTS[capability_id]
+    hint = "Read composition settings and inspect the Undo stack before another write."
+    negotiation, descriptor, request, result = await _invoke_package_write_request(
+        backend,
+        request_id=request_id,
+        contract=contract,
+        arguments=parsed,
+        locator=parsed.composition_locator,
+        locator_field="params.arguments.compositionLocator",
+        allow_replay=False,
+        inspect_hint=hint,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+        undo_available=capability_id != COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID,
+    )
+    value = _validate_write_value(
+        contract=contract,
+        result=result,
+        value_model=CompositionSettingsSetValue,
+        inspect_hint=hint,
+    )
+    before_payload = _snapshot_payload(value.before)
+    expected_before = _snapshot_payload(before)
+    if value.composition_locator != parsed.composition_locator or before_payload != expected_before:
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition setting transition was not bound to the pre-write snapshot.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(action="inspect-state", hint=hint),
+            details={"capabilityId": capability_id},
+        )
+    target_fields: set[str]
+    target_ok = False
+    if isinstance(parsed, CompositionDimensionsSetArguments):
+        target_fields = {"width", "height"}
+        target_ok = value.after.width == parsed.width and value.after.height == parsed.height
+    elif isinstance(parsed, CompositionDurationSetArguments):
+        target_fields = {"duration"}
+        target_ok = _times_equal(value.after.duration, parsed.duration)
+    elif isinstance(parsed, CompositionFrameRateSetArguments):
+        target_fields = {"frame_rate", "frame_duration"}
+        target_ok = (
+            _ratios_equal(value.after.frame_rate, parsed.frame_rate)
+            and value.after.frame_duration.value * value.after.frame_rate.numerator
+            == value.after.frame_duration.scale * value.after.frame_rate.denominator
+        )
+    elif isinstance(parsed, CompositionPixelAspectRatioSetArguments):
+        target_fields = {"pixel_aspect_ratio"}
+        target_ok = _ratios_equal(
+            value.after.pixel_aspect_ratio, parsed.pixel_aspect_ratio
+        )
+    elif isinstance(parsed, CompositionBackgroundColorSetArguments):
+        target_fields = {"background_color"}
+        target_ok = value.after.background_color == parsed.background_color
+    else:
+        assert isinstance(parsed, CompositionDisplayStartTimeSetArguments)
+        target_fields = {"display_start_time"}
+        target_ok = _times_equal(value.after.display_start_time, parsed.display_start_time)
+    if not target_ok or not _composition_settings_equal_except(
+        value.before, value.after, target_fields
+    ):
+        raise NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "Native composition setting readback did not satisfy the exact postcondition.",
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(action="inspect-state", hint=hint),
+            details={"capabilityId": capability_id},
+        )
+    return CompositionSettingsSetExecution(
+        implementation=descriptor,
+        negotiation=negotiation,
+        transport_request_id=request.request_id,
+        idempotency_key=parsed.idempotency_key,
+        replayed=result.replayed,
+        value=value,
+        evidence=result.evidence,
     )
 
 
@@ -1486,6 +1894,12 @@ __all__ = [
     "CAPABILITY_CONTRACTS",
     "CAPABILITY_VERSION",
     "COMPOSITION_DUPLICATE_CAPABILITY_ID",
+    "COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID",
+    "COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID",
+    "COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID",
+    "COMPOSITION_DURATION_SET_CAPABILITY_ID",
+    "COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID",
+    "COMPOSITION_PIXEL_ASPECT_RATIO_SET_CAPABILITY_ID",
     "COMPOSITION_SETTINGS_READ_CAPABILITY_ID",
     "COMPOSITION_WORK_AREA_SET_CAPABILITY_ID",
     "PROJECT_CONTEXT_READ_CAPABILITY_ID",
@@ -1496,6 +1910,8 @@ __all__ = [
     "CompositionDuplicateExecution",
     "CompositionDuplicateValue",
     "CompositionSettingsExecution",
+    "CompositionSettingsSetExecution",
+    "CompositionSettingsSetValue",
     "CompositionSettingsSnapshot",
     "CompositionSettingsValue",
     "CompositionWorkAreaSetExecution",
@@ -1512,6 +1928,7 @@ __all__ = [
     "WorkArea",
     "invoke_composition_duplicate",
     "invoke_composition_settings_read",
+    "invoke_composition_setting_set",
     "invoke_composition_work_area_set",
     "invoke_project_context_read",
     "invoke_project_item_comment_set",

@@ -7,6 +7,9 @@ back on call.
 """
 from __future__ import annotations
 
+import base64
+import hashlib
+import io
 import json
 import re
 from pathlib import Path
@@ -157,6 +160,154 @@ async def test_list_tools_descriptions_lead_with_exposed_name(_full_tool_listing
         assert not tool.description.startswith("ae."), (
             f"{tool.name!r} description still leads with a dotted verb"
         )
+
+
+async def test_preview_frame_registration_and_tools_list_exposure(monkeypatch):
+    from ae_mcp import server as srv
+    from ae_mcp.backends.mock import MockBackend
+
+    assert "ae.previewFrame" in HANDLERS
+    backend = MockBackend()
+    assert "ae.previewFrame" in backend.supported_verbs()
+    monkeypatch.setattr(
+        "ae_mcp.backends.discovery.select_backend",
+        lambda: backend,
+    )
+    monkeypatch.setattr(
+        "ae_mcp.snapshot.discovery.select_snapshotter",
+        lambda: None,
+    )
+
+    tools = await srv.build_server()._ae_list_tools()
+    preview = next(tool for tool in tools if tool.name == "ae_previewFrame")
+    description = " ".join(preview.description.split())
+    assert "before and after visible edits" in description
+    assert "intermediate checkpoints" in description
+    assert "newest captureId" in description
+    assert "private project material" in description
+    assert "background appears with its RGB but alpha 0" in description
+    assert "without compositing it into the exported alpha" in description
+    assert "does not mean the background setting write failed" in description
+
+
+async def test_preview_frame_mcp_content_decodes_at_reported_dimensions(
+    monkeypatch,
+    tmp_path,
+):
+    from PIL import Image
+
+    from ae_mcp import server as srv
+
+    image_path = tmp_path / "preview.png"
+    Image.new("RGB", (96, 54), (12, 34, 56)).save(image_path, "PNG")
+    png_bytes = image_path.read_bytes()
+    digest = hashlib.sha256(png_bytes).hexdigest()
+    handler_result = {
+        "ok": True,
+        "compId": "7",
+        "compName": "Preview",
+        "captureId": "0123456789abcdef0123456789abcdef",
+        "frames": [{
+            "time": 0.5,
+            "path": str(image_path),
+            "width": 96,
+            "height": 54,
+            "sizeBytes": len(png_bytes),
+            "sha256": digest,
+            "source": "comp",
+            "method": "saveFrameToPng",
+            "compId": "7",
+        }],
+    }
+
+    async def _fake_run(_validated, _ctx):
+        return handler_result
+
+    load_all()
+    schema_cls, _ = HANDLERS["ae.previewFrame"]
+    monkeypatch.setitem(
+        HANDLERS,
+        "ae.previewFrame",
+        (schema_cls, _fake_run),
+    )
+    monkeypatch.setattr(
+        srv,
+        "_filtered_tool_names",
+        lambda: set(HANDLERS.keys()),
+    )
+
+    server = build_server()
+    async with create_connected_server_and_client_session(server) as client:
+        listed = await client.list_tools()
+        assert any(tool.name == "ae_previewFrame" for tool in listed.tools)
+        result = await client.call_tool("ae_previewFrame", {})
+
+    assert result.isError is False
+    assert len(result.content) == 2
+    assert result.content[0].type == "text"
+    assert json.loads(result.content[0].text) == handler_result
+    assert result.structuredContent == handler_result
+
+    image_content = result.content[1]
+    assert image_content.type == "image"
+    assert image_content.mimeType == "image/png"
+    decoded = base64.b64decode(image_content.data, validate=True)
+    assert decoded == png_bytes
+    assert hashlib.sha256(decoded).hexdigest() == digest
+    with Image.open(io.BytesIO(decoded)) as image:
+        image.load()
+        assert image.format == "PNG"
+        assert image.size == (96, 54)
+
+
+async def test_preview_frame_rejects_dimension_mismatch_at_mcp_boundary(
+    monkeypatch,
+    tmp_path,
+):
+    from PIL import Image
+
+    from ae_mcp import server as srv
+
+    image_path = tmp_path / "preview.png"
+    Image.new("RGB", (96, 54), (12, 34, 56)).save(image_path, "PNG")
+    png_bytes = image_path.read_bytes()
+    handler_result = {
+        "ok": True,
+        "captureId": "fedcba9876543210fedcba9876543210",
+        "frames": [{
+            "path": str(image_path),
+            "width": 95,
+            "height": 54,
+            "sha256": hashlib.sha256(png_bytes).hexdigest(),
+        }],
+    }
+
+    async def _fake_run(_validated, _ctx):
+        return handler_result
+
+    load_all()
+    schema_cls, _ = HANDLERS["ae.previewFrame"]
+    monkeypatch.setitem(
+        HANDLERS,
+        "ae.previewFrame",
+        (schema_cls, _fake_run),
+    )
+    monkeypatch.setattr(
+        srv,
+        "_filtered_tool_names",
+        lambda: set(HANDLERS.keys()),
+    )
+
+    server = build_server()
+    await server._ae_list_tools()
+    result = await server._ae_call_tool("ae_previewFrame", {})
+
+    assert result.isError is True
+    assert len(result.content) == 1
+    failure = json.loads(result.content[0].text)
+    assert failure["ok"] is False
+    assert "dimensions" in failure["error"]
+    assert result.structuredContent == failure
 
 
 async def test_tool_use_reference_tracks_public_schema_and_action_requirements(

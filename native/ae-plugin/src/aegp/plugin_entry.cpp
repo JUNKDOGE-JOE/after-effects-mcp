@@ -79,6 +79,7 @@ using aemcp::native::HostProjectContextResult;
 using aemcp::native::HostProjectItemMetadataResult;
 using aemcp::native::HostCompositionSettingsResult;
 using aemcp::native::HostCompositionWorkAreaWriteResult;
+using aemcp::native::HostCompositionSettingsWriteResult;
 using aemcp::native::HostProjectItemTextWriteResult;
 using aemcp::native::HostProjectItemLabelWriteResult;
 using aemcp::native::HostCompositionDuplicateResult;
@@ -120,6 +121,8 @@ using aemcp::native::CompositionCurrentTime;
 using aemcp::native::CompositionPositiveRatio;
 using aemcp::native::CompositionSettings;
 using aemcp::native::CompositionWorkAreaChanged;
+using aemcp::native::CompositionSettingsChanged;
+using aemcp::native::CompositionSettingKind;
 using aemcp::native::CompositionDuplicated;
 using aemcp::native::LayerDetails;
 using aemcp::native::LayerDuplicated;
@@ -156,6 +159,12 @@ using aemcp::native::kProjectContextReadCapability;
 using aemcp::native::kProjectItemMetadataReadCapability;
 using aemcp::native::kCompositionSettingsReadCapability;
 using aemcp::native::kCompositionWorkAreaSetCapability;
+using aemcp::native::kCompositionDimensionsSetCapability;
+using aemcp::native::kCompositionDurationSetCapability;
+using aemcp::native::kCompositionFrameRateSetCapability;
+using aemcp::native::kCompositionPixelAspectRatioSetCapability;
+using aemcp::native::kCompositionBackgroundColorSetCapability;
+using aemcp::native::kCompositionDisplayStartTimeSetCapability;
 using aemcp::native::kProjectItemNameSetCapability;
 using aemcp::native::kProjectItemCommentSetCapability;
 using aemcp::native::kProjectItemLabelSetCapability;
@@ -223,9 +232,21 @@ constexpr std::string_view kProjectContextReadContractDigest =
 constexpr std::string_view kProjectItemMetadataReadContractDigest =
     "b13139c0b2e8073f6606bfbead1e59eb7fea63ec10a164b500e19ff8babd0f69";
 constexpr std::string_view kCompositionSettingsReadContractDigest =
-    "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b";
+    "ceda810aba822f06ac05534ccbcb485a5866f094bb9f682de699009f4bdc4631";
 constexpr std::string_view kCompositionWorkAreaSetContractDigest =
     "a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997";
+constexpr std::string_view kCompositionDimensionsSetContractDigest =
+    "67a37903067278c0fbdf1fb265da232da825ef3250b8b256882de5ee294d5588";
+constexpr std::string_view kCompositionDurationSetContractDigest =
+    "16c8b84de5fb7652a6983b7cb1a0739e46c9b0ca7abd59c904969c45f786b1bc";
+constexpr std::string_view kCompositionFrameRateSetContractDigest =
+    "f8fcdba94a605ab30854ebe3f10584b22c842c4c7cf6cca2a0df5b8bbcb5e454";
+constexpr std::string_view kCompositionPixelAspectRatioSetContractDigest =
+    "1f9b1c3ac10ed58c5ed3ed42ccc55f783238e4d020d0cf5bb812ce54081b18bd";
+constexpr std::string_view kCompositionBackgroundColorSetContractDigest =
+    "e9daa022135fa244fb132e92ec7aa5cbcac4fddade2783bb43ba6ec2e494cf11";
+constexpr std::string_view kCompositionDisplayStartTimeSetContractDigest =
+    "3001a8a910ed8fe425b85157a8ccad48fe1ff4e4966729ba9dba0e108344bb37";
 constexpr std::string_view kProjectItemNameSetContractDigest =
     "b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538";
 constexpr std::string_view kProjectItemCommentSetContractDigest =
@@ -233,7 +254,7 @@ constexpr std::string_view kProjectItemCommentSetContractDigest =
 constexpr std::string_view kProjectItemLabelSetContractDigest =
     "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f";
 constexpr std::string_view kCompositionDuplicateContractDigest =
-    "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3";
+    "ff929d2ea5b499d279f9e86a5757f0be6b04561dfabd8e1e3e7443616e82f2ab";
 constexpr std::string_view kLayerDetailsReadContractDigest =
     "b1b7a5f313bbf72eb6b33ac4a0507f9f925ef6873d53fd07d93d861164ac15d9";
 constexpr std::string_view kLayerNameSetContractDigest =
@@ -2474,6 +2495,174 @@ class AegpHostApi final : public HostApi {
           "work area changed but exact readback did not match the request");
     }
     return HostCompositionWorkAreaWriteResult::success(std::move(changed));
+  }
+
+  [[nodiscard]] HostCompositionSettingsWriteResult set_composition_setting(
+      const aemcp::native::CompositionSettingsSetCommand& command,
+      TimePoint work_deadline) override {
+    const auto expired = [work_deadline] {
+      return std::chrono::steady_clock::now() >= work_deadline;
+    };
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_UtilitySuite6> utility_suite(
+        basic_, kAEGPUtilitySuite, kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || utility_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return HostCompositionSettingsWriteResult::failure(
+          "NATIVE_UNSUPPORTED", "required composition settings mutation suites are unavailable");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    const auto item_id = graph_.resolve_composition(
+        command.composition_locator, command.host_instance_id, command.session_id);
+    if (!open.has_value() || !item_id.has_value()) {
+      return HostCompositionSettingsWriteResult::failure(
+          "STALE_LOCATOR", "compositionLocator does not identify the open composition",
+          "params.arguments.compositionLocator");
+    }
+    const auto item = find_project_item(
+        item_suite.get(), open->project, open->root, *item_id, work_deadline);
+    AEGP_CompH comp = nullptr;
+    if (!item.has_value()
+        || comp_suite->AEGP_GetCompFromItem(*item, &comp) != A_Err_NONE
+        || comp == nullptr) {
+      return HostCompositionSettingsWriteResult::failure(
+          "STALE_LOCATOR", "composition identity could not be reacquired",
+          "params.arguments.compositionLocator");
+    }
+    auto before = composition_settings(
+        item_suite.get(), comp_suite.get(), layer_suite.get(), memory_suite.get(),
+        *item, comp, command.composition_locator);
+    if (!before.has_value()) {
+      return HostCompositionSettingsWriteResult::failure(
+          "CAPABILITY_FAILED", "could not read composition settings before mutation");
+    }
+    const auto time_equal = [](const CompositionCurrentTime& left,
+                               const CompositionCurrentTime& right) {
+      return static_cast<std::int64_t>(left.value) * right.scale
+          == static_cast<std::int64_t>(right.value) * left.scale;
+    };
+    const bool same_target =
+        (command.kind == CompositionSettingKind::kDimensions
+          && before->width == command.width && before->height == command.height)
+        || (command.kind == CompositionSettingKind::kDuration
+          && time_equal(before->duration, command.time))
+        || (command.kind == CompositionSettingKind::kFrameRate
+          && before->frame_rate == command.ratio)
+        || (command.kind == CompositionSettingKind::kPixelAspectRatio
+          && before->pixel_aspect_ratio == command.ratio)
+        || (command.kind == CompositionSettingKind::kBackgroundColor
+          && before->background_color == command.color)
+        || (command.kind == CompositionSettingKind::kDisplayStartTime
+          && time_equal(before->display_start_time, command.time));
+    if (same_target) {
+      return HostCompositionSettingsWriteResult::failure(
+          "INVALID_ARGUMENT", "composition setting already matches the requested value",
+          "params.arguments");
+    }
+    if ((command.kind == CompositionSettingKind::kDuration
+          || command.kind == CompositionSettingKind::kDisplayStartTime)
+        && (static_cast<std::int64_t>(command.time.value)
+                * before->frame_duration.scale)
+            % (static_cast<std::int64_t>(command.time.scale)
+                * before->frame_duration.value) != 0) {
+      return HostCompositionSettingsWriteResult::failure(
+          "INVALID_ARGUMENT", "composition time must be exactly frame-aligned",
+          "params.arguments");
+    }
+    if (command.kind == CompositionSettingKind::kDuration
+        && !exact_nonnegative_time_sum_leq(
+            before->work_area_start.value, before->work_area_start.scale,
+            before->work_area_duration.value, before->work_area_duration.scale,
+            command.time.value, command.time.scale)) {
+      return HostCompositionSettingsWriteResult::failure(
+          "INVALID_ARGUMENT", "duration must not end before the work-area end",
+          "params.arguments.duration");
+    }
+    if (expired()) {
+      return HostCompositionSettingsWriteResult::failure(
+          "DEADLINE_EXCEEDED", "composition setting mutation budget elapsed");
+    }
+    const bool undoable =
+        command.kind != CompositionSettingKind::kDisplayStartTime;
+    static constexpr char kLabels[][48] = {
+        "ae-mcp: Set composition dimensions",
+        "ae-mcp: Set composition duration",
+        "ae-mcp: Set composition frame rate",
+        "ae-mcp: Set composition pixel aspect ratio",
+        "ae-mcp: Set composition background colour",
+        "ae-mcp: Set composition display start time"};
+    const std::size_t kind_index = static_cast<std::size_t>(command.kind);
+    if (undoable
+        && utility_suite->AEGP_StartUndoGroup(kLabels[kind_index]) != A_Err_NONE) {
+      return HostCompositionSettingsWriteResult::failure(
+          "CAPABILITY_FAILED", "could not start the After Effects undo group");
+    }
+    A_Err set_error = A_Err_NONE;
+    const A_Time time{
+        static_cast<A_long>(command.time.value),
+        static_cast<A_u_long>(command.time.scale)};
+    const A_Ratio ratio{
+        static_cast<A_long>(command.ratio.numerator),
+        static_cast<A_u_long>(command.ratio.denominator)};
+    const AEGP_ColorVal color{
+        static_cast<A_FpLong>(command.color.alpha) / 255.0,
+        static_cast<A_FpLong>(command.color.red) / 255.0,
+        static_cast<A_FpLong>(command.color.green) / 255.0,
+        static_cast<A_FpLong>(command.color.blue) / 255.0};
+    switch (command.kind) {
+      case CompositionSettingKind::kDimensions:
+        set_error = comp_suite->AEGP_SetCompDimensions(
+            comp, static_cast<A_long>(command.width),
+            static_cast<A_long>(command.height));
+        break;
+      case CompositionSettingKind::kDuration:
+        set_error = comp_suite->AEGP_SetCompDuration(comp, &time);
+        break;
+      case CompositionSettingKind::kFrameRate: {
+        const A_FpLong frame_rate =
+            static_cast<A_FpLong>(command.ratio.numerator)
+            / static_cast<A_FpLong>(command.ratio.denominator);
+        set_error = comp_suite->AEGP_SetCompFrameRate(
+            comp, &frame_rate);
+        break;
+      }
+      case CompositionSettingKind::kPixelAspectRatio:
+        set_error = comp_suite->AEGP_SetCompPixelAspectRatio(comp, &ratio);
+        break;
+      case CompositionSettingKind::kBackgroundColor:
+        set_error = comp_suite->AEGP_SetCompBGColor(comp, &color);
+        break;
+      case CompositionSettingKind::kDisplayStartTime:
+        set_error = comp_suite->AEGP_SetCompDisplayStartTime(comp, &time);
+        break;
+    }
+    const A_Err end_error =
+        undoable ? utility_suite->AEGP_EndUndoGroup() : A_Err_NONE;
+    auto after = composition_settings(
+        item_suite.get(), comp_suite.get(), layer_suite.get(), memory_suite.get(),
+        *item, comp, command.composition_locator);
+    if (set_error != A_Err_NONE || end_error != A_Err_NONE
+        || !after.has_value() || expired()) {
+      return HostCompositionSettingsWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "composition setting may have changed but exact readback failed");
+    }
+    CompositionSettingsChanged changed;
+    changed.composition_locator = command.composition_locator;
+    changed.before = std::move(*before);
+    changed.after = std::move(*after);
+    return HostCompositionSettingsWriteResult::success(std::move(changed));
   }
 
   [[nodiscard]] HostProjectItemTextWriteResult set_project_item_name(
@@ -11240,6 +11429,7 @@ class AegpHostApi final : public HostApi {
     A_Time work_duration{};
     A_Time display_start{};
     A_Ratio pixel_aspect{};
+    AEGP_ColorVal background{};
     if (!name.has_value()
         || item_suite->AEGP_GetItemDimensions(item, &width, &height) != A_Err_NONE
         || item_suite->AEGP_GetItemDuration(item, &duration) != A_Err_NONE
@@ -11248,6 +11438,7 @@ class AegpHostApi final : public HostApi {
         || comp_suite->AEGP_GetCompWorkAreaStart(comp, &work_start) != A_Err_NONE
         || comp_suite->AEGP_GetCompWorkAreaDuration(comp, &work_duration) != A_Err_NONE
         || comp_suite->AEGP_GetCompDisplayStartTime(comp, &display_start) != A_Err_NONE
+        || comp_suite->AEGP_GetCompBGColor(comp, &background) != A_Err_NONE
         || layer_suite->AEGP_GetCompNumLayers(comp, &layer_count) != A_Err_NONE
         || width < 1 || width > 30000 || height < 1 || height > 30000
         || layer_count < 0
@@ -11286,6 +11477,15 @@ class AegpHostApi final : public HostApi {
         static_cast<std::int32_t>(pixel_aspect.den),
         aemcp::native::canonical_seconds_rational(
             pixel_aspect.num, static_cast<std::uint32_t>(pixel_aspect.den))};
+    const auto rgba8 = [](A_FpLong channel) {
+      const A_FpLong bounded = std::clamp(channel, A_FpLong{0.0}, A_FpLong{1.0});
+      return static_cast<std::uint8_t>(std::lround(bounded * 255.0));
+    };
+    settings.background_color = {
+        rgba8(background.redF),
+        rgba8(background.greenF),
+        rgba8(background.blueF),
+        rgba8(background.alphaF)};
     settings.work_area_start = exact_time(work_start);
     settings.work_area_duration = exact_time(work_duration);
     settings.display_start_time = exact_time(display_start);
@@ -11467,6 +11667,14 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kLayerPropertyKeyframeDeleteContractDigest),
             std::string(kNativeMediaReadContractDigest),
             std::string(kNativeMediaWriteContractDigest),
+            {
+                std::string(kCompositionDimensionsSetContractDigest),
+                std::string(kCompositionDurationSetContractDigest),
+                std::string(kCompositionFrameRateSetContractDigest),
+                std::string(kCompositionPixelAspectRatioSetContractDigest),
+                std::string(kCompositionBackgroundColorSetContractDigest),
+                std::string(kCompositionDisplayStartTimeSetContractDigest),
+            },
         },
         *this,
         idle_signal);
@@ -11700,6 +11908,17 @@ void log_completion(
       output << ",\"result\":{"
              << aemcp::native::rpc::composition_settings_persistent_diagnostic_fields(
                     completion.composition_settings_result);
+    } else if (completion.capability_id == kCompositionDimensionsSetCapability
+        || completion.capability_id == kCompositionDurationSetCapability
+        || completion.capability_id == kCompositionFrameRateSetCapability
+        || completion.capability_id == kCompositionPixelAspectRatioSetCapability
+        || completion.capability_id == kCompositionBackgroundColorSetCapability
+        || completion.capability_id == kCompositionDisplayStartTimeSetCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::
+                    composition_settings_change_persistent_diagnostic_fields(
+                        completion.capability_id,
+                        completion.composition_settings_change_result);
     } else if (completion.capability_id == kCompositionWorkAreaSetCapability) {
       output << ",\"result\":{"
              << aemcp::native::rpc::composition_work_area_persistent_diagnostic_fields(

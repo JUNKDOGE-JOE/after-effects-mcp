@@ -126,6 +126,12 @@
             "denominator": 1,
             "rational": "1"
           },
+          "backgroundColor": {
+            "red": 0,
+            "green": 0,
+            "blue": 0,
+            "alpha": 255
+          },
           "workArea": {
             "start": {
               "value": 0,
@@ -169,6 +175,12 @@
             "denominator": 1,
             "rational": "1"
           },
+          "backgroundColor": {
+            "red": 0,
+            "green": 0,
+            "blue": 0,
+            "alpha": 255
+          },
           "workArea": {
             "start": {
               "value": 0,
@@ -204,7 +216,7 @@
           "verified": true,
           "kind": "composition-duplicate",
           "algorithm": "sha256-rfc8785-jcs-v1",
-          "digest": "0da842461e5143f19ea82d495b3af5e007460f9e781d1fb35b4ef6c96503922a"
+          "digest": "a6294016a60965192d55626951982c91afd66a3450df27b55d63ee6a3ecc7c22"
         },
         "undo": {
           "available": true,

@@ -232,6 +232,86 @@ test('repository CI executes this contract on Windows, Linux, and stacked PR bas
   assert.match(ci, /runs-on: ubuntu-24\.04/);
 });
 
+test('one executable mutation-evidence contract binds native, CEP, and Core', () => {
+  const evidence = {
+    engine: 'native-aegp',
+    hostInstanceId: HOST,
+    sessionId: SESSION,
+    requestId: 'mutation-evidence-contract-1',
+    capabilityId: 'ae.composition.display-start-time.set',
+    capabilityVersion: 1,
+    startedAtUnixMs: 1,
+    completedAtUnixMs: 2,
+    effect: 'committed',
+    postcondition: {
+      verified: true,
+      kind: 'composition-display-start-time-set',
+      algorithm: 'sha256-rfc8785-jcs-v1',
+      digest: 'a'.repeat(64),
+    },
+    requestDigest: 'b'.repeat(64),
+    undo: { available: false, verified: false },
+  };
+  assert.equal(schemaAccepts(schema.$defs.executionEvidence, evidence), true);
+  assert.equal(schemaAccepts(schema.$defs.nonUndoableMutationEvidence, evidence), true);
+  const withoutUndo = { ...evidence };
+  delete withoutUndo.undo;
+  assert.equal(schemaAccepts(schema.$defs.executionEvidence, withoutUndo), false);
+  assert.equal(schemaAccepts(schema.$defs.nonUndoableMutationEvidence, withoutUndo), false);
+  assert.equal(schemaAccepts(
+    schema.$defs.executionEvidence,
+    { ...evidence, effect: 'none', undo: undefined },
+  ), false);
+  const readEvidence = { ...evidence, effect: 'none' };
+  delete readEvidence.undo;
+  assert.equal(schemaAccepts(schema.$defs.executionEvidence, readEvidence), true);
+
+  const nativeSource = fs.readFileSync(
+    path.join(here, '..', 'src', 'core', 'rpc_codec.cpp'), 'utf8',
+  );
+  const nativeEncoder = nativeSource.slice(
+    nativeSource.indexOf('encode_native_value_success('),
+    nativeSource.indexOf('struct ErrorPolicy'),
+  );
+  assert.match(nativeEncoder, /if \(mutating\) \{/u);
+  assert.doesNotMatch(nativeEncoder, /if \(mutating && undo_available\)/u);
+  assert.match(
+    nativeEncoder,
+    /std::string\(undo_available \? "true" : "false"\)/u,
+  );
+  assert.equal(nativeEncoder.includes('+ ",\\"verified\\":false}";'), true);
+  assert.match(
+    nativeSource,
+    /capability_id != kCompositionDisplayStartTimeSetCapability\);/u,
+  );
+
+  const cepSource = fs.readFileSync(
+    path.join(here, '..', '..', '..', 'plugin', 'host', 'native-aegp-client.js'),
+    'utf8',
+  );
+  assert.match(
+    cepSource,
+    /concat\(packageContract\.mutating \? \['undo'\] : \[\]\)/u,
+  );
+  assert.match(
+    cepSource,
+    /evidence\.undo\.available\s*=== \(packageContract\.undoAvailable !== false\)/u,
+  );
+  assert.match(cepSource, /evidence\.undo\.verified === false/u);
+
+  const coreSource = fs.readFileSync(
+    path.join(
+      here, '..', '..', '..', 'packages', 'core', 'ae_mcp', 'backends',
+      'native_project_composition.py',
+    ),
+    'utf8',
+  );
+  assert.match(coreSource, /undo = result\.evidence\.undo/u);
+  assert.match(coreSource, /or undo is None/u);
+  assert.match(coreSource, /or undo\.available is not undo_available/u);
+  assert.match(coreSource, /or undo\.verified is not False/u);
+});
+
 test('all checked-in vectors are synthetic and contain no host or Adobe suite claim', () => {
   for (const name of [
     'hello.json',
@@ -686,9 +766,9 @@ test('graph invalidation is an exact authenticated internal lifecycle exchange',
     ), false);
   }
 
-  assert.equal(nativeCapabilityRegistry(schema).length, 54);
+  assert.equal(nativeCapabilityRegistry(schema).length, 60);
   assert.deepEqual(
-    nativeCapabilityRegistry(schema).slice(-11).map((item) => item.id),
+    nativeCapabilityRegistry(schema).slice(-17, -6).map((item) => item.id),
     [
       'ae.shape.layer.create',
       'ae.shape.groups.list',
@@ -897,7 +977,8 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
   const layerCompositingCapabilities = layerCompositingDescriptors(schema);
   const keyframeAuthoringCapabilities = keyframeAuthoringDescriptors(schema);
   const nativeMediaCapabilities = nativeMediaDescriptors(schema);
-  const textShapeMarkerCapabilities = nativeCapabilityRegistry(schema).slice(-11);
+  const textShapeMarkerCapabilities = nativeCapabilityRegistry(schema).slice(-17, -6);
+  const compositionSettingCapabilities = nativeCapabilityRegistry(schema).slice(-6);
   const containsRef = (value) => {
     if (Array.isArray(value)) return value.some(containsRef);
     if (value === null || typeof value !== 'object') return false;
@@ -987,6 +1068,7 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     ...keyframeAuthoringCapabilities,
     ...nativeMediaCapabilities,
     ...textShapeMarkerCapabilities,
+    ...compositionSettingCapabilities,
   ]), capabilityDigest(nativeCapabilityRegistry(schema)));
   assert.equal(projectCompositionCapabilities.length, 8);
   for (const descriptor of projectCompositionCapabilities) {
@@ -1032,6 +1114,15 @@ test('full descriptors are bounded, self-contained direct-run contracts', () => 
     assert.equal(textShapeMarkerDescriptor.contractDigest, sha256Jcs({
       inputSchema: textShapeMarkerDescriptor.inputSchema,
       resultSchema: textShapeMarkerDescriptor.resultSchema,
+    }));
+  }
+  assert.equal(compositionSettingCapabilities.length, 6);
+  for (const compositionSettingDescriptor of compositionSettingCapabilities) {
+    assert.equal(validateCapabilityDescriptor(compositionSettingDescriptor, schema), true,
+      compositionSettingDescriptor.id);
+    assert.equal(compositionSettingDescriptor.contractDigest, sha256Jcs({
+      inputSchema: compositionSettingDescriptor.inputSchema,
+      resultSchema: compositionSettingDescriptor.resultSchema,
     }));
   }
   for (const mediaDescriptor of nativeMediaCapabilities) {
@@ -1190,7 +1281,7 @@ test('v1 capability discovery is single-page, fail-closed, and never replayed', 
   const exchange = golden('capabilities.json');
   assert.equal(exchange.request.params.limit, 100);
   assert.equal(Object.hasOwn(exchange.request.params, 'ids'), false);
-  assert.equal(exchange.response.result.items.length, 54);
+  assert.equal(exchange.response.result.items.length, 60);
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, exchange.response, schema), true);
 
   const zeroLimit = structuredClone(exchange.request);

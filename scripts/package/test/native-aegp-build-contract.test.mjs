@@ -167,6 +167,52 @@ test('native composition-create diagnostics use the redacted serializer', () => 
   );
 });
 
+test('native terminal diagnostics recognize all six composition setters', () => {
+  const completionStart = PLUGIN_ENTRY.indexOf('void log_completion(');
+  const completionEnd = PLUGIN_ENTRY.indexOf('bool PluginState::start_ipc', completionStart);
+  const completionLogger = PLUGIN_ENTRY.slice(completionStart, completionEnd);
+  for (const capability of [
+    'kCompositionDimensionsSetCapability',
+    'kCompositionDurationSetCapability',
+    'kCompositionFrameRateSetCapability',
+    'kCompositionPixelAspectRatioSetCapability',
+    'kCompositionBackgroundColorSetCapability',
+    'kCompositionDisplayStartTimeSetCapability',
+  ]) {
+    assert.match(completionLogger, new RegExp(`completion\\.capability_id == ${capability}`, 'u'));
+  }
+  assert.match(
+    completionLogger,
+    /composition_settings_change_persistent_diagnostic_fields\(\s*completion\.capability_id,\s*completion\.composition_settings_change_result\s*\)/u,
+  );
+});
+
+test('native composition settings use the pinned SDK ratio and frame-rate ABI', () => {
+  const start = PLUGIN_ENTRY.indexOf(
+    'HostCompositionSettingsWriteResult set_composition_setting(',
+  );
+  const end = PLUGIN_ENTRY.indexOf(
+    'HostNativeMediaResult execute_native_media(',
+    start,
+  );
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  const adapter = PLUGIN_ENTRY.slice(start, end);
+
+  assert.match(
+    adapter,
+    /const A_Ratio ratio\{\s*static_cast<A_long>\(command\.ratio\.numerator\),\s*static_cast<A_u_long>\(command\.ratio\.denominator\)\};/u,
+  );
+  assert.match(
+    adapter,
+    /const A_FpLong frame_rate[\s\S]*AEGP_SetCompFrameRate\(\s*comp,\s*&frame_rate\)/u,
+  );
+  assert.doesNotMatch(
+    adapter,
+    /AEGP_SetCompFrameRate\(\s*comp,\s*static_cast<A_FpLong>/u,
+  );
+});
+
 test('native standard transform writes reacquire canonical layer streams before mutation', () => {
   const helperStart = PLUGIN_ENTRY.indexOf(
     'standard_layer_stream_for_match_name(',

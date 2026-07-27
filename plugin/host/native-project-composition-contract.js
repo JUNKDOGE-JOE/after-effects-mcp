@@ -162,7 +162,7 @@ function validProjectItem(value, hostInstanceId, sessionId) {
 function validSettingsSnapshot(value) {
     if (!exactKeys(value, [
         'name', 'width', 'height', 'duration', 'frameDuration', 'frameRate',
-        'pixelAspectRatio', 'workArea', 'displayStartTime', 'layerCount',
+        'pixelAspectRatio', 'backgroundColor', 'workArea', 'displayStartTime', 'layerCount',
     ])
         || !validString(value.name, 0, 1024)
         || !Number.isInteger(value.width) || value.width < 1 || value.width > 30000
@@ -171,6 +171,7 @@ function validSettingsSnapshot(value) {
         || !validTime(value.frameDuration, true, 1)
         || !validRatio(value.frameRate)
         || !validRatio(value.pixelAspectRatio)
+        || !validColor8(value.backgroundColor) || value.backgroundColor.alpha !== 255
         || !validWorkArea(value.workArea)
         || !validTime(value.displayStartTime, true, -2147483648)
         || !Number.isSafeInteger(value.layerCount) || value.layerCount < 0) return false;
@@ -189,6 +190,7 @@ function validSettingsSnapshot(value) {
 
 function settingsFacts(value) {
     return {
+        backgroundColor: value.backgroundColor,
         displayStartTime: value.displayStartTime,
         duration: value.duration,
         frameDuration: value.frameDuration,
@@ -302,7 +304,8 @@ function validCompositionLocatorArguments(value) {
 function validSettingsValue(value, argumentsValue, hostInstanceId, sessionId) {
     if (!exactKeys(value, [
         'compositionLocator', 'name', 'width', 'height', 'duration', 'frameDuration',
-        'frameRate', 'pixelAspectRatio', 'workArea', 'displayStartTime', 'layerCount',
+        'frameRate', 'pixelAspectRatio', 'backgroundColor', 'workArea',
+        'displayStartTime', 'layerCount',
     ]) || !validLocator(value.compositionLocator, ['composition'])
         || !sameLocator(value.compositionLocator, argumentsValue.compositionLocator)
         || !boundToSession(value.compositionLocator, hostInstanceId, sessionId)) return false;
@@ -385,6 +388,71 @@ function validDuplicateValue(value, argumentsValue, hostInstanceId, sessionId) {
         || value.newSettings.name !== argumentsValue.newName) return false;
     return JSON.stringify(canonicalize(settingsFacts(value.sourceSettings)))
         === JSON.stringify(canonicalize(settingsFacts(value.newSettings)));
+}
+
+function validPositiveRatioInput(value) {
+    return exactKeys(value, ['numerator', 'denominator'])
+        && Number.isInteger(value.numerator) && value.numerator >= 1
+        && value.numerator <= 2147483647
+        && Number.isInteger(value.denominator) && value.denominator >= 1
+        && value.denominator <= 2147483647;
+}
+
+function validCompositionSettingArguments(value, fields, validateTarget) {
+    return exactKeys(
+        value,
+        ['compositionLocator'].concat(fields, ['idempotencyKey']),
+    )
+        && validLocator(value.compositionLocator, ['composition'])
+        && validIdempotencyKey(value.idempotencyKey)
+        && validateTarget(value);
+}
+
+function colorsEqual(left, right) {
+    return ['red', 'green', 'blue', 'alpha'].every(function (channel) {
+        return left[channel] === right[channel];
+    });
+}
+
+function compositionSettingFieldsEqual(field, left, right) {
+    if (['duration', 'frameDuration', 'displayStartTime'].includes(field)) {
+        return timesEqual(left, right);
+    }
+    if (['frameRate', 'pixelAspectRatio'].includes(field)) {
+        return ratiosEqual(left, right);
+    }
+    if (field === 'workArea') {
+        return timesEqual(left.start, right.start)
+            && timesEqual(left.duration, right.duration);
+    }
+    return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
+}
+
+function untargetedCompositionSettingsEqual(before, after, targetFields) {
+    return Object.keys(before).every(function (field) {
+        return targetFields.includes(field)
+            || compositionSettingFieldsEqual(field, before[field], after[field]);
+    });
+}
+
+function validCompositionSettingValue(
+    value,
+    argumentsValue,
+    hostInstanceId,
+    sessionId,
+    targetFields,
+    validateTarget,
+) {
+    if (!exactKeys(value, [
+        'changed', 'compositionLocator', 'before', 'after',
+    ]) || value.changed !== true
+        || !validLocator(value.compositionLocator, ['composition'])
+        || !sameLocator(value.compositionLocator, argumentsValue.compositionLocator)
+        || !boundToSession(value.compositionLocator, hostInstanceId, sessionId)
+        || !validSettingsSnapshot(value.before)
+        || !validSettingsSnapshot(value.after)
+        || !validateTarget(value.after, argumentsValue)) return false;
+    return untargetedCompositionSettingsEqual(value.before, value.after, targetFields);
 }
 
 function validLayerLocatorArguments(value) {
@@ -1611,11 +1679,144 @@ const CONTRACTS = Object.freeze({
         locatorFields: Object.freeze([['itemLocator', 'ae_getProjectContext']]),
     }),
     'ae.composition.settings.read': Object.freeze({
-        digest: 'a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b',
+        digest: 'ceda810aba822f06ac05534ccbcb485a5866f094bb9f682de699009f4bdc4631',
         mutating: false,
         postconditionKind: 'composition-settings-read',
         validArguments: validCompositionLocatorArguments,
         validValue: validSettingsValue,
+        locatorFields: Object.freeze([['compositionLocator', 'ae_getProjectContext']]),
+    }),
+    'ae.composition.dimensions.set': Object.freeze({
+        digest: '67a37903067278c0fbdf1fb265da232da825ef3250b8b256882de5ee294d5588',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'composition-dimensions-set',
+        validArguments: function (value) {
+            return validCompositionSettingArguments(value, ['width', 'height'], function (input) {
+                return Number.isInteger(input.width) && input.width >= 1 && input.width <= 30000
+                    && Number.isInteger(input.height) && input.height >= 1
+                    && input.height <= 30000;
+            });
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validCompositionSettingValue(
+                value, argumentsValue, hostInstanceId, sessionId,
+                ['width', 'height'], function (after, input) {
+                    return after.width === input.width && after.height === input.height;
+                },
+            );
+        },
+        locatorFields: Object.freeze([['compositionLocator', 'ae_getProjectContext']]),
+    }),
+    'ae.composition.duration.set': Object.freeze({
+        digest: '16c8b84de5fb7652a6983b7cb1a0739e46c9b0ca7abd59c904969c45f786b1bc',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'composition-duration-set',
+        validArguments: function (value) {
+            return validCompositionSettingArguments(value, ['duration'], function (input) {
+                return validTime(input.duration, false, 1);
+            });
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validCompositionSettingValue(
+                value, argumentsValue, hostInstanceId, sessionId,
+                ['duration'], function (after, input) {
+                    return timesEqual(after.duration, input.duration);
+                },
+            );
+        },
+        locatorFields: Object.freeze([['compositionLocator', 'ae_getProjectContext']]),
+    }),
+    'ae.composition.frame-rate.set': Object.freeze({
+        digest: 'f8fcdba94a605ab30854ebe3f10584b22c842c4c7cf6cca2a0df5b8bbcb5e454',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'composition-frame-rate-set',
+        validArguments: function (value) {
+            return validCompositionSettingArguments(value, ['frameRate'], function (input) {
+                return validPositiveRatioInput(input.frameRate);
+            });
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validCompositionSettingValue(
+                value, argumentsValue, hostInstanceId, sessionId,
+                ['frameRate', 'frameDuration'], function (after, input) {
+                    return ratiosEqual(after.frameRate, input.frameRate);
+                },
+            );
+        },
+        locatorFields: Object.freeze([['compositionLocator', 'ae_getProjectContext']]),
+    }),
+    'ae.composition.pixel-aspect-ratio.set': Object.freeze({
+        digest: '1f9b1c3ac10ed58c5ed3ed42ccc55f783238e4d020d0cf5bb812ce54081b18bd',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'composition-pixel-aspect-ratio-set',
+        validArguments: function (value) {
+            return validCompositionSettingArguments(
+                value, ['pixelAspectRatio'], function (input) {
+                    return validPositiveRatioInput(input.pixelAspectRatio);
+                },
+            );
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validCompositionSettingValue(
+                value, argumentsValue, hostInstanceId, sessionId,
+                ['pixelAspectRatio'], function (after, input) {
+                    return ratiosEqual(after.pixelAspectRatio, input.pixelAspectRatio);
+                },
+            );
+        },
+        locatorFields: Object.freeze([['compositionLocator', 'ae_getProjectContext']]),
+    }),
+    'ae.composition.background-color.set': Object.freeze({
+        digest: 'e9daa022135fa244fb132e92ec7aa5cbcac4fddade2783bb43ba6ec2e494cf11',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'composition-background-color-set',
+        validArguments: function (value) {
+            return validCompositionSettingArguments(
+                value, ['backgroundColor'], function (input) {
+                    return validColor8(input.backgroundColor)
+                        && input.backgroundColor.alpha === 255;
+                },
+            );
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validCompositionSettingValue(
+                value, argumentsValue, hostInstanceId, sessionId,
+                ['backgroundColor'], function (after, input) {
+                    return colorsEqual(
+                        after.backgroundColor,
+                        input.backgroundColor,
+                    );
+                },
+            );
+        },
+        locatorFields: Object.freeze([['compositionLocator', 'ae_getProjectContext']]),
+    }),
+    'ae.composition.display-start-time.set': Object.freeze({
+        digest: '3001a8a910ed8fe425b85157a8ccad48fe1ff4e4966729ba9dba0e108344bb37',
+        mutating: true,
+        undoAvailable: false,
+        allowReplay: false,
+        postconditionKind: 'composition-display-start-time-set',
+        validArguments: function (value) {
+            return validCompositionSettingArguments(
+                value, ['displayStartTime'], function (input) {
+                    return validTime(input.displayStartTime, false, -2147483648);
+                },
+            );
+        },
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validCompositionSettingValue(
+                value, argumentsValue, hostInstanceId, sessionId,
+                ['displayStartTime'], function (after, input) {
+                    return timesEqual(after.displayStartTime, input.displayStartTime);
+                },
+            );
+        },
         locatorFields: Object.freeze([['compositionLocator', 'ae_getProjectContext']]),
     }),
     'ae.composition.work-area.set': Object.freeze({
@@ -1688,7 +1889,7 @@ const CONTRACTS = Object.freeze({
         locatorFields: Object.freeze([['itemLocator', 'ae_getProjectContext']]),
     }),
     'ae.composition.duplicate': Object.freeze({
-        digest: '96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3',
+        digest: 'ff929d2ea5b499d279f9e86a5757f0be6b04561dfabd8e1e3e7443616e82f2ab',
         mutating: true,
         allowReplay: true,
         postconditionKind: 'composition-duplicate',
@@ -2197,7 +2398,7 @@ function validateCapabilityItems(items, requestedIds, detail) {
         const item = matches[0];
         const expected = contract.mutating ? {
             risk: 'write', mutability: 'mutating', idempotency: 'idempotency-key',
-            undo: 'ae-undo-group',
+            undo: contract.undoAvailable === false ? 'none' : 'ae-undo-group',
         } : {
             risk: 'read', mutability: 'read-only', idempotency: 'idempotent',
             undo: 'not-applicable',

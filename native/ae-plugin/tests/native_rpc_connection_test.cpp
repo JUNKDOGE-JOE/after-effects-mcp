@@ -446,6 +446,19 @@ class FakeHost final : public HostApi {
         {0, 1, "0"}, {5, 1, "5"}, command.start, command.duration});
   }
 
+  [[nodiscard]] aemcp::native::HostCompositionSettingsWriteResult
+  set_composition_setting(
+      const aemcp::native::CompositionSettingsSetCommand& command,
+      TimePoint) override {
+    ++composition_settings_write_calls;
+    auto before = package_settings(
+        command.composition_locator, std::string(1025, 'B'));
+    auto after = before;
+    after.width = 1280;
+    return aemcp::native::HostCompositionSettingsWriteResult::success({
+        true, command.composition_locator, std::move(before), std::move(after)});
+  }
+
   [[nodiscard]] aemcp::native::HostProjectItemTextWriteResult set_project_item_name(
       const aemcp::native::ProjectItemTextSetCommand& command,
       TimePoint) override {
@@ -665,6 +678,7 @@ class FakeHost final : public HostApi {
   int composition_time_write_calls{0};
   int composition_create_calls{0};
   int composition_layer_create_calls{0};
+  int composition_settings_write_calls{0};
   int layer_effect_apply_calls{0};
   int layer_properties_calls{0};
   int layer_property_keyframes_calls{0};
@@ -778,12 +792,12 @@ NativeRpcRuntimeInfo runtime() {
       "3bd877e708d62ca1003e65498ebd86a8143cf0f11616fc0467a3e2ba68c8db75",
       "ee6df463fe36f13a02a09b833b0f13a01ba1c2a5dc335d689c04ea834ad10dca",
       "b13139c0b2e8073f6606bfbead1e59eb7fea63ec10a164b500e19ff8babd0f69",
-      "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b",
+      "ceda810aba822f06ac05534ccbcb485a5866f094bb9f682de699009f4bdc4631",
       "a4ffd90349164e1d7228e5d2374ef55c9f0dc1065db0dac9945a7f8eeb16b997",
       "b26f017991e74f009b15cb24fcfd4bb7f154d4ac506f65f150b29efcccb9f538",
       "957985628474caa9c9cef3de76a2839e59691232b062b776ff800a79dd3cc35c",
       "4463637f6a5298b27afb39cea68c593a93383e4ccc7926bc228d00e0cc3ba94f",
-      "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3",
+      "ff929d2ea5b499d279f9e86a5757f0be6b04561dfabd8e1e3e7443616e82f2ab",
       "b1b7a5f313bbf72eb6b33ac4a0507f9f925ef6873d53fd07d93d861164ac15d9",
       "a68fb7f75f050faf4e77c81c3fa9f53ad501016af0eeb065493716ff94fd5929",
       "0b90618916f0df612726017ef80795b72829f367cbf46cad23b33beb129230e2",
@@ -805,6 +819,14 @@ NativeRpcRuntimeInfo runtime() {
       "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9",
       "4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282",
       "a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5",
+      {
+          "67a37903067278c0fbdf1fb265da232da825ef3250b8b256882de5ee294d5588",
+          "16c8b84de5fb7652a6983b7cb1a0739e46c9b0ca7abd59c904969c45f786b1bc",
+          "f8fcdba94a605ab30854ebe3f10584b22c842c4c7cf6cca2a0df5b8bbcb5e454",
+          "1f9b1c3ac10ed58c5ed3ed42ccc55f783238e4d020d0cf5bb812ce54081b18bd",
+          "e9daa022135fa244fb132e92ec7aa5cbcac4fddade2783bb43ba6ec2e494cf11",
+          "3001a8a910ed8fe425b85157a8ccad48fe1ff4e4966729ba9dba0e108344bb37",
+      },
   };
 }
 
@@ -1194,6 +1216,20 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(marker_create_capabilities,
       "aemcp.requirement.native.marker-create",
       "marker-create capabilities response");
+
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "capabilities-composition-dimensions",
+      "ae.composition.dimensions.set"));
+  const std::string composition_dimensions_capabilities = read_body(sockets[0]);
+  require_contains(composition_dimensions_capabilities,
+      "\"id\":\"ae.composition.dimensions.set\"",
+      "composition-dimensions capabilities response");
+  require_contains(composition_dimensions_capabilities,
+      "\"contractDigest\":\"67a37903067278c0fbdf1fb265da232da825ef3250b8b256882de5ee294d5588\"",
+      "composition-dimensions capabilities response");
+  require_contains(composition_dimensions_capabilities,
+      "aemcp.requirement.native.composition-dimensions-set",
+      "composition-dimensions capabilities response");
 
   send_json(sockets[0], bit_depth_capabilities_json(
       "capabilities-bit-depth-read", "ae.project.bit-depth.read"));
@@ -2577,6 +2613,75 @@ void invalid_postcondition_becomes_structured_failure() {
   (void)dispatcher.shutdown();
 }
 
+void composition_setting_post_mutation_evidence_failures_are_ambiguous() {
+  const std::array<std::string_view, 6> capabilities{{
+      "ae.composition.dimensions.set",
+      "ae.composition.duration.set",
+      "ae.composition.frame-rate.set",
+      "ae.composition.pixel-aspect-ratio.set",
+      "ae.composition.background-color.set",
+      "ae.composition.display-start-time.set",
+  }};
+  for (std::size_t index = 0; index < capabilities.size(); ++index) {
+    FakeDispatcherClock dispatcher_clock;
+    HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+    Request request;
+    request.request_id = "invalid-composition-setting-" + std::to_string(index);
+    request.capability_id = std::string(capabilities[index]);
+    request.deadline = dispatcher_clock.now() + 1s;
+    request.route_id = "route-setting-" + std::to_string(index);
+    request.session_generation = 3;
+    request.idempotency_key =
+        "composition-setting-invalid-" + std::to_string(index);
+    request.arguments_fingerprint_sha256 = std::string(kZeroDigest);
+    request.host_instance_id = std::string(kHost);
+    request.session_id = std::string(kSession);
+    request.composition_locator = FakeHost::package_locator(
+        "composition", "66666666-6666-4666-8666-666666666666");
+    if (capabilities[index] == "ae.composition.dimensions.set") {
+      request.composition_create_width = 1280;
+      request.composition_create_height = 720;
+    } else if (capabilities[index] == "ae.composition.duration.set") {
+      request.composition_create_duration = {8, 1, "8"};
+    } else if (capabilities[index] == "ae.composition.frame-rate.set") {
+      request.composition_create_frame_rate = {30, 1, "30"};
+    } else if (
+        capabilities[index] == "ae.composition.pixel-aspect-ratio.set") {
+      request.composition_create_pixel_aspect_ratio = {2, 1, "2"};
+    } else if (capabilities[index] == "ae.composition.background-color.set") {
+      request.layer_create_color =
+          aemcp::native::CompositionLayerCreateColor{10, 20, 30, 255};
+    } else {
+      request.target_time = {1, 1, "1"};
+    }
+    const aemcp::native::EnqueueResult enqueued =
+        dispatcher.enqueue(std::move(request));
+    require(enqueued.code == EnqueueCode::kAccepted,
+        "composition setting mutation was not accepted by HostDispatcher: "
+            + std::string(capabilities[index]) + " " + enqueued.message);
+    FakeHost host;
+    const aemcp::native::DrainBatch batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1 && batch.completions[0].ok
+            && host.composition_settings_write_calls == 1,
+        "composition setting host mutation did not complete before evidence validation");
+    bool evidence_failed = false;
+    try {
+      (void)aemcp::native::rpc::digest_composition_settings_set_postcondition(
+          capabilities[index],
+          batch.completions[0].composition_settings_change_result);
+    } catch (const aemcp::native::rpc::CodecError&) {
+      evidence_failed = true;
+    }
+    require(evidence_failed,
+        "composition setting test did not create a post-mutation evidence failure");
+    require(aemcp::native::post_dispatch_evidence_failure_code(
+                capabilities[index])
+            == "POSSIBLY_SIDE_EFFECTING_FAILURE",
+        "post-mutation composition setting failure was classified as safe");
+    (void)dispatcher.shutdown();
+  }
+}
+
 void construction_failure_is_contained_by_noexcept_boundary() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
@@ -2596,6 +2701,32 @@ void construction_failure_is_contained_by_noexcept_boundary() {
   (void)dispatcher.shutdown();
 }
 
+void composition_setting_contract_mismatch_is_rejected() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcRuntimeInfo invalid_runtime = runtime();
+  invalid_runtime.composition_setting_contract_digests[0] =
+      std::string(64, '0');
+  bool rejected = false;
+  try {
+    NativeRpcConnectionHandler handler(
+        dispatcher,
+        dispatcher_clock,
+        session_clock,
+        std::move(invalid_runtime),
+        observer,
+        idle_signal);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected,
+      "composition-setting contract mismatch did not block native RPC startup");
+  (void)dispatcher.shutdown();
+}
+
 }  // namespace
 
 int main() {
@@ -2605,7 +2736,9 @@ int main() {
   layer_compositing_package_crosses_the_authenticated_wire_boundary();
   invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced();
   invalid_postcondition_becomes_structured_failure();
+  composition_setting_post_mutation_evidence_failures_are_ambiguous();
   construction_failure_is_contained_by_noexcept_boundary();
+  composition_setting_contract_mismatch_is_rejected();
   std::cout << "native_rpc_connection_test: PASS\n";
   return 0;
 }

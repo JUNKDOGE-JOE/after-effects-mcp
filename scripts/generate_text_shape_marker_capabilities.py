@@ -12,6 +12,7 @@ import argparse
 import copy
 import hashlib
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -23,6 +24,7 @@ CORE = ROOT / "packages" / "core"
 sys.path.insert(0, str(CORE))
 
 from ae_mcp.backends import native_text_shape_marker as tsm  # noqa: E402
+from ae_mcp.backends import native_project_composition as composition  # noqa: E402
 
 
 PROTOCOL = ROOT / "native" / "ae-plugin" / "protocol"
@@ -42,6 +44,14 @@ MATRIX_FIXTURES = (
     PROTOCOL / "fixtures" / "layer-compositing-matrix.json",
     PROTOCOL / "fixtures" / "keyframe-authoring-matrix.json",
 )
+COMPOSITION_SNAPSHOT_INVOKE_FIXTURES = {
+    composition.COMPOSITION_SETTINGS_READ_CAPABILITY_ID: (
+        PROTOCOL / "fixtures" / "invoke-composition-settings-read.json"
+    ),
+    composition.COMPOSITION_DUPLICATE_CAPABILITY_ID: (
+        PROTOCOL / "fixtures" / "invoke-composition-duplicate.json"
+    ),
+}
 GENERATED_PREFIX = "tsmGenerated"
 FULL_ONLY_FIELDS = {
     "inputContractId",
@@ -51,6 +61,30 @@ FULL_ONLY_FIELDS = {
     "resultSchema",
     "requirements",
     "examples",
+}
+COMPOSITION_SETTING_CAPABILITY_IDS = (
+    composition.COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID,
+    composition.COMPOSITION_DURATION_SET_CAPABILITY_ID,
+    composition.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID,
+    composition.COMPOSITION_PIXEL_ASPECT_RATIO_SET_CAPABILITY_ID,
+    composition.COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID,
+    composition.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID,
+)
+COMPOSITION_SNAPSHOT_CAPABILITY_IDS = (
+    composition.COMPOSITION_SETTINGS_READ_CAPABILITY_ID,
+    composition.COMPOSITION_DUPLICATE_CAPABILITY_ID,
+)
+COMPOSITION_SNAPSHOT_SCHEMA_DEFINITIONS = {
+    composition.COMPOSITION_SETTINGS_READ_CAPABILITY_ID: (
+        "compositionSettingsReadInputSchemaContract",
+        "compositionSettingsReadResultSchemaContract",
+        "compositionSettingsReadValue",
+    ),
+    composition.COMPOSITION_DUPLICATE_CAPABILITY_ID: (
+        "compositionDuplicateInputSchemaContract",
+        "compositionDuplicateResultSchemaContract",
+        "compositionDuplicateValue",
+    ),
 }
 
 
@@ -80,6 +114,9 @@ def _locator(kind: str, object_id: str) -> dict[str, Any]:
 
 
 COMPOSITION = _locator("composition", "77777777-7777-4777-8777-777777777777")
+NEW_COMPOSITION = _locator(
+    "composition", "99999999-9999-4999-8999-999999999999"
+)
 LAYER = _locator("layer", "88888888-8888-4888-8888-888888888888")
 FRESH_LAYER = {
     **_locator("layer", "99999999-9999-4999-8999-999999999999"),
@@ -401,6 +438,300 @@ def _descriptors() -> list[dict[str, Any]]:
     return descriptors
 
 
+def _exact_time(value: int, scale: int) -> dict[str, Any]:
+    divisor = abs(math.gcd(value, scale))
+    numerator = value // divisor
+    denominator = scale // divisor
+    rational = (
+        str(numerator)
+        if denominator == 1
+        else f"{numerator}/{denominator}"
+    )
+    return {"value": value, "scale": scale, "secondsRational": rational}
+
+
+def _exact_ratio(numerator: int, denominator: int) -> dict[str, Any]:
+    divisor = math.gcd(numerator, denominator)
+    reduced_numerator = numerator // divisor
+    reduced_denominator = denominator // divisor
+    rational = (
+        str(reduced_numerator)
+        if reduced_denominator == 1
+        else f"{reduced_numerator}/{reduced_denominator}"
+    )
+    return {
+        "numerator": numerator,
+        "denominator": denominator,
+        "rational": rational,
+    }
+
+
+def _composition_settings_baseline() -> dict[str, Any]:
+    return {
+        "name": "SYNTHETIC_COMPOSITION",
+        "width": 1920,
+        "height": 1080,
+        "duration": _exact_time(240, 24),
+        "frameDuration": _exact_time(1, 24),
+        "frameRate": _exact_ratio(24, 1),
+        "pixelAspectRatio": _exact_ratio(1, 1),
+        "backgroundColor": {
+            "red": 0,
+            "green": 0,
+            "blue": 0,
+            "alpha": 255,
+        },
+        "workArea": {
+            "start": _exact_time(0, 24),
+            "duration": _exact_time(240, 24),
+        },
+        "displayStartTime": _exact_time(0, 24),
+        "layerCount": 0,
+    }
+
+
+def _composition_setting_examples() -> dict[str, tuple[dict[str, Any], dict[str, Any]]]:
+    baseline = _composition_settings_baseline()
+    operation_key = "synthetic-comp-setting-0001"
+    changes: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {
+        composition.COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID: (
+            {
+                "compositionLocator": COMPOSITION,
+                "width": 1280,
+                "height": 720,
+                "idempotencyKey": operation_key,
+            },
+            {"width": 1280, "height": 720},
+        ),
+        composition.COMPOSITION_DURATION_SET_CAPABILITY_ID: (
+            {
+                "compositionLocator": COMPOSITION,
+                "duration": {"value": 288, "scale": 24},
+                "idempotencyKey": operation_key,
+            },
+            {"duration": _exact_time(288, 24)},
+        ),
+        composition.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID: (
+            {
+                "compositionLocator": COMPOSITION,
+                "frameRate": {"numerator": 30, "denominator": 1},
+                "idempotencyKey": operation_key,
+            },
+            {
+                "frameDuration": _exact_time(1, 30),
+                "frameRate": _exact_ratio(30, 1),
+            },
+        ),
+        composition.COMPOSITION_PIXEL_ASPECT_RATIO_SET_CAPABILITY_ID: (
+            {
+                "compositionLocator": COMPOSITION,
+                "pixelAspectRatio": {"numerator": 4, "denominator": 3},
+                "idempotencyKey": operation_key,
+            },
+            {"pixelAspectRatio": _exact_ratio(4, 3)},
+        ),
+        composition.COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID: (
+            {
+                "compositionLocator": COMPOSITION,
+                "backgroundColor": {
+                    "red": 10,
+                    "green": 20,
+                    "blue": 30,
+                    "alpha": 255,
+                },
+                "idempotencyKey": operation_key,
+            },
+            {
+                "backgroundColor": {
+                    "red": 10,
+                    "green": 20,
+                    "blue": 30,
+                    "alpha": 255,
+                },
+            },
+        ),
+        composition.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID: (
+            {
+                "compositionLocator": COMPOSITION,
+                "displayStartTime": {"value": -24, "scale": 24},
+                "idempotencyKey": operation_key,
+            },
+            {"displayStartTime": _exact_time(-24, 24)},
+        ),
+    }
+    examples: dict[str, tuple[dict[str, Any], dict[str, Any]]] = {}
+    for capability_id, (arguments, after_patch) in changes.items():
+        validated_arguments = composition._COMPOSITION_SETTING_ARGUMENT_MODELS[
+            capability_id
+        ].model_validate(arguments).model_dump(mode="json", by_alias=True)
+        value = composition.CompositionSettingsSetValue.model_validate(
+            {
+                "changed": True,
+                "compositionLocator": COMPOSITION,
+                "before": baseline,
+                "after": {**baseline, **after_patch},
+            }
+        ).model_dump(mode="json", by_alias=True)
+        examples[capability_id] = (validated_arguments, value)
+    return examples
+
+
+def _composition_snapshot_examples() -> dict[
+    str, tuple[dict[str, Any], dict[str, Any]]
+]:
+    baseline = _composition_settings_baseline()
+    settings_arguments = composition.CompositionSettingsArguments.model_validate(
+        {"compositionLocator": COMPOSITION}
+    ).model_dump(mode="json", by_alias=True)
+    settings_value = composition.CompositionSettingsValue.model_validate(
+        {**baseline, "compositionLocator": COMPOSITION}
+    ).model_dump(mode="json", by_alias=True)
+
+    duplicate_arguments = composition.CompositionDuplicateArguments.model_validate(
+        {
+            "compositionLocator": COMPOSITION,
+            "newName": "SYNTHETIC_COPY",
+            "idempotencyKey": "synthetic-composition-duplicate-0001",
+        }
+    ).model_dump(mode="json", by_alias=True)
+    duplicate_value = composition.CompositionDuplicateValue.model_validate(
+        {
+            "changed": True,
+            "sourceCompositionLocator": COMPOSITION,
+            "newCompositionLocator": NEW_COMPOSITION,
+            "projectItemCountBefore": 1,
+            "projectItemCountAfter": 2,
+            "sourceSettings": baseline,
+            "newSettings": {**baseline, "name": "SYNTHETIC_COPY"},
+        }
+    ).model_dump(mode="json", by_alias=True)
+    return {
+        composition.COMPOSITION_SETTINGS_READ_CAPABILITY_ID: (
+            settings_arguments,
+            settings_value,
+        ),
+        composition.COMPOSITION_DUPLICATE_CAPABILITY_ID: (
+            duplicate_arguments,
+            duplicate_value,
+        ),
+    }
+
+
+def _composition_snapshot_descriptors(
+    fixture: dict[str, Any],
+) -> list[dict[str, Any]]:
+    existing = {
+        item["id"]: item for item in fixture["response"]["result"]["items"]
+    }
+    examples = _composition_snapshot_examples()
+    descriptors: list[dict[str, Any]] = []
+    for capability_id in COMPOSITION_SNAPSHOT_CAPABILITY_IDS:
+        contract = composition.CAPABILITY_CONTRACTS[capability_id]
+        descriptor = copy.deepcopy(existing[capability_id])
+        arguments, value = examples[capability_id]
+        descriptor.update(
+            {
+                "summary": contract.summary,
+                "risk": contract.risk,
+                "mutability": (
+                    "read-only" if contract.risk == "read" else "mutating"
+                ),
+                "idempotency": contract.idempotency,
+                "undo": (
+                    "not-applicable"
+                    if contract.risk == "read"
+                    else "ae-undo-group"
+                ),
+                "sideEffectSummary": contract.side_effect_summary,
+                "preconditions": list(contract.preconditions),
+                "inputContractId": contract.input_contract_id,
+                "resultContractId": contract.result_contract_id,
+                "contractDigest": contract.contract_digest,
+                "inputSchema": contract.input_schema,
+                "resultSchema": contract.result_schema,
+                "requirements": [
+                    {"id": contract.requirement_id, "contractVersion": 1}
+                ],
+            }
+        )
+        positive = next(
+            example
+            for example in descriptor["examples"]
+            if example["kind"] == "positive"
+        )
+        positive["arguments"] = arguments
+        positive["expected"] = {"outcome": "succeeded", "value": value}
+        descriptors.append(descriptor)
+    return descriptors
+
+
+def _composition_setting_descriptors() -> list[dict[str, Any]]:
+    examples = _composition_setting_examples()
+    descriptors: list[dict[str, Any]] = []
+    for capability_id in COMPOSITION_SETTING_CAPABILITY_IDS:
+        contract = composition.CAPABILITY_CONTRACTS[capability_id]
+        arguments, value = examples[capability_id]
+        slug = capability_id.removeprefix("ae.").replace(".", "-")
+        descriptors.append(
+            {
+                "detail": "full",
+                "id": capability_id,
+                "version": 1,
+                "schemaVersion": 1,
+                "summary": contract.summary,
+                "risk": contract.risk,
+                "mutability": "mutating",
+                "idempotency": contract.idempotency,
+                "cancellation": "before-dispatch",
+                "undo": (
+                    "none"
+                    if capability_id
+                    == composition.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID
+                    else "ae-undo-group"
+                ),
+                "sideEffectSummary": contract.side_effect_summary,
+                "preconditions": list(contract.preconditions),
+                "compatibility": {
+                    "status": "unverified",
+                    "intendedPlatforms": ["macos-arm64", "windows-x64"],
+                },
+                "inputContractId": contract.input_contract_id,
+                "resultContractId": contract.result_contract_id,
+                "contractDigest": contract.contract_digest,
+                "inputSchema": contract.input_schema,
+                "resultSchema": contract.result_schema,
+                "requirements": [
+                    {"id": contract.requirement_id, "contractVersion": 1}
+                ],
+                "examples": [
+                    {
+                        "id": f"aemcp-example-{slug}",
+                        "kind": "positive",
+                        "summary": (
+                            "Synthetic success demonstrates the frozen typed "
+                            "result contract."
+                        ),
+                        "arguments": arguments,
+                        "expected": {"outcome": "succeeded", "value": value},
+                    },
+                    {
+                        "id": f"aemcp-example-{slug}-stale",
+                        "kind": "negative",
+                        "summary": (
+                            "A stale locator is rejected before host mutation."
+                        ),
+                        "arguments": arguments,
+                        "expected": {
+                            "errorCode": "STALE_LOCATOR",
+                            "recoveryAction": "refresh-locator",
+                        },
+                    },
+                ],
+            }
+        )
+    return descriptors
+
+
 def _summary(descriptor: dict[str, Any]) -> dict[str, Any]:
     result = {
         key: copy.deepcopy(value)
@@ -411,9 +742,7 @@ def _summary(descriptor: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def _cpp_header(
-    descriptors: list[dict[str, Any]], registry_digest: str
-) -> str:
+def _cpp_rows(descriptors: list[dict[str, Any]]) -> str:
     rows = []
     for descriptor in descriptors:
         rows.append(
@@ -424,6 +753,29 @@ def _cpp_header(
             f'        R"TSMCAP({_canonical(_summary(descriptor))})TSMCAP",\n'
             "    },"
         )
+    return "\n".join(rows)
+
+
+def _cpp_projection_rows(descriptors: list[dict[str, Any]]) -> str:
+    rows = []
+    for descriptor in descriptors:
+        rows.append(
+            "    CoreCapabilityContractProjection{\n"
+            f'        "{descriptor["id"]}",\n'
+            f'        "{descriptor["contractDigest"]}",\n'
+            f'        R"TSMCAP({_canonical(descriptor)})TSMCAP",\n'
+            f'        R"TSMCAP({_canonical(_summary(descriptor))})TSMCAP",\n'
+            "    },"
+        )
+    return "\n".join(rows)
+
+
+def _cpp_header(
+    descriptors: list[dict[str, Any]],
+    composition_descriptors: list[dict[str, Any]],
+    composition_snapshot_descriptors: list[dict[str, Any]],
+    registry_digest: str,
+) -> str:
     return (
         "// Generated by scripts/generate_text_shape_marker_capabilities.py.\n"
         "// Do not edit by hand.\n"
@@ -437,19 +789,42 @@ def _cpp_header(
         "  std::string_view full_json;\n"
         "  std::string_view summary_json;\n"
         "};\n\n"
+        "struct CoreCapabilityContractProjection {\n"
+        "  std::string_view id;\n"
+        "  std::string_view contract_digest;\n"
+        "  std::string_view full_json;\n"
+        "  std::string_view summary_json;\n"
+        "};\n\n"
         "inline constexpr std::size_t kTextShapeMarkerCapabilityCount = "
         f"{len(descriptors)};\n"
+        "inline constexpr std::size_t kCompositionSettingCapabilityCount = "
+        f"{len(composition_descriptors)};\n"
+        "inline constexpr std::size_t kCompositionSnapshotCapabilityCount = "
+        f"{len(composition_snapshot_descriptors)};\n"
         "inline constexpr std::string_view kCapabilitiesRegistryDigest =\n"
         f'    "{registry_digest}";\n'
         "inline constexpr std::array<TextShapeMarkerCapabilityDescriptor,\n"
         "    kTextShapeMarkerCapabilityCount> kTextShapeMarkerCapabilities{{\n"
-        + "\n".join(rows)
+        + _cpp_rows(descriptors)
+        + "\n}};\n\n"
+        "inline constexpr std::array<TextShapeMarkerCapabilityDescriptor,\n"
+        "    kCompositionSettingCapabilityCount> kCompositionSettingCapabilities{{\n"
+        + _cpp_rows(composition_descriptors)
+        + "\n}};\n\n"
+        "inline constexpr std::array<CoreCapabilityContractProjection,\n"
+        "    kCompositionSnapshotCapabilityCount> "
+        "kCompositionSnapshotCapabilities{{\n"
+        + _cpp_projection_rows(composition_snapshot_descriptors)
         + "\n}};\n\n"
         "}  // namespace aemcp::native::rpc\n"
     )
 
 
-def _generated_mjs(descriptors: list[dict[str, Any]]) -> str:
+def _generated_mjs(
+    descriptors: list[dict[str, Any]],
+    composition_descriptors: list[dict[str, Any]],
+    composition_snapshot_descriptors: list[dict[str, Any]],
+) -> str:
     return (
         "// Generated by scripts/generate_text_shape_marker_capabilities.py.\n"
         "// Do not edit by hand.\n"
@@ -459,6 +834,15 @@ def _generated_mjs(descriptors: list[dict[str, Any]]) -> str:
         "export const TEXT_SHAPE_MARKER_CAPABILITY_IDS = Object.freeze(\n"
         "  TEXT_SHAPE_MARKER_CAPABILITIES.map((item) => item.id),\n"
         ");\n"
+        "export const COMPOSITION_SETTING_CAPABILITIES = Object.freeze("
+        + json.dumps(composition_descriptors, ensure_ascii=False, indent=2)
+        + ");\n"
+        "export const COMPOSITION_SETTING_CAPABILITY_IDS = Object.freeze(\n"
+        "  COMPOSITION_SETTING_CAPABILITIES.map((item) => item.id),\n"
+        ");\n"
+        "export const COMPOSITION_SNAPSHOT_CAPABILITIES = Object.freeze("
+        + json.dumps(composition_snapshot_descriptors, ensure_ascii=False, indent=2)
+        + ");\n"
     )
 
 
@@ -535,6 +919,21 @@ def _schema_with_tsm(
             if not _generated_ref(item)
         ]
 
+    def append_contract_ref_if_new(
+        union_name: str, definition_name: str, contract_schema: dict[str, Any]
+    ) -> None:
+        union = definitions[union_name]["oneOf"]
+        for item in union:
+            reference = item.get("$ref") if isinstance(item, dict) else None
+            if not isinstance(reference, str) or not reference.startswith("#/$defs/"):
+                continue
+            existing = definitions.get(reference.removeprefix("#/$defs/"))
+            if isinstance(existing, dict) and existing.get("const") == contract_schema:
+                return
+        union.append({"$ref": f"#/$defs/{definition_name}"})
+
+    generated_input_schemas: set[str] = set()
+    generated_result_schemas: set[str] = set()
     for descriptor in descriptors:
         capability_id = descriptor["id"]
         input_root = _pascal(capability_id, "Arguments")
@@ -567,17 +966,27 @@ def _schema_with_tsm(
         definitions["invokeParams"]["oneOf"].append(
             {"$ref": f"#/$defs/{invoke_root}"}
         )
-        definitions["capabilityArguments"]["anyOf"].append(
-            {"$ref": f"#/$defs/{input_root}"}
+        input_fingerprint = _canonical(descriptor["inputSchema"])
+        if input_fingerprint not in generated_input_schemas:
+            definitions["capabilityArguments"]["anyOf"].append(
+                {"$ref": f"#/$defs/{input_root}"}
+            )
+            generated_input_schemas.add(input_fingerprint)
+        result_fingerprint = _canonical(descriptor["resultSchema"])
+        if result_fingerprint not in generated_result_schemas:
+            definitions["capabilityValue"]["oneOf"].append(
+                {"$ref": f"#/$defs/{value_root}"}
+            )
+            generated_result_schemas.add(result_fingerprint)
+        append_contract_ref_if_new(
+            "capabilityInputSchemaContract",
+            input_contract,
+            descriptor["inputSchema"],
         )
-        definitions["capabilityValue"]["oneOf"].append(
-            {"$ref": f"#/$defs/{value_root}"}
-        )
-        definitions["capabilityInputSchemaContract"]["oneOf"].append(
-            {"$ref": f"#/$defs/{input_contract}"}
-        )
-        definitions["capabilityResultSchemaContract"]["oneOf"].append(
-            {"$ref": f"#/$defs/{result_contract}"}
+        append_contract_ref_if_new(
+            "capabilityResultSchemaContract",
+            result_contract,
+            descriptor["resultSchema"],
         )
     return schema
 
@@ -586,16 +995,89 @@ def _fixture_with_tsm(
     fixture: dict[str, Any], descriptors: list[dict[str, Any]]
 ) -> tuple[dict[str, Any], str]:
     updated = copy.deepcopy(fixture)
-    items = [
-        item
-        for item in updated["response"]["result"]["items"]
-        if item["id"] not in tsm.CAPABILITY_CONTRACTS
-    ]
-    items.extend(copy.deepcopy(descriptors))
+    replacements = {item["id"]: item for item in descriptors}
+    items = []
+    replaced = set()
+    for item in updated["response"]["result"]["items"]:
+        capability_id = item["id"]
+        if capability_id in replacements:
+            items.append(copy.deepcopy(replacements[capability_id]))
+            replaced.add(capability_id)
+        else:
+            items.append(item)
+    items.extend(
+        copy.deepcopy(descriptor)
+        for descriptor in descriptors
+        if descriptor["id"] not in replaced
+    )
     digest = _digest(items)
     updated["response"]["result"]["items"] = items
     updated["response"]["result"]["capabilitiesDigest"] = digest
     return updated, digest
+
+
+def _schema_with_composition_snapshots(
+    schema: dict[str, Any], descriptors: list[dict[str, Any]]
+) -> dict[str, Any]:
+    updated = copy.deepcopy(schema)
+    definitions = updated["$defs"]
+    for descriptor in descriptors:
+        (
+            input_name,
+            result_name,
+            value_name,
+        ) = COMPOSITION_SNAPSHOT_SCHEMA_DEFINITIONS[descriptor["id"]]
+        definitions[input_name]["const"] = copy.deepcopy(
+            descriptor["inputSchema"]
+        )
+        definitions[result_name]["const"] = copy.deepcopy(
+            descriptor["resultSchema"]
+        )
+        _install_value_schema(
+            definitions,
+            descriptor["resultSchema"],
+            value_name,
+        )
+    return updated
+
+
+def _invoke_fixture_with_composition_snapshot(
+    fixture: dict[str, Any], capability_id: str
+) -> dict[str, Any]:
+    updated = copy.deepcopy(fixture)
+    result = updated["response"]["result"]
+    if result["capabilityId"] != capability_id:
+        raise ValueError(
+            f"{capability_id} invoke fixture has the wrong capabilityId"
+        )
+    value = result["value"]
+    background_color = copy.deepcopy(
+        _composition_settings_baseline()["backgroundColor"]
+    )
+    if capability_id == composition.COMPOSITION_SETTINGS_READ_CAPABILITY_ID:
+        value["backgroundColor"] = background_color
+        value = composition.CompositionSettingsValue.model_validate(
+            value
+        ).model_dump(mode="json", by_alias=True)
+    else:
+        value["sourceSettings"]["backgroundColor"] = copy.deepcopy(
+            background_color
+        )
+        value["newSettings"]["backgroundColor"] = copy.deepcopy(
+            background_color
+        )
+        value = composition.CompositionDuplicateValue.model_validate(
+            value
+        ).model_dump(mode="json", by_alias=True)
+    result["value"] = value
+    result["evidence"]["postcondition"]["digest"] = _digest(
+        {
+            "capabilityId": capability_id,
+            "capabilityVersion": result["capabilityVersion"],
+            "value": value,
+        }
+    )
+    return updated
 
 
 def _json_text(value: Any) -> str:
@@ -603,16 +1085,40 @@ def _json_text(value: Any) -> str:
 
 
 def _outputs() -> dict[Path, str]:
+    base_fixture = json.loads(CAPABILITIES_FIXTURE.read_text())
     descriptors = _descriptors()
-    fixture, registry_digest = _fixture_with_tsm(
-        json.loads(CAPABILITIES_FIXTURE.read_text()), descriptors
+    composition_descriptors = _composition_setting_descriptors()
+    composition_snapshot_descriptors = _composition_snapshot_descriptors(
+        base_fixture
     )
-    schema = _schema_with_tsm(json.loads(SCHEMA.read_text()), descriptors)
+    generated_descriptors = [*descriptors, *composition_descriptors]
+    all_descriptors = [
+        *generated_descriptors,
+        *composition_snapshot_descriptors,
+    ]
+    fixture, registry_digest = _fixture_with_tsm(
+        base_fixture, all_descriptors
+    )
+    schema = _schema_with_tsm(
+        json.loads(SCHEMA.read_text()), generated_descriptors
+    )
+    schema = _schema_with_composition_snapshots(
+        schema, composition_snapshot_descriptors
+    )
     hello = json.loads(HELLO_FIXTURE.read_text())
     hello["response"]["result"]["capabilitiesDigest"] = registry_digest
     outputs = {
-        GENERATED_MJS: _generated_mjs(descriptors),
-        GENERATED_HPP: _cpp_header(descriptors, registry_digest),
+        GENERATED_MJS: _generated_mjs(
+            descriptors,
+            composition_descriptors,
+            composition_snapshot_descriptors,
+        ),
+        GENERATED_HPP: _cpp_header(
+            descriptors,
+            composition_descriptors,
+            composition_snapshot_descriptors,
+            registry_digest,
+        ),
         SCHEMA: _json_text(schema),
         CAPABILITIES_FIXTURE: _json_text(fixture),
         HELLO_FIXTURE: _json_text(hello),
@@ -621,6 +1127,12 @@ def _outputs() -> dict[Path, str]:
         matrix = json.loads(path.read_text())
         matrix["expectedRegistryDigest"] = registry_digest
         outputs[path] = _json_text(matrix)
+    for capability_id, path in COMPOSITION_SNAPSHOT_INVOKE_FIXTURES.items():
+        outputs[path] = _json_text(
+            _invoke_fixture_with_composition_snapshot(
+                json.loads(path.read_text()), capability_id
+            )
+        )
     return outputs
 
 

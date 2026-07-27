@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import hashlib
 import json
 import logging
 import os
@@ -565,7 +566,11 @@ def _cleanup_default_preview_root_once() -> None:
     _cleanup_old_preview_sessions()
 
 
-def _preview_frame_requests(args: schemas.AePreviewFrameArgs, out_dir: Path) -> list[dict[str, Any]]:
+def _preview_frame_requests(
+    args: schemas.AePreviewFrameArgs,
+    out_dir: Path,
+    capture_id: str,
+) -> list[dict[str, Any]]:
     raw_times: list[float | None]
     if args.times is not None:
         raw_times = list(args.times)
@@ -575,7 +580,7 @@ def _preview_frame_requests(args: schemas.AePreviewFrameArgs, out_dir: Path) -> 
         raw_times = [None]
 
     comp_part = args.comp_id or "active"
-    call_id = uuid.uuid4().hex[:8]
+    call_id = capture_id[:8]
     requests: list[dict[str, Any]] = []
     for index, frame_time in enumerate(raw_times):
         if frame_time is None:
@@ -661,7 +666,8 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
         _cleanup_default_preview_root_once()
         out_dir = _default_preview_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
-    frame_requests = _preview_frame_requests(args, out_dir)
+    capture_id = uuid.uuid4().hex
+    frame_requests = _preview_frame_requests(args, out_dir, capture_id)
     tmpl = _load_jsx("preview_viewer.jsx")
     snapper = None
 
@@ -693,18 +699,20 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
                     new_dims = _downscale_png(Path(str(snap_path)), args.scale)
                     if new_dims is not None:
                         frame_w, frame_h = new_dims
+                    png_bytes = Path(str(snap_path)).read_bytes()
                     frame = {
                         "time": prepared.get("time"),
                         "path": snap_path,
                         "width": frame_w,
                         "height": frame_h,
-                        "sizeBytes": Path(str(snap_path)).stat().st_size,
+                        "sizeBytes": len(png_bytes),
+                        "sha256": hashlib.sha256(png_bytes).hexdigest(),
                         "source": "comp",
                         "method": "saveFrameToPng",
                         "compId": comp_id,
                     }
                     if args.include_base64:
-                        frame["base64"] = base64.b64encode(Path(str(snap_path)).read_bytes()).decode("ascii")
+                        frame["base64"] = base64.b64encode(png_bytes).decode("ascii")
                     frames.append(frame)
                     continue
                 prepared["fallbackReason"] = "saveFrameToPng did not create a PNG file"
@@ -738,15 +746,25 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
                 new_dims = _downscale_png(Path(str(snap_path)), args.scale)
                 if new_dims is not None:
                     frame_w, frame_h = new_dims
+            png_bytes = (
+                Path(str(snap_path)).read_bytes()
+                if snap_path and Path(str(snap_path)).exists()
+                else None
+            )
             frame = {
                 "time": prepared.get("time"),
                 "path": snap_path,
                 "width": frame_w,
                 "height": frame_h,
                 "sizeBytes": (
-                    Path(str(snap_path)).stat().st_size
-                    if snap_path and Path(str(snap_path)).exists()
+                    len(png_bytes)
+                    if png_bytes is not None
                     else snap.get("bytes")
+                ),
+                "sha256": (
+                    hashlib.sha256(png_bytes).hexdigest()
+                    if png_bytes is not None
+                    else None
                 ),
                 "source": "viewer",
                 "method": snap.get("method"),
@@ -754,16 +772,15 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
             }
             if prepared.get("fallbackReason"):
                 frame["fallbackReason"] = prepared.get("fallbackReason")
-            if args.include_base64 and frame["path"]:
-                p = Path(str(frame["path"]))
-                if p.exists():
-                    frame["base64"] = base64.b64encode(p.read_bytes()).decode("ascii")
+            if args.include_base64 and png_bytes is not None:
+                frame["base64"] = base64.b64encode(png_bytes).decode("ascii")
             frames.append(frame)
 
         return {
             "ok": True,
             "compId": comp_id,
             "compName": comp_name,
+            "captureId": capture_id,
             "frames": frames,
         }
 

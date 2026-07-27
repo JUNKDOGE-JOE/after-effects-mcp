@@ -847,6 +847,70 @@ class AePositiveRatioInput(_StrictModel):
     denominator: int = Field(..., ge=1, le=2_147_483_647)
 
 
+class AeCompositionColorInput(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    red: int = Field(..., ge=0, le=255)
+    green: int = Field(..., ge=0, le=255)
+    blue: int = Field(..., ge=0, le=255)
+    alpha: Literal[255]
+
+
+class _AeCompositionSettingWriteArgs(_StrictModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    composition_locator: AeCompositionLocator
+    idempotency_key: str = Field(
+        ..., min_length=16, max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+
+class AeSetCompositionDimensionsArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionDimensions — set exact composition dimensions."""
+
+    width: int = Field(..., ge=1, le=30_000)
+    height: int = Field(..., ge=1, le=30_000)
+
+
+class AeSetCompositionDurationArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionDuration — set exact frame-aligned composition duration."""
+
+    duration: AePositiveCompositionTimeInput
+
+
+class AeSetCompositionFrameRateArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionFrameRate — set an exact supported composition frame rate."""
+
+    frame_rate: AePositiveRatioInput
+
+    @model_validator(mode="after")
+    def _pinned_fp_policy(self) -> "AeSetCompositionFrameRateArgs":
+        if self.frame_rate.denominator != 1:
+            raise ValueError(
+                "fractional frame rates require a pinned-host normalization measurement"
+            )
+        return self
+
+
+class AeSetCompositionPixelAspectRatioArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionPixelAspectRatio — set exact composition pixel aspect."""
+
+    pixel_aspect_ratio: AePositiveRatioInput
+
+
+class AeSetCompositionBackgroundColorArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionBackgroundColor — set exact RGBA8 composition background."""
+
+    background_color: AeCompositionColorInput
+
+
+class AeSetCompositionDisplayStartTimeArgs(_AeCompositionSettingWriteArgs):
+    """ae.setCompositionDisplayStartTime — set exact composition display start."""
+
+    display_start_time: AeCompositionTimeInput
+
+
 class AeCreateCompositionArgs(_StrictModel):
     """ae.createComposition — create one root composition through native AEGP.
 
@@ -1414,7 +1478,20 @@ class AeSnapshotArgs(_StrictModel):
 
 
 class AePreviewFrameArgs(_StrictModel):
-    """ae.previewFrame — render real AE comp frames to PNG files."""
+    """ae.previewFrame — return real composition pixels as PNG image content.
+
+    Preview before and after visible edits, and at intermediate checkpoints.
+    Call after the latest write and use only the newest captureId so an older
+    frame is not mistaken for current state. Frames can contain private project
+    material; preview only the user-authorized composition and times. Use scale
+    or selected times when a smaller visual review is sufficient.
+
+    The composition background appears with its RGB but alpha 0 where no layer
+    covers the frame: After Effects paints that background in its viewport
+    without compositing it into the exported alpha. A transparent preview pixel
+    with the configured background RGB therefore does not mean the background
+    setting write failed.
+    """
     comp_id: Optional[str] = Field(
         None, description="AE comp id. Omit for the active comp."
     )
@@ -1428,7 +1505,12 @@ class AePreviewFrameArgs(_StrictModel):
         None, description="Output directory. Default: temp ae_mcp_previews session directory."
     )
     include_base64: bool = Field(
-        False, description="Attach base64 PNG bytes to each returned frame."
+        False,
+        description=(
+            "Also attach base64 PNG bytes inside each JSON frame. First-class "
+            "MCP image content is always returned; leave false to avoid sending "
+            "a duplicate inline copy."
+        ),
     )
     scale: float = Field(
         1.0, gt=0, le=4,

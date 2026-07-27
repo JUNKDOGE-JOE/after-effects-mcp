@@ -64,6 +64,7 @@ function settings(name) {
         frameDuration: time(1, 24),
         frameRate: ratio(24, 1),
         pixelAspectRatio: ratio(1, 1),
+        backgroundColor: { red: 0, green: 0, blue: 0, alpha: 255 },
         workArea: { start: time(0, 24), duration: time(120, 24) },
         displayStartTime: time(0, 24),
         layerCount: 2,
@@ -117,6 +118,92 @@ function cases() {
         'ae.composition.settings.read': {
             arguments: { compositionLocator: source },
             value: { compositionLocator: source, ...settings('Fixture') },
+        },
+        'ae.composition.dimensions.set': {
+            arguments: {
+                compositionLocator: source,
+                width: 1280,
+                height: 720,
+                idempotencyKey: 'comp-dimensions-0001',
+            },
+            value: {
+                changed: true,
+                compositionLocator: source,
+                before: settings('Fixture'),
+                after: { ...settings('Fixture'), width: 1280, height: 720 },
+            },
+        },
+        'ae.composition.duration.set': {
+            arguments: {
+                compositionLocator: source,
+                duration: { value: 288, scale: 24 },
+                idempotencyKey: 'comp-duration-0001',
+            },
+            value: {
+                changed: true,
+                compositionLocator: source,
+                before: settings('Fixture'),
+                after: { ...settings('Fixture'), duration: time(288, 24) },
+            },
+        },
+        'ae.composition.frame-rate.set': {
+            arguments: {
+                compositionLocator: source,
+                frameRate: { numerator: 25, denominator: 1 },
+                idempotencyKey: 'comp-frame-rate-0001',
+            },
+            value: {
+                changed: true,
+                compositionLocator: source,
+                before: settings('Fixture'),
+                after: {
+                    ...settings('Fixture'),
+                    frameRate: ratio(25, 1),
+                    frameDuration: time(1, 25),
+                },
+            },
+        },
+        'ae.composition.pixel-aspect-ratio.set': {
+            arguments: {
+                compositionLocator: source,
+                pixelAspectRatio: { numerator: 4, denominator: 3 },
+                idempotencyKey: 'comp-pixel-aspect-0001',
+            },
+            value: {
+                changed: true,
+                compositionLocator: source,
+                before: settings('Fixture'),
+                after: { ...settings('Fixture'), pixelAspectRatio: ratio(4, 3) },
+            },
+        },
+        'ae.composition.background-color.set': {
+            arguments: {
+                compositionLocator: source,
+                backgroundColor: { red: 10, green: 20, blue: 30, alpha: 255 },
+                idempotencyKey: 'comp-background-0001',
+            },
+            value: {
+                changed: true,
+                compositionLocator: source,
+                before: settings('Fixture'),
+                after: {
+                    ...settings('Fixture'),
+                    backgroundColor: { red: 10, green: 20, blue: 30, alpha: 255 },
+                },
+            },
+        },
+        'ae.composition.display-start-time.set': {
+            arguments: {
+                compositionLocator: source,
+                displayStartTime: { value: -24, scale: 24 },
+                idempotencyKey: 'comp-display-start-0001',
+            },
+            value: {
+                changed: true,
+                compositionLocator: source,
+                before: settings('Fixture'),
+                after: { ...settings('Fixture'), displayStartTime: time(-24, 24) },
+            },
         },
         'ae.composition.work-area.set': {
             arguments: {
@@ -270,7 +357,7 @@ function cases() {
     return vectors;
 }
 
-test('all twenty frozen #150/#155/#162 contracts accept their closed valid shapes', () => {
+test('all twenty-six frozen package contracts accept their closed valid shapes', () => {
     const vectors = cases();
     assert.deepEqual(
         Object.keys(packageContracts.CONTRACTS).filter(function (capabilityId) {
@@ -1124,7 +1211,9 @@ test('capability descriptors bind every package contract digest', () => {
             risk: entry[1].mutating ? 'write' : 'read',
             mutability: entry[1].mutating ? 'mutating' : 'read-only',
             idempotency: entry[1].mutating ? 'idempotency-key' : 'idempotent',
-            undo: entry[1].mutating ? 'ae-undo-group' : 'not-applicable',
+            undo: entry[1].mutating
+                ? (entry[1].undoAvailable === false ? 'none' : 'ae-undo-group')
+                : 'not-applicable',
         };
     });
     const verified = packageContracts.validateCapabilityItems(items, undefined, 'full');
@@ -1174,6 +1263,59 @@ test('metadata permits a root item with omitted unsupported type-specific facts'
             SESSION,
         ),
         true,
+    );
+});
+
+test('frame-rate mutation accepts equivalent time rescaling and rejects changed time facts', () => {
+    const vector = cases()['ae.composition.frame-rate.set'];
+    const contract = packageContracts.getContract('ae.composition.frame-rate.set');
+    const rescaled = structuredClone(vector.value);
+    rescaled.after.duration = time(250, 25);
+    rescaled.after.workArea = {
+        start: time(0, 25),
+        duration: time(125, 25),
+    };
+    rescaled.after.displayStartTime = time(0, 25);
+
+    assert.equal(
+        contract.validValue(rescaled, vector.arguments, HOST, SESSION),
+        true,
+        'AE may re-encode unchanged times onto the new frame-rate timescale',
+    );
+
+    const changedDuration = structuredClone(rescaled);
+    changedDuration.after.duration = time(251, 25);
+    assert.equal(
+        contract.validValue(changedDuration, vector.arguments, HOST, SESSION),
+        false,
+        'a real non-target duration change must still fail verification',
+    );
+});
+
+test('background mutation compares RGBA channels independently of JSON key order', () => {
+    const vector = cases()['ae.composition.background-color.set'];
+    const contract = packageContracts.getContract(
+        'ae.composition.background-color.set',
+    );
+    const nativeOrdered = structuredClone(vector.value);
+    nativeOrdered.after.backgroundColor = {
+        alpha: vector.arguments.backgroundColor.alpha,
+        blue: vector.arguments.backgroundColor.blue,
+        green: vector.arguments.backgroundColor.green,
+        red: vector.arguments.backgroundColor.red,
+    };
+
+    assert.equal(
+        contract.validValue(nativeOrdered, vector.arguments, HOST, SESSION),
+        true,
+        'native canonical key order must not change RGBA equality',
+    );
+
+    nativeOrdered.after.backgroundColor.red += 1;
+    assert.equal(
+        contract.validValue(nativeOrdered, vector.arguments, HOST, SESSION),
+        false,
+        'a real channel change must still fail verification',
     );
 });
 

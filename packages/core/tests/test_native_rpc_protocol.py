@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import ast
 import hashlib
+import importlib
 import json
+from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
 
@@ -9,15 +12,60 @@ import pytest
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
+import ae_mcp
+
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PROTOCOL_ROOT = REPO_ROOT / "native" / "ae-plugin" / "protocol"
 SCHEMA_PATH = PROTOCOL_ROOT / "aegp-rpc.schema.json"
 FIXTURE_ROOT = PROTOCOL_ROOT / "fixtures"
+CORE_PACKAGE_ROOT = Path(ae_mcp.__file__).resolve().parent
 
 
 def _json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _defines_capability_contracts(path: Path) -> bool:
+    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
+    return any(
+        (
+            isinstance(node, ast.Assign)
+            and any(
+                isinstance(target, ast.Name)
+                and target.id == "CAPABILITY_CONTRACTS"
+                for target in node.targets
+            )
+        )
+        or (
+            isinstance(node, ast.AnnAssign)
+            and isinstance(node.target, ast.Name)
+            and node.target.id == "CAPABILITY_CONTRACTS"
+        )
+        for node in tree.body
+    )
+
+
+def _core_capability_contracts():
+    contracts = {}
+    for path in sorted(CORE_PACKAGE_ROOT.rglob("*.py")):
+        if not _defines_capability_contracts(path):
+            continue
+        relative = path.relative_to(CORE_PACKAGE_ROOT).with_suffix("")
+        module_parts = relative.parts[:-1] if relative.name == "__init__" else relative.parts
+        module_name = ".".join(("ae_mcp", *module_parts))
+        module_contracts = getattr(
+            importlib.import_module(module_name), "CAPABILITY_CONTRACTS"
+        )
+        assert isinstance(module_contracts, Mapping), module_name
+        for capability_id, contract in module_contracts.items():
+            assert capability_id not in contracts, (
+                f"{capability_id} is declared by both "
+                f"{contracts[capability_id][0]} and {module_name}"
+            )
+            contracts[capability_id] = (module_name, contract)
+    assert contracts, "Core exports no CAPABILITY_CONTRACTS"
+    return contracts
 
 
 def _jcs_subset(value) -> bytes:
@@ -175,68 +223,91 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
         "detail": "full",
         "limit": 100,
     }
-    assert [item["id"] for item in capabilities["response"]["result"]["items"]] == [
-        "ae.project.summary",
-        "ae.project.bit-depth.read",
-        "ae.project.bit-depth.set",
-        "ae.project.items.list",
-        "ae.composition.layers.list",
-        "ae.composition.selected-layers.list",
-        "ae.composition.time.read",
-        "ae.composition.time.set",
-        "ae.composition.create",
-        "ae.composition.layer.create",
-        "ae.layer.effect.apply",
-        "ae.layer.properties.list",
-        "ae.layer.property.keyframes.list",
-        "ae.layer.property.set",
-        "ae.project.context.read",
-        "ae.project.item.metadata.read",
-        "ae.composition.settings.read",
-        "ae.composition.work-area.set",
-        "ae.project.item.name.set",
-        "ae.project.item.comment.set",
-        "ae.project.item.label.set",
-        "ae.composition.duplicate",
-        "ae.layer.details.read",
-        "ae.layer.name.set",
-        "ae.layer.range.set",
-        "ae.layer.start-time.set",
-        "ae.layer.stretch.set",
-        "ae.layer.order.set",
-        "ae.layer.parent.set",
-        "ae.layer.duplicate",
-        "ae.layer.compositing.read",
-        "ae.layer.switch.set",
-        "ae.layer.quality.set",
-        "ae.layer.blending-mode.set",
-        "ae.layer.property.keyframe.details.read",
-        "ae.layer.property.keyframe.add",
-        "ae.layer.property.keyframe.value.set",
-        "ae.layer.property.keyframe.interpolation.set",
-        "ae.layer.property.keyframe.temporal-ease.set",
-        "ae.layer.property.keyframe.behavior.set",
-            "ae.layer.property.keyframe.delete",
-            "ae.native.media.read",
-            "ae.native.media.write",
-            "ae.shape.layer.create",
-            "ae.shape.groups.list",
-            "ae.shape.group.create",
-            "ae.shape.path.set",
-            "ae.shape.fill-style.set",
-            "ae.shape.stroke-style.set",
-            "ae.shape.group.reorder",
-            "ae.marker.list",
-            "ae.marker.create",
-            "ae.marker.set",
-            "ae.marker.delete",
-        ]
+    capability_ids = [
+        item["id"] for item in capabilities["response"]["result"]["items"]
+    ]
+    assert len(capability_ids) == len(set(capability_ids))
     assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
         "response"
     ]["result"]["capabilitiesDigest"]
     assert _jcs_subset({"\ue000": 1, "😀": 2}).decode("utf-8") == (
         '{"😀":2,"\ue000":1}'
     )
+
+
+def test_native_capabilities_fixture_covers_every_core_capability_contract():
+    descriptors = {
+        item["id"]: item
+        for item in _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"][
+            "items"
+        ]
+    }
+    violations = []
+    for capability_id, (module_name, contract) in _core_capability_contracts().items():
+        if capability_id not in descriptors:
+            violations.append(
+                f"{capability_id} from {module_name}: missing descriptor"
+            )
+            continue
+        descriptor = descriptors[capability_id]
+        if descriptor["contractDigest"] != contract.contract_digest:
+            violations.append(
+                f"{capability_id} from {module_name}: contractDigest mismatch"
+            )
+        if descriptor["inputSchema"] != contract.input_schema:
+            violations.append(
+                f"{capability_id} from {module_name}: inputSchema mismatch"
+            )
+    assert not violations, "\n".join(violations)
+
+
+def test_every_core_capability_contract_has_a_valid_native_result_vector():
+    descriptors = {
+        item["id"]: item
+        for item in _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"][
+            "items"
+        ]
+    }
+    violations = []
+    for capability_id, (module_name, contract) in _core_capability_contracts().items():
+        descriptor = descriptors.get(capability_id)
+        if descriptor is None:
+            violations.append(
+                f"{capability_id} from {module_name}: MISSING descriptor"
+            )
+            continue
+        if descriptor["resultSchema"] != contract.result_schema:
+            violations.append(
+                f"{capability_id} from {module_name}: resultSchema mismatch"
+            )
+        carriers = [
+            example["expected"]["value"]
+            for example in descriptor.get("examples", ())
+            if example.get("expected", {}).get("outcome") == "succeeded"
+            and "value" in example["expected"]
+        ]
+        if not carriers:
+            violations.append(
+                f"{capability_id} from {module_name}: MISSING native result vector"
+            )
+            continue
+        if len(carriers) != 1:
+            violations.append(
+                f"{capability_id} from {module_name}: "
+                f"expected exactly one native result vector, got {len(carriers)}"
+            )
+            continue
+        errors = sorted(
+            Draft202012Validator(contract.result_schema).iter_errors(carriers[0]),
+            key=lambda error: tuple(str(part) for part in error.absolute_path),
+        )
+        for error in errors:
+            location = ".".join(str(part) for part in error.absolute_path) or "<root>"
+            violations.append(
+                f"{capability_id} from {module_name}: "
+                f"native result vector {location}: {error.message}"
+            )
+    assert not violations, "\n".join(violations)
 
 
 def test_bit_depth_mutation_success_can_never_be_a_transport_replay():

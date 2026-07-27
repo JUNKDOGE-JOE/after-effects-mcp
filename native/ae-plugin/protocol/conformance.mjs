@@ -1,6 +1,9 @@
 import crypto from 'node:crypto';
 
 import {
+  COMPOSITION_SETTING_CAPABILITIES,
+  COMPOSITION_SETTING_CAPABILITY_IDS,
+  COMPOSITION_SNAPSHOT_CAPABILITIES,
   TEXT_SHAPE_MARKER_CAPABILITIES,
   TEXT_SHAPE_MARKER_CAPABILITY_IDS,
 } from './text_shape_marker_capabilities.generated.mjs';
@@ -277,6 +280,12 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: descriptor.inputContractId,
     resultContractId: descriptor.resultContractId,
   })),
+  ...COMPOSITION_SETTING_CAPABILITIES.map((descriptor) => Object.freeze({
+    id: descriptor.id,
+    version: descriptor.version,
+    inputContractId: descriptor.inputContractId,
+    resultContractId: descriptor.resultContractId,
+  })),
 ]);
 const ENVELOPE_KEYS = new Set([
   'wireVersion', 'kind', 'sessionId', 'requestId', 'method', 'deadlineUnixMs', 'params',
@@ -407,6 +416,9 @@ const NATIVE_MEDIA_WRITE_OPERATIONS = Object.freeze([
 ]);
 const TEXT_SHAPE_MARKER_CAPABILITY_SET = new Set(
   TEXT_SHAPE_MARKER_CAPABILITY_IDS,
+);
+const COMPOSITION_SETTING_CAPABILITY_SET = new Set(
+  COMPOSITION_SETTING_CAPABILITY_IDS,
 );
 
 function isKeyframeTimeInput(value) {
@@ -1292,6 +1304,18 @@ export function classifyRequest(message) {
       }
     } else if (TEXT_SHAPE_MARKER_CAPABILITY_SET.has(params.capabilityId)) {
       const descriptor = TEXT_SHAPE_MARKER_CAPABILITIES.find(
+        (item) => item.id === params.capabilityId,
+      );
+      if (!descriptor
+          || !schemaAccepts(
+            descriptor.inputSchema,
+            params.arguments,
+            descriptor.inputSchema,
+          )) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (COMPOSITION_SETTING_CAPABILITY_SET.has(params.capabilityId)) {
+      const descriptor = COMPOSITION_SETTING_CAPABILITIES.find(
         (item) => item.id === params.capabilityId,
       );
       if (!descriptor
@@ -2764,7 +2788,11 @@ function packageExample(spec) {
 }
 
 export function projectCompositionDescriptors(schema) {
+  const generated = new Map(
+    COMPOSITION_SNAPSHOT_CAPABILITIES.map((descriptor) => [descriptor.id, descriptor]),
+  );
   return PROJECT_COMPOSITION_SPECS.map((spec) => {
+    if (generated.has(spec.id)) return structuredClone(generated.get(spec.id));
     const registration = INVOKE_REGISTRY.find((candidate) => candidate.id === spec.id);
     const example = packageExample(spec);
     const inputSchema = structuredClone(schema.$defs[`${spec.schema}InputSchemaContract`].const);
@@ -3404,6 +3432,9 @@ export function nativeCapabilityRegistry(schema) {
     ...keyframeAuthoringDescriptors(schema),
     ...nativeMediaDescriptors(schema),
     ...TEXT_SHAPE_MARKER_CAPABILITIES.map((descriptor) => (
+      structuredClone(descriptor)
+    )),
+    ...COMPOSITION_SETTING_CAPABILITIES.map((descriptor) => (
       structuredClone(descriptor)
     )),
   ];

@@ -32,6 +32,26 @@ Use `.github/ISSUE_TEMPLATE/capability-package.md` to freeze:
 
 Implementation may refine an ambiguous field, but a material scope expansion requires an explicit package decision. Reviewer suggestions do not silently change the freeze.
 
+### Non-Undoable native writes
+
+The executable definition is `native/ae-plugin/protocol/aegp-rpc.schema.json`:
+every successful mutation response must contain an `evidence.undo` object, while
+read-only responses must omit it. For a native write whose pinned SDK
+documentation explicitly says non-Undoable, that object is exactly
+`{"available":false,"verified":false}`. Absence is invalid. The capability must
+not open an AE Undo group for that operation, and must not claim an Undo entry,
+Undo availability, Undo execution, or Undo restoration. Acceptance must record
+the SDK citation, the public request and response, before/after readback at both
+the native and public layers, audit and postcondition evidence, and a distinct
+idempotent compensating public write that restores the exact prior state with
+an independently verified full postcondition. A real AE Undo may be reported
+only if a hardware run proves that this exact operation restores the prior
+state; until then it must never be claimed, and never inferred from
+AEGP_StartUndoGroup/AEGP_EndUndoGroup returning success or from an Edit-menu
+label.
+
+Do not open the group merely to test this: source evidence cannot distinguish no entry from a phantom entry that appears in Edit but does not restore the value. A phantom entry is worse because a user can see the menu respond and reasonably believe the write was reverted.
+
 ## 3. Package lifecycle
 
 | Phase | Normal target | Work | Exit condition |
@@ -40,7 +60,7 @@ Implementation may refine an ambiguous field, but a material scope expansion req
 | Native novelty smoke | 0-1 focused run | Only for an unverified suite, lifecycle, or main-thread mechanism | Primitive works in real AE or the package is redesigned |
 | Implement | 1-2.5 working days | Up to three coordinated tracks: native; Core/bridge/public MCP; tests/fixture | All matrix rows pass T0-T2 and generated artifacts are current |
 | Review, freeze, and CI | 0.5-1 day | Concentrated review and blocker fixes, freeze the candidate source and component receipts, then run T3 and required CI | No unresolved in-scope blocker; the candidate source passes T3 and CI |
-| Candidate hardware | 60-90 minutes plus deterministic build time | One continuous component-set package session on real AE | Every included public tool has evidence; writes have verified Undo |
+| Candidate hardware | 60-90 minutes plus deterministic build time | One continuous component-set package session on real AE | Every included public tool has evidence; writes have verified Undo, or the documented compensation evidence where the SDK provides none |
 | Merge and main | 0.5-1.5 hours plus build time | Merge, rebuild/reinstall from clean `main`, rerun package smoke | Merge SHA passes; any accepted child Issues can close |
 
 These are scope alarms, not promises and not permission to drop evidence. When a phase exceeds its target, first remove unrelated work, repair the environment, or split a genuinely oversized package.
@@ -112,7 +132,7 @@ Run the package in one continuous window:
    endpoint/peer-bound challenge.
 3. Create the disposable fixture once.
 4. Run every read tool and record the real AE state.
-5. For every write: record before state, invoke once, record response/audit/after state, execute Undo, and verify the Undo state.
+5. For every write: record before state, invoke once, and record response/audit/after state; execute and verify real Undo only for Undoable operations, or run the documented compensating public write for an explicitly non-Undoable operation.
 6. Exercise the important inter-tool combinations from the matrix.
 7. Quit and relaunch AE once; verify a new host/session and repeat the package smoke.
 8. Emit one machine-readable evidence bundle and a redacted completion summary.

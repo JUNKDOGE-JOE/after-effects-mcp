@@ -43,6 +43,27 @@ PUBLIC_TOOLS = {
     ),
 }
 
+COMPOSITION_SETTING_PUBLIC_TOOLS = {
+    "ae.setCompositionDimensions": (
+        "composition_locator", "width", "height", "idempotency_key",
+    ),
+    "ae.setCompositionDuration": (
+        "composition_locator", "duration", "idempotency_key",
+    ),
+    "ae.setCompositionFrameRate": (
+        "composition_locator", "frame_rate", "idempotency_key",
+    ),
+    "ae.setCompositionPixelAspectRatio": (
+        "composition_locator", "pixel_aspect_ratio", "idempotency_key",
+    ),
+    "ae.setCompositionBackgroundColor": (
+        "composition_locator", "background_color", "idempotency_key",
+    ),
+    "ae.setCompositionDisplayStartTime": (
+        "composition_locator", "display_start_time", "idempotency_key",
+    ),
+}
+
 
 def _locator(
     kind: str,
@@ -87,6 +108,7 @@ def _settings(name: str) -> dict[str, Any]:
         "frameDuration": _time(1, 24),
         "frameRate": _ratio(24, 1),
         "pixelAspectRatio": _ratio(1, 1),
+        "backgroundColor": {"red": 0, "green": 0, "blue": 0, "alpha": 255},
         "workArea": {"start": _time(0, 1), "duration": _time(10, 1)},
         "displayStartTime": _time(0, 1),
         "layerCount": 2,
@@ -102,10 +124,21 @@ VALUE_MODELS = {
     PC.PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID: PC.ProjectItemCommentSetValue,
     PC.PROJECT_ITEM_LABEL_SET_CAPABILITY_ID: PC.ProjectItemLabelSetValue,
     PC.COMPOSITION_DUPLICATE_CAPABILITY_ID: PC.CompositionDuplicateValue,
+    PC.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID:
+        PC.CompositionSettingsSetValue,
+    PC.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID:
+        PC.CompositionSettingsSetValue,
 }
 
 
 def _descriptor(contract: PC.CapabilityContract) -> N.NativeCapabilityDescriptor:
+    undo = (
+        "not-applicable"
+        if contract.risk == "read"
+        else "none"
+        if contract.capability_id == PC.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID
+        else "ae-undo-group"
+    )
     return N.NativeCapabilityDescriptor(
         detail="full",
         id=contract.capability_id,
@@ -116,7 +149,7 @@ def _descriptor(contract: PC.CapabilityContract) -> N.NativeCapabilityDescriptor
         mutability="read-only" if contract.risk == "read" else "mutating",
         idempotency=contract.idempotency,
         cancellation="before-dispatch",
-        undo="not-applicable" if contract.risk == "read" else "ae-undo-group",
+        undo=undo,
         side_effect_summary=contract.side_effect_summary,
         preconditions=contract.preconditions,
         compatibility=N.NativeCompatibility(
@@ -218,6 +251,21 @@ class PackageBackend(N.NativeInvokeBackend):
         if capability == PC.COMPOSITION_SETTINGS_READ_CAPABILITY_ID:
             name = "Fixture Duplicate" if comp_locator["objectId"] == NEW_COMP_OBJECT else "Fixture Comp"
             return {"compositionLocator": comp_locator, **_settings(name)}
+        if capability == PC.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID:
+            before = _settings("Fixture Comp")
+            after = {
+                **before,
+                "displayStartTime": _time(
+                    arguments["displayStartTime"]["value"],
+                    arguments["displayStartTime"]["scale"],
+                ),
+            }
+            return {
+                "changed": True,
+                "compositionLocator": comp_locator,
+                "before": before,
+                "after": after,
+            }
         if capability == PC.COMPOSITION_WORK_AREA_SET_CAPABILITY_ID:
             return {
                 "changed": True,
@@ -286,9 +334,45 @@ class PackageBackend(N.NativeInvokeBackend):
                     algorithm="sha256-rfc8785-jcs-v1",
                     digest=digest,
                 ),
-                undo=N.NativeUndoEvidence(available=True, verified=False) if is_write else None,
+                undo=(
+                    N.NativeUndoEvidence(
+                        available=request.capability_id
+                        != PC.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID,
+                        verified=False,
+                    )
+                    if is_write
+                    else None
+                ),
             ),
         )
+
+
+class RescaledFrameRateBackend(PackageBackend):
+    def __init__(self, *, after_duration_value: int = 250) -> None:
+        super().__init__()
+        self.after_duration_value = after_duration_value
+
+    def _value(self, request: N.NativeInvokeRequest) -> dict[str, Any]:
+        if request.capability_id != PC.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID:
+            return super()._value(request)
+        before = _settings("Fixture Comp")
+        after = {
+            **before,
+            "duration": _time(self.after_duration_value, 25),
+            "frameDuration": _time(1, 25),
+            "frameRate": _ratio(25, 1),
+            "workArea": {
+                "start": _time(0, 25),
+                "duration": _time(250, 25),
+            },
+            "displayStartTime": _time(0, 25),
+        }
+        return {
+            "changed": True,
+            "compositionLocator": request.arguments["compositionLocator"],
+            "before": before,
+            "after": after,
+        }
 
 
 def _deadline() -> int:
@@ -309,7 +393,7 @@ def test_public_schema_names_are_frozen_closed_and_annotated():
 
 
 def test_native_contracts_are_closed_and_digest_bound():
-    assert len(PC.CAPABILITY_CONTRACTS) == 8
+    assert len(PC.CAPABILITY_CONTRACTS) == 14
     for contract in PC.CAPABILITY_CONTRACTS.values():
         assert contract.input_schema["additionalProperties"] is False
         assert contract.result_schema["additionalProperties"] is False
@@ -317,6 +401,108 @@ def test_native_contracts_are_closed_and_digest_bound():
             "inputSchema": contract.input_schema,
             "resultSchema": contract.result_schema,
         })
+    display_start = _descriptor(
+        PC.CAPABILITY_CONTRACTS[PC.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID]
+    )
+    assert display_start.undo == "none"
+    PC._validate_descriptor(
+        display_start,
+        host_platform="macos-arm64",
+        contract=PC.CAPABILITY_CONTRACTS[
+            PC.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_composition_setting_tools_are_registered_and_listed(monkeypatch):
+    load_all()
+    assert set(COMPOSITION_SETTING_PUBLIC_TOOLS) <= set(HANDLERS)
+    for verb, expected_fields in COMPOSITION_SETTING_PUBLIC_TOOLS.items():
+        schema_cls, _handler = HANDLERS[verb]
+        schema = schema_cls.model_json_schema()
+        assert schema["additionalProperties"] is False
+        assert set(schema["properties"]) == set(expected_fields)
+    monkeypatch.setattr(
+        server_module,
+        "_filtered_tool_names",
+        lambda: set(COMPOSITION_SETTING_PUBLIC_TOOLS),
+    )
+    server = server_module.build_server()
+    listed = await server._ae_list_tools()
+    assert {tool.name for tool in listed} == {
+        name.replace(".", "_") for name in COMPOSITION_SETTING_PUBLIC_TOOLS
+    }
+
+
+@pytest.mark.asyncio
+async def test_display_start_time_reports_non_undoable_write():
+    execution = await PC.invoke_composition_setting_set(
+        PackageBackend(),
+        request_id="package-display-start-1",
+        capability_id=PC.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID,
+        arguments={
+            "compositionLocator": _locator("composition", COMP_OBJECT),
+            "displayStartTime": {"value": -1, "scale": 24},
+            "idempotencyKey": "display-start-intent-0001",
+        },
+        deadline_unix_ms=_deadline(),
+    )
+    assert execution.implementation.undo == "none"
+    assert execution.evidence.undo is not None
+    assert execution.evidence.undo.available is False
+    assert execution.evidence.undo.verified is False
+    assert execution.evidence.undo.group_id is None
+    assert execution.value.before.display_start_time == PC.ExactTime(
+        value=0, scale=1, seconds_rational="0"
+    )
+    assert execution.value.after.display_start_time == PC.ExactTime(
+        value=-1, scale=24, seconds_rational="-1/24"
+    )
+
+
+@pytest.mark.asyncio
+async def test_frame_rate_accepts_equivalent_ae_timebase_rescaling():
+    execution = await PC.invoke_composition_setting_set(
+        RescaledFrameRateBackend(),
+        request_id="package-frame-rate-rescale-1",
+        capability_id=PC.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID,
+        arguments={
+            "compositionLocator": _locator("composition", COMP_OBJECT),
+            "frameRate": {"numerator": 25, "denominator": 1},
+            "idempotencyKey": "frame-rate-rescale-intent-0001",
+        },
+        deadline_unix_ms=_deadline(),
+    )
+
+    assert execution.value.after.frame_rate == PC.ExactRatio(
+        numerator=25, denominator=1, rational="25"
+    )
+    assert execution.value.after.duration == PC.ExactTime(
+        value=250, scale=25, seconds_rational="10"
+    )
+    assert execution.value.after.work_area.duration == PC.ExactTime(
+        value=250, scale=25, seconds_rational="10"
+    )
+
+
+@pytest.mark.asyncio
+async def test_frame_rate_rejects_a_real_untargeted_time_change():
+    with pytest.raises(N.NativeBackendError) as raised:
+        await PC.invoke_composition_setting_set(
+            RescaledFrameRateBackend(after_duration_value=251),
+            request_id="package-frame-rate-duration-drift-1",
+            capability_id=PC.COMPOSITION_FRAME_RATE_SET_CAPABILITY_ID,
+            arguments={
+                "compositionLocator": _locator("composition", COMP_OBJECT),
+                "frameRate": {"numerator": 25, "denominator": 1},
+                "idempotencyKey": "frame-rate-duration-drift-intent-0001",
+            },
+            deadline_unix_ms=_deadline(),
+        )
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
 
 
 def test_project_item_metadata_preserves_native_optional_fact_omission():

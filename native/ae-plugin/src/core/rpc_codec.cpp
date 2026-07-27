@@ -830,6 +830,65 @@ std::string canonical_project_item_text_set_arguments(
   return "{" + members[0] + "," + members[1] + "," + members[2] + "}";
 }
 
+std::string canonical_composition_setting_set_arguments(
+    const InvokeParams& value) {
+  if (!value.composition_locator.has_value()
+      || !valid_output_locator(*value.composition_locator)
+      || value.composition_locator->kind != "composition"
+      || !valid_idempotency_key(value.idempotency_key)) {
+    invalid_argument("invalid composition setting arguments digest input");
+  }
+  if (value.capability_id == kCompositionDimensionsSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"height\":" + std::to_string(value.composition_create_height)
+        + ",\"idempotencyKey\":" + json_string(value.idempotency_key)
+        + ",\"width\":" + std::to_string(value.composition_create_width) + "}";
+  }
+  if (value.capability_id == kCompositionDurationSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"duration\":{\"scale\":"
+        + std::to_string(value.composition_create_duration.scale)
+        + ",\"value\":" + std::to_string(value.composition_create_duration.value)
+        + "},\"idempotencyKey\":" + json_string(value.idempotency_key) + "}";
+  }
+  if (value.capability_id == kCompositionFrameRateSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"frameRate\":{\"denominator\":"
+        + std::to_string(value.composition_create_frame_rate.denominator)
+        + ",\"numerator\":"
+        + std::to_string(value.composition_create_frame_rate.numerator)
+        + "},\"idempotencyKey\":" + json_string(value.idempotency_key) + "}";
+  }
+  if (value.capability_id == kCompositionPixelAspectRatioSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"idempotencyKey\":" + json_string(value.idempotency_key)
+        + ",\"pixelAspectRatio\":{\"denominator\":"
+        + std::to_string(
+            value.composition_create_pixel_aspect_ratio.denominator)
+        + ",\"numerator\":"
+        + std::to_string(
+            value.composition_create_pixel_aspect_ratio.numerator) + "}}";
+  }
+  if (value.capability_id == kCompositionBackgroundColorSetCapability
+      && value.layer_create_color.has_value()) {
+    const auto& color = *value.layer_create_color;
+    return "{\"backgroundColor\":{\"alpha\":" + std::to_string(color.alpha)
+        + ",\"blue\":" + std::to_string(color.blue)
+        + ",\"green\":" + std::to_string(color.green)
+        + ",\"red\":" + std::to_string(color.red) + "}"
+        + ",\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"idempotencyKey\":" + json_string(value.idempotency_key) + "}";
+  }
+  if (value.capability_id == kCompositionDisplayStartTimeSetCapability) {
+    return "{\"compositionLocator\":" + locator_json(*value.composition_locator)
+        + ",\"displayStartTime\":{\"scale\":"
+        + std::to_string(value.target_time.scale)
+        + ",\"value\":" + std::to_string(value.target_time.value)
+        + "},\"idempotencyKey\":" + json_string(value.idempotency_key) + "}";
+  }
+  invalid_argument("invalid composition setting capability");
+}
+
 std::string canonical_layer_time_input(const CompositionCurrentTime& value) {
   if (value.scale == 0
       || value.seconds_rational
@@ -1262,6 +1321,13 @@ std::string canonical_request(const ParsedRequest& request) {
             + ",\"start\":{\"scale\":"
             + std::to_string(value.work_area_start.scale) + ",\"value\":"
             + std::to_string(value.work_area_start.value) + "}}";
+      } else if (value.capability_id == kCompositionDimensionsSetCapability
+          || value.capability_id == kCompositionDurationSetCapability
+          || value.capability_id == kCompositionFrameRateSetCapability
+          || value.capability_id == kCompositionPixelAspectRatioSetCapability
+          || value.capability_id == kCompositionBackgroundColorSetCapability
+          || value.capability_id == kCompositionDisplayStartTimeSetCapability) {
+        arguments = canonical_composition_setting_set_arguments(value);
       } else if (value.capability_id == "ae.project.item.name.set"
           || value.capability_id == "ae.project.item.comment.set") {
         const std::string_view field = value.capability_id == "ae.project.item.name.set"
@@ -1795,6 +1861,149 @@ ParsedRequest classify_request(const JsonValue& root) {
             result.work_area_start,
             result.work_area_duration,
             result.idempotency_key);
+      } else if (capability == "ae.composition.dimensions.set"
+          || capability == "ae.composition.duration.set"
+          || capability == "ae.composition.frame-rate.set"
+          || capability == "ae.composition.pixel-aspect-ratio.set"
+          || capability == "ae.composition.background-color.set"
+          || capability == "ae.composition.display-start-time.set") {
+        const bool dimensions =
+            capability == kCompositionDimensionsSetCapability;
+        const bool duration =
+            capability == kCompositionDurationSetCapability;
+        const bool frame_rate =
+            capability == kCompositionFrameRateSetCapability;
+        const bool pixel_aspect_ratio =
+            capability == kCompositionPixelAspectRatioSetCapability;
+        const bool background_color =
+            capability == kCompositionBackgroundColorSetCapability;
+        const std::string_view field = dimensions
+            ? "width"
+            : duration
+                ? "duration"
+                : frame_rate
+                    ? "frameRate"
+                    : pixel_aspect_ratio
+                        ? "pixelAspectRatio"
+                        : background_color
+                            ? "backgroundColor" : "displayStartTime";
+        const bool closed = dimensions
+            ? exact_keys(
+                *arguments,
+                {"compositionLocator", "width", "height", "idempotencyKey"},
+                {"compositionLocator", "width", "height", "idempotencyKey"})
+            : duration
+                ? exact_keys(
+                    *arguments,
+                    {"compositionLocator", "duration", "idempotencyKey"},
+                    {"compositionLocator", "duration", "idempotencyKey"})
+                : frame_rate
+                    ? exact_keys(
+                        *arguments,
+                        {"compositionLocator", "frameRate", "idempotencyKey"},
+                        {"compositionLocator", "frameRate", "idempotencyKey"})
+                    : pixel_aspect_ratio
+                        ? exact_keys(
+                            *arguments,
+                            {"compositionLocator", "pixelAspectRatio",
+                                "idempotencyKey"},
+                            {"compositionLocator", "pixelAspectRatio",
+                                "idempotencyKey"})
+                        : background_color
+                            ? exact_keys(
+                                *arguments,
+                                {"compositionLocator", "backgroundColor",
+                                    "idempotencyKey"},
+                                {"compositionLocator", "backgroundColor",
+                                    "idempotencyKey"})
+                            : exact_keys(
+                                *arguments,
+                                {"compositionLocator", "displayStartTime",
+                                    "idempotencyKey"},
+                                {"compositionLocator", "displayStartTime",
+                                    "idempotencyKey"});
+        if (!closed) {
+          invalid_argument("composition setting arguments are not closed");
+        }
+        result.composition_locator = parse_locator(
+            *member(*arguments, "compositionLocator"), "composition");
+        if (dimensions) {
+          result.composition_create_width =
+              static_cast<std::uint32_t>(required_uint(
+                  *arguments, "width", CodecErrorKind::kInvalidArgument,
+                  1, 30'000));
+          result.composition_create_height =
+              static_cast<std::uint32_t>(required_uint(
+                  *arguments, "height", CodecErrorKind::kInvalidArgument,
+                  1, 30'000));
+        } else if (duration) {
+          result.composition_create_duration = parse_exact_time_input(
+              *member(*arguments, "duration"), "duration", false);
+        } else if (frame_rate || pixel_aspect_ratio) {
+          const JsonValue* ratio_value = member(*arguments, field);
+          const JsonValue::Object* ratio =
+              ratio_value == nullptr ? nullptr : object_of(*ratio_value);
+          if (ratio == nullptr
+              || !exact_keys(
+                  *ratio,
+                  {"numerator", "denominator"},
+                  {"numerator", "denominator"})) {
+            invalid_argument(
+                std::string(field) + " must be a closed positive ratio");
+          }
+          CompositionPositiveRatio parsed_ratio;
+          parsed_ratio.numerator = static_cast<std::int32_t>(required_uint(
+              *ratio, "numerator", CodecErrorKind::kInvalidArgument,
+              1, std::numeric_limits<std::int32_t>::max()));
+          parsed_ratio.denominator = static_cast<std::int32_t>(required_uint(
+              *ratio, "denominator", CodecErrorKind::kInvalidArgument,
+              1, std::numeric_limits<std::int32_t>::max()));
+          if (frame_rate && parsed_ratio.denominator != 1) {
+            invalid_argument(
+                "fractional frame rates require a pinned-host normalization measurement");
+          }
+          parsed_ratio.rational = canonical_seconds_rational(
+              parsed_ratio.numerator,
+              static_cast<std::uint32_t>(parsed_ratio.denominator));
+          if (frame_rate) {
+            result.composition_create_frame_rate = parsed_ratio;
+          } else {
+            result.composition_create_pixel_aspect_ratio = parsed_ratio;
+          }
+        } else if (background_color) {
+          const JsonValue* color_value = member(*arguments, "backgroundColor");
+          const JsonValue::Object* color =
+              color_value == nullptr ? nullptr : object_of(*color_value);
+          if (color == nullptr
+              || !exact_keys(
+                  *color,
+                  {"red", "green", "blue", "alpha"},
+                  {"red", "green", "blue", "alpha"})) {
+            invalid_argument("backgroundColor must be closed opaque RGBA");
+          }
+          result.layer_create_color = CompositionLayerCreateColor{
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "red", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "green", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "blue", CodecErrorKind::kInvalidArgument, 0, 255)),
+              static_cast<std::uint16_t>(required_uint(
+                  *color, "alpha", CodecErrorKind::kInvalidArgument, 255, 255)),
+          };
+        } else {
+          result.target_time = parse_layer_exact_time_input(
+              *member(*arguments, "displayStartTime"),
+              "displayStartTime",
+              false);
+        }
+        result.idempotency_key = required_string(
+            *arguments, "idempotencyKey", CodecErrorKind::kInvalidArgument);
+        if (!valid_idempotency_key(result.idempotency_key)) {
+          invalid_argument("invalid composition setting idempotency key");
+        }
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            canonical_composition_setting_set_arguments(result));
       } else if (capability == "ae.project.item.name.set"
           || capability == "ae.project.item.comment.set") {
         const std::string field = capability == "ae.project.item.name.set"
@@ -3848,7 +4057,12 @@ std::string canonical_composition_settings_value(const CompositionSettings& valu
       || value.layer_count > kMaxSafeInteger) {
     invalid_argument("invalid composition settings result");
   }
-  return "{\"compositionLocator\":" + locator_json(value.composition_locator)
+  return "{\"backgroundColor\":{\"alpha\":"
+      + std::to_string(value.background_color.alpha)
+      + ",\"blue\":" + std::to_string(value.background_color.blue)
+      + ",\"green\":" + std::to_string(value.background_color.green)
+      + ",\"red\":" + std::to_string(value.background_color.red)
+      + "},\"compositionLocator\":" + locator_json(value.composition_locator)
       + ",\"displayStartTime\":" + canonical_current_time(value.display_start_time)
       + ",\"duration\":" + canonical_current_time(value.duration)
       + ",\"frameDuration\":" + canonical_current_time(value.frame_duration)
@@ -3866,7 +4080,12 @@ std::string canonical_composition_settings_value(const CompositionSettings& valu
 
 std::string canonical_composition_settings_snapshot(const CompositionSettings& value) {
   (void)canonical_composition_settings_value(value);
-  return "{\"displayStartTime\":" + canonical_current_time(value.display_start_time)
+  return "{\"backgroundColor\":{\"alpha\":"
+      + std::to_string(value.background_color.alpha)
+      + ",\"blue\":" + std::to_string(value.background_color.blue)
+      + ",\"green\":" + std::to_string(value.background_color.green)
+      + ",\"red\":" + std::to_string(value.background_color.red)
+      + "},\"displayStartTime\":" + canonical_current_time(value.display_start_time)
       + ",\"duration\":" + canonical_current_time(value.duration)
       + ",\"frameDuration\":" + canonical_current_time(value.frame_duration)
       + ",\"frameRate\":" + canonical_positive_ratio(value.frame_rate, true)
@@ -3903,6 +4122,22 @@ std::string canonical_composition_work_area_set_value(
       + canonical_work_area_pair(value.after_start, value.after_duration)
       + ",\"beforeWorkArea\":"
       + canonical_work_area_pair(value.before_start, value.before_duration)
+      + ",\"changed\":true,\"compositionLocator\":"
+      + locator_json(value.composition_locator) + "}";
+}
+
+std::string canonical_composition_settings_set_value(
+    const CompositionSettingsChanged& value) {
+  if (!value.changed
+      || !valid_output_locator(value.composition_locator)
+      || value.composition_locator.kind != "composition"
+      || value.before.composition_locator != value.composition_locator
+      || value.after.composition_locator != value.composition_locator
+      || value.before == value.after) {
+    invalid_argument("invalid composition settings mutation result");
+  }
+  return "{\"after\":" + canonical_composition_settings_snapshot(value.after)
+      + ",\"before\":" + canonical_composition_settings_snapshot(value.before)
       + ",\"changed\":true,\"compositionLocator\":"
       + locator_json(value.composition_locator) + "}";
 }
@@ -5105,6 +5340,39 @@ std::string digest_composition_work_area_set_postcondition(
       + canonical_composition_work_area_set_value(value) + "}");
 }
 
+std::string composition_settings_set_postcondition_kind(
+    std::string_view capability_id) {
+  if (capability_id == kCompositionDimensionsSetCapability) {
+    return "composition-dimensions-set";
+  }
+  if (capability_id == kCompositionDurationSetCapability) {
+    return "composition-duration-set";
+  }
+  if (capability_id == kCompositionFrameRateSetCapability) {
+    return "composition-frame-rate-set";
+  }
+  if (capability_id == kCompositionPixelAspectRatioSetCapability) {
+    return "composition-pixel-aspect-ratio-set";
+  }
+  if (capability_id == kCompositionBackgroundColorSetCapability) {
+    return "composition-background-color-set";
+  }
+  if (capability_id == kCompositionDisplayStartTimeSetCapability) {
+    return "composition-display-start-time-set";
+  }
+  invalid_argument("invalid composition settings mutation capability");
+}
+
+std::string digest_composition_settings_set_postcondition(
+    std::string_view capability_id,
+    const CompositionSettingsChanged& value) {
+  (void)composition_settings_set_postcondition_kind(capability_id);
+  return sha256_hex(
+      "{\"capabilityId\":" + json_string(capability_id)
+      + ",\"capabilityVersion\":1,\"value\":"
+      + canonical_composition_settings_set_value(value) + "}");
+}
+
 std::string digest_project_item_text_set_arguments(
     std::string_view capability_id,
     const ObjectLocator& item_locator,
@@ -5317,6 +5585,68 @@ std::string composition_settings_persistent_diagnostic_fields(
       + ",\"height\":" + std::to_string(value.height)
       + ",\"layerCount\":" + std::to_string(value.layer_count)
       + ",\"projectGeneration\":"
+      + std::to_string(value.composition_locator.generation);
+}
+
+std::string composition_settings_change_persistent_diagnostic_fields(
+    std::string_view capability_id,
+    const CompositionSettingsChanged& value) {
+  std::string fields = "\"changed\":"
+      + std::string(value.changed ? "true" : "false");
+  if (capability_id == kCompositionDimensionsSetCapability) {
+    fields += ",\"beforeWidth\":" + std::to_string(value.before.width)
+        + ",\"beforeHeight\":" + std::to_string(value.before.height)
+        + ",\"afterWidth\":" + std::to_string(value.after.width)
+        + ",\"afterHeight\":" + std::to_string(value.after.height);
+  } else if (capability_id == kCompositionDurationSetCapability) {
+    fields += ",\"beforeDuration\":{\"value\":"
+        + std::to_string(value.before.duration.value)
+        + ",\"scale\":" + std::to_string(value.before.duration.scale)
+        + "},\"afterDuration\":{\"value\":"
+        + std::to_string(value.after.duration.value)
+        + ",\"scale\":" + std::to_string(value.after.duration.scale) + "}";
+  } else if (capability_id == kCompositionFrameRateSetCapability) {
+    fields += ",\"beforeFrameRate\":{\"numerator\":"
+        + std::to_string(value.before.frame_rate.numerator)
+        + ",\"denominator\":"
+        + std::to_string(value.before.frame_rate.denominator)
+        + "},\"afterFrameRate\":{\"numerator\":"
+        + std::to_string(value.after.frame_rate.numerator)
+        + ",\"denominator\":"
+        + std::to_string(value.after.frame_rate.denominator) + "}";
+  } else if (capability_id == kCompositionPixelAspectRatioSetCapability) {
+    fields += ",\"beforePixelAspectRatio\":{\"numerator\":"
+        + std::to_string(value.before.pixel_aspect_ratio.numerator)
+        + ",\"denominator\":"
+        + std::to_string(value.before.pixel_aspect_ratio.denominator)
+        + "},\"afterPixelAspectRatio\":{\"numerator\":"
+        + std::to_string(value.after.pixel_aspect_ratio.numerator)
+        + ",\"denominator\":"
+        + std::to_string(value.after.pixel_aspect_ratio.denominator) + "}";
+  } else if (capability_id == kCompositionBackgroundColorSetCapability) {
+    const auto color_fields = [](const CompositionColor& color) {
+      return "{\"red\":" + std::to_string(color.red)
+          + ",\"green\":" + std::to_string(color.green)
+          + ",\"blue\":" + std::to_string(color.blue)
+          + ",\"alpha\":" + std::to_string(color.alpha) + "}";
+    };
+    fields += ",\"beforeBackgroundColor\":"
+        + color_fields(value.before.background_color)
+        + ",\"afterBackgroundColor\":"
+        + color_fields(value.after.background_color);
+  } else if (capability_id == kCompositionDisplayStartTimeSetCapability) {
+    fields += ",\"beforeDisplayStartTime\":{\"value\":"
+        + std::to_string(value.before.display_start_time.value)
+        + ",\"scale\":"
+        + std::to_string(value.before.display_start_time.scale)
+        + "},\"afterDisplayStartTime\":{\"value\":"
+        + std::to_string(value.after.display_start_time.value)
+        + ",\"scale\":"
+        + std::to_string(value.after.display_start_time.scale) + "}";
+  } else {
+    invalid_argument("unsupported composition setting diagnostic capability");
+  }
+  return fields + ",\"projectGeneration\":"
       + std::to_string(value.composition_locator.generation);
 }
 
@@ -6225,6 +6555,25 @@ std::string package_descriptor(
     const CapabilitiesSuccess& response,
     const PackageDescriptorSpec& spec,
     std::string_view contract_digest) {
+  const CoreCapabilityContractProjection* projection = nullptr;
+  for (const auto& candidate : kCompositionSnapshotCapabilities) {
+    if (candidate.id == spec.id) {
+      projection = &candidate;
+      break;
+    }
+  }
+  if (projection != nullptr) {
+    if (response.detail == CapabilityDetail::kFull
+        && contract_digest != projection->contract_digest) {
+      invalid_argument(
+          std::string(spec.id)
+          + " contract digest does not match the generated Core projection");
+    }
+    return std::string(
+        response.detail == CapabilityDetail::kFull
+        ? projection->full_json
+        : projection->summary_json);
+  }
   const std::string mutability = spec.mutating ? "mutating" : "read-only";
   const std::string risk = spec.mutating ? "write" : "read";
   const std::string idempotency = spec.mutating ? "idempotency-key" : "idempotent";
@@ -6387,7 +6736,7 @@ std::string composition_settings_descriptor(const CapabilitiesSuccess& response)
   static constexpr std::string_view arguments = R"aemcp({"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"}})aemcp";
   static constexpr std::string_view positive_value = R"aemcp({"compositionLocator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"44444444-4444-4444-8444-444444444444","generation":8,"objectId":"66666666-6666-4666-8666-666666666666"},"name":"SYNTHETIC_COMPOSITION","width":1920,"height":1080,"duration":{"value":5,"scale":1,"secondsRational":"5"},"frameDuration":{"value":1,"scale":24,"secondsRational":"1/24"},"frameRate":{"numerator":24,"denominator":1,"rational":"24"},"pixelAspectRatio":{"numerator":1,"denominator":1,"rational":"1"},"workArea":{"start":{"value":0,"scale":1,"secondsRational":"0"},"duration":{"value":5,"scale":1,"secondsRational":"5"}},"displayStartTime":{"value":0,"scale":1,"secondsRational":"0"},"layerCount":0})aemcp";
   if (response.detail == CapabilityDetail::kFull
-      && response.composition_settings_read_contract_digest != "a7ae9383b4a627bf6f3f42cb929eafa724cf7bc30a172b67ddbcaf9e754f5e9b") {
+      && response.composition_settings_read_contract_digest != "ceda810aba822f06ac05534ccbcb485a5866f094bb9f682de699009f4bdc4631") {
     invalid_argument("ae.composition.settings.read contract digest does not match the compiled descriptor");
   }
   return package_descriptor(response, {
@@ -6500,7 +6849,7 @@ std::string composition_duplicate_descriptor(const CapabilitiesSuccess& response
       "\"objectId\":\"66666666-6666-4666-8666-666666666666\"",
       "\"objectId\":\"77777777-7777-4777-8777-777777777777\"");
   if (response.detail == CapabilityDetail::kFull
-      && response.composition_duplicate_contract_digest != "96e7a14f7e2b983fac41a918657b101f54638d5ae6acee6003757bc6458b3be3") {
+      && response.composition_duplicate_contract_digest != "ff929d2ea5b499d279f9e86a5757f0be6b04561dfabd8e1e3e7443616e82f2ab") {
     invalid_argument("ae.composition.duplicate contract digest does not match the compiled descriptor");
   }
   return package_descriptor(response, {
@@ -7319,7 +7668,8 @@ std::vector<std::uint8_t> encode_native_value_success(
     const ObjectLocator& scope_locator,
     std::string value_json,
     std::string expected_postcondition_digest,
-    bool mutating) {
+    bool mutating,
+    bool undo_available = true) {
   require_request_id(response.request_id);
   require_uuid(response.session_id, "session ID");
   require_uuid(response.host_instance_id, "host instance ID");
@@ -7356,7 +7706,11 @@ std::vector<std::uint8_t> encode_native_value_success(
       + json_string(response.request_id) + ",\"sessionId\":"
       + json_string(response.session_id) + ",\"startedAtUnixMs\":"
       + std::to_string(response.started_at_unix_ms);
-  if (mutating) json += ",\"undo\":{\"available\":true,\"verified\":false}";
+  if (mutating) {
+    json += ",\"undo\":{\"available\":"
+        + std::string(undo_available ? "true" : "false")
+        + ",\"verified\":false}";
+  }
   json += "},\"outcome\":\"succeeded\",\"value\":" + value_json
       + "},\"sessionId\":" + json_string(response.session_id)
       + ",\"wireVersion\":1}";
@@ -7685,6 +8039,14 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
         ? descriptor.full_json : descriptor.summary_json;
     needs_comma = true;
   }
+  for (std::size_t index = 0; index < kCompositionSettingCapabilityCount; ++index) {
+    if (!response.include_composition_settings[index]) continue;
+    if (needs_comma) items.push_back(',');
+    const auto& descriptor = kCompositionSettingCapabilities[index];
+    items += response.detail == CapabilityDetail::kFull
+        ? descriptor.full_json : descriptor.summary_json;
+    needs_comma = true;
+  }
   items.push_back(']');
   const bool complete_full_registry = response.detail == CapabilityDetail::kFull
       && response.include_project_summary
@@ -7733,6 +8095,10 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
       && std::all_of(
           response.include_text_shape_marker.begin(),
           response.include_text_shape_marker.end(),
+          [](bool included) { return included; })
+      && std::all_of(
+          response.include_composition_settings.begin(),
+          response.include_composition_settings.end(),
           [](bool included) { return included; });
   if (complete_full_registry) {
     const std::string encoded_digest = sha256_hex(
@@ -8121,6 +8487,20 @@ std::vector<std::uint8_t> encode_composition_work_area_set_success(
       canonical_composition_work_area_set_value(response.value),
       digest_composition_work_area_set_postcondition(response.value),
       true);
+}
+
+std::vector<std::uint8_t> encode_composition_settings_set_success(
+    std::string_view capability_id,
+    const CompositionSettingsSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      capability_id,
+      composition_settings_set_postcondition_kind(capability_id),
+      response.value.composition_locator,
+      canonical_composition_settings_set_value(response.value),
+      digest_composition_settings_set_postcondition(capability_id, response.value),
+      true,
+      capability_id != kCompositionDisplayStartTimeSetCapability);
 }
 
 std::vector<std::uint8_t> encode_project_item_name_set_success(

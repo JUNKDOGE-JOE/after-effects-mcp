@@ -4,6 +4,7 @@
 #include "aemcp_native/mac_ipc_server.hpp"
 #include "aemcp_native/rpc_codec.hpp"
 
+#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -61,6 +62,7 @@ struct NativeRpcRuntimeInfo {
   std::string layer_property_keyframe_delete_contract_digest;
   std::string native_media_read_contract_digest;
   std::string native_media_write_contract_digest;
+  std::array<std::string, 6> composition_setting_contract_digests;
 };
 
 class NativeRpcObserver {
@@ -86,6 +88,12 @@ class HostIdleSignal {
   virtual ~HostIdleSignal() = default;
   [[nodiscard]] virtual bool request_idle() noexcept = 0;
 };
+
+// Classifies a terminal-evidence failure after host dispatch. Mutating
+// capabilities must remain ambiguous because the host write may have landed.
+[[nodiscard]] std::string_view post_dispatch_evidence_failure_code(
+    std::string_view capability_id,
+    bool graph_invalidation = false) noexcept;
 
 // Owns #72 framing/session state on the single IPC worker and bridges only
 // admitted invoke/cancel requests to HostDispatcher. It never calls HostApi;
