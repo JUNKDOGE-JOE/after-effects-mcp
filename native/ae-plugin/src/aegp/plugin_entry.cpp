@@ -2614,7 +2614,7 @@ class AegpHostApi final : public HostApi {
         static_cast<A_u_long>(command.time.scale)};
     const A_Ratio ratio{
         static_cast<A_long>(command.ratio.numerator),
-        static_cast<A_long>(command.ratio.denominator)};
+        static_cast<A_u_long>(command.ratio.denominator)};
     const AEGP_ColorVal color{
         static_cast<A_FpLong>(command.color.alpha) / 255.0,
         static_cast<A_FpLong>(command.color.red) / 255.0,
@@ -2629,11 +2629,14 @@ class AegpHostApi final : public HostApi {
       case CompositionSettingKind::kDuration:
         set_error = comp_suite->AEGP_SetCompDuration(comp, &time);
         break;
-      case CompositionSettingKind::kFrameRate:
+      case CompositionSettingKind::kFrameRate: {
+        const A_FpLong frame_rate =
+            static_cast<A_FpLong>(command.ratio.numerator)
+            / static_cast<A_FpLong>(command.ratio.denominator);
         set_error = comp_suite->AEGP_SetCompFrameRate(
-            comp, static_cast<A_FpLong>(command.ratio.numerator)
-                / static_cast<A_FpLong>(command.ratio.denominator));
+            comp, &frame_rate);
         break;
+      }
       case CompositionSettingKind::kPixelAspectRatio:
         set_error = comp_suite->AEGP_SetCompPixelAspectRatio(comp, &ratio);
         break;
