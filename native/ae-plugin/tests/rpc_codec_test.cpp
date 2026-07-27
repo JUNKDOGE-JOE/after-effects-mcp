@@ -98,6 +98,8 @@ using aemcp::native::rpc::composition_create_persistent_diagnostic_fields;
 using aemcp::native::rpc::project_context_persistent_diagnostic_fields;
 using aemcp::native::rpc::project_item_metadata_persistent_diagnostic_fields;
 using aemcp::native::rpc::composition_settings_persistent_diagnostic_fields;
+using aemcp::native::rpc::
+    composition_settings_change_persistent_diagnostic_fields;
 using aemcp::native::rpc::composition_work_area_persistent_diagnostic_fields;
 using aemcp::native::rpc::project_item_name_persistent_diagnostic_fields;
 using aemcp::native::rpc::project_item_comment_persistent_diagnostic_fields;
@@ -1809,6 +1811,16 @@ void project_composition_package_parses_and_serializes_all_eight_contracts() {
   private_metadata.comment = "PRIVATE_CUSTOMER_COMMENT_456";
   auto private_settings = composition_settings;
   private_settings.name = "PRIVATE_CUSTOMER_COMPOSITION_789";
+  auto diagnostic_changed_settings = private_settings;
+  diagnostic_changed_settings.width = 1280;
+  diagnostic_changed_settings.height = 720;
+  diagnostic_changed_settings.duration = {20, 1, "20"};
+  diagnostic_changed_settings.frame_rate = {30, 1, "30"};
+  diagnostic_changed_settings.pixel_aspect_ratio = {4, 3, "4/3"};
+  diagnostic_changed_settings.background_color = {10, 20, 30, 255};
+  diagnostic_changed_settings.display_start_time = {-1, 1, "-1"};
+  const aemcp::native::CompositionSettingsChanged diagnostic_settings_change{
+      true, composition_locator, private_settings, diagnostic_changed_settings};
   auto private_name_change = name_change;
   private_name_change.before_value = "PRIVATE_OLD_NAME";
   private_name_change.after_value = "PRIVATE_NEW_NAME";
@@ -1832,6 +1844,31 @@ void project_composition_package_parses_and_serializes_all_eight_contracts() {
     require(diagnostic.find("PRIVATE_") == std::string::npos
             && diagnostic.find("\"projectOpen\"") == std::string::npos,
         "package-150 persistent diagnostics exposed user text or used summary fallback");
+  }
+  const std::array<std::pair<std::string_view, std::string_view>, 6>
+      setting_diagnostic_expectations{{
+          {aemcp::native::kCompositionDimensionsSetCapability, "\"afterWidth\":1280"},
+          {aemcp::native::kCompositionDurationSetCapability, "\"afterDuration\""},
+          {aemcp::native::kCompositionFrameRateSetCapability, "\"afterFrameRate\""},
+          {aemcp::native::kCompositionPixelAspectRatioSetCapability,
+              "\"afterPixelAspectRatio\""},
+          {aemcp::native::kCompositionBackgroundColorSetCapability,
+              "\"afterBackgroundColor\""},
+          {aemcp::native::kCompositionDisplayStartTimeSetCapability,
+              "\"afterDisplayStartTime\""},
+      }};
+  for (const auto& [capability_id, expected_field]
+       : setting_diagnostic_expectations) {
+    const std::string diagnostic =
+        composition_settings_change_persistent_diagnostic_fields(
+            capability_id, diagnostic_settings_change);
+    require(
+        diagnostic.find(expected_field) != std::string::npos
+            && diagnostic.find("\"changed\":true") != std::string::npos
+            && diagnostic.find("\"projectGeneration\":") != std::string::npos
+            && diagnostic.find("PRIVATE_") == std::string::npos
+            && diagnostic.find("unrecognizedCapability") == std::string::npos,
+        "composition settings terminal diagnostic was missing or unsafe");
   }
   require(persistent_package_diagnostics[0].find("\"selectionReturned\":0")
               != std::string::npos
@@ -1925,11 +1962,13 @@ void project_composition_package_parses_and_serializes_all_eight_contracts() {
         "\"capabilityId\":\"" + std::string(capability_id) + "\"")
             != std::string::npos,
         "composition settings mutation used the wrong typed success branch");
-    const bool has_undo = encoded_change.find("\"undo\":") != std::string::npos;
     require(
-        has_undo
-            == (capability_id != "ae.composition.display-start-time.set"),
-        "composition settings mutation encoded the wrong Undo availability");
+        encoded_change.find(
+            capability_id == "ae.composition.display-start-time.set"
+                ? "\"undo\":{\"available\":false,\"verified\":false}"
+                : "\"undo\":{\"available\":true,\"verified\":false}")
+            != std::string::npos,
+        "composition settings mutation omitted or misreported Undo evidence");
   }
 
   auto invalid_metadata = metadata;

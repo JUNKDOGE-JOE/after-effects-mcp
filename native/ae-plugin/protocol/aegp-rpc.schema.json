@@ -12931,6 +12931,40 @@
         }
       }
     },
+    "nonUndoableMutationEvidence": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/executionEvidence"
+        },
+        {
+          "required": [
+            "effect",
+            "undo"
+          ],
+          "properties": {
+            "effect": {
+              "const": "committed"
+            },
+            "undo": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "available",
+                "verified"
+              ],
+              "properties": {
+                "available": {
+                  "const": false
+                },
+                "verified": {
+                  "const": false
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "executionEvidence": {
       "type": "object",
       "additionalProperties": false,
@@ -12989,6 +13023,32 @@
           "$ref": "#/$defs/undoEvidence"
         }
       },
+      "allOf": [
+        {
+          "if": {
+            "required": [
+              "effect"
+            ],
+            "properties": {
+              "effect": {
+                "const": "committed"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "undo"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "undo"
+              ]
+            }
+          }
+        }
+      ],
       "x-invariant": "outer-session-request-capability-must-match-and-completed-time-must-not-precede-started-time"
     },
     "projectSummaryValue": {

@@ -11908,6 +11908,17 @@ void log_completion(
       output << ",\"result\":{"
              << aemcp::native::rpc::composition_settings_persistent_diagnostic_fields(
                     completion.composition_settings_result);
+    } else if (completion.capability_id == kCompositionDimensionsSetCapability
+        || completion.capability_id == kCompositionDurationSetCapability
+        || completion.capability_id == kCompositionFrameRateSetCapability
+        || completion.capability_id == kCompositionPixelAspectRatioSetCapability
+        || completion.capability_id == kCompositionBackgroundColorSetCapability
+        || completion.capability_id == kCompositionDisplayStartTimeSetCapability) {
+      output << ",\"result\":{"
+             << aemcp::native::rpc::
+                    composition_settings_change_persistent_diagnostic_fields(
+                        completion.capability_id,
+                        completion.composition_settings_change_result);
     } else if (completion.capability_id == kCompositionWorkAreaSetCapability) {
       output << ",\"result\":{"
              << aemcp::native::rpc::composition_work_area_persistent_diagnostic_fields(

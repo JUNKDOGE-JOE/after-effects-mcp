@@ -258,6 +258,9 @@ struct ParsedRequest {
     const ProjectItemMetadata& value);
 [[nodiscard]] std::string composition_settings_persistent_diagnostic_fields(
     const CompositionSettings& value);
+[[nodiscard]] std::string composition_settings_change_persistent_diagnostic_fields(
+    std::string_view capability_id,
+    const CompositionSettingsChanged& value);
 [[nodiscard]] std::string composition_work_area_persistent_diagnostic_fields(
     const CompositionWorkAreaChanged& value);
 [[nodiscard]] std::string project_item_name_persistent_diagnostic_fields(

@@ -344,8 +344,22 @@ class CompositionSettingsPackage:
             "call": sequence, "phase": phase, "tool": tool,
             "isError": is_error, "payload": payload,
         })
+        row = self.runtime.matrix[tool]
+        row["invocations"] += 1
         require(
-            not is_error and error_code(payload) is None and payload.get("ok") is True,
+            row["invocations"] <= SPEC.case_by_tool[tool].max_primary_calls,
+            "display-start exceeded its declared call bound",
+        )
+        code = error_code(payload)
+        if code == "POSSIBLY_SIDE_EFFECTING_FAILURE":
+            row["status"] = "failed"
+            raise PossiblySideEffectingStop(
+                f"{tool} may have changed AE; reconcile state and audit before retry"
+            )
+        if is_error or code is not None:
+            row["status"] = "failed"
+        require(
+            not is_error and code is None and payload.get("ok") is True,
             f"{tool} failed",
         )
         implementation = mapping(payload.get("implementation"), "implementation absent")
@@ -385,12 +399,6 @@ class CompositionSettingsPackage:
             and provenance.get("hostInstanceId") == evidence.get("hostInstanceId")
             and provenance.get("sessionId") == evidence.get("sessionId"),
             "display-start provenance drifted",
-        )
-        row = self.runtime.matrix[tool]
-        row["invocations"] += 1
-        require(
-            row["invocations"] <= SPEC.case_by_tool[tool].max_primary_calls,
-            "display-start exceeded its declared call bound",
         )
         row["auditRequestIds"].append(audit["requestId"])
         row["undo"].update({

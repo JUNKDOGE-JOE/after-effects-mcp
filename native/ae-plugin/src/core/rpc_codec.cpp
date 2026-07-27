@@ -5588,6 +5588,68 @@ std::string composition_settings_persistent_diagnostic_fields(
       + std::to_string(value.composition_locator.generation);
 }
 
+std::string composition_settings_change_persistent_diagnostic_fields(
+    std::string_view capability_id,
+    const CompositionSettingsChanged& value) {
+  std::string fields = "\"changed\":"
+      + std::string(value.changed ? "true" : "false");
+  if (capability_id == kCompositionDimensionsSetCapability) {
+    fields += ",\"beforeWidth\":" + std::to_string(value.before.width)
+        + ",\"beforeHeight\":" + std::to_string(value.before.height)
+        + ",\"afterWidth\":" + std::to_string(value.after.width)
+        + ",\"afterHeight\":" + std::to_string(value.after.height);
+  } else if (capability_id == kCompositionDurationSetCapability) {
+    fields += ",\"beforeDuration\":{\"value\":"
+        + std::to_string(value.before.duration.value)
+        + ",\"scale\":" + std::to_string(value.before.duration.scale)
+        + "},\"afterDuration\":{\"value\":"
+        + std::to_string(value.after.duration.value)
+        + ",\"scale\":" + std::to_string(value.after.duration.scale) + "}";
+  } else if (capability_id == kCompositionFrameRateSetCapability) {
+    fields += ",\"beforeFrameRate\":{\"numerator\":"
+        + std::to_string(value.before.frame_rate.numerator)
+        + ",\"denominator\":"
+        + std::to_string(value.before.frame_rate.denominator)
+        + "},\"afterFrameRate\":{\"numerator\":"
+        + std::to_string(value.after.frame_rate.numerator)
+        + ",\"denominator\":"
+        + std::to_string(value.after.frame_rate.denominator) + "}";
+  } else if (capability_id == kCompositionPixelAspectRatioSetCapability) {
+    fields += ",\"beforePixelAspectRatio\":{\"numerator\":"
+        + std::to_string(value.before.pixel_aspect_ratio.numerator)
+        + ",\"denominator\":"
+        + std::to_string(value.before.pixel_aspect_ratio.denominator)
+        + "},\"afterPixelAspectRatio\":{\"numerator\":"
+        + std::to_string(value.after.pixel_aspect_ratio.numerator)
+        + ",\"denominator\":"
+        + std::to_string(value.after.pixel_aspect_ratio.denominator) + "}";
+  } else if (capability_id == kCompositionBackgroundColorSetCapability) {
+    const auto color_fields = [](const CompositionColor& color) {
+      return "{\"red\":" + std::to_string(color.red)
+          + ",\"green\":" + std::to_string(color.green)
+          + ",\"blue\":" + std::to_string(color.blue)
+          + ",\"alpha\":" + std::to_string(color.alpha) + "}";
+    };
+    fields += ",\"beforeBackgroundColor\":"
+        + color_fields(value.before.background_color)
+        + ",\"afterBackgroundColor\":"
+        + color_fields(value.after.background_color);
+  } else if (capability_id == kCompositionDisplayStartTimeSetCapability) {
+    fields += ",\"beforeDisplayStartTime\":{\"value\":"
+        + std::to_string(value.before.display_start_time.value)
+        + ",\"scale\":"
+        + std::to_string(value.before.display_start_time.scale)
+        + "},\"afterDisplayStartTime\":{\"value\":"
+        + std::to_string(value.after.display_start_time.value)
+        + ",\"scale\":"
+        + std::to_string(value.after.display_start_time.scale) + "}";
+  } else {
+    invalid_argument("unsupported composition setting diagnostic capability");
+  }
+  return fields + ",\"projectGeneration\":"
+      + std::to_string(value.composition_locator.generation);
+}
+
 std::string composition_work_area_persistent_diagnostic_fields(
     const CompositionWorkAreaChanged& value) {
   return "\"changed\":true,\"beforeStart\":{\"value\":"
@@ -7644,8 +7706,10 @@ std::vector<std::uint8_t> encode_native_value_success(
       + json_string(response.request_id) + ",\"sessionId\":"
       + json_string(response.session_id) + ",\"startedAtUnixMs\":"
       + std::to_string(response.started_at_unix_ms);
-  if (mutating && undo_available) {
-    json += ",\"undo\":{\"available\":true,\"verified\":false}";
+  if (mutating) {
+    json += ",\"undo\":{\"available\":"
+        + std::string(undo_available ? "true" : "false")
+        + ",\"verified\":false}";
   }
   json += "},\"outcome\":\"succeeded\",\"value\":" + value_json
       + "},\"sessionId\":" + json_string(response.session_id)

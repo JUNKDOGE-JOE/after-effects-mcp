@@ -34,7 +34,21 @@ Implementation may refine an ambiguous field, but a material scope expansion req
 
 ### Non-Undoable native writes
 
-For a native write whose pinned SDK documentation explicitly says non-Undoable, the capability must report undo.available=false and undo.verified=false. It must not open an AE Undo group for that operation, and must not claim an Undo entry, Undo availability, Undo execution, or Undo restoration. Acceptance must record the SDK citation, the public request and response, before/after readback at both the native and public layers, audit and postcondition evidence, and a distinct idempotent compensating public write that restores the exact prior state with an independently verified full postcondition. A real AE Undo may be reported only if a hardware run proves that this exact operation restores the prior state; until then it must never be claimed, and never inferred from AEGP_StartUndoGroup/AEGP_EndUndoGroup returning success or from an Edit-menu label.
+The executable definition is `native/ae-plugin/protocol/aegp-rpc.schema.json`:
+every successful mutation response must contain an `evidence.undo` object, while
+read-only responses must omit it. For a native write whose pinned SDK
+documentation explicitly says non-Undoable, that object is exactly
+`{"available":false,"verified":false}`. Absence is invalid. The capability must
+not open an AE Undo group for that operation, and must not claim an Undo entry,
+Undo availability, Undo execution, or Undo restoration. Acceptance must record
+the SDK citation, the public request and response, before/after readback at both
+the native and public layers, audit and postcondition evidence, and a distinct
+idempotent compensating public write that restores the exact prior state with
+an independently verified full postcondition. A real AE Undo may be reported
+only if a hardware run proves that this exact operation restores the prior
+state; until then it must never be claimed, and never inferred from
+AEGP_StartUndoGroup/AEGP_EndUndoGroup returning success or from an Edit-menu
+label.
 
 Do not open the group merely to test this: source evidence cannot distinguish no entry from a phantom entry that appears in Edit but does not restore the value. A phantom entry is worse because a user can see the menu respond and reasonably believe the write was reverted.
 

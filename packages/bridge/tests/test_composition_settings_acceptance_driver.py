@@ -395,6 +395,45 @@ async def test_display_start_asserts_no_undo_group_instead_of_skipping_check():
 
 
 @pytest.mark.asyncio
+async def test_display_start_records_uncertain_write_before_success_assertions():
+    runtime = _unit_runtime()
+    package = driver.CompositionSettingsPackage(
+        runtime, fixture_name="Comp Settings Fixture"
+    )
+    arguments = {
+        "composition_locator": _locator("composition"),
+        "display_start_time": {"value": -1, "scale": 1},
+        "idempotency_key": "display-start-uncertain-key",
+    }
+
+    class Session:
+        async def call(self, _tool, _received):
+            return True, {
+                "ok": False,
+                "error": {
+                    "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                    "sideEffect": "may-have-occurred",
+                },
+            }
+
+    with pytest.raises(
+        runtime_module.PossiblySideEffectingStop,
+        match="reconcile state and audit before retry",
+    ):
+        await package._display_call(Session(), arguments, phase="t5-display")
+
+    row = runtime.matrix["ae_setCompositionDisplayStartTime"]
+    assert row["status"] == "failed"
+    assert row["invocations"] == 1
+    assert runtime.ledger.total == 1
+    response = [
+        payload for event, payload in runtime.evidence.events
+        if event == "public-tool-response"
+    ][0]
+    assert response["payload"]["error"]["code"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+
+
+@pytest.mark.asyncio
 async def test_preview_binds_background_rgb_and_records_expected_alpha_divergence():
     runtime = _unit_runtime()
     package = driver.CompositionSettingsPackage(
