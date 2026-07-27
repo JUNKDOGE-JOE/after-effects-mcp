@@ -408,6 +408,27 @@ function validCompositionSettingArguments(value, fields, validateTarget) {
         && validateTarget(value);
 }
 
+function compositionSettingFieldsEqual(field, left, right) {
+    if (['duration', 'frameDuration', 'displayStartTime'].includes(field)) {
+        return timesEqual(left, right);
+    }
+    if (['frameRate', 'pixelAspectRatio'].includes(field)) {
+        return ratiosEqual(left, right);
+    }
+    if (field === 'workArea') {
+        return timesEqual(left.start, right.start)
+            && timesEqual(left.duration, right.duration);
+    }
+    return JSON.stringify(canonicalize(left)) === JSON.stringify(canonicalize(right));
+}
+
+function untargetedCompositionSettingsEqual(before, after, targetFields) {
+    return Object.keys(before).every(function (field) {
+        return targetFields.includes(field)
+            || compositionSettingFieldsEqual(field, before[field], after[field]);
+    });
+}
+
 function validCompositionSettingValue(
     value,
     argumentsValue,
@@ -425,13 +446,7 @@ function validCompositionSettingValue(
         || !validSettingsSnapshot(value.before)
         || !validSettingsSnapshot(value.after)
         || !validateTarget(value.after, argumentsValue)) return false;
-    const before = { ...value.before };
-    const after = { ...value.after };
-    for (const field of targetFields) {
-        delete before[field];
-        delete after[field];
-    }
-    return JSON.stringify(canonicalize(before)) === JSON.stringify(canonicalize(after));
+    return untargetedCompositionSettingsEqual(value.before, value.after, targetFields);
 }
 
 function validLayerLocatorArguments(value) {

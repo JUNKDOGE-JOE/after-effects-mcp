@@ -1266,6 +1266,32 @@ test('metadata permits a root item with omitted unsupported type-specific facts'
     );
 });
 
+test('frame-rate mutation accepts equivalent time rescaling and rejects changed time facts', () => {
+    const vector = cases()['ae.composition.frame-rate.set'];
+    const contract = packageContracts.getContract('ae.composition.frame-rate.set');
+    const rescaled = structuredClone(vector.value);
+    rescaled.after.duration = time(250, 25);
+    rescaled.after.workArea = {
+        start: time(0, 25),
+        duration: time(125, 25),
+    };
+    rescaled.after.displayStartTime = time(0, 25);
+
+    assert.equal(
+        contract.validValue(rescaled, vector.arguments, HOST, SESSION),
+        true,
+        'AE may re-encode unchanged times onto the new frame-rate timescale',
+    );
+
+    const changedDuration = structuredClone(rescaled);
+    changedDuration.after.duration = time(251, 25);
+    assert.equal(
+        contract.validValue(changedDuration, vector.arguments, HOST, SESSION),
+        false,
+        'a real non-target duration change must still fail verification',
+    );
+});
+
 test('mutation readback tampering is rejected by package-specific validators', () => {
     const vectors = cases();
     const workArea = vectors['ae.composition.work-area.set'];

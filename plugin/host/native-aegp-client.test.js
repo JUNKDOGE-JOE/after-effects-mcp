@@ -92,6 +92,62 @@ const PROJECT_COMPOSITION_VECTORS = new Map(PROJECT_COMPOSITION_VECTOR_FILES.map
     ), 'utf8'));
     return [vector.request.params.capabilityId, vector];
 }));
+const FRAME_RATE_SET_DESCRIPTOR = CAPABILITIES_VECTOR.items.find(function (descriptor) {
+    return descriptor.id === 'ae.composition.frame-rate.set';
+});
+const FRAME_RATE_SET_EXAMPLE = structuredClone(FRAME_RATE_SET_DESCRIPTOR.examples[0]);
+FRAME_RATE_SET_EXAMPLE.expected.value.after.duration = {
+    value: 300,
+    scale: 30,
+    secondsRational: '10',
+};
+FRAME_RATE_SET_EXAMPLE.expected.value.after.workArea = {
+    start: { value: 0, scale: 30, secondsRational: '0' },
+    duration: { value: 300, scale: 30, secondsRational: '10' },
+};
+FRAME_RATE_SET_EXAMPLE.expected.value.after.displayStartTime = {
+    value: 0,
+    scale: 30,
+    secondsRational: '0',
+};
+const FRAME_RATE_SET_VECTOR = {
+    request: {
+        params: {
+            capabilityId: FRAME_RATE_SET_DESCRIPTOR.id,
+            capabilityVersion: FRAME_RATE_SET_DESCRIPTOR.version,
+            arguments: FRAME_RATE_SET_EXAMPLE.arguments,
+        },
+    },
+    response: {
+        result: {
+            capabilityId: FRAME_RATE_SET_DESCRIPTOR.id,
+            capabilityVersion: FRAME_RATE_SET_DESCRIPTOR.version,
+            engine: 'native-aegp',
+            outcome: 'succeeded',
+            replayed: false,
+            evidence: {
+                engine: 'native-aegp',
+                hostInstanceId: '22222222-2222-4222-8222-222222222222',
+                sessionId: '11111111-1111-4111-8111-111111111111',
+                requestId: 'frame-rate-timescale-fixture',
+                capabilityId: FRAME_RATE_SET_DESCRIPTOR.id,
+                capabilityVersion: FRAME_RATE_SET_DESCRIPTOR.version,
+                startedAtUnixMs: 1900000000000,
+                completedAtUnixMs: 1900000000001,
+                effect: 'committed',
+                requestDigest: '0'.repeat(64),
+                postcondition: {
+                    verified: true,
+                    kind: 'composition-frame-rate-set',
+                    algorithm: 'sha256-rfc8785-jcs-v1',
+                    digest: '0'.repeat(64),
+                },
+                undo: { available: true, verified: false },
+            },
+            value: FRAME_RATE_SET_EXAMPLE.expected.value,
+        },
+    },
+};
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
 const CLIENT = '33333333-3333-4333-8333-333333333333';
@@ -658,6 +714,51 @@ test('CEP client negotiates the complete native registry and verifies prior pack
             .map(function (request) { return request.params.capabilityId; }),
         Array.from(PROJECT_COMPOSITION_VECTORS.keys()),
     );
+});
+
+test('CEP client accepts frame-rate results whose unchanged times use the new timescale', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const vectors = new Map([['ae.composition.frame-rate.set', FRAME_RATE_SET_VECTOR]]);
+    const { client } = await readyNativeClient(t, {
+        projectCompositionVectors: vectors,
+    });
+    const result = await client.invoke({
+        requestId: 'frame-rate-timescale-success',
+        capabilityId: 'ae.composition.frame-rate.set',
+        capabilityVersion: 1,
+        arguments: structuredClone(FRAME_RATE_SET_VECTOR.request.params.arguments),
+        deadlineUnixMs: 1900000005000,
+    });
+
+    assert.deepEqual(result.value, FRAME_RATE_SET_VECTOR.response.result.value);
+});
+
+test('CEP client keeps frame-rate non-target time changes side-effect uncertain', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const changedVector = structuredClone(FRAME_RATE_SET_VECTOR);
+    changedVector.response.result.value.after.duration = {
+        value: 301,
+        scale: 30,
+        secondsRational: '301/30',
+    };
+    const vectors = new Map([['ae.composition.frame-rate.set', changedVector]]);
+    const { client } = await readyNativeClient(t, {
+        projectCompositionVectors: vectors,
+    });
+
+    await assert.rejects(client.invoke({
+        requestId: 'frame-rate-timescale-tamper',
+        capabilityId: 'ae.composition.frame-rate.set',
+        capabilityVersion: 1,
+        arguments: structuredClone(changedVector.request.params.arguments),
+        deadlineUnixMs: 1900000005000,
+    }), {
+        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+        retryable: false,
+        sideEffect: 'may-have-occurred',
+    });
 });
 
 test('CEP client dispatches and verifies all eleven TSM contracts', {
