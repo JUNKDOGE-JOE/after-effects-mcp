@@ -1,7 +1,7 @@
 # 敏捷开发与真实 AE 双轨验证设计
 
 日期：2026-07-28
-状态：已获用户批准，仓库自审通过，待用户复核
+状态：已获用户批准，仓库自审与用户复核通过
 范围：macOS 单用户开发路径、真实 AE 开发 smoke、能力包与发布验证策略
 实现分支：`codex/dev-runtime-path`
 前置提交：`0add90c feat(panel): add an opt-in development runtime path`
