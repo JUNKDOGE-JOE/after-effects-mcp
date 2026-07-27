@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from pathlib import Path
@@ -204,6 +205,7 @@ async def test_preview_frame_saves_comp_frame_without_snapshotter(monkeypatch, m
 
     assert result["ok"] is True
     assert result["compId"] == "7"
+    assert len(result["captureId"]) == 32
     frame = result["frames"][0]
     assert frame["path"]
     assert frame["width"] == 160
@@ -211,6 +213,7 @@ async def test_preview_frame_saves_comp_frame_without_snapshotter(monkeypatch, m
     assert frame["source"] == "comp"
     assert frame["method"] == "saveFrameToPng"
     assert Path(frame["path"]).exists()
+    assert frame["sha256"] == hashlib.sha256(Path(frame["path"]).read_bytes()).hexdigest()
     jsx = mock_backend.calls[-1]["code"]
     assert "saveFrameToPng" in jsx
     assert "openInViewer" in jsx
