@@ -32,6 +32,12 @@ PREVIEW_HANDLER_SOURCE = (
     "packages/core/ae_mcp/server.py:309-359,1498-1522"
 )
 T6_POLICY_SOURCE = "docs/CAPABILITY_PACKAGE_WORKFLOW.md:151-179"
+T4_REQUIRED = False
+NO_T4_REASON = (
+    "All six writes use already-proven AEGP_CompSuite12 settings machinery and "
+    "previewFrame changes only Core MCP content packaging; no new native "
+    "primitive, lifecycle rule, suite, or main-thread mechanism is introduced."
+)
 
 NORMAL_WORKFLOW_CALL_CEILING = 30
 T5_CALL_JUSTIFICATION = {
@@ -552,7 +558,9 @@ SPEC = PackageSpec(
     slug="composition-settings-preview-frame",
     title="Composition Settings plus previewFrame",
     native_novelty=False,
-    t4_target_calls=1,  # Runtime compatibility only; this driver exposes no T4.
+    # PackageSpec predates zero-T4 packages and requires a positive placeholder.
+    # T4_REQUIRED above and the driver mode guard are the governing declaration.
+    t4_target_calls=1,
     t4_hard_limit=1,
     t5_target_calls=len(T5_CALL_PLAN),
     t5_hard_limit=len(T5_CALL_PLAN),

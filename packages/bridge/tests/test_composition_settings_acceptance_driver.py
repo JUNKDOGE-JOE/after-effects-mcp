@@ -422,6 +422,8 @@ async def test_preview_decodes_png_and_binds_dimensions_colour_sha_and_audit():
 
 
 def test_one_driver_selects_only_t5_or_t6_and_no_t4_plan_exists():
+    assert spec.T4_REQUIRED is False
+    assert "already-proven AEGP_CompSuite12" in spec.NO_T4_REASON
     assert driver.CompositionSettingsPackage(
         SimpleNamespace(mode="t5"), fixture_name="Comp Settings Fixture"
     ).plan is spec.T5_CALL_PLAN
@@ -447,4 +449,3 @@ def test_tools_list_requirements_include_six_schemas_preview_and_support_chain()
         "ae_listLayerPropertyKeyframes",
     }
     assert len(spec.SPEC.tools) == 7
-
