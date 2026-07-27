@@ -48,8 +48,11 @@ The Connection diagnostics report the selected version, full source commit, abso
 For a development-installed CEP extension only (the existing `.debug` marker is
 present and `bundle-manifest.json` is absent), setting `AE_MCP_DEV_RUNTIME` to
 an absolute source-checkout path starts that checkout's `.venv/bin/python3`
-with `-B -I -m ae_mcp`, using the canonical checkout as the child working
-directory. This bypasses RuntimeManager installation and takes no
+with `-B -I -c` and a closed bootstrap that prepends only the checkout's
+`packages/core` before running `ae_mcp` as `__main__`, using the canonical
+checkout as the child working directory. This explicit path is required
+because isolated Python does not use the working directory or editable-install
+path files for module discovery. This bypasses RuntimeManager installation and takes no
 RuntimeManager lock; it never reads, writes, or repairs `current` or `previous`.
 The checkout must contain `pyproject.toml`, `packages/core/ae_mcp/__main__.py`,
 and an executable `.venv/bin/python3` or selection fails closed with

@@ -13,6 +13,11 @@ import { createRuntimeManager } from '../src/cep/runtimeManager.js';
 const execFileAsync = promisify(execFile);
 // These fixtures execute POSIX launchers and intentionally model macOS path semantics.
 const macosRuntimeTest = process.platform === 'win32' ? test.skip : test;
+const DEVELOPMENT_CORE_BOOTSTRAP = [
+  'import runpy,sys',
+  'sys.path.insert(0,sys.argv[1])',
+  'runpy.run_module("ae_mcp",run_name="__main__")',
+].join(';');
 
 function sha256(bytes) {
   return crypto.createHash('sha256').update(bytes).digest('hex');
@@ -245,7 +250,13 @@ macosRuntimeTest('development checkout bypasses manifests, generations, pointers
   assert.equal(selected.checkoutPath, canonicalCheckout);
   assert.equal(selected.cwd, canonicalCheckout);
   assert.equal(selected.launcher, canonicalInterpreter);
-  assert.deepEqual(selected.args, ['-B', '-I', '-m', 'ae_mcp']);
+  assert.deepEqual(selected.args, [
+    '-B',
+    '-I',
+    '-c',
+    DEVELOPMENT_CORE_BOOTSTRAP,
+    path.join(canonicalCheckout, 'packages', 'core'),
+  ]);
   assert.equal(selected.interpreter.path, canonicalInterpreter);
   assert.equal(selected.interpreter.resolvedPath, canonicalInterpreter);
   assert.equal(selected.diagnostics[0].code, 'RUNTIME_DEVELOPMENT_RUNTIME_SELECTED');
@@ -261,7 +272,8 @@ macosRuntimeTest('development checkout bypasses manifests, generations, pointers
     { code: 'ENOENT' },
   );
   const launched = await execFileAsync(selected.launcher, selected.args);
-  assert.match(launched.stdout, /development-core:development:-B -I -m ae_mcp/);
+  assert.match(launched.stdout, /development-core:development:-B -I -c/);
+  assert.match(launched.stdout, /packages\/core/);
   const inspected = await manager.inspect();
   assert.equal(inspected.ok, true);
   assert.equal(inspected.developmentRuntime, true);

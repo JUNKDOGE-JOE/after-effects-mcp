@@ -11,6 +11,11 @@ const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z
 const SOURCE_SHA = /^[0-9a-f]{40}$/;
 const SHA256 = /^[0-9a-f]{64}$/;
 const DEVELOPMENT_RUNTIME_ENV = 'AE_MCP_DEV_RUNTIME';
+const DEVELOPMENT_CORE_BOOTSTRAP = [
+  'import runpy,sys',
+  'sys.path.insert(0,sys.argv[1])',
+  'runpy.run_module("ae_mcp",run_name="__main__")',
+].join(';');
 
 export class RuntimeManagerError extends Error {
   constructor(code, message, details = {}) {
@@ -183,7 +188,8 @@ export function createRuntimeManager({
     }
 
     const projectManifest = paths.join([checkout, 'pyproject.toml']);
-    const coreEntrypoint = paths.join([checkout, 'packages', 'core', 'ae_mcp', '__main__.py']);
+    const coreRoot = paths.join([checkout, 'packages', 'core']);
+    const coreEntrypoint = paths.join([coreRoot, 'ae_mcp', '__main__.py']);
     const interpreter = paths.join([checkout, '.venv', 'bin', 'python3']);
     let resolvedInterpreter;
     try {
@@ -217,7 +223,7 @@ export function createRuntimeManager({
       developmentRuntime: true,
       checkoutPath: checkout,
       launcher: interpreter,
-      args: ['-B', '-I', '-m', 'ae_mcp'],
+      args: ['-B', '-I', '-c', DEVELOPMENT_CORE_BOOTSTRAP, coreRoot],
       cwd: checkout,
       interpreter: {
         path: interpreter,
