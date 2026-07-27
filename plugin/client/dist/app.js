@@ -17435,6 +17435,7 @@
   var DEVELOPMENT_CORE_BOOTSTRAP = [
     "import runpy,sys",
     "sys.path.insert(0,sys.argv[1])",
+    "sys.path.insert(0,sys.argv[2])",
     'runpy.run_module("ae_mcp",run_name="__main__")'
   ].join(";");
   var RuntimeManagerError = class extends Error {
@@ -17554,7 +17555,7 @@
       return fs.existsSync(developmentMarkerPath) && !fs.existsSync(packageManifestPath);
     }
     async function selectDevelopmentRuntime() {
-      var _a2, _b2, _c2;
+      var _a2, _b2, _c2, _d2;
       if (!developmentRuntimeInput) return null;
       if (!developmentBuild()) {
         failure(
@@ -17583,15 +17584,18 @@
       const projectManifest = paths.join([checkout, "pyproject.toml"]);
       const coreRoot = paths.join([checkout, "packages", "core"]);
       const coreEntrypoint = paths.join([coreRoot, "ae_mcp", "__main__.py"]);
+      const bridgeRoot = paths.join([checkout, "packages", "bridge"]);
+      const bridgeEntrypoint = paths.join([bridgeRoot, "ae_mcp_bridge", "__init__.py"]);
       const interpreter = paths.join([checkout, ".venv", "bin", "python3"]);
       let resolvedInterpreter;
       try {
-        const [manifestInfo, entrypointInfo, interpreterInfo] = await Promise.all([
+        const [manifestInfo, entrypointInfo, bridgeInfo, interpreterInfo] = await Promise.all([
           promises.lstat(projectManifest),
           promises.lstat(coreEntrypoint),
+          promises.lstat(bridgeEntrypoint),
           promises.lstat(interpreter)
         ]);
-        if (!manifestInfo.isFile() || ((_a2 = manifestInfo.isSymbolicLink) == null ? void 0 : _a2.call(manifestInfo)) || !entrypointInfo.isFile() || ((_b2 = entrypointInfo.isSymbolicLink) == null ? void 0 : _b2.call(entrypointInfo)) || !interpreterInfo.isFile() && !((_c2 = interpreterInfo.isSymbolicLink) == null ? void 0 : _c2.call(interpreterInfo)) || (interpreterInfo.mode & 73) === 0) {
+        if (!manifestInfo.isFile() || ((_a2 = manifestInfo.isSymbolicLink) == null ? void 0 : _a2.call(manifestInfo)) || !entrypointInfo.isFile() || ((_b2 = entrypointInfo.isSymbolicLink) == null ? void 0 : _b2.call(entrypointInfo)) || !bridgeInfo.isFile() || ((_c2 = bridgeInfo.isSymbolicLink) == null ? void 0 : _c2.call(bridgeInfo)) || !interpreterInfo.isFile() && !((_d2 = interpreterInfo.isSymbolicLink) == null ? void 0 : _d2.call(interpreterInfo)) || (interpreterInfo.mode & 73) === 0) {
           throw new Error("required checkout entrypoint is invalid");
         }
         resolvedInterpreter = await promises.realpath(interpreter);
@@ -17602,7 +17606,7 @@
       } catch {
         failure(
           "RUNTIME_DEVELOPMENT_RUNTIME_INVALID",
-          `${DEVELOPMENT_RUNTIME_ENV} does not contain pyproject.toml, the core entrypoint, and an executable .venv/bin/python3`,
+          `${DEVELOPMENT_RUNTIME_ENV} does not contain the Core/bridge entrypoints and an executable .venv/bin/python3`,
           { path: checkout }
         );
       }
@@ -17612,7 +17616,7 @@
         developmentRuntime: true,
         checkoutPath: checkout,
         launcher: interpreter,
-        args: ["-B", "-I", "-c", DEVELOPMENT_CORE_BOOTSTRAP, coreRoot],
+        args: ["-B", "-I", "-c", DEVELOPMENT_CORE_BOOTSTRAP, coreRoot, bridgeRoot],
         cwd: checkout,
         interpreter: {
           path: interpreter,
