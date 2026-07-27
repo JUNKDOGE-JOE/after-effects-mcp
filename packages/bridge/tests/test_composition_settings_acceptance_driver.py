@@ -62,13 +62,13 @@ def _locator(kind: str, object_id: str = COMP) -> dict:
     }
 
 
-def test_comp_settings_runner_call_budget_is_twenty_eight():
-    assert [row.ordinal for row in spec.T5_CALL_PLAN] == list(range(1, 29))
+def test_comp_settings_runner_call_budget_is_thirty():
+    assert [row.ordinal for row in spec.T5_CALL_PLAN] == list(range(1, 31))
     assert [row.ordinal for row in spec.T6_CALL_PLAN] == list(range(1, 18))
     assert spec.T5_CALL_PLAN != spec.T6_CALL_PLAN
-    assert spec.SPEC.t5_target_calls == spec.SPEC.t5_hard_limit == 28
+    assert spec.SPEC.t5_target_calls == spec.SPEC.t5_hard_limit == 30
     assert spec.SPEC.t6_target_calls == spec.SPEC.t6_hard_limit == 17
-    assert spec.T5_CALL_JUSTIFICATION["totalCalls"] == 28
+    assert spec.T5_CALL_JUSTIFICATION["totalCalls"] == 30
     assert spec.T5_CALL_JUSTIFICATION["toolCount"] == 7
     assert spec.T5_CALL_JUSTIFICATION["normalWorkflowCeiling"] == 30
     assert spec.T5_CALL_JUSTIFICATION["withinDefaultCeiling"] is True
@@ -163,15 +163,24 @@ def test_both_plans_chain_every_consumed_address_to_an_earlier_public_call():
         )
 
 
-def test_preview_invalidates_locators_until_project_items_reacquires_them():
+def test_preview_and_real_undo_invalidate_locators_until_reacquired():
     for plan in (spec.T5_CALL_PLAN, spec.T6_CALL_PLAN):
-        assert spec._preview_locator_violations(plan) == ()
+        assert spec._locator_invalidation_violations(plan) == ()
 
-    mutated = tuple(
+    missing_preview_reacquire = tuple(
         row for row in spec.T5_CALL_PLAN
         if row.key != "baseline-preview-reacquire"
     )
-    assert spec._preview_locator_violations(mutated)
+    assert spec._locator_invalidation_violations(missing_preview_reacquire)
+
+    missing_undo_reacquire = tuple(
+        spec.dataclasses.replace(row, undo_of="dimensions-set")
+        if row.key == "dimensions-undo-read"
+        else row
+        for row in spec.T5_CALL_PLAN
+        if row.key != "dimensions-undo-reacquire"
+    )
+    assert spec._locator_invalidation_violations(missing_undo_reacquire)
 
 
 def test_fixture_recipe_is_single_slot_reopened_in_formal_ae_and_archived():
@@ -252,7 +261,7 @@ def test_operation_keys_are_fresh_per_run_and_reconciliation_reuses_original():
     assert "replayed=true is not assumed" in record["duplicateContract"]
 
 
-def test_driver_captures_every_preview_reacquired_composition_locator():
+def test_driver_captures_every_reacquired_composition_locator():
     package = driver.CompositionSettingsPackage(
         SimpleNamespace(mode="t5"), fixture_name="Comp Settings Fixture"
     )
@@ -262,18 +271,21 @@ def test_driver_captures_every_preview_reacquired_composition_locator():
         "generation": 2,
         "objectId": "66666666-6666-4666-8666-666666666666",
     }
-    package._capture(
-        "baseline-preview-reacquire",
-        {
-            "value": {
-                "items": [{
-                    "name": "Comp Settings Fixture",
-                    "locator": fresh,
-                }]
-            }
-        },
-    )
-    assert package.context["composition_locator"] == fresh
+    for row in spec.T5_CALL_PLAN:
+        if row.key == "composition-reacquire" or row.key.endswith("-reacquire"):
+            package.context.pop("composition_locator", None)
+            package._capture(
+                row.key,
+                {
+                    "value": {
+                        "items": [{
+                            "name": "Comp Settings Fixture",
+                            "locator": fresh,
+                        }]
+                    }
+                },
+            )
+            assert package.context["composition_locator"] == fresh
 
 
 class _Evidence:
