@@ -1485,6 +1485,12 @@ class AePreviewFrameArgs(_StrictModel):
     frame is not mistaken for current state. Frames can contain private project
     material; preview only the user-authorized composition and times. Use scale
     or selected times when a smaller visual review is sufficient.
+
+    The composition background appears with its RGB but alpha 0 where no layer
+    covers the frame: After Effects paints that background in its viewport
+    without compositing it into the exported alpha. A transparent preview pixel
+    with the configured background RGB therefore does not mean the background
+    setting write failed.
     """
     comp_id: Optional[str] = Field(
         None, description="AE comp id. Omit for the active comp."

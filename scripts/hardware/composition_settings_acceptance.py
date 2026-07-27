@@ -461,9 +461,10 @@ class CompositionSettingsPackage:
         self.capture_ids.add(capture_id)
         require(payload.get("compName") == self.fixture_name, "wrong comp previewed")
         expected = mapping(self.expected_state, "preview expected state absent")
-        colour = tuple(expected["backgroundColor"][key] for key in (
-            "red", "green", "blue", "alpha"
-        ))
+        background_rgb = tuple(
+            expected["backgroundColor"][key] for key in ("red", "green", "blue")
+        )
+        setting_alpha = expected["backgroundColor"]["alpha"]
         verified = []
         for index, frame_value in enumerate(frames):
             frame = mapping(frame_value, "frame metadata invalid")
@@ -486,10 +487,19 @@ class CompositionSettingsPackage:
                 image.load()
                 require(image.format == "PNG", "preview decode is not PNG")
                 dimensions = image.size
-                matches = sum(
-                    pixel == colour
-                    for pixel in image.convert("RGBA").get_flattened_data()
-                )
+                rgb_matches = 0
+                transparent_rgb_matches = 0
+                matching_rgb_alpha_counts: dict[str, int] = {}
+                for pixel in image.convert("RGBA").get_flattened_data():
+                    if pixel[:3] != background_rgb:
+                        continue
+                    rgb_matches += 1
+                    alpha_key = str(pixel[3])
+                    matching_rgb_alpha_counts[alpha_key] = (
+                        matching_rgb_alpha_counts.get(alpha_key, 0) + 1
+                    )
+                    if pixel[3] == 0:
+                        transparent_rgb_matches += 1
             digest = hashlib.sha256(png).hexdigest()
             require(
                 dimensions == (expected["width"], expected["height"])
@@ -497,12 +507,27 @@ class CompositionSettingsPackage:
                 "preview dimensions drifted",
             )
             require(digest == frame.get("sha256"), "preview SHA drifted")
-            require(matches > 0, "preview lacks expected visible background")
+            require(rgb_matches > 0, "preview lacks expected background RGB")
+            require(
+                setting_alpha == 255 and transparent_rgb_matches > 0,
+                "preview lacks expected transparent background pixels",
+            )
             verified.append({
                 "captureId": capture_id, "requestedTime": arguments.get("time"),
                 "dimensions": dimensions, "sha256": digest,
                 "source": frame.get("source"), "method": frame.get("method"),
-                "matchingBackgroundPixels": matches,
+                "matchingBackgroundRgbPixels": rgb_matches,
+                "matchingBackgroundRgbAlphaCounts": matching_rgb_alpha_counts,
+                "alphaDivergence": {
+                    "status": "observed-expected",
+                    "typedSettingAlpha": setting_alpha,
+                    "uncoveredRenderedAlpha": 0,
+                    "transparentMatchingRgbPixels": transparent_rgb_matches,
+                    "semantic": (
+                        "AE paints the composition background RGB in its viewport "
+                        "without compositing it into exported alpha."
+                    ),
+                },
                 "precedingSettingsAuditRequestId": self._latest_audit(),
                 "evidenceLimits": EVIDENCE_BY_TOOL[tool],
             })

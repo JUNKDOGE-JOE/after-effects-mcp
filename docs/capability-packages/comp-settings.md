@@ -83,6 +83,16 @@ MCP `CallToolResult`, then independently:
 Checking only that image data is a non-empty string is explicitly
 insufficient.
 
+Composition background colour has two distinct alpha semantics. The typed
+`backgroundColor` is a colour setting, so its alpha is 255 for the opaque
+configured colour. In an `ae_previewFrame` PNG, an uncovered pixel has that
+configured RGB but alpha 0: After Effects paints the composition background in
+its viewport without compositing it into the exported alpha. Acceptance
+therefore verifies the visible background by RGB and separately requires and
+records the expected setting-alpha/rendered-alpha divergence. Treating the PNG
+as full-RGBA equality with the typed setting is incorrect; conversely, silently
+dropping alpha would fail to record the transparency that the preview preserves.
+
 The cross-family acceptance cases added to the otherwise unchanged settings
 sequence are:
 

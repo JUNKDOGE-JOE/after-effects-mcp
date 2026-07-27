@@ -185,6 +185,9 @@ async def test_preview_frame_registration_and_tools_list_exposure(monkeypatch):
     assert "intermediate checkpoints" in description
     assert "newest captureId" in description
     assert "private project material" in description
+    assert "background appears with its RGB but alpha 0" in description
+    assert "without compositing it into the exported alpha" in description
+    assert "does not mean the background setting write failed" in description
 
 
 async def test_preview_frame_mcp_content_decodes_at_reported_dimensions(

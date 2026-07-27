@@ -360,7 +360,7 @@ async def test_display_start_asserts_no_undo_group_instead_of_skipping_check():
 
 
 @pytest.mark.asyncio
-async def test_preview_decodes_png_and_binds_dimensions_colour_sha_and_audit():
+async def test_preview_binds_background_rgb_and_records_expected_alpha_divergence():
     runtime = _unit_runtime()
     package = driver.CompositionSettingsPackage(
         runtime, fixture_name="Comp Settings Fixture"
@@ -371,7 +371,8 @@ async def test_preview_decodes_png_and_binds_dimensions_colour_sha_and_audit():
     package.responses["baseline-settings"] = {
         "audit": {"requestId": "mcp-settings-read"}
     }
-    image = Image.new("RGBA", (2, 2), (16, 32, 48, 255))
+    image = Image.new("RGBA", (2, 2), (16, 32, 48, 0))
+    image.putpixel((0, 0), (16, 32, 48, 255))
     buffer = io.BytesIO()
     image.save(buffer, "PNG")
     png = buffer.getvalue()
@@ -417,7 +418,18 @@ async def test_preview_decodes_png_and_binds_dimensions_colour_sha_and_audit():
     ][0]["frames"][0]
     assert verified["dimensions"] == (2, 2)
     assert verified["sha256"] == digest
-    assert verified["matchingBackgroundPixels"] == 4
+    assert verified["matchingBackgroundRgbPixels"] == 4
+    assert verified["matchingBackgroundRgbAlphaCounts"] == {"0": 3, "255": 1}
+    assert verified["alphaDivergence"] == {
+        "status": "observed-expected",
+        "typedSettingAlpha": 255,
+        "uncoveredRenderedAlpha": 0,
+        "transparentMatchingRgbPixels": 3,
+        "semantic": (
+            "AE paints the composition background RGB in its viewport without "
+            "compositing it into exported alpha."
+        ),
+    }
     assert verified["precedingSettingsAuditRequestId"] == "mcp-settings-read"
 
 
