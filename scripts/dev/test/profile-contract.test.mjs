@@ -77,6 +77,14 @@ test('parseDevelopmentCommand rejects unsafe or ambiguous arguments', () => {
     ['sync', '--component', 'all', '--component', 'core'],
     ['sync', '--repo-root', 'relative', '--component', 'core'],
     ['smoke', '--component', 'core'],
+    [
+      'smoke',
+      '--component', 'core',
+      '--scenario', 'unbounded',
+      '--fixture-path', '/fixtures/hdev.aep',
+      '--recovery-archive-root', '/fixtures/recovery',
+      '--evidence-dir', '/evidence/hdev',
+    ],
     ['unknown', '--component', 'core'],
   ]) {
     assert.throws(
@@ -153,6 +161,11 @@ test('buildDevelopmentPlan passes closed component disposition to HDEV', () => {
     '--checkout',
   ]);
   assert.equal(plan.dependencyBootstrapInvocations, 0);
+  assert.equal(plan.steps[0].args.at(-2), '--formal-ae-app');
+  assert.equal(
+    plan.steps[0].args.at(-1),
+    '/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app',
+  );
 });
 
 test('assertDailyPlanSafe rejects an implicit dependency install', () => {
