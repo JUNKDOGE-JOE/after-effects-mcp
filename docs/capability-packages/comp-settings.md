@@ -1022,9 +1022,22 @@ public request
 -> verified postcondition digest
 ```
 
-The T5 candidate and clean-main T6 use the identical 20-call settings script
-below, with the four `ae_previewFrame` calls placed at the checkpoints defined
-by the #177 amendment above:
+T5 and T6 use **distinct plans**, per section 8 of
+`docs/CAPABILITY_PACKAGE_WORKFLOW.md`. T5 is the full candidate acceptance at 24
+public calls — within the default 30-call ceiling, so this brief claims no
+authorization to exceed it. T6 is the clean-`main` replay at 14 calls, skipping
+`ae_setCompositionFrameRate`, `ae_setCompositionDuration` and
+`ae_setCompositionPixelAspectRatio`, each replayed by
+`ae_setCompositionDimensions`, and each recording the grounds that permit the
+skip.
+
+Both plans are frozen in `scripts/hardware/composition_settings_spec.py` as
+`T5_CALL_PLAN` and `T6_CALL_PLAN`, with `T6_SKIPS` carrying the per-tool
+justification. The spec is the executable contract: where this prose and the
+spec disagree, the spec wins and this section is the defect.
+
+The settings script below is the T5 plan, with the four `ae_previewFrame` calls
+placed at the checkpoints defined by the #177 amendment above:
 
 | Call | Public tool | Purpose |
 | ---: | --- | --- |
