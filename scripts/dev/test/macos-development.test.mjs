@@ -112,8 +112,18 @@ test('doctor returns the closed read-only development report', async (t) => {
   assert.equal(report.schemaVersion, 1);
   assert.equal(report.profile, 'development');
   assert.equal(report.ok, true, JSON.stringify(report, null, 2));
-  assert.equal(report.checkoutPath, await fs.promises.realpath(h.repoRoot));
-  assert.equal(report.interpreterPath, await fs.promises.realpath(h.interpreter));
+  const canonicalRepo = await fs.promises.realpath(h.repoRoot);
+  const venvEntrypoint = path.join(canonicalRepo, '.venv/bin/python3');
+  assert.equal(report.checkoutPath, canonicalRepo);
+  assert.equal(report.interpreterPath, venvEntrypoint);
+  assert.equal(
+    report.checks.find((check) => check.id === 'core-interpreter').resolvedPath,
+    await fs.promises.realpath(h.interpreter),
+  );
+  assert.equal(
+    h.calls.some((call) => call.file === venvEntrypoint),
+    true,
+  );
   assert.equal(report.formalAeApp, await fs.promises.realpath(h.formalAeApp));
   assert.equal(
     report.formalAeExecutable,

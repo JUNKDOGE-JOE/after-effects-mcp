@@ -56,6 +56,7 @@ async function inspectPath(checks, dependencies, {
   directory = false,
   executable = false,
   allowSymlink = false,
+  preservePath = false,
   absent = false,
 }) {
   if (absent) {
@@ -77,8 +78,15 @@ async function inspectPath(checks, dependencies, {
       target,
       { directory, executable, allowSymlink },
     );
-    checks.push(frozenCheck(id, true, resolved));
-    return resolved;
+    const reported = preservePath ? target : resolved;
+    checks.push(frozenCheck(
+      id,
+      true,
+      reported,
+      undefined,
+      preservePath ? { resolvedPath: resolved } : {},
+    ));
+    return reported;
   } catch {
     checks.push(frozenCheck(id, false, target, code));
     return target;
@@ -137,6 +145,7 @@ async function inspectRequiredPaths({
     code: 'DEV_CORE_INTERPRETER_MISSING',
     executable: true,
     allowSymlink: true,
+    preservePath: true,
   });
   const interpreterCheck = checks.at(-1);
   if (interpreterCheck.ok) {
