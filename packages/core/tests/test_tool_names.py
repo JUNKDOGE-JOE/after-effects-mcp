@@ -223,9 +223,10 @@ async def test_preview_frame_mcp_content_decodes_at_reported_dimensions(
     )
 
     server = build_server()
-    listed = await server._ae_list_tools()
-    assert any(tool.name == "ae_previewFrame" for tool in listed)
-    result = await server._ae_call_tool("ae_previewFrame", {})
+    async with create_connected_server_and_client_session(server) as client:
+        listed = await client.list_tools()
+        assert any(tool.name == "ae_previewFrame" for tool in listed.tools)
+        result = await client.call_tool("ae_previewFrame", {})
 
     assert result.isError is False
     assert len(result.content) == 2
