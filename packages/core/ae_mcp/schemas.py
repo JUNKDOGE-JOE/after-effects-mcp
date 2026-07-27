@@ -1478,7 +1478,14 @@ class AeSnapshotArgs(_StrictModel):
 
 
 class AePreviewFrameArgs(_StrictModel):
-    """ae.previewFrame — render real AE comp frames to PNG files."""
+    """ae.previewFrame — return real composition pixels as PNG image content.
+
+    Preview before and after visible edits, and at intermediate checkpoints.
+    Call after the latest write and use only the newest captureId so an older
+    frame is not mistaken for current state. Frames can contain private project
+    material; preview only the user-authorized composition and times. Use scale
+    or selected times when a smaller visual review is sufficient.
+    """
     comp_id: Optional[str] = Field(
         None, description="AE comp id. Omit for the active comp."
     )
@@ -1492,7 +1499,12 @@ class AePreviewFrameArgs(_StrictModel):
         None, description="Output directory. Default: temp ae_mcp_previews session directory."
     )
     include_base64: bool = Field(
-        False, description="Attach base64 PNG bytes to each returned frame."
+        False,
+        description=(
+            "Also attach base64 PNG bytes inside each JSON frame. First-class "
+            "MCP image content is always returned; leave false to avoid sending "
+            "a duplicate inline copy."
+        ),
     )
     scale: float = Field(
         1.0, gt=0, le=4,

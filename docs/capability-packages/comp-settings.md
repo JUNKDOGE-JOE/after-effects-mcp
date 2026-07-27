@@ -46,6 +46,10 @@ At the public MCP boundary a successful `ae_previewFrame` call returns:
 2. one `ImageContent` item with `mimeType="image/png"` for each entry in
    `frames`, in the same order.
 
+`CallToolResult.structuredContent` also carries that same JSON object. This is
+additive; item 0 remains byte-compatible for clients that have not adopted
+structured content.
+
 `captureId` and each frame's `sha256` are additive structured fields. Existing
 callers that parse `content[0].text`, use `path`, or opt into the existing
 `include_base64=true` field continue to work. `include_base64` retains its old

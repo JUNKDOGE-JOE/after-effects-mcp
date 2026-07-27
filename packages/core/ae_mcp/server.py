@@ -12,19 +12,23 @@ object surfaced via the request_context; it owns report_progress.
 from __future__ import annotations
 
 import asyncio
+import base64
+import hashlib
 import hmac
+import io
 import json
 import logging
 import os
 import re
 import time
+from pathlib import Path
 from typing import Any, List
 
 from jsonschema import ValidationError as JsonSchemaValidationError
 from jsonschema import validate as validate_json_schema
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
-from mcp.types import CallToolResult, TextContent, Tool
+from mcp.types import CallToolResult, ImageContent, TextContent, Tool
 from pydantic import ValidationError as PydanticValidationError
 
 from ae_mcp import approval_gate, client_identity, schemas
@@ -299,6 +303,63 @@ def _format_result(result: Any) -> str:
         except (TypeError, ValueError):
             return repr(result)
     return repr(result)
+
+
+def _preview_frame_content(result: dict[str, Any]) -> list[ImageContent]:
+    """Build validated MCP image blocks for an ae.previewFrame result."""
+    from PIL import Image
+
+    frames = result.get("frames")
+    if not isinstance(frames, list) or not frames:
+        raise ValueError("successful result has no frames")
+
+    content: list[ImageContent] = []
+    for index, frame in enumerate(frames):
+        if not isinstance(frame, dict):
+            raise ValueError(f"frame {index} metadata is not an object")
+        path = frame.get("path")
+        if not isinstance(path, str) or not path:
+            raise ValueError(f"frame {index} has no image path")
+        try:
+            png_bytes = Path(path).read_bytes()
+        except OSError as error:
+            raise ValueError(f"frame {index} image is unavailable") from error
+
+        try:
+            with Image.open(io.BytesIO(png_bytes)) as image:
+                image.load()
+                image_format = image.format
+                dimensions = image.size
+        except Exception as error:  # noqa: BLE001
+            raise ValueError(f"frame {index} is not a decodable image") from error
+        if image_format != "PNG":
+            raise ValueError(f"frame {index} is not PNG")
+
+        expected = (frame.get("width"), frame.get("height"))
+        if dimensions != expected:
+            raise ValueError(
+                f"frame {index} dimensions {dimensions} do not match {expected}"
+            )
+
+        digest = hashlib.sha256(png_bytes).hexdigest()
+        if frame.get("sha256") != digest:
+            raise ValueError(f"frame {index} SHA-256 does not match metadata")
+
+        content.append(
+            ImageContent(
+                type="image",
+                data=base64.b64encode(png_bytes).decode("ascii"),
+                mimeType="image/png",
+                _meta={
+                    "captureId": result.get("captureId"),
+                    "frameIndex": index,
+                    "sha256": digest,
+                    "width": dimensions[0],
+                    "height": dimensions[1],
+                },
+            )
+        )
+    return content
 
 
 def expose_tool_name(verb: str) -> str:
@@ -1436,8 +1497,33 @@ def build_server() -> Server:
                     request_id or "-",
                 )
 
+        text_content = TextContent(type="text", text=_format_result(result))
+        if (
+            name == "ae.previewFrame"
+            and isinstance(result, dict)
+            and result.get("ok") is True
+        ):
+            try:
+                image_content = _preview_frame_content(result)
+            except ValueError as error:
+                failure = {
+                    "ok": False,
+                    "error": f"ae.previewFrame image packaging failed: {error}",
+                }
+                return CallToolResult(
+                    content=[
+                        TextContent(type="text", text=_format_result(failure))
+                    ],
+                    structuredContent=failure,
+                    isError=True,
+                )
+            return CallToolResult(
+                content=[text_content, *image_content],
+                structuredContent=result,
+                isError=False,
+            )
         return CallToolResult(
-            content=[TextContent(type="text", text=_format_result(result))],
+            content=[text_content],
             isError=isinstance(result, dict) and result.get("ok") is False,
         )
 
