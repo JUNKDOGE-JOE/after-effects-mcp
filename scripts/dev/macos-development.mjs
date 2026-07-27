@@ -34,14 +34,19 @@ function inside(candidate, root) {
 async function ordinaryPath(dependencies, target, {
   directory = false,
   executable = false,
+  allowSymlink = false,
 } = {}) {
-  const info = await dependencies.fs.lstat(target);
-  if (info.isSymbolicLink()) throw new Error('symbolic path refused');
+  const linkInfo = await dependencies.fs.lstat(target);
+  if (linkInfo.isSymbolicLink() && !allowSymlink) throw new Error('symbolic path refused');
+  const resolved = await dependencies.realpath(target);
+  const info = linkInfo.isSymbolicLink()
+    ? await dependencies.fs.stat(resolved)
+    : linkInfo;
   if (directory ? !info.isDirectory() : !info.isFile()) {
     throw new Error(directory ? 'not a directory' : 'not a file');
   }
   if (executable && (info.mode & 0o111) === 0) throw new Error('not executable');
-  return dependencies.realpath(target);
+  return resolved;
 }
 
 async function inspectPath(checks, dependencies, {
@@ -50,6 +55,7 @@ async function inspectPath(checks, dependencies, {
   code,
   directory = false,
   executable = false,
+  allowSymlink = false,
   absent = false,
 }) {
   if (absent) {
@@ -66,7 +72,11 @@ async function inspectPath(checks, dependencies, {
     return target;
   }
   try {
-    const resolved = await ordinaryPath(dependencies, target, { directory, executable });
+    const resolved = await ordinaryPath(
+      dependencies,
+      target,
+      { directory, executable, allowSymlink },
+    );
     checks.push(frozenCheck(id, true, resolved));
     return resolved;
   } catch {
@@ -126,6 +136,7 @@ async function inspectRequiredPaths({
     target: interpreterCandidate,
     code: 'DEV_CORE_INTERPRETER_MISSING',
     executable: true,
+    allowSymlink: true,
   });
   const interpreterCheck = checks.at(-1);
   if (interpreterCheck.ok) {

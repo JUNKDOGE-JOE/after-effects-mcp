@@ -35,12 +35,14 @@ async function fixture(t) {
     'print("fixture")\n',
   );
   await writeFile(repoRoot, 'packages/core/ae_mcp/__init__.py', '');
-  const interpreter = await writeFile(
+  const interpreterTarget = await writeFile(
     repoRoot,
-    '.venv/bin/python3',
+    '.venv/bin/python3.13',
     '#!/bin/sh\nexit 0\n',
     0o755,
   );
+  const interpreter = path.join(repoRoot, '.venv', 'bin', 'python3');
+  await fs.promises.symlink(path.basename(interpreterTarget), interpreter);
   await writeFile(cepRoot, '.debug', '<ExtensionList />\n');
   await writeFile(
     formalAeApp,
@@ -66,7 +68,7 @@ async function fixture(t) {
       };
       return { stdout: `${values[key]}\n`, stderr: '' };
     }
-    if (file.endsWith('/.venv/bin/python3')) {
+    if (file.includes('/.venv/bin/python3')) {
       return {
         stdout: `${await fs.promises.realpath(
           path.join(repoRoot, 'packages/core/ae_mcp/__init__.py'),
@@ -130,7 +132,7 @@ test('doctor returns the closed read-only development report', async (t) => {
   assert.equal(report.checks.every((check) => check.ok), true);
   assert.deepEqual(report.blockers, []);
   assert.equal(
-    h.calls.some((call) => call.file.endsWith('/.venv/bin/python3')
+    h.calls.some((call) => call.file.includes('/.venv/bin/python3')
       && call.args.slice(0, 3).join(' ') === '-B -I -c'
       && call.args[3].includes('sys.path.insert(0,sys.argv[1])')
       && call.args.at(-1) === path.join(report.checkoutPath, 'packages', 'core')),
