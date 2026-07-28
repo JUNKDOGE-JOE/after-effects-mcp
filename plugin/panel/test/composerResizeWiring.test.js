@@ -37,3 +37,19 @@ test('Composer keeps submission and bottom controls independent from resizing', 
   assert.match(composer, /flex:\s*'none'/);
   assert.match(composer, /overflow must stay visible/);
 });
+
+test('ChatScreen owns one session height and observes the shared allocation', () => {
+  const chat = source('../src/screens/ChatScreen.jsx');
+  assert.match(chat, /React\.useReducer\(\s*reduceComposerHeight/);
+  assert.match(chat, /createComposerHeightState/);
+  assert.match(chat, /new ResizeObserver\(measureComposerBounds\)/);
+  assert.match(chat, /observer\.observe\(layoutRef\.current\)/);
+  assert.match(chat, /observer\.observe\(footerRef\.current\)/);
+  assert.match(chat, /observer\.disconnect\(\)/);
+  assert.match(chat, /composerAvailableHeight/);
+  assert.match(chat, /height=\{composerSize\.height\}/);
+  assert.match(chat, /maxHeight=\{composerSize\.maxHeight\}/);
+  assert.match(chat, /type:\s*'request'/);
+  assert.match(chat, /type:\s*'reset'/);
+  assert.doesNotMatch(chat, /localStorage|sessionStorage/);
+});
