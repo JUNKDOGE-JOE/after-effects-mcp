@@ -42,6 +42,15 @@ using aemcp::native::rpc::LayerStretchSetSuccess;
 using aemcp::native::rpc::LayerOrderSetSuccess;
 using aemcp::native::rpc::LayerParentSetSuccess;
 using aemcp::native::rpc::LayerDuplicateSuccess;
+using aemcp::native::rpc::LayerSourceSuccess;
+using aemcp::native::rpc::LayerTrackMatteReadSuccess;
+using aemcp::native::rpc::LayerTrackMatteSetSuccess;
+using aemcp::native::rpc::LayerTrackMatteClearSuccess;
+using aemcp::native::rpc::LayerAVStateSuccess;
+using aemcp::native::rpc::LayerAudioEnabledSetSuccess;
+using aemcp::native::rpc::LayerVideoEnabledSetSuccess;
+using aemcp::native::rpc::LayerSourceType;
+using aemcp::native::rpc::LayerTrackMatteMode;
 using aemcp::native::rpc::CompositionCreateSuccess;
 using aemcp::native::rpc::CompositionLayerCreateSuccess;
 using aemcp::native::rpc::LayerEffectApplySuccess;
@@ -94,6 +103,13 @@ using aemcp::native::rpc::digest_layer_stretch_set_postcondition;
 using aemcp::native::rpc::digest_layer_order_set_postcondition;
 using aemcp::native::rpc::digest_layer_parent_set_postcondition;
 using aemcp::native::rpc::digest_layer_duplicate_postcondition;
+using aemcp::native::rpc::digest_layer_source_postcondition;
+using aemcp::native::rpc::digest_layer_track_matte_read_postcondition;
+using aemcp::native::rpc::digest_layer_track_matte_set_postcondition;
+using aemcp::native::rpc::digest_layer_track_matte_clear_postcondition;
+using aemcp::native::rpc::digest_layer_av_state_postcondition;
+using aemcp::native::rpc::digest_layer_audio_enabled_set_postcondition;
+using aemcp::native::rpc::digest_layer_video_enabled_set_postcondition;
 using aemcp::native::rpc::composition_create_persistent_diagnostic_fields;
 using aemcp::native::rpc::project_context_persistent_diagnostic_fields;
 using aemcp::native::rpc::project_item_metadata_persistent_diagnostic_fields;
@@ -143,6 +159,13 @@ using aemcp::native::rpc::encode_layer_stretch_set_success;
 using aemcp::native::rpc::encode_layer_order_set_success;
 using aemcp::native::rpc::encode_layer_parent_set_success;
 using aemcp::native::rpc::encode_layer_duplicate_success;
+using aemcp::native::rpc::encode_layer_source_success;
+using aemcp::native::rpc::encode_layer_track_matte_read_success;
+using aemcp::native::rpc::encode_layer_track_matte_set_success;
+using aemcp::native::rpc::encode_layer_track_matte_clear_success;
+using aemcp::native::rpc::encode_layer_av_state_success;
+using aemcp::native::rpc::encode_layer_audio_enabled_set_success;
+using aemcp::native::rpc::encode_layer_video_enabled_set_success;
 using aemcp::native::rpc::encode_composition_create_success;
 using aemcp::native::rpc::encode_composition_layer_create_success;
 using aemcp::native::rpc::encode_layer_effect_apply_success;
@@ -2190,6 +2213,188 @@ void layer_timeline_package_parses_and_serializes_all_eight_contracts() {
   }, "layer name result with unbound postcondition digest");
 }
 
+void layer_source_matte_av_package_is_closed_and_typed() {
+  const std::string layer_json = locator_json(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  const std::string matte_json = locator_json(
+      "layer", "99999999-9999-4999-8999-999999999999");
+  const auto decode = [&](std::string_view request_id,
+                          std::string_view capability_id,
+                          const std::string& arguments) {
+    return std::get<InvokeParams>(decode_request_frame(frame(package150_invoke_json(
+        request_id, capability_id, arguments))).params);
+  };
+
+  const InvokeParams source_request = decode(
+      "layer-source", "ae.layer.source.read",
+      "{\"layerLocator\":" + layer_json + "}");
+  const InvokeParams matte_read = decode(
+      "layer-matte-read", "ae.layer.track-matte.read",
+      "{\"layerLocator\":" + layer_json + "}");
+  const InvokeParams matte_set = decode(
+      "layer-matte-set", "ae.layer.track-matte.set",
+      "{\"layerLocator\":" + layer_json + ",\"matteLayerLocator\":"
+          + matte_json + ",\"mode\":\"luma\","
+            "\"idempotencyKey\":\"synthetic-matte-set-0001\"}");
+  const InvokeParams matte_clear = decode(
+      "layer-matte-clear", "ae.layer.track-matte.clear",
+      "{\"layerLocator\":" + layer_json
+          + ",\"idempotencyKey\":\"synthetic-matte-clear-0001\"}");
+  const InvokeParams av_read = decode(
+      "layer-av-read", "ae.layer.av-state.read",
+      "{\"layerLocator\":" + layer_json + "}");
+  const InvokeParams audio_set = decode(
+      "layer-audio-set", "ae.layer.audio-enabled.set",
+      "{\"layerLocator\":" + layer_json + ",\"enabled\":true,"
+        "\"idempotencyKey\":\"synthetic-audio-set-0001\"}");
+  const InvokeParams video_set = decode(
+      "layer-video-set", "ae.layer.video-enabled.set",
+      "{\"layerLocator\":" + layer_json + ",\"enabled\":false,"
+        "\"idempotencyKey\":\"synthetic-video-set-0001\"}");
+  require(source_request.layer_locator.has_value()
+          && matte_read.layer_locator.has_value()
+          && matte_set.matte_layer_locator.has_value()
+          && matte_set.track_matte_mode == LayerTrackMatteMode::kLuma
+          && matte_clear.arguments_fingerprint_sha256.size() == 64
+          && av_read.layer_locator.has_value()
+          && audio_set.av_enabled == true
+          && video_set.av_enabled == false,
+      "layer source/matte/AV request variants lost typed arguments");
+
+  for (const auto& [request_id, capability_id, arguments] :
+       std::array<std::tuple<std::string_view, std::string_view, std::string>, 6>{{
+         {"source-extra", "ae.layer.source.read",
+           "{\"layerLocator\":" + layer_json + ",\"extra\":true}"},
+         {"source-kind", "ae.layer.source.read",
+           "{\"layerLocator\":" + locator_json(
+               "composition", "66666666-6666-4666-8666-666666666666") + "}"},
+         {"matte-self", "ae.layer.track-matte.set",
+           "{\"layerLocator\":" + layer_json + ",\"matteLayerLocator\":"
+             + layer_json + ",\"mode\":\"alpha\","
+               "\"idempotencyKey\":\"synthetic-matte-set-0002\"}"},
+         {"matte-none", "ae.layer.track-matte.set",
+           "{\"layerLocator\":" + layer_json + ",\"matteLayerLocator\":"
+             + matte_json + ",\"mode\":\"none\","
+               "\"idempotencyKey\":\"synthetic-matte-set-0003\"}"},
+         {"matte-key", "ae.layer.track-matte.clear",
+           "{\"layerLocator\":" + layer_json + "}"},
+         {"audio-key", "ae.layer.audio-enabled.set",
+           "{\"layerLocator\":" + layer_json + ",\"enabled\":true}"},
+       }}) {
+    expect_codec_error([&] {
+      (void)decode(request_id, capability_id, arguments);
+    }, "INVALID_ARGUMENT", std::string(request_id));
+  }
+  std::string cross_matte = matte_json;
+  const std::string project =
+      "44444444-4444-4444-8444-444444444444";
+  cross_matte.replace(cross_matte.find(project), project.size(),
+      "55555555-5555-4555-8555-555555555555");
+  expect_codec_error([&] {
+    (void)decode(
+        "matte-cross", "ae.layer.track-matte.set",
+        "{\"layerLocator\":" + layer_json + ",\"matteLayerLocator\":"
+            + cross_matte + ",\"mode\":\"alpha\","
+              "\"idempotencyKey\":\"synthetic-matte-set-0004\"}");
+  }, "INVALID_ARGUMENT", "cross-composition Track Matte");
+
+  const auto layer = locator("layer", "88888888-8888-4888-8888-888888888888");
+  const auto matte = locator("layer", "99999999-9999-4999-8999-999999999999");
+  const auto source = locator("item", "77777777-7777-4777-8777-777777777777");
+  const aemcp::native::rpc::LayerSourceValue source_value{
+      layer, source, LayerSourceType::kFootage, std::string("SYNTHETIC_FOOTAGE")};
+  const aemcp::native::rpc::LayerTrackMatteValue matte_value{
+      layer, true, matte, LayerTrackMatteMode::kAlpha};
+  const aemcp::native::rpc::LayerTrackMatteSetValue matte_set_value{
+      true, layer, std::nullopt, LayerTrackMatteMode::kNone,
+      matte, LayerTrackMatteMode::kLuma};
+  const aemcp::native::rpc::LayerTrackMatteClearValue matte_clear_value{
+      true, layer, matte, LayerTrackMatteMode::kInvertedAlpha,
+      std::nullopt, LayerTrackMatteMode::kInvertedAlpha};
+  const aemcp::native::rpc::LayerAVStateValue av_value{
+      layer, true, false, true, true};
+  const aemcp::native::rpc::LayerAVSwitchSetValue audio_value{
+      true, layer, av_value, {layer, true, true, true, true}};
+  const aemcp::native::rpc::LayerAVSwitchSetValue video_value{
+      true, layer, {layer, true, true, true, true},
+      {layer, true, true, true, false}};
+
+  const auto success = [](auto value, std::string request_id, std::string digest) {
+    using Success = aemcp::native::rpc::NativeValueSuccess<decltype(value)>;
+    return Success{std::move(request_id), std::string(kSession), std::string(kHost),
+        std::move(value), 1'900'000'000'000ULL, 1'900'000'000'025ULL,
+        std::string(kDigest), std::move(digest), false};
+  };
+  require(digest_layer_source_postcondition(source_value)
+              == "0a6fbcd168e808992cc73be7d7e03c37fa300e6baf357fa5a22814429ed761bb",
+      "layer source postcondition drifted from the hand-authored fixture");
+  require(digest_layer_track_matte_read_postcondition(matte_value)
+              == "dbbe5a5fffd11710c3fe94e339b573df60a7f8cf3fe681400d26a6e840896ef0",
+      "Track Matte read postcondition drifted from the hand-authored fixture");
+  require(digest_layer_track_matte_set_postcondition(matte_set_value)
+              == "8f03c3c98d162ae91d0ace200695b699ef7b393fbe4c3155de7935eedb6fe40e",
+      "Track Matte set postcondition drifted from the hand-authored fixture");
+  require(digest_layer_track_matte_clear_postcondition(matte_clear_value)
+              == "77aaae7f37a06f1ac6d15abe28cb182d197af6d9fabdbb5dd68bd27792a59cb6",
+      "Track Matte clear postcondition drifted from the hand-authored fixture");
+  require(digest_layer_av_state_postcondition(av_value)
+              == "f4e1b6f380b3699b9dde2cafa35fe192f498e7cd021af5766d68ad1fa05cc9c7",
+      "layer AV read postcondition drifted from the hand-authored fixture");
+  require(digest_layer_audio_enabled_set_postcondition(audio_value)
+              == "755f7ffe85d6d3a239781e5926b339feae25bafb524449e86b26dce8b120064e",
+      "layer audio switch postcondition drifted from the hand-authored fixture");
+  require(digest_layer_video_enabled_set_postcondition(video_value)
+              == "d6874fa9bc4f79531bfa60a7c0046b02901ef14764b97275b6656c42cfed2bb0",
+      "layer video switch postcondition drifted from the hand-authored fixture");
+
+  const std::array<std::string, 7> encoded{{
+      body(encode_layer_source_success(success(
+          source_value, "source", digest_layer_source_postcondition(source_value)))),
+      body(encode_layer_track_matte_read_success(success(
+          matte_value, "matte-read",
+          digest_layer_track_matte_read_postcondition(matte_value)))),
+      body(encode_layer_track_matte_set_success(success(
+          matte_set_value, "matte-set",
+          digest_layer_track_matte_set_postcondition(matte_set_value)))),
+      body(encode_layer_track_matte_clear_success(success(
+          matte_clear_value, "matte-clear",
+          digest_layer_track_matte_clear_postcondition(matte_clear_value)))),
+      body(encode_layer_av_state_success(success(
+          av_value, "av-read", digest_layer_av_state_postcondition(av_value)))),
+      body(encode_layer_audio_enabled_set_success(success(
+          audio_value, "audio-set",
+          digest_layer_audio_enabled_set_postcondition(audio_value)))),
+      body(encode_layer_video_enabled_set_success(success(
+          video_value, "video-set",
+          digest_layer_video_enabled_set_postcondition(video_value)))),
+  }};
+  const std::array<std::string_view, 7> capabilities{{
+      "ae.layer.source.read", "ae.layer.track-matte.read",
+      "ae.layer.track-matte.set", "ae.layer.track-matte.clear",
+      "ae.layer.av-state.read", "ae.layer.audio-enabled.set",
+      "ae.layer.video-enabled.set",
+  }};
+  for (std::size_t index = 0; index < encoded.size(); ++index) {
+    require(encoded[index].find(
+        "\"capabilityId\":\"" + std::string(capabilities[index]) + "\"")
+            != std::string::npos,
+        "layer source/matte/AV encoder selected the wrong result variant");
+  }
+
+  auto unchanged = audio_value;
+  unchanged.after.audio_enabled = unchanged.before.audio_enabled;
+  expect_argument_error([&] {
+    (void)encode_layer_audio_enabled_set_success(success(
+        unchanged, "audio-unchanged", std::string(kDigest)));
+  }, "unchanged audio switch result");
+  auto crossed = audio_value;
+  crossed.after.video_enabled = !crossed.before.video_enabled;
+  expect_argument_error([&] {
+    (void)encode_layer_audio_enabled_set_success(success(
+        crossed, "audio-crossed", std::string(kDigest)));
+  }, "audio write changed video switch");
+}
+
 void layer_compositing_package_parses_and_serializes_closed_contracts() {
   const std::string layer_json = locator_json(
       "layer", "88888888-8888-4888-8888-888888888888");
@@ -2683,6 +2888,10 @@ void response_helpers_are_bounded_and_typed() {
   capabilities.session_id = std::string(kSession);
   capabilities.detail = CapabilityDetail::kFull;
   capabilities.query_digest = std::string(kDigest);
+  require(
+      kCapabilitiesRegistryDigest
+          == "c7a0122cf436df971631b893e3f5c7aca1c27ee25e82a767c671328f012d1052",
+      "compiled capability registry digest drifted from the 67 descriptors");
   capabilities.capabilities_digest = std::string(kCapabilitiesRegistryDigest);
   capabilities.include_composition_settings.fill(true);
   capabilities.project_summary_contract_digest = std::string(kContractDigest);
@@ -2761,6 +2970,16 @@ void response_helpers_are_bounded_and_typed() {
       std::string(kLayerParentContractDigest);
   capabilities.layer_duplicate_contract_digest =
       std::string(kLayerDuplicateContractDigest);
+  capabilities.include_layer_source_matte_av.fill(true);
+  capabilities.layer_source_matte_av_contract_digests = {{
+      "877ba54bba16bf11432caf0d504b99c753c7843824fcb6a1fcea056d00d5bedb",
+      "1722fcaa4af00c2617107330a875424df7bea27734939278c55257f99963933d",
+      "73e1c693ff26f0a68d9d68f7ea2ae48439fd01194c300cb647735882a6d10735",
+      "0864c04b02da9d17badf343fe8fd5b7ca853a7671306c14d413c3a0f47aa3e15",
+      "f4a05bfadc549c448e95cc18298a650ae96dfa2839dea457365d6bb9d0486464",
+      "8fb18201302250ab204a79bba68ba7db109cec7b90d4bf96be1d86f715fb47d1",
+      "67c82f388cae9f42a7f52dcd3b82345a1d74e5b43b653cf35010037992561403",
+  }};
   capabilities.include_layer_compositing_read = true;
   capabilities.include_layer_switch_set = true;
   capabilities.include_layer_quality_set = true;
@@ -2801,6 +3020,27 @@ void response_helpers_are_bounded_and_typed() {
   capabilities.native_media_write_contract_digest =
       std::string(kNativeMediaWriteContractDigest);
   capabilities.include_text_shape_marker.fill(true);
+  CapabilitiesSuccess full_registry = capabilities;
+  full_registry.capabilities_digest = std::string(kDigest);
+  expect_argument_error([&] {
+    (void)encode_capabilities_success(full_registry);
+  }, "full capability registry digest drift");
+  full_registry.capabilities_digest = std::string(kCapabilitiesRegistryDigest);
+  expect_argument_error([&] {
+    (void)encode_capabilities_success(full_registry);
+  }, "output frame size rejected");
+  CapabilitiesSuccess summary_registry = full_registry;
+  summary_registry.detail = CapabilityDetail::kSummary;
+  const std::string summary_registry_body =
+      body(encode_capabilities_success(summary_registry));
+  require(
+      summary_registry_body.find("\"detail\":\"summary\"") != std::string::npos
+          && summary_registry_body.find("\"id\":\"ae.layer.source.read\"")
+              != std::string::npos
+          && summary_registry_body.find("\"id\":\"ae.layer.video-enabled.set\"")
+              != std::string::npos,
+      "normal summary discovery did not retain the complete registry");
+  capabilities.include_layer_source_matte_av.fill(false);
   const std::string capabilities_body = body(encode_capabilities_success(capabilities));
   require(capabilities_body.find("\"additionalProperties\":false") != std::string::npos
       && capabilities_body.find("aemcp.requirement.native.project-read") != std::string::npos
@@ -2988,10 +3228,36 @@ void response_helpers_are_bounded_and_typed() {
           != std::string::npos
       && capabilities_body.find("\"beforeName\":\"\"") == std::string::npos,
       "full capability serializer omitted the closed contract");
+  CapabilitiesSuccess layer_capabilities = capabilities;
+  layer_capabilities.include_layer_source_matte_av.fill(true);
+  layer_capabilities.include_text_shape_marker.fill(false);
+  const std::string layer_capabilities_body =
+      body(encode_capabilities_success(layer_capabilities));
+  require(
+      layer_capabilities_body.find("\"id\":\"ae.layer.source.read\"")
+              != std::string::npos
+          && layer_capabilities_body.find("\"id\":\"ae.layer.track-matte.read\"")
+              != std::string::npos
+          && layer_capabilities_body.find("\"id\":\"ae.layer.track-matte.set\"")
+              != std::string::npos
+          && layer_capabilities_body.find("\"id\":\"ae.layer.track-matte.clear\"")
+              != std::string::npos
+          && layer_capabilities_body.find("\"id\":\"ae.layer.av-state.read\"")
+              != std::string::npos
+          && layer_capabilities_body.find("\"id\":\"ae.layer.audio-enabled.set\"")
+              != std::string::npos
+          && layer_capabilities_body.find("\"id\":\"ae.layer.video-enabled.set\"")
+              != std::string::npos
+          && layer_capabilities_body.find("\"id\":\"ae.layer.source.set\"")
+              == std::string::npos
+          && layer_capabilities_body.find(
+              "aemcp.requirement.native.layer-track-matte-set")
+              != std::string::npos
+          && layer_capabilities_body.find(
+              "73e1c693ff26f0a68d9d68f7ea2ae48439fd01194c300cb647735882a6d10735")
+              != std::string::npos,
+      "layer source, Track Matte, or AV descriptor was omitted");
   capabilities.capabilities_digest = std::string(kDigest);
-  expect_argument_error([&] {
-    (void)encode_capabilities_success(capabilities);
-  }, "full capability registry digest drift");
   capabilities.include_composition_duplicate = false;
   capabilities.include_layer_details_read = false;
   capabilities.include_layer_name_set = false;
@@ -3725,6 +3991,7 @@ int main() {
   project_graph_invokes_and_results_are_closed_and_deterministic();
   project_composition_package_parses_and_serializes_all_eight_contracts();
   layer_timeline_package_parses_and_serializes_all_eight_contracts();
+  layer_source_matte_av_package_is_closed_and_typed();
   native_media_package_parses_all_twenty_two_public_operations();
   text_shape_marker_codec_preserves_frozen_native_contracts();
   layer_compositing_package_parses_and_serializes_closed_contracts();

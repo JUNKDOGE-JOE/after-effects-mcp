@@ -25,7 +25,7 @@ inline constexpr std::size_t kTextShapeMarkerCapabilityCount = 11;
 inline constexpr std::size_t kCompositionSettingCapabilityCount = 6;
 inline constexpr std::size_t kCompositionSnapshotCapabilityCount = 2;
 inline constexpr std::string_view kCapabilitiesRegistryDigest =
-    "2421e07b2ece78beb943c9121203b4d4aecef39d3df9434000cbe792bfe32517";
+    "c7a0122cf436df971631b893e3f5c7aca1c27ee25e82a767c671328f012d1052";
 inline constexpr std::array<TextShapeMarkerCapabilityDescriptor,
     kTextShapeMarkerCapabilityCount> kTextShapeMarkerCapabilities{{
     TextShapeMarkerCapabilityDescriptor{

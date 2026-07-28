@@ -43,6 +43,29 @@ class CodecError final : public std::runtime_error {
 enum class RpcMethod { kHello, kCapabilities, kInvoke, kCancel, kInvalidateGraph };
 enum class ClientComponent { kCoreBroker, kDevelopmentSmoke };
 enum class CapabilityDetail { kSummary, kFull };
+enum class LayerSourceType { kNone, kFootage, kComposition };
+enum class LayerTrackMatteMode {
+  kNone,
+  kAlpha,
+  kInvertedAlpha,
+  kLuma,
+  kInvertedLuma,
+};
+
+inline constexpr std::string_view kLayerSourceReadCapability =
+    "ae.layer.source.read";
+inline constexpr std::string_view kLayerTrackMatteReadCapability =
+    "ae.layer.track-matte.read";
+inline constexpr std::string_view kLayerTrackMatteSetCapability =
+    "ae.layer.track-matte.set";
+inline constexpr std::string_view kLayerTrackMatteClearCapability =
+    "ae.layer.track-matte.clear";
+inline constexpr std::string_view kLayerAVStateReadCapability =
+    "ae.layer.av-state.read";
+inline constexpr std::string_view kLayerAudioEnabledSetCapability =
+    "ae.layer.audio-enabled.set";
+inline constexpr std::string_view kLayerVideoEnabledSetCapability =
+    "ae.layer.video-enabled.set";
 
 struct HelloParams {
   std::uint16_t minimum_wire_version{0};
@@ -99,6 +122,9 @@ struct InvokeParams {
   std::uint8_t item_label_id{0};
   std::string duplicate_new_name;
   std::optional<ObjectLocator> layer_parent_locator;
+  std::optional<ObjectLocator> matte_layer_locator;
+  LayerTrackMatteMode track_matte_mode{LayerTrackMatteMode::kNone};
+  std::optional<bool> av_enabled;
   CompositionCurrentTime layer_in_point;
   CompositionCurrentTime layer_duration;
   CompositionCurrentTime layer_start_time;
@@ -232,6 +258,61 @@ struct ParsedRequest {
     const LayerParentChanged& value);
 [[nodiscard]] std::string digest_layer_duplicate_postcondition(
     const LayerDuplicated& value);
+struct LayerSourceValue {
+  ObjectLocator layer_locator;
+  std::optional<ObjectLocator> source_item_locator;
+  LayerSourceType source_type{LayerSourceType::kNone};
+  std::optional<std::string> source_name;
+};
+struct LayerTrackMatteValue {
+  ObjectLocator layer_locator;
+  bool active{false};
+  std::optional<ObjectLocator> matte_layer_locator;
+  LayerTrackMatteMode mode{LayerTrackMatteMode::kNone};
+};
+struct LayerTrackMatteSetValue {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  std::optional<ObjectLocator> before_matte_layer_locator;
+  LayerTrackMatteMode before_mode{LayerTrackMatteMode::kNone};
+  ObjectLocator after_matte_layer_locator;
+  LayerTrackMatteMode after_mode{LayerTrackMatteMode::kAlpha};
+};
+struct LayerTrackMatteClearValue {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  ObjectLocator before_matte_layer_locator;
+  LayerTrackMatteMode before_mode{LayerTrackMatteMode::kAlpha};
+  std::optional<ObjectLocator> after_matte_layer_locator;
+  LayerTrackMatteMode after_mode{LayerTrackMatteMode::kAlpha};
+};
+struct LayerAVStateValue {
+  ObjectLocator layer_locator;
+  bool has_audio{false};
+  bool audio_enabled{false};
+  bool has_video{false};
+  bool video_enabled{false};
+};
+struct LayerAVSwitchSetValue {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  LayerAVStateValue before;
+  LayerAVStateValue after;
+};
+[[nodiscard]] std::string digest_layer_source_postcondition(
+    const LayerSourceValue& value);
+[[nodiscard]] std::string digest_layer_track_matte_read_postcondition(
+    const LayerTrackMatteValue& value);
+[[nodiscard]] std::string digest_layer_track_matte_set_postcondition(
+    const LayerTrackMatteSetValue& value);
+[[nodiscard]] std::string digest_layer_track_matte_clear_postcondition(
+    const LayerTrackMatteClearValue& value);
+[[nodiscard]] std::string digest_layer_av_state_postcondition(
+    const LayerAVStateValue& value);
+[[nodiscard]] std::string digest_layer_audio_enabled_set_postcondition(
+    const LayerAVSwitchSetValue& value);
+[[nodiscard]] std::string digest_layer_video_enabled_set_postcondition(
+    const LayerAVSwitchSetValue& value);
 [[nodiscard]] std::string digest_layer_compositing_postcondition(
     const LayerCompositingState& value);
 [[nodiscard]] std::string digest_layer_switch_set_postcondition(
@@ -521,6 +602,7 @@ struct CapabilitiesSuccess {
   bool include_layer_order_set{false};
   bool include_layer_parent_set{false};
   bool include_layer_duplicate{false};
+  std::array<bool, 7> include_layer_source_matte_av{};
   bool include_layer_compositing_read{false};
   bool include_layer_switch_set{false};
   bool include_layer_quality_set{false};
@@ -548,6 +630,7 @@ struct CapabilitiesSuccess {
   std::string layer_order_set_contract_digest;
   std::string layer_parent_set_contract_digest;
   std::string layer_duplicate_contract_digest;
+  std::array<std::string, 7> layer_source_matte_av_contract_digests;
   std::string layer_compositing_read_contract_digest;
   std::string layer_switch_set_contract_digest;
   std::string layer_quality_set_contract_digest;
@@ -698,6 +781,13 @@ using LayerStretchSetSuccess = NativeValueSuccess<LayerStretchChanged>;
 using LayerOrderSetSuccess = NativeValueSuccess<LayerOrderChanged>;
 using LayerParentSetSuccess = NativeValueSuccess<LayerParentChanged>;
 using LayerDuplicateSuccess = NativeValueSuccess<LayerDuplicated>;
+using LayerSourceSuccess = NativeValueSuccess<LayerSourceValue>;
+using LayerTrackMatteReadSuccess = NativeValueSuccess<LayerTrackMatteValue>;
+using LayerTrackMatteSetSuccess = NativeValueSuccess<LayerTrackMatteSetValue>;
+using LayerTrackMatteClearSuccess = NativeValueSuccess<LayerTrackMatteClearValue>;
+using LayerAVStateSuccess = NativeValueSuccess<LayerAVStateValue>;
+using LayerAudioEnabledSetSuccess = NativeValueSuccess<LayerAVSwitchSetValue>;
+using LayerVideoEnabledSetSuccess = NativeValueSuccess<LayerAVSwitchSetValue>;
 using LayerCompositingSuccess = NativeValueSuccess<LayerCompositingState>;
 using LayerSwitchSetSuccess = NativeValueSuccess<LayerSwitchChanged>;
 using LayerQualitySetSuccess = NativeValueSuccess<LayerQualityChanged>;
@@ -929,6 +1019,20 @@ struct ErrorResponse {
     const LayerParentSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_duplicate_success(
     const LayerDuplicateSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_source_success(
+    const LayerSourceSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_track_matte_read_success(
+    const LayerTrackMatteReadSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_track_matte_set_success(
+    const LayerTrackMatteSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_track_matte_clear_success(
+    const LayerTrackMatteClearSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_av_state_success(
+    const LayerAVStateSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_audio_enabled_set_success(
+    const LayerAudioEnabledSetSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_layer_video_enabled_set_success(
+    const LayerVideoEnabledSetSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_compositing_success(
     const LayerCompositingSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_layer_switch_set_success(

@@ -659,6 +659,7 @@ bool valid_output_locator(const ObjectLocator& locator) {
 bool valid_decimal_string(std::string_view text);
 bool same_locator_scope(const ObjectLocator& value, const ObjectLocator& scope);
 std::string canonical_layer_property_value(const LayerPropertyValue& value);
+std::string track_matte_mode_json(LayerTrackMatteMode value);
 
 LayerPropertyValue parse_layer_property_value(const JsonValue& value) {
   const JsonValue::Object* object = object_of(value);
@@ -1381,6 +1382,24 @@ std::string canonical_request(const ParsedRequest& request) {
         arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
             + ",\"layerLocator\":" + locator_json(*value.layer_locator)
             + ",\"newName\":" + json_string(value.layer_new_name) + "}";
+      } else if (value.capability_id == kLayerSourceReadCapability
+          || value.capability_id == kLayerTrackMatteReadCapability
+          || value.capability_id == kLayerAVStateReadCapability) {
+        arguments = "{\"layerLocator\":" + locator_json(*value.layer_locator) + "}";
+      } else if (value.capability_id == kLayerTrackMatteSetCapability) {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator)
+            + ",\"matteLayerLocator\":" + locator_json(*value.matte_layer_locator)
+            + ",\"mode\":" + track_matte_mode_json(value.track_matte_mode) + "}";
+      } else if (value.capability_id == kLayerTrackMatteClearCapability) {
+        arguments = "{\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator) + "}";
+      } else if (value.capability_id == kLayerAudioEnabledSetCapability
+          || value.capability_id == kLayerVideoEnabledSetCapability) {
+        arguments = "{\"enabled\":"
+            + std::string(*value.av_enabled ? "true" : "false")
+            + ",\"idempotencyKey\":" + json_string(value.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*value.layer_locator) + "}";
       } else if (value.capability_id == kLayerCompositingReadCapability) {
         arguments = "{\"layerLocator\":" + locator_json(*value.layer_locator) + "}";
       } else if (value.capability_id == kLayerSwitchSetCapability) {
@@ -2209,6 +2228,74 @@ ParsedRequest classify_request(const JsonValue& root) {
             "{\"idempotencyKey\":" + json_string(result.idempotency_key)
             + ",\"layerLocator\":" + locator_json(*result.layer_locator)
             + ",\"newName\":" + json_string(result.layer_new_name) + "}");
+      } else if (capability == kLayerSourceReadCapability
+          || capability == kLayerTrackMatteReadCapability
+          || capability == kLayerAVStateReadCapability) {
+        if (!exact_keys(*arguments, {"layerLocator"}, {"layerLocator"})) {
+          invalid_argument("layer source, Track Matte, or AV read arguments are not closed");
+        }
+        parse_layer_locator();
+      } else if (capability == kLayerTrackMatteSetCapability) {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "matteLayerLocator", "mode", "idempotencyKey"},
+                {"layerLocator", "matteLayerLocator", "mode", "idempotencyKey"})) {
+          invalid_argument("layer Track Matte set arguments are not closed");
+        }
+        parse_layer_locator();
+        result.matte_layer_locator = parse_locator(
+            *member(*arguments, "matteLayerLocator"), "layer");
+        if (!same_locator_scope(*result.layer_locator, *result.matte_layer_locator)
+            || result.layer_locator->object_id == result.matte_layer_locator->object_id) {
+          invalid_argument("matte layer locator must be a distinct layer in the same context");
+        }
+        const std::string mode = required_string(
+            *arguments, "mode", CodecErrorKind::kInvalidArgument);
+        if (mode == "alpha") {
+          result.track_matte_mode = LayerTrackMatteMode::kAlpha;
+        } else if (mode == "inverted-alpha") {
+          result.track_matte_mode = LayerTrackMatteMode::kInvertedAlpha;
+        } else if (mode == "luma") {
+          result.track_matte_mode = LayerTrackMatteMode::kLuma;
+        } else if (mode == "inverted-luma") {
+          result.track_matte_mode = LayerTrackMatteMode::kInvertedLuma;
+        } else {
+          invalid_argument("invalid settable Track Matte mode");
+        }
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator)
+            + ",\"matteLayerLocator\":" + locator_json(*result.matte_layer_locator)
+            + ",\"mode\":" + track_matte_mode_json(result.track_matte_mode) + "}");
+      } else if (capability == kLayerTrackMatteClearCapability) {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "idempotencyKey"},
+                {"layerLocator", "idempotencyKey"})) {
+          invalid_argument("layer Track Matte clear arguments are not closed");
+        }
+        parse_layer_locator();
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator) + "}");
+      } else if (capability == kLayerAudioEnabledSetCapability
+          || capability == kLayerVideoEnabledSetCapability) {
+        if (!exact_keys(
+                *arguments,
+                {"layerLocator", "enabled", "idempotencyKey"},
+                {"layerLocator", "enabled", "idempotencyKey"})) {
+          invalid_argument("layer AV switch arguments are not closed");
+        }
+        parse_layer_locator();
+        result.av_enabled = required_bool(
+            *arguments, "enabled", CodecErrorKind::kInvalidArgument);
+        parse_layer_idempotency_key();
+        result.arguments_fingerprint_sha256 = sha256_hex(
+            "{\"enabled\":" + std::string(*result.av_enabled ? "true" : "false")
+            + ",\"idempotencyKey\":" + json_string(result.idempotency_key)
+            + ",\"layerLocator\":" + locator_json(*result.layer_locator) + "}");
       } else if (capability == kLayerCompositingReadCapability) {
         if (!exact_keys(*arguments, {"layerLocator"}, {"layerLocator"})) {
           invalid_argument("layer compositing arguments are not closed");
@@ -3638,6 +3725,145 @@ bool same_locator_scope(const ObjectLocator& value, const ObjectLocator& scope) 
 
 std::string nullable_locator_json(const std::optional<ObjectLocator>& value) {
   return value.has_value() ? locator_json(*value) : "null";
+}
+
+std::string layer_source_type_json(LayerSourceType value) {
+  switch (value) {
+    case LayerSourceType::kNone: return "\"none\"";
+    case LayerSourceType::kFootage: return "\"footage\"";
+    case LayerSourceType::kComposition: return "\"composition\"";
+  }
+  invalid_argument("invalid layer source type");
+}
+
+std::string track_matte_mode_json(LayerTrackMatteMode value) {
+  switch (value) {
+    case LayerTrackMatteMode::kNone: return "\"none\"";
+    case LayerTrackMatteMode::kAlpha: return "\"alpha\"";
+    case LayerTrackMatteMode::kInvertedAlpha: return "\"inverted-alpha\"";
+    case LayerTrackMatteMode::kLuma: return "\"luma\"";
+    case LayerTrackMatteMode::kInvertedLuma: return "\"inverted-luma\"";
+  }
+  invalid_argument("invalid Track Matte mode");
+}
+
+std::string canonical_layer_source_value(const LayerSourceValue& value) {
+  if (!valid_output_locator(value.layer_locator) || value.layer_locator.kind != "layer") {
+    invalid_argument("invalid layer source target");
+  }
+  if (value.source_type == LayerSourceType::kNone) {
+    if (value.source_item_locator.has_value() || value.source_name.has_value()) {
+      invalid_argument("source type none requires null source facts");
+    }
+  } else {
+    const std::string expected =
+        value.source_type == LayerSourceType::kComposition ? "composition" : "item";
+    if (!value.source_item_locator.has_value()
+        || value.source_item_locator->kind != expected
+        || !valid_output_locator(*value.source_item_locator)
+        || !same_locator_scope(*value.source_item_locator, value.layer_locator)
+        || !value.source_name.has_value()
+        || validate_utf8_and_count(*value.source_name) > 1024) {
+      invalid_argument("incoherent layer source facts");
+    }
+  }
+  return "{\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"sourceItemLocator\":" + nullable_locator_json(value.source_item_locator)
+      + ",\"sourceName\":"
+      + (value.source_name.has_value() ? json_string(*value.source_name) : "null")
+      + ",\"sourceType\":" + layer_source_type_json(value.source_type) + "}";
+}
+
+bool valid_bound_matte(
+    const ObjectLocator& matte, const ObjectLocator& layer) {
+  return valid_output_locator(matte) && matte.kind == "layer"
+      && same_locator_scope(matte, layer) && matte.object_id != layer.object_id;
+}
+
+std::string canonical_layer_track_matte_value(const LayerTrackMatteValue& value) {
+  if (!valid_output_locator(value.layer_locator) || value.layer_locator.kind != "layer"
+      || value.active != value.matte_layer_locator.has_value()
+      || (value.matte_layer_locator.has_value()
+        && !valid_bound_matte(*value.matte_layer_locator, value.layer_locator))
+      || (value.active && value.mode == LayerTrackMatteMode::kNone)) {
+    invalid_argument("incoherent Track Matte state");
+  }
+  return "{\"active\":" + std::string(value.active ? "true" : "false")
+      + ",\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"matteLayerLocator\":" + nullable_locator_json(value.matte_layer_locator)
+      + ",\"mode\":" + track_matte_mode_json(value.mode) + "}";
+}
+
+std::string canonical_layer_track_matte_set_value(
+    const LayerTrackMatteSetValue& value) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || (value.before_matte_layer_locator.has_value()
+        && (!valid_bound_matte(*value.before_matte_layer_locator, value.layer_locator)
+          || value.before_mode == LayerTrackMatteMode::kNone))
+      || !valid_bound_matte(value.after_matte_layer_locator, value.layer_locator)
+      || value.after_mode == LayerTrackMatteMode::kNone
+      || (value.before_matte_layer_locator == value.after_matte_layer_locator
+        && value.before_mode == value.after_mode)) {
+    invalid_argument("invalid Track Matte set result");
+  }
+  return "{\"afterMatteLayerLocator\":"
+      + locator_json(value.after_matte_layer_locator)
+      + ",\"afterMode\":" + track_matte_mode_json(value.after_mode)
+      + ",\"beforeMatteLayerLocator\":"
+      + nullable_locator_json(value.before_matte_layer_locator)
+      + ",\"beforeMode\":" + track_matte_mode_json(value.before_mode)
+      + ",\"changed\":true,\"layerLocator\":" + locator_json(value.layer_locator) + "}";
+}
+
+std::string canonical_layer_track_matte_clear_value(
+    const LayerTrackMatteClearValue& value) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || !valid_bound_matte(value.before_matte_layer_locator, value.layer_locator)
+      || value.before_mode == LayerTrackMatteMode::kNone
+      || value.after_matte_layer_locator.has_value()
+      || value.after_mode != value.before_mode) {
+    invalid_argument("invalid Track Matte clear result");
+  }
+  return "{\"afterMatteLayerLocator\":null,\"afterMode\":"
+      + track_matte_mode_json(value.after_mode)
+      + ",\"beforeMatteLayerLocator\":" + locator_json(value.before_matte_layer_locator)
+      + ",\"beforeMode\":" + track_matte_mode_json(value.before_mode)
+      + ",\"changed\":true,\"layerLocator\":" + locator_json(value.layer_locator) + "}";
+}
+
+std::string canonical_layer_av_state_value(const LayerAVStateValue& value) {
+  if (!valid_output_locator(value.layer_locator) || value.layer_locator.kind != "layer") {
+    invalid_argument("invalid AV state layer");
+  }
+  return "{\"audioEnabled\":" + std::string(value.audio_enabled ? "true" : "false")
+      + ",\"hasAudio\":" + (value.has_audio ? "true" : "false")
+      + ",\"hasVideo\":" + (value.has_video ? "true" : "false")
+      + ",\"layerLocator\":" + locator_json(value.layer_locator)
+      + ",\"videoEnabled\":" + (value.video_enabled ? "true" : "false") + "}";
+}
+
+std::string canonical_layer_av_switch_value(
+    const LayerAVSwitchSetValue& value, bool audio) {
+  if (!value.changed || !valid_output_locator(value.layer_locator)
+      || value.layer_locator.kind != "layer"
+      || value.before.layer_locator != value.layer_locator
+      || value.after.layer_locator != value.layer_locator
+      || (audio
+        ? (value.before.audio_enabled == value.after.audio_enabled
+          || value.before.has_audio != value.after.has_audio
+          || value.before.has_video != value.after.has_video
+          || value.before.video_enabled != value.after.video_enabled)
+        : (value.before.video_enabled == value.after.video_enabled
+          || value.before.has_audio != value.after.has_audio
+          || value.before.audio_enabled != value.after.audio_enabled
+          || value.before.has_video != value.after.has_video))) {
+    invalid_argument("invalid AV switch transition");
+  }
+  return "{\"after\":" + canonical_layer_av_state_value(value.after)
+      + ",\"before\":" + canonical_layer_av_state_value(value.before)
+      + ",\"changed\":true,\"layerLocator\":" + locator_json(value.layer_locator) + "}";
 }
 
 std::string canonical_project_items_value(const ProjectItemsPage& page) {
@@ -5488,6 +5714,53 @@ std::string digest_layer_duplicate_postcondition(const LayerDuplicated& value) {
       + canonical_layer_duplicate_value(value) + "}");
 }
 
+std::string digest_layer_source_postcondition(const LayerSourceValue& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.source.read\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_source_value(value) + "}");
+}
+
+std::string digest_layer_track_matte_read_postcondition(
+    const LayerTrackMatteValue& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.track-matte.read\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_track_matte_value(value) + "}");
+}
+
+std::string digest_layer_track_matte_set_postcondition(
+    const LayerTrackMatteSetValue& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.track-matte.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_track_matte_set_value(value) + "}");
+}
+
+std::string digest_layer_track_matte_clear_postcondition(
+    const LayerTrackMatteClearValue& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.track-matte.clear\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_track_matte_clear_value(value) + "}");
+}
+
+std::string digest_layer_av_state_postcondition(const LayerAVStateValue& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.av-state.read\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_av_state_value(value) + "}");
+}
+
+std::string digest_layer_audio_enabled_set_postcondition(
+    const LayerAVSwitchSetValue& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.audio-enabled.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_av_switch_value(value, true) + "}");
+}
+
+std::string digest_layer_video_enabled_set_postcondition(
+    const LayerAVSwitchSetValue& value) {
+  return sha256_hex(
+      "{\"capabilityId\":\"ae.layer.video-enabled.set\",\"capabilityVersion\":1,\"value\":"
+      + canonical_layer_av_switch_value(value, false) + "}");
+}
+
 std::string digest_layer_compositing_postcondition(
     const LayerCompositingState& value) {
   return sha256_hex(
@@ -6621,6 +6894,52 @@ std::string package_descriptor(
   return descriptor + "}";
 }
 
+constexpr std::array<std::string_view, 7> kLayerSourceMatteAvFullDescriptors{{
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"877ba54bba16bf11432caf0d504b99c753c7843824fcb6a1fcea056d00d5bedb","detail":"full","examples":[{"arguments":{"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"outcome":"succeeded","value":{"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"sourceItemLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"item","objectId":"77777777-7777-4777-8777-777777777777","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"sourceName":"SYNTHETIC_FOOTAGE","sourceType":"footage"}},"id":"aemcp-example-layer-source-read-positive","kind":"positive","summary":"Synthetic success demonstrates the typed result contract."},{"arguments":{"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-layer-source-read-stale","kind":"negative","summary":"A stale locator is rejected before host access."}],"id":"ae.layer.source.read","idempotency":"idempotent","inputContractId":"aemcp.contract.ae.layer.source.read.input.v1","inputSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["layerLocator"],"type":"object"},"mutability":"read-only","preconditions":["layerLocator must identify a current native layer."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.layer-source-read"}],"resultContractId":"aemcp.contract.ae.layer.source.read.result.v1","resultSchema":{"$defs":{"compositionLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"composition"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"itemLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"item"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"},"sourceItemLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/itemLocator"},{"$ref":"#/$defs/compositionLocator"}]},"sourceName":{"oneOf":[{"type":"null"},{"maxLength":1024,"type":"string"}]},"sourceType":{"enum":["none","footage","composition"]}},"required":["layerLocator","sourceItemLocator","sourceType","sourceName"],"type":"object","x-invariant":"sourceType-none-implies-null-source;footage-implies-item;composition-implies-composition"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads layer source state without changing After Effects state.","summary":"Read one layer's current project-item source.","undo":"not-applicable","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"1722fcaa4af00c2617107330a875424df7bea27734939278c55257f99963933d","detail":"full","examples":[{"arguments":{"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"outcome":"succeeded","value":{"active":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"matteLayerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"99999999-9999-4999-8999-999999999999","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"mode":"alpha"}},"id":"aemcp-example-layer-track-matte-read-positive","kind":"positive","summary":"Synthetic success demonstrates the typed result contract."},{"arguments":{"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-layer-track-matte-read-stale","kind":"negative","summary":"A stale locator is rejected before host access."}],"id":"ae.layer.track-matte.read","idempotency":"idempotent","inputContractId":"aemcp.contract.ae.layer.track-matte.read.input.v1","inputSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["layerLocator"],"type":"object"},"mutability":"read-only","preconditions":["layerLocator must identify a current native layer."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.layer-track-matte-read"}],"resultContractId":"aemcp.contract.ae.layer.track-matte.read.result.v1","resultSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"active":{"type":"boolean"},"layerLocator":{"$ref":"#/$defs/layerLocator"},"matteLayerLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/layerLocator"}]},"mode":{"enum":["none","alpha","inverted-alpha","luma","inverted-luma"]}},"required":["layerLocator","active","matteLayerLocator","mode"],"type":"object","x-invariant":"active-iff-matteLayerLocator-non-null;active-mode-not-none;matte-distinct-and-same-composition"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads Track Matte state without changing After Effects state.","summary":"Read one layer's modern Track Matte relationship.","undo":"not-applicable","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"73e1c693ff26f0a68d9d68f7ea2ae48439fd01194c300cb647735882a6d10735","detail":"full","examples":[{"arguments":{"idempotencyKey":"synthetic-matte-set-0001","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"matteLayerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"99999999-9999-4999-8999-999999999999","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"mode":"luma"},"expected":{"outcome":"succeeded","value":{"afterMatteLayerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"99999999-9999-4999-8999-999999999999","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"afterMode":"luma","beforeMatteLayerLocator":null,"beforeMode":"none","changed":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}}},"id":"aemcp-example-layer-track-matte-set-positive","kind":"positive","summary":"Synthetic success demonstrates the typed result contract."},{"arguments":{"idempotencyKey":"synthetic-matte-set-0001","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"matteLayerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"99999999-9999-4999-8999-999999999999","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"mode":"luma"},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-layer-track-matte-set-stale","kind":"negative","summary":"A stale locator is rejected before host access."}],"id":"ae.layer.track-matte.set","idempotency":"idempotency-key","inputContractId":"aemcp.contract.ae.layer.track-matte.set.input.v1","inputSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"layerLocator":{"$ref":"#/$defs/layerLocator"},"matteLayerLocator":{"$ref":"#/$defs/layerLocator"},"mode":{"enum":["alpha","inverted-alpha","luma","inverted-luma"]}},"required":["layerLocator","matteLayerLocator","mode","idempotencyKey"],"type":"object"},"mutability":"mutating","preconditions":["layerLocator must identify a current native layer.","matteLayerLocator must identify a distinct current layer in the same composition."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.layer-track-matte-set"}],"resultContractId":"aemcp.contract.ae.layer.track-matte.set.result.v1","resultSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"afterMatteLayerLocator":{"$ref":"#/$defs/layerLocator"},"afterMode":{"enum":["alpha","inverted-alpha","luma","inverted-luma"]},"beforeMatteLayerLocator":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/layerLocator"}]},"beforeMode":{"enum":["none","alpha","inverted-alpha","luma","inverted-luma"]},"changed":{"const":true},"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["changed","layerLocator","beforeMatteLayerLocator","beforeMode","afterMatteLayerLocator","afterMode"],"type":"object","x-invariant":"after-matte-and-mode-equal-request;before-differs;all-matte-locators-distinct-and-same-composition"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes one Track Matte relationship and creates one After Effects Undo step.","summary":"Set one arbitrary same-composition Track Matte.","undo":"ae-undo-group","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"0864c04b02da9d17badf343fe8fd5b7ca853a7671306c14d413c3a0f47aa3e15","detail":"full","examples":[{"arguments":{"idempotencyKey":"synthetic-matte-clear-0001","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"outcome":"succeeded","value":{"afterMatteLayerLocator":null,"afterMode":"inverted-alpha","beforeMatteLayerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"99999999-9999-4999-8999-999999999999","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"beforeMode":"inverted-alpha","changed":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}}},"id":"aemcp-example-layer-track-matte-clear-positive","kind":"positive","summary":"Synthetic success demonstrates the typed result contract."},{"arguments":{"idempotencyKey":"synthetic-matte-clear-0001","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-layer-track-matte-clear-stale","kind":"negative","summary":"A stale locator is rejected before host access."}],"id":"ae.layer.track-matte.clear","idempotency":"idempotency-key","inputContractId":"aemcp.contract.ae.layer.track-matte.clear.input.v1","inputSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["layerLocator","idempotencyKey"],"type":"object"},"mutability":"mutating","preconditions":["layerLocator must identify a current native layer.","The layer must have an active Track Matte relationship."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.layer-track-matte-clear"}],"resultContractId":"aemcp.contract.ae.layer.track-matte.clear.result.v1","resultSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"afterMatteLayerLocator":{"type":"null"},"afterMode":{"enum":["alpha","inverted-alpha","luma","inverted-luma"]},"beforeMatteLayerLocator":{"$ref":"#/$defs/layerLocator"},"beforeMode":{"enum":["alpha","inverted-alpha","luma","inverted-luma"]},"changed":{"const":true},"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["changed","layerLocator","beforeMatteLayerLocator","beforeMode","afterMatteLayerLocator","afterMode"],"type":"object","x-invariant":"after-matte-null;afterMode-equals-beforeMode;before-matte-distinct-and-same-composition"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Removes one Track Matte relationship and creates one After Effects Undo step.","summary":"Clear one layer's Track Matte while preserving its stored mode.","undo":"ae-undo-group","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"f4a05bfadc549c448e95cc18298a650ae96dfa2839dea457365d6bb9d0486464","detail":"full","examples":[{"arguments":{"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"outcome":"succeeded","value":{"audioEnabled":false,"hasAudio":true,"hasVideo":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"videoEnabled":true}},"id":"aemcp-example-layer-av-state-read-positive","kind":"positive","summary":"Synthetic success demonstrates the typed result contract."},{"arguments":{"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-layer-av-state-read-stale","kind":"negative","summary":"A stale locator is rejected before host access."}],"id":"ae.layer.av-state.read","idempotency":"idempotent","inputContractId":"aemcp.contract.ae.layer.av-state.read.input.v1","inputSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["layerLocator"],"type":"object"},"mutability":"read-only","preconditions":["layerLocator must identify a current native layer."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.layer-av-state-read"}],"resultContractId":"aemcp.contract.ae.layer.av-state.read.result.v1","resultSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"audioEnabled":{"type":"boolean"},"hasAudio":{"type":"boolean"},"hasVideo":{"type":"boolean"},"layerLocator":{"$ref":"#/$defs/layerLocator"},"videoEnabled":{"type":"boolean"}},"required":["layerLocator","hasAudio","audioEnabled","hasVideo","videoEnabled"],"type":"object","x-invariant":"av-switches-report-raw-layer-state"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads AV state without changing After Effects state.","summary":"Read source media capabilities and layer AV switches.","undo":"not-applicable","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"8fb18201302250ab204a79bba68ba7db109cec7b90d4bf96be1d86f715fb47d1","detail":"full","examples":[{"arguments":{"enabled":true,"idempotencyKey":"synthetic-audio-set-0001","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"outcome":"succeeded","value":{"after":{"audioEnabled":true,"hasAudio":true,"hasVideo":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"videoEnabled":true},"before":{"audioEnabled":false,"hasAudio":true,"hasVideo":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"videoEnabled":true},"changed":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}}},"id":"aemcp-example-layer-audio-enabled-set-positive","kind":"positive","summary":"Synthetic success demonstrates the typed result contract."},{"arguments":{"enabled":true,"idempotencyKey":"synthetic-audio-set-0001","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-layer-audio-enabled-set-stale","kind":"negative","summary":"A stale locator is rejected before host access."}],"id":"ae.layer.audio-enabled.set","idempotency":"idempotency-key","inputContractId":"aemcp.contract.ae.layer.audio-enabled.set.input.v1","inputSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"enabled":{"type":"boolean"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["layerLocator","enabled","idempotencyKey"],"type":"object"},"mutability":"mutating","preconditions":["layerLocator must identify a current native layer.","The current source must have audio and the requested value must differ."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.layer-audio-enabled-set"}],"resultContractId":"aemcp.contract.ae.layer.audio-enabled.set.result.v1","resultSchema":{"$defs":{"avState":{"additionalProperties":false,"properties":{"audioEnabled":{"type":"boolean"},"hasAudio":{"type":"boolean"},"hasVideo":{"type":"boolean"},"layerLocator":{"$ref":"#/$defs/layerLocator"},"videoEnabled":{"type":"boolean"}},"required":["layerLocator","hasAudio","audioEnabled","hasVideo","videoEnabled"],"type":"object"},"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"after":{"$ref":"#/$defs/avState"},"before":{"$ref":"#/$defs/avState"},"changed":{"const":true},"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["changed","layerLocator","before","after"],"type":"object","x-invariant":"after-audioEnabled-equals-request;all-other-av-state-fields-preserved"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes one layer audio switch and creates one After Effects Undo step.","summary":"Set one layer's audio-enabled switch.","undo":"ae-undo-group","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"67c82f388cae9f42a7f52dcd3b82345a1d74e5b43b653cf35010037992561403","detail":"full","examples":[{"arguments":{"enabled":false,"idempotencyKey":"synthetic-video-set-0001","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"outcome":"succeeded","value":{"after":{"audioEnabled":true,"hasAudio":true,"hasVideo":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"videoEnabled":false},"before":{"audioEnabled":true,"hasAudio":true,"hasVideo":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"},"videoEnabled":true},"changed":true,"layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}}},"id":"aemcp-example-layer-video-enabled-set-positive","kind":"positive","summary":"Synthetic success demonstrates the typed result contract."},{"arguments":{"enabled":false,"idempotencyKey":"synthetic-video-set-0001","layerLocator":{"generation":8,"hostInstanceId":"22222222-2222-4222-8222-222222222222","kind":"layer","objectId":"88888888-8888-4888-8888-888888888888","projectId":"44444444-4444-4444-8444-444444444444","sessionId":"11111111-1111-4111-8111-111111111111"}},"expected":{"errorCode":"STALE_LOCATOR","recoveryAction":"refresh-locator"},"id":"aemcp-example-layer-video-enabled-set-stale","kind":"negative","summary":"A stale locator is rejected before host access."}],"id":"ae.layer.video-enabled.set","idempotency":"idempotency-key","inputContractId":"aemcp.contract.ae.layer.video-enabled.set.input.v1","inputSchema":{"$defs":{"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"enabled":{"type":"boolean"},"idempotencyKey":{"maxLength":64,"minLength":16,"pattern":"^[A-Za-z0-9][A-Za-z0-9._:-]*$","type":"string"},"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["layerLocator","enabled","idempotencyKey"],"type":"object"},"mutability":"mutating","preconditions":["layerLocator must identify a current native layer.","The current source must have video and the requested value must differ."],"requirements":[{"contractVersion":1,"id":"aemcp.requirement.native.layer-video-enabled-set"}],"resultContractId":"aemcp.contract.ae.layer.video-enabled.set.result.v1","resultSchema":{"$defs":{"avState":{"additionalProperties":false,"properties":{"audioEnabled":{"type":"boolean"},"hasAudio":{"type":"boolean"},"hasVideo":{"type":"boolean"},"layerLocator":{"$ref":"#/$defs/layerLocator"},"videoEnabled":{"type":"boolean"}},"required":["layerLocator","hasAudio","audioEnabled","hasVideo","videoEnabled"],"type":"object"},"layerLocator":{"additionalProperties":false,"properties":{"generation":{"maximum":9007199254740991,"minimum":1,"type":"integer"},"hostInstanceId":{"$ref":"#/$defs/uuid"},"kind":{"const":"layer"},"objectId":{"$ref":"#/$defs/uuid"},"projectId":{"$ref":"#/$defs/uuid"},"sessionId":{"$ref":"#/$defs/uuid"}},"required":["kind","hostInstanceId","sessionId","projectId","generation","objectId"],"type":"object"},"uuid":{"pattern":"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$","type":"string"}},"additionalProperties":false,"properties":{"after":{"$ref":"#/$defs/avState"},"before":{"$ref":"#/$defs/avState"},"changed":{"const":true},"layerLocator":{"$ref":"#/$defs/layerLocator"}},"required":["changed","layerLocator","before","after"],"type":"object","x-invariant":"after-videoEnabled-equals-request;all-other-av-state-fields-preserved"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes one layer video switch and creates one After Effects Undo step.","summary":"Set one layer's video-enabled switch.","undo":"ae-undo-group","version":1})aemcp"
+}};
+
+constexpr std::array<std::string_view, 7> kLayerSourceMatteAvSummaryDescriptors{{
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.layer.source.read","idempotency":"idempotent","mutability":"read-only","preconditions":["layerLocator must identify a current native layer."],"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads layer source state without changing After Effects state.","summary":"Read one layer's current project-item source.","undo":"not-applicable","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.layer.track-matte.read","idempotency":"idempotent","mutability":"read-only","preconditions":["layerLocator must identify a current native layer."],"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads Track Matte state without changing After Effects state.","summary":"Read one layer's modern Track Matte relationship.","undo":"not-applicable","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.layer.track-matte.set","idempotency":"idempotency-key","mutability":"mutating","preconditions":["layerLocator must identify a current native layer.","matteLayerLocator must identify a distinct current layer in the same composition."],"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes one Track Matte relationship and creates one After Effects Undo step.","summary":"Set one arbitrary same-composition Track Matte.","undo":"ae-undo-group","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.layer.track-matte.clear","idempotency":"idempotency-key","mutability":"mutating","preconditions":["layerLocator must identify a current native layer.","The layer must have an active Track Matte relationship."],"risk":"write","schemaVersion":1,"sideEffectSummary":"Removes one Track Matte relationship and creates one After Effects Undo step.","summary":"Clear one layer's Track Matte while preserving its stored mode.","undo":"ae-undo-group","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.layer.av-state.read","idempotency":"idempotent","mutability":"read-only","preconditions":["layerLocator must identify a current native layer."],"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads AV state without changing After Effects state.","summary":"Read source media capabilities and layer AV switches.","undo":"not-applicable","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.layer.audio-enabled.set","idempotency":"idempotency-key","mutability":"mutating","preconditions":["layerLocator must identify a current native layer.","The current source must have audio and the requested value must differ."],"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes one layer audio switch and creates one After Effects Undo step.","summary":"Set one layer's audio-enabled switch.","undo":"ae-undo-group","version":1})aemcp",
+    R"aemcp({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"detail":"summary","id":"ae.layer.video-enabled.set","idempotency":"idempotency-key","mutability":"mutating","preconditions":["layerLocator must identify a current native layer.","The current source must have video and the requested value must differ."],"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes one layer video switch and creates one After Effects Undo step.","summary":"Set one layer's video-enabled switch.","undo":"ae-undo-group","version":1})aemcp"
+}};
+
+constexpr std::array<std::string_view, 7> kLayerSourceMatteAvContractDigests{{
+    "877ba54bba16bf11432caf0d504b99c753c7843824fcb6a1fcea056d00d5bedb",
+    "1722fcaa4af00c2617107330a875424df7bea27734939278c55257f99963933d",
+    "73e1c693ff26f0a68d9d68f7ea2ae48439fd01194c300cb647735882a6d10735",
+    "0864c04b02da9d17badf343fe8fd5b7ca853a7671306c14d413c3a0f47aa3e15",
+    "f4a05bfadc549c448e95cc18298a650ae96dfa2839dea457365d6bb9d0486464",
+    "8fb18201302250ab204a79bba68ba7db109cec7b90d4bf96be1d86f715fb47d1",
+    "67c82f388cae9f42a7f52dcd3b82345a1d74e5b43b653cf35010037992561403"
+}};
+
+std::string layer_source_matte_av_descriptor(
+    const CapabilitiesSuccess& response, std::size_t index) {
+  if (index >= kLayerSourceMatteAvFullDescriptors.size()) {
+    invalid_argument("invalid layer source, Track Matte, or AV descriptor index");
+  }
+  if (response.detail == CapabilityDetail::kFull) {
+    require_digest(response.layer_source_matte_av_contract_digests[index], "contract digest");
+    if (response.layer_source_matte_av_contract_digests[index]
+        != kLayerSourceMatteAvContractDigests[index]) {
+      invalid_argument("layer source, Track Matte, or AV contract digest drift");
+    }
+    return std::string(kLayerSourceMatteAvFullDescriptors[index]);
+  }
+  return std::string(kLayerSourceMatteAvSummaryDescriptors[index]);
+}
+
 std::string native_media_descriptor(
     const CapabilitiesSuccess& response, bool write) {
   static constexpr std::string_view kReadOperations =
@@ -7497,13 +7816,15 @@ std::string layer_timeline_descriptor(
   const std::string stem = id.substr(3);
   std::string example_stem = stem;
   std::replace(example_stem.begin(), example_stem.end(), '.', '-');
-  return replace_descriptor_text(package_descriptor(response, {
+  std::string descriptor = package_descriptor(response, {
       id, summary, side_effect, preconditions,
       "aemcp.contract." + id + ".input.v1",
       "aemcp.contract." + id + ".result.v1", requirement,
       input, result, arguments, "aemcp-example-" + example_stem + "-stale",
       "STALE_LOCATOR", "refresh-locator", mutating,
-      "aemcp-example-" + example_stem, positive}, configured_digest),
+      "aemcp-example-" + example_stem, positive}, configured_digest);
+  if (response.detail == CapabilityDetail::kSummary) return descriptor;
+  return replace_descriptor_text(std::move(descriptor),
       "Synthetic failure exercises the documented recovery path.",
       "Synthetic failure exercises stale-locator recovery.");
 }
@@ -7643,13 +7964,15 @@ std::string layer_compositing_descriptor(
   }
   std::string example_stem = id.substr(3);
   std::replace(example_stem.begin(), example_stem.end(), '.', '-');
-  return replace_descriptor_text(package_descriptor(response, {
+  std::string descriptor = package_descriptor(response, {
       id, summary, side_effect, preconditions,
       "aemcp.contract." + id + ".input.v1",
       "aemcp.contract." + id + ".result.v1", requirement,
       input, result, arguments, "aemcp-example-" + example_stem + "-stale",
       "STALE_LOCATOR", "refresh-locator", mutating,
-      "aemcp-example-" + example_stem, positive}, configured),
+      "aemcp-example-" + example_stem, positive}, configured);
+  if (response.detail == CapabilityDetail::kSummary) return descriptor;
+  return replace_descriptor_text(std::move(descriptor),
       "Synthetic failure exercises the documented recovery path.",
       "Synthetic failure exercises stale-locator recovery.");
 }
@@ -7976,6 +8299,14 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
     items += layer_timeline_descriptor(response, LayerTimelineDescriptorKind::kDuplicate);
     needs_comma = true;
   }
+  for (std::size_t index = 0;
+       index < response.include_layer_source_matte_av.size();
+       ++index) {
+    if (!response.include_layer_source_matte_av[index]) continue;
+    if (needs_comma) items.push_back(',');
+    items += layer_source_matte_av_descriptor(response, index);
+    needs_comma = true;
+  }
   const auto append_compositing = [&](bool include, LayerCompositingDescriptorKind kind) {
     if (!include) return;
     if (needs_comma) items.push_back(',');
@@ -8079,6 +8410,10 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
       && response.include_layer_order_set
       && response.include_layer_parent_set
       && response.include_layer_duplicate
+      && std::all_of(
+          response.include_layer_source_matte_av.begin(),
+          response.include_layer_source_matte_av.end(),
+          [](bool included) { return included; })
       && response.include_layer_compositing_read
       && response.include_layer_switch_set
       && response.include_layer_quality_set
@@ -8646,6 +8981,90 @@ std::vector<std::uint8_t> encode_layer_duplicate_success(
       response.value.source_layer_locator,
       canonical_layer_duplicate_value(response.value),
       digest_layer_duplicate_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_source_success(
+    const LayerSourceSuccess& response) {
+  return encode_native_value_success(
+      response,
+      kLayerSourceReadCapability,
+      "layer-source-read",
+      response.value.layer_locator,
+      canonical_layer_source_value(response.value),
+      digest_layer_source_postcondition(response.value),
+      false);
+}
+
+std::vector<std::uint8_t> encode_layer_track_matte_read_success(
+    const LayerTrackMatteReadSuccess& response) {
+  return encode_native_value_success(
+      response,
+      kLayerTrackMatteReadCapability,
+      "layer-track-matte-read",
+      response.value.layer_locator,
+      canonical_layer_track_matte_value(response.value),
+      digest_layer_track_matte_read_postcondition(response.value),
+      false);
+}
+
+std::vector<std::uint8_t> encode_layer_track_matte_set_success(
+    const LayerTrackMatteSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      kLayerTrackMatteSetCapability,
+      "layer-track-matte-set",
+      response.value.layer_locator,
+      canonical_layer_track_matte_set_value(response.value),
+      digest_layer_track_matte_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_track_matte_clear_success(
+    const LayerTrackMatteClearSuccess& response) {
+  return encode_native_value_success(
+      response,
+      kLayerTrackMatteClearCapability,
+      "layer-track-matte-clear",
+      response.value.layer_locator,
+      canonical_layer_track_matte_clear_value(response.value),
+      digest_layer_track_matte_clear_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_av_state_success(
+    const LayerAVStateSuccess& response) {
+  return encode_native_value_success(
+      response,
+      kLayerAVStateReadCapability,
+      "layer-av-state-read",
+      response.value.layer_locator,
+      canonical_layer_av_state_value(response.value),
+      digest_layer_av_state_postcondition(response.value),
+      false);
+}
+
+std::vector<std::uint8_t> encode_layer_audio_enabled_set_success(
+    const LayerAudioEnabledSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      kLayerAudioEnabledSetCapability,
+      "layer-audio-enabled-set",
+      response.value.layer_locator,
+      canonical_layer_av_switch_value(response.value, true),
+      digest_layer_audio_enabled_set_postcondition(response.value),
+      true);
+}
+
+std::vector<std::uint8_t> encode_layer_video_enabled_set_success(
+    const LayerVideoEnabledSetSuccess& response) {
+  return encode_native_value_success(
+      response,
+      kLayerVideoEnabledSetCapability,
+      "layer-video-enabled-set",
+      response.value.layer_locator,
+      canonical_layer_av_switch_value(response.value, false),
+      digest_layer_video_enabled_set_postcondition(response.value),
       true);
 }
 

@@ -5950,6 +5950,27 @@
           "$ref": "#/$defs/layerDuplicateInvokeParams"
         },
         {
+          "$ref": "#/$defs/layerSourceReadInvokeParams"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteReadInvokeParams"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteSetInvokeParams"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteClearInvokeParams"
+        },
+        {
+          "$ref": "#/$defs/layerAvStateReadInvokeParams"
+        },
+        {
+          "$ref": "#/$defs/layerAudioEnabledSetInvokeParams"
+        },
+        {
+          "$ref": "#/$defs/layerVideoEnabledSetInvokeParams"
+        },
+        {
           "$ref": "#/$defs/layerCompositingReadInvokeParams"
         },
         {
@@ -6650,6 +6671,27 @@
         },
         {
           "$ref": "#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetArguments"
+        },
+        {
+          "$ref": "#/$defs/layerSourceReadArguments"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteReadArguments"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteSetArguments"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteClearArguments"
+        },
+        {
+          "$ref": "#/$defs/layerAvStateReadArguments"
+        },
+        {
+          "$ref": "#/$defs/layerAudioEnabledSetArguments"
+        },
+        {
+          "$ref": "#/$defs/layerVideoEnabledSetArguments"
         }
       ]
     },
@@ -6801,6 +6843,24 @@
         },
         {
           "$ref": "#/$defs/tsmGeneratedAeCompositionDimensionsSetValue"
+        },
+        {
+          "$ref": "#/$defs/layerSourceReadValue"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteReadValue"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteSetValue"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteClearValue"
+        },
+        {
+          "$ref": "#/$defs/layerAvStateReadValue"
+        },
+        {
+          "$ref": "#/$defs/layerAudioEnabledSetValue"
         }
       ]
     },
@@ -12278,6 +12338,18 @@
         },
         {
           "$ref": "#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetInputSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteSetInputSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteClearInputSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerAudioEnabledSetInputSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerSourceReadInputSchemaContract"
         }
       ]
     },
@@ -12426,6 +12498,27 @@
         },
         {
           "$ref": "#/$defs/tsmGeneratedAeCompositionDimensionsSetResultSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerSourceReadResultSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteReadResultSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteSetResultSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteClearResultSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerAvStateReadResultSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerAudioEnabledSetResultSchemaContract"
+        },
+        {
+          "$ref": "#/$defs/layerVideoEnabledSetResultSchemaContract"
         }
       ]
     },
@@ -17679,6 +17772,27 @@
         },
         {
           "$ref": "#/$defs/layerDuplicateInvokeResult"
+        },
+        {
+          "$ref": "#/$defs/layerSourceReadInvokeResult"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteReadInvokeResult"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteSetInvokeResult"
+        },
+        {
+          "$ref": "#/$defs/layerTrackMatteClearInvokeResult"
+        },
+        {
+          "$ref": "#/$defs/layerAvStateReadInvokeResult"
+        },
+        {
+          "$ref": "#/$defs/layerAudioEnabledSetInvokeResult"
+        },
+        {
+          "$ref": "#/$defs/layerVideoEnabledSetInvokeResult"
         },
         {
           "$ref": "#/$defs/layerCompositingReadInvokeResult"
@@ -33291,6 +33405,2804 @@
               }
             }
           }
+        }
+      }
+    },
+    "layerSourceReadArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        }
+      }
+    },
+    "layerSourceReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator",
+        "sourceItemLocator",
+        "sourceType",
+        "sourceName"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "sourceItemLocator": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId"
+              ],
+              "properties": {
+                "kind": {
+                  "enum": [
+                    "item",
+                    "composition"
+                  ]
+                },
+                "hostInstanceId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "sessionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "projectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "objectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sourceType": {
+          "enum": [
+            "none",
+            "footage",
+            "composition"
+          ]
+        },
+        "sourceName": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 1024
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "x-invariant": "sourceType-none-iff-sourceItemLocator-and-sourceName-are-null"
+    },
+    "layerSourceReadInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "arguments"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.source.read"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "arguments": {
+          "$ref": "#/$defs/layerSourceReadArguments"
+        }
+      }
+    },
+    "layerSourceReadInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        }
+      }
+    },
+    "layerSourceReadResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator",
+          "sourceItemLocator",
+          "sourceType",
+          "sourceName"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "sourceItemLocator": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/itemLocator"
+              },
+              {
+                "$ref": "#/$defs/compositionLocator"
+              }
+            ]
+          },
+          "sourceType": {
+            "enum": [
+              "none",
+              "footage",
+              "composition"
+            ]
+          },
+          "sourceName": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "string",
+                "maxLength": 1024
+              }
+            ]
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          },
+          "itemLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "item"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          },
+          "compositionLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "composition"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        },
+        "x-invariant": "sourceType-none-implies-null-source;footage-implies-item;composition-implies-composition"
+      }
+    },
+    "layerSourceReadInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "engine",
+        "outcome",
+        "value",
+        "evidence"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.source.read"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "engine": {
+          "const": "native-aegp"
+        },
+        "outcome": {
+          "const": "succeeded"
+        },
+        "value": {
+          "$ref": "#/$defs/layerSourceReadValue"
+        },
+        "evidence": {
+          "$ref": "#/$defs/executionEvidence"
+        }
+      }
+    },
+    "layerTrackMatteReadArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        }
+      }
+    },
+    "layerTrackMatteReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator",
+        "active",
+        "matteLayerLocator",
+        "mode"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "active": {
+          "type": "boolean"
+        },
+        "matteLayerLocator": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "layer"
+                },
+                "hostInstanceId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "sessionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "projectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "objectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "enum": [
+            "none",
+            "alpha",
+            "inverted-alpha",
+            "luma",
+            "inverted-luma"
+          ]
+        }
+      },
+      "x-invariant": "active-equals-matteLayerLocator-present;active-requires-non-none-mode"
+    },
+    "layerTrackMatteReadInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "arguments"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.track-matte.read"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "arguments": {
+          "$ref": "#/$defs/layerTrackMatteReadArguments"
+        }
+      }
+    },
+    "layerTrackMatteReadInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        }
+      }
+    },
+    "layerTrackMatteReadResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator",
+          "active",
+          "matteLayerLocator",
+          "mode"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "matteLayerLocator": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/layerLocator"
+              }
+            ]
+          },
+          "mode": {
+            "enum": [
+              "none",
+              "alpha",
+              "inverted-alpha",
+              "luma",
+              "inverted-luma"
+            ]
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        },
+        "x-invariant": "active-iff-matteLayerLocator-non-null;active-mode-not-none;matte-distinct-and-same-composition"
+      }
+    },
+    "layerTrackMatteReadInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "engine",
+        "outcome",
+        "value",
+        "evidence"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.track-matte.read"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "engine": {
+          "const": "native-aegp"
+        },
+        "outcome": {
+          "const": "succeeded"
+        },
+        "value": {
+          "$ref": "#/$defs/layerTrackMatteReadValue"
+        },
+        "evidence": {
+          "$ref": "#/$defs/executionEvidence"
+        }
+      }
+    },
+    "layerTrackMatteSetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator",
+        "matteLayerLocator",
+        "mode",
+        "idempotencyKey"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "matteLayerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "mode": {
+          "enum": [
+            "alpha",
+            "inverted-alpha",
+            "luma",
+            "inverted-luma"
+          ]
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "layerTrackMatteSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "layerLocator",
+        "beforeMatteLayerLocator",
+        "beforeMode",
+        "afterMatteLayerLocator",
+        "afterMode"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "beforeMatteLayerLocator": {
+          "anyOf": [
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "layer"
+                },
+                "hostInstanceId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "sessionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "projectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "objectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                }
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "beforeMode": {
+          "enum": [
+            "none",
+            "alpha",
+            "inverted-alpha",
+            "luma",
+            "inverted-luma"
+          ]
+        },
+        "afterMatteLayerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "afterMode": {
+          "enum": [
+            "alpha",
+            "inverted-alpha",
+            "luma",
+            "inverted-luma"
+          ]
+        }
+      },
+      "x-invariant": "after-matte-and-mode-equal-request;relationship-or-mode-changes"
+    },
+    "layerTrackMatteSetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "arguments"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.track-matte.set"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "arguments": {
+          "$ref": "#/$defs/layerTrackMatteSetArguments"
+        }
+      }
+    },
+    "layerTrackMatteSetInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator",
+          "matteLayerLocator",
+          "mode",
+          "idempotencyKey"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "matteLayerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "mode": {
+            "enum": [
+              "alpha",
+              "inverted-alpha",
+              "luma",
+              "inverted-luma"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        }
+      }
+    },
+    "layerTrackMatteSetResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "changed",
+          "layerLocator",
+          "beforeMatteLayerLocator",
+          "beforeMode",
+          "afterMatteLayerLocator",
+          "afterMode"
+        ],
+        "properties": {
+          "changed": {
+            "const": true
+          },
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "beforeMatteLayerLocator": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/$defs/layerLocator"
+              }
+            ]
+          },
+          "beforeMode": {
+            "enum": [
+              "none",
+              "alpha",
+              "inverted-alpha",
+              "luma",
+              "inverted-luma"
+            ]
+          },
+          "afterMatteLayerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "afterMode": {
+            "enum": [
+              "alpha",
+              "inverted-alpha",
+              "luma",
+              "inverted-luma"
+            ]
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        },
+        "x-invariant": "after-matte-and-mode-equal-request;before-differs;all-matte-locators-distinct-and-same-composition"
+      }
+    },
+    "layerTrackMatteSetInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "engine",
+        "outcome",
+        "value",
+        "evidence"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.track-matte.set"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "engine": {
+          "const": "native-aegp"
+        },
+        "outcome": {
+          "const": "succeeded"
+        },
+        "value": {
+          "$ref": "#/$defs/layerTrackMatteSetValue"
+        },
+        "evidence": {
+          "$ref": "#/$defs/executionEvidence"
+        }
+      }
+    },
+    "layerTrackMatteClearArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator",
+        "idempotencyKey"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "layerTrackMatteClearValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "layerLocator",
+        "beforeMatteLayerLocator",
+        "beforeMode",
+        "afterMatteLayerLocator",
+        "afterMode"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "beforeMatteLayerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "beforeMode": {
+          "enum": [
+            "alpha",
+            "inverted-alpha",
+            "luma",
+            "inverted-luma"
+          ]
+        },
+        "afterMatteLayerLocator": {
+          "type": "null"
+        },
+        "afterMode": {
+          "enum": [
+            "none",
+            "alpha",
+            "inverted-alpha",
+            "luma",
+            "inverted-luma"
+          ]
+        }
+      },
+      "x-invariant": "afterMatteLayerLocator-null;afterMode-equals-beforeMode"
+    },
+    "layerTrackMatteClearInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "arguments"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.track-matte.clear"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "arguments": {
+          "$ref": "#/$defs/layerTrackMatteClearArguments"
+        }
+      }
+    },
+    "layerTrackMatteClearInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator",
+          "idempotencyKey"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        }
+      }
+    },
+    "layerTrackMatteClearResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "changed",
+          "layerLocator",
+          "beforeMatteLayerLocator",
+          "beforeMode",
+          "afterMatteLayerLocator",
+          "afterMode"
+        ],
+        "properties": {
+          "changed": {
+            "const": true
+          },
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "beforeMatteLayerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "beforeMode": {
+            "enum": [
+              "alpha",
+              "inverted-alpha",
+              "luma",
+              "inverted-luma"
+            ]
+          },
+          "afterMatteLayerLocator": {
+            "type": "null"
+          },
+          "afterMode": {
+            "enum": [
+              "alpha",
+              "inverted-alpha",
+              "luma",
+              "inverted-luma"
+            ]
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        },
+        "x-invariant": "after-matte-null;afterMode-equals-beforeMode;before-matte-distinct-and-same-composition"
+      }
+    },
+    "layerTrackMatteClearInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "engine",
+        "outcome",
+        "value",
+        "evidence"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.track-matte.clear"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "engine": {
+          "const": "native-aegp"
+        },
+        "outcome": {
+          "const": "succeeded"
+        },
+        "value": {
+          "$ref": "#/$defs/layerTrackMatteClearValue"
+        },
+        "evidence": {
+          "$ref": "#/$defs/executionEvidence"
+        }
+      }
+    },
+    "layerAvStateReadArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        }
+      }
+    },
+    "layerAvStateReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator",
+        "hasAudio",
+        "audioEnabled",
+        "hasVideo",
+        "videoEnabled"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "hasAudio": {
+          "type": "boolean"
+        },
+        "audioEnabled": {
+          "type": "boolean"
+        },
+        "hasVideo": {
+          "type": "boolean"
+        },
+        "videoEnabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "layerAvStateReadInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "arguments"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.av-state.read"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "arguments": {
+          "$ref": "#/$defs/layerAvStateReadArguments"
+        }
+      }
+    },
+    "layerAvStateReadInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        }
+      }
+    },
+    "layerAvStateReadResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator",
+          "hasAudio",
+          "audioEnabled",
+          "hasVideo",
+          "videoEnabled"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "hasAudio": {
+            "type": "boolean"
+          },
+          "audioEnabled": {
+            "type": "boolean"
+          },
+          "hasVideo": {
+            "type": "boolean"
+          },
+          "videoEnabled": {
+            "type": "boolean"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        },
+        "x-invariant": "av-switches-report-raw-layer-state"
+      }
+    },
+    "layerAvStateReadInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "engine",
+        "outcome",
+        "value",
+        "evidence"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.av-state.read"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "engine": {
+          "const": "native-aegp"
+        },
+        "outcome": {
+          "const": "succeeded"
+        },
+        "value": {
+          "$ref": "#/$defs/layerAvStateReadValue"
+        },
+        "evidence": {
+          "$ref": "#/$defs/executionEvidence"
+        }
+      }
+    },
+    "layerAudioEnabledSetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator",
+        "enabled",
+        "idempotencyKey"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "layerAudioEnabledSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "layerLocator",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "before": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "layerLocator",
+            "hasAudio",
+            "audioEnabled",
+            "hasVideo",
+            "videoEnabled"
+          ],
+          "properties": {
+            "layerLocator": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "layer"
+                },
+                "hostInstanceId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "sessionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "projectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "objectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                }
+              }
+            },
+            "hasAudio": {
+              "type": "boolean"
+            },
+            "audioEnabled": {
+              "type": "boolean"
+            },
+            "hasVideo": {
+              "type": "boolean"
+            },
+            "videoEnabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "after": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "layerLocator",
+            "hasAudio",
+            "audioEnabled",
+            "hasVideo",
+            "videoEnabled"
+          ],
+          "properties": {
+            "layerLocator": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "layer"
+                },
+                "hostInstanceId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "sessionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "projectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "objectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                }
+              }
+            },
+            "hasAudio": {
+              "type": "boolean"
+            },
+            "audioEnabled": {
+              "type": "boolean"
+            },
+            "hasVideo": {
+              "type": "boolean"
+            },
+            "videoEnabled": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "x-invariant": "after-audioEnabled-equals-request;all-other-av-state-fields-preserved"
+    },
+    "layerAudioEnabledSetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "arguments"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.audio-enabled.set"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "arguments": {
+          "$ref": "#/$defs/layerAudioEnabledSetArguments"
+        }
+      }
+    },
+    "layerAudioEnabledSetInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator",
+          "enabled",
+          "idempotencyKey"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        }
+      }
+    },
+    "layerAudioEnabledSetResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "changed",
+          "layerLocator",
+          "before",
+          "after"
+        ],
+        "properties": {
+          "changed": {
+            "const": true
+          },
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "before": {
+            "$ref": "#/$defs/avState"
+          },
+          "after": {
+            "$ref": "#/$defs/avState"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          },
+          "avState": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "layerLocator",
+              "hasAudio",
+              "audioEnabled",
+              "hasVideo",
+              "videoEnabled"
+            ],
+            "properties": {
+              "layerLocator": {
+                "$ref": "#/$defs/layerLocator"
+              },
+              "hasAudio": {
+                "type": "boolean"
+              },
+              "audioEnabled": {
+                "type": "boolean"
+              },
+              "hasVideo": {
+                "type": "boolean"
+              },
+              "videoEnabled": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "x-invariant": "after-audioEnabled-equals-request;all-other-av-state-fields-preserved"
+      }
+    },
+    "layerAudioEnabledSetInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "engine",
+        "outcome",
+        "value",
+        "evidence"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.audio-enabled.set"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "engine": {
+          "const": "native-aegp"
+        },
+        "outcome": {
+          "const": "succeeded"
+        },
+        "value": {
+          "$ref": "#/$defs/layerAudioEnabledSetValue"
+        },
+        "evidence": {
+          "$ref": "#/$defs/executionEvidence"
+        }
+      }
+    },
+    "layerVideoEnabledSetArguments": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator",
+        "enabled",
+        "idempotencyKey"
+      ],
+      "properties": {
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "idempotencyKey": {
+          "type": "string",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        }
+      }
+    },
+    "layerVideoEnabledSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "layerLocator",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "layerLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "layer"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "before": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "layerLocator",
+            "hasAudio",
+            "audioEnabled",
+            "hasVideo",
+            "videoEnabled"
+          ],
+          "properties": {
+            "layerLocator": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "layer"
+                },
+                "hostInstanceId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "sessionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "projectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "objectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                }
+              }
+            },
+            "hasAudio": {
+              "type": "boolean"
+            },
+            "audioEnabled": {
+              "type": "boolean"
+            },
+            "hasVideo": {
+              "type": "boolean"
+            },
+            "videoEnabled": {
+              "type": "boolean"
+            }
+          }
+        },
+        "after": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "layerLocator",
+            "hasAudio",
+            "audioEnabled",
+            "hasVideo",
+            "videoEnabled"
+          ],
+          "properties": {
+            "layerLocator": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "kind",
+                "hostInstanceId",
+                "sessionId",
+                "projectId",
+                "generation",
+                "objectId"
+              ],
+              "properties": {
+                "kind": {
+                  "const": "layer"
+                },
+                "hostInstanceId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "sessionId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "projectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                },
+                "generation": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 9007199254740991
+                },
+                "objectId": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                }
+              }
+            },
+            "hasAudio": {
+              "type": "boolean"
+            },
+            "audioEnabled": {
+              "type": "boolean"
+            },
+            "hasVideo": {
+              "type": "boolean"
+            },
+            "videoEnabled": {
+              "type": "boolean"
+            }
+          }
+        }
+      },
+      "x-invariant": "after-videoEnabled-equals-request;all-other-av-state-fields-preserved"
+    },
+    "layerVideoEnabledSetInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "arguments"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.video-enabled.set"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "arguments": {
+          "$ref": "#/$defs/layerVideoEnabledSetArguments"
+        }
+      }
+    },
+    "layerVideoEnabledSetInputSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "layerLocator",
+          "enabled",
+          "idempotencyKey"
+        ],
+        "properties": {
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 64,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          }
+        }
+      }
+    },
+    "layerVideoEnabledSetResultSchemaContract": {
+      "const": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "changed",
+          "layerLocator",
+          "before",
+          "after"
+        ],
+        "properties": {
+          "changed": {
+            "const": true
+          },
+          "layerLocator": {
+            "$ref": "#/$defs/layerLocator"
+          },
+          "before": {
+            "$ref": "#/$defs/avState"
+          },
+          "after": {
+            "$ref": "#/$defs/avState"
+          }
+        },
+        "$defs": {
+          "uuid": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+          },
+          "layerLocator": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "hostInstanceId",
+              "sessionId",
+              "projectId",
+              "generation",
+              "objectId"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "hostInstanceId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "sessionId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "projectId": {
+                "$ref": "#/$defs/uuid"
+              },
+              "generation": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
+              "objectId": {
+                "$ref": "#/$defs/uuid"
+              }
+            }
+          },
+          "avState": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "layerLocator",
+              "hasAudio",
+              "audioEnabled",
+              "hasVideo",
+              "videoEnabled"
+            ],
+            "properties": {
+              "layerLocator": {
+                "$ref": "#/$defs/layerLocator"
+              },
+              "hasAudio": {
+                "type": "boolean"
+              },
+              "audioEnabled": {
+                "type": "boolean"
+              },
+              "hasVideo": {
+                "type": "boolean"
+              },
+              "videoEnabled": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "x-invariant": "after-videoEnabled-equals-request;all-other-av-state-fields-preserved"
+      }
+    },
+    "layerVideoEnabledSetInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "engine",
+        "outcome",
+        "value",
+        "evidence"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.layer.video-enabled.set"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "engine": {
+          "const": "native-aegp"
+        },
+        "outcome": {
+          "const": "succeeded"
+        },
+        "value": {
+          "$ref": "#/$defs/layerVideoEnabledSetValue"
+        },
+        "evidence": {
+          "$ref": "#/$defs/executionEvidence"
         }
       }
     }
