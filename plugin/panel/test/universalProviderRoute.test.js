@@ -719,6 +719,58 @@ test('retries native Messages once after removing only explicitly rejected Anthr
   }
 });
 
+test('retries native Messages once without beta values after a generic invalid-beta response', async () => {
+  const records = [];
+  const audit = [];
+  const upstream = controlledUpstream(records, ({ res, attempt }) => {
+    if (attempt === 1) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        error: {
+          message: 'Invalid beta header.',
+        },
+      }));
+      return;
+    }
+    sendNativeMessage(res);
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'native-r': 'responses', 'native-m': 'messages', 'chat-m': 'chat' },
+    profileCalls: [],
+    audit,
+  });
+  try {
+    const local = await route.start();
+    const result = await requestText(local.anthropicBaseUrl + '/v1/messages', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer ' + local.routeToken,
+        'anthropic-version': '2023-06-01',
+        'anthropic-beta': 'supported-beta, unsupported-beta',
+        'content-type': 'application/json',
+      },
+      body: {
+        model: 'native-m',
+        max_tokens: 16,
+        messages: [{ role: 'user', content: 'OK' }],
+      },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(records.length, 2);
+    assert.equal(records[0].headers['anthropic-beta'], 'supported-beta, unsupported-beta');
+    assert.equal(records[1].headers['anthropic-beta'], undefined);
+    assert.deepEqual(records[1].body, records[0].body);
+    assert.equal(audit.filter((entry) => entry.event === 'provider_route_compat_retry').length, 1);
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
 test('does not retry native Messages for an unrelated upstream 400', async () => {
   const records = [];
   const upstream = controlledUpstream(records, ({ res }) => {

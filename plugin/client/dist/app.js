@@ -38220,7 +38220,12 @@ data: ${JSON.stringify(payload)}
     const match = message.match(
       /^Unexpected value\(s\)\s+(.+?)\s+for the `anthropic-beta` header(?:\.|$)/
     );
-    if (!match) return null;
+    if (!match) {
+      if (!/\bbeta\b/i.test(message) || !/\binvalid\b/i.test(message)) return null;
+      const next2 = { ...headers };
+      delete next2["anthropic-beta"];
+      return next2;
+    }
     const token = "[A-Za-z0-9][A-Za-z0-9._:-]{0,127}";
     const listPattern = new RegExp("^`" + token + "`(?:\\s*(?:,|and)\\s*`" + token + "`)*$");
     if (!listPattern.test(match[1])) return null;
