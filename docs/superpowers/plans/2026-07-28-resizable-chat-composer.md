@@ -9,8 +9,8 @@
 **Tech Stack:** React 18.3, CEP Panel JSX and inline styles, Node.js ESM and `node:test`, existing esbuild Panel bundle, macOS After Effects 2026 UI smoke.
 
 **Real-CEP adaptation:** The implementation separates a structural
-`role="separator"` boundary from a transparent, read-only text focus carrier
-that exposes the current pixel height, and uses bounded window-level
+`role="separator"` visual rule from its transparent, read-only text focus
+carrier sibling that exposes the current pixel height, and uses bounded window-level
 `mousemove`/`mouseup` listeners for an active drag. AE's CEP host did not
 preserve Shift+Arrow keyboard events on a generic focusable element, range
 input, or button, and did not retain Pointer Capture outside the handle. The

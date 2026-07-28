@@ -14,11 +14,17 @@ test('Composer exposes the tested accessible resize interaction', () => {
   const focusCarrierStart = handle.indexOf('<input');
   const focusCarrierEnd = handle.indexOf('/>', focusCarrierStart);
   const focusCarrier = handle.slice(focusCarrierStart, focusCarrierEnd);
+  const separatorStart = handle.indexOf('<span', focusCarrierEnd);
+  const separatorEnd = handle.indexOf('/>', separatorStart);
+  const separator = handle.slice(separatorStart, separatorEnd);
   assert.ok(handleStart >= 0 && handleEnd > handleStart);
   assert.ok(focusCarrierStart >= 0 && focusCarrierEnd > focusCarrierStart);
+  assert.ok(separatorStart > focusCarrierEnd && separatorEnd > separatorStart);
   assert.match(composer, /createComposerDragSession/);
   assert.match(composer, /composerKeyboardRequest/);
-  assert.match(handle, /<div\s+role="separator"\s+aria-orientation="horizontal"/);
+  assert.match(separator, /role="separator"/);
+  assert.match(separator, /aria-orientation="horizontal"/);
+  assert.doesNotMatch(separator, /aria-hidden/);
   assert.match(focusCarrier, /type="text"/);
   assert.match(focusCarrier, /readOnly/);
   assert.match(focusCarrier, /value=\{`\$\{height\} px`\}/);

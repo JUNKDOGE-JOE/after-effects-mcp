@@ -11626,8 +11626,6 @@
     return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
       "div",
       {
-        role: "separator",
-        "aria-orientation": "horizontal",
         style: {
           height: 10,
           flex: "none",
@@ -11679,7 +11677,8 @@
           /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
             "span",
             {
-              "aria-hidden": "true",
+              role: "separator",
+              "aria-orientation": "horizontal",
               style: {
                 width: 36,
                 height: 2,

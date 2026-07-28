@@ -68,8 +68,6 @@ function ComposerResizeHandle({
 
   return (
     <div
-      role="separator"
-      aria-orientation="horizontal"
       style={{
         height: 10,
         flex: 'none',
@@ -116,7 +114,8 @@ function ComposerResizeHandle({
         }}
       />
       <span
-        aria-hidden="true"
+        role="separator"
+        aria-orientation="horizontal"
         style={{
           width: 36,
           height: 2,

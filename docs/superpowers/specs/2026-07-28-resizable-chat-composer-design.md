@@ -166,10 +166,11 @@ pointer left the handle in the AE host, while the bounded window listeners did.
 
 ## Keyboard and accessibility behavior
 
-The visual boundary exposes structural `role="separator"` semantics. A
-transparent, read-only `input type="text"` focus carrier exposes the current
-pixel height in its value and describes the Shift+Arrow shortcuts in its
-accessible label. Keeping the roles separate is a real-CEP adaptation: AE
+The visual rule exposes structural `role="separator"` semantics and has no
+children. Its sibling, a transparent, read-only `input type="text"` focus
+carrier, exposes the current pixel height in its value and describes the
+Shift+Arrow shortcuts in its accessible label. Keeping the roles separate is a
+real-CEP adaptation: AE
 retains Shift+Arrow events for the text control but not for a generic focusable
 separator, range input, or button. Together they expose:
 
