@@ -1,5 +1,7 @@
 # ae-mcp
 
+[![MCP Toplist](https://mcptoplist.com/badge/glama%2FJUNKDOGE-JOE%2Fafter-effects-mcp.svg)](https://mcptoplist.com/server/glama%2FJUNKDOGE-JOE%2Fafter-effects-mcp)
+
 English | [简体中文](README.zh-CN.md)
 
 ae-mcp is a backend-agnostic automation tool that keeps Adobe After Effects and AI agents in the same working context. Its MCP server exposes AE project state, tool execution, previews, screenshots, and checkpoints so an agent can understand and operate the current AE project during a conversation.
