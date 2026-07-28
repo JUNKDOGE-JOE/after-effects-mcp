@@ -25,9 +25,9 @@
     mod
   ));
 
-  // node_modules/react/cjs/react.production.min.js
+  // ../../../../plugin/panel/node_modules/react/cjs/react.production.min.js
   var require_react_production_min = __commonJS({
-    "node_modules/react/cjs/react.production.min.js"(exports) {
+    "../../../../plugin/panel/node_modules/react/cjs/react.production.min.js"(exports) {
       "use strict";
       var l = Symbol.for("react.element");
       var n = Symbol.for("react.portal");
@@ -298,9 +298,9 @@
     }
   });
 
-  // node_modules/react/index.js
+  // ../../../../plugin/panel/node_modules/react/index.js
   var require_react = __commonJS({
-    "node_modules/react/index.js"(exports, module) {
+    "../../../../plugin/panel/node_modules/react/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_production_min();
@@ -310,9 +310,9 @@
     }
   });
 
-  // node_modules/scheduler/cjs/scheduler.production.min.js
+  // ../../../../plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js
   var require_scheduler_production_min = __commonJS({
-    "node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
+    "../../../../plugin/panel/node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
       "use strict";
       function f(a, b) {
         var c = a.length;
@@ -563,9 +563,9 @@
     }
   });
 
-  // node_modules/scheduler/index.js
+  // ../../../../plugin/panel/node_modules/scheduler/index.js
   var require_scheduler = __commonJS({
-    "node_modules/scheduler/index.js"(exports, module) {
+    "../../../../plugin/panel/node_modules/scheduler/index.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_scheduler_production_min();
@@ -575,9 +575,9 @@
     }
   });
 
-  // node_modules/react-dom/cjs/react-dom.production.min.js
+  // ../../../../plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js
   var require_react_dom_production_min = __commonJS({
-    "node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
+    "../../../../plugin/panel/node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
       "use strict";
       var aa = require_react();
       var ca = require_scheduler();
@@ -7185,9 +7185,9 @@
     }
   });
 
-  // node_modules/react-dom/index.js
+  // ../../../../plugin/panel/node_modules/react-dom/index.js
   var require_react_dom = __commonJS({
-    "node_modules/react-dom/index.js"(exports, module) {
+    "../../../../plugin/panel/node_modules/react-dom/index.js"(exports, module) {
       "use strict";
       function checkDCE() {
         if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
@@ -7211,9 +7211,9 @@
     }
   });
 
-  // node_modules/react-dom/client.js
+  // ../../../../plugin/panel/node_modules/react-dom/client.js
   var require_client = __commonJS({
-    "node_modules/react-dom/client.js"(exports) {
+    "../../../../plugin/panel/node_modules/react-dom/client.js"(exports) {
       "use strict";
       var m = require_react_dom();
       if (true) {
@@ -7242,9 +7242,9 @@
     }
   });
 
-  // node_modules/react/cjs/react-jsx-runtime.production.min.js
+  // ../../../../plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js
   var require_react_jsx_runtime_production_min = __commonJS({
-    "node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
+    "../../../../plugin/panel/node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
       "use strict";
       var f = require_react();
       var k = Symbol.for("react.element");
@@ -7267,9 +7267,9 @@
     }
   });
 
-  // node_modules/react/jsx-runtime.js
+  // ../../../../plugin/panel/node_modules/react/jsx-runtime.js
   var require_jsx_runtime = __commonJS({
-    "node_modules/react/jsx-runtime.js"(exports, module) {
+    "../../../../plugin/panel/node_modules/react/jsx-runtime.js"(exports, module) {
       "use strict";
       if (true) {
         module.exports = require_react_jsx_runtime_production_min();
@@ -7318,19 +7318,19 @@
   // src/components/core/Icon.jsx
   var import_react4 = __toESM(require_react(), 1);
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var import_react3 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/shared/src/utils.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/shared/src/utils.js
   var toKebabCase = (string) => string.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   var mergeClasses = (...classes) => classes.filter((className, index, array) => {
     return Boolean(className) && array.indexOf(className) === index;
   }).join(" ");
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var import_react2 = __toESM(require_react());
 
-  // node_modules/lucide-react/dist/esm/defaultAttributes.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/defaultAttributes.js
   var defaultAttributes = {
     xmlns: "http://www.w3.org/2000/svg",
     width: 24,
@@ -7343,7 +7343,7 @@
     strokeLinejoin: "round"
   };
 
-  // node_modules/lucide-react/dist/esm/Icon.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/Icon.js
   var Icon = (0, import_react2.forwardRef)(
     ({
       color = "currentColor",
@@ -7375,7 +7375,7 @@
     }
   );
 
-  // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/createLucideIcon.js
   var createLucideIcon = (iconName, iconNode) => {
     const Component = (0, import_react3.forwardRef)(
       ({ className, ...props }, ref) => (0, import_react3.createElement)(Icon, {
@@ -7389,13 +7389,13 @@
     return Component;
   };
 
-  // node_modules/lucide-react/dist/esm/icons/arrow-up.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/arrow-up.js
   var ArrowUp = createLucideIcon("ArrowUp", [
     ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
     ["path", { d: "M12 19V5", key: "x0mq9r" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/book-open.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/book-open.js
   var BookOpen = createLucideIcon("BookOpen", [
     ["path", { d: "M12 7v14", key: "1akyts" }],
     [
@@ -7407,7 +7407,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/box.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/box.js
   var Box = createLucideIcon("Box", [
     [
       "path",
@@ -7420,7 +7420,7 @@
     ["path", { d: "M12 22V12", key: "d0xqtd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/brain.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/brain.js
   var Brain = createLucideIcon("Brain", [
     [
       "path",
@@ -7445,58 +7445,58 @@
     ["path", { d: "M19.967 17.484A4 4 0 0 1 18 18", key: "159ez6" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/check.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/check.js
   var Check = createLucideIcon("Check", [["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-down.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-down.js
   var ChevronDown = createLucideIcon("ChevronDown", [
     ["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/chevron-right.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/chevron-right.js
   var ChevronRight = createLucideIcon("ChevronRight", [
     ["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-alert.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-alert.js
   var CircleAlert = createLucideIcon("CircleAlert", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "12", x2: "12", y1: "8", y2: "12", key: "1pkeuh" }],
     ["line", { x1: "12", x2: "12.01", y1: "16", y2: "16", key: "4dfq90" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle-slash.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/circle-slash.js
   var CircleSlash = createLucideIcon("CircleSlash", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "9", x2: "15", y1: "15", y2: "9", key: "1dfufj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/circle.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/circle.js
   var Circle = createLucideIcon("Circle", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/copy.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/copy.js
   var Copy = createLucideIcon("Copy", [
     ["rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2", key: "17jyea" }],
     ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2", key: "zix9uf" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/download.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/download.js
   var Download = createLucideIcon("Download", [
     ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
     ["polyline", { points: "7 10 12 15 17 10", key: "2ggqvy" }],
     ["line", { x1: "12", x2: "12", y1: "15", y2: "3", key: "1vk2je" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/external-link.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/external-link.js
   var ExternalLink = createLucideIcon("ExternalLink", [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
     ["path", { d: "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6", key: "a6xqqp" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye-off.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/eye-off.js
   var EyeOff = createLucideIcon("EyeOff", [
     [
       "path",
@@ -7516,7 +7516,7 @@
     ["path", { d: "m2 2 20 20", key: "1ooewy" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/eye.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/eye.js
   var Eye = createLucideIcon("Eye", [
     [
       "path",
@@ -7528,7 +7528,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/file-text.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/file-text.js
   var FileText = createLucideIcon("FileText", [
     ["path", { d: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", key: "1rqfz7" }],
     ["path", { d: "M14 2v4a2 2 0 0 0 2 2h4", key: "tnqrlb" }],
@@ -7537,7 +7537,7 @@
     ["path", { d: "M16 17H8", key: "z1uh3a" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/github.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/github.js
   var Github = createLucideIcon("Github", [
     [
       "path",
@@ -7549,28 +7549,28 @@
     ["path", { d: "M9 18c-4.51 2-5-2-7-2", key: "9comsn" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/globe.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/globe.js
   var Globe = createLucideIcon("Globe", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
     ["path", { d: "M2 12h20", key: "9i4pu4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/history.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/history.js
   var History = createLucideIcon("History", [
     ["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "1357e3" }],
     ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
     ["path", { d: "M12 7v5l4 2", key: "1fdv2h" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/info.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/info.js
   var Info = createLucideIcon("Info", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 16v-4", key: "1dtifu" }],
     ["path", { d: "M12 8h.01", key: "e9boi3" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list-checks.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/list-checks.js
   var ListChecks = createLucideIcon("ListChecks", [
     ["path", { d: "m3 17 2 2 4-4", key: "1jhpwq" }],
     ["path", { d: "m3 7 2 2 4-4", key: "1obspn" }],
@@ -7579,7 +7579,7 @@
     ["path", { d: "M13 18h8", key: "oe0vm4" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/list.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/list.js
   var List = createLucideIcon("List", [
     ["path", { d: "M3 12h.01", key: "nlz23k" }],
     ["path", { d: "M3 18h.01", key: "1tta3j" }],
@@ -7589,23 +7589,23 @@
     ["path", { d: "M8 6h13", key: "ik3vkj" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/message-square.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/message-square.js
   var MessageSquare = createLucideIcon("MessageSquare", [
     ["path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", key: "1lielz" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/pause.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/pause.js
   var Pause = createLucideIcon("Pause", [
     ["rect", { x: "14", y: "4", width: "4", height: "16", rx: "1", key: "zuxfzm" }],
     ["rect", { x: "6", y: "4", width: "4", height: "16", rx: "1", key: "1okwgv" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/play.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/play.js
   var Play = createLucideIcon("Play", [
     ["polygon", { points: "6 3 20 12 6 21 6 3", key: "1oa8hb" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plug.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/plug.js
   var Plug = createLucideIcon("Plug", [
     ["path", { d: "M12 22v-5", key: "1ega77" }],
     ["path", { d: "M9 8V2", key: "14iosj" }],
@@ -7613,25 +7613,25 @@
     ["path", { d: "M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z", key: "osxo6l" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/plus.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/plus.js
   var Plus = createLucideIcon("Plus", [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/rotate-cw.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/rotate-cw.js
   var RotateCw = createLucideIcon("RotateCw", [
     ["path", { d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", key: "1p45f6" }],
     ["path", { d: "M21 3v5h-5", key: "1q7to0" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/search.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/search.js
   var Search = createLucideIcon("Search", [
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }],
     ["path", { d: "m21 21-4.3-4.3", key: "1qie3q" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/send.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/send.js
   var Send = createLucideIcon("Send", [
     [
       "path",
@@ -7643,7 +7643,7 @@
     ["path", { d: "m21.854 2.147-10.94 10.939", key: "12cjpa" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/settings.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/settings.js
   var Settings = createLucideIcon("Settings", [
     [
       "path",
@@ -7655,7 +7655,7 @@
     ["circle", { cx: "12", cy: "12", r: "3", key: "1v7zrd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield-alert.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/shield-alert.js
   var ShieldAlert = createLucideIcon("ShieldAlert", [
     [
       "path",
@@ -7668,7 +7668,7 @@
     ["path", { d: "M12 16h.01", key: "1drbdi" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/shield.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/shield.js
   var Shield = createLucideIcon("Shield", [
     [
       "path",
@@ -7679,7 +7679,7 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/sparkles.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/sparkles.js
   var Sparkles = createLucideIcon("Sparkles", [
     [
       "path",
@@ -7694,12 +7694,12 @@
     ["path", { d: "M5 18H3", key: "zchphs" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/square.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/square.js
   var Square = createLucideIcon("Square", [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/stethoscope.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/stethoscope.js
   var Stethoscope = createLucideIcon("Stethoscope", [
     ["path", { d: "M11 2v2", key: "1539x4" }],
     ["path", { d: "M5 2v2", key: "1yf1q8" }],
@@ -7708,7 +7708,7 @@
     ["circle", { cx: "20", cy: "10", r: "2", key: "ts1r5v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/trash-2.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/trash-2.js
   var Trash2 = createLucideIcon("Trash2", [
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", key: "4alrt4" }],
@@ -7717,7 +7717,7 @@
     ["line", { x1: "14", x2: "14", y1: "11", y2: "17", key: "xtxkd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/triangle-alert.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/triangle-alert.js
   var TriangleAlert = createLucideIcon("TriangleAlert", [
     [
       "path",
@@ -7730,13 +7730,13 @@
     ["path", { d: "M12 17h.01", key: "p32p05" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/undo-2.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/undo-2.js
   var Undo2 = createLucideIcon("Undo2", [
     ["path", { d: "M9 14 4 9l5-5", key: "102s5s" }],
     ["path", { d: "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11", key: "f3b9sd" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/wrench.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/wrench.js
   var Wrench = createLucideIcon("Wrench", [
     [
       "path",
@@ -7747,13 +7747,13 @@
     ]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/x.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/x.js
   var X = createLucideIcon("X", [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ]);
 
-  // node_modules/lucide-react/dist/esm/icons/zap.js
+  // ../../../../plugin/panel/node_modules/lucide-react/dist/esm/icons/zap.js
   var Zap = createLucideIcon("Zap", [
     [
       "path",
@@ -11473,7 +11473,209 @@
 
   // src/components/chat/Composer.jsx
   var import_react33 = __toESM(require_react(), 1);
+
+  // src/lib/composerResize.js
+  var COMPOSER_MIN_HEIGHT = 72;
+  var COMPOSER_DEFAULT_HEIGHT = 96;
+  var COMPOSER_KEYBOARD_STEP = 24;
+  var MIN_TRANSCRIPT_HEIGHT = 120;
+  var MAX_COMPOSER_RATIO = 0.6;
+  var FALLBACK_MAX_HEIGHT = 320;
+  function finitePositive(value) {
+    return Number.isFinite(value) && value > 0;
+  }
+  function composerMaxHeight(availableHeight) {
+    if (!finitePositive(availableHeight)) return FALLBACK_MAX_HEIGHT;
+    return Math.max(
+      COMPOSER_MIN_HEIGHT,
+      Math.min(
+        availableHeight - MIN_TRANSCRIPT_HEIGHT,
+        Math.floor(availableHeight * MAX_COMPOSER_RATIO)
+      )
+    );
+  }
+  function clampComposerHeight(height, maxHeight) {
+    const legalMax = Math.max(
+      COMPOSER_MIN_HEIGHT,
+      finitePositive(maxHeight) ? maxHeight : FALLBACK_MAX_HEIGHT
+    );
+    const requested = Number.isFinite(height) ? height : COMPOSER_DEFAULT_HEIGHT;
+    return Math.min(Math.max(requested, COMPOSER_MIN_HEIGHT), legalMax);
+  }
+  function composerAvailableHeight({
+    containerHeight,
+    footerHeight,
+    composerHeight
+  }) {
+    if (![containerHeight, footerHeight, composerHeight].every(Number.isFinite)) return null;
+    if (containerHeight <= 0 || footerHeight < 0 || composerHeight <= 0) return null;
+    const fixedFooterHeight = Math.max(0, footerHeight - composerHeight);
+    const availableHeight = containerHeight - fixedFooterHeight;
+    return availableHeight > 0 ? availableHeight : null;
+  }
+  function createComposerHeightState(availableHeight) {
+    const maxHeight = composerMaxHeight(availableHeight);
+    return {
+      height: clampComposerHeight(COMPOSER_DEFAULT_HEIGHT, maxHeight),
+      maxHeight
+    };
+  }
+  function reduceComposerHeight(state, action) {
+    if ((action == null ? void 0 : action.type) === "measure") {
+      const maxHeight = composerMaxHeight(action.availableHeight);
+      return { height: clampComposerHeight(state.height, maxHeight), maxHeight };
+    }
+    if ((action == null ? void 0 : action.type) === "request") {
+      return {
+        height: clampComposerHeight(action.height, state.maxHeight),
+        maxHeight: state.maxHeight
+      };
+    }
+    if ((action == null ? void 0 : action.type) === "reset") {
+      return {
+        height: clampComposerHeight(COMPOSER_DEFAULT_HEIGHT, state.maxHeight),
+        maxHeight: state.maxHeight
+      };
+    }
+    return state;
+  }
+  function composerKeyboardRequest(eventLike, currentHeight) {
+    if ((eventLike == null ? void 0 : eventLike.shiftKey) !== true) return null;
+    if (eventLike.key === "ArrowUp") return currentHeight + COMPOSER_KEYBOARD_STEP;
+    if (eventLike.key === "ArrowDown") return currentHeight - COMPOSER_KEYBOARD_STEP;
+    return null;
+  }
+  function createComposerPointerSession({
+    target,
+    pointerId,
+    startY,
+    startHeight,
+    onRequest
+  }) {
+    let active = true;
+    target.setPointerCapture(pointerId);
+    function releaseIfCaptured() {
+      try {
+        if (typeof target.hasPointerCapture === "function" && target.hasPointerCapture(pointerId)) {
+          target.releasePointerCapture(pointerId);
+        }
+      } catch {
+      }
+    }
+    function move(eventLike) {
+      if (!active || (eventLike == null ? void 0 : eventLike.pointerId) !== pointerId) return false;
+      onRequest(startHeight + (startY - eventLike.clientY));
+      return true;
+    }
+    function finish(eventLike, releaseCapture = true) {
+      if (!active || (eventLike == null ? void 0 : eventLike.pointerId) !== pointerId) return false;
+      active = false;
+      if (releaseCapture) releaseIfCaptured();
+      return true;
+    }
+    function cancel() {
+      if (!active) return;
+      active = false;
+      releaseIfCaptured();
+    }
+    return Object.freeze({ move, finish, cancel });
+  }
+
+  // src/components/chat/Composer.jsx
   var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
+  function ComposerResizeHandle({
+    height,
+    minHeight,
+    maxHeight,
+    onHeightChange,
+    onHeightReset
+  }) {
+    const [hover, setHover] = import_react33.default.useState(false);
+    const [dragging, setDragging] = import_react33.default.useState(false);
+    const dragRef = import_react33.default.useRef(null);
+    import_react33.default.useEffect(() => () => {
+      var _a;
+      (_a = dragRef.current) == null ? void 0 : _a.cancel();
+      dragRef.current = null;
+    }, []);
+    const finishDrag = (event, releaseCapture) => {
+      var _a;
+      const finished = ((_a = dragRef.current) == null ? void 0 : _a.finish(event, releaseCapture)) === true;
+      if (finished) {
+        dragRef.current = null;
+        setDragging(false);
+      }
+    };
+    const handlePointerDown = (event) => {
+      var _a;
+      if (event.button !== 0) return;
+      event.preventDefault();
+      (_a = dragRef.current) == null ? void 0 : _a.cancel();
+      dragRef.current = createComposerPointerSession({
+        target: event.currentTarget,
+        pointerId: event.pointerId,
+        startY: event.clientY,
+        startHeight: height,
+        onRequest: (nextHeight) => onHeightChange == null ? void 0 : onHeightChange(nextHeight)
+      });
+      setDragging(true);
+    };
+    const handleResizeKey = (event) => {
+      const nextHeight = composerKeyboardRequest(event, height);
+      if (nextHeight === null) return;
+      event.preventDefault();
+      onHeightChange == null ? void 0 : onHeightChange(nextHeight);
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+      "div",
+      {
+        className: "ds-focusable",
+        tabIndex: 0,
+        role: "separator",
+        "aria-label": "\u8C03\u6574\u8F93\u5165\u533A\u9AD8\u5EA6 Resize composer",
+        "aria-orientation": "horizontal",
+        "aria-keyshortcuts": "Shift+ArrowUp Shift+ArrowDown",
+        "aria-valuemin": minHeight,
+        "aria-valuemax": maxHeight,
+        "aria-valuenow": height,
+        onDoubleClick: onHeightReset,
+        onKeyDown: handleResizeKey,
+        onPointerDown: handlePointerDown,
+        onPointerMove: (event) => {
+          var _a;
+          return (_a = dragRef.current) == null ? void 0 : _a.move(event);
+        },
+        onPointerUp: (event) => finishDrag(event, true),
+        onPointerCancel: (event) => finishDrag(event, true),
+        onLostPointerCapture: (event) => finishDrag(event, false),
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        style: {
+          height: 10,
+          flex: "none",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "row-resize",
+          touchAction: "none",
+          userSelect: "none"
+        },
+        children: /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+          "span",
+          {
+            "aria-hidden": "true",
+            style: {
+              width: 36,
+              height: 2,
+              borderRadius: 1,
+              background: dragging ? "var(--focus-ring)" : hover ? "var(--border-strong)" : "var(--border-default)",
+              transition: "background var(--dur-fast) var(--ease-out)"
+            }
+          }
+        )
+      }
+    );
+  }
   function Composer({
     value = "",
     onChange,
@@ -11484,7 +11686,12 @@
     notice,
     options,
     placeholder,
-    style
+    style,
+    height = COMPOSER_DEFAULT_HEIGHT,
+    minHeight = COMPOSER_MIN_HEIGHT,
+    maxHeight = FALLBACK_MAX_HEIGHT,
+    onHeightChange,
+    onHeightReset
   }) {
     const [focus, setFocus] = import_react33.default.useState(false);
     const canSend = !disabled && !streaming && value.trim().length > 0;
@@ -11496,55 +11703,70 @@
     };
     return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
       notice,
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
-        "div",
-        {
-          style: {
-            display: "flex",
-            flexDirection: options ? "column" : "row",
-            alignItems: options ? "stretch" : "flex-end",
-            gap: options ? 2 : "var(--space-15)",
-            padding: "var(--space-15)",
-            background: "var(--bg-well)",
-            border: `1px solid ${focus && !disabled ? "var(--border-strong)" : "var(--border-default)"}`,
-            boxShadow: focus && !disabled ? "0 0 0 1px var(--focus-ring)" : "none",
-            borderRadius: "var(--radius-lg)",
-            opacity: disabled ? 0.5 : 1,
-            transition: "border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)"
-          },
-          children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
-              "textarea",
-              {
-                rows: 1,
-                value,
-                placeholder,
-                disabled,
-                onChange: (e) => onChange && onChange(e.target.value),
-                onFocus: () => setFocus(true),
-                onBlur: () => setFocus(false),
-                onKeyDown: handleKey,
-                style: {
-                  flex: 1,
-                  minWidth: 0,
-                  maxHeight: 72,
-                  resize: "none",
-                  background: "transparent",
-                  border: "none",
-                  outline: "none",
-                  padding: "4px 2px 4px 4px",
-                  color: "var(--text-primary)",
-                  font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", minHeight: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+          ComposerResizeHandle,
+          {
+            height,
+            minHeight,
+            maxHeight,
+            onHeightChange,
+            onHeightReset
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+          "div",
+          {
+            style: {
+              height,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: options ? "column" : "row",
+              alignItems: "stretch",
+              gap: options ? 2 : "var(--space-15)",
+              padding: "var(--space-15)",
+              background: "var(--bg-well)",
+              border: `1px solid ${focus && !disabled ? "var(--border-strong)" : "var(--border-default)"}`,
+              boxShadow: focus && !disabled ? "0 0 0 1px var(--focus-ring)" : "none",
+              borderRadius: "var(--radius-lg)",
+              opacity: disabled ? 0.5 : 1,
+              transition: "border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)"
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+                "textarea",
+                {
+                  rows: 1,
+                  value,
+                  placeholder,
+                  disabled,
+                  onChange: (e) => onChange && onChange(e.target.value),
+                  onFocus: () => setFocus(true),
+                  onBlur: () => setFocus(false),
+                  onKeyDown: handleKey,
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: 0,
+                    overflowY: "auto",
+                    resize: "none",
+                    background: "transparent",
+                    border: "none",
+                    outline: "none",
+                    padding: "4px 2px 4px 4px",
+                    color: "var(--text-primary)",
+                    font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`
+                  }
                 }
-              }
-            ),
-            options ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 2, minWidth: 0 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
-              streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
-            ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
-          ]
-        }
-      )
+              ),
+              options ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { flex: "none", display: "flex", alignItems: "center", gap: 2, minWidth: 0, overflow: "visible" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
+                streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+              ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+            ]
+          }
+        )
+      ] })
     ] });
   }
   function SendButton({ icon, title, kind, disabled = false, onClick }) {
@@ -11565,6 +11787,7 @@
           width: 24,
           height: 24,
           flex: "none",
+          alignSelf: "flex-end",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
@@ -11986,6 +12209,15 @@
     const t = C[lang] || C.zh;
     const [draft, setDraft] = import_react36.default.useState("");
     const logRef = import_react36.default.useRef(null);
+    const layoutRef = import_react36.default.useRef(null);
+    const footerRef = import_react36.default.useRef(null);
+    const [composerSize, dispatchComposerSize] = import_react36.default.useReducer(
+      reduceComposerHeight,
+      void 0,
+      () => createComposerHeightState()
+    );
+    const composerHeightRef = import_react36.default.useRef(composerSize.height);
+    composerHeightRef.current = composerSize.height;
     const hasEntries = entries.length > 0;
     const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
     const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
@@ -12035,13 +12267,33 @@
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }, [entries, streaming, thinking]);
+    import_react36.default.useEffect(() => {
+      if (typeof ResizeObserver !== "function") return void 0;
+      if (!layoutRef.current || !footerRef.current) return void 0;
+      const measureComposerBounds = () => {
+        const layout = layoutRef.current;
+        const footer = footerRef.current;
+        if (!layout || !footer) return;
+        const availableHeight = composerAvailableHeight({
+          containerHeight: layout.getBoundingClientRect().height,
+          footerHeight: footer.getBoundingClientRect().height,
+          composerHeight: composerHeightRef.current
+        });
+        dispatchComposerSize({ type: "measure", availableHeight });
+      };
+      measureComposerBounds();
+      const observer = new ResizeObserver(measureComposerBounds);
+      observer.observe(layoutRef.current);
+      observer.observe(footerRef.current);
+      return () => observer.disconnect();
+    }, []);
     const send = () => {
       const text = draft.trim();
       if (!text || composerDisabled || streaming) return;
       if (onSend) onSend(text);
       setDraft("");
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
         !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(import_react36.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(AIAvatar, { size: 32 }),
@@ -12073,7 +12325,7 @@
           /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { children: t.thinking })
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         Composer,
         {
           value: draft,
@@ -12084,7 +12336,12 @@
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null,
+          height: composerSize.height,
+          minHeight: COMPOSER_MIN_HEIGHT,
+          maxHeight: composerSize.maxHeight,
+          onHeightChange: (height) => dispatchComposerSize({ type: "request", height }),
+          onHeightReset: () => dispatchComposerSize({ type: "reset" })
         }
       ) })
     ] });
