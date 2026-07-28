@@ -92,3 +92,9 @@ test('App owns the draft above Chat tab and disposes its attachment store', () =
   assert.match(app, /\(\) => attachmentStore\.dispose\(\)/);
   assert.match(app, /attachmentStore\.releaseSession\(chatSessionIdRef\.current\)/);
 });
+
+test('App includes active attachment paths in exact log-export redaction', () => {
+  const app = source('../src/app/App.jsx');
+  assert.match(app, /attachmentPathSecrets\(\{\s*draft:\s*attachmentDraft,\s*pendingTurn:\s*pendingTurnRef\.current/s);
+  assert.match(app, /exactSecrets\.push\(\.\.\.attachmentSecrets\)/);
+});

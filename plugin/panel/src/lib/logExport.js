@@ -4,6 +4,21 @@ export function redactSecrets(text, exactSecrets = []) {
   return redactCredentialText(text, exactSecrets);
 }
 
+export function attachmentPathSecrets({ draft, pendingTurn } = {}) {
+  const paths = [];
+  for (const item of draft?.items || []) {
+    if (typeof item?.ref?.localPath === 'string' && item.ref.localPath) {
+      paths.push(item.ref.localPath);
+    }
+  }
+  for (const attachment of pendingTurn?.attachments || []) {
+    if (typeof attachment?.localPath === 'string' && attachment.localPath) {
+      paths.push(attachment.localPath);
+    }
+  }
+  return [...new Set(paths)];
+}
+
 export function buildLogExport({ panelLogs = [], hostInfo = {}, sidecarTail = '', version = '', now = new Date(), exactSecrets = [] } = {}) {
   const lines = [];
   lines.push('# ae-mcp panel log export');

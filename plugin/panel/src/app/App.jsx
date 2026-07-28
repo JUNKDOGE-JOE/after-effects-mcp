@@ -65,7 +65,7 @@ import { copyWizardConfig } from '../lib/wizardCopy.js';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
 import pkg from '../../package.json';
-import { buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
+import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
 import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
@@ -1287,6 +1287,11 @@ function Shell({ cs }) {
     try {
       const exactSecrets = providerSecretService.getRedactionValues();
       if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
+      const attachmentSecrets = attachmentPathSecrets({
+        draft: attachmentDraft,
+        pendingTurn: pendingTurnRef.current,
+      });
+      exactSecrets.push(...attachmentSecrets);
       const text = buildLogExport({
         panelLogs: logs,
         hostInfo: { hostVersion: (connInfo && connInfo.hostVersion) || '-', pythonVersion: (connInfo && connInfo.pythonVersion) || '-' },
@@ -1300,7 +1305,7 @@ function Shell({ cs }) {
     } catch (e) {
       pushLog('Log export failed: ' + (e && e.message ? e.message : String(e)));
     }
-  }, [logs, connInfo, claudeBackend, providerSecretService, pushLog]);
+  }, [logs, connInfo, claudeBackend, providerSecretService, pushLog, attachmentDraft]);
 
   const undoToPreviousCheckpoint = React.useCallback(async () => {
     try {

@@ -48766,6 +48766,21 @@ data: ${JSON.stringify(payload)}
   function redactSecrets(text, exactSecrets = []) {
     return redactCredentialText(text, exactSecrets);
   }
+  function attachmentPathSecrets({ draft, pendingTurn } = {}) {
+    var _a;
+    const paths = [];
+    for (const item of (draft == null ? void 0 : draft.items) || []) {
+      if (typeof ((_a = item == null ? void 0 : item.ref) == null ? void 0 : _a.localPath) === "string" && item.ref.localPath) {
+        paths.push(item.ref.localPath);
+      }
+    }
+    for (const attachment of (pendingTurn == null ? void 0 : pendingTurn.attachments) || []) {
+      if (typeof (attachment == null ? void 0 : attachment.localPath) === "string" && attachment.localPath) {
+        paths.push(attachment.localPath);
+      }
+    }
+    return [...new Set(paths)];
+  }
   function buildLogExport({ panelLogs = [], hostInfo = {}, sidecarTail = "", version = "", now = /* @__PURE__ */ new Date(), exactSecrets = [] } = {}) {
     const lines = [];
     lines.push("# ae-mcp panel log export");
@@ -50258,6 +50273,11 @@ ${baseUrl}`),
       try {
         const exactSecrets = providerSecretService.getRedactionValues();
         if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
+        const attachmentSecrets = attachmentPathSecrets({
+          draft: attachmentDraft,
+          pendingTurn: pendingTurnRef.current
+        });
+        exactSecrets.push(...attachmentSecrets);
         const text = buildLogExport({
           panelLogs: logs,
           hostInfo: { hostVersion: connInfo && connInfo.hostVersion || "-", pythonVersion: connInfo && connInfo.pythonVersion || "-" },
@@ -50271,7 +50291,7 @@ ${baseUrl}`),
       } catch (e) {
         pushLog("Log export failed: " + (e && e.message ? e.message : String(e)));
       }
-    }, [logs, connInfo, claudeBackend, providerSecretService, pushLog]);
+    }, [logs, connInfo, claudeBackend, providerSecretService, pushLog, attachmentDraft]);
     const undoToPreviousCheckpoint = import_react46.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
