@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 from typing import Any
 
 import pytest
@@ -9,6 +10,8 @@ from pydantic import BaseModel, ValidationError
 
 from ae_mcp import schemas
 from ae_mcp.annotations import VERB_ANNOTATIONS
+from ae_mcp.backends import native as N
+from ae_mcp.backends import native_layer_source_matte_av as SMA
 
 
 HOST = "22222222-2222-4222-8222-222222222222"
@@ -242,3 +245,249 @@ def test_annotations_express_read_only_reads_and_idempotent_non_destructive_writ
         assert annotation.idempotentHint is True
         assert annotation.destructiveHint is False
         assert annotation.readOnlyHint is (handler_name in read_handlers)
+
+
+def _native_descriptor(contract: SMA.CapabilityContract) -> N.NativeCapabilityDescriptor:
+    return N.NativeCapabilityDescriptor(
+        detail="full",
+        id=contract.capability_id,
+        version=SMA.CAPABILITY_VERSION,
+        schema_version=1,
+        summary=contract.summary,
+        risk=contract.risk,
+        mutability="read-only" if contract.risk == "read" else "mutating",
+        idempotency=contract.idempotency,
+        cancellation="before-dispatch",
+        undo="not-applicable" if contract.risk == "read" else "ae-undo-group",
+        side_effect_summary=contract.side_effect_summary,
+        preconditions=contract.preconditions,
+        compatibility=N.NativeCompatibility(
+            status="verified", intended_platforms=("macos-arm64",),
+            minimum_host_major=25, maximum_host_major=26,
+        ),
+        input_contract_id=contract.input_contract_id,
+        result_contract_id=contract.result_contract_id,
+        contract_digest=contract.contract_digest,
+        input_schema=contract.input_schema,
+        result_schema=contract.result_schema,
+        requirements=(N.NativeRequirement(id=contract.requirement_id, contract_version=1),),
+        examples=({"arguments": {}},),
+    )
+
+
+def _source_value(layer: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "layerLocator": layer,
+        "sourceItemLocator": _item(),
+        "sourceType": "footage",
+        "sourceName": "Fixture footage",
+    }
+
+
+def _matte_state(layer: dict[str, Any], *, active: bool = True) -> dict[str, Any]:
+    return {
+        "layerLocator": layer,
+        "active": active,
+        "matteLayerLocator": _layer(object_id=MATTE_LAYER) if active else None,
+        "mode": "luma",
+    }
+
+
+def _av_state(layer: dict[str, Any], *, audio_enabled: bool = True, video_enabled: bool = True) -> dict[str, Any]:
+    return {
+        "layerLocator": layer,
+        "hasAudio": True,
+        "audioEnabled": audio_enabled,
+        "hasVideo": True,
+        "videoEnabled": video_enabled,
+    }
+
+
+VALUE_MODELS = {
+    SMA.LAYER_SOURCE_READ_CAPABILITY_ID: SMA.LayerSourceValue,
+    SMA.LAYER_TRACK_MATTE_READ_CAPABILITY_ID: SMA.LayerTrackMatteValue,
+    SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID: SMA.LayerTrackMatteSetValue,
+    SMA.LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID: SMA.LayerTrackMatteClearValue,
+    SMA.LAYER_AV_STATE_READ_CAPABILITY_ID: SMA.LayerAVStateValue,
+    SMA.LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID: SMA.LayerAudioEnabledSetValue,
+    SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID: SMA.LayerVideoEnabledSetValue,
+}
+
+
+class PackageBackend(N.NativeInvokeBackend):
+    name = "layer-source-matte-av-package-fixture"
+
+    def __init__(self) -> None:
+        self.items = tuple(_native_descriptor(contract) for contract in SMA.CAPABILITY_CONTRACTS.values())
+        self.requests: list[N.NativeInvokeRequest] = []
+        self.tamper_postcondition: str | None = None
+        self.negotiation = N.NativeNegotiation(
+            selected_wire_version=1, plugin_version="0.9.2", compiled_sdk_version="25.6.61",
+            source_commit="a" * 40, host_instance_id=HOST, host_platform="macos-arm64",
+            session_id=SESSION, session_generation=GENERATION,
+            capabilities_digest=N._capabilities_registry_digest(self.items),
+        )
+
+    async def negotiate(self, **_kwargs):
+        return self.negotiation
+
+    async def capabilities(self, *, ids, detail, limit, **_kwargs):
+        assert ids is None and detail == "full" and limit == 100
+        return N.NativeCapabilities(
+            session_id=SESSION, detail="full", items=self.items, next_cursor=None,
+            query_digest=N._capabilities_query_digest(
+                session_id=SESSION, ids=None, detail="full", limit=100,
+            ),
+            capabilities_digest=self.negotiation.capabilities_digest,
+        )
+
+    def _value(self, request: N.NativeInvokeRequest) -> dict[str, Any]:
+        layer = request.arguments["layerLocator"]
+        capability = request.capability_id
+        if capability == SMA.LAYER_SOURCE_READ_CAPABILITY_ID:
+            return _source_value(layer)
+        if capability == SMA.LAYER_TRACK_MATTE_READ_CAPABILITY_ID:
+            return _matte_state(layer)
+        if capability == SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID:
+            return {
+                "changed": True, "layerLocator": layer,
+                "beforeMatteLayerLocator": None, "beforeMode": "none",
+                "afterMatteLayerLocator": request.arguments["matteLayerLocator"],
+                "afterMode": request.arguments["mode"],
+            }
+        if capability == SMA.LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID:
+            return {
+                "changed": True, "layerLocator": layer,
+                "beforeMatteLayerLocator": _layer(object_id=MATTE_LAYER), "beforeMode": "luma",
+                "afterMatteLayerLocator": None, "afterMode": "luma",
+            }
+        if capability == SMA.LAYER_AV_STATE_READ_CAPABILITY_ID:
+            return _av_state(layer)
+        if capability == SMA.LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID:
+            return {
+                "changed": True, "layerLocator": layer,
+                "before": _av_state(layer, audio_enabled=False),
+                "after": _av_state(layer, audio_enabled=request.arguments["enabled"]),
+            }
+        if capability == SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID:
+            return {
+                "changed": True, "layerLocator": layer,
+                "before": _av_state(layer, video_enabled=False),
+                "after": _av_state(layer, video_enabled=request.arguments["enabled"]),
+            }
+        raise AssertionError(capability)
+
+    async def invoke(self, request, *, cancellation=None):
+        del cancellation
+        self.requests.append(request)
+        raw_value = self._value(request)
+        value = VALUE_MODELS[request.capability_id].model_validate(raw_value)
+        contract = SMA.CAPABILITY_CONTRACTS[request.capability_id]
+        digest = SMA._value_digest(request.capability_id, value)
+        if self.tamper_postcondition == request.capability_id:
+            digest = "f" * 64
+        is_write = contract.risk == "write"
+        return N.NativeInvokeResult(
+            capability_id=request.capability_id, capability_version=request.capability_version,
+            engine="native-aegp", outcome="succeeded", replayed=False, value=raw_value,
+            evidence=N.NativeExecutionEvidence(
+                engine="native-aegp", host_instance_id=HOST, session_id=SESSION,
+                request_id=request.request_id, capability_id=request.capability_id,
+                capability_version=request.capability_version,
+                started_at_unix_ms=request.deadline_unix_ms - 100,
+                completed_at_unix_ms=request.deadline_unix_ms - 1,
+                effect="committed" if is_write else "none",
+                request_digest=N._invoke_request_digest(request, self.negotiation),
+                postcondition=N.NativePostconditionEvidence(
+                    verified=True, kind=contract.postcondition_kind,
+                    algorithm="sha256-rfc8785-jcs-v1", digest=digest,
+                ),
+                undo=N.NativeUndoEvidence(available=True, verified=False) if is_write else None,
+            ),
+        )
+
+
+def _deadline() -> int:
+    return int(time.time() * 1000) + 5_000
+
+
+def test_seven_native_contracts_are_closed_and_exclude_maintained_jsx_source_set():
+    expected_ids = {
+        "ae.layer.source.read", "ae.layer.track-matte.read", "ae.layer.track-matte.set",
+        "ae.layer.track-matte.clear", "ae.layer.av-state.read",
+        "ae.layer.audio-enabled.set", "ae.layer.video-enabled.set",
+    }
+    assert set(SMA.CAPABILITY_CONTRACTS) == expected_ids
+    for capability_id, contract in SMA.CAPABILITY_CONTRACTS.items():
+        assert contract.input_schema["additionalProperties"] is False
+        assert contract.result_schema["additionalProperties"] is False
+        assert contract.contract_digest == N._sha256_closed_json({
+            "inputSchema": contract.input_schema, "resultSchema": contract.result_schema,
+        })
+        descriptor = _native_descriptor(contract)
+        SMA._descriptor_validator(contract)(descriptor, host_platform="macos-arm64")
+        if contract.risk == "write":
+            assert contract.idempotency == "idempotency-key"
+            assert descriptor.undo == "ae-undo-group"
+        else:
+            assert contract.idempotency == "idempotent"
+
+
+@pytest.mark.asyncio
+async def test_native_source_matte_and_av_contracts_bind_values_postconditions_and_undo():
+    backend = PackageBackend()
+    layer = _layer()
+    source = await SMA.invoke_layer_source_read(
+        backend, request_id="source-read-1", layer_locator=layer, deadline_unix_ms=_deadline(),
+    )
+    matte = await SMA.invoke_layer_track_matte_read(
+        backend, request_id="matte-read-1", layer_locator=layer, deadline_unix_ms=_deadline(),
+    )
+    set_matte = await SMA.invoke_layer_track_matte_set(
+        backend, request_id="matte-set-1", layer_locator=layer,
+        matte_layer_locator=_layer(object_id=MATTE_LAYER), mode="alpha",
+        idempotency_key="matte-set-intent-0001", deadline_unix_ms=_deadline(),
+    )
+    clear_matte = await SMA.invoke_layer_track_matte_clear(
+        backend, request_id="matte-clear-1", layer_locator=layer,
+        idempotency_key="matte-clear-intent-0001", deadline_unix_ms=_deadline(),
+    )
+    av = await SMA.invoke_layer_av_state_read(
+        backend, request_id="av-read-1", layer_locator=layer, deadline_unix_ms=_deadline(),
+    )
+    audio = await SMA.invoke_layer_audio_enabled_set(
+        backend, request_id="audio-set-1", layer_locator=layer, enabled=True,
+        idempotency_key="audio-set-intent-0001", deadline_unix_ms=_deadline(),
+    )
+    video = await SMA.invoke_layer_video_enabled_set(
+        backend, request_id="video-set-1", layer_locator=layer, enabled=True,
+        idempotency_key="video-set-intent-0001", deadline_unix_ms=_deadline(),
+    )
+    assert source.value.source_item_locator is not None and source.value.source_type == "footage"
+    assert matte.value.active is True and matte.value.mode == "luma"
+    assert set_matte.value.after_matte_layer_locator.object_id == MATTE_LAYER
+    assert set_matte.value.after_mode == "alpha"
+    assert clear_matte.value.after_matte_layer_locator is None
+    assert clear_matte.value.before_mode == clear_matte.value.after_mode == "luma"
+    assert av.value.has_audio is True and av.value.video_enabled is True
+    assert audio.value.before.video_enabled == audio.value.after.video_enabled
+    assert video.value.before.audio_enabled == video.value.after.audio_enabled
+    for execution in (set_matte, clear_matte, audio, video):
+        assert execution.evidence.effect == "committed"
+        assert execution.evidence.undo is not None
+        assert execution.evidence.undo.available is True
+        assert execution.evidence.undo.verified is False
+
+
+@pytest.mark.asyncio
+async def test_tampered_native_write_evidence_remains_possibly_side_effecting():
+    backend = PackageBackend()
+    backend.tamper_postcondition = SMA.LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID
+    with pytest.raises(N.NativeBackendError) as raised:
+        await SMA.invoke_layer_audio_enabled_set(
+            backend, request_id="tampered-audio-1", layer_locator=_layer(), enabled=True,
+            idempotency_key="tampered-audio-intent-0001", deadline_unix_ms=_deadline(),
+        )
+    assert len(backend.requests) == 1
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
