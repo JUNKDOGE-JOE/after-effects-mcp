@@ -106,6 +106,13 @@ hash_root() {
 
 temporary="$(/usr/bin/mktemp -d "${TMPDIR:-/tmp}/ae-mcp-signing.XXXXXX")"
 trap '/bin/rm -rf "$temporary"' EXIT
+resolved_entitlements_path="$temporary/PlatformHelper.entitlements"
+node scripts/package/macos-helper-entitlements.mjs \
+  --team-id "$AE_MCP_APPLE_TEAM_ID" \
+  --out "$resolved_entitlements_path" \
+  || fail 'SIGNING_IDENTITY_INVALID: platform Helper entitlements could not be rendered'
+/usr/bin/plutil -lint "$resolved_entitlements_path" >/dev/null \
+  || fail 'SIGNING_IDENTITY_INVALID: platform Helper entitlements are invalid'
 
 verify_native() {
   local candidate="$1"
@@ -123,10 +130,19 @@ sign_native() {
   verify_native "$candidate"
 }
 
+sign_native_with_entitlements() {
+  local candidate="$1"
+  /usr/bin/codesign --force --sign "$AE_MCP_APPLE_SIGNING_IDENTITY" \
+    --options runtime --timestamp --entitlements "$resolved_entitlements_path" \
+    "$candidate" >/dev/null 2>&1 \
+    || fail 'SIGNING_COMMAND_FAILED: Developer ID Helper signing failed'
+  verify_native "$candidate"
+}
+
 sign_bundle() {
   local candidate="$1"
   /usr/bin/codesign --force --sign "$AE_MCP_APPLE_SIGNING_IDENTITY" \
-    --options runtime --timestamp --entitlements "$entitlements_path" \
+    --options runtime --timestamp --entitlements "$resolved_entitlements_path" \
     "$candidate" >/dev/null 2>&1 \
     || fail 'SIGNING_COMMAND_FAILED: Developer ID XPC bundle signing failed'
   /usr/bin/codesign --verify --strict --verbose=4 "$candidate" >/dev/null 2>&1 \
@@ -160,7 +176,7 @@ printf 'SIGNING_XATTR_AUDIT %s\n' "$xattr_audit"
 
 source_stage_sha="$(/usr/bin/shasum -a 256 "$root/bundle-manifest.json" | /usr/bin/awk '{print $1}')"
 before_helper="$(hash_root)"
-sign_native "$helper_path"
+sign_native_with_entitlements "$helper_path"
 after_helper="$(hash_root)"
 
 sign_native "$xpc_executable"
@@ -248,9 +264,23 @@ verify_protected_identity() {
   identity_index=$((identity_index + 1))
 }
 
+verify_keychain_entitlements() {
+  local candidate="$1"
+  local extracted="$temporary/keychain-entitlements-$identity_index.plist"
+  local expected="$AE_MCP_APPLE_TEAM_ID.com.junkdoge.ae-mcp.platform-helper"
+  /usr/bin/codesign --display --entitlements "$extracted" "$candidate" >/dev/null 2>&1 \
+    || fail 'SIGNING_IDENTITY_INVALID: Helper Keychain entitlements could not be inspected'
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :com.apple.application-identifier' "$extracted" 2>/dev/null)" = "$expected" ]] \
+    || fail 'SIGNING_IDENTITY_INVALID: Helper application identifier is invalid'
+  [[ "$(/usr/libexec/PlistBuddy -c 'Print :keychain-access-groups:0' "$extracted" 2>/dev/null)" = "$expected" ]] \
+    || fail 'SIGNING_IDENTITY_INVALID: Helper Keychain access group is invalid'
+}
+
 verify_protected_identity "$helper_path"
+verify_keychain_entitlements "$helper_path"
 verify_protected_identity "$xpc_executable"
 verify_protected_identity "$xpc_bundle"
+verify_keychain_entitlements "$xpc_bundle"
 verify_protected_identity "$addon_path"
 [[ "$launcher_architecture" != 'macho-arm64' ]] \
   || verify_protected_identity "$launcher_path"

@@ -1,11 +1,72 @@
 @preconcurrency import Dispatch
 import Foundation
+import Security
 import Testing
 
 @testable import PlatformHelperService
 
 @Suite struct KeychainSecretStoreTests {
     private let rawReference = "aemcp-secret://provider/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/api/v1"
+
+    @Test
+    func testDevelopmentAndReleaseSigningIdentitiesSelectDifferentKeychainProfiles() throws {
+        XCTAssertEqual(
+            try keychainStorageMode(for: KeychainProcessIdentity(
+                teamIdentifier: "",
+                applicationIdentifier: nil
+            )),
+            .fileBased
+        )
+        XCTAssertEqual(
+            try keychainStorageMode(for: KeychainProcessIdentity(
+                teamIdentifier: "ABCDE12345",
+                applicationIdentifier: "ABCDE12345.com.junkdoge.ae-mcp.platform-helper"
+            )),
+            .dataProtection
+        )
+
+        for identity in [
+            KeychainProcessIdentity(
+                teamIdentifier: "ABCDE12345",
+                applicationIdentifier: nil
+            ),
+            KeychainProcessIdentity(
+                teamIdentifier: "ABCDE12345",
+                applicationIdentifier: "WRONG12345.com.junkdoge.ae-mcp.platform-helper"
+            ),
+        ] {
+            XCTAssertThrowsError(try keychainStorageMode(for: identity)) { error in
+                XCTAssertEqual((error as? HelperFailure)?.code, "SECRET_STORE_UNAVAILABLE")
+            }
+        }
+    }
+
+    @Test
+    func testDevelopmentKeychainQueryOmitsDataProtectionOnlyAttributes() {
+        let fileBased = keychainBaseQuery(
+            service: "com.junkdoge.ae-mcp",
+            account: "provider:test",
+            mode: .fileBased
+        )
+        XCTAssertEqual(
+            Set(fileBased.keys),
+            [kSecClass as String, kSecAttrService as String, kSecAttrAccount as String]
+        )
+
+        let dataProtection = keychainBaseQuery(
+            service: "com.junkdoge.ae-mcp",
+            account: "provider:test",
+            mode: .dataProtection
+        )
+        XCTAssertEqual(
+            dataProtection[kSecUseDataProtectionKeychain as String] as? Bool,
+            true
+        )
+        XCTAssertEqual(
+            dataProtection[kSecAttrSynchronizable as String] as? Bool,
+            false
+        )
+    }
 
     @Test
     func testSecretReferenceUsesStrictGrammarAndOpaqueAccountDerivation() throws {
