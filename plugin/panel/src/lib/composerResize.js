@@ -10,7 +10,8 @@ function finitePositive(value) {
 }
 
 export function composerMaxHeight(availableHeight) {
-  if (!finitePositive(availableHeight)) return FALLBACK_MAX_HEIGHT;
+  if (!Number.isFinite(availableHeight)) return FALLBACK_MAX_HEIGHT;
+  if (availableHeight <= 0) return COMPOSER_MIN_HEIGHT;
   return Math.max(
     COMPOSER_MIN_HEIGHT,
     Math.min(
@@ -38,7 +39,7 @@ export function composerAvailableHeight({
   if (containerHeight <= 0 || footerHeight < 0 || composerHeight <= 0) return null;
   const fixedFooterHeight = Math.max(0, footerHeight - composerHeight);
   const availableHeight = containerHeight - fixedFooterHeight;
-  return availableHeight > 0 ? availableHeight : null;
+  return Math.max(0, availableHeight);
 }
 
 export function createComposerHeightState(availableHeight) {

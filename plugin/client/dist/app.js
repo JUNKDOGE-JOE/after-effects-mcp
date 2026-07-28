@@ -11485,7 +11485,8 @@
     return Number.isFinite(value) && value > 0;
   }
   function composerMaxHeight(availableHeight) {
-    if (!finitePositive(availableHeight)) return FALLBACK_MAX_HEIGHT;
+    if (!Number.isFinite(availableHeight)) return FALLBACK_MAX_HEIGHT;
+    if (availableHeight <= 0) return COMPOSER_MIN_HEIGHT;
     return Math.max(
       COMPOSER_MIN_HEIGHT,
       Math.min(
@@ -11511,7 +11512,7 @@
     if (containerHeight <= 0 || footerHeight < 0 || composerHeight <= 0) return null;
     const fixedFooterHeight = Math.max(0, footerHeight - composerHeight);
     const availableHeight = containerHeight - fixedFooterHeight;
-    return availableHeight > 0 ? availableHeight : null;
+    return Math.max(0, availableHeight);
   }
   function createComposerHeightState(availableHeight) {
     const maxHeight = composerMaxHeight(availableHeight);
@@ -11618,18 +11619,15 @@
     };
     const handleResizeKey = (event) => {
       const nextHeight = composerKeyboardRequest(event, height);
-      if (nextHeight === null) {
-        if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-          event.preventDefault();
-        }
-        return;
-      }
+      if (nextHeight === null) return;
       event.preventDefault();
       onHeightChange == null ? void 0 : onHeightChange(nextHeight);
     };
     return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
       "div",
       {
+        role: "separator",
+        "aria-orientation": "horizontal",
         style: {
           height: 10,
           flex: "none",
@@ -11650,14 +11648,9 @@
               type: "text",
               className: "ds-focusable",
               tabIndex: 0,
-              role: "separator",
-              "aria-label": "\u8C03\u6574\u8F93\u5165\u533A\u9AD8\u5EA6 Resize composer",
-              "aria-orientation": "horizontal",
+              "aria-label": `\u8C03\u6574\u8F93\u5165\u533A\u9AD8\u5EA6\uFF0C\u5F53\u524D ${height}px\uFF0C\u8303\u56F4 ${minHeight}-${maxHeight}px\uFF1B\u6309 Shift+\u4E0A/\u4E0B Resize composer with Shift+ArrowUp/Down`,
               "aria-keyshortcuts": "Shift+ArrowUp Shift+ArrowDown",
-              "aria-valuemin": minHeight,
-              "aria-valuemax": maxHeight,
-              "aria-valuenow": height,
-              value: "",
+              value: `${height} px`,
               readOnly: true,
               onDoubleClick: onHeightReset,
               onKeyDown: handleResizeKey,

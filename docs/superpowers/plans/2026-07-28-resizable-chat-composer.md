@@ -8,6 +8,15 @@
 
 **Tech Stack:** React 18.3, CEP Panel JSX and inline styles, Node.js ESM and `node:test`, existing esbuild Panel bundle, macOS After Effects 2026 UI smoke.
 
+**Real-CEP adaptation:** The implementation separates a structural
+`role="separator"` boundary from a transparent, read-only text focus carrier
+that exposes the current pixel height, and uses bounded window-level
+`mousemove`/`mouseup` listeners for an active drag. AE's CEP host did not
+preserve Shift+Arrow keyboard events on a generic focusable element, range
+input, or button, and did not retain Pointer Capture outside the handle. The
+executable tests and the design spec record this verified deviation from the
+initial snippets below.
+
 ## Global Constraints
 
 - Work only in `.worktrees/issue-113-resizable-composer` on `codex/issue-113-resizable-composer`; do not touch the dirty root checkout or its existing #67/#69 changes.

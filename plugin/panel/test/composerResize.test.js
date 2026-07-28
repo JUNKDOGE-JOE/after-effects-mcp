@@ -23,6 +23,22 @@ test('composer bounds preserve the transcript in compact and tall panels', () =>
   assert.equal(clampComposerHeight(900, 480), 480);
 });
 
+test('a measured panel shorter than fixed footer chrome clamps to the minimum', () => {
+  const availableHeight = composerAvailableHeight({
+    containerHeight: 80,
+    footerHeight: 160,
+    composerHeight: 72,
+  });
+  assert.equal(availableHeight, 0);
+  assert.equal(composerMaxHeight(availableHeight), 72);
+
+  const measured = reduceComposerHeight(
+    { height: 300, maxHeight: FALLBACK_MAX_HEIGHT },
+    { type: 'measure', availableHeight },
+  );
+  assert.deepEqual(measured, { height: 72, maxHeight: 72 });
+});
+
 test('footer chrome is removed from the shared transcript and input allocation', () => {
   assert.equal(composerAvailableHeight({
     containerHeight: 400,

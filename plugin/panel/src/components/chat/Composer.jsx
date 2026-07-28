@@ -61,18 +61,15 @@ function ComposerResizeHandle({
 
   const handleResizeKey = (event) => {
     const nextHeight = composerKeyboardRequest(event, height);
-    if (nextHeight === null) {
-      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
-        event.preventDefault();
-      }
-      return;
-    }
+    if (nextHeight === null) return;
     event.preventDefault();
     onHeightChange?.(nextHeight);
   };
 
   return (
     <div
+      role="separator"
+      aria-orientation="horizontal"
       style={{
         height: 10,
         flex: 'none',
@@ -91,14 +88,9 @@ function ComposerResizeHandle({
         type="text"
         className="ds-focusable"
         tabIndex={0}
-        role="separator"
-        aria-label="调整输入区高度 Resize composer"
-        aria-orientation="horizontal"
+        aria-label={`调整输入区高度，当前 ${height}px，范围 ${minHeight}-${maxHeight}px；按 Shift+上/下 Resize composer with Shift+ArrowUp/Down`}
         aria-keyshortcuts="Shift+ArrowUp Shift+ArrowDown"
-        aria-valuemin={minHeight}
-        aria-valuemax={maxHeight}
-        aria-valuenow={height}
-        value=""
+        value={`${height} px`}
         readOnly
         onDoubleClick={onHeightReset}
         onKeyDown={handleResizeKey}

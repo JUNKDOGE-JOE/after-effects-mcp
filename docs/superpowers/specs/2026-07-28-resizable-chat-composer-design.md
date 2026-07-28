@@ -4,7 +4,7 @@
 
 **Issue:** #113 (resizable Composer slice only)
 
-**Status:** Approved interaction design; implementation pending
+**Status:** Implemented and verified in the real CEP host
 
 ## Outcome
 
@@ -141,13 +141,13 @@ transcript keeps `minHeight: 0` and becomes the constrained region.
 
 ## Pointer interaction
 
-On primary-button `pointerdown`, the handle records:
+On primary-button `mousedown`, the handle records:
 
-- the pointer ID;
 - the pointer's starting client Y;
 - the controlled Composer height at drag start.
 
-It then captures that pointer. While captured:
+It then installs bounded `window` `mousemove` and `mouseup` listeners for the
+active drag:
 
 ```text
 requestedHeight = startHeight + (startY - currentY)
@@ -156,22 +156,28 @@ requestedHeight = startHeight + (startY - currentY)
 Moving upward therefore increases the height. Each request is clamped by the
 owner before rendering.
 
-The drag ends on `pointerup`, `pointercancel`, or lost pointer capture. Cleanup
-releases capture when applicable, clears the drag snapshot, and removes the
-active visual state. Component unmount performs the same cleanup. Secondary
-buttons do not start a drag.
+The drag ends on `mouseup`. Cleanup removes both listeners, clears the drag
+snapshot, and removes the active visual state. Starting a replacement drag and
+component unmount perform the same idempotent cleanup. Secondary buttons do not
+start a drag.
 
-No global mouse listeners are required.
+This is a real-CEP adaptation. Pointer Capture did not retain the drag once the
+pointer left the handle in the AE host, while the bounded window listeners did.
 
 ## Keyboard and accessibility behavior
 
-The handle is focusable and exposes:
+The visual boundary exposes structural `role="separator"` semantics. A
+transparent, read-only `input type="text"` focus carrier exposes the current
+pixel height in its value and describes the Shift+Arrow shortcuts in its
+accessible label. Keeping the roles separate is a real-CEP adaptation: AE
+retains Shift+Arrow events for the text control but not for a generic focusable
+separator, range input, or button. Together they expose:
 
 - `role="separator"`;
 - `aria-orientation="horizontal"`;
 - an accessible label describing Composer resizing;
 - `aria-keyshortcuts="Shift+ArrowUp Shift+ArrowDown"`;
-- `aria-valuemin`, `aria-valuemax`, and `aria-valuenow`.
+- the current, minimum, and maximum heights in the focus carrier's label.
 
 Only these focused-handle shortcuts resize:
 
