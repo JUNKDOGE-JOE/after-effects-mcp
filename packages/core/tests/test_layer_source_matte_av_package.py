@@ -43,24 +43,38 @@ PUBLIC_VERBS = {
 }
 
 
-def _layer(*, object_id: str = LAYER, session_id: str = SESSION) -> dict[str, Any]:
+def _layer(
+    *,
+    object_id: str = LAYER,
+    host_instance_id: str = HOST,
+    session_id: str = SESSION,
+    project_id: str = PROJECT,
+    generation: int = GENERATION,
+) -> dict[str, Any]:
     return {
         "kind": "layer",
-        "hostInstanceId": HOST,
+        "hostInstanceId": host_instance_id,
         "sessionId": session_id,
-        "projectId": PROJECT,
-        "generation": GENERATION,
+        "projectId": project_id,
+        "generation": generation,
         "objectId": object_id,
     }
 
 
-def _item(*, kind: str = "item", session_id: str = SESSION) -> dict[str, Any]:
+def _item(
+    *,
+    kind: str = "item",
+    host_instance_id: str = HOST,
+    session_id: str = SESSION,
+    project_id: str = PROJECT,
+    generation: int = GENERATION,
+) -> dict[str, Any]:
     return {
         "kind": kind,
-        "hostInstanceId": HOST,
+        "hostInstanceId": host_instance_id,
         "sessionId": session_id,
-        "projectId": PROJECT,
-        "generation": GENERATION,
+        "projectId": project_id,
+        "generation": generation,
         "objectId": ITEM,
     }
 
@@ -112,19 +126,28 @@ def test_every_layer_locator_rejects_a_non_layer_locator(model_name: str):
         model.model_validate({**payload, "layer_locator": _item()})
 
 
-def test_source_and_matte_writes_reject_obvious_locator_context_mismatches():
+@pytest.mark.parametrize(
+    ("context_field", "other_value"),
+    [
+        ("host_instance_id", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        ("session_id", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+        ("project_id", "cccccccc-cccc-4ccc-8ccc-cccccccccccc"),
+        ("generation", GENERATION + 1),
+    ],
+)
+def test_source_and_matte_writes_reject_each_locator_context_binding(
+    context_field: str, other_value: str | int,
+):
+    changed_context = {context_field: other_value}
     with pytest.raises(ValidationError, match="source_item_locator must match layer_locator context"):
         schemas.AeSetLayerSourceArgs.model_validate({
             **_valid_inputs()[schemas.AeSetLayerSourceArgs],
-            "source_item_locator": _item(session_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+            "source_item_locator": _item(**changed_context),
         })
     with pytest.raises(ValidationError, match="matte_layer_locator must match layer_locator context"):
         schemas.AeSetLayerTrackMatteArgs.model_validate({
             **_valid_inputs()[schemas.AeSetLayerTrackMatteArgs],
-            "matte_layer_locator": _layer(
-                object_id=MATTE_LAYER,
-                session_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-            ),
+            "matte_layer_locator": _layer(object_id=MATTE_LAYER, **changed_context),
         })
 
 
@@ -168,6 +191,14 @@ def test_set_track_matte_rejects_the_fill_layer_as_its_own_matte():
         schemas.AeSetLayerTrackMatteArgs.model_validate({
             **_valid_inputs()[schemas.AeSetLayerTrackMatteArgs],
             "matte_layer_locator": _layer(),
+        })
+
+
+def test_set_track_matte_rejects_a_non_layer_matte_locator():
+    with pytest.raises(ValidationError):
+        schemas.AeSetLayerTrackMatteArgs.model_validate({
+            **_valid_inputs()[schemas.AeSetLayerTrackMatteArgs],
+            "matte_layer_locator": _item(),
         })
 
 
