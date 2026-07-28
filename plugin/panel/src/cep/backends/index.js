@@ -30,7 +30,7 @@ export const BACKENDS = {
   codex: {
     id: 'codex',
     baseDescriptor: codexStaticDescriptor,
-    attachmentTransport: 'native',
+    attachmentTransport: 'native+manifest',
   },
   opencode: {
     id: 'opencode',
@@ -50,7 +50,13 @@ export const BACKENDS = {
   },
 };
 
-const ATTACHMENT_TRANSPORTS = new Set(['agent-sdk', 'native', 'manifest', 'reject']);
+const ATTACHMENT_TRANSPORTS = new Set([
+  'agent-sdk',
+  'native',
+  'native+manifest',
+  'manifest',
+  'reject',
+]);
 
 export function assertAttachmentBackendRegistry(registry) {
   for (const [id, entry] of Object.entries(registry)) {

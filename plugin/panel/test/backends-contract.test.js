@@ -75,7 +75,7 @@ test('registry gives every backend a truthful attachment disposition', () => {
       subscription: 'agent-sdk',
       byok: 'reject',
       'claude-api': 'agent-sdk',
-      codex: 'native',
+      codex: 'native+manifest',
       opencode: 'native',
       zcode: 'manifest',
     },

@@ -30009,7 +30009,7 @@
     codex: {
       id: "codex",
       baseDescriptor: codexStaticDescriptor,
-      attachmentTransport: "native"
+      attachmentTransport: "native+manifest"
     },
     opencode: {
       id: "opencode",
@@ -30028,7 +30028,13 @@
       attachmentTransport: "manifest"
     }
   };
-  var ATTACHMENT_TRANSPORTS = /* @__PURE__ */ new Set(["agent-sdk", "native", "manifest", "reject"]);
+  var ATTACHMENT_TRANSPORTS = /* @__PURE__ */ new Set([
+    "agent-sdk",
+    "native",
+    "native+manifest",
+    "manifest",
+    "reject"
+  ]);
   function assertAttachmentBackendRegistry(registry) {
     for (const [id, entry] of Object.entries(registry)) {
       if (!ATTACHMENT_TRANSPORTS.has(entry == null ? void 0 : entry.attachmentTransport)) {
@@ -40775,14 +40781,13 @@ data: ${JSON.stringify(payload)}
     }
     function turnInput(turn, text) {
       const input = [];
-      if (text) input.push({ type: "text", text });
+      const modelText = withAttachmentManifest(text, turn.attachments);
+      if (modelText) input.push({ type: "text", text: modelText });
       for (const attachment of turn.attachments) {
         if (attachment.mediaType.startsWith("image/")) {
           input.push({ type: "localImage", path: attachment.localPath });
         } else if (attachment.mediaType.startsWith("audio/")) {
           input.push({ type: "localAudio", path: attachment.localPath });
-        } else {
-          input.push({ type: "mention", name: attachment.name, path: attachment.localPath });
         }
       }
       return input;

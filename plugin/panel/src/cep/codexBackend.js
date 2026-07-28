@@ -23,7 +23,10 @@ import {
   isCoreAuthorizedDynamicCall,
   planSessionKey,
 } from '../../../shared/tool-approval.mjs';
-import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
+import {
+  normalizeTurnInput,
+  withAttachmentManifest,
+} from '../../../shared/chat-attachments.mjs';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -986,14 +989,13 @@ export function createCodexBackend({
 
   function turnInput(turn, text) {
     const input = [];
-    if (text) input.push({ type: 'text', text });
+    const modelText = withAttachmentManifest(text, turn.attachments);
+    if (modelText) input.push({ type: 'text', text: modelText });
     for (const attachment of turn.attachments) {
       if (attachment.mediaType.startsWith('image/')) {
         input.push({ type: 'localImage', path: attachment.localPath });
       } else if (attachment.mediaType.startsWith('audio/')) {
         input.push({ type: 'localAudio', path: attachment.localPath });
-      } else {
-        input.push({ type: 'mention', name: attachment.name, path: attachment.localPath });
       }
     }
     return input;

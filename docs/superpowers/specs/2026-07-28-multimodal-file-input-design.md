@@ -220,6 +220,13 @@ registry coverage cannot drift. The Composer never branches on backend
 identity. The application backend boundary, rather than the Composer,
 classifies the internal `byok` backend as unavailable for attachment turns.
 
+Codex uses a hybrid mapping. Its app-server protocol has native local-image
+and local-audio input items, but no generic local-file item. The protocol's
+`mention` input is reserved for `app://` and `plugin://` references and must
+not be used for arbitrary filesystem paths. The adapter therefore includes
+every selected file in the manifest and additionally sends images and audio
+through their native input items.
+
 ## Composer interaction
 
 The existing Composer gains an attachment button and an attachment area above

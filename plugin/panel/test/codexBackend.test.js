@@ -912,7 +912,7 @@ test('createCodexBackend reuses threadId on subsequent turns', async () => {
   await second;
 });
 
-test('createCodexBackend maps selected files to native app-server input and accepts the logical turn once', async () => {
+test('createCodexBackend exposes every selected file in a manifest and keeps native media input', async () => {
   const { backend, events, spawned } = makeBackend({ getServerInstructions: () => '' });
   const turn = {
     turnId: 'turn-1',
@@ -921,15 +921,25 @@ test('createCodexBackend maps selected files to native app-server input and acce
       { id: 'image-1', name: 'frame.png', localPath: 'C:\\tmp\\frame.png', size: 3, mediaType: 'image/png', temporary: false },
       { id: 'audio-1', name: 'audio.wav', localPath: 'C:\\tmp\\audio.wav', size: 4, mediaType: 'audio/wav', temporary: false },
       { id: 'video-1', name: 'clip.mov', localPath: 'C:\\tmp\\clip.mov', size: 5, mediaType: 'video/quicktime', temporary: false },
+      { id: 'text-1', name: 'note.txt', localPath: 'C:\\tmp\\note.txt', size: 6, mediaType: 'text/plain', temporary: false },
+      { id: 'unknown-1', name: 'unknown.payload', localPath: 'C:\\tmp\\unknown.payload', size: 7, mediaType: '', temporary: false },
     ],
   };
   const { pending, proc, turnStart } = await startTurn(backend, spawned, turn);
 
   assert.deepEqual(turnStart.params.input, [
-    { type: 'text', text: 'inspect' },
+    {
+      type: 'text',
+      text: 'inspect\n\n<ae_mcp_attachments version="1">\n'
+        + '{"files":[{"id":"image-1","name":"frame.png","path":"C:\\\\tmp\\\\frame.png","size":3,"mediaType":"image/png"},'
+        + '{"id":"audio-1","name":"audio.wav","path":"C:\\\\tmp\\\\audio.wav","size":4,"mediaType":"audio/wav"},'
+        + '{"id":"video-1","name":"clip.mov","path":"C:\\\\tmp\\\\clip.mov","size":5,"mediaType":"video/quicktime"},'
+        + '{"id":"text-1","name":"note.txt","path":"C:\\\\tmp\\\\note.txt","size":6,"mediaType":"text/plain"},'
+        + '{"id":"unknown-1","name":"unknown.payload","path":"C:\\\\tmp\\\\unknown.payload","size":7,"mediaType":"application/octet-stream"}]}\n'
+        + '</ae_mcp_attachments>',
+    },
     { type: 'localImage', path: 'C:\\tmp\\frame.png' },
     { type: 'localAudio', path: 'C:\\tmp\\audio.wav' },
-    { type: 'mention', name: 'clip.mov', path: 'C:\\tmp\\clip.mov' },
   ]);
 
   proc.pushStdout({ method: 'turn/started', params: { turn: { id: 'codex-turn-1' } } });

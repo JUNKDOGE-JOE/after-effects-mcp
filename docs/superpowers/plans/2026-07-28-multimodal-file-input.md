@@ -211,7 +211,7 @@ Add `turn-accepted` to `BACKEND_EVENTS`. Add these exact dispositions:
 subscription: { attachmentTransport: 'agent-sdk' }
 'claude-api': { attachmentTransport: 'agent-sdk' }
 byok: { attachmentTransport: 'reject' }
-codex: { attachmentTransport: 'native' }
+codex: { attachmentTransport: 'native+manifest' }
 opencode: { attachmentTransport: 'native' }
 zcode: { attachmentTransport: 'manifest' }
 ```
@@ -828,28 +828,35 @@ git commit -m "feat(panel): retain attachment turns until accepted"
 - Consumes: normalized `TurnInput`, `withAttachmentManifest`, and
   `attachmentFileUrl`
 - Produces: one `turn-accepted` event per accepted turn
-- Codex transport: app-server local input items
+- Codex transport: manifest for every file plus native image/audio input items
 - OpenCode transport: `FilePartInput`
 - ZCode transport: delimited attachment manifest
 - BYOK transport: pre-dispatch structured rejection
 
-- [ ] **Step 1: Write failing Codex native-input tests**
+- [ ] **Step 1: Write failing Codex hybrid-input tests**
 
 Assert the `turn/start` body contains:
 
 ```js
 [
-  { type: 'text', text: 'inspect' },
+  {
+    type: 'text',
+    text: 'inspect\n\n<ae_mcp_attachments version="1">\n'
+      + '{"files":[/* every attachment in order */]}\n'
+      + '</ae_mcp_attachments>',
+  },
   { type: 'localImage', path: '/tmp/frame.png' },
   { type: 'localAudio', path: '/tmp/audio.wav' },
-  { type: 'mention', name: 'clip.mov', path: '/tmp/clip.mov' },
 ]
 ```
 
 Use advisory `mediaType` only to select the app-server's image/audio native
-shape; every other file uses the generic `mention`. Assert `turn/started`
-emits `{type:'turn-accepted', turnId, transport:'codex-app-server'}` exactly
-once before normal streaming.
+shape. The app-server's `mention` item is for `app://` and `plugin://`
+references, not arbitrary local files, so every attachment also appears in
+the manifest and no filesystem path is serialized as a `mention`. Assert
+`turn/started` emits
+`{type:'turn-accepted', turnId, transport:'codex-app-server'}` exactly once
+before normal streaming.
 
 - [ ] **Step 2: Write failing OpenCode file-part tests**
 
@@ -914,9 +921,10 @@ Expected: FAIL on string-only serialization and the missing acceptance event.
 - [ ] **Step 6: Implement Codex mapping**
 
 Store `activeTurnId` and the full normalized turn. Replace `turnParams(text)`
-with `turnParams(turn, textWithPreamble)`. Build the text item only when text is
-non-empty, append every file item in order, and keep the preamble confined to
-the text item.
+with `turnParams(turn, textWithPreamble)`. Build one text item containing the
+user text plus an attachment manifest whenever attachments are present, append
+native image/audio items in attachment order, and keep the preamble confined
+to the text item.
 
 Never place a local path in emitted events or transcript messages.
 
@@ -1218,7 +1226,7 @@ Expected: all commands pass and `plugin/client/dist/app.js` plus
 
 - [ ] **Step 4: Perform an explicit production-code mutation proof**
 
-Temporarily remove `attachmentTransport: 'native'` from the Codex registry row
+Temporarily remove `attachmentTransport: 'native+manifest'` from the Codex registry row
 using `apply_patch`. Run:
 
 ```bash
