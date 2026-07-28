@@ -12,6 +12,11 @@ import { AIAvatar } from '../components/chat/AIAvatar';
 import { eventTitle } from '../lib/activityModel';
 import { buildComposerChips } from '../lib/composerOptions';
 import {
+  createAttachmentDraftState,
+  draftCanSend,
+  readyAttachments,
+} from '../lib/attachmentDraft';
+import {
   COMPOSER_MIN_HEIGHT,
   composerAvailableHeight,
   createComposerHeightState,
@@ -38,6 +43,13 @@ const C = {
     failed: '失败',
     awaiting: '等待批准',
     thinking: '思考中…',
+    attachmentAdd: '添加文件',
+    attachmentDrop: '拖放或粘贴文件',
+    attachmentStaging: '正在准备…',
+    attachmentReady: '已就绪',
+    attachmentRetry: '重试',
+    attachmentRemove: '移除',
+    uncertainTurn: '发送结果不确定。请新建会话核对后再试。',
   },
   en: {
     hello: 'Hi! I can operate the open AE project directly. Try one of these:',
@@ -58,6 +70,13 @@ const C = {
     failed: 'Failed',
     awaiting: 'Awaiting approval',
     thinking: 'Thinking…',
+    attachmentAdd: 'Add files',
+    attachmentDrop: 'Drop or paste files',
+    attachmentStaging: 'Preparing…',
+    attachmentReady: 'Ready',
+    attachmentRetry: 'Retry',
+    attachmentRemove: 'Remove',
+    uncertainTurn: 'Send outcome is uncertain. Start a new session before retrying.',
   },
 };
 
@@ -105,7 +124,7 @@ function titleForTool(entry, lang) {
 function Entry({ entry, lang, onApprove }) {
   const t = C[lang] || C.zh;
   if (entry.type === 'user-text') {
-    return <ChatBubble role="user">{entry.text}</ChatBubble>;
+    return <ChatBubble role="user" attachments={entry.attachments}>{entry.text}</ChatBubble>;
   }
   if (entry.type === 'ai-text') {
     return <ChatBubble role="ai">{entry.text}</ChatBubble>;
@@ -175,9 +194,14 @@ export function ChatScreen({
   onChipEffort,
   onChipFast,
   onChipApproval,
+  attachmentDraft = createAttachmentDraftState(),
+  dispatchAttachmentDraft,
+  createTurnId,
+  onAddFile,
+  onRemoveAttachment,
+  onRetryAttachment,
 }) {
   const t = C[lang] || C.zh;
-  const [draft, setDraft] = React.useState('');
   const logRef = React.useRef(null);
   const layoutRef = React.useRef(null);
   const footerRef = React.useRef(null);
@@ -258,11 +282,33 @@ export function ChatScreen({
     return () => observer.disconnect();
   }, []);
 
-  const send = () => {
-    const text = draft.trim();
-    if (!text || composerDisabled || streaming) return;
-    if (onSend) onSend(text);
-    setDraft('');
+  const sendTurn = (textOverride) => {
+    const text = String(textOverride === undefined ? attachmentDraft.text : textOverride).trim();
+    const candidate = textOverride === undefined
+      ? attachmentDraft
+      : { ...attachmentDraft, text };
+    if (!draftCanSend(candidate) || composerDisabled || streaming || !createTurnId) return;
+    if (textOverride !== undefined) {
+      dispatchAttachmentDraft?.({ type: 'text', value: text });
+    }
+    const turnId = createTurnId();
+    const turn = {
+      turnId,
+      text,
+      attachments: readyAttachments(attachmentDraft),
+    };
+    dispatchAttachmentDraft?.({ type: 'sending', turnId, turn });
+    onSend?.(turn);
+  };
+  const send = () => sendTurn();
+  const sendError = attachmentDraft.sendError;
+  const attachmentLabels = {
+    add: t.attachmentAdd,
+    drop: t.attachmentDrop,
+    staging: t.attachmentStaging,
+    ready: t.attachmentReady,
+    retry: t.attachmentRetry,
+    remove: t.attachmentRemove,
   };
 
   return (
@@ -292,7 +338,7 @@ export function ChatScreen({
                 caption={card.caption}
                 onClick={() => {
                   if (card.onClick) card.onClick(card);
-                  else if (onSend) onSend(card.prompt || card.title);
+                  else sendTurn(card.prompt || card.title);
                 }}
               />
             ))}
@@ -313,20 +359,35 @@ export function ChatScreen({
 
       <div ref={footerRef} style={{ flex: 'none', padding: 'var(--space-2) var(--space-3) var(--space-3)', borderTop: '1px solid var(--border-subtle)' }}>
         <Composer
-          value={draft}
-          onChange={setDraft}
+          value={attachmentDraft.text}
+          onChange={(value) => dispatchAttachmentDraft?.({ type: 'text', value })}
           onSend={send}
           onStop={onStop}
           streaming={streaming}
           disabled={composerDisabled}
           placeholder={t.placeholder}
           options={composerOptions}
-          notice={disabledHint ? <Notice text={disabledHint} actionLabel={noticeActionLabel || t.noticeAction} onAction={onNoticeAction || onNewSession} /> : null}
+          notice={disabledHint
+            ? <Notice text={disabledHint} actionLabel={noticeActionLabel || t.noticeAction} onAction={onNoticeAction || onNewSession} />
+            : sendError
+              ? (
+                <Notice
+                  text={attachmentDraft.dispatchState === 'uncertain' ? t.uncertainTurn : sendError.message}
+                  actionLabel={attachmentDraft.dispatchState === 'uncertain' ? t.newSession : null}
+                  onAction={attachmentDraft.dispatchState === 'uncertain' ? onNewSession : null}
+                />
+              )
+              : null}
           height={composerSize.height}
           minHeight={COMPOSER_MIN_HEIGHT}
           maxHeight={composerSize.maxHeight}
           onHeightChange={(height) => dispatchComposerSize({ type: 'request', height })}
           onHeightReset={() => dispatchComposerSize({ type: 'reset' })}
+          attachmentDraft={attachmentDraft}
+          onAddFile={onAddFile}
+          onRemoveAttachment={onRemoveAttachment}
+          onRetryAttachment={onRetryAttachment}
+          attachmentLabels={attachmentLabels}
         />
       </div>
     </div>

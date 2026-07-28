@@ -1,3 +1,5 @@
+import { displayAttachments } from '../../../shared/chat-attachments.mjs';
+
 function nextId(entries, prefix) {
   return `${prefix}-${entries.length + 1}`;
 }
@@ -9,12 +11,22 @@ function updateTool(entries, toolUseId, updater) {
   });
 }
 
+export function userTurnEntry(turn) {
+  return {
+    id: `user-${turn.turnId}`,
+    type: 'user-text',
+    text: turn.text,
+    attachments: displayAttachments(turn.attachments),
+  };
+}
+
 export function reduceEvent(entries, evt) {
   const current = Array.isArray(entries) ? entries : [];
   if (!evt || !evt.type) return current;
 
   switch (evt.type) {
     case 'turn-start':
+    case 'turn-accepted':
       return current;
 
     case 'text-delta': {

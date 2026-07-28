@@ -7289,10 +7289,10 @@
         var isNode = function isNode2(value) {
           return value instanceof HTMLElement;
         };
-        var createStore = function createStore2(initialState) {
+        var createStore = function createStore2(initialState2) {
           var queries2 = arguments.length > 1 && arguments[1] !== void 0 ? arguments[1] : [];
           var actions2 = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : [];
-          var state2 = Object.assign({}, initialState);
+          var state2 = Object.assign({}, initialState2);
           var actionQueue = [];
           var dispatchQueue = [];
           var getState = function getState2() {
@@ -23062,9 +23062,23 @@
   // src/components/chat/ChatBubble.jsx
   var import_react29 = __toESM(require_react(), 1);
   var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
-  function ChatBubble({ role = "ai", children, streaming = false, avatar = true, style }) {
+  function formatAttachmentBytes(value) {
+    const bytes = Number(value) || 0;
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
+  }
+  function ChatBubble({
+    role = "ai",
+    children,
+    attachments = [],
+    streaming = false,
+    avatar = true,
+    style
+  }) {
     if (role === "user") {
-      return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
         "div",
         {
           style: {
@@ -23078,7 +23092,27 @@
             color: "var(--text-primary)",
             overflowWrap: "break-word"
           },
-          children
+          children: [
+            children ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { children }) : null,
+            attachments.length ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 3, marginTop: children ? 5 : 0 }, children: attachments.map((attachment) => /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
+              "div",
+              {
+                style: {
+                  minWidth: 0,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  color: "var(--text-secondary)",
+                  font: "var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)"
+                },
+                children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: attachment.name }),
+                  /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("span", { style: { flex: "none", color: "var(--text-tertiary)" }, children: formatAttachmentBytes(attachment.size) })
+                ]
+              },
+              attachment.id
+            )) }) : null
+          ]
         }
       ) });
     }
@@ -23470,6 +23504,65 @@
   var MAX_ATTACHMENTS_PER_TURN = 32;
   var MAX_CLIPBOARD_ITEM_BYTES = 256 * 1024 * 1024;
   var MAX_CLIPBOARD_TURN_BYTES = 512 * 1024 * 1024;
+  function requireString(value, field, { allowEmpty = false } = {}) {
+    if (typeof value !== "string" || !allowEmpty && !value) {
+      throw new TypeError(field + " must be " + (allowEmpty ? "a string" : "a non-empty string"));
+    }
+    return value;
+  }
+  function normalizeAttachment(value) {
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      throw new TypeError("attachment must be an object");
+    }
+    if (!Number.isSafeInteger(value.size) || value.size < 0) {
+      throw new TypeError("attachment.size must be a non-negative safe integer");
+    }
+    if (typeof value.temporary !== "boolean") {
+      throw new TypeError("attachment.temporary must be a boolean");
+    }
+    const attachment = {
+      id: requireString(value.id, "attachment.id"),
+      name: requireString(value.name, "attachment.name"),
+      localPath: requireString(value.localPath, "attachment.localPath"),
+      size: value.size,
+      mediaType: value.mediaType === void 0 ? "" : requireString(value.mediaType, "attachment.mediaType", { allowEmpty: true }),
+      temporary: value.temporary
+    };
+    return Object.freeze(attachment);
+  }
+  function normalizeTurnInput(input) {
+    const source = typeof input === "string" ? { turnId: "", text: input, attachments: [] } : input;
+    if (!source || typeof source !== "object" || Array.isArray(source)) {
+      throw new TypeError("turn input must be a string or object");
+    }
+    const attachments = source.attachments;
+    if (!Array.isArray(attachments)) {
+      throw new TypeError("turn.attachments must be an array");
+    }
+    if (attachments.length > MAX_ATTACHMENTS_PER_TURN) {
+      throw new TypeError("turn.attachments exceeds the per-turn limit");
+    }
+    const normalized = {
+      turnId: requireString(source.turnId, "turn.turnId", { allowEmpty: true }),
+      text: requireString(source.text, "turn.text", { allowEmpty: true }),
+      attachments: Object.freeze(attachments.map(normalizeAttachment))
+    };
+    if (!normalized.text.trim() && !normalized.attachments.length) {
+      throw new TypeError("turn requires text or attachments");
+    }
+    return Object.freeze(normalized);
+  }
+  function displayAttachments(attachments) {
+    return attachments.map((value) => {
+      const { id, name, size, mediaType } = normalizeAttachment(value);
+      return Object.freeze({
+        id,
+        name,
+        size,
+        ...mediaType ? { mediaType } : {}
+      });
+    });
+  }
 
   // src/components/chat/AttachmentPond.jsx
   var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
@@ -23561,11 +23654,29 @@
   });
 
   // src/lib/attachmentDraft.js
+  function initialState() {
+    return {
+      text: "",
+      items: [],
+      pendingTurnId: null,
+      pendingSnapshot: null,
+      dispatchState: null,
+      sendError: null
+    };
+  }
+  function createAttachmentDraftState() {
+    return initialState();
+  }
   function readyAttachments(state) {
     return state.items.filter((item) => item.status === "ready" && item.ref).map((item) => item.ref);
   }
   function draftIsBusy(state) {
     return state.items.some((item) => item.status === "staging");
+  }
+  function draftCanSend(state) {
+    if (state.pendingTurnId || draftIsBusy(state)) return false;
+    if (state.items.some((item) => item.status === "error")) return false;
+    return state.text.trim().length > 0 || readyAttachments(state).length > 0;
   }
   function isFileTransfer(dataTransfer) {
     return Array.from((dataTransfer == null ? void 0 : dataTransfer.types) || []).includes("Files");
@@ -23573,6 +23684,107 @@
   function attachmentDropFiles(dataTransfer) {
     if (!isFileTransfer(dataTransfer)) return [];
     return Array.from((dataTransfer == null ? void 0 : dataTransfer.files) || []);
+  }
+  function replaceItem(items, pondId, update) {
+    const index = items.findIndex((item) => item.pondId === pondId);
+    if (index < 0) return items;
+    const next = items.slice();
+    next[index] = update(items[index]);
+    return next;
+  }
+  function freezeSnapshot(turn, fallbackState, turnId) {
+    const source = turn || {
+      turnId,
+      text: fallbackState.text,
+      attachments: readyAttachments(fallbackState)
+    };
+    return Object.freeze({
+      turnId: source.turnId,
+      text: source.text,
+      attachments: Object.freeze([...source.attachments])
+    });
+  }
+  function reduceAttachmentDraft(state, action) {
+    var _a;
+    if (!state || !action) return state;
+    if (action.type === "accepted") {
+      return action.turnId === state.pendingTurnId ? initialState() : state;
+    }
+    if (action.type === "rejected") {
+      if (action.turnId !== state.pendingTurnId) return state;
+      return {
+        ...state,
+        pendingTurnId: null,
+        pendingSnapshot: null,
+        dispatchState: "not-started",
+        sendError: action.error || null
+      };
+    }
+    if (action.type === "uncertain") {
+      if (action.turnId !== state.pendingTurnId) return state;
+      return {
+        ...state,
+        dispatchState: "uncertain",
+        sendError: action.error || null
+      };
+    }
+    if (action.type === "reset") return initialState();
+    if (state.pendingTurnId) return state;
+    if (action.type === "text") {
+      return {
+        ...state,
+        text: String((_a = action.value) != null ? _a : ""),
+        sendError: null,
+        dispatchState: null
+      };
+    }
+    if (action.type === "staging") {
+      const replacement = {
+        pondId: action.pondId,
+        file: action.file,
+        status: "staging",
+        ref: null,
+        error: null
+      };
+      const existing = state.items.findIndex((item) => item.pondId === action.pondId);
+      return {
+        ...state,
+        items: existing < 0 ? [...state.items, replacement] : state.items.map((item, index) => index === existing ? replacement : item),
+        sendError: null
+      };
+    }
+    if (action.type === "ready") {
+      const items = replaceItem(state.items, action.pondId, (item) => ({
+        ...item,
+        status: "ready",
+        ref: action.ref,
+        error: null
+      }));
+      return items === state.items ? state : { ...state, items };
+    }
+    if (action.type === "error") {
+      const items = replaceItem(state.items, action.pondId, (item) => ({
+        ...item,
+        status: "error",
+        ref: null,
+        error: action.error || null
+      }));
+      return items === state.items ? state : { ...state, items };
+    }
+    if (action.type === "remove") {
+      const items = state.items.filter((item) => item.pondId !== action.pondId);
+      return items.length === state.items.length ? state : { ...state, items };
+    }
+    if (action.type === "sending") {
+      return {
+        ...state,
+        pendingTurnId: action.turnId,
+        pendingSnapshot: freezeSnapshot(action.turn, state, action.turnId),
+        dispatchState: "pending",
+        sendError: null
+      };
+    }
+    return state;
   }
 
   // src/lib/composerResize.js
@@ -24239,7 +24451,14 @@
       ok: "\u5B8C\u6210",
       failed: "\u5931\u8D25",
       awaiting: "\u7B49\u5F85\u6279\u51C6",
-      thinking: "\u601D\u8003\u4E2D\u2026"
+      thinking: "\u601D\u8003\u4E2D\u2026",
+      attachmentAdd: "\u6DFB\u52A0\u6587\u4EF6",
+      attachmentDrop: "\u62D6\u653E\u6216\u7C98\u8D34\u6587\u4EF6",
+      attachmentStaging: "\u6B63\u5728\u51C6\u5907\u2026",
+      attachmentReady: "\u5DF2\u5C31\u7EEA",
+      attachmentRetry: "\u91CD\u8BD5",
+      attachmentRemove: "\u79FB\u9664",
+      uncertainTurn: "\u53D1\u9001\u7ED3\u679C\u4E0D\u786E\u5B9A\u3002\u8BF7\u65B0\u5EFA\u4F1A\u8BDD\u6838\u5BF9\u540E\u518D\u8BD5\u3002"
     },
     en: {
       hello: "Hi! I can operate the open AE project directly. Try one of these:",
@@ -24259,7 +24478,14 @@
       ok: "Done",
       failed: "Failed",
       awaiting: "Awaiting approval",
-      thinking: "Thinking\u2026"
+      thinking: "Thinking\u2026",
+      attachmentAdd: "Add files",
+      attachmentDrop: "Drop or paste files",
+      attachmentStaging: "Preparing\u2026",
+      attachmentReady: "Ready",
+      attachmentRetry: "Retry",
+      attachmentRemove: "Remove",
+      uncertainTurn: "Send outcome is uncertain. Start a new session before retrying."
     }
   };
   var DEFAULT_PROMPTS = {
@@ -24299,7 +24525,7 @@
   function Entry({ entry, lang, onApprove }) {
     const t = C[lang] || C.zh;
     if (entry.type === "user-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ChatBubble, { role: "user", children: entry.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ChatBubble, { role: "user", attachments: entry.attachments, children: entry.text });
     }
     if (entry.type === "ai-text") {
       return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ChatBubble, { role: "ai", children: entry.text });
@@ -24363,10 +24589,15 @@
     onChipModel,
     onChipEffort,
     onChipFast,
-    onChipApproval
+    onChipApproval,
+    attachmentDraft = createAttachmentDraftState(),
+    dispatchAttachmentDraft,
+    createTurnId,
+    onAddFile,
+    onRemoveAttachment,
+    onRetryAttachment
   }) {
     const t = C[lang] || C.zh;
-    const [draft, setDraft] = import_react37.default.useState("");
     const logRef = import_react37.default.useRef(null);
     const layoutRef = import_react37.default.useRef(null);
     const footerRef = import_react37.default.useRef(null);
@@ -24446,11 +24677,31 @@
       observer.observe(footerRef.current);
       return () => observer.disconnect();
     }, []);
-    const send = () => {
-      const text = draft.trim();
-      if (!text || composerDisabled || streaming) return;
-      if (onSend) onSend(text);
-      setDraft("");
+    const sendTurn = (textOverride) => {
+      const text = String(textOverride === void 0 ? attachmentDraft.text : textOverride).trim();
+      const candidate = textOverride === void 0 ? attachmentDraft : { ...attachmentDraft, text };
+      if (!draftCanSend(candidate) || composerDisabled || streaming || !createTurnId) return;
+      if (textOverride !== void 0) {
+        dispatchAttachmentDraft == null ? void 0 : dispatchAttachmentDraft({ type: "text", value: text });
+      }
+      const turnId = createTurnId();
+      const turn = {
+        turnId,
+        text,
+        attachments: readyAttachments(attachmentDraft)
+      };
+      dispatchAttachmentDraft == null ? void 0 : dispatchAttachmentDraft({ type: "sending", turnId, turn });
+      onSend == null ? void 0 : onSend(turn);
+    };
+    const send = () => sendTurn();
+    const sendError = attachmentDraft.sendError;
+    const attachmentLabels = {
+      add: t.attachmentAdd,
+      drop: t.attachmentDrop,
+      staging: t.attachmentStaging,
+      ready: t.attachmentReady,
+      retry: t.attachmentRetry,
+      remove: t.attachmentRemove
     };
     return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
@@ -24472,7 +24723,7 @@
               caption: card.caption,
               onClick: () => {
                 if (card.onClick) card.onClick(card);
-                else if (onSend) onSend(card.prompt || card.title);
+                else sendTurn(card.prompt || card.title);
               }
             },
             card.id || card.title
@@ -24487,20 +24738,32 @@
       /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         Composer,
         {
-          value: draft,
-          onChange: setDraft,
+          value: attachmentDraft.text,
+          onChange: (value) => dispatchAttachmentDraft == null ? void 0 : dispatchAttachmentDraft({ type: "text", value }),
           onSend: send,
           onStop,
           streaming,
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null,
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+            Notice,
+            {
+              text: attachmentDraft.dispatchState === "uncertain" ? t.uncertainTurn : sendError.message,
+              actionLabel: attachmentDraft.dispatchState === "uncertain" ? t.newSession : null,
+              onAction: attachmentDraft.dispatchState === "uncertain" ? onNewSession : null
+            }
+          ) : null,
           height: composerSize.height,
           minHeight: COMPOSER_MIN_HEIGHT,
           maxHeight: composerSize.maxHeight,
           onHeightChange: (height) => dispatchComposerSize({ type: "request", height }),
-          onHeightReset: () => dispatchComposerSize({ type: "reset" })
+          onHeightReset: () => dispatchComposerSize({ type: "reset" }),
+          attachmentDraft,
+          onAddFile,
+          onRemoveAttachment,
+          onRetryAttachment,
+          attachmentLabels
         }
       ) })
     ] });
@@ -46773,11 +47036,20 @@ data: ${JSON.stringify(payload)}
       return updater(entry);
     });
   }
+  function userTurnEntry(turn) {
+    return {
+      id: `user-${turn.turnId}`,
+      type: "user-text",
+      text: turn.text,
+      attachments: displayAttachments(turn.attachments)
+    };
+  }
   function reduceEvent(entries, evt) {
     const current = Array.isArray(entries) ? entries : [];
     if (!evt || !evt.type) return current;
     switch (evt.type) {
       case "turn-start":
+      case "turn-accepted":
         return current;
       case "text-delta": {
         const text = String(evt.text || "");
@@ -46858,6 +47130,239 @@ data: ${JSON.stringify(payload)}
       default:
         return current;
     }
+  }
+
+  // src/cep/attachmentStore.js
+  function attachmentError(code, message, cause) {
+    const error = new Error(message);
+    error.code = code;
+    if (cause) error.cause = cause;
+    return error;
+  }
+  function browserBlobChunk(slice) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(reader.error || new Error("FileReader failed"));
+      reader.onload = () => resolve(reader.result);
+      reader.readAsArrayBuffer(slice);
+    });
+  }
+  function requireSegment(value, field) {
+    const text = String(value || "");
+    if (!/^[A-Za-z0-9_-]+$/.test(text)) {
+      throw attachmentError("ATTACHMENT_INVALID", field + " must be a safe path segment");
+    }
+    return text;
+  }
+  function safeBasename(value, fallback = "attachment") {
+    const normalized = String(value || "").replace(/\\/g, "/");
+    const name = normalized.split("/").filter(Boolean).pop() || fallback;
+    return name === "." || name === ".." ? fallback : name;
+  }
+  function mediaTypeOf(file) {
+    return typeof (file == null ? void 0 : file.type) === "string" ? file.type : "";
+  }
+  function writeAll(fs, descriptor, bytes) {
+    const view = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+    let offset = 0;
+    while (offset < view.byteLength) {
+      const written = fs.writeSync(descriptor, view, offset, view.byteLength - offset);
+      if (!written) throw new Error("attachment write made no progress");
+      offset += written;
+    }
+  }
+  function removeEmptyDirectory(fs, directory) {
+    try {
+      fs.rmdirSync(directory);
+    } catch (error) {
+      if (!["ENOENT", "ENOTEMPTY", "EEXIST"].includes(error == null ? void 0 : error.code)) throw error;
+    }
+  }
+  function createAttachmentStore({
+    platform,
+    randomUUID,
+    readBlobChunk = browserBlobChunk,
+    chunkBytes = 1024 * 1024,
+    now = Date.now
+  }) {
+    if (!(platform == null ? void 0 : platform.paths) || !(platform == null ? void 0 : platform.fs)) throw new TypeError("attachment store requires a platform adapter");
+    if (typeof randomUUID !== "function") throw new TypeError("attachment store requires randomUUID");
+    if (typeof readBlobChunk !== "function") throw new TypeError("attachment store requires readBlobChunk");
+    if (!Number.isSafeInteger(chunkBytes) || chunkBytes <= 0) throw new TypeError("chunkBytes must be positive");
+    const { fs } = platform;
+    const root = platform.paths.join([
+      platform.paths.tempRoot,
+      "ae-mcp-panel-attachments"
+    ]);
+    const records = /* @__PURE__ */ new Map();
+    let disposed = false;
+    function sessionRecords(sessionId) {
+      return [...records.values()].filter((record) => record.sessionId === sessionId);
+    }
+    function reserve({ sessionId, pondId, size, temporary }) {
+      if (disposed) throw attachmentError("ATTACHMENT_STORE_DISPOSED", "Attachment store is disposed");
+      const safeSessionId = requireSegment(sessionId, "sessionId");
+      requireSegment(pondId, "pondId");
+      const existing = sessionRecords(safeSessionId);
+      if (existing.length >= MAX_ATTACHMENTS_PER_TURN) {
+        throw attachmentError("ATTACHMENT_COUNT_LIMIT", "Attachment count exceeds the per-turn limit");
+      }
+      if (temporary && size > MAX_CLIPBOARD_ITEM_BYTES) {
+        throw attachmentError("ATTACHMENT_ITEM_TOO_LARGE", "Clipboard attachment exceeds the per-item limit");
+      }
+      const reservedBytes = existing.reduce(
+        (total, record2) => total + (record2.temporary ? record2.size : 0),
+        0
+      );
+      if (temporary && reservedBytes + size > MAX_CLIPBOARD_TURN_BYTES) {
+        throw attachmentError("ATTACHMENT_TURN_TOO_LARGE", "Clipboard attachments exceed the per-turn limit");
+      }
+      const id = requireSegment(randomUUID(), "attachment id");
+      if (records.has(id)) throw attachmentError("ATTACHMENT_ID_COLLISION", "Attachment id already exists");
+      const record = {
+        id,
+        pondId,
+        sessionId: safeSessionId,
+        size,
+        temporary,
+        createdAt: Number(now()),
+        ref: null
+      };
+      records.set(id, record);
+      return record;
+    }
+    function protectDirectory(directory) {
+      fs.mkdirSync(directory, { recursive: true, mode: 448 });
+      try {
+        fs.chmodSync(directory, 448);
+      } catch (error) {
+        if (platform.id !== "windows-x64") throw error;
+      }
+      if (fs.lstatSync(directory).isSymbolicLink()) {
+        throw attachmentError("ATTACHMENT_STAGING_FAILED", "Attachment directory must not be a symbolic link");
+      }
+    }
+    function cleanupTemporary(record, candidate = ((_a) => (_a = record == null ? void 0 : record.ref) == null ? void 0 : _a.localPath)()) {
+      if (!(record == null ? void 0 : record.temporary) || !candidate || !platform.paths.contains(root, candidate)) return;
+      try {
+        fs.unlinkSync(candidate);
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) !== "ENOENT") throw error;
+      }
+      const sessionDirectory = platform.paths.join([root, record.sessionId]);
+      if (platform.paths.contains(root, sessionDirectory)) removeEmptyDirectory(fs, sessionDirectory);
+      removeEmptyDirectory(fs, root);
+    }
+    async function preparePathless(file, context) {
+      var _a, _b;
+      if (!Number.isSafeInteger(file == null ? void 0 : file.size) || file.size < 0 || typeof (file == null ? void 0 : file.slice) !== "function") {
+        throw attachmentError("ATTACHMENT_INVALID", "Pathless attachment must be a Blob-like file");
+      }
+      const record = reserve({
+        ...context,
+        size: file.size,
+        temporary: true
+      });
+      const name = safeBasename(file.name);
+      const sessionDirectory = platform.paths.join([root, record.sessionId]);
+      const partPath = platform.paths.join([sessionDirectory, record.id + ".part"]);
+      const finalPath = platform.paths.join([sessionDirectory, record.id + "-" + name]);
+      let descriptor = null;
+      try {
+        protectDirectory(root);
+        protectDirectory(sessionDirectory);
+        if (!platform.paths.contains(root, partPath) || !platform.paths.contains(root, finalPath)) {
+          throw attachmentError("ATTACHMENT_STAGING_FAILED", "Attachment staging path escaped the managed root");
+        }
+        descriptor = fs.openSync(partPath, "wx", 384);
+        for (let offset = 0; offset < file.size; offset += chunkBytes) {
+          const slice = file.slice(offset, Math.min(file.size, offset + chunkBytes));
+          const chunk = await readBlobChunk(slice);
+          writeAll(fs, descriptor, chunk);
+        }
+        fs.fsyncSync(descriptor);
+        fs.closeSync(descriptor);
+        descriptor = null;
+        fs.renameSync(partPath, finalPath);
+        const ref = Object.freeze({
+          id: record.id,
+          name,
+          localPath: finalPath,
+          size: file.size,
+          mediaType: mediaTypeOf(file),
+          temporary: true
+        });
+        record.ref = ref;
+        return ref;
+      } catch (cause) {
+        if (descriptor !== null) {
+          try {
+            fs.closeSync(descriptor);
+          } catch {
+          }
+        }
+        cleanupTemporary(record, partPath);
+        records.delete(record.id);
+        if ((_b = (_a = cause == null ? void 0 : cause.code) == null ? void 0 : _a.startsWith) == null ? void 0 : _b.call(_a, "ATTACHMENT_")) throw cause;
+        throw attachmentError("ATTACHMENT_STAGING_FAILED", "Failed to stage local attachment", cause);
+      }
+    }
+    async function preparePathBacked(file, context) {
+      if (!platform.paths.isAbsolute(file.path)) {
+        throw attachmentError("ATTACHMENT_INVALID", "Attachment path must be absolute");
+      }
+      const localPath = platform.paths.resolve([file.path]);
+      let stat;
+      try {
+        stat = fs.statSync(localPath);
+        if (!stat.isFile()) throw new Error("not a regular file");
+        fs.accessSync(localPath, fs.constants.R_OK);
+      } catch (cause) {
+        throw attachmentError("ATTACHMENT_UNREADABLE", "Attachment path is not a readable file", cause);
+      }
+      const record = reserve({
+        ...context,
+        size: stat.size,
+        temporary: false
+      });
+      const name = safeBasename(file.name || platform.paths.basename(localPath));
+      const ref = Object.freeze({
+        id: record.id,
+        name,
+        localPath,
+        size: stat.size,
+        mediaType: mediaTypeOf(file),
+        temporary: false
+      });
+      record.ref = ref;
+      return ref;
+    }
+    return Object.freeze({
+      prepare(file, context = {}) {
+        if (file == null ? void 0 : file.path) return preparePathBacked(file, context);
+        return preparePathless(file, context);
+      },
+      release(attachmentId) {
+        const record = records.get(attachmentId);
+        if (!record) return;
+        cleanupTemporary(record);
+        records.delete(attachmentId);
+      },
+      releaseSession(sessionId) {
+        for (const record of sessionRecords(String(sessionId || ""))) {
+          cleanupTemporary(record);
+          records.delete(record.id);
+        }
+      },
+      dispose() {
+        if (disposed) return;
+        for (const record of [...records.values()]) {
+          cleanupTemporary(record);
+          records.delete(record.id);
+        }
+        disposed = true;
+      }
+    });
   }
 
   // src/lib/descriptorSelect.js
@@ -48493,6 +48998,22 @@ data: ${JSON.stringify(payload)}
     const [confirmRegen, setConfirmRegen] = import_react46.default.useState(false);
     const [tokenEpoch, setTokenEpoch] = import_react46.default.useState(0);
     const platform = import_react46.default.useMemo(() => createPlatformAdapter(), []);
+    const attachmentStore = import_react46.default.useMemo(() => createAttachmentStore({
+      platform,
+      randomUUID: randomProviderCredentialId
+    }), [platform]);
+    const [attachmentDraft, dispatchAttachmentDraft] = import_react46.default.useReducer(
+      reduceAttachmentDraft,
+      void 0,
+      createAttachmentDraftState
+    );
+    const [chatSessionId, setChatSessionId] = import_react46.default.useState("chat-0");
+    const chatSessionIdRef = import_react46.default.useRef(chatSessionId);
+    chatSessionIdRef.current = chatSessionId;
+    const attachmentOperationsRef = import_react46.default.useRef(/* @__PURE__ */ new Map());
+    const pendingTurnRef = import_react46.default.useRef(null);
+    const acceptedTurnRef = import_react46.default.useRef(null);
+    import_react46.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
     const legacyKeyStore = import_react46.default.useMemo(() => {
       try {
         return createLegacyApiKeyStore();
@@ -48843,6 +49364,55 @@ ${baseUrl}`),
     }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
     const toolsApi = import_react46.default.useMemo(() => createToolsApi(mcp), [mcp]);
     import_react46.default.useEffect(() => () => mcp.stop(), [mcp]);
+    const releaseTurnAttachments = import_react46.default.useCallback((turn) => {
+      for (const attachment of (turn == null ? void 0 : turn.attachments) || []) {
+        attachmentStore.release(attachment.id);
+      }
+    }, [attachmentStore]);
+    const resetAttachmentDraftSession = import_react46.default.useCallback(() => {
+      attachmentStore.releaseSession(chatSessionIdRef.current);
+      attachmentOperationsRef.current.clear();
+      pendingTurnRef.current = null;
+      acceptedTurnRef.current = null;
+      dispatchAttachmentDraft({ type: "reset" });
+      const nextSessionId = "chat-" + randomProviderCredentialId();
+      chatSessionIdRef.current = nextSessionId;
+      setChatSessionId(nextSessionId);
+    }, [attachmentStore]);
+    const addAttachment = import_react46.default.useCallback(async ({ pondId, file }) => {
+      const operation = {};
+      const sessionId = chatSessionId;
+      attachmentOperationsRef.current.set(pondId, operation);
+      dispatchAttachmentDraft({ type: "staging", pondId, file });
+      try {
+        const ref = await attachmentStore.prepare(file, { sessionId, pondId });
+        if (attachmentOperationsRef.current.get(pondId) !== operation || chatSessionIdRef.current !== sessionId) {
+          attachmentStore.release(ref.id);
+          return;
+        }
+        attachmentOperationsRef.current.delete(pondId);
+        dispatchAttachmentDraft({ type: "ready", pondId, ref });
+      } catch (error) {
+        if (attachmentOperationsRef.current.get(pondId) !== operation || chatSessionIdRef.current !== sessionId) return;
+        attachmentOperationsRef.current.delete(pondId);
+        dispatchAttachmentDraft({
+          type: "error",
+          pondId,
+          error: {
+            code: (error == null ? void 0 : error.code) || "ATTACHMENT_STAGING_FAILED",
+            message: (error == null ? void 0 : error.message) || "Attachment staging failed"
+          }
+        });
+      }
+    }, [attachmentStore, chatSessionId]);
+    const removeAttachment = import_react46.default.useCallback((item) => {
+      attachmentOperationsRef.current.delete(item.pondId);
+      if (item.ref) attachmentStore.release(item.ref.id);
+      dispatchAttachmentDraft({ type: "remove", pondId: item.pondId });
+    }, [attachmentStore]);
+    const retryAttachment = import_react46.default.useCallback((item) => {
+      addAttachment({ pondId: item.pondId, file: item.file });
+    }, [addAttachment]);
     const providerAcceptanceEventsRef = import_react46.default.useRef([]);
     const handleChatEvent = import_react46.default.useCallback((evt) => {
       if (evt && typeof evt.type === "string") {
@@ -48853,15 +49423,48 @@ ${baseUrl}`),
         });
         if (providerAcceptanceEventsRef.current.length > 256) providerAcceptanceEventsRef.current.shift();
       }
-      if (evt.type === "turn-start") setChatStreaming(true);
+      const pending = pendingTurnRef.current;
+      if (evt.type === "turn-accepted") {
+        if (!pending || evt.turnId !== pending.turnId) return;
+        acceptedTurnRef.current = pending.turnId;
+        setChatEntries((entries) => entries.concat(userTurnEntry(pending)));
+        dispatchAttachmentDraft({ type: "accepted", turnId: pending.turnId });
+        setChatStreaming(true);
+        return;
+      }
+      if (evt.type === "error" && pending && acceptedTurnRef.current !== pending.turnId) {
+        if (evt.turnId !== pending.turnId) return;
+        setChatStreaming(false);
+        setThinkingActive(false);
+        if (evt.dispatchState === "not-started") {
+          dispatchAttachmentDraft({
+            type: "rejected",
+            turnId: pending.turnId,
+            error: { code: evt.code || "BACKEND_ERROR", message: evt.message || "Backend unavailable" }
+          });
+          pendingTurnRef.current = null;
+        } else {
+          dispatchAttachmentDraft({
+            type: "uncertain",
+            turnId: pending.turnId,
+            error: { code: evt.code || "TRANSPORT_UNCERTAIN", message: evt.message || "Send outcome is uncertain" }
+          });
+        }
+        return;
+      }
       if (evt.type === "thinking") setThinkingActive(!!evt.active);
       if (evt.type === "turn-end" || evt.type === "error") {
+        if (pending && acceptedTurnRef.current === pending.turnId) {
+          releaseTurnAttachments(pending);
+          pendingTurnRef.current = null;
+          acceptedTurnRef.current = null;
+        }
         setChatStreaming(false);
         setThinkingActive(false);
       }
       if (evt.type === "zcode-session-created") setZcodeSessionModels(evt.result || null);
       setChatEntries((entries) => reduceEvent(entries, evt));
-    }, []);
+    }, [releaseTurnAttachments]);
     const recoverRuntimeProvider = import_react46.default.useCallback(async (provider, _failureFacts, requestedModelId) => {
       if (!providerStore) return null;
       const modelId = String(requestedModelId || "").trim();
@@ -49269,22 +49872,60 @@ ${baseUrl}`),
       codexBackend.reset();
       openCodeBackend.reset();
       zcodeBackend.reset();
+      resetAttachmentDraftSession();
       setChatEntries([]);
       setChatStreaming(false);
       setSessionModel(null);
       setSessionEffort(null);
       setSessionFast(null);
       if (decision.nextReal !== "zcode") setZcodeSessionModels(null);
-    }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, zcodeBackend]);
-    const sendChat = (text) => {
-      const trimmed = String(text || "").trim();
-      if (!trimmed) return;
-      setChatEntries((entries) => entries.concat({ id: `user-${Date.now()}`, type: "user-text", text: trimmed }));
-      activeBackend.sendUser(trimmed);
+    }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, resetAttachmentDraftSession, zcodeBackend]);
+    const sendChat = (input) => {
+      if (pendingTurnRef.current) return;
+      let turn;
+      try {
+        turn = normalizeTurnInput(input);
+      } catch (error) {
+        const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
+        dispatchAttachmentDraft({
+          type: "rejected",
+          turnId,
+          error: { code: "TURN_INPUT_INVALID", message: error.message }
+        });
+        return;
+      }
+      pendingTurnRef.current = turn;
+      acceptedTurnRef.current = null;
+      try {
+        const result = activeBackend.sendUser(turn);
+        Promise.resolve(result).catch((error) => {
+          var _a;
+          if (((_a = pendingTurnRef.current) == null ? void 0 : _a.turnId) !== turn.turnId) return;
+          handleChatEvent({
+            type: "error",
+            kind: (error == null ? void 0 : error.kind) || "backend",
+            code: (error == null ? void 0 : error.code) || "BACKEND_ERROR",
+            message: (error == null ? void 0 : error.message) || String(error),
+            turnId: turn.turnId,
+            dispatchState: (error == null ? void 0 : error.dispatchState) || "uncertain"
+          });
+        });
+      } catch (error) {
+        handleChatEvent({
+          type: "error",
+          kind: (error == null ? void 0 : error.kind) || "backend",
+          code: (error == null ? void 0 : error.code) || "BACKEND_ERROR",
+          message: (error == null ? void 0 : error.message) || String(error),
+          turnId: turn.turnId,
+          dispatchState: (error == null ? void 0 : error.dispatchState) || "not-started"
+        });
+      }
     };
     const newChatSession = () => {
       activeBackend.reset();
+      resetAttachmentDraftSession();
       setChatStreaming(false);
+      setThinkingActive(false);
       setChatEntries([]);
     };
     const pushLog = import_react46.default.useCallback((m) => {
@@ -49584,7 +50225,13 @@ ${baseUrl}`),
             onChipApproval: (m) => {
               setPermissionMode(m);
               writePref("ae_mcp_perm_mode", m);
-            }
+            },
+            attachmentDraft,
+            dispatchAttachmentDraft,
+            createTurnId: randomProviderCredentialId,
+            onAddFile: addAttachment,
+            onRemoveAttachment: removeAttachment,
+            onRetryAttachment: retryAttachment
           }
         ) : null,
         tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
