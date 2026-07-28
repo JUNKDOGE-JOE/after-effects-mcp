@@ -9,7 +9,7 @@ import {
   composerKeyboardRequest,
   composerMaxHeight,
   createComposerHeightState,
-  createComposerPointerSession,
+  createComposerDragSession,
   reduceComposerHeight,
 } from '../src/lib/composerResize.js';
 
@@ -63,66 +63,30 @@ test('only shifted vertical arrows request one keyboard step', () => {
   assert.equal(composerKeyboardRequest({ key: 'Enter', shiftKey: true }, 96), null);
 });
 
-test('pointer session captures, reports direction, ignores other pointers, and cleans up', () => {
-  const captured = new Set();
-  const released = [];
-  const target = {
-    setPointerCapture(pointerId) { captured.add(pointerId); },
-    hasPointerCapture(pointerId) { return captured.has(pointerId); },
-    releasePointerCapture(pointerId) {
-      captured.delete(pointerId);
-      released.push(pointerId);
-    },
-  };
+test('drag session reports direction and stops after mouseup', () => {
   const requests = [];
-  const session = createComposerPointerSession({
-    target,
-    pointerId: 7,
+  const session = createComposerDragSession({
     startY: 300,
     startHeight: 96,
     onRequest: (height) => requests.push(height),
   });
-  assert.equal(captured.has(7), true);
-  assert.equal(session.move({ pointerId: 8, clientY: 200 }), false);
-  assert.equal(session.move({ pointerId: 7, clientY: 250 }), true);
-  assert.equal(session.move({ pointerId: 7, clientY: 340 }), true);
+  assert.equal(session.move({ clientY: 250 }), true);
+  assert.equal(session.move({ clientY: 340 }), true);
+  assert.equal(session.move({}), false);
   assert.deepEqual(requests, [146, 56]);
-  assert.equal(session.finish({ pointerId: 7 }, true), true);
-  assert.deepEqual(released, [7]);
-  assert.equal(session.move({ pointerId: 7, clientY: 200 }), false);
+  assert.equal(session.finish(), true);
+  assert.equal(session.finish(), false);
+  assert.equal(session.move({ clientY: 200 }), false);
   session.cancel();
-  assert.deepEqual(released, [7]);
 });
 
-test('lost capture ends a drag without attempting a second release', () => {
-  const target = {
-    setPointerCapture() {},
-    hasPointerCapture() { return true; },
-    releasePointerCapture() { throw new Error('must not release after lost capture'); },
-  };
-  const session = createComposerPointerSession({
-    target,
-    pointerId: 4,
-    startY: 100,
-    startHeight: 96,
-    onRequest() {},
-  });
-  assert.equal(session.finish({ pointerId: 4 }, false), true);
-  assert.equal(session.move({ pointerId: 4, clientY: 90 }), false);
-});
-
-test('unmount cleanup tolerates capture disappearing during release', () => {
-  const target = {
-    setPointerCapture() {},
-    hasPointerCapture() { return true; },
-    releasePointerCapture() { throw new Error('capture already gone'); },
-  };
-  const session = createComposerPointerSession({
-    target,
-    pointerId: 9,
+test('drag session cancellation is idempotent', () => {
+  const session = createComposerDragSession({
     startY: 100,
     startHeight: 96,
     onRequest() {},
   });
   assert.doesNotThrow(() => session.cancel());
+  assert.doesNotThrow(() => session.cancel());
+  assert.equal(session.move({ clientY: 90 }), false);
 });

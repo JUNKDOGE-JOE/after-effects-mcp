@@ -12,9 +12,11 @@ test('Composer exposes the tested accessible resize interaction', () => {
   const handleEnd = composer.indexOf('export function Composer');
   const handle = composer.slice(handleStart, handleEnd);
   assert.ok(handleStart >= 0 && handleEnd > handleStart);
-  assert.match(composer, /createComposerPointerSession/);
+  assert.match(composer, /createComposerDragSession/);
   assert.match(composer, /composerKeyboardRequest/);
   assert.match(composer, /role="separator"/);
+  assert.match(composer, /type="text"/);
+  assert.match(composer, /readOnly/);
   assert.match(composer, /aria-orientation="horizontal"/);
   assert.match(composer, /aria-keyshortcuts="Shift\+ArrowUp Shift\+ArrowDown"/);
   assert.match(composer, /aria-valuemin=\{minHeight\}/);
@@ -23,6 +25,14 @@ test('Composer exposes the tested accessible resize interaction', () => {
   assert.match(composer, /className="ds-focusable"/);
   assert.match(composer, /onDoubleClick=\{onHeightReset\}/);
   assert.match(composer, /cursor:\s*'row-resize'/);
+  assert.match(handle, /event\.currentTarget\.focus\(\)/);
+  assert.match(handle, /onMouseDown=\{handleMouseDown\}/);
+  assert.match(handle, /window\.addEventListener\('mousemove'/);
+  assert.match(handle, /window\.addEventListener\('mouseup'/);
+  assert.match(handle, /window\.removeEventListener\('mousemove'/);
+  assert.match(handle, /window\.removeEventListener\('mouseup'/);
+  assert.match(handle, /event\.key === 'ArrowUp' \|\| event\.key === 'ArrowDown'/);
+  assert.match(handle, /event\.preventDefault\(\)/);
   assert.match(handle, /hover/);
   assert.match(handle, /dragging/);
   assert.doesNotMatch(handle, /onSend|onStop|options|onChange/);

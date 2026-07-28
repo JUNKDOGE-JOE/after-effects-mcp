@@ -76,46 +76,28 @@ export function composerKeyboardRequest(eventLike, currentHeight) {
   return null;
 }
 
-export function createComposerPointerSession({
-  target,
-  pointerId,
+export function createComposerDragSession({
   startY,
   startHeight,
   onRequest,
 }) {
   let active = true;
-  target.setPointerCapture(pointerId);
-
-  function releaseIfCaptured() {
-    try {
-      if (
-        typeof target.hasPointerCapture === 'function'
-        && target.hasPointerCapture(pointerId)
-      ) {
-        target.releasePointerCapture(pointerId);
-      }
-    } catch {
-      // Capture may already have been released by the host.
-    }
-  }
 
   function move(eventLike) {
-    if (!active || eventLike?.pointerId !== pointerId) return false;
+    if (!active || !Number.isFinite(eventLike?.clientY)) return false;
     onRequest(startHeight + (startY - eventLike.clientY));
     return true;
   }
 
-  function finish(eventLike, releaseCapture = true) {
-    if (!active || eventLike?.pointerId !== pointerId) return false;
+  function finish() {
+    if (!active) return false;
     active = false;
-    if (releaseCapture) releaseIfCaptured();
     return true;
   }
 
   function cancel() {
     if (!active) return;
     active = false;
-    releaseIfCaptured();
   }
 
   return Object.freeze({ move, finish, cancel });

@@ -5,7 +5,7 @@ import {
   COMPOSER_MIN_HEIGHT,
   FALLBACK_MAX_HEIGHT,
   composerKeyboardRequest,
-  createComposerPointerSession,
+  createComposerDragSession,
 } from '../../lib/composerResize';
 
 function ComposerResizeHandle({
@@ -17,78 +17,118 @@ function ComposerResizeHandle({
 }) {
   const [hover, setHover] = React.useState(false);
   const [dragging, setDragging] = React.useState(false);
+  const [focused, setFocused] = React.useState(false);
   const dragRef = React.useRef(null);
 
-  React.useEffect(() => () => {
-    dragRef.current?.cancel();
+  const clearDrag = (updateState = true) => {
+    const active = dragRef.current;
+    if (!active) return;
+    window.removeEventListener('mousemove', active.move);
+    window.removeEventListener('mouseup', active.finish);
+    active.session.cancel();
     dragRef.current = null;
-  }, []);
-
-  const finishDrag = (event, releaseCapture) => {
-    const finished = dragRef.current?.finish(event, releaseCapture) === true;
-    if (finished) {
-      dragRef.current = null;
-      setDragging(false);
-    }
+    if (updateState) setDragging(false);
   };
 
-  const handlePointerDown = (event) => {
+  React.useEffect(() => () => clearDrag(false), []);
+
+  const handleMouseDown = (event) => {
     if (event.button !== 0) return;
+    event.currentTarget.focus();
     event.preventDefault();
-    dragRef.current?.cancel();
-    dragRef.current = createComposerPointerSession({
-      target: event.currentTarget,
-      pointerId: event.pointerId,
+    clearDrag();
+
+    const session = createComposerDragSession({
       startY: event.clientY,
       startHeight: height,
       onRequest: (nextHeight) => onHeightChange?.(nextHeight),
     });
+    const move = (moveEvent) => session.move(moveEvent);
+    const finish = () => {
+      if (dragRef.current?.session !== session) return;
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', finish);
+      session.finish();
+      dragRef.current = null;
+      setDragging(false);
+    };
+
+    dragRef.current = { session, move, finish };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', finish);
     setDragging(true);
   };
 
   const handleResizeKey = (event) => {
     const nextHeight = composerKeyboardRequest(event, height);
-    if (nextHeight === null) return;
+    if (nextHeight === null) {
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        event.preventDefault();
+      }
+      return;
+    }
     event.preventDefault();
     onHeightChange?.(nextHeight);
   };
 
   return (
     <div
-      className="ds-focusable"
-      tabIndex={0}
-      role="separator"
-      aria-label="调整输入区高度 Resize composer"
-      aria-orientation="horizontal"
-      aria-keyshortcuts="Shift+ArrowUp Shift+ArrowDown"
-      aria-valuemin={minHeight}
-      aria-valuemax={maxHeight}
-      aria-valuenow={height}
-      onDoubleClick={onHeightReset}
-      onKeyDown={handleResizeKey}
-      onPointerDown={handlePointerDown}
-      onPointerMove={(event) => dragRef.current?.move(event)}
-      onPointerUp={(event) => finishDrag(event, true)}
-      onPointerCancel={(event) => finishDrag(event, true)}
-      onLostPointerCapture={(event) => finishDrag(event, false)}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
       style={{
         height: 10,
         flex: 'none',
+        position: 'relative',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         cursor: 'row-resize',
         touchAction: 'none',
         userSelect: 'none',
+        borderRadius: 4,
+        boxShadow: focused ? '0 0 0 1px var(--focus-ring)' : 'none',
       }}
     >
+      <input
+        type="text"
+        className="ds-focusable"
+        tabIndex={0}
+        role="separator"
+        aria-label="调整输入区高度 Resize composer"
+        aria-orientation="horizontal"
+        aria-keyshortcuts="Shift+ArrowUp Shift+ArrowDown"
+        aria-valuemin={minHeight}
+        aria-valuemax={maxHeight}
+        aria-valuenow={height}
+        value=""
+        readOnly
+        onDoubleClick={onHeightReset}
+        onKeyDown={handleResizeKey}
+        onMouseDown={handleMouseDown}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          margin: 0,
+          padding: 0,
+          border: 'none',
+          background: 'transparent',
+          opacity: 0,
+          cursor: 'row-resize',
+          appearance: 'none',
+          WebkitAppearance: 'none',
+          touchAction: 'none',
+        }}
+      />
       <span
         aria-hidden="true"
         style={{
           width: 36,
           height: 2,
+          pointerEvents: 'none',
           borderRadius: 1,
           background: dragging
             ? 'var(--focus-ring)'
