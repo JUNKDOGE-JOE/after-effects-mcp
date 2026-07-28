@@ -1,7 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { BACKEND_EVENTS } from '../src/cep/backends/contract.js';
-import { BACKENDS, REAL_BACKENDS, baseDescriptorFor } from '../src/cep/backends/index.js';
+import {
+  BACKENDS,
+  REAL_BACKENDS,
+  assertAttachmentBackendRegistry,
+  baseDescriptorFor,
+} from '../src/cep/backends/index.js';
 
 test('contract event vocabulary is the frozen canonical set', () => {
   assert.ok(Object.isFrozen(BACKEND_EVENTS));
@@ -9,6 +14,7 @@ test('contract event vocabulary is the frozen canonical set', () => {
   assert.ok(BACKEND_EVENTS.includes('tool-allowed'));
   assert.ok(BACKEND_EVENTS.includes('tool-denied'));
   assert.ok(BACKEND_EVENTS.includes('thinking'));
+  assert.ok(BACKEND_EVENTS.includes('turn-accepted'));
   for (const e of ['turn-start', 'text-delta', 'tool-start', 'tool-result', 'approval-required', 'turn-end', 'error']) {
     assert.ok(BACKEND_EVENTS.includes(e), 'missing ' + e);
   }
@@ -20,6 +26,43 @@ test('registry exposes the real embedded backends', () => {
     assert.equal(BACKENDS[id].id, id);
     assert.equal(typeof BACKENDS[id].baseDescriptor, 'function');
   }
+});
+
+test('registry gives every backend a truthful attachment disposition', () => {
+  assert.equal(assertAttachmentBackendRegistry(BACKENDS), true);
+  assert.deepEqual(
+    Object.fromEntries(REAL_BACKENDS.map((id) => [id, BACKENDS[id].attachmentTransport])),
+    {
+      subscription: 'agent-sdk',
+      byok: 'reject',
+      'claude-api': 'agent-sdk',
+      codex: 'native',
+      opencode: 'native',
+      zcode: 'manifest',
+    },
+  );
+});
+
+test('attachment registry rejects a missing supported-backend mapping', () => {
+  const mutated = {
+    ...BACKENDS,
+    codex: { ...BACKENDS.codex, attachmentTransport: undefined },
+  };
+  assert.throws(
+    () => assertAttachmentBackendRegistry(mutated),
+    /codex.*attachment transport/i,
+  );
+});
+
+test('attachment registry permits rejection only for legacy byok', () => {
+  const mutated = {
+    ...BACKENDS,
+    codex: { ...BACKENDS.codex, attachmentTransport: 'reject' },
+  };
+  assert.throws(
+    () => assertAttachmentBackendRegistry(mutated),
+    /codex.*reject/i,
+  );
 });
 
 test('every registered backend yields a conformant descriptor', () => {

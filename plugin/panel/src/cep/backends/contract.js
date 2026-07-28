@@ -14,6 +14,7 @@
 //
 // onEvent emission contract (order within a turn):
 //   turn-start
+//   turn-accepted{turnId,transport}
 //   ( text-delta{text,phase?}
 //   | tool-start{toolUseId,name,input}
 //   | tool-result{toolUseId,ok,text,durationMs}
@@ -23,12 +24,19 @@
 //   | thinking{active} )*
 //   turn-end{stopReason} | error{kind,message}
 //
+// An error before a model-turn request is sent includes the matching turnId
+// and dispatchState:'not-started'. A transport failure after request dispatch
+// but before turn-accepted includes the matching turnId and
+// dispatchState:'uncertain'. Backends never retry an uncertain turn
+// automatically.
+//
 // stop(): drains every pending approval (deny + tool-denied) and emits
 //   exactly one error{kind:'aborted'}.
 //
 // New backends are validated against this in backends-contract.test.js.
 export const BACKEND_EVENTS = Object.freeze([
   'turn-start',
+  'turn-accepted',
   'text-delta',
   'tool-start',
   'tool-result',
