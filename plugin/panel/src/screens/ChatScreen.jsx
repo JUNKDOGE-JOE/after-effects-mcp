@@ -11,6 +11,12 @@ import { ComposerChip } from '../components/chat/ComposerChip';
 import { AIAvatar } from '../components/chat/AIAvatar';
 import { eventTitle } from '../lib/activityModel';
 import { buildComposerChips } from '../lib/composerOptions';
+import {
+  COMPOSER_MIN_HEIGHT,
+  composerAvailableHeight,
+  createComposerHeightState,
+  reduceComposerHeight,
+} from '../lib/composerResize';
 
 const C = {
   zh: {
@@ -173,6 +179,15 @@ export function ChatScreen({
   const t = C[lang] || C.zh;
   const [draft, setDraft] = React.useState('');
   const logRef = React.useRef(null);
+  const layoutRef = React.useRef(null);
+  const footerRef = React.useRef(null);
+  const [composerSize, dispatchComposerSize] = React.useReducer(
+    reduceComposerHeight,
+    undefined,
+    () => createComposerHeightState(),
+  );
+  const composerHeightRef = React.useRef(composerSize.height);
+  composerHeightRef.current = composerSize.height;
   const hasEntries = entries.length > 0;
   const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
   const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
@@ -220,6 +235,29 @@ export function ChatScreen({
     if (el) el.scrollTop = el.scrollHeight;
   }, [entries, streaming, thinking]);
 
+  React.useEffect(() => {
+    if (typeof ResizeObserver !== 'function') return undefined;
+    if (!layoutRef.current || !footerRef.current) return undefined;
+
+    const measureComposerBounds = () => {
+      const layout = layoutRef.current;
+      const footer = footerRef.current;
+      if (!layout || !footer) return;
+      const availableHeight = composerAvailableHeight({
+        containerHeight: layout.getBoundingClientRect().height,
+        footerHeight: footer.getBoundingClientRect().height,
+        composerHeight: composerHeightRef.current,
+      });
+      dispatchComposerSize({ type: 'measure', availableHeight });
+    };
+
+    measureComposerBounds();
+    const observer = new ResizeObserver(measureComposerBounds);
+    observer.observe(layoutRef.current);
+    observer.observe(footerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
   const send = () => {
     const text = draft.trim();
     if (!text || composerDisabled || streaming) return;
@@ -228,7 +266,7 @@ export function ChatScreen({
   };
 
   return (
-    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+    <div ref={layoutRef} style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       <div ref={logRef} style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: 'var(--space-3)', display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
         {!hasEntries && composerDisabled ? (
           <React.Fragment>
@@ -273,7 +311,7 @@ export function ChatScreen({
         ) : null}
       </div>
 
-      <div style={{ flex: 'none', padding: 'var(--space-2) var(--space-3) var(--space-3)', borderTop: '1px solid var(--border-subtle)' }}>
+      <div ref={footerRef} style={{ flex: 'none', padding: 'var(--space-2) var(--space-3) var(--space-3)', borderTop: '1px solid var(--border-subtle)' }}>
         <Composer
           value={draft}
           onChange={setDraft}
@@ -284,6 +322,11 @@ export function ChatScreen({
           placeholder={t.placeholder}
           options={composerOptions}
           notice={disabledHint ? <Notice text={disabledHint} actionLabel={noticeActionLabel || t.noticeAction} onAction={onNoticeAction || onNewSession} /> : null}
+          height={composerSize.height}
+          minHeight={COMPOSER_MIN_HEIGHT}
+          maxHeight={composerSize.maxHeight}
+          onHeightChange={(height) => dispatchComposerSize({ type: 'request', height })}
+          onHeightReset={() => dispatchComposerSize({ type: 'reset' })}
         />
       </div>
     </div>

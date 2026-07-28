@@ -11473,7 +11473,226 @@
 
   // src/components/chat/Composer.jsx
   var import_react33 = __toESM(require_react(), 1);
+
+  // src/lib/composerResize.js
+  var COMPOSER_MIN_HEIGHT = 72;
+  var COMPOSER_DEFAULT_HEIGHT = 96;
+  var COMPOSER_KEYBOARD_STEP = 24;
+  var MIN_TRANSCRIPT_HEIGHT = 120;
+  var MAX_COMPOSER_RATIO = 0.6;
+  var FALLBACK_MAX_HEIGHT = 320;
+  function finitePositive(value) {
+    return Number.isFinite(value) && value > 0;
+  }
+  function composerMaxHeight(availableHeight) {
+    if (!Number.isFinite(availableHeight)) return FALLBACK_MAX_HEIGHT;
+    if (availableHeight <= 0) return COMPOSER_MIN_HEIGHT;
+    return Math.max(
+      COMPOSER_MIN_HEIGHT,
+      Math.min(
+        availableHeight - MIN_TRANSCRIPT_HEIGHT,
+        Math.floor(availableHeight * MAX_COMPOSER_RATIO)
+      )
+    );
+  }
+  function clampComposerHeight(height, maxHeight) {
+    const legalMax = Math.max(
+      COMPOSER_MIN_HEIGHT,
+      finitePositive(maxHeight) ? maxHeight : FALLBACK_MAX_HEIGHT
+    );
+    const requested = Number.isFinite(height) ? height : COMPOSER_DEFAULT_HEIGHT;
+    return Math.min(Math.max(requested, COMPOSER_MIN_HEIGHT), legalMax);
+  }
+  function composerAvailableHeight({
+    containerHeight,
+    footerHeight,
+    composerHeight
+  }) {
+    if (![containerHeight, footerHeight, composerHeight].every(Number.isFinite)) return null;
+    if (containerHeight <= 0 || footerHeight < 0 || composerHeight <= 0) return null;
+    const fixedFooterHeight = Math.max(0, footerHeight - composerHeight);
+    const availableHeight = containerHeight - fixedFooterHeight;
+    return Math.max(0, availableHeight);
+  }
+  function createComposerHeightState(availableHeight) {
+    const maxHeight = composerMaxHeight(availableHeight);
+    return {
+      height: clampComposerHeight(COMPOSER_DEFAULT_HEIGHT, maxHeight),
+      maxHeight
+    };
+  }
+  function reduceComposerHeight(state, action) {
+    if ((action == null ? void 0 : action.type) === "measure") {
+      const maxHeight = composerMaxHeight(action.availableHeight);
+      return { height: clampComposerHeight(state.height, maxHeight), maxHeight };
+    }
+    if ((action == null ? void 0 : action.type) === "request") {
+      return {
+        height: clampComposerHeight(action.height, state.maxHeight),
+        maxHeight: state.maxHeight
+      };
+    }
+    if ((action == null ? void 0 : action.type) === "reset") {
+      return {
+        height: clampComposerHeight(COMPOSER_DEFAULT_HEIGHT, state.maxHeight),
+        maxHeight: state.maxHeight
+      };
+    }
+    return state;
+  }
+  function composerKeyboardRequest(eventLike, currentHeight) {
+    if ((eventLike == null ? void 0 : eventLike.shiftKey) !== true) return null;
+    if (eventLike.key === "ArrowUp") return currentHeight + COMPOSER_KEYBOARD_STEP;
+    if (eventLike.key === "ArrowDown") return currentHeight - COMPOSER_KEYBOARD_STEP;
+    return null;
+  }
+  function createComposerDragSession({
+    startY,
+    startHeight,
+    onRequest
+  }) {
+    let active = true;
+    function move(eventLike) {
+      if (!active || !Number.isFinite(eventLike == null ? void 0 : eventLike.clientY)) return false;
+      onRequest(startHeight + (startY - eventLike.clientY));
+      return true;
+    }
+    function finish() {
+      if (!active) return false;
+      active = false;
+      return true;
+    }
+    function cancel() {
+      if (!active) return;
+      active = false;
+    }
+    return Object.freeze({ move, finish, cancel });
+  }
+
+  // src/components/chat/Composer.jsx
   var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
+  function ComposerResizeHandle({
+    height,
+    minHeight,
+    maxHeight,
+    onHeightChange,
+    onHeightReset
+  }) {
+    const [hover, setHover] = import_react33.default.useState(false);
+    const [dragging, setDragging] = import_react33.default.useState(false);
+    const [focused, setFocused] = import_react33.default.useState(false);
+    const dragRef = import_react33.default.useRef(null);
+    const clearDrag = (updateState = true) => {
+      const active = dragRef.current;
+      if (!active) return;
+      window.removeEventListener("mousemove", active.move);
+      window.removeEventListener("mouseup", active.finish);
+      active.session.cancel();
+      dragRef.current = null;
+      if (updateState) setDragging(false);
+    };
+    import_react33.default.useEffect(() => () => clearDrag(false), []);
+    const handleMouseDown = (event) => {
+      if (event.button !== 0) return;
+      event.currentTarget.focus();
+      event.preventDefault();
+      clearDrag();
+      const session = createComposerDragSession({
+        startY: event.clientY,
+        startHeight: height,
+        onRequest: (nextHeight) => onHeightChange == null ? void 0 : onHeightChange(nextHeight)
+      });
+      const move = (moveEvent) => session.move(moveEvent);
+      const finish = () => {
+        var _a;
+        if (((_a = dragRef.current) == null ? void 0 : _a.session) !== session) return;
+        window.removeEventListener("mousemove", move);
+        window.removeEventListener("mouseup", finish);
+        session.finish();
+        dragRef.current = null;
+        setDragging(false);
+      };
+      dragRef.current = { session, move, finish };
+      window.addEventListener("mousemove", move);
+      window.addEventListener("mouseup", finish);
+      setDragging(true);
+    };
+    const handleResizeKey = (event) => {
+      const nextHeight = composerKeyboardRequest(event, height);
+      if (nextHeight === null) return;
+      event.preventDefault();
+      onHeightChange == null ? void 0 : onHeightChange(nextHeight);
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+      "div",
+      {
+        style: {
+          height: 10,
+          flex: "none",
+          position: "relative",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "row-resize",
+          touchAction: "none",
+          userSelect: "none",
+          borderRadius: 4,
+          boxShadow: focused ? "0 0 0 1px var(--focus-ring)" : "none"
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+            "input",
+            {
+              type: "text",
+              className: "ds-focusable",
+              tabIndex: 0,
+              "aria-label": `\u8C03\u6574\u8F93\u5165\u533A\u9AD8\u5EA6\uFF0C\u5F53\u524D ${height}px\uFF0C\u8303\u56F4 ${minHeight}-${maxHeight}px\uFF1B\u6309 Shift+\u4E0A/\u4E0B Resize composer with Shift+ArrowUp/Down`,
+              "aria-keyshortcuts": "Shift+ArrowUp Shift+ArrowDown",
+              value: `${height} px`,
+              readOnly: true,
+              onDoubleClick: onHeightReset,
+              onKeyDown: handleResizeKey,
+              onMouseDown: handleMouseDown,
+              onMouseEnter: () => setHover(true),
+              onMouseLeave: () => setHover(false),
+              onFocus: () => setFocused(true),
+              onBlur: () => setFocused(false),
+              style: {
+                position: "absolute",
+                inset: 0,
+                width: "100%",
+                height: "100%",
+                margin: 0,
+                padding: 0,
+                border: "none",
+                background: "transparent",
+                opacity: 0,
+                cursor: "row-resize",
+                appearance: "none",
+                WebkitAppearance: "none",
+                touchAction: "none"
+              }
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+            "span",
+            {
+              role: "separator",
+              "aria-orientation": "horizontal",
+              style: {
+                width: 36,
+                height: 2,
+                pointerEvents: "none",
+                borderRadius: 1,
+                background: dragging ? "var(--focus-ring)" : hover ? "var(--border-strong)" : "var(--border-default)",
+                transition: "background var(--dur-fast) var(--ease-out)"
+              }
+            }
+          )
+        ]
+      }
+    );
+  }
   function Composer({
     value = "",
     onChange,
@@ -11484,7 +11703,12 @@
     notice,
     options,
     placeholder,
-    style
+    style,
+    height = COMPOSER_DEFAULT_HEIGHT,
+    minHeight = COMPOSER_MIN_HEIGHT,
+    maxHeight = FALLBACK_MAX_HEIGHT,
+    onHeightChange,
+    onHeightReset
   }) {
     const [focus, setFocus] = import_react33.default.useState(false);
     const canSend = !disabled && !streaming && value.trim().length > 0;
@@ -11496,55 +11720,70 @@
     };
     return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
       notice,
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
-        "div",
-        {
-          style: {
-            display: "flex",
-            flexDirection: options ? "column" : "row",
-            alignItems: options ? "stretch" : "flex-end",
-            gap: options ? 2 : "var(--space-15)",
-            padding: "var(--space-15)",
-            background: "var(--bg-well)",
-            border: `1px solid ${focus && !disabled ? "var(--border-strong)" : "var(--border-default)"}`,
-            boxShadow: focus && !disabled ? "0 0 0 1px var(--focus-ring)" : "none",
-            borderRadius: "var(--radius-lg)",
-            opacity: disabled ? 0.5 : 1,
-            transition: "border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)"
-          },
-          children: [
-            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
-              "textarea",
-              {
-                rows: 1,
-                value,
-                placeholder,
-                disabled,
-                onChange: (e) => onChange && onChange(e.target.value),
-                onFocus: () => setFocus(true),
-                onBlur: () => setFocus(false),
-                onKeyDown: handleKey,
-                style: {
-                  flex: 1,
-                  minWidth: 0,
-                  maxHeight: 72,
-                  resize: "none",
-                  background: "transparent",
-                  border: "none",
-                  outline: "none",
-                  padding: "4px 2px 4px 4px",
-                  color: "var(--text-primary)",
-                  font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`
+      /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", flexDirection: "column", minHeight: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+          ComposerResizeHandle,
+          {
+            height,
+            minHeight,
+            maxHeight,
+            onHeightChange,
+            onHeightReset
+          }
+        ),
+        /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+          "div",
+          {
+            style: {
+              height,
+              minHeight: 0,
+              display: "flex",
+              flexDirection: options ? "column" : "row",
+              alignItems: "stretch",
+              gap: options ? 2 : "var(--space-15)",
+              padding: "var(--space-15)",
+              background: "var(--bg-well)",
+              border: `1px solid ${focus && !disabled ? "var(--border-strong)" : "var(--border-default)"}`,
+              boxShadow: focus && !disabled ? "0 0 0 1px var(--focus-ring)" : "none",
+              borderRadius: "var(--radius-lg)",
+              opacity: disabled ? 0.5 : 1,
+              transition: "border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)"
+            },
+            children: [
+              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+                "textarea",
+                {
+                  rows: 1,
+                  value,
+                  placeholder,
+                  disabled,
+                  onChange: (e) => onChange && onChange(e.target.value),
+                  onFocus: () => setFocus(true),
+                  onBlur: () => setFocus(false),
+                  onKeyDown: handleKey,
+                  style: {
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: 0,
+                    overflowY: "auto",
+                    resize: "none",
+                    background: "transparent",
+                    border: "none",
+                    outline: "none",
+                    padding: "4px 2px 4px 4px",
+                    color: "var(--text-primary)",
+                    font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`
+                  }
                 }
-              }
-            ),
-            options ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 2, minWidth: 0 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
-              streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
-            ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
-          ]
-        }
-      )
+              ),
+              options ? /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { style: { flex: "none", display: "flex", alignItems: "center", gap: 2, minWidth: 0, overflow: "visible" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
+                streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+              ] }) : streaming ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+            ]
+          }
+        )
+      ] })
     ] });
   }
   function SendButton({ icon, title, kind, disabled = false, onClick }) {
@@ -11565,6 +11804,7 @@
           width: 24,
           height: 24,
           flex: "none",
+          alignSelf: "flex-end",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
@@ -11986,6 +12226,15 @@
     const t = C[lang] || C.zh;
     const [draft, setDraft] = import_react36.default.useState("");
     const logRef = import_react36.default.useRef(null);
+    const layoutRef = import_react36.default.useRef(null);
+    const footerRef = import_react36.default.useRef(null);
+    const [composerSize, dispatchComposerSize] = import_react36.default.useReducer(
+      reduceComposerHeight,
+      void 0,
+      () => createComposerHeightState()
+    );
+    const composerHeightRef = import_react36.default.useRef(composerSize.height);
+    composerHeightRef.current = composerSize.height;
     const hasEntries = entries.length > 0;
     const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
     const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
@@ -12035,13 +12284,33 @@
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }, [entries, streaming, thinking]);
+    import_react36.default.useEffect(() => {
+      if (typeof ResizeObserver !== "function") return void 0;
+      if (!layoutRef.current || !footerRef.current) return void 0;
+      const measureComposerBounds = () => {
+        const layout = layoutRef.current;
+        const footer = footerRef.current;
+        if (!layout || !footer) return;
+        const availableHeight = composerAvailableHeight({
+          containerHeight: layout.getBoundingClientRect().height,
+          footerHeight: footer.getBoundingClientRect().height,
+          composerHeight: composerHeightRef.current
+        });
+        dispatchComposerSize({ type: "measure", availableHeight });
+      };
+      measureComposerBounds();
+      const observer = new ResizeObserver(measureComposerBounds);
+      observer.observe(layoutRef.current);
+      observer.observe(footerRef.current);
+      return () => observer.disconnect();
+    }, []);
     const send = () => {
       const text = draft.trim();
       if (!text || composerDisabled || streaming) return;
       if (onSend) onSend(text);
       setDraft("");
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
         !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(import_react36.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(AIAvatar, { size: 32 }),
@@ -12073,7 +12342,7 @@
           /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { children: t.thinking })
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
         Composer,
         {
           value: draft,
@@ -12084,7 +12353,12 @@
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : null,
+          height: composerSize.height,
+          minHeight: COMPOSER_MIN_HEIGHT,
+          maxHeight: composerSize.maxHeight,
+          onHeightChange: (height) => dispatchComposerSize({ type: "request", height }),
+          onHeightReset: () => dispatchComposerSize({ type: "reset" })
         }
       ) })
     ] });
