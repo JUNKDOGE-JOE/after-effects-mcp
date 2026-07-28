@@ -99,9 +99,27 @@ function registrationFor(fixture, execFile, overrides) {
 test('macOS registration verifies the payload and bootstraps the exact helper before use', async (t) => {
     const fixture = writeMacosFixture(t);
     const calls = [];
+    const mkdirCalls = [];
+    const writeFileCalls = [];
+    const chmodCalls = [];
     let generatedPlist = null;
     let generatedContents = null;
     const service = `gui/501/${HELPER_ID}`;
+    const fsImpl = {
+        ...fs,
+        mkdirSync(target, options) {
+            mkdirCalls.push([target, options]);
+            return fs.mkdirSync(target, options);
+        },
+        writeFileSync(target, contents, options) {
+            writeFileCalls.push([target, options]);
+            return fs.writeFileSync(target, contents, options);
+        },
+        chmodSync(target, mode) {
+            chmodCalls.push([target, mode]);
+            return fs.chmodSync(target, mode);
+        },
+    };
 
     function execFile(file, args, options, callback) {
         calls.push([file, [...args]]);
@@ -127,7 +145,7 @@ test('macOS registration verifies the payload and bootstraps the exact helper be
         ));
     }
 
-    const registration = registrationFor(fixture, execFile);
+    const registration = registrationFor(fixture, execFile, { fsImpl });
     await registration.ensureRegistered();
 
     assert.equal(registration.helperPath, fixture.helperPath);
@@ -138,8 +156,26 @@ test('macOS registration verifies the payload and bootstraps the exact helper be
     ]);
     assert.equal(generatedContents.includes('__AE_MCP_HELPER_EXECUTABLE__'), false);
     assert.equal(generatedContents.includes(fixture.helperPath), true);
-    assert.equal(fs.statSync(fixture.stateRoot).mode & 0o077, 0);
-    assert.equal(fs.statSync(generatedPlist).mode & 0o177, 0);
+    assert.deepEqual(
+        mkdirCalls.find(([target]) => target === fixture.stateRoot),
+        [fixture.stateRoot, { recursive: true, mode: 0o700 }],
+    );
+    const temporaryWrite = writeFileCalls.find(
+        ([target]) => target.startsWith(generatedPlist + '.tmp.'),
+    );
+    assert.ok(temporaryWrite);
+    assert.deepEqual(
+        temporaryWrite[1],
+        { encoding: 'utf8', mode: 0o600, flag: 'wx' },
+    );
+    assert.deepEqual(chmodCalls, [
+        [fixture.stateRoot, 0o700],
+        [generatedPlist, 0o600],
+    ]);
+    if (process.platform !== 'win32') {
+        assert.equal(fs.statSync(fixture.stateRoot).mode & 0o077, 0);
+        assert.equal(fs.statSync(generatedPlist).mode & 0o177, 0);
+    }
 });
 
 test('macOS registration rejects a tampered payload before launchctl', (t) => {
