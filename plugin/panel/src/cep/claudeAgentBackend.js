@@ -4,6 +4,7 @@ import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js
 import { selectProviderRoute } from '../lib/providerRouteSelection.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { createUniversalProviderRoute } from './universalProviderRoute.js';
+import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
 const READY_TIMEOUT_MS = 15000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -111,17 +112,35 @@ export function createClaudeAgentBackend({
   let routeClosePromise = Promise.resolve();
   let runtimeGeneration = 0;
   let providerSensitiveValues = [];
+  let activeAttachmentPaths = [];
   let providerDeltaPhase = undefined;
   let providerDeltaRedactor = createDeltaRedactor([], () => {});
+  let activeTurn = null;
+  let activeTurnAccepted = false;
+  let activeTurnDispatched = false;
 
   function emit(evt) {
-    if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
+    let event = evt;
+    if (
+      event?.type === 'error'
+      && activeTurn?.turnId
+      && !event.turnId
+    ) {
+      event = {
+        ...event,
+        turnId: activeTurn.turnId,
+        ...(!activeTurnAccepted ? {
+          dispatchState: activeTurnDispatched ? 'uncertain' : 'not-started',
+        } : {}),
+      };
+    }
+    if (onEvent) onEvent(redactValue(event, [...providerSensitiveValues, ...activeAttachmentPaths]));
   }
 
   function resetProviderDeltaRedactor() {
     providerDeltaRedactor.discard();
     providerDeltaPhase = undefined;
-    providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
+    providerDeltaRedactor = createDeltaRedactor([...providerSensitiveValues, ...activeAttachmentPaths], (text) => {
       activeAssistantText += text;
       emit({ type: 'text-delta', text, ...(providerDeltaPhase ? { phase: providerDeltaPhase } : {}) });
     });
@@ -134,11 +153,21 @@ export function createClaudeAgentBackend({
     resetProviderDeltaRedactor();
   }
 
+  function setActiveAttachmentPaths(values) {
+    activeAttachmentPaths = Array.from(new Set((values || [])
+      .filter((value) => typeof value === 'string' && value)))
+      .sort((left, right) => right.length - left.length);
+    if (stderrTail) {
+      stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+    }
+    resetProviderDeltaRedactor();
+  }
+
   function clearProviderSensitiveValues() {
     providerDeltaRedactor.discard();
     providerSensitiveValues = [];
     providerDeltaPhase = undefined;
-    providerDeltaRedactor = createDeltaRedactor([], () => {});
+    providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {});
   }
 
   function writeMessage(message) {
@@ -147,16 +176,15 @@ export function createClaudeAgentBackend({
   }
 
   function finishActive() {
-    if (!activeResolve) {
-      activeRun = null;
-      activeAssistantText = '';
-      return;
-    }
     const resolve = activeResolve;
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
-    resolve();
+    activeTurn = null;
+    activeTurnAccepted = false;
+    activeTurnDispatched = false;
+    setActiveAttachmentPaths([]);
+    if (resolve) resolve();
   }
 
   function handleSidecarMessage(message) {
@@ -176,6 +204,9 @@ export function createClaudeAgentBackend({
       return;
     }
     providerDeltaRedactor.flush();
+    if (event.type === 'turn-accepted' && activeTurn && event.turnId === activeTurn.turnId) {
+      activeTurnAccepted = true;
+    }
     emit(event);
     if (event.type === 'turn-end') {
       transcript.push({ role: 'assistant', text: activeAssistantText });
@@ -532,7 +563,10 @@ export function createClaudeAgentBackend({
       if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on('data', reader);
       if (spawnedProc.stderr && spawnedProc.stderr.on) spawnedProc.stderr.on('data', (chunk) => {
         if (startGeneration !== runtimeGeneration || proc !== spawnedProc) return;
-        stderrTail = appendTail(stderrTail, processChannel === 'api' ? '[provider-sidecar-stderr-redacted]\n' : chunk);
+        const detail = processChannel === 'api'
+          ? '[provider-sidecar-stderr-redacted]\n'
+          : redactValue(String(chunk), [...providerSensitiveValues, ...activeAttachmentPaths]);
+        stderrTail = appendTail(stderrTail, detail);
       });
       spawnedProc.on('exit', (code, signal) => handleExit(spawnedProc, startGeneration, code, signal));
       spawnedProc.on('error', (error) => {
@@ -607,10 +641,29 @@ export function createClaudeAgentBackend({
     }
   }
 
-  async function sendUser(text) {
+  async function sendUser(input) {
     if (activeRun) return activeRun;
 
+    const structuredInput = input !== null && typeof input === 'object' && !Array.isArray(input);
+    let turn;
+    try {
+      turn = normalizeTurnInput(input);
+    } catch (error) {
+      const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
+      emit({
+        type: 'error',
+        kind: 'attachment',
+        code: 'TURN_INPUT_INVALID',
+        message: error.message,
+        ...(turnId ? { turnId, dispatchState: 'not-started' } : {}),
+      });
+      return;
+    }
     activeAssistantText = '';
+    activeTurn = turn;
+    activeTurnAccepted = false;
+    activeTurnDispatched = false;
+    setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
     resetProviderDeltaRedactor();
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
@@ -623,11 +676,14 @@ export function createClaudeAgentBackend({
       return run;
     }
 
-    const userText = String(text || '');
+    const userText = turn.text;
     transcript.push({ role: 'user', text: userText });
+    activeTurnDispatched = true;
     writeMessage({
       t: 'user',
+      ...(turn.turnId ? { turnId: turn.turnId } : {}),
       text: userText,
+      ...(structuredInput ? { attachments: turn.attachments } : {}),
       permissionMode: getPermissionMode(),
       model: processModel,
       effort: getEffort ? getEffort() : undefined,

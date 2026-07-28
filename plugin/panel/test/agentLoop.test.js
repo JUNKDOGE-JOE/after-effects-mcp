@@ -128,6 +128,36 @@ test('createAgentLoop streams a pure text turn into history', async () => {
   ]);
 });
 
+test('createAgentLoop rejects attachment turns before legacy BYOK dispatch', async () => {
+  const events = [];
+  const calls = [];
+  const loop = makeLoop({ anthropic: anthropicFromSse([textTurn('unreachable')], calls), events });
+
+  await loop.sendUser({
+    turnId: 'turn-1',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'notes.pdf',
+      localPath: '/tmp/notes.pdf',
+      size: 12,
+      mediaType: 'application/pdf',
+      temporary: false,
+    }],
+  });
+
+  assert.deepEqual(events, [{
+    type: 'error',
+    kind: 'attachment',
+    code: 'ATTACHMENT_SIDECAR_REQUIRED',
+    message: 'Restore the Claude Agent SDK sidecar to send local files.',
+    turnId: 'turn-1',
+    dispatchState: 'not-started',
+  }]);
+  assert.equal(calls.length, 0);
+  assert.deepEqual(loop.getMessages(), []);
+});
+
 test('createAgentLoop runs a tool directly and continues after tool_result', async () => {
   const events = [];
   const calls = [];

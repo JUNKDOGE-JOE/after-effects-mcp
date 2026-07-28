@@ -24,7 +24,7 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { localizeZcodeError } from '../lib/zcodeErrors.js';
-import { redactText, redactValue } from '../lib/exactSecretRedaction.js';
+import { createDeltaRedactor, redactText, redactValue } from '../lib/exactSecretRedaction.js';
 import { isSensitiveProviderHeaderName } from '../lib/providerHeaderPolicy.js';
 import { createPlatformAdapter } from './platform/index.js';
 import {
@@ -35,6 +35,7 @@ import {
   isCoreAuthorizedDynamicCall,
   planSessionKey,
 } from '../../../shared/tool-approval.mjs';
+import { normalizeTurnInput, withAttachmentManifest } from '../../../shared/chat-attachments.mjs';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -517,9 +518,16 @@ export function createZcodeBackend({
   let activeRun = null;
   let activeResolve = null;
   let activeAssistantText = '';
+  let activeTurn = null;
+  let activeTurnAccepted = false;
+  let sendDispatched = false;
   let environmentSecretValues = [];
   let runtimeSecretValues = [];
   let activeSecretValues = [];
+  let activeAttachmentPaths = [];
+  let processStderrAttachmentPaths = [];
+  let assistantDeltaRedactor = createDeltaRedactor([], () => {});
+  let stderrRedactor = createDeltaRedactor([], () => {});
   let secretEpoch = 0;
   let toolMeta = { allowedTools: [], annotations: {} };
   const pendingApprovals = new Map();
@@ -528,20 +536,74 @@ export function createZcodeBackend({
   const sessionAllowedTools = new Set();
   const sessionAllowedPlans = new Set();
 
+  function activeRedactionValues() {
+    return [...activeSecretValues, ...activeAttachmentPaths];
+  }
+
+  function stderrRedactionValues() {
+    return [...activeSecretValues, ...processStderrAttachmentPaths];
+  }
+
   function emit(evt) {
-    if (onEvent) onEvent(redactValue(evt, activeSecretValues));
+    if (onEvent) onEvent(redactValue(evt, activeRedactionValues()));
   }
 
   function safeText(value) {
-    return redactText(value, activeSecretValues);
+    return redactText(value, activeRedactionValues());
+  }
+
+  function resetAssistantDeltaRedactor() {
+    assistantDeltaRedactor.discard();
+    assistantDeltaRedactor = createDeltaRedactor(activeRedactionValues(), (text) => {
+      activeAssistantText += text;
+      emit({ type: 'text-delta', text });
+    });
+  }
+
+  function resetStderrRedactor() {
+    stderrRedactor.discard();
+    stderrRedactor = createDeltaRedactor(stderrRedactionValues(), (text) => {
+      stderrTail = appendTail(stderrTail, text);
+    });
+  }
+
+  function resetOutputRedactors() {
+    resetAssistantDeltaRedactor();
+    resetStderrRedactor();
+  }
+
+  function setActiveAttachmentPaths(values) {
+    activeAttachmentPaths = Array.from(new Set((values || [])
+      .filter((value) => typeof value === 'string' && value)))
+      .sort((left, right) => right.length - left.length);
+    if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+    const previousProcessPathCount = processStderrAttachmentPaths.length;
+    processStderrAttachmentPaths = Array.from(new Set([
+      ...processStderrAttachmentPaths,
+      ...activeAttachmentPaths,
+    ])).sort((left, right) => right.length - left.length);
+    resetAssistantDeltaRedactor();
+    if (processStderrAttachmentPaths.length !== previousProcessPathCount) {
+      resetStderrRedactor();
+    }
+  }
+
+  function clearProcessStderrAttachmentPaths() {
+    processStderrAttachmentPaths = [];
+    resetStderrRedactor();
   }
 
   function refreshActiveSecretValues() {
-    activeSecretValues = Array.from(new Set([
+    const nextSecretValues = Array.from(new Set([
       ...environmentSecretValues,
       ...runtimeSecretValues,
     ])).sort((left, right) => right.length - left.length);
+    const stderrInventoryChanged = nextSecretValues.length !== activeSecretValues.length
+      || nextSecretValues.some((value, index) => value !== activeSecretValues[index]);
+    activeSecretValues = nextSecretValues;
     secretEpoch += 1;
+    resetAssistantDeltaRedactor();
+    if (stderrInventoryChanged) resetStderrRedactor();
   }
 
   function clearActiveSecretValues() {
@@ -549,6 +611,7 @@ export function createZcodeBackend({
     runtimeSecretValues = [];
     activeSecretValues = [];
     secretEpoch += 1;
+    resetOutputRedactors();
   }
 
   function scheduleSecretCleanup() {
@@ -614,13 +677,31 @@ export function createZcodeBackend({
     if (!activeResolve) {
       activeRun = null;
       activeAssistantText = '';
+      activeTurn = null;
+      activeTurnAccepted = false;
+      sendDispatched = false;
+      setActiveAttachmentPaths([]);
       return;
     }
     const resolve = activeResolve;
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
+    activeTurn = null;
+    activeTurnAccepted = false;
+    sendDispatched = false;
+    setActiveAttachmentPaths([]);
     resolve();
+  }
+
+  function activeTurnFailureFields() {
+    if (!activeTurn?.turnId) return {};
+    return {
+      turnId: activeTurn.turnId,
+      ...(!activeTurnAccepted ? {
+        dispatchState: sendDispatched ? 'uncertain' : 'not-started',
+      } : {}),
+    };
   }
 
   function drainApprovals() {
@@ -818,6 +899,7 @@ export function createZcodeBackend({
     if (type === 'state.updated') {
       const patch = params.patch || params.payload || {};
       if (patch.status === 'idle' && activeRun) {
+        assistantDeltaRedactor.flush();
         drainApprovals();
         emit({ type: 'turn-end', stopReason: 'end_turn' });
         transcript.push({ role: 'assistant', text: activeAssistantText });
@@ -833,9 +915,7 @@ export function createZcodeBackend({
     if (type === 'model.streaming') {
       const payload = params.payload || {};
       if (payload.kind === 'text_delta' && payload.delta) {
-        const delta = safeText(String(payload.delta));
-        activeAssistantText += delta;
-        emit({ type: 'text-delta', text: delta });
+        assistantDeltaRedactor.feed(String(payload.delta));
       }
       return;
     }
@@ -857,6 +937,7 @@ export function createZcodeBackend({
       return;
     }
     if (type === 'turn.completed') {
+      assistantDeltaRedactor.flush();
       drainApprovals();
       const payload = params.payload || {};
       emit({ type: 'turn-end', stopReason: 'end_turn' });
@@ -865,9 +946,10 @@ export function createZcodeBackend({
       return;
     }
     if (type === 'turn.failed') {
+      assistantDeltaRedactor.discard();
       const payload = params.payload || {};
       const message = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, 'ZCode turn failed', lang), activeRuntimeModel);
-      emit({ type: 'error', kind: zcodeErrorKind(message), message });
+      emit({ type: 'error', kind: zcodeErrorKind(message), message, ...activeTurnFailureFields() });
       finishActive();
       return;
     }
@@ -917,6 +999,7 @@ export function createZcodeBackend({
 
   function handleExit(code, signal) {
     const wasStopping = stopping;
+    stderrRedactor.flush();
     const detail = stderrTail ? String(code) + (signal ? ' ' + signal : '') + ' ' + stderrTail : String(code) + (signal ? ' ' + signal : '');
     if (rpc) rpc.close(new Error('ZCode app-server exited: ' + detail));
     proc = null;
@@ -928,13 +1011,20 @@ export function createZcodeBackend({
     subscribed = false;
     activeRuntimeModel = null;
     if (wasStopping) {
+      clearProcessStderrAttachmentPaths();
       scheduleSecretCleanup();
       return;
     }
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: 'ZCode app-server exited: ' + detail });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: 'ZCode app-server exited: ' + detail,
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
+    clearProcessStderrAttachmentPaths();
     scheduleSecretCleanup();
   }
 
@@ -950,9 +1040,10 @@ export function createZcodeBackend({
     subscribed = false;
     activeRuntimeModel = null;
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: err.message });
+      emit({ type: 'error', kind: 'mcp', message: err.message, ...activeTurnFailureFields() });
       finishActive();
     }
+    clearProcessStderrAttachmentPaths();
     scheduleSecretCleanup();
   }
 
@@ -982,7 +1073,7 @@ export function createZcodeBackend({
       const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
       if (proc.stdout && proc.stdout.on) proc.stdout.on('data', reader);
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
-        stderrTail = appendTail(stderrTail, chunk);
+        stderrRedactor.feed(chunk);
       });
       proc.on('exit', (code, signal) => handleExit(code, signal));
       proc.on('error', (error) => handleError(error));
@@ -1104,35 +1195,69 @@ export function createZcodeBackend({
     }
   }
 
-  async function sendUser(text) {
+  async function sendUser(input) {
     if (activeRun) return activeRun;
+    let turn;
+    try {
+      turn = normalizeTurnInput(input);
+    } catch (error) {
+      const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
+      emit({
+        type: 'error',
+        kind: 'attachment',
+        code: 'TURN_INPUT_INVALID',
+        message: error.message,
+        ...(turnId ? { turnId, dispatchState: 'not-started' } : {}),
+      });
+      return;
+    }
     activeAssistantText = '';
+    activeTurn = turn;
+    activeTurnAccepted = false;
+    sendDispatched = false;
+    setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });
 
     try {
       await ensureSession();
-      const userText = String(text || '');
+      const userText = turn.text;
       transcript.push({ role: 'user', text: userText });
 
       // ZCode (like Codex) does not forward the ae-mcp server instructions to
       // the model, so prepend them as a one-shot preamble on the first turn.
-      let turnText = userText;
+      let turnText = withAttachmentManifest(userText, turn.attachments);
       if (transcript.filter((m) => m.role === 'user').length === 1) {
         const instr = (getServerInstructions() || '').trim();
-        if (instr) turnText = instr + '\n\n---\n\n' + userText;
+        if (instr) turnText = instr + '\n\n---\n\n' + turnText;
       }
 
       // session/send resolves on acceptance, long before turn.completed.
-      rpc.request('session/send', { sessionId, content: turnText }, 180000).catch((e) => {
+      sendDispatched = true;
+      rpc.request('session/send', { sessionId, content: turnText }, 180000).then(() => {
+        if (activeTurn === turn && turn.turnId) {
+          activeTurnAccepted = true;
+          emit({ type: 'turn-accepted', turnId: turn.turnId, transport: 'zcode-manifest' });
+        }
+      }).catch((e) => {
         const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.', lang);
-        emit({ type: 'error', kind: zcodeErrorKind(message), message });
+        emit({
+          type: 'error',
+          kind: zcodeErrorKind(message),
+          message,
+          ...activeTurnFailureFields(),
+        });
         finishActive();
       });
     } catch (e) {
       const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.', lang);
-      emit({ type: 'error', kind: zcodeErrorKind(message), message });
+      emit({
+        type: 'error',
+        kind: zcodeErrorKind(message),
+        message,
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
     return activeRun;
@@ -1212,7 +1337,7 @@ export function createZcodeBackend({
     }
     drainApprovals();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.' });
+      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }
@@ -1232,6 +1357,9 @@ export function createZcodeBackend({
     sessionModelRef = null;
     subscribed = false;
     activeRuntimeModel = null;
+    activeTurn = null;
+    activeTurnAccepted = false;
+    sendDispatched = false;
     transcript = [];
     pendingApprovals.clear();
     pendingElicitations.clear();
@@ -1241,6 +1369,7 @@ export function createZcodeBackend({
     toolMeta = { allowedTools: [], annotations: {} };
     finishActive();
     stderrTail = '';
+    clearProcessStderrAttachmentPaths();
     clearActiveSecretValues();
     stopping = false;
   }

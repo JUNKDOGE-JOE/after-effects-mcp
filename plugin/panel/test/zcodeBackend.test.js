@@ -171,6 +171,185 @@ async function startTurn(backend, spawned, text = 'hello') {
 
 // --- tests ---
 
+test('createZcodeBackend sends one attachment manifest while keeping transcript text path-free', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc, sendReq } = await startTurn(backend, spawned, {
+    turnId: 'turn-1',
+    text: 'inspect',
+    attachments: [
+      { id: 'att-1', name: 'notes.pdf', localPath: 'C:\\tmp\\notes.pdf', size: 12, mediaType: 'application/pdf', temporary: false },
+      { id: 'att-2', name: 'clip.mov', localPath: 'C:\\tmp\\clip.mov', size: 20, mediaType: 'video/quicktime', temporary: false },
+    ],
+  });
+
+  assert.match(sendReq.params.content, /^inspect\n\n<ae_mcp_attachments version="1">\n/);
+  assert.match(sendReq.params.content, /"path":"C:\\\\tmp\\\\notes\.pdf"/);
+  assert.match(sendReq.params.content, /"path":"C:\\\\tmp\\\\clip\.mov"/);
+  assert.equal((sendReq.params.content.match(/<ae_mcp_attachments/g) || []).length, 1);
+  assert.deepEqual(events.find((event) => event.type === 'turn-accepted'), {
+    type: 'turn-accepted',
+    turnId: 'turn-1',
+    transport: 'zcode-manifest',
+  });
+  assert.deepEqual(backend.getMessages()[0], { role: 'user', text: 'inspect' });
+  assert.equal(JSON.stringify({ events, messages: backend.getMessages() }).includes('C:\\tmp'), false);
+
+  pushEvent(proc, 'turn.completed', { response: 'done' });
+  await pending;
+});
+
+test('createZcodeBackend preserves the attachment manifest after first-turn instructions', async () => {
+  const { backend, spawned } = makeBackend({
+    getServerInstructions: () => 'Follow the server contract.',
+  });
+  const { pending, proc, sendReq } = await startTurn(backend, spawned, {
+    turnId: 'turn-instructions',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'notes.pdf',
+      localPath: 'C:\\private\\notes.pdf',
+      size: 12,
+      mediaType: 'application/pdf',
+      temporary: false,
+    }],
+  });
+
+  assert.match(
+    sendReq.params.content,
+    /^Follow the server contract\.\n\n---\n\ninspect\n\n<ae_mcp_attachments version="1">\n/,
+  );
+  assert.match(sendReq.params.content, /"path":"C:\\\\private\\\\notes\.pdf"/);
+
+  pushEvent(proc, 'turn.completed', { response: 'done' });
+  await pending;
+});
+
+test('createZcodeBackend redacts an attachment path split across output and transcript', async () => {
+  const path = 'C:\\private\\customer.mov';
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, {
+    turnId: 'turn-redact-output',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'customer.mov',
+      localPath: path,
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+
+  pushEvent(proc, 'model.streaming', {
+    delta: 'C:\\private\\',
+    kind: 'text_delta',
+    done: false,
+  });
+  pushEvent(proc, 'model.streaming', {
+    delta: 'customer.mov',
+    kind: 'text_delta',
+    done: false,
+  });
+  pushEvent(proc, 'turn.completed', { response: path });
+  await pending;
+
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('createZcodeBackend redacts an attachment path split across stderr failure', async () => {
+  const path = 'C:\\private\\customer.mov';
+  const { backend, events, spawned } = makeBackend();
+  const pending = backend.sendUser({
+    turnId: 'turn-redact-stderr',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'customer.mov',
+      localPath: path,
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+  await flush();
+
+  const proc = spawned.procs[0];
+  proc.pushStderr('failed C:\\private\\');
+  proc.pushStderr('customer.mov');
+  proc.exit(1);
+  await pending;
+
+  const rendered = JSON.stringify(events);
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('createZcodeBackend keeps attachment stderr redaction until the persistent process exits', async () => {
+  const path = 'C:\\private\\late-customer.mov';
+  const { backend, events, spawned } = makeBackend();
+  const first = await startTurn(backend, spawned, {
+    turnId: 'turn-attachment',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'late-customer.mov',
+      localPath: path,
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+  pushEvent(first.proc, 'turn.completed', { response: 'done' });
+  await first.pending;
+
+  first.proc.pushStderr('late C:\\private\\');
+  first.proc.pushStderr('late-customer.mov');
+  const second = backend.sendUser({
+    turnId: 'turn-text-only',
+    text: 'next',
+    attachments: [],
+  });
+  await flush();
+  first.proc.exit(1);
+  await second;
+
+  const rendered = JSON.stringify(events);
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('createZcodeBackend correlates a rejected session/send as uncertain without retry', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const pending = backend.sendUser({
+    turnId: 'turn-send-failed',
+    text: 'inspect',
+    attachments: [],
+  });
+  await flush();
+  const proc = spawned.procs[0];
+  const createReq = parseWrites(proc)[0];
+  respond(proc, createReq, { session: { sessionId: 'sess_test' }, settings: { model: { available: [] } } });
+  await flush();
+  const subReq = parseWrites(proc).find((message) => message.method === 'session/subscribe');
+  respond(proc, subReq, { sessionId: 'sess_test', eventSeq: 0 });
+  await flush();
+  const sendReq = parseWrites(proc).find((message) => message.method === 'session/send');
+  reject(proc, sendReq, 'session/send disconnected');
+  await pending;
+
+  assert.deepEqual(events.at(-1), {
+    type: 'error',
+    kind: 'mcp',
+    message: 'session/send disconnected',
+    turnId: 'turn-send-failed',
+    dispatchState: 'uncertain',
+  });
+  assert.equal(parseWrites(proc).filter((message) => message.method === 'session/send').length, 1);
+});
+
 test('createZcodeBackend spawns node with zcode.cjs app-server args', async () => {
   const { backend, spawned } = makeBackend();
   backend.sendUser('hello');

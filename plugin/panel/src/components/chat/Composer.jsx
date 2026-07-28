@@ -1,5 +1,12 @@
 import React from 'react';
 import { Icon } from '../core/Icon';
+import { AttachmentPond } from './AttachmentPond';
+import {
+  attachmentDropFiles,
+  draftIsBusy,
+  isFileTransfer,
+  readyAttachments,
+} from '../../lib/attachmentDraft';
 import {
   COMPOSER_DEFAULT_HEIGHT,
   COMPOSER_MIN_HEIGHT,
@@ -149,14 +156,40 @@ export function Composer({
   maxHeight = FALLBACK_MAX_HEIGHT,
   onHeightChange,
   onHeightReset,
+  attachmentDraft = { items: [] },
+  onAddFile,
+  onRemoveAttachment,
+  onRetryAttachment,
+  attachmentLabels,
 }) {
   const [focus, setFocus] = React.useState(false);
-  const canSend = !disabled && !streaming && value.trim().length > 0;
+  const attachmentPondRef = React.useRef(null);
+  const readyAttachmentCount = readyAttachments(attachmentDraft).length;
+  const attachmentsBusy = draftIsBusy(attachmentDraft)
+    || attachmentDraft.items.some((item) => item.status === 'error');
+  const canSend = !disabled
+    && !streaming
+    && !attachmentsBusy
+    && (value.trim().length > 0 || readyAttachmentCount > 0);
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (canSend && onSend) onSend();
     }
+  };
+  const handleFileDrag = (event) => {
+    if (disabled || streaming || attachmentDraft.pendingTurnId) return;
+    if (!isFileTransfer(event.dataTransfer)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+  const handleFileDrop = (event) => {
+    if (disabled || streaming || attachmentDraft.pendingTurnId) return;
+    const files = attachmentDropFiles(event.dataTransfer);
+    if (!files.length) return;
+    event.preventDefault();
+    event.stopPropagation();
+    attachmentPondRef.current?.addFiles(files);
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-15)', ...style }}>
@@ -174,9 +207,9 @@ export function Composer({
             height,
             minHeight: 0,
             display: 'flex',
-            flexDirection: options ? 'column' : 'row',
+            flexDirection: 'column',
             alignItems: 'stretch',
-            gap: options ? 2 : 'var(--space-15)',
+            gap: 2,
             padding: 'var(--space-15)',
             background: 'var(--bg-well)',
             border: `1px solid ${focus && !disabled ? 'var(--border-strong)' : 'var(--border-default)'}`,
@@ -185,30 +218,51 @@ export function Composer({
             opacity: disabled ? 0.5 : 1,
             transition: 'border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out)',
           }}
+          onDragEnterCapture={handleFileDrag}
+          onDragOverCapture={handleFileDrag}
+          onDropCapture={handleFileDrop}
         >
-          <textarea
-            rows={1}
-            value={value}
-            placeholder={placeholder}
-            disabled={disabled}
-            onChange={(e) => onChange && onChange(e.target.value)}
-            onFocus={() => setFocus(true)}
-            onBlur={() => setFocus(false)}
-            onKeyDown={handleKey}
-            style={{
-              flex: 1,
-              minWidth: 0,
-              minHeight: 0,
-              overflowY: 'auto',
-              resize: 'none',
-              background: 'transparent',
-              border: 'none',
-              outline: 'none',
-              padding: '4px 2px 4px 4px',
-              color: 'var(--text-primary)',
-              font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`,
-            }}
-          ></textarea>
+          <AttachmentPond
+            ref={attachmentPondRef}
+            items={attachmentDraft.items}
+            disabled={disabled || streaming || Boolean(attachmentDraft.pendingTurnId)}
+            labels={attachmentLabels}
+            onAddFile={onAddFile}
+            onRemoveAttachment={onRemoveAttachment}
+            onRetryAttachment={onRetryAttachment}
+          />
+          <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: 'flex', alignItems: 'stretch', gap: 'var(--space-15)' }}>
+            <textarea
+              rows={1}
+              value={value}
+              placeholder={placeholder}
+              disabled={disabled}
+              onChange={(e) => onChange && onChange(e.target.value)}
+              onFocus={() => setFocus(true)}
+              onBlur={() => setFocus(false)}
+              onKeyDown={handleKey}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 0,
+                overflowY: 'auto',
+                resize: 'none',
+                background: 'transparent',
+                border: 'none',
+                outline: 'none',
+                padding: '4px 2px 4px 4px',
+                color: 'var(--text-primary)',
+                font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`,
+              }}
+            ></textarea>
+            {!options ? (
+              streaming ? (
+                <SendButton icon="square" title="停止 Stop" kind="stop" onClick={onStop} />
+              ) : (
+                <SendButton icon="arrow-up" title="发送 Send" kind="send" disabled={!canSend} onClick={canSend ? onSend : undefined} />
+              )
+            ) : null}
+          </div>
           {options ? (
             <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 2, minWidth: 0, overflow: 'visible' }}>
               {/* overflow must stay visible: ComposerChip drop-up menus render
@@ -220,11 +274,7 @@ export function Composer({
                 <SendButton icon="arrow-up" title="发送 Send" kind="send" disabled={!canSend} onClick={canSend ? onSend : undefined} />
               )}
             </div>
-          ) : streaming ? (
-            <SendButton icon="square" title="停止 Stop" kind="stop" onClick={onStop} />
-          ) : (
-            <SendButton icon="arrow-up" title="发送 Send" kind="send" disabled={!canSend} onClick={canSend ? onSend : undefined} />
-          )}
+          ) : null}
         </div>
       </div>
     </div>

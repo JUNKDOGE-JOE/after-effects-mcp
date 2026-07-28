@@ -20,6 +20,51 @@ import Testing
     }
 
     @Test
+    func testAcceptsSignedBrokerSpawnedByTrustedCepRendererUnderCepAndSupportedAfterEffects() throws {
+        let inspector = FixedCallerInspector(evidence: .validBroker)
+        let authorizer = MacCallerAuthorizer(
+            inspector: inspector,
+            currentUserIdentifier: 501
+        )
+
+        let caller = try authorizer.authorize(connection: .brokerFixture)
+
+        XCTAssertEqual(caller.processIdentifier, 1003)
+        XCTAssertEqual(caller.afterEffectsMajor, 26)
+        XCTAssertEqual(caller.connectionRequirement, MacCallerPolicy.brokerConnectionRequirement)
+        XCTAssertEqual(inspector.accessCount, 1)
+    }
+
+    @Test
+    func testRejectsBrokerWhenAnyBrokerCepOrAeBoundaryChanges() throws {
+        let invalid: [CallerEvidence] = [
+            .validBroker.replacing(callerSigningIdentifier: "com.example.attacker"),
+            .validBroker.replacing(callerBrokerSignatureValid: false),
+            .validBroker.replacing(callerArchitecture: .x86_64),
+            .validBroker.replacing(ancestry: Array(CallerEvidence.validBroker.ancestry.dropFirst())),
+            .validBroker.replacing(ancestry: [
+                CallerEvidence.validBroker.ancestry[0],
+                CallerEvidence.validBroker.ancestry[2],
+            ]),
+            .validBroker.replacing(firstAncestorSigningIdentifier: "com.example.fake-cep"),
+            .validBroker.replacing(firstAncestorTeamIdentifier: "ATTACKER01"),
+            .validBroker.replacing(firstAncestorSignatureValid: false),
+            .validBroker.replacing(firstAncestorArchitecture: .x86_64),
+            .validBroker.replacing(afterEffectsMajor: 27),
+        ]
+
+        for evidence in invalid {
+            let authorizer = MacCallerAuthorizer(
+                inspector: FixedCallerInspector(evidence: evidence),
+                currentUserIdentifier: 501
+            )
+            XCTAssertThrowsError(try authorizer.authorize(connection: .brokerFixture)) { error in
+                XCTAssertEqual((error as? HelperFailure)?.code, "HELPER_UNAUTHORIZED")
+            }
+        }
+    }
+
+    @Test
     func testRejectsEveryIdentityBoundaryIndependently() throws {
         let invalid: [CallerEvidence] = [
             .valid.replacing(processIdentifier: 1003),
@@ -75,6 +120,10 @@ import Testing
     func testPolicyConstantsMatchProductionIdentifiersAndVersions() {
         XCTAssertEqual(MacCallerPolicy.afterEffectsBundleIdentifier, "com.adobe.AfterEffects.application")
         XCTAssertEqual(MacCallerPolicy.cepSigningIdentifier, "com.adobe.cep.CEPHtmlEngine")
+        XCTAssertEqual(
+            MacCallerPolicy.cepRendererSigningIdentifier,
+            "com.adobe.cep.CEPHtmlEngine Helper (Renderer)"
+        )
         XCTAssertEqual(MacCallerPolicy.adobeTeamIdentifier, "JQ525L2MZD")
         XCTAssertEqual(MacCallerPolicy.supportedAfterEffectsMajors, [25, 26])
         XCTAssertEqual(MacCallerPolicy.requiredArchitecture, .arm64)
@@ -262,6 +311,53 @@ private extension CallerEvidence {
         ]
     )
 
+    static let validBroker = CallerEvidence(
+        processIdentifier: 1003,
+        effectiveUserIdentifier: 501,
+        auditSessionIdentifier: 77,
+        generationBefore: ProcessGeneration(seconds: 101, microseconds: 1),
+        generationAfter: ProcessGeneration(seconds: 101, microseconds: 1),
+        caller: SignedProcessIdentity(
+            processIdentifier: 1003,
+            parentProcessIdentifier: 1002,
+            signingIdentifier: "ae-mcp-platform-helper",
+            teamIdentifier: "",
+            bundleVersionMajor: nil,
+            architecture: .arm64,
+            signatureValid: false,
+            brokerSignatureValid: true
+        ),
+        ancestry: [
+            SignedProcessIdentity(
+                processIdentifier: 1002,
+                parentProcessIdentifier: 1001,
+                signingIdentifier: "com.adobe.cep.CEPHtmlEngine Helper (Renderer)",
+                teamIdentifier: "JQ525L2MZD",
+                bundleVersionMajor: nil,
+                architecture: .arm64,
+                signatureValid: true
+            ),
+            SignedProcessIdentity(
+                processIdentifier: 1001,
+                parentProcessIdentifier: 1000,
+                signingIdentifier: "com.adobe.cep.CEPHtmlEngine",
+                teamIdentifier: "JQ525L2MZD",
+                bundleVersionMajor: nil,
+                architecture: .arm64,
+                signatureValid: true
+            ),
+            SignedProcessIdentity(
+                processIdentifier: 1000,
+                parentProcessIdentifier: 1,
+                signingIdentifier: "com.adobe.AfterEffects.application",
+                teamIdentifier: "JQ525L2MZD",
+                bundleVersionMajor: 26,
+                architecture: .arm64,
+                signatureValid: true
+            ),
+        ]
+    )
+
     func replacing(
         processIdentifier: pid_t? = nil,
         effectiveUserIdentifier: uid_t? = nil,
@@ -272,8 +368,13 @@ private extension CallerEvidence {
         callerBundleVersionMajor: Int? = nil,
         callerTeamIdentifier: String? = nil,
         callerSignatureValid: Bool? = nil,
+        callerBrokerSignatureValid: Bool? = nil,
         callerArchitecture: NativeArchitecture? = nil,
         ancestry: [SignedProcessIdentity]? = nil,
+        firstAncestorSigningIdentifier: String? = nil,
+        firstAncestorTeamIdentifier: String? = nil,
+        firstAncestorSignatureValid: Bool? = nil,
+        firstAncestorArchitecture: NativeArchitecture? = nil,
         afterEffectsBundleIdentifier: String? = nil,
         afterEffectsTeamIdentifier: String? = nil,
         afterEffectsSignatureValid: Bool? = nil,
@@ -288,19 +389,36 @@ private extension CallerEvidence {
             teamIdentifier: callerTeamIdentifier ?? nextCaller.teamIdentifier,
             bundleVersionMajor: callerBundleVersionMajor ?? nextCaller.bundleVersionMajor,
             architecture: callerArchitecture ?? nextCaller.architecture,
-            signatureValid: callerSignatureValid ?? nextCaller.signatureValid
+            signatureValid: callerSignatureValid ?? nextCaller.signatureValid,
+            brokerSignatureValid: callerBrokerSignatureValid ?? nextCaller.brokerSignatureValid
         )
         var nextAncestry = ancestry ?? self.ancestry
         if !nextAncestry.isEmpty {
-            let ae = nextAncestry[0]
+            let first = nextAncestry[0]
             nextAncestry[0] = SignedProcessIdentity(
+                processIdentifier: first.processIdentifier,
+                parentProcessIdentifier: first.parentProcessIdentifier,
+                signingIdentifier: firstAncestorSigningIdentifier ?? first.signingIdentifier,
+                teamIdentifier: firstAncestorTeamIdentifier ?? first.teamIdentifier,
+                bundleVersionMajor: first.bundleVersionMajor,
+                architecture: firstAncestorArchitecture ?? first.architecture,
+                signatureValid: firstAncestorSignatureValid ?? first.signatureValid,
+                brokerSignatureValid: first.brokerSignatureValid
+            )
+        }
+        if let aeIndex = nextAncestry.firstIndex(where: {
+            $0.signingIdentifier == MacCallerPolicy.afterEffectsBundleIdentifier
+        }) {
+            let ae = nextAncestry[aeIndex]
+            nextAncestry[aeIndex] = SignedProcessIdentity(
                 processIdentifier: ae.processIdentifier,
                 parentProcessIdentifier: ae.parentProcessIdentifier,
                 signingIdentifier: afterEffectsBundleIdentifier ?? ae.signingIdentifier,
                 teamIdentifier: afterEffectsTeamIdentifier ?? ae.teamIdentifier,
                 bundleVersionMajor: afterEffectsMajor ?? ae.bundleVersionMajor,
                 architecture: afterEffectsArchitecture ?? ae.architecture,
-                signatureValid: afterEffectsSignatureValid ?? ae.signatureValid
+                signatureValid: afterEffectsSignatureValid ?? ae.signatureValid,
+                brokerSignatureValid: ae.brokerSignatureValid
             )
         }
         return CallerEvidence(
@@ -321,5 +439,12 @@ private extension ConnectionIdentity {
         effectiveUserIdentifier: 501,
         auditSessionIdentifier: 77,
         processGeneration: ProcessGeneration(seconds: 100, microseconds: 1)
+    )
+
+    static let brokerFixture = ConnectionIdentity(
+        processIdentifier: 1003,
+        effectiveUserIdentifier: 501,
+        auditSessionIdentifier: 77,
+        processGeneration: ProcessGeneration(seconds: 101, microseconds: 1)
     )
 }

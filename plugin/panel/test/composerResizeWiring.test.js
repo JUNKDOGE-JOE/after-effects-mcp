@@ -56,6 +56,10 @@ test('Composer keeps submission and bottom controls independent from resizing', 
   assert.match(composer, /minHeight:\s*0/);
   assert.match(composer, /flex:\s*'none'/);
   assert.match(composer, /overflow must stay visible/);
+  assert.ok(
+    composer.indexOf('<ComposerResizeHandle') < composer.indexOf('<AttachmentPond'),
+    'attachment surface must stay below the independent resize handle',
+  );
 });
 
 test('ChatScreen owns one session height and observes the shared allocation', () => {

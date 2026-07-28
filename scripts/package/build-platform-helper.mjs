@@ -79,7 +79,12 @@ export function validateHelperIdentityPolicy(policy, platform) {
       && JSON.stringify(mac.caller?.afterEffectsMajors) === JSON.stringify([25, 26])
       && JSON.stringify(mac.caller?.directSigningIdentifiers) === JSON.stringify([
         'com.adobe.cep.CEPHtmlEngine',
-      ]);
+        'ae-mcp-platform-helper',
+      ])
+      && mac.caller?.brokerDirectParentSigningIdentifier
+        === 'com.adobe.cep.CEPHtmlEngine Helper (Renderer)'
+      && mac.caller?.brokerRequiredAncestorSigningIdentifier
+        === 'com.adobe.cep.CEPHtmlEngine';
   const windowsValid = platform === 'windows-x64'
       && windows?.platform === platform
       && windows.minimumOsVersion === '11.0.26100'

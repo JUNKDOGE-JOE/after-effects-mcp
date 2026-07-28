@@ -1,6 +1,8 @@
 import { createSseParser } from '../lib/sse.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
+import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
+import { attachmentFileUrl, normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
 const MCP_TIMEOUT_MS = 120000;
 const READY_TIMEOUT_MS = 30000;
@@ -172,6 +174,13 @@ export function createOpenCodeBackend({
   let activeRun = null;
   let activeResolve = null;
   let activeAssistantText = '';
+  let activeAttachmentPaths = [];
+  let processStderrAttachmentPaths = [];
+  let assistantDeltaRedactor = createDeltaRedactor([], () => {});
+  let stderrRedactor = createDeltaRedactor([], () => {});
+  let activeTurn = null;
+  let activeTurnAccepted = false;
+  let messageDispatched = false;
   let turnStarted = false;
   let toolMeta = { annotations: {} };
   const pendingApprovals = new Map();
@@ -180,7 +189,43 @@ export function createOpenCodeBackend({
   const transcript = [];
 
   function emit(evt) {
-    if (onEvent) onEvent(evt);
+    if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
+  }
+
+  function resetAssistantDeltaRedactor() {
+    assistantDeltaRedactor.discard();
+    assistantDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, (text) => {
+      activeAssistantText += text;
+      emit({ type: 'text-delta', text });
+    });
+  }
+
+  function resetStderrRedactor() {
+    stderrRedactor.discard();
+    stderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, (text) => {
+      stderrTail = appendTail(stderrTail, text);
+    });
+  }
+
+  function setActiveAttachmentPaths(values) {
+    activeAttachmentPaths = Array.from(new Set((values || [])
+      .filter((value) => typeof value === 'string' && value)))
+      .sort((left, right) => right.length - left.length);
+    if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+    const previousProcessPathCount = processStderrAttachmentPaths.length;
+    processStderrAttachmentPaths = Array.from(new Set([
+      ...processStderrAttachmentPaths,
+      ...activeAttachmentPaths,
+    ])).sort((left, right) => right.length - left.length);
+    resetAssistantDeltaRedactor();
+    if (processStderrAttachmentPaths.length !== previousProcessPathCount) {
+      resetStderrRedactor();
+    }
+  }
+
+  function clearProcessStderrAttachmentPaths() {
+    processStderrAttachmentPaths = [];
+    resetStderrRedactor();
   }
 
   function fetcher() {
@@ -195,16 +240,24 @@ export function createOpenCodeBackend({
     if (!activeResolve) {
       activeRun = null;
       activeAssistantText = '';
+      activeTurn = null;
+      activeTurnAccepted = false;
+      messageDispatched = false;
       turnStarted = false;
       startedTools.clear();
+      setActiveAttachmentPaths([]);
       return;
     }
     const resolve = activeResolve;
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
+    activeTurn = null;
+    activeTurnAccepted = false;
+    messageDispatched = false;
     turnStarted = false;
     startedTools.clear();
+    setActiveAttachmentPaths([]);
     resolve();
   }
 
@@ -215,6 +268,16 @@ export function createOpenCodeBackend({
       throw new Error('OpenCode HTTP ' + (response ? response.status : 'error') + (text ? ': ' + text : ''));
     }
     return response;
+  }
+
+  function activeTurnFailureFields() {
+    if (!activeTurn?.turnId) return {};
+    return {
+      turnId: activeTurn.turnId,
+      ...(!activeTurnAccepted ? {
+        dispatchState: messageDispatched ? 'uncertain' : 'not-started',
+      } : {}),
+    };
   }
 
   async function requestJson(path, options = {}) {
@@ -270,18 +333,28 @@ export function createOpenCodeBackend({
 
   function handleExit(code, signal) {
     const wasStopping = stopping;
+    stderrRedactor.flush();
     proc = null;
     serverPromise = null;
     sessionPromise = null;
     sessionId = null;
     sseClosed = true;
     sseStarted = false;
-    if (wasStopping) return;
+    if (wasStopping) {
+      clearProcessStderrAttachmentPaths();
+      return;
+    }
     if (activeRun) {
       const detail = stderrTail ? String(code) + (signal ? ' ' + signal : '') + ' ' + stderrTail : String(code) + (signal ? ' ' + signal : '');
-      emit({ type: 'error', kind: 'mcp', message: 'opencode serve exited: ' + detail });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: 'opencode serve exited: ' + detail,
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
+    clearProcessStderrAttachmentPaths();
   }
 
   function handleError(error) {
@@ -292,9 +365,15 @@ export function createOpenCodeBackend({
     sseClosed = true;
     sseStarted = false;
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: error && error.message ? error.message : 'opencode serve error' });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: error && error.message ? error.message : 'opencode serve error',
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
+    clearProcessStderrAttachmentPaths();
   }
 
   async function startServer() {
@@ -318,7 +397,7 @@ export function createOpenCodeBackend({
         env: spawnEnv,
       });
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
-        stderrTail = appendTail(stderrTail, chunk);
+        stderrRedactor.feed(chunk);
       });
       if (proc.on) {
         proc.on('exit', (code, signal) => handleExit(code, signal));
@@ -360,7 +439,12 @@ export function createOpenCodeBackend({
     const parser = createSseParser(({ data }) => handleOpenCodeEvent(data));
     request('/event').then((response) => readSseBody(response.body, parser)).catch((e) => {
       if (!sseClosed && activeRun) {
-        emit({ type: 'error', kind: 'mcp', message: e && e.message ? e.message : 'OpenCode event stream failed.' });
+        emit({
+          type: 'error',
+          kind: 'mcp',
+          message: e && e.message ? e.message : 'OpenCode event stream failed.',
+          ...activeTurnFailureFields(),
+        });
         finishActive();
       }
     });
@@ -473,6 +557,7 @@ export function createOpenCodeBackend({
       if (st === 'busy') {
         if (!turnStarted) { turnStarted = true; emit({ type: 'turn-start' }); }
       } else if (st === 'idle') {
+        assistantDeltaRedactor.flush();
         drainApprovals();
         emit({ type: 'turn-end', stopReason: 'end_turn' });
         transcript.push({ role: 'assistant', text: activeAssistantText });
@@ -484,7 +569,7 @@ export function createOpenCodeBackend({
       if (p.field === 'text') {
         emit({ type: 'thinking', active: false });
         const text = p.delta;
-        if (text) { activeAssistantText += String(text); emit({ type: 'text-delta', text: String(text) }); }
+        if (text) assistantDeltaRedactor.feed(String(text));
       } else if (p.field === 'reasoning') {
         emit({ type: 'thinking', active: true });
       }
@@ -497,8 +582,14 @@ export function createOpenCodeBackend({
       return;
     }
     if (type === 'session.error') {
+      assistantDeltaRedactor.discard();
       const error = p.error || p;
-      emit({ type: 'error', kind: error.kind || 'mcp', message: error.message || String(error || 'OpenCode session error') });
+      emit({
+        type: 'error',
+        kind: error.kind || 'mcp',
+        message: error.message || String(error || 'OpenCode session error'),
+        ...activeTurnFailureFields(),
+      });
       finishActive();
       return;
     }
@@ -519,21 +610,64 @@ export function createOpenCodeBackend({
     return Promise.allSettled(replies);
   }
 
-  async function sendUser(text) {
+  function openCodeParts(turn) {
+    return [
+      ...(turn.text ? [{ type: 'text', text: turn.text }] : []),
+      ...turn.attachments.map((file) => ({
+        type: 'file',
+        mime: file.mediaType || 'application/octet-stream',
+        filename: file.name,
+        url: attachmentFileUrl(file.localPath, adapter.id),
+      })),
+    ];
+  }
+
+  async function sendUser(input) {
     if (activeRun) return activeRun;
+    let turn;
+    try {
+      turn = normalizeTurnInput(input);
+    } catch (error) {
+      const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
+      emit({
+        type: 'error',
+        kind: 'attachment',
+        code: 'TURN_INPUT_INVALID',
+        message: error.message,
+        ...(turnId ? { turnId, dispatchState: 'not-started' } : {}),
+      });
+      return;
+    }
     activeAssistantText = '';
+    activeTurn = turn;
+    activeTurnAccepted = false;
+    messageDispatched = false;
+    setActiveAttachmentPaths(turn.attachments.flatMap((attachment) => [
+      attachment.localPath,
+      attachmentFileUrl(attachment.localPath, adapter.id),
+    ]));
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });
     try {
       const id = await ensureSession();
-      const userText = String(text || '');
+      const userText = turn.text;
       transcript.push({ role: 'user', text: userText });
+      messageDispatched = true;
       await postJson('/session/' + encodeURIComponent(id) + '/message', {
-        parts: [{ type: 'text', text: userText }],
+        parts: openCodeParts(turn),
       });
+      if (turn.turnId) {
+        activeTurnAccepted = true;
+        emit({ type: 'turn-accepted', turnId: turn.turnId, transport: 'opencode-file-part' });
+      }
     } catch (e) {
-      emit({ type: 'error', kind: 'mcp', message: e && e.message ? e.message : 'Failed to start OpenCode turn.' });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: e && e.message ? e.message : 'Failed to start OpenCode turn.',
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
     return activeRun;
@@ -556,7 +690,7 @@ export function createOpenCodeBackend({
     }
     await drainApprovals();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.' });
+      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }
@@ -572,12 +706,17 @@ export function createOpenCodeBackend({
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
+    activeTurn = null;
+    activeTurnAccepted = false;
+    messageDispatched = false;
     turnStarted = false;
     startedTools.clear();
     transcript.length = 0;
     if (proc && proc.kill) proc.kill();
     proc = null;
     serverPromise = null;
+    stderrTail = '';
+    clearProcessStderrAttachmentPaths();
     try {
       if (configHome) {
         const fs = fsImpl || adapter.fs;

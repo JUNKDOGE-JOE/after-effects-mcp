@@ -376,7 +376,6 @@ export function SettingsScreen({
           <Segmented full value={backend} onChange={onBackendChange} options={[
             { value: 'subscription', label: t.backendSub },
             { value: 'codex', label: t.backendCodex },
-            { value: 'zcode', label: t.backendZcode },
           ]} />
         </Field>
         <ChannelCard

@@ -28,6 +28,17 @@ struct ConnectionIdentity: Equatable {
 struct AuthorizedCaller: Equatable {
     let processIdentifier: pid_t
     let afterEffectsMajor: Int
+    let connectionRequirement: String
+
+    init(
+        processIdentifier: pid_t,
+        afterEffectsMajor: Int,
+        connectionRequirement: String = MacCallerPolicy.directConnectionRequirement
+    ) {
+        self.processIdentifier = processIdentifier
+        self.afterEffectsMajor = afterEffectsMajor
+        self.connectionRequirement = connectionRequirement
+    }
 }
 
 protocol CallerAuthorizing {

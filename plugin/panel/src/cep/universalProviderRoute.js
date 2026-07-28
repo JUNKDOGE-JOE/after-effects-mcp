@@ -247,7 +247,12 @@ function headersWithoutRejectedAnthropicBetas(headers, buffer) {
   const match = message.match(
     /^Unexpected value\(s\)\s+(.+?)\s+for the `anthropic-beta` header(?:\.|$)/,
   );
-  if (!match) return null;
+  if (!match) {
+    if (!/\bbeta\b/i.test(message) || !/\binvalid\b/i.test(message)) return null;
+    const next = { ...headers };
+    delete next['anthropic-beta'];
+    return next;
+  }
   const token = '[A-Za-z0-9][A-Za-z0-9._:-]{0,127}';
   const listPattern = new RegExp('^`' + token + '`(?:\\s*(?:,|and)\\s*`' + token + '`)*$');
   if (!listPattern.test(match[1])) return null;
@@ -263,6 +268,42 @@ function headersWithoutRejectedAnthropicBetas(headers, buffer) {
   if (remaining.length > 0) next['anthropic-beta'] = remaining.join(', ');
   else delete next['anthropic-beta'];
   return next;
+}
+
+function payloadWithoutRejectedContextManagement(payload, buffer) {
+  let errorBody;
+  let requestBody;
+  try {
+    errorBody = JSON.parse(buffer.toString('utf8'));
+    requestBody = JSON.parse(payload.toString('utf8'));
+  } catch {
+    return null;
+  }
+  const source = errorBody?.error && typeof errorBody.error === 'object'
+    ? errorBody.error
+    : errorBody;
+  const message = typeof source?.message === 'string' ? source.message : '';
+  if (!/\bcontext_management\b/.test(message)
+      || requestBody === null
+      || typeof requestBody !== 'object'
+      || Array.isArray(requestBody)) return null;
+  const context = requestBody.context_management;
+  if (context === null
+      || typeof context !== 'object'
+      || Array.isArray(context)
+      || JSON.stringify(Object.keys(context).sort()) !== '["edits"]'
+      || !Array.isArray(context.edits)
+      || context.edits.length !== 1) return null;
+  const edit = context.edits[0];
+  if (edit === null
+      || typeof edit !== 'object'
+      || Array.isArray(edit)
+      || JSON.stringify(Object.keys(edit).sort()) !== '["keep","type"]'
+      || edit.type !== 'clear_thinking_20251015'
+      || edit.keep !== 'all') return null;
+  const next = { ...requestBody };
+  delete next.context_management;
+  return Buffer.from(JSON.stringify(next), 'utf8');
 }
 
 function createGate(maximum) {
@@ -583,7 +624,7 @@ export function createUniversalProviderRoute({
       method: 'POST',
     };
     if (lookupImpl) requestOptions.lookup = lookupImpl;
-    const sendAttempt = (attemptHeaders, allowBetaRetry) => {
+    const sendAttempt = (attemptHeaders, attemptPayload, compatibility) => {
       let connected = false;
       let requestSettled = false;
       let request = null;
@@ -632,10 +673,11 @@ export function createUniversalProviderRoute({
               if (responseSettled || context.finished) return;
               responseSettled = true;
               const rawErrorBody = Buffer.concat(chunks);
-              const retryHeaders = allowBetaRetry && status === 400
+              const retryHeaders = compatibility.beta && status === 400
                 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, rawErrorBody)
                 : null;
               if (retryHeaders) {
+                retryHeaders['content-length'] = String(attemptPayload.length);
                 onAudit({
                   event: 'provider_route_compat_retry',
                   modelId,
@@ -644,7 +686,35 @@ export function createUniversalProviderRoute({
                   compatibility: 'anthropic-beta-rejected-values',
                   outcome: 'retry',
                 });
-                sendAttempt(retryHeaders, false);
+                sendAttempt(retryHeaders, attemptPayload, {
+                  beta: false,
+                  contextManagement: compatibility.contextManagement,
+                });
+                return;
+              }
+              const retryPayload = compatibility.contextManagement && status === 400
+                ? payloadWithoutRejectedContextManagement(attemptPayload, rawErrorBody)
+                : null;
+              if (retryPayload) {
+                onAudit({
+                  event: 'provider_route_compat_retry',
+                  modelId,
+                  clientProtocol,
+                  upstreamProtocol: capability.upstreamProtocol,
+                  compatibility: 'context-management-rejected',
+                  outcome: 'retry',
+                });
+                sendAttempt(
+                  {
+                    ...attemptHeaders,
+                    'content-length': String(retryPayload.length),
+                  },
+                  retryPayload,
+                  {
+                    beta: compatibility.beta,
+                    contextManagement: false,
+                  },
+                );
                 return;
               }
               let errorHeaders = responseHeaders;
@@ -823,7 +893,7 @@ export function createUniversalProviderRoute({
             'Provider request failed.',
           ));
         });
-        request.end(payload);
+        request.end(attemptPayload);
       } catch {
         clearTimeout(connectTimer);
         if (!context.finish()) return;
@@ -834,7 +904,10 @@ export function createUniversalProviderRoute({
         ));
       }
     };
-    sendAttempt(headers, true);
+    sendAttempt(headers, payload, {
+      beta: true,
+      contextManagement: true,
+    });
   };
 
   const forwardChatFacade = ({ context, payload, modelId }) => {

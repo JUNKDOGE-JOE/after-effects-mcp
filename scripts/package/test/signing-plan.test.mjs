@@ -396,7 +396,7 @@ test('mac nested signer uses current lipo grammar and signs helper payload botto
   assert.doesNotMatch(source, /lipo\s+-verify_arch\s+arm64/);
   assert.match(source, /lipo\s+"\$candidate"\s+-verify_arch\s+arm64/);
 
-  const helperSign = source.indexOf('sign_native "$helper_path"');
+  const helperSign = source.indexOf('sign_native_with_entitlements "$helper_path"');
   const xpcExecutableSign = source.indexOf('sign_native "$xpc_executable"');
   const xpcBundleSign = source.indexOf('sign_bundle "$xpc_bundle"');
   const addonSign = source.indexOf('sign_native "$addon_path"');
@@ -410,6 +410,8 @@ test('mac nested signer uses current lipo grammar and signs helper payload botto
   assert.match(source, /\[\[ "\$AE_MCP_APPLE_SIGNING_IDENTITY" != '-' \]\]/);
   assert.match(source, /\[\[ -x "\$candidate" \]\]/);
   assert.match(source, /grep -Eq '\^CodeDirectory \.\* flags=\.\*runtime'/);
+  assert.match(source, /macos-helper-entitlements\.mjs/);
+  assert.match(source, /--entitlements "\$resolved_entitlements_path"/);
 });
 
 test('windows nested signer signs and verifies the declared N-API transport', async () => {
@@ -498,7 +500,7 @@ test('Windows Authenticode object fixtures reject any unverified nested object b
 test('mac nested signer runs the audited xattr preflight before any signing', async () => {
   const source = await fs.promises.readFile('scripts/package/sign-macos-nested.sh', 'utf8');
   const preflight = source.indexOf('macos-signing-xattrs.mjs --root "$helper_root"');
-  const firstSign = source.indexOf('sign_native "$helper_path"');
+  const firstSign = source.indexOf('sign_native_with_entitlements "$helper_path"');
   assert.ok(preflight >= 0 && preflight < firstSign);
   assert.match(source, /SIGNING_XATTR_AUDIT/);
   assert.doesNotMatch(source, /xattr\s+-c(?:\s|$)/);

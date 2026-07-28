@@ -13,8 +13,8 @@ import {
   zcodeDescriptorFromProbedModels,
 } from './backendCapabilities.js';
 
-// effectiveBackend 'byok' = API channel chosen but Node runtime broken; the
-// fetch-based loop serves the same API channel, so it shares the branch.
+// `byok` remains readable only for legacy state/descriptor compatibility.
+// Live custom Claude Provider selection uses `claude-api`.
 export function isClaudeApiBackend(effectiveBackend) {
   return effectiveBackend === 'claude-api' || effectiveBackend === 'byok';
 }

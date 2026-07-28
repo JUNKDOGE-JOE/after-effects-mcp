@@ -9,6 +9,102 @@ html, body { margin: 0; height: 100%; }
 body { background: var(--bg-panel); color: var(--text-primary); font: var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui); }
 #root { height: 100%; display: flex; flex-direction: column; }
 
+.ae-attachment-pond {
+  flex: none;
+  min-width: 0;
+  max-height: min(42%, 168px);
+  overflow-y: auto;
+}
+
+.ae-attachment-pond .filepond--root {
+  min-height: 30px;
+  margin: 0;
+  font: var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui);
+}
+
+.ae-attachment-pond .filepond--drop-label {
+  min-height: 30px;
+  color: var(--text-tertiary);
+}
+
+.ae-attachment-pond .filepond--panel-root {
+  background: transparent;
+  border: 1px dashed var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.ae-attachment-pond .filepond--list-scroller {
+  margin: 0;
+}
+
+.ae-attachment-pond .filepond--item {
+  margin: 2px 0;
+}
+
+.ae-attachment-pond .filepond--file {
+  min-height: 32px;
+  padding: 4px 8px;
+  color: var(--text-primary);
+  background: var(--bg-raised);
+}
+
+.ae-attachment-pond .filepond--image-preview {
+  background: var(--bg-well);
+}
+
+.ae-attachment-pond button:focus-visible {
+  outline: 1px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+.ae-attachment-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 3px;
+}
+
+.ae-attachment-status {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 4px;
+  color: var(--text-secondary);
+  font: var(--weight-regular) var(--text-micro)/var(--leading-tight) var(--font-ui);
+}
+
+.ae-attachment-status--error {
+  color: var(--error);
+}
+
+.ae-attachment-status__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ae-attachment-status__size,
+.ae-attachment-status__state {
+  flex: none;
+  color: var(--text-tertiary);
+}
+
+.ae-attachment-status__state {
+  margin-left: auto;
+}
+
+.ae-attachment-status button {
+  flex: none;
+  padding: 1px 4px;
+  color: inherit;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
 .tools-screen {
   position: relative;
   flex: 1;

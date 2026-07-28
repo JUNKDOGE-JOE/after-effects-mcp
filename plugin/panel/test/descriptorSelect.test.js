@@ -12,7 +12,7 @@ const v3Provider = {
   },
 };
 
-test('isClaudeApiBackend covers claude-api and node-broken byok, nothing else', () => {
+test('isClaudeApiBackend covers live claude-api and legacy byok state, nothing else', () => {
   assert.equal(isClaudeApiBackend('claude-api'), true);
   assert.equal(isClaudeApiBackend('byok'), true);
   assert.equal(isClaudeApiBackend('subscription'), false);
@@ -26,7 +26,7 @@ test('claude-api + provider probedModels drives the descriptor (regression: was 
   assert.equal(d.defaultModelId, 'glm-5.2');
 });
 
-test('node-broken byok backend uses the same probed-models path', () => {
+test('legacy byok state uses the same probed-models path', () => {
   const base = byokStaticDescriptor();
   const d = selectDescriptor({ effectiveBackend: 'byok', backendPref: 'subscription', baseDescriptor: base, claudeApiProvider: probedProvider });
   assert.equal(d.defaultModelId, 'glm-5.2');

@@ -88,4 +88,9 @@ and environment values are excluded from evidence.
 
 Runtime provider credentials remain behind the helper's OS credential-store interface. Phase 0
 signing evidence proves code identity and packaging order only; it does not grant credential-store
-access and never contains provider configuration.
+access and never contains provider configuration. The ad-hoc development Helper uses the current
+user's file-based macOS Keychain because Data Protection Keychain writes require a signed
+application identifier; it never falls back to a plaintext provider file. Release signing renders
+the application identifier from the protected Team ID, embeds it in the standalone Helper and XPC
+bundle, and verifies those entitlements before promotion. A signed Helper whose Team ID and
+application identifier do not match fails closed instead of using the development Keychain profile.

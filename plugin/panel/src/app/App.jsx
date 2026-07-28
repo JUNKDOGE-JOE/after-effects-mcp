@@ -29,7 +29,11 @@ import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
 import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref, codexProviderChannelLock } from '../lib/channels.js';
 import { createProviderStore } from '../cep/providerStore';
 import { createProviderSecretService, resolveProviderRequestProfile } from '../cep/providerSecrets';
-import { createProviderAcceptanceBridge } from '../cep/providerAcceptanceBridge.js';
+import {
+  countMentionedPanelAttachments,
+  createProviderAcceptanceBridge,
+  normalizePanelAcceptanceTurns,
+} from '../cep/providerAcceptanceBridge.js';
 import { createUniversalProviderRoute } from '../cep/universalProviderRoute.js';
 import { migrateProviderStoreSecrets } from '../cep/providerMigration';
 import { migrateProviderStoreV2ToV3 } from '../cep/providerSchemaMigration';
@@ -42,7 +46,12 @@ import { probeProviderModels } from '../cep/modelProbe';
 import { detectCcSwitch, readCcSwitchProviderDrafts } from '../cep/ccSwitch';
 import { inspectClaudeSettingsEnv, readClaudeSettingsProviderDraft } from '../cep/claudeSettingsImport';
 import { codexCliCredentialAvailable, readCodexCliConfig, resolveCodexCliCredential } from '../cep/codexConfig';
-import { reduceEvent } from '../lib/chatEntries';
+import { reduceEvent, userTurnEntry } from '../lib/chatEntries';
+import {
+  createAttachmentDraftState,
+  reduceAttachmentDraft,
+} from '../lib/attachmentDraft.js';
+import { createAttachmentStore } from '../cep/attachmentStore.js';
 import { DEFAULT_MODEL } from '../lib/anthropic';
 import { descriptorWithCustomModel } from '../lib/backendCapabilities';
 import { selectDescriptor, reconcileModelPref } from '../lib/descriptorSelect';
@@ -60,7 +69,7 @@ import { copyWizardConfig } from '../lib/wizardCopy.js';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
 import pkg from '../../package.json';
-import { buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
+import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
 import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
@@ -68,6 +77,7 @@ import { readCepSystemPath } from '../cep/platform/paths.js';
 import { createRuntimeManager, hasDevelopmentRuntimeOverride } from '../cep/runtimeManager.js';
 import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
+import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
 // Re-export so app code has a single import surface; the helpers themselves live
 // in lib/ so the test suite (node --test, which cannot parse JSX) can import them.
@@ -314,6 +324,22 @@ function Shell({ cs }) {
   // Embedded chat: provider references, model/permission prefs, entry feed.
   // Resolved provider values exist only inside a request/probe/spawn call.
   const platform = React.useMemo(() => createPlatformAdapter(), []);
+  const attachmentStore = React.useMemo(() => createAttachmentStore({
+    platform,
+    randomUUID: randomProviderCredentialId,
+  }), [platform]);
+  const [attachmentDraft, dispatchAttachmentDraft] = React.useReducer(
+    reduceAttachmentDraft,
+    undefined,
+    createAttachmentDraftState,
+  );
+  const [chatSessionId, setChatSessionId] = React.useState('chat-0');
+  const chatSessionIdRef = React.useRef(chatSessionId);
+  chatSessionIdRef.current = chatSessionId;
+  const attachmentOperationsRef = React.useRef(new Map());
+  const pendingTurnRef = React.useRef(null);
+  const acceptedTurnRef = React.useRef(null);
+  React.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
   const legacyKeyStore = React.useMemo(() => {
     try { return createLegacyApiKeyStore(); } catch (e) { return null; }
   }, []);
@@ -551,8 +577,7 @@ function Shell({ cs }) {
     codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === 'ready' && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === 'checking', cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
     zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
   }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
-  const nodeOk = !(probe && probe.nodeOk === false);
-  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
+  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock });
   const claudeSettingsHint = React.useMemo(() => {
     try { return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs }); } catch (e) { return null; }
   }, [platform]);
@@ -646,6 +671,61 @@ function Shell({ cs }) {
   }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
   const toolsApi = React.useMemo(() => createToolsApi(mcp), [mcp]);
   React.useEffect(() => () => mcp.stop(), [mcp]);
+  const releaseTurnAttachments = React.useCallback((turn) => {
+    for (const attachment of turn?.attachments || []) {
+      attachmentStore.release(attachment.id);
+    }
+  }, [attachmentStore]);
+  const resetAttachmentDraftSession = React.useCallback(() => {
+    attachmentStore.releaseSession(chatSessionIdRef.current);
+    attachmentOperationsRef.current.clear();
+    pendingTurnRef.current = null;
+    acceptedTurnRef.current = null;
+    dispatchAttachmentDraft({ type: 'reset' });
+    const nextSessionId = 'chat-' + randomProviderCredentialId();
+    chatSessionIdRef.current = nextSessionId;
+    setChatSessionId(nextSessionId);
+  }, [attachmentStore]);
+  const addAttachment = React.useCallback(async ({ pondId, file }) => {
+    const operation = {};
+    const sessionId = chatSessionId;
+    attachmentOperationsRef.current.set(pondId, operation);
+    dispatchAttachmentDraft({ type: 'staging', pondId, file });
+    try {
+      const ref = await attachmentStore.prepare(file, { sessionId, pondId });
+      if (
+        attachmentOperationsRef.current.get(pondId) !== operation
+        || chatSessionIdRef.current !== sessionId
+      ) {
+        attachmentStore.release(ref.id);
+        return;
+      }
+      attachmentOperationsRef.current.delete(pondId);
+      dispatchAttachmentDraft({ type: 'ready', pondId, ref });
+    } catch (error) {
+      if (
+        attachmentOperationsRef.current.get(pondId) !== operation
+        || chatSessionIdRef.current !== sessionId
+      ) return;
+      attachmentOperationsRef.current.delete(pondId);
+      dispatchAttachmentDraft({
+        type: 'error',
+        pondId,
+        error: {
+          code: error?.code || 'ATTACHMENT_STAGING_FAILED',
+          message: error?.message || 'Attachment staging failed',
+        },
+      });
+    }
+  }, [attachmentStore, chatSessionId]);
+  const removeAttachment = React.useCallback((item) => {
+    attachmentOperationsRef.current.delete(item.pondId);
+    if (item.ref) attachmentStore.release(item.ref.id);
+    dispatchAttachmentDraft({ type: 'remove', pondId: item.pondId });
+  }, [attachmentStore]);
+  const retryAttachment = React.useCallback((item) => {
+    addAttachment({ pondId: item.pondId, file: item.file });
+  }, [addAttachment]);
   const providerAcceptanceEventsRef = React.useRef([]);
   const handleChatEvent = React.useCallback((evt) => {
     if (evt && typeof evt.type === 'string') {
@@ -656,15 +736,48 @@ function Shell({ cs }) {
       });
       if (providerAcceptanceEventsRef.current.length > 256) providerAcceptanceEventsRef.current.shift();
     }
-    if (evt.type === 'turn-start') setChatStreaming(true);
+    const pending = pendingTurnRef.current;
+    if (evt.type === 'turn-accepted') {
+      if (!pending || evt.turnId !== pending.turnId) return;
+      acceptedTurnRef.current = pending.turnId;
+      setChatEntries((entries) => entries.concat(userTurnEntry(pending)));
+      dispatchAttachmentDraft({ type: 'accepted', turnId: pending.turnId });
+      setChatStreaming(true);
+      return;
+    }
+    if (evt.type === 'error' && pending && acceptedTurnRef.current !== pending.turnId) {
+      if (evt.turnId !== pending.turnId) return;
+      setChatStreaming(false);
+      setThinkingActive(false);
+      if (evt.dispatchState === 'not-started') {
+        dispatchAttachmentDraft({
+          type: 'rejected',
+          turnId: pending.turnId,
+          error: { code: evt.code || 'BACKEND_ERROR', message: evt.message || 'Backend unavailable' },
+        });
+        pendingTurnRef.current = null;
+      } else {
+        dispatchAttachmentDraft({
+          type: 'uncertain',
+          turnId: pending.turnId,
+          error: { code: evt.code || 'TRANSPORT_UNCERTAIN', message: evt.message || 'Send outcome is uncertain' },
+        });
+      }
+      return;
+    }
     if (evt.type === 'thinking') setThinkingActive(!!evt.active);
     if (evt.type === 'turn-end' || evt.type === 'error') {
+      if (pending && acceptedTurnRef.current === pending.turnId) {
+        releaseTurnAttachments(pending);
+        pendingTurnRef.current = null;
+        acceptedTurnRef.current = null;
+      }
       setChatStreaming(false);
       setThinkingActive(false);
     }
     if (evt.type === 'zcode-session-created') setZcodeSessionModels(evt.result || null);
     setChatEntries((entries) => reduceEvent(entries, evt));
-  }, []);
+  }, [releaseTurnAttachments]);
 
   const recoverRuntimeProvider = React.useCallback(async (provider, _failureFacts, requestedModelId) => {
     if (!providerStore) return null;
@@ -792,14 +905,16 @@ function Shell({ cs }) {
         const client = input.client === 'claude' ? 'claude' : input.client === 'codex' ? 'codex' : '';
         const providerId = typeof input.providerId === 'string' ? input.providerId.trim() : '';
         const modelId = typeof input.modelId === 'string' ? input.modelId.trim() : '';
-        const prompts = Array.isArray(input.prompts)
-          ? input.prompts.map((value) => String(value || '').trim())
-          : [];
+        let plannedTurns;
+        try {
+          plannedTurns = normalizePanelAcceptanceTurns(input);
+        } catch {
+          return { ok: false, errorCode: 'PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN', turns: [] };
+        }
         const graceMs = Number.isInteger(input.graceMs) && input.graceMs >= 0 && input.graceMs <= 10000
           ? input.graceMs
           : 3000;
-        if (!client || !providerId || !modelId || prompts.length < 1 || prompts.length > 4
-          || prompts.some((value) => !value || value.length > 2000)) {
+        if (!client || !providerId || !modelId) {
           return { ok: false, errorCode: 'PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN', turns: [] };
         }
         let provider = null;
@@ -823,13 +938,14 @@ function Shell({ cs }) {
         };
         backend.reset();
         try {
-          for (const prompt of prompts) {
+          for (const plannedTurn of plannedTurns) {
             const eventStart = providerAcceptanceEventsRef.current.length;
             const startedAt = Date.now();
-            await backend.sendUser(prompt);
+            await backend.sendUser(plannedTurn);
             await new Promise((resolve) => setTimeout(resolve, graceMs));
             const events = providerAcceptanceEventsRef.current.slice(eventStart);
             const error = events.find((event) => event.type === 'error');
+            const accepted = events.some((event) => event.type === 'turn-accepted');
             const terminal = events.some((event) => event.type === 'turn-end');
             const transcript = backend.getMessages();
             const hasAssistant = transcript.some((message) => message?.role === 'assistant'
@@ -839,11 +955,17 @@ function Shell({ cs }) {
               terminal: terminal ? 'turn-end' : null,
               durationMs: Date.now() - startedAt,
               errorCode: error?.code || error?.kind || null,
+              attachmentCount: plannedTurn.attachments.length,
+              mentionedAttachmentCount: countMentionedPanelAttachments(
+                transcript,
+                plannedTurn.attachments,
+              ),
+              accepted,
             });
             if (!turns.at(-1).ok) break;
           }
           return {
-            ok: turns.length === prompts.length && turns.every((turn) => turn.ok),
+            ok: turns.length === plannedTurns.length && turns.every((turn) => turn.ok),
             client,
             modelId,
             turns,
@@ -932,8 +1054,8 @@ function Shell({ cs }) {
   const activeBackend = backendInstances[effective.backend] || byokLoop;
 
   // Descriptor selection is keyed on the EFFECTIVE backend from pickBackend,
-  // not backendPref: 'byok' never appears as a pref (migrateBackendPref maps
-  // it away), only as an effective backend when Node is broken.
+  // not backendPref. `byok` remains only for legacy state compatibility;
+  // live custom Claude Provider selection resolves to `claude-api`.
   React.useEffect(() => {
     const facts = {
       effectiveBackend: effective.backend,
@@ -1109,24 +1231,61 @@ function Shell({ cs }) {
     codexBackend.reset();
     openCodeBackend.reset();
     zcodeBackend.reset();
+    resetAttachmentDraftSession();
     setChatEntries([]);
     setChatStreaming(false);
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
     if (decision.nextReal !== 'zcode') setZcodeSessionModels(null);
-  }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, zcodeBackend]);
+  }, [effective.backend, byokLoop, claudeBackend, codexBackend, openCodeBackend, resetAttachmentDraftSession, zcodeBackend]);
 
-  const sendChat = (text) => {
-    const trimmed = String(text || '').trim();
-    if (!trimmed) return;
-    setChatEntries((entries) => entries.concat({ id: `user-${Date.now()}`, type: 'user-text', text: trimmed }));
-    activeBackend.sendUser(trimmed);
+  const sendChat = (input) => {
+    if (pendingTurnRef.current) return;
+    let turn;
+    try {
+      turn = normalizeTurnInput(input);
+    } catch (error) {
+      const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
+      dispatchAttachmentDraft({
+        type: 'rejected',
+        turnId,
+        error: { code: 'TURN_INPUT_INVALID', message: error.message },
+      });
+      return;
+    }
+    pendingTurnRef.current = turn;
+    acceptedTurnRef.current = null;
+    try {
+      const result = activeBackend.sendUser(turn);
+      Promise.resolve(result).catch((error) => {
+        if (pendingTurnRef.current?.turnId !== turn.turnId) return;
+        handleChatEvent({
+          type: 'error',
+          kind: error?.kind || 'backend',
+          code: error?.code || 'BACKEND_ERROR',
+          message: error?.message || String(error),
+          turnId: turn.turnId,
+          dispatchState: error?.dispatchState || 'uncertain',
+        });
+      });
+    } catch (error) {
+      handleChatEvent({
+        type: 'error',
+        kind: error?.kind || 'backend',
+        code: error?.code || 'BACKEND_ERROR',
+        message: error?.message || String(error),
+        turnId: turn.turnId,
+        dispatchState: error?.dispatchState || 'not-started',
+      });
+    }
   };
 
   const newChatSession = () => {
     activeBackend.reset();
+    resetAttachmentDraftSession();
     setChatStreaming(false);
+    setThinkingActive(false);
     setChatEntries([]);
   };
 
@@ -1140,6 +1299,11 @@ function Shell({ cs }) {
     try {
       const exactSecrets = providerSecretService.getRedactionValues();
       if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
+      const attachmentSecrets = attachmentPathSecrets({
+        draft: attachmentDraft,
+        pendingTurn: pendingTurnRef.current,
+      });
+      exactSecrets.push(...attachmentSecrets);
       const text = buildLogExport({
         panelLogs: logs,
         hostInfo: { hostVersion: (connInfo && connInfo.hostVersion) || '-', pythonVersion: (connInfo && connInfo.pythonVersion) || '-' },
@@ -1153,7 +1317,7 @@ function Shell({ cs }) {
     } catch (e) {
       pushLog('Log export failed: ' + (e && e.message ? e.message : String(e)));
     }
-  }, [logs, connInfo, claudeBackend, providerSecretService, pushLog]);
+  }, [logs, connInfo, claudeBackend, providerSecretService, pushLog, attachmentDraft]);
 
   const undoToPreviousCheckpoint = React.useCallback(async () => {
     try {
@@ -1433,6 +1597,12 @@ function Shell({ cs }) {
             onChipEffort={setSessionEffort}
             onChipFast={(v) => setSessionFast(Boolean(v))}
             onChipApproval={(m) => { setPermissionMode(m); writePref('ae_mcp_perm_mode', m); }}
+            attachmentDraft={attachmentDraft}
+            dispatchAttachmentDraft={dispatchAttachmentDraft}
+            createTurnId={randomProviderCredentialId}
+            onAddFile={addAttachment}
+            onRemoveAttachment={removeAttachment}
+            onRetryAttachment={retryAttachment}
           />
         ) : null}
         {tab === 'activity' ? (

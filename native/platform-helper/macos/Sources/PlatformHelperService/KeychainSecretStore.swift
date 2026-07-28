@@ -57,6 +57,47 @@ protocol KeychainBackend {
     func delete(service: String, account: String) throws
 }
 
+enum KeychainStorageMode: Equatable {
+    case fileBased
+    case dataProtection
+}
+
+struct KeychainProcessIdentity: Equatable {
+    let teamIdentifier: String
+    let applicationIdentifier: String?
+}
+
+func keychainStorageMode(for identity: KeychainProcessIdentity) throws -> KeychainStorageMode {
+    if identity.teamIdentifier.isEmpty {
+        guard identity.applicationIdentifier == nil else {
+            throw HelperFailure.secretStoreUnavailable
+        }
+        return .fileBased
+    }
+    let expected = "\(identity.teamIdentifier).com.junkdoge.ae-mcp.platform-helper"
+    guard identity.applicationIdentifier == expected else {
+        throw HelperFailure.secretStoreUnavailable
+    }
+    return .dataProtection
+}
+
+func keychainBaseQuery(
+    service: String,
+    account: String,
+    mode: KeychainStorageMode
+) -> [String: Any] {
+    var query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: account,
+    ]
+    if mode == .dataProtection {
+        query[kSecUseDataProtectionKeychain as String] = true
+        query[kSecAttrSynchronizable as String] = false
+    }
+    return query
+}
+
 private struct CredentialBlob: Codable, Equatable {
     let schemaVersion: Int
     let revision: Int
@@ -294,9 +335,17 @@ final class InMemoryKeychainBackend: KeychainBackend {
 }
 
 final class SecurityKeychainBackend: KeychainBackend {
+    private let storageMode: Result<KeychainStorageMode, Error>
+
+    init(identity: KeychainProcessIdentity? = nil) {
+        storageMode = Result {
+            try keychainStorageMode(for: identity ?? Self.currentProcessIdentity())
+        }
+    }
+
     func read(service: String, account: String) throws -> Data? {
         var item: CFTypeRef?
-        var query = baseQuery(service: service, account: account)
+        var query = try baseQuery(service: service, account: account)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         let status = SecItemCopyMatching(query as CFDictionary, &item)
@@ -308,9 +357,12 @@ final class SecurityKeychainBackend: KeychainBackend {
     }
 
     func add(service: String, account: String, data: Data) throws {
-        var query = baseQuery(service: service, account: account)
+        let mode = try storageMode.get()
+        var query = keychainBaseQuery(service: service, account: account, mode: mode)
         query[kSecValueData as String] = data
-        query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        if mode == .dataProtection {
+            query[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        }
         guard SecItemAdd(query as CFDictionary, nil) == errSecSuccess else {
             throw HelperFailure.secretStoreUnavailable
         }
@@ -318,27 +370,62 @@ final class SecurityKeychainBackend: KeychainBackend {
 
     func update(service: String, account: String, data: Data) throws {
         let status = SecItemUpdate(
-            baseQuery(service: service, account: account) as CFDictionary,
+            try baseQuery(service: service, account: account) as CFDictionary,
             [kSecValueData as String: data] as CFDictionary
         )
         guard status == errSecSuccess else { throw HelperFailure.secretStoreUnavailable }
     }
 
     func delete(service: String, account: String) throws {
-        let status = SecItemDelete(baseQuery(service: service, account: account) as CFDictionary)
+        let status = SecItemDelete(try baseQuery(service: service, account: account) as CFDictionary)
         guard status == errSecSuccess || status == errSecItemNotFound else {
             throw HelperFailure.secretStoreUnavailable
         }
     }
 
-    private func baseQuery(service: String, account: String) -> [String: Any] {
-        [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecUseDataProtectionKeychain as String: true,
-            kSecAttrSynchronizable as String: false,
-        ]
+    private func baseQuery(service: String, account: String) throws -> [String: Any] {
+        keychainBaseQuery(
+            service: service,
+            account: account,
+            mode: try storageMode.get()
+        )
+    }
+
+    private static func currentProcessIdentity() throws -> KeychainProcessIdentity {
+        var code: SecCode?
+        guard SecCodeCopySelf(SecCSFlags(rawValue: 0), &code) == errSecSuccess,
+              let code
+        else {
+            throw HelperFailure.secretStoreUnavailable
+        }
+        var staticCode: SecStaticCode?
+        guard SecCodeCopyStaticCode(
+            code,
+            SecCSFlags(rawValue: 0),
+            &staticCode
+        ) == errSecSuccess,
+              let staticCode
+        else {
+            throw HelperFailure.secretStoreUnavailable
+        }
+        var information: CFDictionary?
+        guard SecCodeCopySigningInformation(
+            staticCode,
+            SecCSFlags(rawValue: 1 << 1),
+            &information
+        ) == errSecSuccess,
+              let values = information as? [String: Any]
+        else {
+            throw HelperFailure.secretStoreUnavailable
+        }
+        let teamIdentifier = values[kSecCodeInfoTeamIdentifier as String] as? String ?? ""
+        let entitlements = values[kSecCodeInfoEntitlementsDict as String] as? [String: Any]
+        let applicationIdentifier =
+            entitlements?["com.apple.application-identifier"] as? String
+        return KeychainProcessIdentity(
+            teamIdentifier: teamIdentifier,
+            applicationIdentifier: applicationIdentifier
+        )
     }
 }
 

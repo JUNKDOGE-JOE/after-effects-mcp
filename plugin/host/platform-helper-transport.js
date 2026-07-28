@@ -3,6 +3,12 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const {
+    prepareMacosHelperRegistration,
+} = require('./platform-helper-registration');
+const {
+    createPlatformHelperStdioTransport,
+} = require('./platform-helper-stdio-transport');
 
 const WINDOWS_PAYLOAD_FILES = Object.freeze([
     'bin/ae-mcp-platform-helper.exe',
@@ -139,6 +145,13 @@ function validNativeTransport(value) {
         && typeof value.close === 'function';
 }
 
+function validMacosRegistration(value) {
+    return value
+        && typeof value.helperPath === 'string'
+        && value.helperPath.length > 0
+        && typeof value.ensureRegistered === 'function';
+}
+
 function createPlatformHelperTransport(options) {
     const input = options || {};
     const runtime = input.runtime || { platform: process.platform, arch: process.arch };
@@ -161,6 +174,7 @@ function createPlatformHelperTransport(options) {
     };
 
     let helperIdentity = null;
+    let macosRegistration = null;
     if (platformId === 'windows-x64') {
         const verifyPayload = input.verifyWindowsPayload || verifyWindowsPayload;
         helperIdentity = verifyPayload(addonPath, input);
@@ -171,16 +185,33 @@ function createPlatformHelperTransport(options) {
             || !/^[0-9a-f]{64}$/i.test(helperIdentity.sha256)) {
             throw repairRequired('platform helper payload verifier returned an invalid entrypoint');
         }
+    } else {
+        const prepareRegistration = input.prepareMacosHelperRegistration
+            || prepareMacosHelperRegistration;
+        macosRegistration = prepareRegistration({
+            addonPath,
+            fsImpl: input.fsImpl,
+            createHash: input.createHash,
+            execFile: input.execFile,
+            homedir: input.homedir,
+            getuid: input.getuid,
+            processId: input.processId,
+        });
+        if (!validMacosRegistration(macosRegistration)) {
+            throw repairRequired('platform helper registrar returned an invalid registration');
+        }
     }
 
-    let addon;
-    try {
-        addon = loadAddon(addonPath);
-    } catch (cause) {
-        throw repairRequired('failed to load the platform helper transport addon', cause);
-    }
-    if (!addon || typeof addon.createTransport !== 'function') {
-        throw repairRequired('platform helper addon does not export createTransport');
+    let addon = null;
+    if (platformId === 'windows-x64') {
+        try {
+            addon = loadAddon(addonPath);
+        } catch (cause) {
+            throw repairRequired('failed to load the platform helper transport addon', cause);
+        }
+        if (!addon || typeof addon.createTransport !== 'function') {
+            throw repairRequired('platform helper addon does not export createTransport');
+        }
     }
 
     let nativeTransport = null;
@@ -189,12 +220,10 @@ function createPlatformHelperTransport(options) {
     let closed = false;
 
     function openNativeTransport() {
-        const opened = platformId === 'windows-x64'
-            ? addon.createTransport({
-                expectedServerPath: helperIdentity.path,
-                expectedServerSha256: helperIdentity.sha256,
-            })
-            : addon.createTransport();
+        const opened = addon.createTransport({
+            expectedServerPath: helperIdentity.path,
+            expectedServerSha256: helperIdentity.sha256,
+        });
         if (!validNativeTransport(opened)) {
             try {
                 if (opened && typeof opened.close === 'function') opened.close();
@@ -261,9 +290,23 @@ function createPlatformHelperTransport(options) {
             opened = await connectWindows();
         } else {
             try {
-                opened = openNativeTransport();
+                await macosRegistration.ensureRegistered();
+                const createBrokerTransport = input.createMacosBrokerTransport
+                    || createPlatformHelperStdioTransport;
+                opened = createBrokerTransport({
+                    helperPath: macosRegistration.helperPath,
+                    spawnImpl: input.spawnMacosBroker,
+                });
+                if (!validNativeTransport(opened)) {
+                    try {
+                        if (opened && typeof opened.close === 'function') opened.close();
+                    } catch (_) {}
+                    throw repairRequired('platform helper broker returned an invalid transport');
+                }
             } catch (cause) {
-                if (cause && cause.code === 'PLATFORM_HELPER_REPAIR_REQUIRED') throw cause;
+                if (cause
+                    && (cause.code === 'PLATFORM_HELPER_REPAIR_REQUIRED'
+                        || cause.code === 'HELPER_START_FAILED')) throw cause;
                 throw unavailable('failed to open the authenticated platform helper transport', cause);
             }
         }

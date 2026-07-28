@@ -9,6 +9,8 @@ import {
 } from './profile-contract.mjs';
 
 const execFileAsync = promisify(childProcess.execFile);
+const DEVELOPMENT_NODE_MINIMUM = '24.17.0';
+const RUNTIME_GENERATION = /^g-[0-9a-f]{16}$/;
 const CORE_IMPORT_PROBE = [
   'import pathlib,sys',
   'sys.path.insert(0,sys.argv[1])',
@@ -33,6 +35,19 @@ function inside(candidate, root) {
   return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
 }
 
+function compareVersions(left, right) {
+  const values = (value) => String(value).split(/[+-]/, 1)[0].split('.').map(Number);
+  const a = values(left);
+  const b = values(right);
+  if (a.length !== 3 || b.length !== 3
+      || a.some((value) => !Number.isSafeInteger(value) || value < 0)
+      || b.some((value) => !Number.isSafeInteger(value) || value < 0)) return null;
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index] !== b[index]) return a[index] < b[index] ? -1 : 1;
+  }
+  return 0;
+}
+
 async function ordinaryPath(dependencies, target, {
   directory = false,
   executable = false,
@@ -49,6 +64,114 @@ async function ordinaryPath(dependencies, target, {
   }
   if (executable && (info.mode & 0o111) === 0) throw new Error('not executable');
   return resolved;
+}
+
+async function activeRuntimeNodeCandidate(dependencies, home) {
+  const runtimeRoot = path.join(home, '.ae-mcp', 'runtime');
+  const currentPointer = path.join(runtimeRoot, 'current');
+  try {
+    const info = await dependencies.fs.lstat(currentPointer);
+    if (!info.isFile() || info.isSymbolicLink() || info.size > 256) {
+      return { code: 'DEV_NODE_RUNTIME_INVALID' };
+    }
+    const relative = String(
+      await dependencies.fs.readFile(currentPointer, 'utf8'),
+    ).trim();
+    const parts = relative.split('/');
+    const generation = parts.length === 2
+      && parts[0] === 'generations'
+      && RUNTIME_GENERATION.test(parts[1]);
+    const legacy = parts.length === 2
+      && parts[1] === 'macos-arm64'
+      && parts[0] !== '.'
+      && parts[0] !== '..'
+      && !parts[0].includes('\\')
+      && !parts[0].includes('\0');
+    if (!generation && !legacy) return { code: 'DEV_NODE_RUNTIME_INVALID' };
+    return {
+      path: generation
+        ? path.join(runtimeRoot, relative, 'runtime', 'node', 'bin', 'node')
+        : path.join(runtimeRoot, relative, 'node', 'bin', 'node'),
+      runtimeRoot,
+      source: 'active-runtime',
+    };
+  } catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    return { code: 'DEV_NODE_RUNTIME_INVALID' };
+  }
+}
+
+async function inspectDevelopmentNode(checks, dependencies, home, environment) {
+  const explicit = typeof environment?.AE_MCP_NODE_CLI === 'string'
+    ? environment.AE_MCP_NODE_CLI.trim()
+    : '';
+  let candidate;
+  if (explicit) {
+    candidate = path.isAbsolute(explicit)
+      ? { path: explicit, source: 'explicit' }
+      : { code: 'DEV_NODE_RUNTIME_INVALID' };
+  } else {
+    candidate = await activeRuntimeNodeCandidate(dependencies, home);
+  }
+  if (!candidate) {
+    checks.push(frozenCheck(
+      'development-node',
+      false,
+      '',
+      'DEV_NODE_RUNTIME_MISSING',
+    ));
+    return;
+  }
+  if (candidate.code) {
+    checks.push(frozenCheck('development-node', false, '', candidate.code));
+    return;
+  }
+
+  try {
+    const resolved = await ordinaryPath(
+      dependencies,
+      candidate.path,
+      { executable: true, allowSymlink: true },
+    );
+    if (candidate.runtimeRoot) {
+      const canonicalRoot = await dependencies.realpath(candidate.runtimeRoot);
+      if (!inside(resolved, canonicalRoot)) throw new Error('runtime Node escaped root');
+    }
+    const result = await dependencies.execFile(
+      resolved,
+      ['-p', 'process.version + " " + process.arch'],
+      {
+        env: environment,
+        shell: false,
+        encoding: 'utf8',
+      },
+    );
+    const match = String(result.stdout || '').trim().match(
+      /^v([0-9]+\.[0-9]+\.[0-9]+) (arm64)$/,
+    );
+    const compared = match ? compareVersions(match[1], DEVELOPMENT_NODE_MINIMUM) : null;
+    if (!match || compared === null || compared < 0) {
+      throw new Error('development Node is incompatible');
+    }
+    checks.push(frozenCheck(
+      'development-node',
+      true,
+      resolved,
+      undefined,
+      {
+        version: match[1],
+        arch: match[2],
+        source: candidate.source,
+      },
+    ));
+  } catch {
+    checks.push(frozenCheck(
+      'development-node',
+      false,
+      candidate.path,
+      'DEV_NODE_RUNTIME_INVALID',
+    ));
+  }
 }
 
 async function inspectPath(checks, dependencies, {
@@ -113,6 +236,7 @@ async function inspectRequiredPaths({
   home,
   formalAeApp,
   components,
+  requireNode,
   environment,
   dependencies,
 }) {
@@ -305,6 +429,9 @@ async function inspectRequiredPaths({
       directory: true,
     });
   }
+  if (requireNode) {
+    await inspectDevelopmentNode(checks, dependencies, home, environment);
+  }
 
   return checks;
 }
@@ -359,6 +486,7 @@ export async function inspectDevelopmentEnvironment({
   home,
   formalAeApp,
   components = ['core'],
+  requireNode = false,
   environment = process.env,
   dependencies = createDefaultMacosDependencies(),
 }) {
@@ -379,6 +507,7 @@ export async function inspectDevelopmentEnvironment({
     home,
     formalAeApp,
     components,
+    requireNode,
     environment,
     dependencies: merged,
   });
@@ -391,6 +520,9 @@ export async function inspectDevelopmentEnvironment({
     interpreterPath: checks.find((check) => check.id === 'core-interpreter').path,
     formalAeApp: checks.find((check) => check.id === 'formal-ae-app').path,
     formalAeExecutable: checks.find((check) => check.id === 'formal-ae-executable').path,
+    ...(requireNode ? {
+      nodePath: checks.find((check) => check.id === 'development-node').path,
+    } : {}),
     checks: Object.freeze(checks),
     blockers: Object.freeze(blockers),
   });
@@ -408,6 +540,12 @@ export async function launchDevelopmentAe(report, {
       'development environment must pass doctor before launch',
     );
   }
+  if (!report.nodePath) {
+    throw developmentError(
+      'DEV_NODE_RUNTIME_MISSING',
+      'development launch requires a compatible Node runtime',
+    );
+  }
   if (await processInspector.afterEffectsRunning()) {
     throw developmentError(
       'DEV_AE_ALREADY_RUNNING',
@@ -419,7 +557,11 @@ export async function launchDevelopmentAe(report, {
     detached: true,
     stdio: 'ignore',
     shell: false,
-    env: { ...environment, AE_MCP_DEV_RUNTIME: report.checkoutPath },
+    env: {
+      ...environment,
+      AE_MCP_DEV_RUNTIME: report.checkoutPath,
+      AE_MCP_NODE_CLI: report.nodePath,
+    },
   });
   child.unref();
   return Object.freeze({

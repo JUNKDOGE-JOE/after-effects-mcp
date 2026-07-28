@@ -23,6 +23,10 @@ import {
   isCoreAuthorizedDynamicCall,
   planSessionKey,
 } from '../../../shared/tool-approval.mjs';
+import {
+  normalizeTurnInput,
+  withAttachmentManifest,
+} from '../../../shared/chat-attachments.mjs';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -300,6 +304,8 @@ export function createCodexBackend({
   let lastCliInfo = null;
   let providerRoute = null;
   let providerSensitiveValues = [];
+  let activeAttachmentPaths = [];
+  let processStderrAttachmentPaths = [];
   let providerDeltaPhase = undefined;
   let providerDeltaRedactor = createDeltaRedactor([], () => {});
   let providerStderrRedactor = createDeltaRedactor([], () => {});
@@ -310,6 +316,9 @@ export function createCodexBackend({
   let turnFailureInFlight = false;
   let providerRecoverySequence = 0;
   let providerRefreshPending = false;
+  let activeTurn = null;
+  let activeTurnAccepted = false;
+  let activeTurnDispatched = false;
   let activeUserText = '';
   let activeUserRecorded = false;
   const pendingApprovals = new Map();
@@ -323,29 +332,56 @@ export function createCodexBackend({
   }
 
   function emit(evt) {
-    if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
+    if (onEvent) onEvent(redactValue(evt, [...providerSensitiveValues, ...activeAttachmentPaths]));
   }
 
   function resetProviderDeltaRedactor() {
     providerDeltaRedactor.discard();
     providerDeltaPhase = undefined;
-    providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
-      activeAssistantText += text;
-      emit({ type: 'text-delta', text, phase: providerDeltaPhase });
-    });
+    providerDeltaRedactor = createDeltaRedactor(
+      [...providerSensitiveValues, ...activeAttachmentPaths],
+      (text) => {
+        activeAssistantText += text;
+        emit({ type: 'text-delta', text, phase: providerDeltaPhase });
+      },
+    );
   }
 
   function resetProviderStderrRedactor() {
     providerStderrRedactor.discard();
-    providerStderrRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
-      stderrTail = appendTail(stderrTail, text);
-    });
+    providerStderrRedactor = createDeltaRedactor(
+      [...providerSensitiveValues, ...processStderrAttachmentPaths],
+      (text) => {
+        stderrTail = appendTail(stderrTail, text);
+      },
+    );
   }
 
   function setProviderSensitiveValues(values) {
     providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === 'string' && value)))
       .sort((left, right) => right.length - left.length);
     resetProviderDeltaRedactor();
+    resetProviderStderrRedactor();
+  }
+
+  function setActiveAttachmentPaths(values) {
+    activeAttachmentPaths = Array.from(new Set((values || [])
+      .filter((value) => typeof value === 'string' && value)))
+      .sort((left, right) => right.length - left.length);
+    if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+    const previousProcessPathCount = processStderrAttachmentPaths.length;
+    processStderrAttachmentPaths = Array.from(new Set([
+      ...processStderrAttachmentPaths,
+      ...activeAttachmentPaths,
+    ])).sort((left, right) => right.length - left.length);
+    resetProviderDeltaRedactor();
+    if (processStderrAttachmentPaths.length !== previousProcessPathCount) {
+      resetProviderStderrRedactor();
+    }
+  }
+
+  function clearProcessStderrAttachmentPaths({ preserveActive = false } = {}) {
+    processStderrAttachmentPaths = preserveActive ? activeAttachmentPaths.slice() : [];
     resetProviderStderrRedactor();
   }
 
@@ -360,12 +396,22 @@ export function createCodexBackend({
     providerStderrRedactor.discard();
     providerSensitiveValues = [];
     providerDeltaPhase = undefined;
-    providerDeltaRedactor = createDeltaRedactor([], () => {});
-    providerStderrRedactor = createDeltaRedactor([], () => {});
+    providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {});
+    providerStderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, () => {});
   }
 
   function currentEnv() {
     return adapter.completeSpawnEnv(env || {});
+  }
+
+  function activeTurnFailureFields() {
+    if (!activeTurn?.turnId) return {};
+    return {
+      turnId: activeTurn.turnId,
+      ...(!activeTurnAccepted ? {
+        dispatchState: activeTurnDispatched ? 'uncertain' : 'not-started',
+      } : {}),
+    };
   }
 
   function finishActive() {
@@ -374,12 +420,16 @@ export function createCodexBackend({
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
+    activeTurn = null;
+    activeTurnAccepted = false;
+    activeTurnDispatched = false;
     activeUserText = '';
     activeUserRecorded = false;
     providerRecoveryAttempted = false;
     providerRecoveryInFlight = false;
     turnFailureInFlight = false;
     providerRefreshPending = false;
+    setActiveAttachmentPaths([]);
     if (resolve) resolve();
     if (refreshProvider) {
       Promise.resolve().then(() => onProviderProfileRecovered()).catch(() => {});
@@ -412,6 +462,7 @@ export function createCodexBackend({
     activeAssistantText = '';
     stderrTail = '';
     clearProviderSensitiveValues();
+    clearProcessStderrAttachmentPaths({ preserveActive: true });
     if (previousProc) {
       try { previousProc.kill(); } catch { /* best effort */ }
     }
@@ -422,6 +473,10 @@ export function createCodexBackend({
     if (message.method === 'turn/started') {
       currentTurnId = (params.turn && params.turn.id) || params.turnId || null;
       resetProviderDeltaRedactor();
+      if (activeTurn && activeTurn.turnId && !activeTurnAccepted) {
+        activeTurnAccepted = true;
+        emit({ type: 'turn-accepted', turnId: activeTurn.turnId, transport: 'codex-app-server' });
+      }
       emit({ type: 'turn-start' });
       return;
     }
@@ -600,13 +655,20 @@ export function createCodexBackend({
     closeProviderRoute();
     if (wasStopping) {
       clearProviderSensitiveValues();
+      clearProcessStderrAttachmentPaths();
       return;
     }
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: 'codex app-server exited: ' + detail });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: 'codex app-server exited: ' + detail,
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
     clearProviderSensitiveValues();
+    clearProcessStderrAttachmentPaths();
   }
 
   function handleError(error) {
@@ -621,10 +683,11 @@ export function createCodexBackend({
     preambleSent = false;
     closeProviderRoute();
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: err.message });
+      emit({ type: 'error', kind: 'mcp', message: err.message, ...activeTurnFailureFields() });
       finishActive();
     }
     clearProviderSensitiveValues();
+    clearProcessStderrAttachmentPaths();
   }
 
   function clearSpawnCredentialCopies(runtimeConfig, spawnEnvironment, extraNames = []) {
@@ -958,10 +1021,24 @@ export function createCodexBackend({
     return threadId;
   }
 
-  function turnParams(text) {
+  function turnInput(turn, text) {
+    const input = [];
+    const modelText = withAttachmentManifest(text, turn.attachments);
+    if (modelText) input.push({ type: 'text', text: modelText });
+    for (const attachment of turn.attachments) {
+      if (attachment.mediaType.startsWith('image/')) {
+        input.push({ type: 'localImage', path: attachment.localPath });
+      } else if (attachment.mediaType.startsWith('audio/')) {
+        input.push({ type: 'localAudio', path: attachment.localPath });
+      }
+    }
+    return input;
+  }
+
+  function turnParams(turn, text) {
     const params = {
       threadId,
-      input: [{ type: 'text', text }],
+      input: turnInput(turn, text),
       model: getModel(),
       effort: getEffort ? getEffort() : undefined,
       approvalPolicy: APPROVAL_POLICY,
@@ -985,7 +1062,8 @@ export function createCodexBackend({
       if (instructions) turnText = instructions + '\n\n---\n\n' + activeUserText;
       preambleSent = true;
     }
-    rpc.request('turn/start', turnParams(turnText), 180000).catch((error) => {
+    activeTurnDispatched = true;
+    rpc.request('turn/start', turnParams(activeTurn, turnText), 180000).catch((error) => {
       void handleTurnFailure(error);
     });
   }
@@ -1044,15 +1122,21 @@ export function createCodexBackend({
       let failure = {
         kind: error?.kind,
         code: error?.code,
-        message: redactValue(error?.message || 'Failed to start Codex turn.', providerSensitiveValues),
+        message: redactValue(
+          error?.message || 'Failed to start Codex turn.',
+          [...providerSensitiveValues, ...activeAttachmentPaths],
+        ),
       };
       try {
-        if (await attemptProviderRecovery(error)) return;
+        if (!activeTurnDispatched && await attemptProviderRecovery(error)) return;
       } catch (recoveryError) {
         failure = {
           kind: recoveryError?.kind,
           code: recoveryError?.code,
-          message: redactValue(recoveryError?.message || 'Failed to start Codex turn.', providerSensitiveValues),
+          message: redactValue(
+            recoveryError?.message || 'Failed to start Codex turn.',
+            [...providerSensitiveValues, ...activeAttachmentPaths],
+          ),
         };
       }
       providerDeltaRedactor.discard();
@@ -1063,6 +1147,7 @@ export function createCodexBackend({
         kind: failure?.kind || (providerHttpFailure || /model/i.test(message) ? 'model' : 'mcp'),
         ...(failure?.code ? { code: failure.code } : {}),
         message,
+        ...activeTurnFailureFields(),
       });
       finishActive();
     } finally {
@@ -1070,10 +1155,28 @@ export function createCodexBackend({
     }
   }
 
-  async function sendUser(text) {
+  async function sendUser(input) {
     if (activeRun) return activeRun;
+    let turn;
+    try {
+      turn = normalizeTurnInput(input);
+    } catch (error) {
+      const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
+      emit({
+        type: 'error',
+        kind: 'attachment',
+        code: 'TURN_INPUT_INVALID',
+        message: error.message,
+        ...(turnId ? { turnId, dispatchState: 'not-started' } : {}),
+      });
+      return;
+    }
     activeAssistantText = '';
-    activeUserText = String(text || '');
+    activeTurn = turn;
+    activeTurnAccepted = false;
+    activeTurnDispatched = false;
+    setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
+    activeUserText = turn.text;
     activeUserRecorded = false;
     providerRecoveryAttempted = false;
     providerRecoveryInFlight = false;
@@ -1126,7 +1229,7 @@ export function createCodexBackend({
     drainApprovals();
     providerDeltaRedactor.discard();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.' });
+      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }
@@ -1158,6 +1261,7 @@ export function createCodexBackend({
     finishActive();
     stderrTail = '';
     clearProviderSensitiveValues();
+    clearProcessStderrAttachmentPaths();
     stopping = false;
   }
 

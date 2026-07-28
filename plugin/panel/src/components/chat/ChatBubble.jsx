@@ -1,7 +1,22 @@
 import React from 'react';
 import { AIAvatar } from './AIAvatar';
 
-export function ChatBubble({ role = 'ai', children, streaming = false, avatar = true, style }) {
+function formatAttachmentBytes(value) {
+  const bytes = Number(value) || 0;
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
+}
+
+export function ChatBubble({
+  role = 'ai',
+  children,
+  attachments = [],
+  streaming = false,
+  avatar = true,
+  style,
+}) {
   if (role === 'user') {
     return (
       <div style={{ display: 'flex', justifyContent: 'flex-end', ...style }}>
@@ -18,7 +33,31 @@ export function ChatBubble({ role = 'ai', children, streaming = false, avatar = 
             overflowWrap: 'break-word',
           }}
         >
-          {children}
+          {children ? <div>{children}</div> : null}
+          {attachments.length ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: children ? 5 : 0 }}>
+              {attachments.map((attachment) => (
+                <div
+                  key={attachment.id}
+                  style={{
+                    minWidth: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    color: 'var(--text-secondary)',
+                    font: 'var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)',
+                  }}
+                >
+                  <span style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {attachment.name}
+                  </span>
+                  <span style={{ flex: 'none', color: 'var(--text-tertiary)' }}>
+                    {formatAttachmentBytes(attachment.size)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : null}
         </div>
       </div>
     );

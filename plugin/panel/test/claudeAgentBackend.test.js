@@ -164,6 +164,83 @@ test('createClaudeAgentBackend writes user only after ready handshake', async ()
   await pending;
 });
 
+test('createClaudeAgentBackend forwards one normalized attachment turn without exposing paths in events', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const turn = {
+    turnId: 'turn-1',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'notes.pdf',
+      localPath: 'C:\\private\\notes.pdf',
+      size: 12,
+      mediaType: 'application/pdf',
+      temporary: false,
+    }],
+  };
+  const pending = backend.sendUser(turn);
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+
+  assert.deepEqual(parseWrites(spawned.procs[0]), [{
+    t: 'user',
+    turnId: 'turn-1',
+    text: 'inspect',
+    attachments: turn.attachments,
+    permissionMode: 'manual',
+    model: 'claude-test',
+  }]);
+
+  spawned.procs[0].pushStdout({
+    t: 'event',
+    event: { type: 'turn-accepted', turnId: 'turn-1', transport: 'claude-agent-sdk' },
+  });
+  spawned.procs[0].pushStdout({
+    t: 'event',
+    event: { type: 'turn-end', stopReason: 'end_turn' },
+  });
+  await pending;
+
+  assert.deepEqual(events, [
+    { type: 'turn-accepted', turnId: 'turn-1', transport: 'claude-agent-sdk' },
+    { type: 'turn-end', stopReason: 'end_turn' },
+  ]);
+  assert.equal(JSON.stringify(events).includes('C:\\private'), false);
+  assert.deepEqual(backend.getMessages()[0], { role: 'user', text: 'inspect' });
+});
+
+test('createClaudeAgentBackend redacts active attachment paths from sidecar errors and stderr', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const localPath = 'C:\\private\\notes.pdf';
+  const pending = backend.sendUser({
+    turnId: 'turn-redact',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'notes.pdf',
+      localPath,
+      size: 12,
+      mediaType: 'application/pdf',
+      temporary: false,
+    }],
+  });
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+  spawned.procs[0].pushStderr('failed to read ' + localPath);
+  spawned.procs[0].pushStdout({
+    t: 'event',
+    event: { type: 'error', kind: 'network', message: 'failed to read ' + localPath },
+  });
+  await pending;
+
+  assert.equal(JSON.stringify(events).includes(localPath), false);
+  assert.match(events.at(-1).message, /\[redacted\]/);
+  assert.equal(backend.getStderrTail().includes(localPath), false);
+  assert.match(backend.getStderrTail(), /\[redacted\]/);
+});
+
 test('createClaudeAgentBackend passes effort and thinking when getters are provided', async () => {
   const { backend, spawned } = makeBackend({
     getEffort: () => 'low',

@@ -1,3 +1,5 @@
+import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
+
 const PROTOCOLS = new Set(['responses', 'chat', 'messages']);
 const CAPABILITY_STATUSES = new Set(['unknown', 'supported', 'unsupported']);
 const AGENT_FEATURES = Object.freeze([
@@ -55,6 +57,7 @@ function bridgeError(code) {
     PROVIDER_ACCEPTANCE_BRIDGE_DISPOSED: 'Provider acceptance bridge is disposed.',
     PROVIDER_ACCEPTANCE_CALLBACK_FAILED: 'Provider acceptance state refresh failed.',
     PROVIDER_ACCEPTANCE_INVALID_MODELS: 'Provider acceptance model list is invalid.',
+    PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN: 'Provider acceptance panel turn is invalid.',
     PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND: 'Provider was not found.',
     PROVIDER_ACCEPTANCE_PROBE_FAILED: 'Provider acceptance probe failed.',
     PROVIDER_ACCEPTANCE_ROUTE_CLOSE_FAILED: 'Provider acceptance route did not close cleanly.',
@@ -65,6 +68,75 @@ function bridgeError(code) {
   const error = new Error(messages[code] || messages.PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE);
   error.code = messages[code] ? code : 'PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE';
   return error;
+}
+
+function absoluteAttachmentPath(value) {
+  return typeof value === 'string'
+    && value.length > 0
+    && value.length <= 4096
+    && !/[\0\r\n]/.test(value)
+    && (
+      value.startsWith('/')
+      || /^[A-Za-z]:[\\/]/.test(value)
+      || /^\\\\[^\\]+\\[^\\]+/.test(value)
+    );
+}
+
+export function normalizePanelAcceptanceTurns(input = {}) {
+  const hasPrompts = Array.isArray(input.prompts);
+  const hasTurns = Array.isArray(input.turns);
+  if (hasPrompts === hasTurns) {
+    throw bridgeError('PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN');
+  }
+  const source = hasTurns
+    ? input.turns
+    : input.prompts.map((value) => ({
+      text: String(value || '').trim(),
+      attachments: [],
+    }));
+  if (source.length < 1 || source.length > 4) {
+    throw bridgeError('PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN');
+  }
+  try {
+    return Object.freeze(source.map((value, index) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new TypeError('turn must be an object');
+      }
+      const turn = normalizeTurnInput({
+        ...value,
+        turnId: `provider-acceptance-${index + 1}`,
+      });
+      if (turn.text.length > 2000
+          || turn.attachments.some((attachment) => !absoluteAttachmentPath(
+            attachment.localPath,
+          ))) {
+        throw new TypeError('turn is outside the acceptance boundary');
+      }
+      return turn;
+    }));
+  } catch {
+    throw bridgeError('PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN');
+  }
+}
+
+export function countMentionedPanelAttachments(transcript, attachments) {
+  const assistantText = Array.isArray(transcript)
+    ? transcript
+      .filter((message) => message?.role === 'assistant' && typeof message.text === 'string')
+      .map((message) => message.text)
+      .join('\n')
+    : '';
+  if (!assistantText || !Array.isArray(attachments)) return 0;
+  const names = new Set(attachments.flatMap((attachment) => (
+    typeof attachment?.name === 'string' && attachment.name
+      ? [attachment.name]
+      : []
+  )));
+  let count = 0;
+  for (const name of names) {
+    if (assistantText.includes(name)) count += 1;
+  }
+  return count;
 }
 
 function dependency(name, value, predicate) {

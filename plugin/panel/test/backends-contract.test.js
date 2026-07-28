@@ -1,7 +1,51 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { createAgentLoop } from '../src/lib/agentLoop.js';
+import { createClaudeAgentBackend } from '../src/cep/claudeAgentBackend.js';
+import { createCodexBackend } from '../src/cep/codexBackend.js';
+import { createOpenCodeBackend } from '../src/cep/openCodeBackend.js';
+import { createZcodeBackend } from '../src/cep/zcodeBackend.js';
 import { BACKEND_EVENTS } from '../src/cep/backends/contract.js';
-import { BACKENDS, REAL_BACKENDS, baseDescriptorFor } from '../src/cep/backends/index.js';
+import {
+  BACKENDS,
+  REAL_BACKENDS,
+  assertAttachmentBackendRegistry,
+  baseDescriptorFor,
+} from '../src/cep/backends/index.js';
+
+const ATTACHMENT_CONFORMANCE = {
+  subscription: {
+    factory: createClaudeAgentBackend,
+    testFile: 'claudeAgentBackend.test.js',
+    assertion: /turn-accepted.*turn-1.*claude-agent-sdk/s,
+  },
+  'claude-api': {
+    factory: createClaudeAgentBackend,
+    testFile: 'claudeAgentBackend.test.js',
+    assertion: /turn-accepted.*turn-1.*claude-agent-sdk/s,
+  },
+  byok: {
+    factory: createAgentLoop,
+    testFile: 'agentLoop.test.js',
+    assertion: /ATTACHMENT_SIDECAR_REQUIRED.*turn-1.*not-started/s,
+  },
+  codex: {
+    factory: createCodexBackend,
+    testFile: 'codexBackend.test.js',
+    assertion: /turn-accepted.*turn-1.*codex-app-server/s,
+  },
+  opencode: {
+    factory: createOpenCodeBackend,
+    testFile: 'openCodeBackend.test.js',
+    assertion: /turn-accepted.*turn-1.*opencode-file-part/s,
+  },
+  zcode: {
+    factory: createZcodeBackend,
+    testFile: 'zcodeBackend.test.js',
+    assertion: /turn-accepted.*turn-1.*zcode-manifest/s,
+  },
+};
 
 test('contract event vocabulary is the frozen canonical set', () => {
   assert.ok(Object.isFrozen(BACKEND_EVENTS));
@@ -9,6 +53,7 @@ test('contract event vocabulary is the frozen canonical set', () => {
   assert.ok(BACKEND_EVENTS.includes('tool-allowed'));
   assert.ok(BACKEND_EVENTS.includes('tool-denied'));
   assert.ok(BACKEND_EVENTS.includes('thinking'));
+  assert.ok(BACKEND_EVENTS.includes('turn-accepted'));
   for (const e of ['turn-start', 'text-delta', 'tool-start', 'tool-result', 'approval-required', 'turn-end', 'error']) {
     assert.ok(BACKEND_EVENTS.includes(e), 'missing ' + e);
   }
@@ -19,6 +64,58 @@ test('registry exposes the real embedded backends', () => {
   for (const id of REAL_BACKENDS) {
     assert.equal(BACKENDS[id].id, id);
     assert.equal(typeof BACKENDS[id].baseDescriptor, 'function');
+  }
+});
+
+test('registry gives every backend a truthful attachment disposition', () => {
+  assert.equal(assertAttachmentBackendRegistry(BACKENDS), true);
+  assert.deepEqual(
+    Object.fromEntries(REAL_BACKENDS.map((id) => [id, BACKENDS[id].attachmentTransport])),
+    {
+      subscription: 'agent-sdk',
+      byok: 'reject',
+      'claude-api': 'agent-sdk',
+      codex: 'native+manifest',
+      opencode: 'native',
+      zcode: 'manifest',
+    },
+  );
+});
+
+test('attachment registry rejects a missing supported-backend mapping', () => {
+  const mutated = {
+    ...BACKENDS,
+    codex: { ...BACKENDS.codex, attachmentTransport: undefined },
+  };
+  assert.throws(
+    () => assertAttachmentBackendRegistry(mutated),
+    /codex.*attachment transport/i,
+  );
+});
+
+test('attachment registry permits rejection only for legacy byok', () => {
+  const mutated = {
+    ...BACKENDS,
+    codex: { ...BACKENDS.codex, attachmentTransport: 'reject' },
+  };
+  assert.throws(
+    () => assertAttachmentBackendRegistry(mutated),
+    /codex.*reject/i,
+  );
+});
+
+test('every attachment registry row has an executable factory conformance vector', () => {
+  assert.deepEqual(Object.keys(ATTACHMENT_CONFORMANCE).sort(), [...REAL_BACKENDS].sort());
+  for (const id of REAL_BACKENDS) {
+    const vector = ATTACHMENT_CONFORMANCE[id];
+    assert.equal(typeof vector.factory, 'function', id + ' factory');
+    const source = readFileSync(new URL(vector.testFile, import.meta.url), 'utf8');
+    assert.match(source, vector.assertion, id + ' conformance assertion');
+    if (BACKENDS[id].attachmentTransport === 'reject') {
+      assert.equal(id, 'byok');
+    } else {
+      assert.notEqual(BACKENDS[id].attachmentTransport, 'reject', id + ' supported transport');
+    }
   }
 });
 

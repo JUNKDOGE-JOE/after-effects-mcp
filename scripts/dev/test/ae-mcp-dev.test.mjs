@@ -133,6 +133,15 @@ test('CLI reports an already-running AE without spawning another host', async ()
   assert.equal(result.output.error.code, 'DEV_AE_ALREADY_RUNNING');
 });
 
+test('CLI launch requires doctor to resolve a compatible development Node', async () => {
+  const h = harness();
+  const result = await main(['launch-ae'], h);
+
+  assert.equal(result.exitCode, 0);
+  assert.equal(h.calls[0].kind, 'doctor');
+  assert.equal(h.calls[0].options.requireNode, true);
+});
+
 test('Core-only sync has zero process steps and ignores CEP source dependency state', async () => {
   const h = harness();
   const result = await main(['sync', '--component', 'core'], h);
