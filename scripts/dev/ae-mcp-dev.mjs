@@ -122,6 +122,7 @@ export async function main(
       home: command.home,
       formalAeApp: command.formalAeApp,
       components: command.components,
+      requireNode: command.action === 'launch-ae',
       environment,
       dependencies,
     });

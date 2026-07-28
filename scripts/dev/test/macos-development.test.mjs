@@ -216,12 +216,95 @@ test('doctor checks CEP source dependencies only when CEP is selected', async (t
   ).length, 3);
 });
 
-test('launch refuses a running AE and otherwise spawns only the exact formal executable', async (t) => {
+test('launch doctor reuses and validates the active RuntimeManager Node without installing', async (t) => {
+  const h = await fixture(t);
+  const runtimeRoot = path.join(h.home, '.ae-mcp', 'runtime');
+  const relative = 'generations/g-0123456789abcdef';
+  const nodePath = await writeFile(
+    runtimeRoot,
+    `${relative}/runtime/node/bin/node`,
+    '#!/bin/sh\nexit 0\n',
+    0o755,
+  );
+  await writeFile(runtimeRoot, 'current', `${relative}\n`);
+  const canonicalNode = await fs.promises.realpath(nodePath);
+  const originalExecFile = h.dependencies.execFile;
+  h.dependencies.execFile = async (file, args, options) => {
+    if (file === canonicalNode) {
+      h.calls.push({ file, args, options });
+      return { stdout: 'v24.17.0 arm64\n', stderr: '' };
+    }
+    return originalExecFile(file, args, options);
+  };
+
+  const report = await inspectDevelopmentEnvironment({
+    repoRoot: h.repoRoot,
+    home: h.home,
+    formalAeApp: h.formalAeApp,
+    requireNode: true,
+    dependencies: h.dependencies,
+  });
+
+  assert.equal(report.ok, true, JSON.stringify(report, null, 2));
+  assert.equal(report.nodePath, canonicalNode);
+  assert.deepEqual(
+    report.checks.find((check) => check.id === 'development-node'),
+    {
+      id: 'development-node',
+      ok: true,
+      path: canonicalNode,
+      version: '24.17.0',
+      arch: 'arm64',
+      source: 'active-runtime',
+    },
+  );
+  assert.equal(
+    h.calls.some((call) => call.file === canonicalNode
+      && call.args.join(' ') === '-p process.version + " " + process.arch'),
+    true,
+  );
+});
+
+test('launch doctor fails closed when no compatible development Node is available', async (t) => {
   const h = await fixture(t);
   const report = await inspectDevelopmentEnvironment({
     repoRoot: h.repoRoot,
     home: h.home,
     formalAeApp: h.formalAeApp,
+    requireNode: true,
+    environment: {},
+    dependencies: h.dependencies,
+  });
+
+  assert.equal(report.ok, false);
+  assert.deepEqual(report.blockers.map((item) => item.code), [
+    'DEV_NODE_RUNTIME_MISSING',
+  ]);
+});
+
+test('launch refuses a running AE and otherwise spawns only the exact formal executable', async (t) => {
+  const h = await fixture(t);
+  const nodePath = await writeFile(
+    h.root,
+    'node-v24/bin/node',
+    '#!/bin/sh\nexit 0\n',
+    0o755,
+  );
+  const originalExecFile = h.dependencies.execFile;
+  const canonicalNode = await fs.promises.realpath(nodePath);
+  h.dependencies.execFile = async (file, args, options) => {
+    if (file === canonicalNode) {
+      h.calls.push({ file, args, options });
+      return { stdout: 'v24.17.0 arm64\n', stderr: '' };
+    }
+    return originalExecFile(file, args, options);
+  };
+  const report = await inspectDevelopmentEnvironment({
+    repoRoot: h.repoRoot,
+    home: h.home,
+    formalAeApp: h.formalAeApp,
+    requireNode: true,
+    environment: { AE_MCP_NODE_CLI: nodePath },
     dependencies: h.dependencies,
   });
   let spawned = null;
@@ -259,6 +342,7 @@ test('launch refuses a running AE and otherwise spawns only the exact formal exe
   assert.equal(spawned.options.shell, false);
   assert.equal(spawned.options.env.SENTINEL, 'kept');
   assert.equal(spawned.options.env.AE_MCP_DEV_RUNTIME, report.checkoutPath);
+  assert.equal(spawned.options.env.AE_MCP_NODE_CLI, report.nodePath);
   assert.equal(spawned.unrefCalls, 1);
   assert.deepEqual(receipt, {
     schemaVersion: 1,
