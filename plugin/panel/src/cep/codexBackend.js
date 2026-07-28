@@ -304,6 +304,8 @@ export function createCodexBackend({
   let lastCliInfo = null;
   let providerRoute = null;
   let providerSensitiveValues = [];
+  let activeAttachmentPaths = [];
+  let processStderrAttachmentPaths = [];
   let providerDeltaPhase = undefined;
   let providerDeltaRedactor = createDeltaRedactor([], () => {});
   let providerStderrRedactor = createDeltaRedactor([], () => {});
@@ -330,29 +332,56 @@ export function createCodexBackend({
   }
 
   function emit(evt) {
-    if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
+    if (onEvent) onEvent(redactValue(evt, [...providerSensitiveValues, ...activeAttachmentPaths]));
   }
 
   function resetProviderDeltaRedactor() {
     providerDeltaRedactor.discard();
     providerDeltaPhase = undefined;
-    providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
-      activeAssistantText += text;
-      emit({ type: 'text-delta', text, phase: providerDeltaPhase });
-    });
+    providerDeltaRedactor = createDeltaRedactor(
+      [...providerSensitiveValues, ...activeAttachmentPaths],
+      (text) => {
+        activeAssistantText += text;
+        emit({ type: 'text-delta', text, phase: providerDeltaPhase });
+      },
+    );
   }
 
   function resetProviderStderrRedactor() {
     providerStderrRedactor.discard();
-    providerStderrRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
-      stderrTail = appendTail(stderrTail, text);
-    });
+    providerStderrRedactor = createDeltaRedactor(
+      [...providerSensitiveValues, ...processStderrAttachmentPaths],
+      (text) => {
+        stderrTail = appendTail(stderrTail, text);
+      },
+    );
   }
 
   function setProviderSensitiveValues(values) {
     providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === 'string' && value)))
       .sort((left, right) => right.length - left.length);
     resetProviderDeltaRedactor();
+    resetProviderStderrRedactor();
+  }
+
+  function setActiveAttachmentPaths(values) {
+    activeAttachmentPaths = Array.from(new Set((values || [])
+      .filter((value) => typeof value === 'string' && value)))
+      .sort((left, right) => right.length - left.length);
+    if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+    const previousProcessPathCount = processStderrAttachmentPaths.length;
+    processStderrAttachmentPaths = Array.from(new Set([
+      ...processStderrAttachmentPaths,
+      ...activeAttachmentPaths,
+    ])).sort((left, right) => right.length - left.length);
+    resetProviderDeltaRedactor();
+    if (processStderrAttachmentPaths.length !== previousProcessPathCount) {
+      resetProviderStderrRedactor();
+    }
+  }
+
+  function clearProcessStderrAttachmentPaths({ preserveActive = false } = {}) {
+    processStderrAttachmentPaths = preserveActive ? activeAttachmentPaths.slice() : [];
     resetProviderStderrRedactor();
   }
 
@@ -367,8 +396,8 @@ export function createCodexBackend({
     providerStderrRedactor.discard();
     providerSensitiveValues = [];
     providerDeltaPhase = undefined;
-    providerDeltaRedactor = createDeltaRedactor([], () => {});
-    providerStderrRedactor = createDeltaRedactor([], () => {});
+    providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {});
+    providerStderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, () => {});
   }
 
   function currentEnv() {
@@ -400,6 +429,7 @@ export function createCodexBackend({
     providerRecoveryInFlight = false;
     turnFailureInFlight = false;
     providerRefreshPending = false;
+    setActiveAttachmentPaths([]);
     if (resolve) resolve();
     if (refreshProvider) {
       Promise.resolve().then(() => onProviderProfileRecovered()).catch(() => {});
@@ -432,6 +462,7 @@ export function createCodexBackend({
     activeAssistantText = '';
     stderrTail = '';
     clearProviderSensitiveValues();
+    clearProcessStderrAttachmentPaths({ preserveActive: true });
     if (previousProc) {
       try { previousProc.kill(); } catch { /* best effort */ }
     }
@@ -624,6 +655,7 @@ export function createCodexBackend({
     closeProviderRoute();
     if (wasStopping) {
       clearProviderSensitiveValues();
+      clearProcessStderrAttachmentPaths();
       return;
     }
     if (activeRun) {
@@ -636,6 +668,7 @@ export function createCodexBackend({
       finishActive();
     }
     clearProviderSensitiveValues();
+    clearProcessStderrAttachmentPaths();
   }
 
   function handleError(error) {
@@ -654,6 +687,7 @@ export function createCodexBackend({
       finishActive();
     }
     clearProviderSensitiveValues();
+    clearProcessStderrAttachmentPaths();
   }
 
   function clearSpawnCredentialCopies(runtimeConfig, spawnEnvironment, extraNames = []) {
@@ -1088,7 +1122,10 @@ export function createCodexBackend({
       let failure = {
         kind: error?.kind,
         code: error?.code,
-        message: redactValue(error?.message || 'Failed to start Codex turn.', providerSensitiveValues),
+        message: redactValue(
+          error?.message || 'Failed to start Codex turn.',
+          [...providerSensitiveValues, ...activeAttachmentPaths],
+        ),
       };
       try {
         if (!activeTurnDispatched && await attemptProviderRecovery(error)) return;
@@ -1096,7 +1133,10 @@ export function createCodexBackend({
         failure = {
           kind: recoveryError?.kind,
           code: recoveryError?.code,
-          message: redactValue(recoveryError?.message || 'Failed to start Codex turn.', providerSensitiveValues),
+          message: redactValue(
+            recoveryError?.message || 'Failed to start Codex turn.',
+            [...providerSensitiveValues, ...activeAttachmentPaths],
+          ),
         };
       }
       providerDeltaRedactor.discard();
@@ -1135,6 +1175,7 @@ export function createCodexBackend({
     activeTurn = turn;
     activeTurnAccepted = false;
     activeTurnDispatched = false;
+    setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
     activeUserText = turn.text;
     activeUserRecorded = false;
     providerRecoveryAttempted = false;
@@ -1220,6 +1261,7 @@ export function createCodexBackend({
     finishActive();
     stderrTail = '';
     clearProviderSensitiveValues();
+    clearProcessStderrAttachmentPaths();
     stopping = false;
   }
 

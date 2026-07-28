@@ -198,6 +198,129 @@ test('createZcodeBackend sends one attachment manifest while keeping transcript 
   await pending;
 });
 
+test('createZcodeBackend preserves the attachment manifest after first-turn instructions', async () => {
+  const { backend, spawned } = makeBackend({
+    getServerInstructions: () => 'Follow the server contract.',
+  });
+  const { pending, proc, sendReq } = await startTurn(backend, spawned, {
+    turnId: 'turn-instructions',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'notes.pdf',
+      localPath: 'C:\\private\\notes.pdf',
+      size: 12,
+      mediaType: 'application/pdf',
+      temporary: false,
+    }],
+  });
+
+  assert.match(
+    sendReq.params.content,
+    /^Follow the server contract\.\n\n---\n\ninspect\n\n<ae_mcp_attachments version="1">\n/,
+  );
+  assert.match(sendReq.params.content, /"path":"C:\\\\private\\\\notes\.pdf"/);
+
+  pushEvent(proc, 'turn.completed', { response: 'done' });
+  await pending;
+});
+
+test('createZcodeBackend redacts an attachment path split across output and transcript', async () => {
+  const path = 'C:\\private\\customer.mov';
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, {
+    turnId: 'turn-redact-output',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'customer.mov',
+      localPath: path,
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+
+  pushEvent(proc, 'model.streaming', {
+    delta: 'C:\\private\\',
+    kind: 'text_delta',
+    done: false,
+  });
+  pushEvent(proc, 'model.streaming', {
+    delta: 'customer.mov',
+    kind: 'text_delta',
+    done: false,
+  });
+  pushEvent(proc, 'turn.completed', { response: path });
+  await pending;
+
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('createZcodeBackend redacts an attachment path split across stderr failure', async () => {
+  const path = 'C:\\private\\customer.mov';
+  const { backend, events, spawned } = makeBackend();
+  const pending = backend.sendUser({
+    turnId: 'turn-redact-stderr',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'customer.mov',
+      localPath: path,
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+  await flush();
+
+  const proc = spawned.procs[0];
+  proc.pushStderr('failed C:\\private\\');
+  proc.pushStderr('customer.mov');
+  proc.exit(1);
+  await pending;
+
+  const rendered = JSON.stringify(events);
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('createZcodeBackend keeps attachment stderr redaction until the persistent process exits', async () => {
+  const path = 'C:\\private\\late-customer.mov';
+  const { backend, events, spawned } = makeBackend();
+  const first = await startTurn(backend, spawned, {
+    turnId: 'turn-attachment',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'late-customer.mov',
+      localPath: path,
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+  pushEvent(first.proc, 'turn.completed', { response: 'done' });
+  await first.pending;
+
+  first.proc.pushStderr('late C:\\private\\');
+  first.proc.pushStderr('late-customer.mov');
+  const second = backend.sendUser({
+    turnId: 'turn-text-only',
+    text: 'next',
+    attachments: [],
+  });
+  await flush();
+  first.proc.exit(1);
+  await second;
+
+  const rendered = JSON.stringify(events);
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
 test('createZcodeBackend correlates a rejected session/send as uncertain without retry', async () => {
   const { backend, events, spawned } = makeBackend();
   const pending = backend.sendUser({

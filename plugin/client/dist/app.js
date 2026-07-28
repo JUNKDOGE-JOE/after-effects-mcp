@@ -29025,6 +29025,12 @@
     let environmentSecretValues = [];
     let runtimeSecretValues = [];
     let activeSecretValues = [];
+    let activeAttachmentPaths = [];
+    let processStderrAttachmentPaths = [];
+    let assistantDeltaRedactor = createDeltaRedactor([], () => {
+    });
+    let stderrRedactor = createDeltaRedactor([], () => {
+    });
     let secretEpoch = 0;
     let toolMeta = { allowedTools: [], annotations: {} };
     const pendingApprovals = /* @__PURE__ */ new Map();
@@ -29032,24 +29038,69 @@
     const pendingUserInputs = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     const sessionAllowedPlans = /* @__PURE__ */ new Set();
+    function activeRedactionValues() {
+      return [...activeSecretValues, ...activeAttachmentPaths];
+    }
+    function stderrRedactionValues() {
+      return [...activeSecretValues, ...processStderrAttachmentPaths];
+    }
     function emit(evt) {
-      if (onEvent) onEvent(redactValue(evt, activeSecretValues));
+      if (onEvent) onEvent(redactValue(evt, activeRedactionValues()));
     }
     function safeText(value) {
-      return redactText(value, activeSecretValues);
+      return redactText(value, activeRedactionValues());
+    }
+    function resetAssistantDeltaRedactor() {
+      assistantDeltaRedactor.discard();
+      assistantDeltaRedactor = createDeltaRedactor(activeRedactionValues(), (text) => {
+        activeAssistantText += text;
+        emit({ type: "text-delta", text });
+      });
+    }
+    function resetStderrRedactor() {
+      stderrRedactor.discard();
+      stderrRedactor = createDeltaRedactor(stderrRedactionValues(), (text) => {
+        stderrTail = appendTail2(stderrTail, text);
+      });
+    }
+    function resetOutputRedactors() {
+      resetAssistantDeltaRedactor();
+      resetStderrRedactor();
+    }
+    function setActiveAttachmentPaths(values) {
+      activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
+      if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+      const previousProcessPathCount = processStderrAttachmentPaths.length;
+      processStderrAttachmentPaths = Array.from(/* @__PURE__ */ new Set([
+        ...processStderrAttachmentPaths,
+        ...activeAttachmentPaths
+      ])).sort((left, right) => right.length - left.length);
+      resetAssistantDeltaRedactor();
+      if (processStderrAttachmentPaths.length !== previousProcessPathCount) {
+        resetStderrRedactor();
+      }
+    }
+    function clearProcessStderrAttachmentPaths() {
+      processStderrAttachmentPaths = [];
+      resetStderrRedactor();
     }
     function refreshActiveSecretValues() {
-      activeSecretValues = Array.from(/* @__PURE__ */ new Set([
+      const nextSecretValues = Array.from(/* @__PURE__ */ new Set([
         ...environmentSecretValues,
         ...runtimeSecretValues
       ])).sort((left, right) => right.length - left.length);
+      const stderrInventoryChanged = nextSecretValues.length !== activeSecretValues.length || nextSecretValues.some((value, index) => value !== activeSecretValues[index]);
+      activeSecretValues = nextSecretValues;
       secretEpoch += 1;
+      resetAssistantDeltaRedactor();
+      if (stderrInventoryChanged) resetStderrRedactor();
     }
     function clearActiveSecretValues() {
       environmentSecretValues = [];
       runtimeSecretValues = [];
       activeSecretValues = [];
       secretEpoch += 1;
+      resetOutputRedactors();
     }
     function scheduleSecretCleanup() {
       const scheduledEpoch = secretEpoch;
@@ -29111,6 +29162,7 @@
         activeTurn = null;
         activeTurnAccepted = false;
         sendDispatched = false;
+        setActiveAttachmentPaths([]);
         return;
       }
       const resolve = activeResolve;
@@ -29120,6 +29172,7 @@
       activeTurn = null;
       activeTurnAccepted = false;
       sendDispatched = false;
+      setActiveAttachmentPaths([]);
       resolve();
     }
     function activeTurnFailureFields() {
@@ -29278,6 +29331,7 @@
       if (type === "state.updated") {
         const patch = params.patch || params.payload || {};
         if (patch.status === "idle" && activeRun) {
+          assistantDeltaRedactor.flush();
           drainApprovals();
           emit({ type: "turn-end", stopReason: "end_turn" });
           transcript.push({ role: "assistant", text: activeAssistantText });
@@ -29292,9 +29346,7 @@
       if (type === "model.streaming") {
         const payload = params.payload || {};
         if (payload.kind === "text_delta" && payload.delta) {
-          const delta = safeText(String(payload.delta));
-          activeAssistantText += delta;
-          emit({ type: "text-delta", text: delta });
+          assistantDeltaRedactor.feed(String(payload.delta));
         }
         return;
       }
@@ -29315,6 +29367,7 @@
         return;
       }
       if (type === "turn.completed") {
+        assistantDeltaRedactor.flush();
         drainApprovals();
         const payload = params.payload || {};
         emit({ type: "turn-end", stopReason: "end_turn" });
@@ -29323,6 +29376,7 @@
         return;
       }
       if (type === "turn.failed") {
+        assistantDeltaRedactor.discard();
         const payload = params.payload || {};
         const message2 = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, "ZCode turn failed", lang), activeRuntimeModel);
         emit({ type: "error", kind: zcodeErrorKind(message2), message: message2, ...activeTurnFailureFields() });
@@ -29367,6 +29421,7 @@
     }
     function handleExit(code, signal) {
       const wasStopping = stopping;
+      stderrRedactor.flush();
       const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
       if (rpc) rpc.close(new Error("ZCode app-server exited: " + detail));
       proc = null;
@@ -29378,6 +29433,7 @@
       subscribed = false;
       activeRuntimeModel = null;
       if (wasStopping) {
+        clearProcessStderrAttachmentPaths();
         scheduleSecretCleanup();
         return;
       }
@@ -29390,6 +29446,7 @@
         });
         finishActive();
       }
+      clearProcessStderrAttachmentPaths();
       scheduleSecretCleanup();
     }
     function handleError(error) {
@@ -29407,6 +29464,7 @@
         emit({ type: "error", kind: "mcp", message: err.message, ...activeTurnFailureFields() });
         finishActive();
       }
+      clearProcessStderrAttachmentPaths();
       scheduleSecretCleanup();
     }
     async function startProcess() {
@@ -29441,7 +29499,7 @@
         const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
         if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail2(stderrTail, chunk);
+          stderrRedactor.feed(chunk);
         });
         proc.on("exit", (code, signal) => handleExit(code, signal));
         proc.on("error", (error) => handleError(error));
@@ -29556,6 +29614,7 @@
       activeTurn = turn;
       activeTurnAccepted = false;
       sendDispatched = false;
+      setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
       });
@@ -29566,7 +29625,7 @@
         let turnText = withAttachmentManifest(userText, turn.attachments);
         if (transcript.filter((m) => m.role === "user").length === 1) {
           const instr = (getServerInstructions() || "").trim();
-          if (instr) turnText = instr + "\n\n---\n\n" + userText;
+          if (instr) turnText = instr + "\n\n---\n\n" + turnText;
         }
         sendDispatched = true;
         rpc.request("session/send", { sessionId, content: turnText }, 18e4).then(() => {
@@ -29689,6 +29748,7 @@
       toolMeta = { allowedTools: [], annotations: {} };
       finishActive();
       stderrTail = "";
+      clearProcessStderrAttachmentPaths();
       clearActiveSecretValues();
       stopping = false;
     }
@@ -40194,6 +40254,8 @@ data: ${JSON.stringify(payload)}
     let lastCliInfo = null;
     let providerRoute = null;
     let providerSensitiveValues = [];
+    let activeAttachmentPaths = [];
+    let processStderrAttachmentPaths = [];
     let providerDeltaPhase = void 0;
     let providerDeltaRedactor = createDeltaRedactor([], () => {
     });
@@ -40221,25 +40283,48 @@ data: ${JSON.stringify(payload)}
       });
     }
     function emit(evt) {
-      if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
+      if (onEvent) onEvent(redactValue(evt, [...providerSensitiveValues, ...activeAttachmentPaths]));
     }
     function resetProviderDeltaRedactor() {
       providerDeltaRedactor.discard();
       providerDeltaPhase = void 0;
-      providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
-        activeAssistantText += text;
-        emit({ type: "text-delta", text, phase: providerDeltaPhase });
-      });
+      providerDeltaRedactor = createDeltaRedactor(
+        [...providerSensitiveValues, ...activeAttachmentPaths],
+        (text) => {
+          activeAssistantText += text;
+          emit({ type: "text-delta", text, phase: providerDeltaPhase });
+        }
+      );
     }
     function resetProviderStderrRedactor() {
       providerStderrRedactor.discard();
-      providerStderrRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
-        stderrTail = appendTail4(stderrTail, text);
-      });
+      providerStderrRedactor = createDeltaRedactor(
+        [...providerSensitiveValues, ...processStderrAttachmentPaths],
+        (text) => {
+          stderrTail = appendTail4(stderrTail, text);
+        }
+      );
     }
     function setProviderSensitiveValues(values) {
       providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
       resetProviderDeltaRedactor();
+      resetProviderStderrRedactor();
+    }
+    function setActiveAttachmentPaths(values) {
+      activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
+      if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+      const previousProcessPathCount = processStderrAttachmentPaths.length;
+      processStderrAttachmentPaths = Array.from(/* @__PURE__ */ new Set([
+        ...processStderrAttachmentPaths,
+        ...activeAttachmentPaths
+      ])).sort((left, right) => right.length - left.length);
+      resetProviderDeltaRedactor();
+      if (processStderrAttachmentPaths.length !== previousProcessPathCount) {
+        resetProviderStderrRedactor();
+      }
+    }
+    function clearProcessStderrAttachmentPaths({ preserveActive = false } = {}) {
+      processStderrAttachmentPaths = preserveActive ? activeAttachmentPaths.slice() : [];
       resetProviderStderrRedactor();
     }
     function providerRedactionValues(additional = []) {
@@ -40252,9 +40337,9 @@ data: ${JSON.stringify(payload)}
       providerStderrRedactor.discard();
       providerSensitiveValues = [];
       providerDeltaPhase = void 0;
-      providerDeltaRedactor = createDeltaRedactor([], () => {
+      providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {
       });
-      providerStderrRedactor = createDeltaRedactor([], () => {
+      providerStderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, () => {
       });
     }
     function currentEnv() {
@@ -40284,6 +40369,7 @@ data: ${JSON.stringify(payload)}
       providerRecoveryInFlight = false;
       turnFailureInFlight = false;
       providerRefreshPending = false;
+      setActiveAttachmentPaths([]);
       if (resolve) resolve();
       if (refreshProvider) {
         Promise.resolve().then(() => onProviderProfileRecovered()).catch(() => {
@@ -40315,6 +40401,7 @@ data: ${JSON.stringify(payload)}
       activeAssistantText = "";
       stderrTail = "";
       clearProviderSensitiveValues();
+      clearProcessStderrAttachmentPaths({ preserveActive: true });
       if (previousProc) {
         try {
           previousProc.kill();
@@ -40495,6 +40582,7 @@ data: ${JSON.stringify(payload)}
       closeProviderRoute();
       if (wasStopping) {
         clearProviderSensitiveValues();
+        clearProcessStderrAttachmentPaths();
         return;
       }
       if (activeRun) {
@@ -40507,6 +40595,7 @@ data: ${JSON.stringify(payload)}
         finishActive();
       }
       clearProviderSensitiveValues();
+      clearProcessStderrAttachmentPaths();
     }
     function handleError(error) {
       const err = error instanceof Error ? error : new Error("codex app-server error");
@@ -40524,6 +40613,7 @@ data: ${JSON.stringify(payload)}
         finishActive();
       }
       clearProviderSensitiveValues();
+      clearProcessStderrAttachmentPaths();
     }
     function clearSpawnCredentialCopies(runtimeConfig, spawnEnvironment, extraNames = []) {
       const names = new Set(extraNames);
@@ -40922,7 +41012,10 @@ data: ${JSON.stringify(payload)}
         let failure2 = {
           kind: error == null ? void 0 : error.kind,
           code: error == null ? void 0 : error.code,
-          message: redactValue((error == null ? void 0 : error.message) || "Failed to start Codex turn.", providerSensitiveValues)
+          message: redactValue(
+            (error == null ? void 0 : error.message) || "Failed to start Codex turn.",
+            [...providerSensitiveValues, ...activeAttachmentPaths]
+          )
         };
         try {
           if (!activeTurnDispatched && await attemptProviderRecovery(error)) return;
@@ -40930,7 +41023,10 @@ data: ${JSON.stringify(payload)}
           failure2 = {
             kind: recoveryError == null ? void 0 : recoveryError.kind,
             code: recoveryError == null ? void 0 : recoveryError.code,
-            message: redactValue((recoveryError == null ? void 0 : recoveryError.message) || "Failed to start Codex turn.", providerSensitiveValues)
+            message: redactValue(
+              (recoveryError == null ? void 0 : recoveryError.message) || "Failed to start Codex turn.",
+              [...providerSensitiveValues, ...activeAttachmentPaths]
+            )
           };
         }
         providerDeltaRedactor.discard();
@@ -40968,6 +41064,7 @@ data: ${JSON.stringify(payload)}
       activeTurn = turn;
       activeTurnAccepted = false;
       activeTurnDispatched = false;
+      setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
       activeUserText = turn.text;
       activeUserRecorded = false;
       providerRecoveryAttempted = false;
@@ -41048,6 +41145,7 @@ data: ${JSON.stringify(payload)}
       finishActive();
       stderrTail = "";
       clearProviderSensitiveValues();
+      clearProcessStderrAttachmentPaths();
       stopping = false;
     }
     const PROBE_INITIALIZE_TIMEOUT_MS = 1e4;
@@ -41279,6 +41377,12 @@ data: ${JSON.stringify(payload)}
     let activeRun = null;
     let activeResolve = null;
     let activeAssistantText = "";
+    let activeAttachmentPaths = [];
+    let processStderrAttachmentPaths = [];
+    let assistantDeltaRedactor = createDeltaRedactor([], () => {
+    });
+    let stderrRedactor = createDeltaRedactor([], () => {
+    });
     let activeTurn = null;
     let activeTurnAccepted = false;
     let messageDispatched = false;
@@ -41289,7 +41393,37 @@ data: ${JSON.stringify(payload)}
     const startedTools = /* @__PURE__ */ new Set();
     const transcript = [];
     function emit(evt) {
-      if (onEvent) onEvent(evt);
+      if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
+    }
+    function resetAssistantDeltaRedactor() {
+      assistantDeltaRedactor.discard();
+      assistantDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, (text) => {
+        activeAssistantText += text;
+        emit({ type: "text-delta", text });
+      });
+    }
+    function resetStderrRedactor() {
+      stderrRedactor.discard();
+      stderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, (text) => {
+        stderrTail = appendTail5(stderrTail, text);
+      });
+    }
+    function setActiveAttachmentPaths(values) {
+      activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
+      if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+      const previousProcessPathCount = processStderrAttachmentPaths.length;
+      processStderrAttachmentPaths = Array.from(/* @__PURE__ */ new Set([
+        ...processStderrAttachmentPaths,
+        ...activeAttachmentPaths
+      ])).sort((left, right) => right.length - left.length);
+      resetAssistantDeltaRedactor();
+      if (processStderrAttachmentPaths.length !== previousProcessPathCount) {
+        resetStderrRedactor();
+      }
+    }
+    function clearProcessStderrAttachmentPaths() {
+      processStderrAttachmentPaths = [];
+      resetStderrRedactor();
     }
     function fetcher() {
       return fetchImpl || defaultFetch();
@@ -41306,6 +41440,7 @@ data: ${JSON.stringify(payload)}
         messageDispatched = false;
         turnStarted = false;
         startedTools.clear();
+        setActiveAttachmentPaths([]);
         return;
       }
       const resolve = activeResolve;
@@ -41317,6 +41452,7 @@ data: ${JSON.stringify(payload)}
       messageDispatched = false;
       turnStarted = false;
       startedTools.clear();
+      setActiveAttachmentPaths([]);
       resolve();
     }
     async function request(path, options = {}) {
@@ -41385,13 +41521,17 @@ data: ${JSON.stringify(payload)}
     }
     function handleExit(code, signal) {
       const wasStopping = stopping;
+      stderrRedactor.flush();
       proc = null;
       serverPromise = null;
       sessionPromise = null;
       sessionId = null;
       sseClosed = true;
       sseStarted = false;
-      if (wasStopping) return;
+      if (wasStopping) {
+        clearProcessStderrAttachmentPaths();
+        return;
+      }
       if (activeRun) {
         const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
         emit({
@@ -41402,6 +41542,7 @@ data: ${JSON.stringify(payload)}
         });
         finishActive();
       }
+      clearProcessStderrAttachmentPaths();
     }
     function handleError(error) {
       proc = null;
@@ -41419,6 +41560,7 @@ data: ${JSON.stringify(payload)}
         });
         finishActive();
       }
+      clearProcessStderrAttachmentPaths();
     }
     async function startServer() {
       if (proc && baseUrl) return true;
@@ -41441,7 +41583,7 @@ data: ${JSON.stringify(payload)}
           env: spawnEnv
         });
         if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrTail = appendTail5(stderrTail, chunk);
+          stderrRedactor.feed(chunk);
         });
         if (proc.on) {
           proc.on("exit", (code, signal) => handleExit(code, signal));
@@ -41586,6 +41728,7 @@ data: ${JSON.stringify(payload)}
             emit({ type: "turn-start" });
           }
         } else if (st === "idle") {
+          assistantDeltaRedactor.flush();
           drainApprovals();
           emit({ type: "turn-end", stopReason: "end_turn" });
           transcript.push({ role: "assistant", text: activeAssistantText });
@@ -41597,10 +41740,7 @@ data: ${JSON.stringify(payload)}
         if (p.field === "text") {
           emit({ type: "thinking", active: false });
           const text = p.delta;
-          if (text) {
-            activeAssistantText += String(text);
-            emit({ type: "text-delta", text: String(text) });
-          }
+          if (text) assistantDeltaRedactor.feed(String(text));
         } else if (p.field === "reasoning") {
           emit({ type: "thinking", active: true });
         }
@@ -41613,6 +41753,7 @@ data: ${JSON.stringify(payload)}
         return;
       }
       if (type === "session.error") {
+        assistantDeltaRedactor.discard();
         const error = p.error || p;
         emit({
           type: "error",
@@ -41667,6 +41808,10 @@ data: ${JSON.stringify(payload)}
       activeTurn = turn;
       activeTurnAccepted = false;
       messageDispatched = false;
+      setActiveAttachmentPaths(turn.attachments.flatMap((attachment) => [
+        attachment.localPath,
+        attachmentFileUrl(attachment.localPath, adapter.id)
+      ]));
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
       });
@@ -41734,6 +41879,8 @@ data: ${JSON.stringify(payload)}
       if (proc && proc.kill) proc.kill();
       proc = null;
       serverPromise = null;
+      stderrTail = "";
+      clearProcessStderrAttachmentPaths();
       try {
         if (configHome) {
           const fs = fsImpl || adapter.fs;

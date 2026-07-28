@@ -8,6 +8,7 @@ async function flush() {
 }
 
 function makeProc() {
+  const stderrHandlers = [];
   const exitHandlers = [];
   const errorHandlers = [];
   let killed = false;
@@ -16,7 +17,11 @@ function makeProc() {
       return killed;
     },
     stdout: { on() {} },
-    stderr: { on() {} },
+    stderr: {
+      on(event, handler) {
+        if (event === 'data') stderrHandlers.push(handler);
+      },
+    },
     on(event, handler) {
       if (event === 'exit') exitHandlers.push(handler);
       if (event === 'error') errorHandlers.push(handler);
@@ -29,6 +34,9 @@ function makeProc() {
     },
     error(error) {
       for (const handler of errorHandlers) handler(error);
+    },
+    pushStderr(text) {
+      for (const handler of stderrHandlers) handler(text);
     },
   };
 }
@@ -204,6 +212,111 @@ test('createOpenCodeBackend sends official file parts and accepts after the mess
   fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
   await pending;
   assert.deepEqual(backend.getMessages()[0], { role: 'user', text: 'inspect' });
+});
+
+test('createOpenCodeBackend redacts an attachment path split across output and transcript', async () => {
+  const path = 'C:\\private\\customer.mov';
+  const fileUrl = 'file:///C:/private/customer.mov';
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser({
+    turnId: 'turn-redact-output',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'customer.mov',
+      localPath: path,
+      size: 12,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+  await flush();
+
+  fetched.sse.push({
+    type: 'message.part.delta',
+    properties: { sessionID: 'session_1', field: 'text', delta: 'file:///C:/private/' },
+  });
+  fetched.sse.push({
+    type: 'message.part.delta',
+    properties: { sessionID: 'session_1', field: 'text', delta: 'customer.mov' },
+  });
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(path), false);
+  assert.equal(rendered.includes(fileUrl), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('createOpenCodeBackend redacts an attachment path split across stderr failure', async () => {
+  const path = 'C:\\private\\customer.mov';
+  const { backend, events, spawned } = makeBackend();
+  const pending = backend.sendUser({
+    turnId: 'turn-redact-stderr',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'customer.mov',
+      localPath: path,
+      size: 12,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+  await flush();
+
+  const proc = spawned.procs[0];
+  proc.pushStderr('failed C:\\private\\');
+  proc.pushStderr('customer.mov');
+  proc.exit(1);
+  await pending;
+
+  const rendered = JSON.stringify(events);
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('createOpenCodeBackend keeps attachment stderr redaction until the persistent process exits', async () => {
+  const fileUrl = 'file:///C:/private/late-customer.mov';
+  const { backend, events, spawned, fetched } = makeBackend();
+  const first = backend.sendUser({
+    turnId: 'turn-attachment',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'late-customer.mov',
+      localPath: 'C:\\private\\late-customer.mov',
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+  await flush();
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await first;
+
+  const proc = spawned.procs[0];
+  proc.pushStderr('late file:///C:/private/');
+  proc.pushStderr('late-customer.mov');
+  const second = backend.sendUser({
+    turnId: 'turn-text-only',
+    text: 'next',
+    attachments: [],
+  });
+  await flush();
+  proc.exit(1);
+  await second;
+
+  const rendered = JSON.stringify(events);
+  assert.equal(rendered.includes(fileUrl), false);
+  assert.match(rendered, /\[redacted\]/);
 });
 
 test('createOpenCodeBackend correlates a failed message POST as uncertain without retry', async () => {

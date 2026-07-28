@@ -956,6 +956,98 @@ test('createCodexBackend exposes every selected file in a manifest and keeps nat
   assert.deepEqual(backend.getMessages()[0], { role: 'user', text: 'inspect' });
 });
 
+test('createCodexBackend redacts an attachment path split across output and transcript', async () => {
+  const path = 'C:\\private\\customer.mov';
+  const { backend, events, spawned } = makeBackend({ getServerInstructions: () => '' });
+  const { pending, proc } = await startTurn(backend, spawned, {
+    turnId: 'turn-redact-output',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'customer.mov',
+      localPath: path,
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+
+  proc.pushStdout({
+    method: 'item/agentMessage/delta',
+    params: { delta: 'C:\\private\\' },
+  });
+  proc.pushStdout({
+    method: 'item/agentMessage/delta',
+    params: { delta: 'customer.mov' },
+  });
+  proc.pushStdout({ method: 'turn/completed', params: {} });
+  await pending;
+
+  const rendered = JSON.stringify({ events, messages: backend.getMessages() });
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('createCodexBackend redacts an attachment path split across stderr failure', async () => {
+  const path = 'C:\\private\\customer.mov';
+  const { backend, events, spawned } = makeBackend({ getServerInstructions: () => '' });
+  const { pending, proc } = await startTurn(backend, spawned, {
+    turnId: 'turn-redact-stderr',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'customer.mov',
+      localPath: path,
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+
+  proc.pushStderr('failed C:\\private\\');
+  proc.pushStderr('customer.mov');
+  proc.exit(1);
+  await pending;
+
+  const rendered = JSON.stringify(events);
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
+test('createCodexBackend keeps attachment stderr redaction until the persistent process exits', async () => {
+  const path = 'C:\\private\\late-customer.mov';
+  const { backend, events, spawned } = makeBackend({ getServerInstructions: () => '' });
+  const first = await startTurn(backend, spawned, {
+    turnId: 'turn-attachment',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'late-customer.mov',
+      localPath: path,
+      size: 20,
+      mediaType: 'video/quicktime',
+      temporary: false,
+    }],
+  });
+  first.proc.pushStdout({ method: 'turn/completed', params: {} });
+  await first.pending;
+
+  first.proc.pushStderr('late C:\\private\\');
+  first.proc.pushStderr('late-customer.mov');
+  const second = backend.sendUser({
+    turnId: 'turn-text-only',
+    text: 'next',
+    attachments: [],
+  });
+  await flush();
+  first.proc.exit(1);
+  await second;
+
+  const rendered = JSON.stringify(events);
+  assert.equal(rendered.includes(path), false);
+  assert.match(rendered, /\[redacted\]/);
+});
+
 test('createCodexBackend maps app-server turn and tool notifications to panel events', async () => {
   const { backend, events, spawned } = makeBackend();
   const { pending, proc } = await startTurn(backend, spawned, 'events');

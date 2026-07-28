@@ -1,6 +1,7 @@
 import { createSseParser } from '../lib/sse.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
+import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
 import { attachmentFileUrl, normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
 const MCP_TIMEOUT_MS = 120000;
@@ -173,6 +174,10 @@ export function createOpenCodeBackend({
   let activeRun = null;
   let activeResolve = null;
   let activeAssistantText = '';
+  let activeAttachmentPaths = [];
+  let processStderrAttachmentPaths = [];
+  let assistantDeltaRedactor = createDeltaRedactor([], () => {});
+  let stderrRedactor = createDeltaRedactor([], () => {});
   let activeTurn = null;
   let activeTurnAccepted = false;
   let messageDispatched = false;
@@ -184,7 +189,43 @@ export function createOpenCodeBackend({
   const transcript = [];
 
   function emit(evt) {
-    if (onEvent) onEvent(evt);
+    if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
+  }
+
+  function resetAssistantDeltaRedactor() {
+    assistantDeltaRedactor.discard();
+    assistantDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, (text) => {
+      activeAssistantText += text;
+      emit({ type: 'text-delta', text });
+    });
+  }
+
+  function resetStderrRedactor() {
+    stderrRedactor.discard();
+    stderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, (text) => {
+      stderrTail = appendTail(stderrTail, text);
+    });
+  }
+
+  function setActiveAttachmentPaths(values) {
+    activeAttachmentPaths = Array.from(new Set((values || [])
+      .filter((value) => typeof value === 'string' && value)))
+      .sort((left, right) => right.length - left.length);
+    if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+    const previousProcessPathCount = processStderrAttachmentPaths.length;
+    processStderrAttachmentPaths = Array.from(new Set([
+      ...processStderrAttachmentPaths,
+      ...activeAttachmentPaths,
+    ])).sort((left, right) => right.length - left.length);
+    resetAssistantDeltaRedactor();
+    if (processStderrAttachmentPaths.length !== previousProcessPathCount) {
+      resetStderrRedactor();
+    }
+  }
+
+  function clearProcessStderrAttachmentPaths() {
+    processStderrAttachmentPaths = [];
+    resetStderrRedactor();
   }
 
   function fetcher() {
@@ -204,6 +245,7 @@ export function createOpenCodeBackend({
       messageDispatched = false;
       turnStarted = false;
       startedTools.clear();
+      setActiveAttachmentPaths([]);
       return;
     }
     const resolve = activeResolve;
@@ -215,6 +257,7 @@ export function createOpenCodeBackend({
     messageDispatched = false;
     turnStarted = false;
     startedTools.clear();
+    setActiveAttachmentPaths([]);
     resolve();
   }
 
@@ -290,13 +333,17 @@ export function createOpenCodeBackend({
 
   function handleExit(code, signal) {
     const wasStopping = stopping;
+    stderrRedactor.flush();
     proc = null;
     serverPromise = null;
     sessionPromise = null;
     sessionId = null;
     sseClosed = true;
     sseStarted = false;
-    if (wasStopping) return;
+    if (wasStopping) {
+      clearProcessStderrAttachmentPaths();
+      return;
+    }
     if (activeRun) {
       const detail = stderrTail ? String(code) + (signal ? ' ' + signal : '') + ' ' + stderrTail : String(code) + (signal ? ' ' + signal : '');
       emit({
@@ -307,6 +354,7 @@ export function createOpenCodeBackend({
       });
       finishActive();
     }
+    clearProcessStderrAttachmentPaths();
   }
 
   function handleError(error) {
@@ -325,6 +373,7 @@ export function createOpenCodeBackend({
       });
       finishActive();
     }
+    clearProcessStderrAttachmentPaths();
   }
 
   async function startServer() {
@@ -348,7 +397,7 @@ export function createOpenCodeBackend({
         env: spawnEnv,
       });
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
-        stderrTail = appendTail(stderrTail, chunk);
+        stderrRedactor.feed(chunk);
       });
       if (proc.on) {
         proc.on('exit', (code, signal) => handleExit(code, signal));
@@ -508,6 +557,7 @@ export function createOpenCodeBackend({
       if (st === 'busy') {
         if (!turnStarted) { turnStarted = true; emit({ type: 'turn-start' }); }
       } else if (st === 'idle') {
+        assistantDeltaRedactor.flush();
         drainApprovals();
         emit({ type: 'turn-end', stopReason: 'end_turn' });
         transcript.push({ role: 'assistant', text: activeAssistantText });
@@ -519,7 +569,7 @@ export function createOpenCodeBackend({
       if (p.field === 'text') {
         emit({ type: 'thinking', active: false });
         const text = p.delta;
-        if (text) { activeAssistantText += String(text); emit({ type: 'text-delta', text: String(text) }); }
+        if (text) assistantDeltaRedactor.feed(String(text));
       } else if (p.field === 'reasoning') {
         emit({ type: 'thinking', active: true });
       }
@@ -532,6 +582,7 @@ export function createOpenCodeBackend({
       return;
     }
     if (type === 'session.error') {
+      assistantDeltaRedactor.discard();
       const error = p.error || p;
       emit({
         type: 'error',
@@ -591,6 +642,10 @@ export function createOpenCodeBackend({
     activeTurn = turn;
     activeTurnAccepted = false;
     messageDispatched = false;
+    setActiveAttachmentPaths(turn.attachments.flatMap((attachment) => [
+      attachment.localPath,
+      attachmentFileUrl(attachment.localPath, adapter.id),
+    ]));
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });
@@ -660,6 +715,8 @@ export function createOpenCodeBackend({
     if (proc && proc.kill) proc.kill();
     proc = null;
     serverPromise = null;
+    stderrTail = '';
+    clearProcessStderrAttachmentPaths();
     try {
       if (configHome) {
         const fs = fsImpl || adapter.fs;
