@@ -22,6 +22,16 @@ The Composer remains backend-neutral. A missing attachment mapping is an
 adapter defect to repair, not a reason to permanently disable attachments for
 one backend.
 
+The four supported attachment backends are Codex, Claude through the Agent SDK
+sidecar, OpenCode, and ZCode. The registry also contains an internal legacy
+`byok` HTTP fallback used only when the Claude sidecar cannot run. That direct
+HTTP loop has neither local filesystem access nor a portable provider upload
+contract, so it cannot truthfully expose arbitrary local files. In that
+degraded state the Composer remains visible, but an attachment turn fails
+before dispatch with guidance to restore the Claude sidecar. It never drops
+the files, sends a path the remote model cannot read, or claims attachment
+support.
+
 ## Current behavior
 
 The Composer accepts only text. `ChatScreen` owns one text draft and calls the
@@ -55,6 +65,8 @@ never creates or forwards attachments.
 - Native attachment or file-resource transport where a backend provides it.
 - An application-generated attachment manifest where a backend has no generic
   file item, so the agent still receives readable file references.
+- A scoped local-file read allowance for the Claude Agent SDK that can open
+  only paths present in the current user-selected attachment set.
 - Session-scoped attachment drafts and deterministic cleanup of
   application-created temporary files.
 - Explicit pre-dispatch, accepted, and uncertain-dispatch behavior.
@@ -72,6 +84,8 @@ never creates or forwards attachments.
   tables.
 - A cloud upload manager, durable media library, or provider-specific file
   store.
+- Portable arbitrary-file support for the internal legacy `byok` direct-HTTP
+  fallback. It remains text-only and fails attachment turns before dispatch.
 - Directory attachment in this slice.
 - Downloading a remote URL supplied as an attachment.
 - Changing the public AE MCP surface, AEGP behavior, project state, or Undo.
@@ -199,8 +213,10 @@ This fallback is still file exposure, not content processing. It must not:
 - claim native multimodal delivery when only a readable path was supplied;
 - log the generated manifest.
 
-Codex, Claude, OpenCode, and ZCode must all implement either native transport
-or manifest transport. The Composer never branches on backend identity.
+Codex, Claude Agent SDK, OpenCode, and ZCode must all implement either native
+transport or manifest transport. The Composer never branches on backend
+identity. The application backend boundary, rather than the Composer,
+classifies the internal `byok` fallback as unavailable for attachment turns.
 
 ## Composer interaction
 
@@ -339,9 +355,12 @@ Assert for every adapter that:
 - redacted diagnostics contain no contents or absolute paths.
 
 Add a dynamic invariant that enumerates the registered chat backends and
-requires every one to implement the attachment mapping contract. Prove the
-guard by mutation: remove one backend's mapping, observe the test fail, restore
-it, and observe the test pass.
+requires every one to declare either an implemented attachment mapping or the
+explicit legacy-HTTP pre-dispatch rejection. The four supported attachment
+backends must use a real mapping; only the internal `byok` fallback may use the
+rejection disposition. Prove the guard by mutation: remove one supported
+backend's mapping, observe the test fail, restore it, and observe the test
+pass.
 
 ### Real-host development validation
 
