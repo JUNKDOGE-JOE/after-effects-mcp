@@ -4,7 +4,7 @@
 
 **Issue:** #190
 
-**Status:** Draft for user review
+**Status:** User-approved design
 
 ## Outcome
 
