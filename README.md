@@ -195,10 +195,13 @@ node native/ae-plugin/verify-macos.mjs \
   --bundle "$BUILD_DIR/AeMcpNative.plugin"
 ```
 
-Local development admits only a same-user client whose process ancestry reaches
-the current formal After Effects host. The native challenge still binds the
-endpoint and peer identity, but there is no connection code, fingerprint
-confirmation, or build flag on the single-user development path.
+The current native implementation checks the local user, After Effects process ancestry, endpoint,
+and peer identity. These are compatibility-era implementation details, not a supported defense
+against another local account or hostile same-user code. The product trust boundary is one trusted
+user operating AE and selected clients on the same host; there is no connection code or fingerprint
+ceremony. Do not add remote, multi-user, pairing, or hostile-local-process gates without a new
+product decision. Provider/API secret confidentiality remains required; see
+[the product trust policy](docs/THREAT_MODEL.md).
 
 Close every After Effects, AfterFX, and aerender process before installing. The development
 installer validates the receipt shape, product version, protocol metadata, platform, architecture,

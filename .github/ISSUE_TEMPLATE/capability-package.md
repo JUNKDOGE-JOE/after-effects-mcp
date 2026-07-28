@@ -82,7 +82,7 @@ public MCP tool
 - [ ] Target machine unlocked/awake; OS permissions and GUI control prepared.
 - [ ] Canonical CEP/native paths and scan roots checked.
 - [ ] Disposable fixture and evidence root prepared.
-- [ ] Pairing and known modal-dialog recovery prepared.
+- [ ] Known modal-dialog recovery prepared; the supported local single-user path requires no pairing, connection code, or fingerprint ceremony.
 - [ ] Exact SHA, clean state, artifact hashes, and installed receipts will be captured.
 
 ## Exit conditions

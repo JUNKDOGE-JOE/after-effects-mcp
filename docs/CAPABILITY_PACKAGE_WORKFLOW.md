@@ -96,7 +96,11 @@ Every finding receives one of three dispositions:
 
 Use no more than two concentrated review rounds by default. Investigation of a non-reproduced edge case is limited to 60-90 minutes. Additional review is warranted only when a blocker fix changes the public acceptance boundary.
 
-Concurrency hardening, power-loss behavior, extreme installer recovery, signing/notarization, Windows expansion, generalized frameworks, Provider routing, Tool Library work, and AEGP/JSX resolution do not become P0 without acceptance-path evidence or an explicit user priority change.
+Power-loss/cross-restart continuation and hostile-local-process hardening are rejected by the
+product trust policy and must not become capability-package work. Concurrency correctness, extreme
+installer recovery, signing/notarization, Windows expansion, generalized frameworks, Provider
+routing, Tool Library work, and AEGP/JSX resolution do not become P0 without acceptance-path
+evidence or an explicit user priority change.
 
 ## 6. Development review and release-candidate freeze
 

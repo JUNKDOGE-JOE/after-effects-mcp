@@ -1,9 +1,16 @@
-# Platform helper security contract
+# Platform helper credential and release contract
 
-The platform helper is an authenticated local capability boundary for secrets and window capture.
-The CEP host loads the bundled N-API transport addon; on macOS the addon connects to the signed XPC
-service, and on Windows it connects to the current-user named pipe helper. No helper transport opens
-a TCP/UDP listener, enumerates provider secrets, or exposes a general-purpose command mode.
+The Platform Helper exists to keep provider/API secrets out of ordinary product state and to expose
+the platform window-capture adapter. It is not a security boundary against another local account,
+same-user process, compromised AE/CEP process, or hostile client. The CEP host loads the bundled
+N-API transport addon; on macOS the addon connects to the XPC service, and on Windows it connects to
+the current-user named pipe helper.
+
+The current transports retain their existing local admission checks, but those checks are
+implementation details rather than a product security promise. Do not add peer-identity, process-
+ancestry, pairing, endpoint-attack, or multi-user hardening. No helper transport opens a TCP/UDP
+listener, enumerates provider secrets, returns secret values to ordinary product state, or exposes
+a general-purpose command mode.
 
 ## Signing boundary
 
@@ -66,11 +73,12 @@ complete entry set before cleanup, after cleanup, and after the final attribute 
 replaced with an outside hard link therefore cannot redirect the descriptor-bound removal.
 
 This Node/CLI preflight is not an atomic transaction with the filesystem or with the later
-`codesign` command. It fails closed on changes visible at its syscall boundaries, but it cannot
-prove the absence of a hostile swap-and-restore performed entirely between those syscalls, nor can
-it isolate an outside hard link created temporarily to the same already-open inode. Release signing
-therefore requires an exclusive disposable workspace; later manifest hashing, `codesign`, and
-signature verification remain independent fail-closed gates.
+`codesign` command. Release signing therefore uses an exclusive disposable workspace; later
+manifest hashing, `codesign`, and signature verification remain independent fail-closed release
+integrity gates. Its syscall boundaries cannot prove the absence of a swap-and-restore or an
+outside hard link to the same inode. This records a limitation; the project does not claim
+resistance to a hostile local process swapping files during signing and will not add runtime
+hardening for it.
 
 ## Evidence and credential handling
 
