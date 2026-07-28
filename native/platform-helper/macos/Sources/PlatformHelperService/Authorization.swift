@@ -11,6 +11,7 @@ enum NativeArchitecture: String, Equatable {
 enum MacCallerPolicy {
     static let afterEffectsBundleIdentifier = "com.adobe.AfterEffects.application"
     static let cepSigningIdentifier = "com.adobe.cep.CEPHtmlEngine"
+    static let brokerSigningIdentifier = "ae-mcp-platform-helper"
     static let adobeTeamIdentifier = "JQ525L2MZD"
     static let supportedAfterEffectsMajors = [25, 26]
     static let requiredArchitecture = NativeArchitecture.arm64
@@ -21,6 +22,9 @@ enum MacCallerPolicy {
 
     static let directConnectionRequirement =
         #"anchor apple generic and certificate leaf[subject.OU] = "JQ525L2MZD" and identifier "com.adobe.cep.CEPHtmlEngine""#
+
+    static let brokerConnectionRequirement =
+        #"identifier "ae-mcp-platform-helper""#
 }
 
 struct SignedProcessIdentity: Equatable {
@@ -31,6 +35,27 @@ struct SignedProcessIdentity: Equatable {
     let bundleVersionMajor: Int?
     let architecture: NativeArchitecture
     let signatureValid: Bool
+    let brokerSignatureValid: Bool
+
+    init(
+        processIdentifier: pid_t,
+        parentProcessIdentifier: pid_t,
+        signingIdentifier: String,
+        teamIdentifier: String,
+        bundleVersionMajor: Int?,
+        architecture: NativeArchitecture,
+        signatureValid: Bool,
+        brokerSignatureValid: Bool = false
+    ) {
+        self.processIdentifier = processIdentifier
+        self.parentProcessIdentifier = parentProcessIdentifier
+        self.signingIdentifier = signingIdentifier
+        self.teamIdentifier = teamIdentifier
+        self.bundleVersionMajor = bundleVersionMajor
+        self.architecture = architecture
+        self.signatureValid = signatureValid
+        self.brokerSignatureValid = brokerSignatureValid
+    }
 }
 
 struct CallerEvidence: Equatable {
@@ -77,19 +102,33 @@ struct MacCallerAuthorizer: CallerAuthorizing {
               evidence.effectiveUserIdentifier == connection.effectiveUserIdentifier,
               evidence.auditSessionIdentifier == connection.auditSessionIdentifier,
               evidence.generationBefore == connection.processGeneration,
-              evidence.generationAfter == connection.processGeneration,
-              trustedAdobeProcess(evidence.caller),
-              evidence.caller.signingIdentifier == MacCallerPolicy.cepSigningIdentifier
+              evidence.generationAfter == connection.processGeneration
         else {
             throw HelperFailure.unauthorized
         }
 
-        guard let aeIndex = evidence.ancestry.firstIndex(where: {
+        let adobeAncestry: ArraySlice<SignedProcessIdentity>
+        let connectionRequirement: String
+        if trustedAdobeProcess(evidence.caller),
+           evidence.caller.signingIdentifier == MacCallerPolicy.cepSigningIdentifier {
+            adobeAncestry = evidence.ancestry[...]
+            connectionRequirement = MacCallerPolicy.directConnectionRequirement
+        } else if trustedBrokerProcess(evidence.caller),
+                  let directParent = evidence.ancestry.first,
+                  trustedAdobeProcess(directParent),
+                  directParent.signingIdentifier == MacCallerPolicy.cepSigningIdentifier {
+            adobeAncestry = evidence.ancestry.dropFirst()
+            connectionRequirement = MacCallerPolicy.brokerConnectionRequirement
+        } else {
+            throw HelperFailure.unauthorized
+        }
+
+        guard let aeIndex = adobeAncestry.firstIndex(where: {
             $0.signingIdentifier == MacCallerPolicy.afterEffectsBundleIdentifier
         }) else {
             throw HelperFailure.unauthorized
         }
-        let pathToAfterEffects = evidence.ancestry[...aeIndex]
+        let pathToAfterEffects = adobeAncestry[...aeIndex]
         guard pathToAfterEffects.allSatisfy(trustedAdobeProcess),
               let major = pathToAfterEffects.last?.bundleVersionMajor,
               MacCallerPolicy.supportedAfterEffectsMajors.contains(major)
@@ -98,13 +137,20 @@ struct MacCallerAuthorizer: CallerAuthorizing {
         }
         return AuthorizedCaller(
             processIdentifier: connection.processIdentifier,
-            afterEffectsMajor: major
+            afterEffectsMajor: major,
+            connectionRequirement: connectionRequirement
         )
     }
 
     private func trustedAdobeProcess(_ process: SignedProcessIdentity) -> Bool {
         process.signatureValid
             && process.teamIdentifier == MacCallerPolicy.adobeTeamIdentifier
+            && process.architecture == MacCallerPolicy.requiredArchitecture
+    }
+
+    private func trustedBrokerProcess(_ process: SignedProcessIdentity) -> Bool {
+        process.brokerSignatureValid
+            && process.signingIdentifier == MacCallerPolicy.brokerSigningIdentifier
             && process.architecture == MacCallerPolicy.requiredArchitecture
     }
 }
@@ -231,6 +277,20 @@ struct SecurityFrameworkSignedProcessInspector: SignedProcessInspecting {
             requirement
         ) == errSecSuccess
 
+        var brokerRequirement: SecRequirement?
+        guard SecRequirementCreateWithString(
+            MacCallerPolicy.brokerConnectionRequirement as CFString,
+            SecCSFlags(rawValue: 0),
+            &brokerRequirement
+        ) == errSecSuccess, let brokerRequirement else {
+            throw HelperFailure.unauthorized
+        }
+        let brokerSignatureValid = SecCodeCheckValidity(
+            dynamicCode,
+            SecCSFlags(rawValue: 1 << 4),
+            brokerRequirement
+        ) == errSecSuccess
+
         var staticCode: SecStaticCode?
         guard SecCodeCopyStaticCode(
             dynamicCode,
@@ -246,11 +306,12 @@ struct SecurityFrameworkSignedProcessInspector: SignedProcessInspecting {
             &signingInformation
         ) == errSecSuccess,
               let information = signingInformation as? [String: Any],
-              let signingIdentifier = information[kSecCodeInfoIdentifier as String] as? String,
-              let teamIdentifier = information[kSecCodeInfoTeamIdentifier as String] as? String
+              let signingIdentifier = information[kSecCodeInfoIdentifier as String] as? String
         else {
             throw HelperFailure.unauthorized
         }
+        let teamIdentifier =
+            information[kSecCodeInfoTeamIdentifier as String] as? String ?? ""
         let plist = information[kSecCodeInfoPList as String] as? [String: Any]
         return SignedProcessIdentity(
             processIdentifier: snapshot.processIdentifier,
@@ -259,7 +320,8 @@ struct SecurityFrameworkSignedProcessInspector: SignedProcessInspecting {
             teamIdentifier: teamIdentifier,
             bundleVersionMajor: bundleVersionMajor(plist),
             architecture: snapshot.architecture,
-            signatureValid: signatureValid
+            signatureValid: signatureValid,
+            brokerSignatureValid: brokerSignatureValid
         )
     }
 

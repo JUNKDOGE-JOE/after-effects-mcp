@@ -51,39 +51,21 @@ function windowsOptions(overrides) {
     };
 }
 
-test('transport loads the in-process N-API addon for only the two supported targets', async () => {
-    for (const fixture of [
-        { platform: 'darwin', arch: 'arm64', platformId: 'macos-arm64' },
-        { platform: 'win32', arch: 'x64', platformId: 'windows-x64' },
-    ]) {
-        const loaded = [];
-        const native = fakeNativeTransport();
-        const options = {
-            runtime: { platform: fixture.platform, arch: fixture.arch },
-            verifyWindowsPayload: function () {
-                return {
-                    path: 'C:\\verified\\ae-mcp-platform-helper.exe',
-                    sha256: 'a'.repeat(64),
-                };
-            },
-            loadAddon: function (addonPath) {
-                loaded.push(addonPath);
-                return { createTransport: function () { return native; } };
-            },
-        };
-        if (fixture.platform === 'darwin') {
-            options.prepareMacosHelperRegistration = macOptions()
-                .prepareMacosHelperRegistration;
-        }
-        const transport = createPlatformHelperTransport(options);
-        assert.equal(loaded.length, 1);
-        assert.match(
-            loaded[0],
-            new RegExp(`platform[\\\\/]${fixture.platformId}[\\\\/]lib[\\\\/]ae-mcp-platform-helper-transport\\.node$`),
-        );
-        assert.equal(await transport.request('{"ok":true}'), '{"ok":true}');
-        await transport.close();
-    }
+test('only Windows loads the in-process N-API addon', async () => {
+    const loaded = [];
+    const transport = createPlatformHelperTransport(windowsOptions({
+        loadAddon: function (addonPath) {
+            loaded.push(addonPath);
+            return { createTransport: function () { return fakeNativeTransport(); } };
+        },
+    }));
+    assert.equal(loaded.length, 1);
+    assert.match(
+        loaded[0],
+        /platform[\\/]windows-x64[\\/]lib[\\/]ae-mcp-platform-helper-transport\.node$/,
+    );
+    assert.equal(await transport.request('{"ok":true}'), '{"ok":true}');
+    await transport.close();
 });
 
 test('transport rejects unsupported OS/architecture pairs before loading native code', () => {
@@ -101,14 +83,16 @@ test('transport rejects unsupported OS/architecture pairs before loading native 
     }
 });
 
-test('transport fails closed when the addon or N-API result violates the contract', async () => {
-    const runtime = { platform: 'darwin', arch: 'arm64' };
+test('Windows transport fails closed when the addon or N-API result violates the contract', async () => {
+    const runtime = { platform: 'win32', arch: 'x64' };
     assert.throws(() => createPlatformHelperTransport(macOptions({
         runtime,
+        verifyWindowsPayload: windowsOptions().verifyWindowsPayload,
         loadAddon: function () { return {}; },
     })), { code: 'PLATFORM_HELPER_REPAIR_REQUIRED' });
     const transport = createPlatformHelperTransport(macOptions({
         runtime,
+        verifyWindowsPayload: windowsOptions().verifyWindowsPayload,
         loadAddon: function () {
             return { createTransport: function () { return { request: async function () {} }; } };
         },
@@ -184,20 +168,23 @@ test('Windows transport reports a bounded startup failure without falling back',
     await transport.close();
 });
 
-test('macOS relies on XPC activation and never invokes the Windows launcher', async () => {
-    let spawns = 0;
+test('macOS uses the verified stdio broker and never loads the addon', async () => {
+    const events = [];
     const transport = createPlatformHelperTransport(macOptions({
         loadAddon: function () {
-            return { createTransport: function () { return fakeNativeTransport(); } };
+            throw new Error('macOS must not load the addon');
         },
-        spawnHelper: function () { spawns += 1; return fakeChild(); },
+        createMacosBrokerTransport: function ({ helperPath }) {
+            events.push(`broker:${helperPath}`);
+            return fakeNativeTransport();
+        },
     }));
-    assert.equal(await transport.request('xpc'), 'xpc');
-    assert.equal(spawns, 0);
+    assert.equal(await transport.request('stdio'), 'stdio');
+    assert.deepEqual(events, ['broker:/verified/ae-mcp-platform-helper']);
     await transport.close();
 });
 
-test('macOS registration completes before the addon opens XPC or sends a request', async () => {
+test('macOS registration completes before the stdio broker starts or sends a request', async () => {
     const events = [];
     let releaseRegistration;
     const registrationGate = new Promise(function (resolve) {
@@ -216,17 +203,16 @@ test('macOS registration completes before the addon opens XPC or sends a request
             };
         },
         loadAddon: function () {
+            throw new Error('macOS must not load the addon');
+        },
+        createMacosBrokerTransport: function () {
+            events.push('broker:createTransport');
             return {
-                createTransport: function () {
-                    events.push('addon:createTransport');
-                    return {
-                        request: async function (jsonUtf8) {
-                            events.push('native:request');
-                            return jsonUtf8;
-                        },
-                        close: async function () {},
-                    };
+                request: async function (jsonUtf8) {
+                    events.push('broker:request');
+                    return jsonUtf8;
                 },
+                close: async function () {},
             };
         },
     });
@@ -242,8 +228,8 @@ test('macOS registration completes before the addon opens XPC or sends a request
     assert.deepEqual(events, [
         'register:start',
         'register:done',
-        'addon:createTransport',
-        'native:request',
+        'broker:createTransport',
+        'broker:request',
     ]);
     await transport.close();
 });
@@ -261,13 +247,9 @@ test('concurrent macOS requests share one registration and one native transport'
                 },
             };
         },
-        loadAddon: function () {
-            return {
-                createTransport: function () {
-                    nativeTransports += 1;
-                    return fakeNativeTransport();
-                },
-            };
+        createMacosBrokerTransport: function () {
+            nativeTransports += 1;
+            return fakeNativeTransport();
         },
     }));
 
@@ -295,13 +277,9 @@ test('macOS registration lifecycle errors remain bounded and block native XPC', 
                     },
                 };
             },
-            loadAddon: function () {
-                return {
-                    createTransport: function () {
-                        nativeTransports += 1;
-                        return fakeNativeTransport();
-                    },
-                };
+            createMacosBrokerTransport: function () {
+                nativeTransports += 1;
+                return fakeNativeTransport();
             },
         }));
         await assert.rejects(transport.request('{}'), fixture);
@@ -377,7 +355,7 @@ test('Windows payload is hashed before native code is loaded or Helper is starte
     assert.equal(loads, 1);
 });
 
-test('process launch is isolated to the verified Windows JS boundary', () => {
+test('process launch is isolated to the verified platform Helper JS boundaries', () => {
     const hostSource = fs.readFileSync(path.join(__dirname, 'platform-helper-transport.js'), 'utf8');
     assert.match(hostSource, /require\('child_process'\)\.spawn/);
     assert.match(hostSource, /windowsHide:\s*true/);
@@ -395,6 +373,7 @@ test('process launch is isolated to the verified Windows JS boundary', () => {
     const processBoundaryFiles = new Set([
         'platform-helper-transport.js',
         'platform-helper-registration.js',
+        'platform-helper-stdio-transport.js',
     ]);
     for (const name of productionHostFiles) {
         const source = fs.readFileSync(path.join(__dirname, name), 'utf8');
@@ -411,6 +390,17 @@ test('process launch is isolated to the verified Windows JS boundary', () => {
     assert.doesNotMatch(
         registrationSource,
         /shell:\s*true|\bexec\s*\(|\bspawn\s*\(|\bbootout\b|\bkill\b|stdio:\s*'inherit'/i,
+    );
+    const stdioSource = fs.readFileSync(
+        path.join(__dirname, 'platform-helper-stdio-transport.js'),
+        'utf8',
+    );
+    assert.match(stdioSource, /\['--client-stdio'\]/);
+    assert.match(stdioSource, /shell:\s*false/);
+    assert.match(stdioSource, /stdio:\s*\['pipe',\s*'pipe',\s*'pipe'\]/);
+    assert.doesNotMatch(
+        stdioSource,
+        /shell:\s*true|\bexec\s*\(|\bexecFile\s*\(|\bkill\s*\(|stdio:\s*'inherit'/i,
     );
 
     const addonRoot = path.resolve(__dirname, '../../native/platform-helper/client-addon');

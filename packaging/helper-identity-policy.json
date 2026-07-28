@@ -28,8 +28,10 @@
         26
       ],
       "directSigningIdentifiers": [
-        "com.adobe.cep.CEPHtmlEngine"
-      ]
+        "com.adobe.cep.CEPHtmlEngine",
+        "ae-mcp-platform-helper"
+      ],
+      "brokerDirectParentSigningIdentifier": "com.adobe.cep.CEPHtmlEngine"
     }
   },
   "windows": {

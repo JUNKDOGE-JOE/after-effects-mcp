@@ -115,7 +115,7 @@ final class PlatformHelperListenerDelegate: NSObject, NSXPCListenerDelegate {
 
             // This public macOS 13+ API gives the authorized branch an OS-enforced
             // direct-peer requirement in addition to the generation/ancestry checks.
-            connection.setCodeSigningRequirement(MacCallerPolicy.directConnectionRequirement)
+            connection.setCodeSigningRequirement(caller.connectionRequirement)
             exportedObject = AuthorizedPlatformHelperExport(
                 identity: identity,
                 caller: caller,

@@ -6,6 +6,9 @@ const path = require('path');
 const {
     prepareMacosHelperRegistration,
 } = require('./platform-helper-registration');
+const {
+    createPlatformHelperStdioTransport,
+} = require('./platform-helper-stdio-transport');
 
 const WINDOWS_PAYLOAD_FILES = Object.freeze([
     'bin/ae-mcp-platform-helper.exe',
@@ -199,14 +202,16 @@ function createPlatformHelperTransport(options) {
         }
     }
 
-    let addon;
-    try {
-        addon = loadAddon(addonPath);
-    } catch (cause) {
-        throw repairRequired('failed to load the platform helper transport addon', cause);
-    }
-    if (!addon || typeof addon.createTransport !== 'function') {
-        throw repairRequired('platform helper addon does not export createTransport');
+    let addon = null;
+    if (platformId === 'windows-x64') {
+        try {
+            addon = loadAddon(addonPath);
+        } catch (cause) {
+            throw repairRequired('failed to load the platform helper transport addon', cause);
+        }
+        if (!addon || typeof addon.createTransport !== 'function') {
+            throw repairRequired('platform helper addon does not export createTransport');
+        }
     }
 
     let nativeTransport = null;
@@ -215,12 +220,10 @@ function createPlatformHelperTransport(options) {
     let closed = false;
 
     function openNativeTransport() {
-        const opened = platformId === 'windows-x64'
-            ? addon.createTransport({
-                expectedServerPath: helperIdentity.path,
-                expectedServerSha256: helperIdentity.sha256,
-            })
-            : addon.createTransport();
+        const opened = addon.createTransport({
+            expectedServerPath: helperIdentity.path,
+            expectedServerSha256: helperIdentity.sha256,
+        });
         if (!validNativeTransport(opened)) {
             try {
                 if (opened && typeof opened.close === 'function') opened.close();
@@ -288,7 +291,18 @@ function createPlatformHelperTransport(options) {
         } else {
             try {
                 await macosRegistration.ensureRegistered();
-                opened = openNativeTransport();
+                const createBrokerTransport = input.createMacosBrokerTransport
+                    || createPlatformHelperStdioTransport;
+                opened = createBrokerTransport({
+                    helperPath: macosRegistration.helperPath,
+                    spawnImpl: input.spawnMacosBroker,
+                });
+                if (!validNativeTransport(opened)) {
+                    try {
+                        if (opened && typeof opened.close === 'function') opened.close();
+                    } catch (_) {}
+                    throw repairRequired('platform helper broker returned an invalid transport');
+                }
             } catch (cause) {
                 if (cause
                     && (cause.code === 'PLATFORM_HELPER_REPAIR_REQUIRED'

@@ -2,21 +2,71 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Register the verified bundled macOS Platform Helper before the panel opens its XPC connection, so Provider credentials work in real After Effects without any plaintext fallback.
+**Goal:** Register the verified bundled macOS Platform Helper and reach it from hardened Adobe CEP through a bounded same-binary stdio broker, so Provider credentials work in real After Effects without any plaintext fallback.
 
-**Architecture:** Add one focused CommonJS registration module beside the existing host transport. It validates the fixed seven-file macOS payload, materializes a private per-user launchd plist, reuses only an already-loaded service whose program path matches the verified Helper, and bootstraps the service when absent. The existing transport invokes that module before loading the native XPC connection; all Provider, protocol, caller-authorization, and Windows behavior remains unchanged.
+**Architecture:** The CommonJS registration module validates the fixed seven-file macOS payload, materializes a private per-user launchd plist, reuses only an already-loaded service whose program path matches the verified Helper, and bootstraps the service when absent. Real AE proved that Adobe's hardened CEP process cannot load a non-Adobe-Team N-API addon. The macOS host therefore spawns the exact verified Helper executable in a bounded `--client-stdio` mode; that child owns the existing XPC connection. Service authorization accepts the broker only with its fixed native identity, direct trusted CEP parent, stable Adobe ancestry, current UID/audit session, and supported AE version. Windows keeps the addon path.
 
-**Tech Stack:** Node.js CommonJS host modules, `node:test`, macOS `launchctl`, native N-API/XPC transport, existing CEP development sync and non-candidate HDEV tooling.
+**Tech Stack:** Node.js CommonJS host modules, `node:test`, macOS `launchctl`, Swift stdio/XPC broker, Security.framework caller inspection, existing CEP development sync and non-candidate HDEV tooling.
 
 ## Global Constraints
 
-- Do not change Provider routing, accepted credentials, plaintext fallback policy, Helper methods, protocol schemas, caller authorization, or release signing requirements.
+- Do not change Provider routing, accepted credentials, plaintext fallback policy, Helper methods, protocol schemas, or release signing requirements.
+- Caller authorization may add only the broker route described above; direct Adobe CEP authorization and every existing rejected-peer boundary remain covered.
 - Do not read, print, log, or persist plaintext Provider credentials outside the existing Helper request boundary.
 - Do not use a shell for registration; invoke only the fixed `/bin/launchctl` executable with an argv array.
 - Do not boot out, kill, or restart an already-loaded matching Helper during routine panel startup.
-- Windows keeps its existing verified-helper spawn path.
+- Windows keeps its existing verified-helper addon/spawn path.
 - Reuse installed dependencies; do not run `npm ci`, `uv sync`, portable-runtime generation, ZXP packaging, T5, or T6.
 - Real-machine verification is non-candidate HDEV and must run through the installed panel inside real After Effects.
+
+## Real-host correction checkpoint
+
+Tasks 1-3 below were completed and committed as `50378cb` and `c9614ad`.
+Focused tests, mutation proof, host/panel/package/governance checks, CEP-only
+sync, and an AE restart all passed their applicable boundaries. Real CEP then
+reported:
+
+```text
+ERR_DLOPEN_FAILED: mapping process and mapped file have different Team IDs
+```
+
+The installed CEP executable is Adobe Team `JQ525L2MZD`, hardened, and has no
+disable-library-validation entitlement. The development addon is ad-hoc signed;
+a release addon would use the product Team ID, which is still not Adobe's.
+Accordingly, the original “load addon inside CEP after registration” step is
+not a viable macOS product path. The following tasks supersede only that
+transport placement while retaining the completed registration work.
+
+### Task 4: Specify the out-of-process macOS transport
+
+- [ ] Add failing host tests proving macOS never loads the N-API addon, waits
+  for registration, and spawns only the verified Helper path with the literal
+  `--client-stdio` argument and private pipes.
+- [ ] Add failing lifecycle tests for bounded stdout frames, EOF, spawn failure,
+  unexpected exit, and concurrent requests.
+- [ ] Add failing Swift tests for broker identity + direct CEP + AE ancestry,
+  including independent mutations of every retained authorization boundary.
+
+### Task 5: Implement the same-binary stdio broker
+
+- [ ] Add Swift `--client-stdio` mode that reads one bounded JSON frame per line,
+  forwards it through the existing XPC protocol, writes one bounded response per
+  line, and exits on EOF.
+- [ ] Add the broker authorization branch while preserving the direct CEP branch
+  and rejection-only backend behavior.
+- [ ] Change only macOS host transport to spawn the broker; retain the Windows
+  N-API addon behavior unchanged.
+- [ ] Prove the new guards by mutation, then run focused Node, Swift, protocol,
+  static-boundary, panel, package, and governance checks.
+
+### Task 6: Real-AE development verification
+
+- [ ] Rebuild only the changed Helper/CEP components and perform development
+  sync without dependency bootstrap or release packaging.
+- [ ] Restart formal AE, obtain Helper capabilities from the Adobe CEP process,
+  and verify the service caller evidence is authorized.
+- [ ] Run only the pending non-candidate Claude Provider multimodal HDEV; do not
+  run packaged T5/T6.
 
 ---
 
