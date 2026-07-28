@@ -39249,16 +39249,30 @@ data: ${JSON.stringify(payload)}
     let routeClosePromise = Promise.resolve();
     let runtimeGeneration = 0;
     let providerSensitiveValues = [];
+    let activeAttachmentPaths = [];
     let providerDeltaPhase = void 0;
     let providerDeltaRedactor = createDeltaRedactor([], () => {
     });
+    let activeTurn = null;
+    let activeTurnAccepted = false;
+    let activeTurnDispatched = false;
     function emit(evt) {
-      if (onEvent) onEvent(redactValue(evt, providerSensitiveValues));
+      let event = evt;
+      if ((event == null ? void 0 : event.type) === "error" && (activeTurn == null ? void 0 : activeTurn.turnId) && !event.turnId) {
+        event = {
+          ...event,
+          turnId: activeTurn.turnId,
+          ...!activeTurnAccepted ? {
+            dispatchState: activeTurnDispatched ? "uncertain" : "not-started"
+          } : {}
+        };
+      }
+      if (onEvent) onEvent(redactValue(event, [...providerSensitiveValues, ...activeAttachmentPaths]));
     }
     function resetProviderDeltaRedactor() {
       providerDeltaRedactor.discard();
       providerDeltaPhase = void 0;
-      providerDeltaRedactor = createDeltaRedactor(providerSensitiveValues, (text) => {
+      providerDeltaRedactor = createDeltaRedactor([...providerSensitiveValues, ...activeAttachmentPaths], (text) => {
         activeAssistantText += text;
         emit({ type: "text-delta", text, ...providerDeltaPhase ? { phase: providerDeltaPhase } : {} });
       });
@@ -39267,11 +39281,18 @@ data: ${JSON.stringify(payload)}
       providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
       resetProviderDeltaRedactor();
     }
+    function setActiveAttachmentPaths(values) {
+      activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
+      if (stderrTail) {
+        stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+      }
+      resetProviderDeltaRedactor();
+    }
     function clearProviderSensitiveValues() {
       providerDeltaRedactor.discard();
       providerSensitiveValues = [];
       providerDeltaPhase = void 0;
-      providerDeltaRedactor = createDeltaRedactor([], () => {
+      providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {
       });
     }
     function writeMessage(message) {
@@ -39279,16 +39300,15 @@ data: ${JSON.stringify(payload)}
       proc.stdin.write(JSON.stringify(message) + "\n");
     }
     function finishActive() {
-      if (!activeResolve) {
-        activeRun = null;
-        activeAssistantText = "";
-        return;
-      }
       const resolve = activeResolve;
       activeResolve = null;
       activeRun = null;
       activeAssistantText = "";
-      resolve();
+      activeTurn = null;
+      activeTurnAccepted = false;
+      activeTurnDispatched = false;
+      setActiveAttachmentPaths([]);
+      if (resolve) resolve();
     }
     function handleSidecarMessage(message) {
       if (!message || message.t === "ready") return;
@@ -39306,6 +39326,9 @@ data: ${JSON.stringify(payload)}
         return;
       }
       providerDeltaRedactor.flush();
+      if (event.type === "turn-accepted" && activeTurn && event.turnId === activeTurn.turnId) {
+        activeTurnAccepted = true;
+      }
       emit(event);
       if (event.type === "turn-end") {
         transcript.push({ role: "assistant", text: activeAssistantText });
@@ -39646,7 +39669,8 @@ data: ${JSON.stringify(payload)}
         if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on("data", reader);
         if (spawnedProc.stderr && spawnedProc.stderr.on) spawnedProc.stderr.on("data", (chunk) => {
           if (startGeneration !== runtimeGeneration || proc !== spawnedProc) return;
-          stderrTail = appendTail3(stderrTail, processChannel === "api" ? "[provider-sidecar-stderr-redacted]\n" : chunk);
+          const detail = processChannel === "api" ? "[provider-sidecar-stderr-redacted]\n" : redactValue(String(chunk), [...providerSensitiveValues, ...activeAttachmentPaths]);
+          stderrTail = appendTail3(stderrTail, detail);
         });
         spawnedProc.on("exit", (code, signal) => handleExit(spawnedProc, startGeneration, code, signal));
         spawnedProc.on("error", (error) => {
@@ -39716,9 +39740,28 @@ data: ${JSON.stringify(payload)}
         return false;
       }
     }
-    async function sendUser(text) {
+    async function sendUser(input) {
       if (activeRun) return activeRun;
+      const structuredInput = input !== null && typeof input === "object" && !Array.isArray(input);
+      let turn;
+      try {
+        turn = normalizeTurnInput(input);
+      } catch (error) {
+        const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
+        emit({
+          type: "error",
+          kind: "attachment",
+          code: "TURN_INPUT_INVALID",
+          message: error.message,
+          ...turnId ? { turnId, dispatchState: "not-started" } : {}
+        });
+        return;
+      }
       activeAssistantText = "";
+      activeTurn = turn;
+      activeTurnAccepted = false;
+      activeTurnDispatched = false;
+      setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
       resetProviderDeltaRedactor();
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
@@ -39729,11 +39772,14 @@ data: ${JSON.stringify(payload)}
         if (activeRun === run) finishActive();
         return run;
       }
-      const userText = String(text || "");
+      const userText = turn.text;
       transcript.push({ role: "user", text: userText });
+      activeTurnDispatched = true;
       writeMessage({
         t: "user",
+        ...turn.turnId ? { turnId: turn.turnId } : {},
         text: userText,
+        ...structuredInput ? { attachments: turn.attachments } : {},
         permissionMode: getPermissionMode(),
         model: processModel,
         effort: getEffort ? getEffort() : void 0,

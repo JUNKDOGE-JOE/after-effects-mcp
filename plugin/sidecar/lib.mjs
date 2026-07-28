@@ -5,6 +5,9 @@ import {
   isCoreAuthorizedDynamicCall,
   planSessionKey
 } from '../shared/tool-approval.mjs'
+import { realpathSync as defaultRealpathSync, statSync as defaultStatSync } from 'node:fs'
+import { isAbsolute as defaultIsAbsolute } from 'node:path'
+import { normalizeTurnInput, withAttachmentManifest } from '../shared/chat-attachments.mjs'
 
 const DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 
@@ -24,6 +27,7 @@ const PROVIDER_ENV_KEYS = [
   'ANTHROPIC_BASE_URL',
   'ANTHROPIC_AUTH_TOKEN'
 ]
+const ATTACHMENT_READ_RULE = 'Read may be used only for exact paths listed in the current <ae_mcp_attachments> manifest.'
 
 const SYSTEM_PROMPTS = {
   zh: `你是 After Effects 面板内的助手。只使用 ae_ 前缀工具操作 After Effects。回答简短，优先直接完成用户请求。
@@ -95,7 +99,16 @@ export function parseArgv(argv) {
   return options
 }
 
-export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date.now }) {
+export function createSidecar({
+  queryFn,
+  writeLine,
+  argvOptions,
+  env,
+  now = Date.now,
+  isAbsolute = defaultIsAbsolute,
+  realpathSync = defaultRealpathSync,
+  statSync = defaultStatSync
+}) {
   if (typeof queryFn !== 'function') {
     throw new Error('queryFn is required')
   }
@@ -154,8 +167,27 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
   }
 
   function startTurn(message) {
+    let input
+    try {
+      input = canonicalAttachmentTurn(message)
+    } catch {
+      emitEvent({
+        type: 'error',
+        kind: 'attachment',
+        code: 'ATTACHMENT_PATH_INVALID',
+        message: 'Selected attachment path is unavailable: [attachment-path]',
+        turnId: typeof message.turnId === 'string' ? message.turnId : '',
+        dispatchState: 'not-started'
+      })
+      return
+    }
     const controller = new AbortController()
     const turn = {
+      turnId: input.turnId,
+      text: input.text,
+      attachments: input.attachments,
+      selectedRealPaths: new Set(input.attachments.map((attachment) => attachment.localPath)),
+      model: typeof message.model === 'string' && message.model ? message.model : options.model,
       permissionMode: normalizePermissionMode(message.permissionMode),
       effort: typeof message.effort === 'string' && message.effort ? message.effort : 'high',
       thinking: message.thinking === 'adaptive' ? { type: 'adaptive' } : null,
@@ -171,7 +203,7 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
 
     emitEvent({ type: 'turn-start' })
 
-    runTurn(message, turn).finally(() => {
+    runTurn(turn).finally(() => {
       drainApprovals('Turn ended.')
       if (activeTurn === turn) {
         activeTurn = null
@@ -179,14 +211,46 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
     })
   }
 
-  async function runTurn(message, turn) {
+  function canonicalAttachmentTurn(message) {
+    const normalized = normalizeTurnInput({
+      turnId: typeof message.turnId === 'string' ? message.turnId : '',
+      text: typeof message.text === 'string' ? message.text : '',
+      attachments: Array.isArray(message.attachments) ? message.attachments : []
+    })
+    const attachments = normalized.attachments.map((attachment) => {
+      if (!isAbsolute(attachment.localPath)) throw new Error('attachment path must be absolute')
+      const realPath = String(realpathSync(attachment.localPath))
+      if (!isAbsolute(realPath) || !statSync(realPath).isFile()) {
+        throw new Error('attachment path must resolve to a file')
+      }
+      return Object.freeze({ ...attachment, localPath: realPath })
+    })
+    return Object.freeze({
+      turnId: normalized.turnId,
+      text: normalized.text,
+      attachments: Object.freeze(attachments)
+    })
+  }
+
+  function redactAttachmentPaths(value, turn) {
+    let output = String(value || '')
+    for (const path of turn.selectedRealPaths) {
+      output = output.split(path).join('[attachment-path]')
+    }
+    return output
+  }
+
+  async function runTurn(turn) {
     let sawResult = false
     try {
-      const model = typeof message.model === 'string' && message.model ? message.model : options.model
+      const model = typeof turn.model === 'string' && turn.model ? turn.model : options.model
       const queryOptions = buildTurnOptions({ model, turn })
+      if (turn.turnId) {
+        emitEvent({ type: 'turn-accepted', turnId: turn.turnId, transport: 'claude-agent-sdk' })
+      }
 
       for await (const sdkMessage of queryFn({
-        prompt: String(message.text || ''),
+        prompt: withAttachmentManifest(turn.text, turn.attachments),
         options: queryOptions
       })) {
         if (sdkMessage && sdkMessage.type === 'result') sawResult = true
@@ -205,19 +269,24 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
         emitAbortedOnce(turn)
         return
       }
-      emitTerminalEvent(turn, { type: 'error', kind: classifyError(error), message: truncateDetail(error) })
+      emitTerminalEvent(turn, {
+        type: 'error',
+        kind: classifyError(error),
+        message: redactAttachmentPaths(truncateDetail(error), turn)
+      })
     }
   }
 
   function buildTurnOptions({ model, turn }) {
     const tiered = tierTools(turn.permissionMode)
+    const attachmentTools = turn.attachments.length ? ['Read'] : []
     const queryOptions = {
       model,
       mcpServers: buildMcpServers(),
-      allowedTools: tiered.allowedTools,
+      allowedTools: uniqueToolList([...tiered.allowedTools, ...attachmentTools]),
       disallowedTools: DISALLOWED_TOOLS,
       settingSources: [],
-      agents: buildAgents(),
+      agents: buildAgents(turn),
       agent: 'ae',
       canUseTool: async (toolName, input) => canUseTool(toolName, input, turn),
       onElicitation: async (request, context = {}) => handleElicitation(request, turn, context.signal),
@@ -275,14 +344,19 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
     }
   }
 
-  function buildAgents() {
+  function buildAgents(turn) {
+    const attachmentTools = turn.attachments.length ? ['Read'] : []
+    const prompt = turn.attachments.length
+      ? SYSTEM_PROMPTS[options.lang] + '\n\n' + ATTACHMENT_READ_RULE
+      : SYSTEM_PROMPTS[options.lang]
     return {
       ae: {
         description: 'After Effects panel assistant',
-        prompt: SYSTEM_PROMPTS[options.lang],
+        prompt,
         tools: uniqueToolList([
           ...Object.keys(options.annotations),
-          ...options.allowedTools
+          ...options.allowedTools,
+          ...attachmentTools
         ])
       }
     }
@@ -350,7 +424,7 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
         emitTerminalEvent(turn, {
           type: 'error',
           kind: classifyError(message.result || message),
-          message: truncateDetail(message.result || message)
+          message: redactAttachmentPaths(truncateDetail(message.result || message), turn)
         })
       } else {
         emitTerminalEvent(turn, {
@@ -363,6 +437,25 @@ export function createSidecar({ queryFn, writeLine, argvOptions, env, now = Date
 
   async function canUseTool(toolName, input, turn) {
     const name = String(toolName || '')
+    if (name === 'Read') {
+      const filePath = input && input.file_path
+      if (!turn.attachments.length || typeof filePath !== 'string' || !isAbsolute(filePath)) {
+        return { behavior: 'deny', message: 'Read is limited to selected attachment files.' }
+      }
+      try {
+        const realPath = String(realpathSync(filePath))
+        if (
+          realPath !== filePath
+          || !statSync(realPath).isFile()
+          || !turn.selectedRealPaths.has(realPath)
+        ) {
+          return { behavior: 'deny', message: 'Read is limited to selected attachment files.' }
+        }
+        return { behavior: 'allow', updatedInput: input }
+      } catch {
+        return { behavior: 'deny', message: 'Read is limited to selected attachment files.' }
+      }
+    }
     if (!name.startsWith('mcp__ae__')) {
       return {
         behavior: 'deny',

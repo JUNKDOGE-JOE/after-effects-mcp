@@ -89,6 +89,173 @@ test('maps user turn, text, tool_use, tool_result, and result events', async () 
   ])
 })
 
+test('attachment turns expose only exact canonical selected files through Read', async () => {
+  const writes = []
+  let queryInput
+  let releaseQuery
+  const queryGate = new Promise((resolve) => { releaseQuery = resolve })
+  const selectedRealPath = '/private/selected/notes.pdf'
+  const realpaths = new Map([
+    ['/tmp/selected-link.pdf', selectedRealPath],
+    [selectedRealPath, selectedRealPath],
+    ['/tmp/other.pdf', '/tmp/other.pdf'],
+    ['/tmp/dir', '/tmp/dir'],
+    ['/tmp/selected/../selected-link.pdf', selectedRealPath],
+    ['/tmp/outside-link.pdf', '/private/outside.pdf']
+  ])
+  const sidecar = createSidecar({
+    queryFn: async function * (input) {
+      queryInput = input
+      await queryGate
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {},
+    isAbsolute: (value) => String(value).startsWith('/'),
+    realpathSync: (value) => {
+      if (!realpaths.has(value)) throw new Error('missing')
+      return realpaths.get(value)
+    },
+    statSync: (value) => ({ isFile: () => value !== '/tmp/dir' })
+  })
+
+  sidecar.handleLine(JSON.stringify({
+    t: 'user',
+    turnId: 'turn-1',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'notes.pdf',
+      localPath: '/tmp/selected-link.pdf',
+      size: 12,
+      mediaType: 'application/pdf',
+      temporary: false
+    }],
+    permissionMode: 'none'
+  }))
+  await waitFor(() => queryInput !== undefined)
+
+  assert.match(queryInput.prompt, /^inspect\n\n<ae_mcp_attachments version="1">\n/)
+  assert.match(queryInput.prompt, /"path":"\/private\/selected\/notes\.pdf"/)
+  assert.equal(queryInput.options.allowedTools.includes('Read'), true)
+  assert.equal(queryInput.options.agents.ae.tools.includes('Read'), true)
+  assert.match(queryInput.options.agents.ae.prompt, /exact paths listed in the current <ae_mcp_attachments>/)
+  assert.deepEqual(events(writes)[0], {
+    type: 'turn-start'
+  })
+  assert.deepEqual(events(writes)[1], {
+    type: 'turn-accepted',
+    turnId: 'turn-1',
+    transport: 'claude-agent-sdk'
+  })
+  assert.equal(JSON.stringify(events(writes)).includes('/private/selected'), false)
+
+  assert.deepEqual(
+    await queryInput.options.canUseTool('Read', { file_path: selectedRealPath }),
+    { behavior: 'allow', updatedInput: { file_path: selectedRealPath } }
+  )
+  for (const [tool, input] of [
+    ['Read', { file_path: '/tmp/other.pdf' }],
+    ['Read', { file_path: '/tmp/dir' }],
+    ['Read', { file_path: '/tmp/selected/../selected-link.pdf' }],
+    ['Read', { file_path: '/tmp/outside-link.pdf' }],
+    ['Read', {}],
+    ['Write', { file_path: selectedRealPath }],
+    ['Edit', { file_path: selectedRealPath }],
+    ['Bash', { command: 'cat ' + selectedRealPath }],
+    ['Glob', { pattern: '**/*' }]
+  ]) {
+    assert.equal((await queryInput.options.canUseTool(tool, input)).behavior, 'deny')
+  }
+
+  releaseQuery()
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+})
+
+test('invalid selected attachment paths fail before query without leaking the path', async () => {
+  const writes = []
+  let queryCalls = 0
+  const sidecar = createSidecar({
+    queryFn: async function * () {
+      queryCalls += 1
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {},
+    isAbsolute: (value) => String(value).startsWith('/'),
+    realpathSync: (value) => value,
+    statSync: () => ({ isFile: () => false })
+  })
+
+  sidecar.handleLine(JSON.stringify({
+    t: 'user',
+    turnId: 'turn-invalid',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'folder',
+      localPath: '/private/not-a-file',
+      size: 0,
+      mediaType: '',
+      temporary: false
+    }],
+    permissionMode: 'none'
+  }))
+  await waitFor(() => eventCount(writes, 'error') === 1)
+
+  assert.equal(queryCalls, 0)
+  assert.deepEqual(events(writes).at(-1), {
+    type: 'error',
+    kind: 'attachment',
+    code: 'ATTACHMENT_PATH_INVALID',
+    message: 'Selected attachment path is unavailable: [attachment-path]',
+    turnId: 'turn-invalid',
+    dispatchState: 'not-started'
+  })
+  assert.equal(JSON.stringify(events(writes)).includes('/private/not-a-file'), false)
+})
+
+test('attachment query failures redact the selected real path', async () => {
+  const writes = []
+  const selectedPath = '/private/selected/notes.pdf'
+  const sidecar = createSidecar({
+    queryFn: async function * () {
+      throw new Error('cannot read ' + selectedPath)
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {},
+    isAbsolute: (value) => String(value).startsWith('/'),
+    realpathSync: (value) => value,
+    statSync: () => ({ isFile: () => true })
+  })
+
+  sidecar.handleLine(JSON.stringify({
+    t: 'user',
+    turnId: 'turn-query-failed',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'notes.pdf',
+      localPath: selectedPath,
+      size: 12,
+      mediaType: 'application/pdf',
+      temporary: false
+    }],
+    permissionMode: 'none'
+  }))
+  await waitFor(() => eventCount(writes, 'error') === 1)
+
+  assert.equal(JSON.stringify(events(writes)).includes(selectedPath), false)
+  assert.deepEqual(events(writes).at(-1), {
+    type: 'error',
+    kind: 'network',
+    message: 'cannot read [attachment-path]'
+  })
+})
+
 test('clean SDK EOF without a result emits one structured terminal error', async () => {
   const writes = []
   const sidecar = createSidecar({
