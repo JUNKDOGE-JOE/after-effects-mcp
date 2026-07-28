@@ -21,6 +21,23 @@ function fakeChild() {
     return child;
 }
 
+function nextTurn() {
+    return new Promise(function (resolve) { setImmediate(resolve); });
+}
+
+function macOptions(overrides) {
+    return {
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        prepareMacosHelperRegistration: function () {
+            return {
+                helperPath: '/verified/ae-mcp-platform-helper',
+                ensureRegistered: async function () {},
+            };
+        },
+        ...overrides,
+    };
+}
+
 function windowsOptions(overrides) {
     return {
         runtime: { platform: 'win32', arch: 'x64' },
@@ -41,7 +58,7 @@ test('transport loads the in-process N-API addon for only the two supported targ
     ]) {
         const loaded = [];
         const native = fakeNativeTransport();
-        const transport = createPlatformHelperTransport({
+        const options = {
             runtime: { platform: fixture.platform, arch: fixture.arch },
             verifyWindowsPayload: function () {
                 return {
@@ -53,7 +70,12 @@ test('transport loads the in-process N-API addon for only the two supported targ
                 loaded.push(addonPath);
                 return { createTransport: function () { return native; } };
             },
-        });
+        };
+        if (fixture.platform === 'darwin') {
+            options.prepareMacosHelperRegistration = macOptions()
+                .prepareMacosHelperRegistration;
+        }
+        const transport = createPlatformHelperTransport(options);
         assert.equal(loaded.length, 1);
         assert.match(
             loaded[0],
@@ -81,16 +103,16 @@ test('transport rejects unsupported OS/architecture pairs before loading native 
 
 test('transport fails closed when the addon or N-API result violates the contract', async () => {
     const runtime = { platform: 'darwin', arch: 'arm64' };
-    assert.throws(() => createPlatformHelperTransport({
+    assert.throws(() => createPlatformHelperTransport(macOptions({
         runtime,
         loadAddon: function () { return {}; },
-    }), { code: 'PLATFORM_HELPER_REPAIR_REQUIRED' });
-    const transport = createPlatformHelperTransport({
+    })), { code: 'PLATFORM_HELPER_REPAIR_REQUIRED' });
+    const transport = createPlatformHelperTransport(macOptions({
         runtime,
         loadAddon: function () {
             return { createTransport: function () { return { request: async function () {} }; } };
         },
-    });
+    }));
     await assert.rejects(transport.request('{}'), { code: 'PLATFORM_HELPER_REPAIR_REQUIRED' });
     await transport.close();
 });
@@ -164,15 +186,143 @@ test('Windows transport reports a bounded startup failure without falling back',
 
 test('macOS relies on XPC activation and never invokes the Windows launcher', async () => {
     let spawns = 0;
-    const transport = createPlatformHelperTransport({
-        runtime: { platform: 'darwin', arch: 'arm64' },
+    const transport = createPlatformHelperTransport(macOptions({
         loadAddon: function () {
             return { createTransport: function () { return fakeNativeTransport(); } };
         },
         spawnHelper: function () { spawns += 1; return fakeChild(); },
-    });
+    }));
     assert.equal(await transport.request('xpc'), 'xpc');
     assert.equal(spawns, 0);
+    await transport.close();
+});
+
+test('macOS registration completes before the addon opens XPC or sends a request', async () => {
+    const events = [];
+    let releaseRegistration;
+    const registrationGate = new Promise(function (resolve) {
+        releaseRegistration = resolve;
+    });
+    const transport = createPlatformHelperTransport({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        prepareMacosHelperRegistration: function () {
+            return {
+                helperPath: '/verified/ae-mcp-platform-helper',
+                ensureRegistered: async function () {
+                    events.push('register:start');
+                    await registrationGate;
+                    events.push('register:done');
+                },
+            };
+        },
+        loadAddon: function () {
+            return {
+                createTransport: function () {
+                    events.push('addon:createTransport');
+                    return {
+                        request: async function (jsonUtf8) {
+                            events.push('native:request');
+                            return jsonUtf8;
+                        },
+                        close: async function () {},
+                    };
+                },
+            };
+        },
+    });
+
+    const request = transport.request('xpc');
+    try {
+        await nextTurn();
+        assert.deepEqual(events, ['register:start']);
+    } finally {
+        releaseRegistration();
+    }
+    assert.equal(await request, 'xpc');
+    assert.deepEqual(events, [
+        'register:start',
+        'register:done',
+        'addon:createTransport',
+        'native:request',
+    ]);
+    await transport.close();
+});
+
+test('concurrent macOS requests share one registration and one native transport', async () => {
+    let registrations = 0;
+    let nativeTransports = 0;
+    const transport = createPlatformHelperTransport(macOptions({
+        prepareMacosHelperRegistration: function () {
+            return {
+                helperPath: '/verified/ae-mcp-platform-helper',
+                ensureRegistered: async function () {
+                    registrations += 1;
+                    await nextTurn();
+                },
+            };
+        },
+        loadAddon: function () {
+            return {
+                createTransport: function () {
+                    nativeTransports += 1;
+                    return fakeNativeTransport();
+                },
+            };
+        },
+    }));
+
+    assert.deepEqual(await Promise.all([
+        transport.request('one'),
+        transport.request('two'),
+    ]), ['one', 'two']);
+    assert.equal(registrations, 1);
+    assert.equal(nativeTransports, 1);
+    await transport.close();
+});
+
+test('macOS registration lifecycle errors remain bounded and block native XPC', async () => {
+    for (const fixture of [
+        { code: 'HELPER_START_FAILED', retryable: true },
+        { code: 'PLATFORM_HELPER_REPAIR_REQUIRED', retryable: false },
+    ]) {
+        let nativeTransports = 0;
+        const transport = createPlatformHelperTransport(macOptions({
+            prepareMacosHelperRegistration: function () {
+                return {
+                    helperPath: '/verified/ae-mcp-platform-helper',
+                    ensureRegistered: async function () {
+                        throw Object.assign(new Error('sensitive local detail'), fixture);
+                    },
+                };
+            },
+            loadAddon: function () {
+                return {
+                    createTransport: function () {
+                        nativeTransports += 1;
+                        return fakeNativeTransport();
+                    },
+                };
+            },
+        }));
+        await assert.rejects(transport.request('{}'), fixture);
+        assert.equal(nativeTransports, 0);
+        await transport.close();
+    }
+});
+
+test('Windows never constructs the macOS registrar', async () => {
+    let macosRegistrars = 0;
+    const transport = createPlatformHelperTransport(windowsOptions({
+        prepareMacosHelperRegistration: function () {
+            macosRegistrars += 1;
+            throw new Error('must not run');
+        },
+        loadAddon: function () {
+            return { createTransport: function () { return fakeNativeTransport(); } };
+        },
+    }));
+    assert.equal(await transport.request('windows'), 'windows');
+    assert.equal(macosRegistrars, 0);
     await transport.close();
 });
 
@@ -235,16 +385,33 @@ test('process launch is isolated to the verified Windows JS boundary', () => {
     assert.match(hostSource, /detached:\s*true/);
     assert.match(hostSource, /shell:\s*false/);
     assert.match(hostSource, /stdio:\s*'ignore'/);
-    assert.doesNotMatch(hostSource, /execFile|\bexec\s*\(|ShellExecute|stdio:\s*'inherit'/i);
+    assert.doesNotMatch(
+        hostSource,
+        /require\('child_process'\)\.execFile|\bexec\s*\(|ShellExecute|stdio:\s*'inherit'/i,
+    );
 
     const productionHostFiles = fs.readdirSync(__dirname)
         .filter((name) => name.endsWith('.js') && !name.endsWith('.test.js'));
+    const processBoundaryFiles = new Set([
+        'platform-helper-transport.js',
+        'platform-helper-registration.js',
+    ]);
     for (const name of productionHostFiles) {
         const source = fs.readFileSync(path.join(__dirname, name), 'utf8');
-        if (name === 'platform-helper-transport.js') continue;
+        if (processBoundaryFiles.has(name)) continue;
         assert.doesNotMatch(source, /process\.(?:platform|arch)/, name);
         assert.doesNotMatch(source, /child_process|execFile|spawn\s*\(/i, name);
     }
+    const registrationSource = fs.readFileSync(
+        path.join(__dirname, 'platform-helper-registration.js'),
+        'utf8',
+    );
+    assert.match(registrationSource, /\/bin\/launchctl/);
+    assert.match(registrationSource, /require\('child_process'\)\.execFile/);
+    assert.doesNotMatch(
+        registrationSource,
+        /shell:\s*true|\bexec\s*\(|\bspawn\s*\(|\bbootout\b|\bkill\b|stdio:\s*'inherit'/i,
+    );
 
     const addonRoot = path.resolve(__dirname, '../../native/platform-helper/client-addon');
     const cmake = fs.readFileSync(path.join(addonRoot, 'CMakeLists.txt'), 'utf8');
