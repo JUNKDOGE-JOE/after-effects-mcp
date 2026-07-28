@@ -573,8 +573,7 @@ function Shell({ cs }) {
     codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === 'ready' && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === 'checking', cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
     zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
   }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
-  const nodeOk = !(probe && probe.nodeOk === false);
-  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock, nodeOk });
+  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock });
   const claudeSettingsHint = React.useMemo(() => {
     try { return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs }); } catch (e) { return null; }
   }, [platform]);
@@ -1042,8 +1041,8 @@ function Shell({ cs }) {
   const activeBackend = backendInstances[effective.backend] || byokLoop;
 
   // Descriptor selection is keyed on the EFFECTIVE backend from pickBackend,
-  // not backendPref: 'byok' never appears as a pref (migrateBackendPref maps
-  // it away), only as an effective backend when Node is broken.
+  // not backendPref. `byok` remains only for legacy state compatibility;
+  // live custom Claude Provider selection resolves to `claude-api`.
   React.useEffect(() => {
     const facts = {
       effectiveBackend: effective.backend,

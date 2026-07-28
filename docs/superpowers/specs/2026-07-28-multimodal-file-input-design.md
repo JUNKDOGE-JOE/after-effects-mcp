@@ -9,8 +9,8 @@
 ## Outcome
 
 Let a user attach local files to a chat turn from the After Effects CEP panel
-and expose those files to the selected model through every existing chat
-backend: Codex, Claude, OpenCode, and ZCode.
+and expose those files to the selected model through both user-visible chat
+backends: Codex and Claude Code.
 
 The panel does not decide how a model should understand a file. It does not
 extract document text, parse PDFs, convert Office files, transcode media,
@@ -22,15 +22,16 @@ The Composer remains backend-neutral. A missing attachment mapping is an
 adapter defect to repair, not a reason to permanently disable attachments for
 one backend.
 
-The four supported attachment backends are Codex, Claude through the Agent SDK
-sidecar, OpenCode, and ZCode. The registry also contains an internal legacy
-`byok` HTTP fallback used only when the Claude sidecar cannot run. That direct
-HTTP loop has neither local filesystem access nor a portable provider upload
-contract, so it cannot truthfully expose arbitrary local files. In that
-degraded state the Composer remains visible, but an attachment turn fails
-before dispatch with guidance to restore the Claude sidecar. It never drops
-the files, sends a path the remote model cannot read, or claims attachment
-support.
+The two user-visible attachment backends are Codex and Claude through the Agent
+SDK sidecar. A Claude custom Provider uses the same Agent SDK backend through a
+panel-owned loopback universal-Provider route; the sidecar receives only a
+local route token and never the upstream credential. The registry retains an
+internal legacy `byok` direct-HTTP backend for state compatibility, but live
+selection never falls back to it. If the Agent SDK runtime cannot run, the
+Claude channel fails closed instead of silently changing transport.
+
+OpenCode and ZCode adapters remain internal implementation compatibility, not
+built-in product choices and not real-host acceptance targets for this slice.
 
 ## Current behavior
 
@@ -38,12 +39,11 @@ The Composer accepts only text. `ChatScreen` owns one text draft and calls the
 application with a string. The application appends that text to the transcript
 and calls `activeBackend.sendUser(text)`.
 
-All four backends therefore expose text-only submission contracts:
+The current user-visible backends therefore expose text-only submission
+contracts:
 
 - Codex sends one `text` item to `turn/start`.
 - Claude sends a string through the sidecar to the Agent SDK.
-- OpenCode sends one text part to the session message endpoint.
-- ZCode sends string content to `session/send`.
 
 The provider codec already understands some image content blocks, and model
 probing preserves provider input modalities, but the panel submission path
@@ -60,8 +60,8 @@ never creates or forwards attachments.
 - Image thumbnails using FilePond's existing image preview support.
 - Generic name-and-size cards for all other files.
 - Text-plus-file and attachment-only turns.
-- One backend-neutral turn contract consumed by Codex, Claude, OpenCode, and
-  ZCode.
+- One backend-neutral turn contract consumed by Codex and Claude, while the
+  internal OpenCode and ZCode adapters remain contract-compatible.
 - Native attachment or file-resource transport where a backend provides it.
 - An application-generated attachment manifest where a backend has no generic
   file item, so the agent still receives readable file references.
@@ -85,7 +85,8 @@ never creates or forwards attachments.
 - A cloud upload manager, durable media library, or provider-specific file
   store.
 - Portable arbitrary-file support for the internal legacy `byok` direct-HTTP
-  fallback. It remains text-only and fails attachment turns before dispatch.
+  backend. It remains text-only, unreachable from live Provider selection, and
+  fails attachment turns before dispatch if restored from legacy state.
 - Directory attachment in this slice.
 - Downloading a remote URL supplied as an attachment.
 - Changing the public AE MCP surface, AEGP behavior, project state, or Undo.
@@ -213,10 +214,11 @@ This fallback is still file exposure, not content processing. It must not:
 - claim native multimodal delivery when only a readable path was supplied;
 - log the generated manifest.
 
-Codex, Claude Agent SDK, OpenCode, and ZCode must all implement either native
-transport or manifest transport. The Composer never branches on backend
+Codex and Claude Agent SDK must implement either native transport or manifest
+transport. Internal OpenCode and ZCode adapters keep the same contract so
+registry coverage cannot drift. The Composer never branches on backend
 identity. The application backend boundary, rather than the Composer,
-classifies the internal `byok` fallback as unavailable for attachment turns.
+classifies the internal `byok` backend as unavailable for attachment turns.
 
 ## Composer interaction
 
@@ -344,8 +346,7 @@ Focused Panel tests prove:
 
 ### Cross-backend contract tests
 
-Run the same `TurnInput` vector through Codex, Claude, OpenCode, and ZCode.
-Assert for every adapter that:
+Run the same `TurnInput` vector through every registered adapter. Assert that:
 
 - all attachments are present in order;
 - names, sizes, and readable references survive serialization;
@@ -356,11 +357,11 @@ Assert for every adapter that:
 
 Add a dynamic invariant that enumerates the registered chat backends and
 requires every one to declare either an implemented attachment mapping or the
-explicit legacy-HTTP pre-dispatch rejection. The four supported attachment
-backends must use a real mapping; only the internal `byok` fallback may use the
-rejection disposition. Prove the guard by mutation: remove one supported
-backend's mapping, observe the test fail, restore it, and observe the test
-pass.
+explicit legacy-HTTP pre-dispatch rejection. Codex, Claude Agent SDK, and the
+retained internal adapters must use a real mapping; only internal `byok` may
+use the rejection disposition. Prove the guard by mutation: remove one
+supported backend's mapping, observe the test fail, restore it, and observe the
+test pass.
 
 ### Real-host development validation
 
@@ -376,7 +377,7 @@ Use one application-owned temporary fixture set containing:
 - a short video;
 - a file with an unknown extension.
 
-For each of Codex, Claude, OpenCode, and ZCode:
+For Codex and Claude Code:
 
 1. attach the same fixture set from the real Composer;
 2. send the smallest prompt that asks the model to list the files it can see;
@@ -408,8 +409,8 @@ This slice is complete when:
   cleanup behave as specified;
 - the mutation-proven cross-backend invariant passes;
 - focused Panel tests and required repository checks pass;
-- the real AE panel verifies file exposure through all four configured
-  backends using reused development dependencies;
+- the real AE panel verifies file exposure through both user-visible backends
+  using reused development dependencies;
 - the resulting PR documents any backend that used a native attachment versus
   a manifest, without claiming that transport alone proves model
   understanding.

@@ -2,16 +2,18 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add FilePond-backed local file attachments to the real AE chat Composer and expose every attachment through Codex, Claude Agent SDK, OpenCode, and ZCode without panel-side content parsing.
+**Goal:** Add FilePond-backed local file attachments to the real AE chat Composer and expose every attachment through the built-in Codex and Claude Code choices without panel-side content parsing.
 
-**Architecture:** The Panel owns one normalized `TurnInput` contract and one session-scoped attachment store. FilePond owns picker/drop/paste presentation, while a thin draft reducer and store create stable local references. Backend adapters map those references to native local-file items where available or to a delimited, non-visible attachment manifest; the legacy direct-HTTP `byok` fallback rejects attachment turns before dispatch because it cannot read local files.
+**Architecture:** The Panel owns one normalized `TurnInput` contract and one session-scoped attachment store. FilePond owns picker/drop/paste presentation, while a thin draft reducer and store create stable local references. Backend adapters map those references to native local-file items where available or to a delimited, non-visible attachment manifest. Claude subscription and custom Provider channels both use the Agent SDK sidecar; custom Providers are exposed through a panel-owned loopback route. The internal legacy direct-HTTP `byok` backend remains only for state compatibility and is never a live fallback.
 
 **Tech Stack:** React 18.3.1, FilePond 4.32.12, react-filepond 7.1.3, filepond-plugin-image-preview 4.6.12, CEP Node filesystem APIs, Node test runner, Codex app-server JSON-RPC, Claude Agent SDK sidecar, OpenCode HTTP/SSE, ZCode app-server RPC.
 
 ## Global Constraints
 
-- Supported attachment backends are Codex, Claude Agent SDK, OpenCode, and ZCode.
-- The internal legacy `byok` HTTP fallback remains text-only and must reject attachment turns before dispatch with `ATTACHMENT_SIDECAR_REQUIRED`.
+- Built-in attachment choices and real-host HDEV targets are Codex and Claude Code.
+- Claude custom Providers use the Claude Agent SDK loopback route; absence of a usable Node/sidecar runtime fails closed with no direct-HTTP fallback.
+- Internal OpenCode and ZCode adapters remain contract-tested but are not exposed or exercised in this slice.
+- The internal legacy `byok` HTTP backend remains text-only and must reject attachment turns before dispatch with `ATTACHMENT_SIDECAR_REQUIRED`.
 - Do not add a file-extension or MIME allowlist.
 - Do not parse, extract, OCR, transcribe, index, convert, transcode, thumbnail video, or sample video frames.
 - Do not add a provider upload manager or a new public AE MCP tool.
@@ -1236,7 +1238,7 @@ Verify:
 
 - no parser, converter, upload endpoint, video slicer, or MIME allowlist was
   introduced;
-- only the legacy `byok` fallback rejects attachments;
+- only the internal legacy `byok` backend rejects attachments;
 - every supported backend carries all attachment refs in order;
 - absolute paths occur only inside scoped store/transport code and tests;
 - no native, Core, public MCP, protocol, release, #67, or #69 files changed;
@@ -1269,7 +1271,7 @@ Create, outside tracked source and outside Adobe scan roots:
 Record lifecycle `ephemeral-validation`, the file count, and a cleanup
 condition. Do not retain file contents in the PR or checkpoint.
 
-- [ ] **Step 8: Run focused real AE/CEP validation through all four backends**
+- [ ] **Step 8: Run focused real AE/CEP validation through both built-in backends**
 
 In the actual AE panel:
 
@@ -1277,8 +1279,8 @@ In the actual AE panel:
 2. remove and re-add one item;
 3. send an attachment-only turn;
 4. send a text-plus-attachment turn;
-5. verify each supported backend receives all filenames in order:
-   Codex, Claude Agent SDK, OpenCode, and ZCode;
+5. verify each built-in backend receives all filenames in order:
+   Codex and Claude Agent SDK;
 6. record native versus manifest transport for each;
 7. on one native multimodal backend, ask it to use the image or video through
    its own capability;
@@ -1319,7 +1321,7 @@ Create `docs/checkpoints/2026-07-28-multimodal-file-input-hdev.md` containing:
   fixture contents.
 
 Update the design status to “Implemented; non-candidate HDEV verified” only if
-all four supported backend checks passed.
+both built-in backend checks passed.
 
 - [ ] **Step 11: Run final verification**
 
@@ -1355,7 +1357,8 @@ Review specifically:
 - no cleanup path can escape the managed root;
 - no absolute path reaches logs or transcript;
 - every backend emits one correctly correlated acceptance event;
-- legacy BYOK fails before dispatch;
+- internal legacy BYOK fails before dispatch and is not a live Provider
+  fallback;
 - FilePond introduces no format allowlist or upload endpoint;
 - existing Composer resize and keyboard behavior remains intact.
 

@@ -28,18 +28,20 @@ export function claudeChannels({
     ok: Boolean(probe && probe.nodeOk !== false && probe.loggedIn),
     detail: (probe && probe.detail) || '',
     fixHint: probe && probe.nodeOk === false
-      ? { zh: '内嵌对话需要系统 Node 18+：安装 Node.js LTS 后重新检测；或使用下方「API 直连」通道（无 Node 时自动降级为直连 HTTP）。', en: 'Embedded chat needs system Node 18+: install Node.js LTS and re-check, or use the API direct channel below (falls back to direct HTTP without Node).' }
-      : { zh: '订阅未登录：在终端运行 claude /login 完成登录后重新检测；或改用下方「API 直连」通道。', en: 'Not logged in: run claude /login in a terminal and re-check, or switch to the API direct channel below.' },
+      ? { zh: 'Claude Code 内嵌对话与自定义 Provider 都需要可用的 Node 运行时：修复运行时后重新检测。', en: 'Embedded Claude Code chat and custom Providers both require an available Node runtime. Repair the runtime, then re-check.' }
+      : { zh: '订阅未登录：在终端运行 claude /login 完成登录后重新检测；或改用下方「自定义 Provider」通道。', en: 'Not logged in: run claude /login in a terminal and re-check, or switch to the custom Provider channel below.' },
   };
   const selected = apiProviderSelected === undefined ? Boolean(apiProvider) : Boolean(apiProviderSelected);
   const resolverReady = providerCredentialResolverReady === undefined
     ? (providerAvailable === undefined ? providerHasCredentialPolicy(apiProvider) : providerAvailable)
     : providerCredentialResolverReady;
+  const runtimeReady = !(probe && probe.nodeOk === false);
   const canPreflight = Boolean(
     !providerChecking
     && selected
     && apiProvider?.baseUrl
-    && resolverReady,
+    && resolverReady
+    && runtimeReady
   );
   const api = {
     channel: 'api',
@@ -49,7 +51,9 @@ export function claudeChannels({
     checking: Boolean(providerChecking),
     ok: canPreflight,
     detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : '',
-    fixHint: apiProvider && resolverReady !== true && !providerChecking
+    fixHint: !runtimeReady
+      ? { zh: 'Claude 自定义 Provider 通过 Agent SDK 运行，需要可用的 Node 运行时：修复运行时后重新检测。', en: 'Claude custom Providers run through the Agent SDK and require an available Node runtime. Repair the runtime, then re-check.' }
+      : apiProvider && resolverReady !== true && !providerChecking
       ? { zh: '系统凭据库不可用：Helper 会随 AE 自动启动，请先重新打开面板或重启 AE；仍失败时再修复当前安装。不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled.' }
       : { zh: '在「Provider 管理」新增或选择一个通用 Provider（Base URL + API Key）。系统会按模型自动选择 Messages、Responses 或 Chat 路由。', en: 'Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model.' },
   };
@@ -172,8 +176,8 @@ export function codexProviderChannelLock(lockedChannel = '', providerId = '') {
   return lockedChannel === 'custom' ? '' : lockedChannel;
 }
 
-// Legacy pref migration: 'byok' collapses into Claude's api channel (spec:
-// BYOK 并入 Claude); 'opencode' was never exposed in the 3-way UI.
+// Legacy pref migration: `byok` collapses into Claude's API channel. OpenCode
+// and ZCode remain internal adapters, not choices in the built-in two-way UI.
 export function migrateBackendPref(storage) {
   let pref = 'subscription';
   let lockedChannel = '';
@@ -185,10 +189,10 @@ export function migrateBackendPref(storage) {
       lockedChannel = 'api';
       storage.setItem('ae_mcp_backend', pref);
       storage.setItem('ae_mcp_channel_lock', lockedChannel);
-    } else if (raw === 'opencode') {
+    } else if (raw === 'opencode' || raw === 'zcode') {
       pref = 'subscription';
       storage.setItem('ae_mcp_backend', pref);
-    } else if (raw === 'codex' || raw === 'zcode' || raw === 'subscription') {
+    } else if (raw === 'codex' || raw === 'subscription') {
       pref = raw;
     }
   } catch (e) { /* storage unavailable -> defaults */ }

@@ -1,5 +1,6 @@
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../src/lib/backendSelect.js';
 import { claudeChannels, codexChannels, zcodeChannels } from '../src/lib/channels.js';
+import { BACKENDS } from '../src/cep/backends/index.js';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -12,18 +13,29 @@ test('pickBackend: claude subscription channel wins when ok', () => {
   assert.deepEqual(result, { backend: 'subscription', reason: 'ok', channel: 'subscription', fixHint: null });
 });
 
-test('pickBackend: every custom Claude API channel stays on the secret-redacting direct loop', () => {
+test('pickBackend routes every custom Claude API channel through the Claude Agent SDK transport', () => {
   const channels = { claude: [ch('subscription', false), ch('api', true)] };
-  assert.equal(pickBackend({ pref: 'subscription', channels, nodeOk: true }).backend, 'byok');
-  assert.equal(pickBackend({ pref: 'subscription', channels, nodeOk: false }).backend, 'byok');
+  for (const nodeOk of [true, false]) {
+    const selected = pickBackend({ pref: 'subscription', channels, nodeOk });
+    assert.deepEqual(selected, {
+      backend: 'claude-api',
+      reason: 'ok',
+      channel: 'api',
+      fixHint: null,
+    });
+    assert.equal(BACKENDS[selected.backend].attachmentTransport, 'agent-sdk');
+  }
 });
 
-test('pickBackend keeps non-official Anthropic-compatible providers on direct HTTP', () => {
+test('pickBackend keeps non-official Anthropic-compatible providers on the Claude Agent SDK local route', () => {
   const direct = { ...ch('api', true), directHttp: true };
-  assert.equal(
-    pickBackend({ pref: 'subscription', channels: { claude: [ch('subscription', false), direct] }, nodeOk: true }).backend,
-    'byok',
-  );
+  const selected = pickBackend({
+    pref: 'subscription',
+    channels: { claude: [ch('subscription', false), direct] },
+    nodeOk: true,
+  });
+  assert.equal(selected.backend, 'claude-api');
+  assert.equal(BACKENDS[selected.backend].attachmentTransport, 'agent-sdk');
 });
 
 test('pickBackend: probing and no-channel states carry reason + fixHint', () => {

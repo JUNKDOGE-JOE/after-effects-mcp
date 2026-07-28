@@ -24,10 +24,35 @@ test('claudeChannels: subscription reflects probe, api reflects provider entry',
     providerAvailable: true,
   });
   assert.equal(withApi[0].ok, false);
-  assert.match(withApi[0].fixHint.zh, /API 直连/);
+  assert.match(withApi[0].fixHint.zh, /自定义 Provider/);
   assert.equal(withApi[1].ok, true);
   assert.equal(withApi[1].canPreflight, true);
   assert.equal(withApi[1].selected, true);
+});
+
+test('claudeChannels fails a custom Provider closed when the shared Agent SDK runtime is unavailable', () => {
+  const provider = {
+    baseUrl: 'https://r',
+    auth: {
+      model: {
+        kind: 'x-api-key',
+        valueRef: {
+          kind: 'secret',
+          reference: 'aemcp-secret://provider/5eb75f05-5d9e-5d9c-85af-f0893e8b90c2/auth-model/v1',
+          revision: 1,
+        },
+      },
+    },
+  };
+  const channels = claudeChannels({
+    probe: { nodeOk: false, loggedIn: false },
+    apiProvider: provider,
+    providerAvailable: true,
+  });
+  assert.equal(channels[1].ok, false);
+  assert.equal(channels[1].canPreflight, false);
+  assert.match(channels[1].fixHint.zh, /Node 运行时/);
+  assert.match(channels[1].fixHint.en, /Node runtime/);
 });
 
 test('codexChannels: cli login state + custom provider channel', () => {
@@ -193,7 +218,7 @@ test('pickChannel: first ok wins; explicit lock is honored even when not ok', ()
   assert.equal(pickChannel([]), null);
 });
 
-test('migrateBackendPref maps legacy byok/opencode prefs onto the 3-way model', () => {
+test('migrateBackendPref maps non-product and legacy prefs onto the two built-in choices', () => {
   function storage(init) {
     const map = new Map(Object.entries(init));
     return { getItem: (k) => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, v), map };
@@ -204,6 +229,9 @@ test('migrateBackendPref maps legacy byok/opencode prefs onto the 3-way model', 
   assert.equal(byok.map.get('ae_mcp_channel_lock'), 'api');
   const oc = storage({ ae_mcp_backend: 'opencode' });
   assert.deepEqual(migrateBackendPref(oc), { pref: 'subscription', lockedChannel: '' });
+  const zcode = storage({ ae_mcp_backend: 'zcode' });
+  assert.deepEqual(migrateBackendPref(zcode), { pref: 'subscription', lockedChannel: '' });
+  assert.equal(zcode.map.get('ae_mcp_backend'), 'subscription');
   const keep = storage({ ae_mcp_backend: 'codex', ae_mcp_channel_lock: 'cli' });
   assert.deepEqual(migrateBackendPref(keep), { pref: 'codex', lockedChannel: 'cli' });
   assert.deepEqual(migrateBackendPref(storage({})), { pref: 'subscription', lockedChannel: '' });

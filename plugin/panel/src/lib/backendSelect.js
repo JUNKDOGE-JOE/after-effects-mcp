@@ -4,7 +4,7 @@ import { pickChannel } from './channels.js';
 // All backends use the same selection algorithm over uniform channel probe
 // arrays. `pref` is the 3-way backend choice (subscription|codex|zcode);
 // channels = { claude: [...], codex: [...], zcode: [...] }.
-export function pickBackend({ pref, channels = {}, lockedChannel = '', nodeOk = true }) {
+export function pickBackend({ pref, channels = {}, lockedChannel = '' }) {
   const group = pref === 'codex' || pref === 'zcode' ? pref : 'claude';
   const list = channels[group] || [];
   const selectedCustom = group === 'codex'
@@ -28,10 +28,9 @@ export function pickBackend({ pref, channels = {}, lockedChannel = '', nodeOk = 
   }
   if (group === 'claude') {
     if (chosen.channel === 'api') {
-      // Provider credentials stay in the direct loop, whose delta/history
-      // redactor can prove exact-secret suppression without retaining a
-      // sidecar credential for the process lifetime.
-      return { backend: 'byok', reason: 'ok', channel: 'api', fixHint: null };
+      // The Claude Agent backend exposes only a loopback route token to the
+      // sidecar; upstream Provider credentials stay in the panel-owned route.
+      return { backend: 'claude-api', reason: 'ok', channel: 'api', fixHint: null };
     }
     return { backend: 'subscription', reason: 'ok', channel: 'subscription', fixHint: null };
   }

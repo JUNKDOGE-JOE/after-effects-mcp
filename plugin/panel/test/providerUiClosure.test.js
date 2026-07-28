@@ -64,6 +64,17 @@ test('Settings offers every v3 Provider to both Claude and Codex selectors', () 
   assert.match(settings, /同一个 Provider 可同时用于 Claude 和 Codex/);
 });
 
+test('Settings exposes only Claude Code and Codex as built-in backend choices', () => {
+  const settings = source('../src/screens/SettingsScreen.jsx');
+  const start = settings.indexOf('<Segmented full value={backend}');
+  const end = settings.indexOf('/>', start);
+  assert.ok(start >= 0 && end > start);
+  const options = settings.slice(start, end);
+  assert.match(options, /value:\s*'subscription'/);
+  assert.match(options, /value:\s*'codex'/);
+  assert.doesNotMatch(options, /value:\s*'zcode'/);
+});
+
 test('App routes provider probing through the v3 profile resolver and CAS flow', () => {
   const app = source('../src/app/App.jsx');
   assert.match(app, /runProviderManagerProbe\s*\(\s*provider\s*,\s*\{/);
