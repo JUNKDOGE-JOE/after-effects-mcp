@@ -1,6 +1,7 @@
 import { createSseParser } from '../lib/sse.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
+import { attachmentFileUrl, normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
 const MCP_TIMEOUT_MS = 120000;
 const READY_TIMEOUT_MS = 30000;
@@ -172,6 +173,9 @@ export function createOpenCodeBackend({
   let activeRun = null;
   let activeResolve = null;
   let activeAssistantText = '';
+  let activeTurn = null;
+  let activeTurnAccepted = false;
+  let messageDispatched = false;
   let turnStarted = false;
   let toolMeta = { annotations: {} };
   const pendingApprovals = new Map();
@@ -195,6 +199,9 @@ export function createOpenCodeBackend({
     if (!activeResolve) {
       activeRun = null;
       activeAssistantText = '';
+      activeTurn = null;
+      activeTurnAccepted = false;
+      messageDispatched = false;
       turnStarted = false;
       startedTools.clear();
       return;
@@ -203,6 +210,9 @@ export function createOpenCodeBackend({
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
+    activeTurn = null;
+    activeTurnAccepted = false;
+    messageDispatched = false;
     turnStarted = false;
     startedTools.clear();
     resolve();
@@ -215,6 +225,16 @@ export function createOpenCodeBackend({
       throw new Error('OpenCode HTTP ' + (response ? response.status : 'error') + (text ? ': ' + text : ''));
     }
     return response;
+  }
+
+  function activeTurnFailureFields() {
+    if (!activeTurn?.turnId) return {};
+    return {
+      turnId: activeTurn.turnId,
+      ...(!activeTurnAccepted ? {
+        dispatchState: messageDispatched ? 'uncertain' : 'not-started',
+      } : {}),
+    };
   }
 
   async function requestJson(path, options = {}) {
@@ -279,7 +299,12 @@ export function createOpenCodeBackend({
     if (wasStopping) return;
     if (activeRun) {
       const detail = stderrTail ? String(code) + (signal ? ' ' + signal : '') + ' ' + stderrTail : String(code) + (signal ? ' ' + signal : '');
-      emit({ type: 'error', kind: 'mcp', message: 'opencode serve exited: ' + detail });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: 'opencode serve exited: ' + detail,
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
   }
@@ -292,7 +317,12 @@ export function createOpenCodeBackend({
     sseClosed = true;
     sseStarted = false;
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: error && error.message ? error.message : 'opencode serve error' });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: error && error.message ? error.message : 'opencode serve error',
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
   }
@@ -360,7 +390,12 @@ export function createOpenCodeBackend({
     const parser = createSseParser(({ data }) => handleOpenCodeEvent(data));
     request('/event').then((response) => readSseBody(response.body, parser)).catch((e) => {
       if (!sseClosed && activeRun) {
-        emit({ type: 'error', kind: 'mcp', message: e && e.message ? e.message : 'OpenCode event stream failed.' });
+        emit({
+          type: 'error',
+          kind: 'mcp',
+          message: e && e.message ? e.message : 'OpenCode event stream failed.',
+          ...activeTurnFailureFields(),
+        });
         finishActive();
       }
     });
@@ -498,7 +533,12 @@ export function createOpenCodeBackend({
     }
     if (type === 'session.error') {
       const error = p.error || p;
-      emit({ type: 'error', kind: error.kind || 'mcp', message: error.message || String(error || 'OpenCode session error') });
+      emit({
+        type: 'error',
+        kind: error.kind || 'mcp',
+        message: error.message || String(error || 'OpenCode session error'),
+        ...activeTurnFailureFields(),
+      });
       finishActive();
       return;
     }
@@ -519,21 +559,60 @@ export function createOpenCodeBackend({
     return Promise.allSettled(replies);
   }
 
-  async function sendUser(text) {
+  function openCodeParts(turn) {
+    return [
+      ...(turn.text ? [{ type: 'text', text: turn.text }] : []),
+      ...turn.attachments.map((file) => ({
+        type: 'file',
+        mime: file.mediaType || 'application/octet-stream',
+        filename: file.name,
+        url: attachmentFileUrl(file.localPath, adapter.id),
+      })),
+    ];
+  }
+
+  async function sendUser(input) {
     if (activeRun) return activeRun;
+    let turn;
+    try {
+      turn = normalizeTurnInput(input);
+    } catch (error) {
+      const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
+      emit({
+        type: 'error',
+        kind: 'attachment',
+        code: 'TURN_INPUT_INVALID',
+        message: error.message,
+        ...(turnId ? { turnId, dispatchState: 'not-started' } : {}),
+      });
+      return;
+    }
     activeAssistantText = '';
+    activeTurn = turn;
+    activeTurnAccepted = false;
+    messageDispatched = false;
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });
     try {
       const id = await ensureSession();
-      const userText = String(text || '');
+      const userText = turn.text;
       transcript.push({ role: 'user', text: userText });
+      messageDispatched = true;
       await postJson('/session/' + encodeURIComponent(id) + '/message', {
-        parts: [{ type: 'text', text: userText }],
+        parts: openCodeParts(turn),
       });
+      if (turn.turnId) {
+        activeTurnAccepted = true;
+        emit({ type: 'turn-accepted', turnId: turn.turnId, transport: 'opencode-file-part' });
+      }
     } catch (e) {
-      emit({ type: 'error', kind: 'mcp', message: e && e.message ? e.message : 'Failed to start OpenCode turn.' });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: e && e.message ? e.message : 'Failed to start OpenCode turn.',
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
     return activeRun;
@@ -556,7 +635,7 @@ export function createOpenCodeBackend({
     }
     await drainApprovals();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.' });
+      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }
@@ -572,6 +651,9 @@ export function createOpenCodeBackend({
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
+    activeTurn = null;
+    activeTurnAccepted = false;
+    messageDispatched = false;
     turnStarted = false;
     startedTools.clear();
     transcript.length = 0;

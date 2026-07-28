@@ -35,6 +35,7 @@ import {
   isCoreAuthorizedDynamicCall,
   planSessionKey,
 } from '../../../shared/tool-approval.mjs';
+import { normalizeTurnInput, withAttachmentManifest } from '../../../shared/chat-attachments.mjs';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -517,6 +518,9 @@ export function createZcodeBackend({
   let activeRun = null;
   let activeResolve = null;
   let activeAssistantText = '';
+  let activeTurn = null;
+  let activeTurnAccepted = false;
+  let sendDispatched = false;
   let environmentSecretValues = [];
   let runtimeSecretValues = [];
   let activeSecretValues = [];
@@ -614,13 +618,29 @@ export function createZcodeBackend({
     if (!activeResolve) {
       activeRun = null;
       activeAssistantText = '';
+      activeTurn = null;
+      activeTurnAccepted = false;
+      sendDispatched = false;
       return;
     }
     const resolve = activeResolve;
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
+    activeTurn = null;
+    activeTurnAccepted = false;
+    sendDispatched = false;
     resolve();
+  }
+
+  function activeTurnFailureFields() {
+    if (!activeTurn?.turnId) return {};
+    return {
+      turnId: activeTurn.turnId,
+      ...(!activeTurnAccepted ? {
+        dispatchState: sendDispatched ? 'uncertain' : 'not-started',
+      } : {}),
+    };
   }
 
   function drainApprovals() {
@@ -867,7 +887,7 @@ export function createZcodeBackend({
     if (type === 'turn.failed') {
       const payload = params.payload || {};
       const message = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, 'ZCode turn failed', lang), activeRuntimeModel);
-      emit({ type: 'error', kind: zcodeErrorKind(message), message });
+      emit({ type: 'error', kind: zcodeErrorKind(message), message, ...activeTurnFailureFields() });
       finishActive();
       return;
     }
@@ -932,7 +952,12 @@ export function createZcodeBackend({
       return;
     }
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: 'ZCode app-server exited: ' + detail });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: 'ZCode app-server exited: ' + detail,
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
     scheduleSecretCleanup();
@@ -950,7 +975,7 @@ export function createZcodeBackend({
     subscribed = false;
     activeRuntimeModel = null;
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: err.message });
+      emit({ type: 'error', kind: 'mcp', message: err.message, ...activeTurnFailureFields() });
       finishActive();
     }
     scheduleSecretCleanup();
@@ -1104,35 +1129,68 @@ export function createZcodeBackend({
     }
   }
 
-  async function sendUser(text) {
+  async function sendUser(input) {
     if (activeRun) return activeRun;
+    let turn;
+    try {
+      turn = normalizeTurnInput(input);
+    } catch (error) {
+      const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
+      emit({
+        type: 'error',
+        kind: 'attachment',
+        code: 'TURN_INPUT_INVALID',
+        message: error.message,
+        ...(turnId ? { turnId, dispatchState: 'not-started' } : {}),
+      });
+      return;
+    }
     activeAssistantText = '';
+    activeTurn = turn;
+    activeTurnAccepted = false;
+    sendDispatched = false;
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });
 
     try {
       await ensureSession();
-      const userText = String(text || '');
+      const userText = turn.text;
       transcript.push({ role: 'user', text: userText });
 
       // ZCode (like Codex) does not forward the ae-mcp server instructions to
       // the model, so prepend them as a one-shot preamble on the first turn.
-      let turnText = userText;
+      let turnText = withAttachmentManifest(userText, turn.attachments);
       if (transcript.filter((m) => m.role === 'user').length === 1) {
         const instr = (getServerInstructions() || '').trim();
         if (instr) turnText = instr + '\n\n---\n\n' + userText;
       }
 
       // session/send resolves on acceptance, long before turn.completed.
-      rpc.request('session/send', { sessionId, content: turnText }, 180000).catch((e) => {
+      sendDispatched = true;
+      rpc.request('session/send', { sessionId, content: turnText }, 180000).then(() => {
+        if (activeTurn === turn && turn.turnId) {
+          activeTurnAccepted = true;
+          emit({ type: 'turn-accepted', turnId: turn.turnId, transport: 'zcode-manifest' });
+        }
+      }).catch((e) => {
         const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.', lang);
-        emit({ type: 'error', kind: zcodeErrorKind(message), message });
+        emit({
+          type: 'error',
+          kind: zcodeErrorKind(message),
+          message,
+          ...activeTurnFailureFields(),
+        });
         finishActive();
       });
     } catch (e) {
       const message = zcodeErrorMessage(e, 'Failed to start ZCode turn.', lang);
-      emit({ type: 'error', kind: zcodeErrorKind(message), message });
+      emit({
+        type: 'error',
+        kind: zcodeErrorKind(message),
+        message,
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
     return activeRun;
@@ -1212,7 +1270,7 @@ export function createZcodeBackend({
     }
     drainApprovals();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.' });
+      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }
@@ -1232,6 +1290,9 @@ export function createZcodeBackend({
     sessionModelRef = null;
     subscribed = false;
     activeRuntimeModel = null;
+    activeTurn = null;
+    activeTurnAccepted = false;
+    sendDispatched = false;
     transcript = [];
     pendingApprovals.clear();
     pendingElicitations.clear();

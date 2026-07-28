@@ -912,6 +912,40 @@ test('createCodexBackend reuses threadId on subsequent turns', async () => {
   await second;
 });
 
+test('createCodexBackend maps selected files to native app-server input and accepts the logical turn once', async () => {
+  const { backend, events, spawned } = makeBackend({ getServerInstructions: () => '' });
+  const turn = {
+    turnId: 'turn-1',
+    text: 'inspect',
+    attachments: [
+      { id: 'image-1', name: 'frame.png', localPath: 'C:\\tmp\\frame.png', size: 3, mediaType: 'image/png', temporary: false },
+      { id: 'audio-1', name: 'audio.wav', localPath: 'C:\\tmp\\audio.wav', size: 4, mediaType: 'audio/wav', temporary: false },
+      { id: 'video-1', name: 'clip.mov', localPath: 'C:\\tmp\\clip.mov', size: 5, mediaType: 'video/quicktime', temporary: false },
+    ],
+  };
+  const { pending, proc, turnStart } = await startTurn(backend, spawned, turn);
+
+  assert.deepEqual(turnStart.params.input, [
+    { type: 'text', text: 'inspect' },
+    { type: 'localImage', path: 'C:\\tmp\\frame.png' },
+    { type: 'localAudio', path: 'C:\\tmp\\audio.wav' },
+    { type: 'mention', name: 'clip.mov', path: 'C:\\tmp\\clip.mov' },
+  ]);
+
+  proc.pushStdout({ method: 'turn/started', params: { turn: { id: 'codex-turn-1' } } });
+  await flush();
+  assert.deepEqual(events.slice(0, 2), [
+    { type: 'turn-accepted', turnId: 'turn-1', transport: 'codex-app-server' },
+    { type: 'turn-start' },
+  ]);
+  assert.equal(events.filter((event) => event.type === 'turn-accepted').length, 1);
+  assert.equal(JSON.stringify(events).includes('C:\\tmp'), false);
+
+  proc.pushStdout({ method: 'turn/completed', params: {} });
+  await pending;
+  assert.deepEqual(backend.getMessages()[0], { role: 'user', text: 'inspect' });
+});
+
 test('createCodexBackend maps app-server turn and tool notifications to panel events', async () => {
   const { backend, events, spawned } = makeBackend();
   const { pending, proc } = await startTurn(backend, spawned, 'events');
@@ -1007,73 +1041,34 @@ test('createCodexBackend emits one model error when RPC rejection and error noti
   }]);
 });
 
-test('createCodexBackend re-detects a recoverable provider once and retries the same turn', async () => {
-  const recoveredProvider = providerFixtureV3({ baseUrl: 'https://recovered.example/v1' });
-  const recoveryCalls = [];
-  const routeCalls = [];
-  let resolveCalls = 0;
-  let refreshed = 0;
+test('createCodexBackend never replays a dispatched turn while acceptance is uncertain', async () => {
+  let recoveryCalls = 0;
   const { backend, events, spawned } = makeBackend({
-    createProviderRoute: (input) => {
-      routeCalls.push(input);
-      return localProviderRoute({ routeToken: `recovery-route-${routeCalls.length}` });
-    },
     getProviderProfile: () => selectedProvider(),
-    resolveRequestProfile: async () => {
-      resolveCalls += 1;
-      return resolvedModelProfile();
+    resolveRequestProfile: async () => resolvedModelProfile(),
+    recoverProviderProfile: async () => {
+      recoveryCalls += 1;
+      return selectedProvider(providerFixtureV3({ baseUrl: 'https://recovered.example/v1' }));
     },
-    recoverProviderProfile: async (provider, facts, modelId) => {
-      recoveryCalls.push({ provider, facts, modelId });
-      return selectedProvider(recoveredProvider);
-    },
-    onProviderProfileRecovered: () => { refreshed += 1; },
   });
-  const { pending, proc } = await startTurn(backend, spawned, 'retry this turn');
+  const turn = { turnId: 'turn-uncertain', text: 'do not replay', attachments: [] };
+  const { pending, proc } = await startTurn(backend, spawned, turn);
 
   proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { status: 404, message: 'HTTP status 404' } } });
-  for (let index = 0; index < 20 && spawned.procs.length < 2; index += 1) await flush();
-  assert.equal(spawned.procs.length, 2);
-  assert.equal(proc.killed, true);
-  assert.equal(recoveryCalls.length, 1);
-  assert.equal(recoveryCalls[0].provider, CUSTOM_PROVIDER);
-  assert.deepEqual(recoveryCalls[0].facts, { status: 404, code: '' });
-  assert.equal(recoveryCalls[0].modelId, PROVIDER_MODEL_ID);
-  assert.equal(resolveCalls, 0);
-
-  const proc2 = spawned.procs[1];
-  assert.equal(routeCalls.length, 2);
-  assert.equal(routeCalls[1].provider, recoveredProvider);
-  assert.deepEqual(spawned.calls[1].args, expectedLocalProviderArgs());
-  let settled = false;
-  pending.then(() => { settled = true; });
-  proc.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'stale' } });
-  proc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
-  proc.exit(1);
-  await flush();
-  assert.equal(settled, false);
-
-  const init = parseWrites(proc2)[0];
-  respond(proc2, init, {});
-  await flush();
-  const threadStart = parseWrites(proc2)[1];
-  respond(proc2, threadStart, { threadId: 'thread_recovered' });
-  await flush();
-  const retriedTurn = parseWrites(proc2)[2];
-  assert.equal(retriedTurn.params.input[0].text, 'retry this turn');
-  respond(proc2, retriedTurn, {});
-  proc2.pushStdout({ jsonrpc: '2.0', method: 'item/agentMessage/delta', params: { delta: 'recovered' } });
-  proc2.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
   await pending;
-  await flush();
 
-  assert.equal(events.some((event) => event.type === 'error'), false);
-  assert.equal(backend.getMessages().filter((message) => message.role === 'user').length, 1);
-  assert.equal(backend.getMessages().at(-1).text, 'recovered');
-  assert.equal(refreshed, 1);
+  assert.equal(recoveryCalls, 0);
+  assert.equal(spawned.procs.length, 1);
+  assert.deepEqual(events.at(-1), {
+    type: 'error',
+    kind: 'mcp',
+    message: 'HTTP status 404',
+    turnId: 'turn-uncertain',
+    dispatchState: 'uncertain',
+  });
 });
 
-test('createCodexBackend re-detects generic 405 and 501 provider failures', async (context) => {
+test('createCodexBackend classifies generic 405 and 501 after dispatch as uncertain without replay', async (context) => {
   for (const status of [405, 501]) {
     await context.test(`HTTP ${status}`, async () => {
       let recoveryCalls = 0;
@@ -1085,56 +1080,63 @@ test('createCodexBackend re-detects generic 405 and 501 provider failures', asyn
           return { provider, modelId };
         },
       });
-      const { pending, proc } = await startTurn(backend, spawned, `recover ${status}`);
+      const turn = { turnId: `turn-${status}`, text: `do not replay ${status}`, attachments: [] };
+      const { pending, proc } = await startTurn(backend, spawned, turn);
       proc.pushStdout({
         jsonrpc: '2.0',
         method: 'error',
         params: { error: { status, message: `HTTP status ${status}` } },
       });
-      await waitFor(() => spawned.procs.length === 2);
-
-      const recoveredProc = spawned.procs[1];
-      await waitFor(() => parseWrites(recoveredProc).length >= 1);
-      respond(recoveredProc, parseWrites(recoveredProc)[0], {});
-      await waitFor(() => parseWrites(recoveredProc).length >= 2);
-      respond(recoveredProc, parseWrites(recoveredProc)[1], { threadId: `thread_${status}` });
-      await waitFor(() => parseWrites(recoveredProc).length >= 3);
-      respond(recoveredProc, parseWrites(recoveredProc)[2], {});
-      recoveredProc.pushStdout({ jsonrpc: '2.0', method: 'turn/completed', params: {} });
       await pending;
 
-      assert.equal(recoveryCalls, 1);
-      assert.equal(events.some((event) => event.type === 'error'), false);
+      assert.equal(recoveryCalls, 0);
+      assert.equal(spawned.procs.length, 1);
+      assert.deepEqual(events.at(-1), {
+        type: 'error',
+        kind: 'mcp',
+        message: `HTTP status ${status}`,
+        turnId: `turn-${status}`,
+        dispatchState: 'uncertain',
+      });
     });
   }
 });
 
-test('createCodexBackend never retries a recoverable provider failure more than once per turn', async () => {
+test('createCodexBackend does not invoke recovery for a rejected turn/start request', async () => {
   let recoveryCalls = 0;
-  const recoveredProvider = providerFixtureV3({ baseUrl: 'https://recovered.example/v1' });
   const { backend, events, spawned } = makeBackend({
     getProviderProfile: () => selectedProvider(),
     resolveRequestProfile: async () => resolvedModelProfile(),
     recoverProviderProfile: async () => {
       recoveryCalls += 1;
-      return selectedProvider(recoveredProvider);
+      return selectedProvider(providerFixtureV3({ baseUrl: 'https://recovered.example/v1' }));
     },
   });
-  const { pending, proc } = await startTurn(backend, spawned, 'retry only once');
-  proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { statusCode: 404, message: 'HTTP status 404' } } });
-  for (let index = 0; index < 20 && spawned.procs.length < 2; index += 1) await flush();
-  const proc2 = spawned.procs[1];
-  respond(proc2, parseWrites(proc2)[0], {});
-  await flush();
-  respond(proc2, parseWrites(proc2)[1], { threadId: 'thread_retry_once' });
-  await flush();
-  respond(proc2, parseWrites(proc2)[2], {});
-  proc2.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { httpStatus: 404, message: 'HTTP status 404' } } });
+  const turn = { turnId: 'turn-rpc-reject', text: 'one attempt', attachments: [] };
+  const { pending, proc, turnStart } = await startTurnRequest(backend, spawned, turn);
+  proc.pushStdout({ id: turnStart.id, error: { statusCode: 404, message: 'HTTP status 404' } });
   await pending;
-  await flush();
-  assert.equal(recoveryCalls, 1);
-  assert.equal(spawned.procs.length, 2);
-  assert.equal(events.at(-1).type, 'error');
+  assert.equal(recoveryCalls, 0);
+  assert.equal(spawned.procs.length, 1);
+  assert.equal(parseWrites(proc).filter((message) => message.method === 'turn/start').length, 1);
+  assert.equal(events.at(-1).dispatchState, 'uncertain');
+});
+
+test('createCodexBackend correlates an app-server exit after dispatch as uncertain', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const turn = { turnId: 'turn-exit', text: 'inspect', attachments: [] };
+  const { pending, proc } = await startTurnRequest(backend, spawned, turn);
+
+  proc.exit(1);
+  await pending;
+
+  assert.deepEqual(events.at(-1), {
+    type: 'error',
+    kind: 'mcp',
+    message: 'codex app-server exited: 1',
+    turnId: 'turn-exit',
+    dispatchState: 'uncertain',
+  });
 });
 
 test('createCodexBackend keeps the original route error redacted when re-detection fails', async () => {
@@ -1231,8 +1233,14 @@ test('createCodexBackend reset prevents an in-flight provider recovery from revi
     },
     onProviderProfileRecovered: () => { refreshed += 1; },
   });
-  const { pending, proc } = await startTurn(backend, spawned, 'reset during recovery');
-  proc.pushStdout({ jsonrpc: '2.0', method: 'error', params: { error: { code: 'unsupported_endpoint', message: 'unsupported endpoint' } } });
+  const pending = backend.sendUser({ turnId: 'turn-before-dispatch', text: 'reset during recovery', attachments: [] });
+  await flush();
+  const proc = spawned.procs[0];
+  const init = parseWrites(proc)[0];
+  respond(proc, init, {});
+  await flush();
+  const threadStart = parseWrites(proc)[1];
+  proc.pushStdout({ id: threadStart.id, error: { code: 'unsupported_endpoint', message: 'unsupported endpoint' } });
   for (let index = 0; index < 20 && recoveryCalls < 1; index += 1) await flush();
   assert.equal(recoveryCalls, 1);
   backend.reset();

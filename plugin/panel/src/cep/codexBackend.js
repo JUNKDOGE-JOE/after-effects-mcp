@@ -23,6 +23,7 @@ import {
   isCoreAuthorizedDynamicCall,
   planSessionKey,
 } from '../../../shared/tool-approval.mjs';
+import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -310,6 +311,9 @@ export function createCodexBackend({
   let turnFailureInFlight = false;
   let providerRecoverySequence = 0;
   let providerRefreshPending = false;
+  let activeTurn = null;
+  let activeTurnAccepted = false;
+  let activeTurnDispatched = false;
   let activeUserText = '';
   let activeUserRecorded = false;
   const pendingApprovals = new Map();
@@ -368,12 +372,25 @@ export function createCodexBackend({
     return adapter.completeSpawnEnv(env || {});
   }
 
+  function activeTurnFailureFields() {
+    if (!activeTurn?.turnId) return {};
+    return {
+      turnId: activeTurn.turnId,
+      ...(!activeTurnAccepted ? {
+        dispatchState: activeTurnDispatched ? 'uncertain' : 'not-started',
+      } : {}),
+    };
+  }
+
   function finishActive() {
     const resolve = activeResolve;
     const refreshProvider = providerRefreshPending;
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
+    activeTurn = null;
+    activeTurnAccepted = false;
+    activeTurnDispatched = false;
     activeUserText = '';
     activeUserRecorded = false;
     providerRecoveryAttempted = false;
@@ -422,6 +439,10 @@ export function createCodexBackend({
     if (message.method === 'turn/started') {
       currentTurnId = (params.turn && params.turn.id) || params.turnId || null;
       resetProviderDeltaRedactor();
+      if (activeTurn && activeTurn.turnId && !activeTurnAccepted) {
+        activeTurnAccepted = true;
+        emit({ type: 'turn-accepted', turnId: activeTurn.turnId, transport: 'codex-app-server' });
+      }
       emit({ type: 'turn-start' });
       return;
     }
@@ -603,7 +624,12 @@ export function createCodexBackend({
       return;
     }
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: 'codex app-server exited: ' + detail });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: 'codex app-server exited: ' + detail,
+        ...activeTurnFailureFields(),
+      });
       finishActive();
     }
     clearProviderSensitiveValues();
@@ -621,7 +647,7 @@ export function createCodexBackend({
     preambleSent = false;
     closeProviderRoute();
     if (activeRun) {
-      emit({ type: 'error', kind: 'mcp', message: err.message });
+      emit({ type: 'error', kind: 'mcp', message: err.message, ...activeTurnFailureFields() });
       finishActive();
     }
     clearProviderSensitiveValues();
@@ -958,10 +984,25 @@ export function createCodexBackend({
     return threadId;
   }
 
-  function turnParams(text) {
+  function turnInput(turn, text) {
+    const input = [];
+    if (text) input.push({ type: 'text', text });
+    for (const attachment of turn.attachments) {
+      if (attachment.mediaType.startsWith('image/')) {
+        input.push({ type: 'localImage', path: attachment.localPath });
+      } else if (attachment.mediaType.startsWith('audio/')) {
+        input.push({ type: 'localAudio', path: attachment.localPath });
+      } else {
+        input.push({ type: 'mention', name: attachment.name, path: attachment.localPath });
+      }
+    }
+    return input;
+  }
+
+  function turnParams(turn, text) {
     const params = {
       threadId,
-      input: [{ type: 'text', text }],
+      input: turnInput(turn, text),
       model: getModel(),
       effort: getEffort ? getEffort() : undefined,
       approvalPolicy: APPROVAL_POLICY,
@@ -985,7 +1026,8 @@ export function createCodexBackend({
       if (instructions) turnText = instructions + '\n\n---\n\n' + activeUserText;
       preambleSent = true;
     }
-    rpc.request('turn/start', turnParams(turnText), 180000).catch((error) => {
+    activeTurnDispatched = true;
+    rpc.request('turn/start', turnParams(activeTurn, turnText), 180000).catch((error) => {
       void handleTurnFailure(error);
     });
   }
@@ -1047,7 +1089,7 @@ export function createCodexBackend({
         message: redactValue(error?.message || 'Failed to start Codex turn.', providerSensitiveValues),
       };
       try {
-        if (await attemptProviderRecovery(error)) return;
+        if (!activeTurnDispatched && await attemptProviderRecovery(error)) return;
       } catch (recoveryError) {
         failure = {
           kind: recoveryError?.kind,
@@ -1063,6 +1105,7 @@ export function createCodexBackend({
         kind: failure?.kind || (providerHttpFailure || /model/i.test(message) ? 'model' : 'mcp'),
         ...(failure?.code ? { code: failure.code } : {}),
         message,
+        ...activeTurnFailureFields(),
       });
       finishActive();
     } finally {
@@ -1070,10 +1113,27 @@ export function createCodexBackend({
     }
   }
 
-  async function sendUser(text) {
+  async function sendUser(input) {
     if (activeRun) return activeRun;
+    let turn;
+    try {
+      turn = normalizeTurnInput(input);
+    } catch (error) {
+      const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
+      emit({
+        type: 'error',
+        kind: 'attachment',
+        code: 'TURN_INPUT_INVALID',
+        message: error.message,
+        ...(turnId ? { turnId, dispatchState: 'not-started' } : {}),
+      });
+      return;
+    }
     activeAssistantText = '';
-    activeUserText = String(text || '');
+    activeTurn = turn;
+    activeTurnAccepted = false;
+    activeTurnDispatched = false;
+    activeUserText = turn.text;
     activeUserRecorded = false;
     providerRecoveryAttempted = false;
     providerRecoveryInFlight = false;
@@ -1126,7 +1186,7 @@ export function createCodexBackend({
     drainApprovals();
     providerDeltaRedactor.discard();
     if (activeRun) {
-      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.' });
+      emit({ type: 'error', kind: 'aborted', message: 'Turn aborted.', ...activeTurnFailureFields() });
       finishActive();
     }
   }

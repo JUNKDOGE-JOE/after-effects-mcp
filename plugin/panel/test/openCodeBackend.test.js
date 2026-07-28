@@ -142,6 +142,7 @@ function makeBackend(options = {}) {
   const fetched = makeFetch();
   const fsImpl = makeFs();
   const platform = {
+    id: 'windows-x64',
     paths: { tempRoot: 'C:\\tmp', join: (parts) => parts.join('\\') },
     fs: fsImpl,
     completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
@@ -164,6 +165,82 @@ function makeBackend(options = {}) {
   });
   return { backend, events, spawned, fetched, fsImpl };
 }
+
+test('createOpenCodeBackend sends official file parts and accepts after the message POST', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser({
+    turnId: 'turn-1',
+    text: 'inspect',
+    attachments: [{
+      id: 'att-1',
+      name: 'notes.pdf',
+      localPath: 'C:\\tmp\\notes.pdf',
+      size: 12,
+      mediaType: 'application/pdf',
+      temporary: false,
+    }],
+  });
+  await flush();
+
+  const message = fetched.calls.find((call) => call.path === '/session/session_1/message');
+  assert.deepEqual(message.body, {
+    parts: [
+      { type: 'text', text: 'inspect' },
+      {
+        type: 'file',
+        mime: 'application/pdf',
+        filename: 'notes.pdf',
+        url: 'file:///C:/tmp/notes.pdf',
+      },
+    ],
+  });
+  assert.deepEqual(events[0], {
+    type: 'turn-accepted',
+    turnId: 'turn-1',
+    transport: 'opencode-file-part',
+  });
+  assert.equal(JSON.stringify(events).includes('C:\\tmp'), false);
+
+  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
+  await pending;
+  assert.deepEqual(backend.getMessages()[0], { role: 'user', text: 'inspect' });
+});
+
+test('createOpenCodeBackend correlates a failed message POST as uncertain without retry', async () => {
+  const base = makeFetch();
+  let rejectMessage;
+  const fetchImpl = async (url, options = {}) => {
+    const parsed = new URL(url);
+    if (parsed.pathname === '/session/session_1/message') {
+      base.calls.push({
+        method: options.method || 'GET',
+        path: parsed.pathname,
+        body: options.body ? JSON.parse(options.body) : null,
+      });
+      return await new Promise((_resolve, reject) => { rejectMessage = reject; });
+    }
+    return base.fetchImpl(url, options);
+  };
+  const { backend, events } = makeBackend({ fetchImpl });
+  const pending = backend.sendUser({
+    turnId: 'turn-post-failed',
+    text: 'inspect',
+    attachments: [],
+  });
+  for (let index = 0; index < 20 && !rejectMessage; index += 1) await flush();
+  assert.equal(typeof rejectMessage, 'function');
+  rejectMessage(new Error('message POST disconnected'));
+  await pending;
+
+  assert.deepEqual(events.at(-1), {
+    type: 'error',
+    kind: 'mcp',
+    message: 'message POST disconnected',
+    turnId: 'turn-post-failed',
+    dispatchState: 'uncertain',
+  });
+  assert.equal(base.calls.filter((call) => call.path === '/session/session_1/message').length, 1);
+});
 
 test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config, and sends a session message', async () => {
   const { backend, spawned, fetched, fsImpl } = makeBackend();

@@ -23504,6 +23504,8 @@
   var MAX_ATTACHMENTS_PER_TURN = 32;
   var MAX_CLIPBOARD_ITEM_BYTES = 256 * 1024 * 1024;
   var MAX_CLIPBOARD_TURN_BYTES = 512 * 1024 * 1024;
+  var ATTACHMENT_MANIFEST_OPEN = '<ae_mcp_attachments version="1">';
+  var ATTACHMENT_MANIFEST_CLOSE = "</ae_mcp_attachments>";
   function requireString(value, field, { allowEmpty = false } = {}) {
     if (typeof value !== "string" || !allowEmpty && !value) {
       throw new TypeError(field + " must be " + (allowEmpty ? "a string" : "a non-empty string"));
@@ -23562,6 +23564,47 @@
         ...mediaType ? { mediaType } : {}
       });
     });
+  }
+  function attachmentManifest(attachments) {
+    const files = attachments.map((value) => {
+      const { id, name, localPath, size, mediaType } = normalizeAttachment(value);
+      return {
+        id,
+        name,
+        path: localPath,
+        size,
+        mediaType: mediaType || "application/octet-stream"
+      };
+    });
+    return ATTACHMENT_MANIFEST_OPEN + "\n" + JSON.stringify({ files }) + "\n" + ATTACHMENT_MANIFEST_CLOSE;
+  }
+  function withAttachmentManifest(text, attachments) {
+    const body = String(text || "");
+    if (!attachments.length) return body;
+    const manifest = attachmentManifest(attachments);
+    return body ? body + "\n\n" + manifest : manifest;
+  }
+  function encodePathSegments(value) {
+    return value.split("/").map((part) => encodeURIComponent(part)).join("/");
+  }
+  function attachmentFileUrl(localPath, platformId) {
+    requireString(localPath, "attachment path");
+    if (platformId === "macos-arm64") {
+      if (!localPath.startsWith("/")) throw new TypeError("macOS attachment path must be absolute");
+      return "file://" + encodePathSegments(localPath);
+    }
+    if (platformId === "windows-x64") {
+      const normalized = localPath.replace(/\\/g, "/");
+      if (normalized.startsWith("//")) {
+        return "file://" + encodePathSegments(normalized.slice(2));
+      }
+      if (!/^[A-Za-z]:\//.test(normalized)) {
+        throw new TypeError("Windows attachment path must be absolute");
+      }
+      const drive = normalized.slice(0, 2);
+      return "file:///" + drive + encodePathSegments(normalized.slice(2));
+    }
+    throw new TypeError("unsupported attachment platform: " + platformId);
   }
 
   // src/components/chat/AttachmentPond.jsx
@@ -28358,15 +28401,41 @@
       }
       return await executeTool(toolUse);
     }
-    async function sendUser(text) {
+    async function sendUser(input) {
       if (activeRun) return activeRun;
-      const userMessage = { role: "user", content: String(text || "") };
+      let turn;
+      try {
+        turn = normalizeTurnInput(input);
+      } catch (error) {
+        const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
+        emit({
+          type: "error",
+          kind: "attachment",
+          code: "TURN_INPUT_INVALID",
+          message: error.message,
+          ...turnId ? { turnId, dispatchState: "not-started" } : {}
+        });
+        return;
+      }
+      if (turn.attachments.length) {
+        emit({
+          type: "error",
+          kind: "attachment",
+          code: "ATTACHMENT_SIDECAR_REQUIRED",
+          message: "Restore the Claude Agent SDK sidecar to send local files.",
+          turnId: turn.turnId,
+          dispatchState: "not-started"
+        });
+        return;
+      }
+      const userMessage = { role: "user", content: turn.text };
       messages.push(userMessage);
       emit({ type: "turn-start" });
       const controller = new AbortController();
       activeController = controller;
       activeRun = (async () => {
         let activeSensitiveValues = [];
+        let turnAccepted = false;
         try {
           const tools = await mcp.listTools();
           const toolByName = new Map((tools || []).map((tool) => [tool.name, tool]));
@@ -28385,12 +28454,16 @@
             activeSensitiveValues = sensitiveValues(requestProfile);
             const deltaRedactor = createDeltaRedactor(
               activeSensitiveValues,
-              (text2) => {
-                if (text2) emit({ type: "text-delta", text: text2 });
+              (text) => {
+                if (text) emit({ type: "text-delta", text });
               }
             );
             let result;
             try {
+              if (turn.turnId && !turnAccepted) {
+                turnAccepted = true;
+                emit({ type: "turn-accepted", turnId: turn.turnId, transport: "legacy-byok" });
+              }
               result = await anthropic({
                 requestProfile,
                 model: getModel && getModel() || DEFAULT_MODEL,
@@ -28426,7 +28499,15 @@
         } catch (e) {
           const kind = normalizeErrorKind(e);
           repairDanglingToolUses();
-          emit({ type: "error", kind, message: safeErrorMessage(e, activeSensitiveValues) });
+          emit({
+            type: "error",
+            kind,
+            message: safeErrorMessage(e, activeSensitiveValues),
+            ...!turnAccepted && turn.turnId ? {
+              turnId: turn.turnId,
+              dispatchState: "not-started"
+            } : {}
+          });
         } finally {
           activeSensitiveValues = [];
           activeController = null;
@@ -28939,6 +29020,9 @@
     let activeRun = null;
     let activeResolve = null;
     let activeAssistantText = "";
+    let activeTurn = null;
+    let activeTurnAccepted = false;
+    let sendDispatched = false;
     let environmentSecretValues = [];
     let runtimeSecretValues = [];
     let activeSecretValues = [];
@@ -29025,13 +29109,28 @@
       if (!activeResolve) {
         activeRun = null;
         activeAssistantText = "";
+        activeTurn = null;
+        activeTurnAccepted = false;
+        sendDispatched = false;
         return;
       }
       const resolve = activeResolve;
       activeResolve = null;
       activeRun = null;
       activeAssistantText = "";
+      activeTurn = null;
+      activeTurnAccepted = false;
+      sendDispatched = false;
       resolve();
+    }
+    function activeTurnFailureFields() {
+      if (!(activeTurn == null ? void 0 : activeTurn.turnId)) return {};
+      return {
+        turnId: activeTurn.turnId,
+        ...!activeTurnAccepted ? {
+          dispatchState: sendDispatched ? "uncertain" : "not-started"
+        } : {}
+      };
     }
     function drainApprovals() {
       for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
@@ -29227,7 +29326,7 @@
       if (type === "turn.failed") {
         const payload = params.payload || {};
         const message2 = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, "ZCode turn failed", lang), activeRuntimeModel);
-        emit({ type: "error", kind: zcodeErrorKind(message2), message: message2 });
+        emit({ type: "error", kind: zcodeErrorKind(message2), message: message2, ...activeTurnFailureFields() });
         finishActive();
         return;
       }
@@ -29284,7 +29383,12 @@
         return;
       }
       if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: "ZCode app-server exited: " + detail });
+        emit({
+          type: "error",
+          kind: "mcp",
+          message: "ZCode app-server exited: " + detail,
+          ...activeTurnFailureFields()
+        });
         finishActive();
       }
       scheduleSecretCleanup();
@@ -29301,7 +29405,7 @@
       subscribed = false;
       activeRuntimeModel = null;
       if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: err.message });
+        emit({ type: "error", kind: "mcp", message: err.message, ...activeTurnFailureFields() });
         finishActive();
       }
       scheduleSecretCleanup();
@@ -29433,29 +29537,62 @@
         sessionPromise = null;
       }
     }
-    async function sendUser(text) {
+    async function sendUser(input) {
       if (activeRun) return activeRun;
+      let turn;
+      try {
+        turn = normalizeTurnInput(input);
+      } catch (error) {
+        const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
+        emit({
+          type: "error",
+          kind: "attachment",
+          code: "TURN_INPUT_INVALID",
+          message: error.message,
+          ...turnId ? { turnId, dispatchState: "not-started" } : {}
+        });
+        return;
+      }
       activeAssistantText = "";
+      activeTurn = turn;
+      activeTurnAccepted = false;
+      sendDispatched = false;
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
       });
       try {
         await ensureSession();
-        const userText = String(text || "");
+        const userText = turn.text;
         transcript.push({ role: "user", text: userText });
-        let turnText = userText;
+        let turnText = withAttachmentManifest(userText, turn.attachments);
         if (transcript.filter((m) => m.role === "user").length === 1) {
           const instr = (getServerInstructions() || "").trim();
           if (instr) turnText = instr + "\n\n---\n\n" + userText;
         }
-        rpc.request("session/send", { sessionId, content: turnText }, 18e4).catch((e) => {
+        sendDispatched = true;
+        rpc.request("session/send", { sessionId, content: turnText }, 18e4).then(() => {
+          if (activeTurn === turn && turn.turnId) {
+            activeTurnAccepted = true;
+            emit({ type: "turn-accepted", turnId: turn.turnId, transport: "zcode-manifest" });
+          }
+        }).catch((e) => {
           const message = zcodeErrorMessage(e, "Failed to start ZCode turn.", lang);
-          emit({ type: "error", kind: zcodeErrorKind(message), message });
+          emit({
+            type: "error",
+            kind: zcodeErrorKind(message),
+            message,
+            ...activeTurnFailureFields()
+          });
           finishActive();
         });
       } catch (e) {
         const message = zcodeErrorMessage(e, "Failed to start ZCode turn.", lang);
-        emit({ type: "error", kind: zcodeErrorKind(message), message });
+        emit({
+          type: "error",
+          kind: zcodeErrorKind(message),
+          message,
+          ...activeTurnFailureFields()
+        });
         finishActive();
       }
       return activeRun;
@@ -29519,7 +29656,7 @@
       }
       drainApprovals();
       if (activeRun) {
-        emit({ type: "error", kind: "aborted", message: "Turn aborted." });
+        emit({ type: "error", kind: "aborted", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
       }
     }
@@ -29541,6 +29678,9 @@
       sessionModelRef = null;
       subscribed = false;
       activeRuntimeModel = null;
+      activeTurn = null;
+      activeTurnAccepted = false;
+      sendDispatched = false;
       transcript = [];
       pendingApprovals.clear();
       pendingElicitations.clear();
@@ -39959,6 +40099,9 @@ data: ${JSON.stringify(payload)}
     let turnFailureInFlight = false;
     let providerRecoverySequence = 0;
     let providerRefreshPending = false;
+    let activeTurn = null;
+    let activeTurnAccepted = false;
+    let activeTurnDispatched = false;
     let activeUserText = "";
     let activeUserRecorded = false;
     const pendingApprovals = /* @__PURE__ */ new Map();
@@ -40010,12 +40153,24 @@ data: ${JSON.stringify(payload)}
     function currentEnv() {
       return adapter.completeSpawnEnv(env || {});
     }
+    function activeTurnFailureFields() {
+      if (!(activeTurn == null ? void 0 : activeTurn.turnId)) return {};
+      return {
+        turnId: activeTurn.turnId,
+        ...!activeTurnAccepted ? {
+          dispatchState: activeTurnDispatched ? "uncertain" : "not-started"
+        } : {}
+      };
+    }
     function finishActive() {
       const resolve = activeResolve;
       const refreshProvider = providerRefreshPending;
       activeResolve = null;
       activeRun = null;
       activeAssistantText = "";
+      activeTurn = null;
+      activeTurnAccepted = false;
+      activeTurnDispatched = false;
       activeUserText = "";
       activeUserRecorded = false;
       providerRecoveryAttempted = false;
@@ -40065,6 +40220,10 @@ data: ${JSON.stringify(payload)}
       if (message.method === "turn/started") {
         currentTurnId = params.turn && params.turn.id || params.turnId || null;
         resetProviderDeltaRedactor();
+        if (activeTurn && activeTurn.turnId && !activeTurnAccepted) {
+          activeTurnAccepted = true;
+          emit({ type: "turn-accepted", turnId: activeTurn.turnId, transport: "codex-app-server" });
+        }
         emit({ type: "turn-start" });
         return;
       }
@@ -40232,7 +40391,12 @@ data: ${JSON.stringify(payload)}
         return;
       }
       if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: "codex app-server exited: " + detail });
+        emit({
+          type: "error",
+          kind: "mcp",
+          message: "codex app-server exited: " + detail,
+          ...activeTurnFailureFields()
+        });
         finishActive();
       }
       clearProviderSensitiveValues();
@@ -40249,7 +40413,7 @@ data: ${JSON.stringify(payload)}
       preambleSent = false;
       closeProviderRoute();
       if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: err.message });
+        emit({ type: "error", kind: "mcp", message: err.message, ...activeTurnFailureFields() });
         finishActive();
       }
       clearProviderSensitiveValues();
@@ -40563,10 +40727,24 @@ data: ${JSON.stringify(payload)}
       threadId = threadIdFromResult(result);
       return threadId;
     }
-    function turnParams(text) {
+    function turnInput(turn, text) {
+      const input = [];
+      if (text) input.push({ type: "text", text });
+      for (const attachment of turn.attachments) {
+        if (attachment.mediaType.startsWith("image/")) {
+          input.push({ type: "localImage", path: attachment.localPath });
+        } else if (attachment.mediaType.startsWith("audio/")) {
+          input.push({ type: "localAudio", path: attachment.localPath });
+        } else {
+          input.push({ type: "mention", name: attachment.name, path: attachment.localPath });
+        }
+      }
+      return input;
+    }
+    function turnParams(turn, text) {
       const params = {
         threadId,
-        input: [{ type: "text", text }],
+        input: turnInput(turn, text),
         model: getModel(),
         effort: getEffort ? getEffort() : void 0,
         approvalPolicy: APPROVAL_POLICY,
@@ -40589,7 +40767,8 @@ data: ${JSON.stringify(payload)}
         if (instructions) turnText = instructions + "\n\n---\n\n" + activeUserText;
         preambleSent = true;
       }
-      rpc.request("turn/start", turnParams(turnText), 18e4).catch((error) => {
+      activeTurnDispatched = true;
+      rpc.request("turn/start", turnParams(activeTurn, turnText), 18e4).catch((error) => {
         void handleTurnFailure(error);
       });
     }
@@ -40640,7 +40819,7 @@ data: ${JSON.stringify(payload)}
           message: redactValue((error == null ? void 0 : error.message) || "Failed to start Codex turn.", providerSensitiveValues)
         };
         try {
-          if (await attemptProviderRecovery(error)) return;
+          if (!activeTurnDispatched && await attemptProviderRecovery(error)) return;
         } catch (recoveryError) {
           failure2 = {
             kind: recoveryError == null ? void 0 : recoveryError.kind,
@@ -40655,17 +40834,35 @@ data: ${JSON.stringify(payload)}
           type: "error",
           kind: (failure2 == null ? void 0 : failure2.kind) || (providerHttpFailure || /model/i.test(message) ? "model" : "mcp"),
           ...(failure2 == null ? void 0 : failure2.code) ? { code: failure2.code } : {},
-          message
+          message,
+          ...activeTurnFailureFields()
         });
         finishActive();
       } finally {
         turnFailureInFlight = false;
       }
     }
-    async function sendUser(text) {
+    async function sendUser(input) {
       if (activeRun) return activeRun;
+      let turn;
+      try {
+        turn = normalizeTurnInput(input);
+      } catch (error) {
+        const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
+        emit({
+          type: "error",
+          kind: "attachment",
+          code: "TURN_INPUT_INVALID",
+          message: error.message,
+          ...turnId ? { turnId, dispatchState: "not-started" } : {}
+        });
+        return;
+      }
       activeAssistantText = "";
-      activeUserText = String(text || "");
+      activeTurn = turn;
+      activeTurnAccepted = false;
+      activeTurnDispatched = false;
+      activeUserText = turn.text;
       activeUserRecorded = false;
       providerRecoveryAttempted = false;
       providerRecoveryInFlight = false;
@@ -40711,7 +40908,7 @@ data: ${JSON.stringify(payload)}
       drainApprovals();
       providerDeltaRedactor.discard();
       if (activeRun) {
-        emit({ type: "error", kind: "aborted", message: "Turn aborted." });
+        emit({ type: "error", kind: "aborted", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
       }
     }
@@ -40976,6 +41173,9 @@ data: ${JSON.stringify(payload)}
     let activeRun = null;
     let activeResolve = null;
     let activeAssistantText = "";
+    let activeTurn = null;
+    let activeTurnAccepted = false;
+    let messageDispatched = false;
     let turnStarted = false;
     let toolMeta = { annotations: {} };
     const pendingApprovals = /* @__PURE__ */ new Map();
@@ -40995,6 +41195,9 @@ data: ${JSON.stringify(payload)}
       if (!activeResolve) {
         activeRun = null;
         activeAssistantText = "";
+        activeTurn = null;
+        activeTurnAccepted = false;
+        messageDispatched = false;
         turnStarted = false;
         startedTools.clear();
         return;
@@ -41003,6 +41206,9 @@ data: ${JSON.stringify(payload)}
       activeResolve = null;
       activeRun = null;
       activeAssistantText = "";
+      activeTurn = null;
+      activeTurnAccepted = false;
+      messageDispatched = false;
       turnStarted = false;
       startedTools.clear();
       resolve();
@@ -41014,6 +41220,15 @@ data: ${JSON.stringify(payload)}
         throw new Error("OpenCode HTTP " + (response ? response.status : "error") + (text ? ": " + text : ""));
       }
       return response;
+    }
+    function activeTurnFailureFields() {
+      if (!(activeTurn == null ? void 0 : activeTurn.turnId)) return {};
+      return {
+        turnId: activeTurn.turnId,
+        ...!activeTurnAccepted ? {
+          dispatchState: messageDispatched ? "uncertain" : "not-started"
+        } : {}
+      };
     }
     async function requestJson(path, options = {}) {
       const response = await request(path, options);
@@ -41073,7 +41288,12 @@ data: ${JSON.stringify(payload)}
       if (wasStopping) return;
       if (activeRun) {
         const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
-        emit({ type: "error", kind: "mcp", message: "opencode serve exited: " + detail });
+        emit({
+          type: "error",
+          kind: "mcp",
+          message: "opencode serve exited: " + detail,
+          ...activeTurnFailureFields()
+        });
         finishActive();
       }
     }
@@ -41085,7 +41305,12 @@ data: ${JSON.stringify(payload)}
       sseClosed = true;
       sseStarted = false;
       if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: error && error.message ? error.message : "opencode serve error" });
+        emit({
+          type: "error",
+          kind: "mcp",
+          message: error && error.message ? error.message : "opencode serve error",
+          ...activeTurnFailureFields()
+        });
         finishActive();
       }
     }
@@ -41150,7 +41375,12 @@ data: ${JSON.stringify(payload)}
       const parser = createSseParser(({ data: data2 }) => handleOpenCodeEvent(data2));
       request("/event").then((response) => readSseBody(response.body, parser)).catch((e) => {
         if (!sseClosed && activeRun) {
-          emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "OpenCode event stream failed." });
+          emit({
+            type: "error",
+            kind: "mcp",
+            message: e && e.message ? e.message : "OpenCode event stream failed.",
+            ...activeTurnFailureFields()
+          });
           finishActive();
         }
       });
@@ -41278,7 +41508,12 @@ data: ${JSON.stringify(payload)}
       }
       if (type === "session.error") {
         const error = p.error || p;
-        emit({ type: "error", kind: error.kind || "mcp", message: error.message || String(error || "OpenCode session error") });
+        emit({
+          type: "error",
+          kind: error.kind || "mcp",
+          message: error.message || String(error || "OpenCode session error"),
+          ...activeTurnFailureFields()
+        });
         finishActive();
         return;
       }
@@ -41295,21 +41530,59 @@ data: ${JSON.stringify(payload)}
       }
       return Promise.allSettled(replies);
     }
-    async function sendUser(text) {
+    function openCodeParts(turn) {
+      return [
+        ...turn.text ? [{ type: "text", text: turn.text }] : [],
+        ...turn.attachments.map((file) => ({
+          type: "file",
+          mime: file.mediaType || "application/octet-stream",
+          filename: file.name,
+          url: attachmentFileUrl(file.localPath, adapter.id)
+        }))
+      ];
+    }
+    async function sendUser(input) {
       if (activeRun) return activeRun;
+      let turn;
+      try {
+        turn = normalizeTurnInput(input);
+      } catch (error) {
+        const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
+        emit({
+          type: "error",
+          kind: "attachment",
+          code: "TURN_INPUT_INVALID",
+          message: error.message,
+          ...turnId ? { turnId, dispatchState: "not-started" } : {}
+        });
+        return;
+      }
       activeAssistantText = "";
+      activeTurn = turn;
+      activeTurnAccepted = false;
+      messageDispatched = false;
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
       });
       try {
         const id = await ensureSession();
-        const userText = String(text || "");
+        const userText = turn.text;
         transcript.push({ role: "user", text: userText });
+        messageDispatched = true;
         await postJson("/session/" + encodeURIComponent(id) + "/message", {
-          parts: [{ type: "text", text: userText }]
+          parts: openCodeParts(turn)
         });
+        if (turn.turnId) {
+          activeTurnAccepted = true;
+          emit({ type: "turn-accepted", turnId: turn.turnId, transport: "opencode-file-part" });
+        }
       } catch (e) {
-        emit({ type: "error", kind: "mcp", message: e && e.message ? e.message : "Failed to start OpenCode turn." });
+        emit({
+          type: "error",
+          kind: "mcp",
+          message: e && e.message ? e.message : "Failed to start OpenCode turn.",
+          ...activeTurnFailureFields()
+        });
         finishActive();
       }
       return activeRun;
@@ -41331,7 +41604,7 @@ data: ${JSON.stringify(payload)}
       }
       await drainApprovals();
       if (activeRun) {
-        emit({ type: "error", kind: "aborted", message: "Turn aborted." });
+        emit({ type: "error", kind: "aborted", message: "Turn aborted.", ...activeTurnFailureFields() });
         finishActive();
       }
     }
@@ -41346,6 +41619,9 @@ data: ${JSON.stringify(payload)}
       activeResolve = null;
       activeRun = null;
       activeAssistantText = "";
+      activeTurn = null;
+      activeTurnAccepted = false;
+      messageDispatched = false;
       turnStarted = false;
       startedTools.clear();
       transcript.length = 0;

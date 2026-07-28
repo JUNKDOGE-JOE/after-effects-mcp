@@ -6,6 +6,7 @@ import {
   safeErrorMessage,
   sensitiveValues,
 } from './exactSecretRedaction.js';
+import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
 const MAX_TOOL_ROUNDS = 25;
 
@@ -141,10 +142,36 @@ export function createAgentLoop({
     return await executeTool(toolUse);
   }
 
-  async function sendUser(text) {
+  async function sendUser(input) {
     if (activeRun) return activeRun;
 
-    const userMessage = { role: 'user', content: String(text || '') };
+    let turn;
+    try {
+      turn = normalizeTurnInput(input);
+    } catch (error) {
+      const turnId = typeof input?.turnId === 'string' ? input.turnId : '';
+      emit({
+        type: 'error',
+        kind: 'attachment',
+        code: 'TURN_INPUT_INVALID',
+        message: error.message,
+        ...(turnId ? { turnId, dispatchState: 'not-started' } : {}),
+      });
+      return;
+    }
+    if (turn.attachments.length) {
+      emit({
+        type: 'error',
+        kind: 'attachment',
+        code: 'ATTACHMENT_SIDECAR_REQUIRED',
+        message: 'Restore the Claude Agent SDK sidecar to send local files.',
+        turnId: turn.turnId,
+        dispatchState: 'not-started',
+      });
+      return;
+    }
+
+    const userMessage = { role: 'user', content: turn.text };
     messages.push(userMessage);
     emit({ type: 'turn-start' });
 
@@ -153,6 +180,7 @@ export function createAgentLoop({
 
     activeRun = (async () => {
       let activeSensitiveValues = [];
+      let turnAccepted = false;
       try {
         const tools = await mcp.listTools();
         const toolByName = new Map((tools || []).map((tool) => [tool.name, tool]));
@@ -180,6 +208,10 @@ export function createAgentLoop({
           );
           let result;
           try {
+            if (turn.turnId && !turnAccepted) {
+              turnAccepted = true;
+              emit({ type: 'turn-accepted', turnId: turn.turnId, transport: 'legacy-byok' });
+            }
             result = await anthropic({
               requestProfile,
               model: (getModel && getModel()) || DEFAULT_MODEL,
@@ -224,7 +256,15 @@ export function createAgentLoop({
         // gap with synthetic cancelled results so the conversation stays
         // continuable.
         repairDanglingToolUses();
-        emit({ type: 'error', kind, message: safeErrorMessage(e, activeSensitiveValues) });
+        emit({
+          type: 'error',
+          kind,
+          message: safeErrorMessage(e, activeSensitiveValues),
+          ...(!turnAccepted && turn.turnId ? {
+            turnId: turn.turnId,
+            dispatchState: 'not-started',
+          } : {}),
+        });
       } finally {
         activeSensitiveValues = [];
         activeController = null;
