@@ -147,6 +147,8 @@ class LayerTrackMatteSetValue(_NativeModel):
                 or locator.object_id == self.layer_locator.object_id
             ):
                 raise ValueError("Track Matte locators must be distinct same-context layers")
+        if before is not None and self.before_mode == "none":
+            raise ValueError("an active Track Matte requires a stored non-none mode")
         if before == after and self.before_mode == self.after_mode:
             raise ValueError("Track Matte did not change")
         return self
