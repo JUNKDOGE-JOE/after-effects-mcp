@@ -29,7 +29,11 @@ import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
 import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref, codexProviderChannelLock } from '../lib/channels.js';
 import { createProviderStore } from '../cep/providerStore';
 import { createProviderSecretService, resolveProviderRequestProfile } from '../cep/providerSecrets';
-import { createProviderAcceptanceBridge } from '../cep/providerAcceptanceBridge.js';
+import {
+  countMentionedPanelAttachments,
+  createProviderAcceptanceBridge,
+  normalizePanelAcceptanceTurns,
+} from '../cep/providerAcceptanceBridge.js';
 import { createUniversalProviderRoute } from '../cep/universalProviderRoute.js';
 import { migrateProviderStoreSecrets } from '../cep/providerMigration';
 import { migrateProviderStoreV2ToV3 } from '../cep/providerSchemaMigration';
@@ -901,14 +905,16 @@ function Shell({ cs }) {
         const client = input.client === 'claude' ? 'claude' : input.client === 'codex' ? 'codex' : '';
         const providerId = typeof input.providerId === 'string' ? input.providerId.trim() : '';
         const modelId = typeof input.modelId === 'string' ? input.modelId.trim() : '';
-        const prompts = Array.isArray(input.prompts)
-          ? input.prompts.map((value) => String(value || '').trim())
-          : [];
+        let plannedTurns;
+        try {
+          plannedTurns = normalizePanelAcceptanceTurns(input);
+        } catch {
+          return { ok: false, errorCode: 'PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN', turns: [] };
+        }
         const graceMs = Number.isInteger(input.graceMs) && input.graceMs >= 0 && input.graceMs <= 10000
           ? input.graceMs
           : 3000;
-        if (!client || !providerId || !modelId || prompts.length < 1 || prompts.length > 4
-          || prompts.some((value) => !value || value.length > 2000)) {
+        if (!client || !providerId || !modelId) {
           return { ok: false, errorCode: 'PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN', turns: [] };
         }
         let provider = null;
@@ -932,13 +938,14 @@ function Shell({ cs }) {
         };
         backend.reset();
         try {
-          for (const prompt of prompts) {
+          for (const plannedTurn of plannedTurns) {
             const eventStart = providerAcceptanceEventsRef.current.length;
             const startedAt = Date.now();
-            await backend.sendUser(prompt);
+            await backend.sendUser(plannedTurn);
             await new Promise((resolve) => setTimeout(resolve, graceMs));
             const events = providerAcceptanceEventsRef.current.slice(eventStart);
             const error = events.find((event) => event.type === 'error');
+            const accepted = events.some((event) => event.type === 'turn-accepted');
             const terminal = events.some((event) => event.type === 'turn-end');
             const transcript = backend.getMessages();
             const hasAssistant = transcript.some((message) => message?.role === 'assistant'
@@ -948,11 +955,17 @@ function Shell({ cs }) {
               terminal: terminal ? 'turn-end' : null,
               durationMs: Date.now() - startedAt,
               errorCode: error?.code || error?.kind || null,
+              attachmentCount: plannedTurn.attachments.length,
+              mentionedAttachmentCount: countMentionedPanelAttachments(
+                transcript,
+                plannedTurn.attachments,
+              ),
+              accepted,
             });
             if (!turns.at(-1).ok) break;
           }
           return {
-            ok: turns.length === prompts.length && turns.every((turn) => turn.ok),
+            ok: turns.length === plannedTurns.length && turns.every((turn) => turn.ok),
             client,
             modelId,
             turns,

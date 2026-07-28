@@ -771,6 +771,68 @@ test('retries native Messages once without beta values after a generic invalid-b
   }
 });
 
+test('retries native Messages once without the rejected SDK context-management hint', async () => {
+  const records = [];
+  const audit = [];
+  const upstream = controlledUpstream(records, ({ res, attempt }) => {
+    if (attempt === 1) {
+      res.writeHead(400, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        error: {
+          message: 'context_management is not available for this model.',
+        },
+      }));
+      return;
+    }
+    sendNativeMessage(res);
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'native-r': 'responses', 'native-m': 'messages', 'chat-m': 'chat' },
+    profileCalls: [],
+    audit,
+  });
+  try {
+    const local = await route.start();
+    const result = await requestText(local.anthropicBaseUrl + '/v1/messages', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer ' + local.routeToken,
+        'anthropic-beta': 'supported-beta',
+        'content-type': 'application/json',
+      },
+      body: {
+        model: 'native-m',
+        max_tokens: 16,
+        messages: [{ role: 'user', content: 'OK' }],
+        context_management: {
+          edits: [{ type: 'clear_thinking_20251015', keep: 'all' }],
+        },
+      },
+    });
+    assert.equal(result.status, 200);
+    assert.equal(records.length, 2);
+    assert.deepEqual(records[0].body.context_management, {
+      edits: [{ type: 'clear_thinking_20251015', keep: 'all' }],
+    });
+    assert.equal(records[1].body.context_management, undefined);
+    assert.deepEqual(
+      { ...records[1].body, context_management: records[0].body.context_management },
+      records[0].body,
+    );
+    assert.equal(records[1].headers['anthropic-beta'], 'supported-beta');
+    assert.equal(audit.filter(
+      (entry) => entry.compatibility === 'context-management-rejected',
+    ).length, 1);
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
 test('does not retry native Messages for an unrelated upstream 400', async () => {
   const records = [];
   const upstream = controlledUpstream(records, ({ res }) => {
@@ -795,6 +857,47 @@ test('does not retry native Messages for an unrelated upstream 400', async () =>
         'content-type': 'application/json',
       },
       body: { model: 'native-m', max_tokens: 16, messages: [{ role: 'user', content: 'OK' }] },
+    });
+    assert.equal(result.status, 400);
+    assert.equal(records.length, 1);
+  } finally {
+    await route.close();
+    await closeServer(upstream);
+  }
+});
+
+test('does not discard an unknown context-management contract on retry', async () => {
+  const records = [];
+  const upstream = controlledUpstream(records, ({ res }) => {
+    res.writeHead(400, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({
+      error: { message: 'context_management is not available for this model.' },
+    }));
+  });
+  await listen(upstream);
+  const apiRoot = 'http://127.0.0.1:' + upstream.address().port + '/v1';
+  const route = makeRoute({
+    apiRoot,
+    records,
+    capabilities: { 'native-r': 'responses', 'native-m': 'messages', 'chat-m': 'chat' },
+    profileCalls: [],
+  });
+  try {
+    const local = await route.start();
+    const result = await requestText(local.anthropicBaseUrl + '/v1/messages', {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer ' + local.routeToken,
+        'content-type': 'application/json',
+      },
+      body: {
+        model: 'native-m',
+        max_tokens: 16,
+        messages: [{ role: 'user', content: 'OK' }],
+        context_management: {
+          edits: [{ type: 'future_context_contract', keep: 'all' }],
+        },
+      },
     });
     assert.equal(result.status, 400);
     assert.equal(records.length, 1);

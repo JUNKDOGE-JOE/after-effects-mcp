@@ -1,6 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createProviderAcceptanceBridge } from '../src/cep/providerAcceptanceBridge.js';
+import {
+  countMentionedPanelAttachments,
+  createProviderAcceptanceBridge,
+  normalizePanelAcceptanceTurns,
+} from '../src/cep/providerAcceptanceBridge.js';
 
 const UPSTREAM_SECRET = 'sk-upstream-must-never-leave-cep';
 const SECRET_REFERENCE = 'aemcp-secret://provider/credential-id/auth-model/v1';
@@ -142,6 +146,84 @@ function assertNoUpstreamMaterial(value) {
   assert.doesNotMatch(serialized, /private-provider\.example/);
   assert.doesNotMatch(serialized, /"(?:apiRoot|auth|baseUrl|credential|headers|reference)"/);
 }
+
+test('panel acceptance turns preserve legacy prompts and structured attachment order', () => {
+  const prompts = normalizePanelAcceptanceTurns({
+    prompts: ['first', 'second'],
+  });
+  assert.deepEqual(
+    prompts.map((turn) => ({ text: turn.text, attachments: turn.attachments })),
+    [
+      { text: 'first', attachments: [] },
+      { text: 'second', attachments: [] },
+    ],
+  );
+
+  const attachments = Array.from({ length: 5 }, (_, index) => ({
+    id: `attachment-${index + 1}`,
+    name: `fixture-${index + 1}.bin`,
+    localPath: `/private/tmp/fixture-${index + 1}.bin`,
+    size: index + 1,
+    mediaType: 'application/octet-stream',
+    temporary: false,
+  }));
+  const turns = normalizePanelAcceptanceTurns({
+    turns: [{ text: 'inspect', attachments }],
+  });
+  assert.deepEqual(
+    turns[0].attachments.map((attachment) => attachment.id),
+    attachments.map((attachment) => attachment.id),
+  );
+  assert.equal(turns[0].turnId, 'provider-acceptance-1');
+});
+
+test('panel acceptance turns reject ambiguous input and relative attachment paths', () => {
+  assert.throws(
+    () => normalizePanelAcceptanceTurns({
+      prompts: ['legacy'],
+      turns: [{ text: 'structured', attachments: [] }],
+    }),
+    (error) => error.code === 'PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN',
+  );
+  assert.throws(
+    () => normalizePanelAcceptanceTurns({
+      turns: [{
+        text: '',
+        attachments: [{
+          id: 'attachment-1',
+          name: 'fixture.bin',
+          localPath: 'relative/fixture.bin',
+          size: 1,
+          mediaType: 'application/octet-stream',
+          temporary: false,
+        }],
+      }],
+    }),
+    (error) => error.code === 'PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN',
+  );
+});
+
+test('panel acceptance evidence counts attachment names without returning assistant text', () => {
+  const attachments = [
+    { name: 'one.txt' },
+    { name: 'two.png' },
+    { name: 'three.pdf' },
+  ];
+  assert.equal(
+    countMentionedPanelAttachments(
+      [{ role: 'assistant', text: 'I can see one.txt and three.pdf.' }],
+      attachments,
+    ),
+    2,
+  );
+  assert.equal(
+    countMentionedPanelAttachments(
+      [{ role: 'user', text: 'one.txt two.png three.pdf' }],
+      attachments,
+    ),
+    0,
+  );
+});
 
 test('snapshot exposes only Provider identity, revisions, model ids, and capability statuses', () => {
   const bridge = createProviderAcceptanceBridge(bridgeDeps());

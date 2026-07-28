@@ -38241,6 +38241,26 @@ data: ${JSON.stringify(payload)}
     else delete next["anthropic-beta"];
     return next;
   }
+  function payloadWithoutRejectedContextManagement(payload, buffer) {
+    let errorBody;
+    let requestBody2;
+    try {
+      errorBody = JSON.parse(buffer.toString("utf8"));
+      requestBody2 = JSON.parse(payload.toString("utf8"));
+    } catch {
+      return null;
+    }
+    const source = (errorBody == null ? void 0 : errorBody.error) && typeof errorBody.error === "object" ? errorBody.error : errorBody;
+    const message = typeof (source == null ? void 0 : source.message) === "string" ? source.message : "";
+    if (!/\bcontext_management\b/.test(message) || requestBody2 === null || typeof requestBody2 !== "object" || Array.isArray(requestBody2)) return null;
+    const context = requestBody2.context_management;
+    if (context === null || typeof context !== "object" || Array.isArray(context) || JSON.stringify(Object.keys(context).sort()) !== '["edits"]' || !Array.isArray(context.edits) || context.edits.length !== 1) return null;
+    const edit = context.edits[0];
+    if (edit === null || typeof edit !== "object" || Array.isArray(edit) || JSON.stringify(Object.keys(edit).sort()) !== '["keep","type"]' || edit.type !== "clear_thinking_20251015" || edit.keep !== "all") return null;
+    const next = { ...requestBody2 };
+    delete next.context_management;
+    return Buffer.from(JSON.stringify(next), "utf8");
+  }
   function createGate2(maximum) {
     let active = 0;
     return {
@@ -38568,7 +38588,7 @@ data: ${JSON.stringify(payload)}
         method: "POST"
       };
       if (lookupImpl) requestOptions.lookup = lookupImpl;
-      const sendAttempt = (attemptHeaders, allowBetaRetry) => {
+      const sendAttempt = (attemptHeaders, attemptPayload, compatibility2) => {
         let connected = false;
         let requestSettled = false;
         let request = null;
@@ -38617,8 +38637,9 @@ data: ${JSON.stringify(payload)}
                 if (responseSettled || context.finished) return;
                 responseSettled = true;
                 const rawErrorBody = Buffer.concat(chunks2);
-                const retryHeaders = allowBetaRetry && status === 400 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, rawErrorBody) : null;
+                const retryHeaders = compatibility2.beta && status === 400 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, rawErrorBody) : null;
                 if (retryHeaders) {
+                  retryHeaders["content-length"] = String(attemptPayload.length);
                   onAudit({
                     event: "provider_route_compat_retry",
                     modelId,
@@ -38627,7 +38648,33 @@ data: ${JSON.stringify(payload)}
                     compatibility: "anthropic-beta-rejected-values",
                     outcome: "retry"
                   });
-                  sendAttempt(retryHeaders, false);
+                  sendAttempt(retryHeaders, attemptPayload, {
+                    beta: false,
+                    contextManagement: compatibility2.contextManagement
+                  });
+                  return;
+                }
+                const retryPayload = compatibility2.contextManagement && status === 400 ? payloadWithoutRejectedContextManagement(attemptPayload, rawErrorBody) : null;
+                if (retryPayload) {
+                  onAudit({
+                    event: "provider_route_compat_retry",
+                    modelId,
+                    clientProtocol,
+                    upstreamProtocol: capability.upstreamProtocol,
+                    compatibility: "context-management-rejected",
+                    outcome: "retry"
+                  });
+                  sendAttempt(
+                    {
+                      ...attemptHeaders,
+                      "content-length": String(retryPayload.length)
+                    },
+                    retryPayload,
+                    {
+                      beta: compatibility2.beta,
+                      contextManagement: false
+                    }
+                  );
                   return;
                 }
                 let errorHeaders = responseHeaders;
@@ -38812,7 +38859,7 @@ data: ${JSON.stringify(payload)}
               "Provider request failed."
             ));
           });
-          request.end(payload);
+          request.end(attemptPayload);
         } catch {
           clearTimeout(connectTimer);
           if (!context.finish()) return;
@@ -38823,7 +38870,10 @@ data: ${JSON.stringify(payload)}
           ));
         }
       };
-      sendAttempt(headers, true);
+      sendAttempt(headers, payload, {
+        beta: true,
+        contextManagement: true
+      });
     };
     const forwardChatFacade = ({ context, payload, modelId }) => {
       const endpoint = new URL("responses", chatRouteInfo.baseUrl.replace(/\/+$/, "") + "/");
@@ -42831,6 +42881,7 @@ data: ${JSON.stringify(payload)}
       PROVIDER_ACCEPTANCE_BRIDGE_DISPOSED: "Provider acceptance bridge is disposed.",
       PROVIDER_ACCEPTANCE_CALLBACK_FAILED: "Provider acceptance state refresh failed.",
       PROVIDER_ACCEPTANCE_INVALID_MODELS: "Provider acceptance model list is invalid.",
+      PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN: "Provider acceptance panel turn is invalid.",
       PROVIDER_ACCEPTANCE_PROVIDER_NOT_FOUND: "Provider was not found.",
       PROVIDER_ACCEPTANCE_PROBE_FAILED: "Provider acceptance probe failed.",
       PROVIDER_ACCEPTANCE_ROUTE_CLOSE_FAILED: "Provider acceptance route did not close cleanly.",
@@ -42841,6 +42892,52 @@ data: ${JSON.stringify(payload)}
     const error = new Error(messages[code] || messages.PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE);
     error.code = messages[code] ? code : "PROVIDER_ACCEPTANCE_STORE_UNAVAILABLE";
     return error;
+  }
+  function absoluteAttachmentPath(value) {
+    return typeof value === "string" && value.length > 0 && value.length <= 4096 && !/[\0\r\n]/.test(value) && (value.startsWith("/") || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\[^\\]+\\[^\\]+/.test(value));
+  }
+  function normalizePanelAcceptanceTurns(input = {}) {
+    const hasPrompts = Array.isArray(input.prompts);
+    const hasTurns = Array.isArray(input.turns);
+    if (hasPrompts === hasTurns) {
+      throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN");
+    }
+    const source = hasTurns ? input.turns : input.prompts.map((value) => ({
+      text: String(value || "").trim(),
+      attachments: []
+    }));
+    if (source.length < 1 || source.length > 4) {
+      throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN");
+    }
+    try {
+      return Object.freeze(source.map((value, index) => {
+        if (!value || typeof value !== "object" || Array.isArray(value)) {
+          throw new TypeError("turn must be an object");
+        }
+        const turn = normalizeTurnInput({
+          ...value,
+          turnId: `provider-acceptance-${index + 1}`
+        });
+        if (turn.text.length > 2e3 || turn.attachments.some((attachment) => !absoluteAttachmentPath(
+          attachment.localPath
+        ))) {
+          throw new TypeError("turn is outside the acceptance boundary");
+        }
+        return turn;
+      }));
+    } catch {
+      throw bridgeError("PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN");
+    }
+  }
+  function countMentionedPanelAttachments(transcript, attachments) {
+    const assistantText = Array.isArray(transcript) ? transcript.filter((message) => (message == null ? void 0 : message.role) === "assistant" && typeof message.text === "string").map((message) => message.text).join("\n") : "";
+    if (!assistantText || !Array.isArray(attachments)) return 0;
+    const names = new Set(attachments.flatMap((attachment) => typeof (attachment == null ? void 0 : attachment.name) === "string" && attachment.name ? [attachment.name] : []));
+    let count = 0;
+    for (const name of names) {
+      if (assistantText.includes(name)) count += 1;
+    }
+    return count;
   }
   function dependency(name, value, predicate) {
     if (!predicate(value)) throw new TypeError(`${name} is required`);
@@ -49928,9 +50025,14 @@ ${baseUrl}`),
           const client = input.client === "claude" ? "claude" : input.client === "codex" ? "codex" : "";
           const providerId = typeof input.providerId === "string" ? input.providerId.trim() : "";
           const modelId = typeof input.modelId === "string" ? input.modelId.trim() : "";
-          const prompts = Array.isArray(input.prompts) ? input.prompts.map((value) => String(value || "").trim()) : [];
+          let plannedTurns;
+          try {
+            plannedTurns = normalizePanelAcceptanceTurns(input);
+          } catch {
+            return { ok: false, errorCode: "PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN", turns: [] };
+          }
           const graceMs = Number.isInteger(input.graceMs) && input.graceMs >= 0 && input.graceMs <= 1e4 ? input.graceMs : 3e3;
-          if (!client || !providerId || !modelId || prompts.length < 1 || prompts.length > 4 || prompts.some((value) => !value || value.length > 2e3)) {
+          if (!client || !providerId || !modelId) {
             return { ok: false, errorCode: "PROVIDER_ACCEPTANCE_INVALID_PANEL_TURN", turns: [] };
           }
           let provider = null;
@@ -49957,13 +50059,14 @@ ${baseUrl}`),
           };
           backend.reset();
           try {
-            for (const prompt of prompts) {
+            for (const plannedTurn of plannedTurns) {
               const eventStart = providerAcceptanceEventsRef.current.length;
               const startedAt = Date.now();
-              await backend.sendUser(prompt);
+              await backend.sendUser(plannedTurn);
               await new Promise((resolve) => setTimeout(resolve, graceMs));
               const events2 = providerAcceptanceEventsRef.current.slice(eventStart);
               const error = events2.find((event) => event.type === "error");
+              const accepted = events2.some((event) => event.type === "turn-accepted");
               const terminal = events2.some((event) => event.type === "turn-end");
               const transcript = backend.getMessages();
               const hasAssistant = transcript.some((message) => (message == null ? void 0 : message.role) === "assistant" && typeof message.text === "string" && message.text.trim());
@@ -49971,12 +50074,18 @@ ${baseUrl}`),
                 ok: !error && terminal && hasAssistant,
                 terminal: terminal ? "turn-end" : null,
                 durationMs: Date.now() - startedAt,
-                errorCode: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.kind) || null
+                errorCode: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.kind) || null,
+                attachmentCount: plannedTurn.attachments.length,
+                mentionedAttachmentCount: countMentionedPanelAttachments(
+                  transcript,
+                  plannedTurn.attachments
+                ),
+                accepted
               });
               if (!turns.at(-1).ok) break;
             }
             return {
-              ok: turns.length === prompts.length && turns.every((turn) => turn.ok),
+              ok: turns.length === plannedTurns.length && turns.every((turn) => turn.ok),
               client,
               modelId,
               turns
