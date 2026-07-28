@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { createMacosAdapter } from '../src/cep/platform/macos.js';
+import { createWindowsAdapter } from '../src/cep/platform/windows.js';
 import { createAttachmentStore } from '../src/cep/attachmentStore.js';
 import {
   MAX_ATTACHMENTS_PER_TURN,
@@ -18,9 +19,11 @@ function makeRoot(t) {
 }
 
 function makePlatform(tempRoot, overrides = {}) {
-  const platform = createMacosAdapter({
-    platform: 'darwin',
-    arch: 'arm64',
+  const windows = process.platform === 'win32';
+  const createAdapter = windows ? createWindowsAdapter : createMacosAdapter;
+  const platform = createAdapter({
+    platform: windows ? 'win32' : 'darwin',
+    arch: windows ? 'x64' : 'arm64',
     home: path.join(tempRoot, 'home'),
     temp: tempRoot,
     env: {},
