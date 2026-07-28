@@ -83,6 +83,13 @@ test('normalizeTurnInput rejects malformed attachment turns', () => {
   }
 });
 
+test('normalizeTurnInput rejects a turn with neither text nor attachments', () => {
+  assert.throws(
+    () => normalizeTurnInput({ turnId: 'turn-1', text: '', attachments: [] }),
+    /text or attachment/i,
+  );
+});
+
 test('display metadata never contains a local path or ownership flag', () => {
   const value = displayAttachments([fixtureAttachment()]);
   assert.deepEqual(value, [{
@@ -133,5 +140,9 @@ test('attachmentFileUrl encodes macOS and Windows path components', () => {
   assert.equal(
     attachmentFileUrl('C:\\Users\\Test\\AE files\\a#b.png', 'windows-x64'),
     'file:///C:/Users/Test/AE%20files/a%23b.png',
+  );
+  assert.equal(
+    attachmentFileUrl('\\\\server\\share\\AE files\\a#b.png', 'windows-x64'),
+    'file://server/share/AE%20files/a%23b.png',
   );
 });

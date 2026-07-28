@@ -29,7 +29,7 @@ function requireSegment(value, field) {
 }
 
 function safeBasename(value, fallback = 'attachment') {
-  const normalized = String(value || '').replaceAll('\\', '/');
+  const normalized = String(value || '').replace(/\\/g, '/');
   const name = normalized.split('/').filter(Boolean).pop() || fallback;
   return name === '.' || name === '..' ? fallback : name;
 }
@@ -106,6 +106,7 @@ export function createAttachmentStore({
       sessionId: safeSessionId,
       size,
       temporary,
+      createdAt: Number(now()),
       ref: null,
     };
     records.set(id, record);
@@ -173,7 +174,6 @@ export function createAttachmentStore({
         size: file.size,
         mediaType: mediaTypeOf(file),
         temporary: true,
-        createdAt: Number(now()),
       });
       record.ref = ref;
       return ref;
@@ -193,10 +193,10 @@ export function createAttachmentStore({
   }
 
   async function preparePathBacked(file, context) {
-    const localPath = platform.paths.resolve([file.path]);
-    if (!platform.paths.isAbsolute(localPath)) {
+    if (!platform.paths.isAbsolute(file.path)) {
       throw attachmentError('ATTACHMENT_INVALID', 'Attachment path must be absolute');
     }
+    const localPath = platform.paths.resolve([file.path]);
     let stat;
     try {
       stat = fs.statSync(localPath);
@@ -218,7 +218,6 @@ export function createAttachmentStore({
       size: stat.size,
       mediaType: mediaTypeOf(file),
       temporary: false,
-      createdAt: Number(now()),
     });
     record.ref = ref;
     return ref;

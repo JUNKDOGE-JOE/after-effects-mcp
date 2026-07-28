@@ -53,6 +53,9 @@ export function normalizeTurnInput(input) {
     text: requireString(source.text, 'turn.text', { allowEmpty: true }),
     attachments: Object.freeze(attachments.map(normalizeAttachment)),
   };
+  if (!normalized.text.trim() && !normalized.attachments.length) {
+    throw new TypeError('turn requires text or attachments');
+  }
   return Object.freeze(normalized);
 }
 
@@ -102,7 +105,10 @@ export function attachmentFileUrl(localPath, platformId) {
     return 'file://' + encodePathSegments(localPath);
   }
   if (platformId === 'windows-x64') {
-    const normalized = localPath.replaceAll('\\', '/');
+    const normalized = localPath.replace(/\\/g, '/');
+    if (normalized.startsWith('//')) {
+      return 'file://' + encodePathSegments(normalized.slice(2));
+    }
     if (!/^[A-Za-z]:\//.test(normalized)) {
       throw new TypeError('Windows attachment path must be absolute');
     }

@@ -73,9 +73,30 @@ test('path-backed originals remain user-owned and are never deleted', async (t) 
 
   assert.equal(ref.temporary, false);
   assert.equal(ref.localPath, original);
+  assert.deepEqual(Object.keys(ref), [
+    'id',
+    'name',
+    'localPath',
+    'size',
+    'mediaType',
+    'temporary',
+  ]);
   store.release(ref.id);
   store.release(ref.id);
   assert.equal(fs.readFileSync(original, 'utf8'), 'video');
+});
+
+test('path-backed input must already be absolute', async (t) => {
+  const root = makeRoot(t);
+  const store = makeStore(root);
+
+  await assert.rejects(
+    store.prepare(
+      { name: 'relative.txt', size: 1, type: 'text/plain', path: 'relative.txt' },
+      { sessionId: 's1', pondId: 'p1' },
+    ),
+    (error) => error.code === 'ATTACHMENT_INVALID',
+  );
 });
 
 test('pathless blob is staged atomically and removed with its session', async (t) => {
