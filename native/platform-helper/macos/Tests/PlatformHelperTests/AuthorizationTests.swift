@@ -20,7 +20,7 @@ import Testing
     }
 
     @Test
-    func testAcceptsOnlySignedBrokerWithDirectTrustedCepAndSupportedAfterEffectsAncestry() throws {
+    func testAcceptsSignedBrokerSpawnedByTrustedCepRendererUnderCepAndSupportedAfterEffects() throws {
         let inspector = FixedCallerInspector(evidence: .validBroker)
         let authorizer = MacCallerAuthorizer(
             inspector: inspector,
@@ -42,6 +42,10 @@ import Testing
             .validBroker.replacing(callerBrokerSignatureValid: false),
             .validBroker.replacing(callerArchitecture: .x86_64),
             .validBroker.replacing(ancestry: Array(CallerEvidence.validBroker.ancestry.dropFirst())),
+            .validBroker.replacing(ancestry: [
+                CallerEvidence.validBroker.ancestry[0],
+                CallerEvidence.validBroker.ancestry[2],
+            ]),
             .validBroker.replacing(firstAncestorSigningIdentifier: "com.example.fake-cep"),
             .validBroker.replacing(firstAncestorTeamIdentifier: "ATTACKER01"),
             .validBroker.replacing(firstAncestorSignatureValid: false),
@@ -116,6 +120,10 @@ import Testing
     func testPolicyConstantsMatchProductionIdentifiersAndVersions() {
         XCTAssertEqual(MacCallerPolicy.afterEffectsBundleIdentifier, "com.adobe.AfterEffects.application")
         XCTAssertEqual(MacCallerPolicy.cepSigningIdentifier, "com.adobe.cep.CEPHtmlEngine")
+        XCTAssertEqual(
+            MacCallerPolicy.cepRendererSigningIdentifier,
+            "com.adobe.cep.CEPHtmlEngine Helper (Renderer)"
+        )
         XCTAssertEqual(MacCallerPolicy.adobeTeamIdentifier, "JQ525L2MZD")
         XCTAssertEqual(MacCallerPolicy.supportedAfterEffectsMajors, [25, 26])
         XCTAssertEqual(MacCallerPolicy.requiredArchitecture, .arm64)
@@ -323,7 +331,7 @@ private extension CallerEvidence {
             SignedProcessIdentity(
                 processIdentifier: 1002,
                 parentProcessIdentifier: 1001,
-                signingIdentifier: "com.adobe.cep.CEPHtmlEngine",
+                signingIdentifier: "com.adobe.cep.CEPHtmlEngine Helper (Renderer)",
                 teamIdentifier: "JQ525L2MZD",
                 bundleVersionMajor: nil,
                 architecture: .arm64,
@@ -331,6 +339,15 @@ private extension CallerEvidence {
             ),
             SignedProcessIdentity(
                 processIdentifier: 1001,
+                parentProcessIdentifier: 1000,
+                signingIdentifier: "com.adobe.cep.CEPHtmlEngine",
+                teamIdentifier: "JQ525L2MZD",
+                bundleVersionMajor: nil,
+                architecture: .arm64,
+                signatureValid: true
+            ),
+            SignedProcessIdentity(
+                processIdentifier: 1000,
                 parentProcessIdentifier: 1,
                 signingIdentifier: "com.adobe.AfterEffects.application",
                 teamIdentifier: "JQ525L2MZD",

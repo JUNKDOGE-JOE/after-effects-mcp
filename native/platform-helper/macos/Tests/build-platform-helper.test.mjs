@@ -84,6 +84,10 @@ test('mac identity policy locks public connection, signer, version, and Keychain
   ]);
   assert.equal(
     policy.macos.caller.brokerDirectParentSigningIdentifier,
+    'com.adobe.cep.CEPHtmlEngine Helper (Renderer)',
+  );
+  assert.equal(
+    policy.macos.caller.brokerRequiredAncestorSigningIdentifier,
     'com.adobe.cep.CEPHtmlEngine',
   );
   assert.equal(policy.macos.authorization.publicConnectionIdentityOnly, true);

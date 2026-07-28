@@ -33,7 +33,7 @@ test('rejected XPC peers cannot instantiate or reach production backends', () =>
   assert.doesNotMatch(rejection, /KeychainSecretStore|ScreenCapture|ProtocolRequestValidator/);
 });
 
-test('stdio broker keeps XPC out of CEP and retains direct CEP plus AE ancestry checks', () => {
+test('stdio broker keeps XPC out of CEP and pins renderer, CEP, and AE ancestry', () => {
   const authorization = source('Authorization.swift');
   const broker = source('StdioBroker.swift');
   const main = source('main.swift');
@@ -42,7 +42,8 @@ test('stdio broker keeps XPC out of CEP and retains direct CEP plus AE ancestry 
   assert.match(broker, /NSXPCConnection/);
   assert.match(broker, /platformHelperMaximumMessageBytes/);
   assert.match(authorization, /brokerSigningIdentifier\s*=\s*"ae-mcp-platform-helper"/);
-  assert.match(authorization, /directParent\.signingIdentifier\s*==\s*MacCallerPolicy\.cepSigningIdentifier/);
+  assert.match(authorization, /directParent\.signingIdentifier\s*==\s*MacCallerPolicy\.cepRendererSigningIdentifier/);
+  assert.match(authorization, /cepParent\.signingIdentifier\s*==\s*MacCallerPolicy\.cepSigningIdentifier/);
   assert.match(authorization, /adobeAncestry\.firstIndex/);
   assert.match(authorization, /connectionRequirement:\s*connectionRequirement/);
 });

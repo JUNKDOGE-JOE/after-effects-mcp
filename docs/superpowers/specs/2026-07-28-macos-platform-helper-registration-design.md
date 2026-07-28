@@ -32,9 +32,10 @@ credential path is introduced.
 
 The service authorizes either the legacy direct Adobe CEP peer or the broker
 peer. A broker is accepted only when its native signature is valid for the
-fixed Helper signing identifier, it is arm64, its direct parent is the same
-trusted Adobe CEP identity, and the stable ancestry reaches a supported trusted
-AE process. The XPC connection receives the matching broker code-signing
+fixed Helper signing identifier, it is arm64, its direct parent is Adobe's
+signed `CEPHtmlEngine Helper (Renderer)`, that renderer's direct parent is the
+signed `CEPHtmlEngine`, and the stable ancestry then reaches a supported
+trusted AE process. The XPC connection receives the matching broker code-signing
 requirement before activation. This preserves the existing same-user,
 audit-session, process-generation, Adobe ancestry, and rejected-peer
 `backendAccessCount=0` boundaries.
@@ -111,7 +112,7 @@ Tests are written before production changes and must demonstrate:
 6. macOS CEP transport never attempts to load the N-API addon;
 7. the broker accepts bounded frames, proxies XPC responses, and exits on EOF;
 8. broker authorization requires the fixed broker identity, direct trusted CEP
-   parent, and supported trusted AE ancestry;
+   renderer, its trusted CEP parent, and supported trusted AE ancestry;
 9. Windows startup behavior and all existing protocol/release guards remain
    unchanged.
 

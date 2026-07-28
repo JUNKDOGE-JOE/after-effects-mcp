@@ -4,7 +4,7 @@
 
 **Goal:** Register the verified bundled macOS Platform Helper and reach it from hardened Adobe CEP through a bounded same-binary stdio broker, so Provider credentials work in real After Effects without any plaintext fallback.
 
-**Architecture:** The CommonJS registration module validates the fixed seven-file macOS payload, materializes a private per-user launchd plist, reuses only an already-loaded service whose program path matches the verified Helper, and bootstraps the service when absent. Real AE proved that Adobe's hardened CEP process cannot load a non-Adobe-Team N-API addon. The macOS host therefore spawns the exact verified Helper executable in a bounded `--client-stdio` mode; that child owns the existing XPC connection. Service authorization accepts the broker only with its fixed native identity, direct trusted CEP parent, stable Adobe ancestry, current UID/audit session, and supported AE version. Windows keeps the addon path.
+**Architecture:** The CommonJS registration module validates the fixed seven-file macOS payload, materializes a private per-user launchd plist, reuses only an already-loaded service whose program path matches the verified Helper, and bootstraps the service when absent. Real AE proved that Adobe's hardened CEP process cannot load a non-Adobe-Team N-API addon. The macOS host therefore spawns the exact verified Helper executable in a bounded `--client-stdio` mode; that child owns the existing XPC connection. Service authorization accepts the broker only with its fixed native identity, direct trusted CEP renderer parent followed by the signed CEP process, stable Adobe ancestry, current UID/audit session, and supported AE version. Windows keeps the addon path.
 
 **Tech Stack:** Node.js CommonJS host modules, `node:test`, macOS `launchctl`, Swift stdio/XPC broker, Security.framework caller inspection, existing CEP development sync and non-candidate HDEV tooling.
 
@@ -44,7 +44,8 @@ transport placement while retaining the completed registration work.
   `--client-stdio` argument and private pipes.
 - [ ] Add failing lifecycle tests for bounded stdout frames, EOF, spawn failure,
   unexpected exit, and concurrent requests.
-- [ ] Add failing Swift tests for broker identity + direct CEP + AE ancestry,
+- [ ] Add failing Swift tests for broker identity + direct CEP renderer +
+  required CEP + AE ancestry,
   including independent mutations of every retained authorization boundary.
 
 ### Task 5: Implement the same-binary stdio broker
@@ -56,6 +57,14 @@ transport placement while retaining the completed registration work.
   and rejection-only backend behavior.
 - [ ] Change only macOS host transport to spawn the broker; retain the Windows
   N-API addon behavior unchanged.
+
+Real CEP process inspection refined the broker branch: Node executes in
+Adobe's signed `CEPHtmlEngine Helper (Renderer)`, so that renderer—not the
+top-level `CEPHtmlEngine`—is the broker's direct parent. Authorization pins the
+exact renderer identifier, then independently requires its signed
+`CEPHtmlEngine` parent and the supported AE ancestor; it does not accept an
+arbitrary Adobe-signed parent.
+
 - [ ] Prove the new guards by mutation, then run focused Node, Swift, protocol,
   static-boundary, panel, package, and governance checks.
 

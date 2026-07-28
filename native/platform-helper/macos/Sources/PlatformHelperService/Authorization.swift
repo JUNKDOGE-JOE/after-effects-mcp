@@ -11,6 +11,7 @@ enum NativeArchitecture: String, Equatable {
 enum MacCallerPolicy {
     static let afterEffectsBundleIdentifier = "com.adobe.AfterEffects.application"
     static let cepSigningIdentifier = "com.adobe.cep.CEPHtmlEngine"
+    static let cepRendererSigningIdentifier = "com.adobe.cep.CEPHtmlEngine Helper (Renderer)"
     static let brokerSigningIdentifier = "ae-mcp-platform-helper"
     static let adobeTeamIdentifier = "JQ525L2MZD"
     static let supportedAfterEffectsMajors = [25, 26]
@@ -116,7 +117,10 @@ struct MacCallerAuthorizer: CallerAuthorizing {
         } else if trustedBrokerProcess(evidence.caller),
                   let directParent = evidence.ancestry.first,
                   trustedAdobeProcess(directParent),
-                  directParent.signingIdentifier == MacCallerPolicy.cepSigningIdentifier {
+                  directParent.signingIdentifier == MacCallerPolicy.cepRendererSigningIdentifier,
+                  let cepParent = evidence.ancestry.dropFirst().first,
+                  trustedAdobeProcess(cepParent),
+                  cepParent.signingIdentifier == MacCallerPolicy.cepSigningIdentifier {
             adobeAncestry = evidence.ancestry.dropFirst()
             connectionRequirement = MacCallerPolicy.brokerConnectionRequirement
         } else {

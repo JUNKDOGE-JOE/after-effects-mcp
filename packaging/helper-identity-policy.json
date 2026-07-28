@@ -31,7 +31,8 @@
         "com.adobe.cep.CEPHtmlEngine",
         "ae-mcp-platform-helper"
       ],
-      "brokerDirectParentSigningIdentifier": "com.adobe.cep.CEPHtmlEngine"
+      "brokerDirectParentSigningIdentifier": "com.adobe.cep.CEPHtmlEngine Helper (Renderer)",
+      "brokerRequiredAncestorSigningIdentifier": "com.adobe.cep.CEPHtmlEngine"
     }
   },
   "windows": {
