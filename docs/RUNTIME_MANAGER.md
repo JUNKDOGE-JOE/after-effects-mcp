@@ -4,6 +4,15 @@ The v0.9.3 macOS panel uses the runtime already contained in the installed exten
 
 v0.9.3 macOS 面板只使用已安装扩展中自带的 runtime，不会通过 Homebrew、`uv`、pip、npm、公共包仓库或 PATH 中发现的命令安装 core。
 
+RuntimeManager protects normal installation correctness; it is not a crash-continuity or hostile
+local-process security boundary. Atomic pointer changes, bounded rollback, and repair of an observed
+invalid current generation remain supported. Power-loss continuation, stale-process forensics,
+cross-restart task resumption, and adversarial lock/ABA resistance are explicit non-goals.
+
+RuntimeManager 保护普通安装流程的正确性，不是断电续跑或抵御本机恶意进程的安全边界。
+原子指针切换、有界回滚，以及对已观察到的无效 current generation 进行修复仍属于支持范围；
+断电续跑、陈旧进程取证、跨重启任务恢复和对抗性 lock/ABA 防护明确不做。
+
 ## Layout / 目录
 
 ```text

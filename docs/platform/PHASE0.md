@@ -3,6 +3,11 @@
 Phase 0 proves platform and signing assumptions with disposable output. It never creates a release
 candidate, tag, build lock, final signing report, or published artifact.
 
+This document records the implemented release/signing probe. Historical peer-identity and
+process-ancestry experiments below are not current product security commitments. The supported
+runtime model trusts the host user and local clients; only Provider/API secret confidentiality and
+release integrity remain security/release requirements. See `docs/THREAT_MODEL.md`.
+
 ## Signing probe boundary
 
 The probe accepts an unsigned platform stage that has already passed
@@ -157,22 +162,21 @@ Rejected peers receive a rejection-only exported object. It performs only a boun
 scan and returns `HELPER_UNAUTHORIZED backendAccessCount=0`; it never creates the request validator,
 Keychain backend, or capture backend. The authorized branch additionally applies
 `NSXPCConnection.setCodeSigningRequirement` before activating the connection. Foundation does not
-expose the peer's complete `audit_token_t`; no private selector is used. If a later security review
-requires full audit-token binding rather than PID/UID/session plus generation and the XPC peer
-binding, the transport must move to a reviewed raw-XPC message boundary using
-`SecCodeCreateWithXPCMessage`. This is a design gate, not permission to add a private API fallback.
+expose the peer's complete `audit_token_t`; no private selector is used. The current product policy
+does not require full audit-token binding or a raw-XPC replacement. `SecCodeCreateWithXPCMessage`
+remains historical investigation context, not a design gate or backlog item.
 
-### CEP extension identity limitation and capability proposal
+### Historical CEP extension identity investigation
 
 The current boundary proves the identity and ancestry of an operating-system process. It cannot
 prove which extension inside an Adobe CEP host originated JavaScript. In the threat model, other
 Adobe CEP extensions running as the same user may have the same `CEPHtmlEngine` signing identifier,
 Adobe Team ID, native architecture, and AE ancestry. macOS code signing therefore cannot distinguish
 that extension from this one. Extension manifest data, argv, environment variables, or current
-working directory are mutable inputs, not security attestations, and must not be promoted into the
-authorization decision. This remains an explicit open architecture risk.
+working directory are mutable inputs. The product trusts same-user local processes, so this is an
+accepted limitation rather than an open architecture risk.
 
-A minimal hardening experiment is a separately signed broker plus a short-lived capability:
+The Phase 0 investigation considered a separately signed broker plus a short-lived capability:
 
 1. launch the broker with a private inherited anonymous channel and bind it to the observed CEP
    process generation, UID, audit session, AE ancestry, helper protocol version, and requested scope;
@@ -181,12 +185,14 @@ A minimal hardening experiment is a separately signed broker plus a short-lived 
 3. have the helper atomically consume the capability and reject replay, expiry, scope widening, or a
    changed process binding; never place the capability in argv, the environment, a file, or logs.
 
-This can reduce accidental cross-extension access, networkless guessing, and replay. It does not
-solve a malicious peer extension that can launch the same broker and receive its own capability,
-because the initial broker request still lacks a macOS-authenticated CEP extension ID. Closing that
-case requires either an Adobe-supported extension attestation/bootstrap primitive, a host boundary
-that assigns each extension a distinct trusted process identity, or an explicit product decision to
-accept the residual risk. The broker proposal must not be represented as closure before that choice.
+That design could reduce accidental cross-extension access, networkless guessing, and replay. It
+does not solve a malicious peer extension that can launch the same broker and receive its own
+capability, because the initial broker request still lacks a macOS-authenticated CEP extension ID.
+Closing that case requires either an Adobe-supported extension attestation/bootstrap primitive, a
+host boundary that assigns each extension a distinct trusted process identity, or a different
+product trust model.
+Under the current policy this experiment is rejected work and must not be implemented or used as a
+release gate.
 
 Run the disposable rejection probe from the repository root with the following exact commands. The
 helper copy is ad-hoc signed only so launchd can execute the local negative-test artifact; neither the

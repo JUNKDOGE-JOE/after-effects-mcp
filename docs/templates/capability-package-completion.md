@@ -1,6 +1,6 @@
 # Capability Package Completion
 
-Publish only redacted summaries. Omit credentials, tokens, pairing fingerprints, user project names, private paths, and other sensitive values; retain full machine evidence locally.
+Publish only redacted summaries. Omit credentials, tokens, user project names, private paths, and other sensitive values; retain full machine evidence locally.
 
 ## Identity
 
@@ -79,4 +79,4 @@ Provide one row per included public tool. Summarize request/response shapes here
 - Full CI runs:
 - T4 / T5 / T6 runs:
 - First candidate hardware pass:
-- Environment / pairing / permission interruptions:
+- Environment / permission interruptions:

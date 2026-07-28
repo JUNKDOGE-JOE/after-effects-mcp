@@ -23,9 +23,9 @@ artifact-manifest-v0.9.2.json
 
 触发签名 RC 前必须逐项确认：
 
-- revised “条件式 A→B” signed-helper architecture 已取得明确批准，并完成其 Phase 0 安全/可行性证据；未批准时不得实现或声称 helper、Tool Library、provider route 已闭环。
+- revised “条件式 A→B” signed-helper architecture 已取得明确批准，并完成其 Phase 0 签名/可行性证据；未批准时不得实现或声称 helper、Tool Library、provider route 已闭环。
 - `packaging/native-coverage-approvals.json` 当前保持 `blocked`。未来即使 helper build 单独落地，也必须另行提供并批准逐文件 Mac/Windows 原生签名复验、AE 25/26 双平台实机矩阵，以及 `provider-header-routing`、Tool Library、持久化、升级回滚和权限恢复的完整验收覆盖；缺少任一项时 build guard 在不可逆 candidate lock 之前失败。
-- 所有 helper-gated provider route 与 Tool Library 实现、测试和安全评审已经在 candidate 中完成；版本文档不能替代实现证据。
+- 所有 helper-gated provider route 与 Tool Library 实现、测试、凭据防泄露评审和发布完整性评审已经在 candidate 中完成；版本文档不能替代实现证据。
 - protected `main`、required checks、allowlisted attestation 身份、protected Environment reviewer 和一次性 candidate build lock 已配置并验证。
 - GitHub 标签规则集（tag ruleset）必须阻止除晋级身份外创建、更新或删除 `v*` tag；从 mutation-adjacent 复核开始到公开后审计结束，maintainer 必须对 `main` 执行外部合并冻结。workflow 的 API 重读只能检测竞态，不能原子化替代标签规则集或合并冻结。
 - 仓库已启用 GitHub Immutable Releases；protected `release-promotion` Environment 提供仅具 repository administration-read 的 `AE_MCP_RELEASE_ADMIN_TOKEN`，用于在 tag/publish 前读取该设置，不能用普通 contents token 或布尔占位替代。
@@ -138,9 +138,9 @@ Both platforms come from one candidate SHA. Any platform failure, source change,
 
 Before a signed RC is triggered, verify all of the following:
 
-- The revised conditional A→B signed-helper architecture has explicit approval and Phase 0 security/feasibility evidence. Until then, no helper, Tool Library, or provider-route closure may be implemented or claimed through release documentation.
+- The revised conditional A→B signed-helper architecture has explicit approval and Phase 0 signing/feasibility evidence. Until then, no helper, Tool Library, or provider-route closure may be implemented or claimed through release documentation.
 - `packaging/native-coverage-approvals.json` intentionally remains `blocked`. Landing the helper build alone never unlocks an RC: separately approved per-file Mac/Windows native-signature verification, the AE 25/26 hardware matrix, and complete provider-header-routing, Tool Library, persistence, upgrade/rollback, and permission-recovery acceptance coverage are all required before the irreversible candidate lock.
-- All approved helper-gated provider route and Tool Library implementation, tests, and security review are present in the candidate; version metadata is not implementation evidence.
+- All approved helper-gated provider route and Tool Library implementation, tests, credential-leak review, and release-integrity review are present in the candidate; version metadata is not implementation evidence.
 - Protected `main`, required checks, allowlisted attestation identities, protected Environment reviewers, and the one-build-per-candidate lock are configured and tested.
 - A GitHub tag ruleset blocks every identity except promotion from creating, updating, or deleting `v*` tags, and maintainers enforce an external `main` merge freeze from mutation-adjacent revalidation through the post-publication audit. API rereads detect races but cannot atomically replace the tag ruleset or merge freeze.
 - GitHub Immutable Releases is enabled. The protected `release-promotion` Environment supplies `AE_MCP_RELEASE_ADMIN_TOKEN` with repository administration-read only so the workflow can read that setting before tag and publish; a contents token or boolean placeholder is not sufficient.
