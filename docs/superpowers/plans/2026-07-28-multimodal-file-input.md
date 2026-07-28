@@ -410,6 +410,8 @@ git commit -m "feat(panel): stage session attachments safely"
 - Modify: `plugin/panel/package-lock.json`
 - Modify: `plugin/panel/src/main.jsx`
 - Modify: `plugin/panel/src/styles/index.css`
+- Modify (generated): `plugin/client/dist/app.js`
+- Modify (generated): `plugin/client/dist/app.css`
 - Create: `plugin/panel/src/lib/attachmentDraft.js`
 - Create: `plugin/panel/src/components/chat/AttachmentPond.jsx`
 - Modify: `plugin/panel/src/components/chat/Composer.jsx`
@@ -603,7 +605,7 @@ Expected: PASS.
 - [ ] **Step 10: Commit the Composer surface**
 
 ```bash
-git add plugin/panel/package.json plugin/panel/package-lock.json plugin/panel/src/main.jsx plugin/panel/src/styles/index.css plugin/panel/src/lib/attachmentDraft.js plugin/panel/src/components/chat/AttachmentPond.jsx plugin/panel/src/components/chat/Composer.jsx plugin/panel/test/attachmentDraft.test.js plugin/panel/test/composerAttachmentsWiring.test.js plugin/panel/test/composerResizeWiring.test.js
+git add plugin/panel/package.json plugin/panel/package-lock.json plugin/panel/src/main.jsx plugin/panel/src/styles/index.css plugin/panel/src/lib/attachmentDraft.js plugin/panel/src/components/chat/AttachmentPond.jsx plugin/panel/src/components/chat/Composer.jsx plugin/panel/test/attachmentDraft.test.js plugin/panel/test/composerAttachmentsWiring.test.js plugin/panel/test/composerResizeWiring.test.js plugin/client/dist/app.js plugin/client/dist/app.css
 git commit -m "feat(panel): add FilePond attachment composer"
 ```
 
