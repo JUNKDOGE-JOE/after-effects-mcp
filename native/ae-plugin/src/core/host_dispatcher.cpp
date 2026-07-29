@@ -1218,11 +1218,11 @@ Completion dispatch_layer_source_matte_av(
           "target and Matte are owned by different compositions",
           "params.arguments.matteLayerLocator");
     }
-    if (!target.av_capable || !matte->av_capable) {
+    if (!target.track_matte_capable || !matte->track_matte_capable) {
       return failure_for(
           request, "TRACK_MATTE_LAYER_NOT_AV",
-          "target and Matte must both be AV-capable layers",
-          !target.av_capable
+          "target and Matte must both be Track-Matte-capable visual layers",
+          !target.track_matte_capable
               ? "params.arguments.layerLocator"
               : "params.arguments.matteLayerLocator");
     }

@@ -10786,7 +10786,7 @@ class AegpHostApi final : public HostApi {
         locator,
         reinterpret_cast<std::uintptr_t>(resolved->layer),
         reinterpret_cast<std::uintptr_t>(resolved->composition),
-        object_type == AEGP_ObjectType_AV,
+        track_matte_capable(object_type),
     });
   }
 
@@ -11216,6 +11216,21 @@ class AegpHostApi final : public HostApi {
     if (mode == "subtract") return PF_Xfer_SUBTRACT;
     if (mode == "divide") return PF_Xfer_DIVIDE;
     return std::nullopt;
+  }
+
+  [[nodiscard]] static bool track_matte_capable(AEGP_ObjectType object_type) {
+    switch (object_type) {
+      case AEGP_ObjectType_AV:
+      case AEGP_ObjectType_TEXT:
+      case AEGP_ObjectType_VECTOR:
+      case AEGP_ObjectType_3D_MODEL:
+        return true;
+      case AEGP_ObjectType_NONE:
+      case AEGP_ObjectType_LIGHT:
+      case AEGP_ObjectType_CAMERA:
+        return false;
+    }
+    return false;
   }
 
   [[nodiscard]] static std::optional<std::string> layer_track_matte_name(

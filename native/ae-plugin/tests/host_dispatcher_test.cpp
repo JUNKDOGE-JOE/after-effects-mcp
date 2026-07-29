@@ -2137,6 +2137,63 @@ void layer_compositing_writes_read_back_only_their_owned_sdk_fields() {
       "layer Normal mode no longer matches the AEGP timeline transfer value");
 }
 
+void track_matte_eligibility_accepts_visual_layer_object_types() {
+  const std::filesystem::path plugin_source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "aegp" / "plugin_entry.cpp";
+  std::ifstream plugin_input(plugin_source_path, std::ios::binary);
+  require(plugin_input.good(),
+      "could not open plugin_entry.cpp Track Matte eligibility source");
+  const std::string plugin_source{
+      std::istreambuf_iterator<char>(plugin_input),
+      std::istreambuf_iterator<char>()};
+  const std::size_t predicate = plugin_source.find(
+      "bool track_matte_capable(AEGP_ObjectType object_type)");
+  const std::size_t next_helper = plugin_source.find("\n  [[nodiscard]]", predicate);
+  require(predicate != std::string::npos && next_helper != std::string::npos,
+      "native Track Matte eligibility predicate is missing");
+  const std::string_view predicate_source(
+      plugin_source.data() + predicate, next_helper - predicate);
+  for (const std::string_view object_type : {
+           "AEGP_ObjectType_AV",
+           "AEGP_ObjectType_TEXT",
+           "AEGP_ObjectType_VECTOR",
+           "AEGP_ObjectType_3D_MODEL",
+       }) {
+    require(predicate_source.find(object_type) != std::string_view::npos,
+        "native Track Matte eligibility excludes a visual layer object type");
+  }
+
+  const std::filesystem::path dispatcher_header_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "include" / "aemcp_native" / "host_dispatcher.hpp";
+  std::ifstream dispatcher_header_input(dispatcher_header_path, std::ios::binary);
+  require(dispatcher_header_input.good(),
+      "could not open HostResolvedLayer contract source");
+  const std::string dispatcher_header{
+      std::istreambuf_iterator<char>(dispatcher_header_input),
+      std::istreambuf_iterator<char>()};
+  require(dispatcher_header.find("bool track_matte_capable{false};")
+              != std::string::npos
+          && dispatcher_header.find("av_capable") == std::string::npos,
+      "HostResolvedLayer did not name Track Matte eligibility precisely");
+
+  const std::filesystem::path dispatcher_source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "core" / "host_dispatcher.cpp";
+  std::ifstream dispatcher_input(dispatcher_source_path, std::ios::binary);
+  require(dispatcher_input.good(),
+      "could not open Track Matte dispatcher source");
+  const std::string dispatcher_source{
+      std::istreambuf_iterator<char>(dispatcher_input),
+      std::istreambuf_iterator<char>()};
+  require(dispatcher_source.find("target.track_matte_capable") != std::string::npos
+          && dispatcher_source.find("matte->track_matte_capable")
+              != std::string::npos
+          && dispatcher_source.find("av_capable") == std::string::npos,
+      "Track Matte dispatcher did not use the precise eligibility carrier");
+}
+
 void legacy_effect_metadata_is_utf8_normalized_before_json_evidence() {
   const std::filesystem::path source_path =
       std::filesystem::path(__FILE__).parent_path().parent_path()
@@ -3399,11 +3456,11 @@ class LayerSourceMatteAvHost final : public HostApi {
     }
     if (locator == target_locator) {
       return HostLayerResolveResult::success(
-          {locator, target_token, target_composition_owner, target_av_capable});
+          {locator, target_token, target_composition_owner, target_track_matte_capable});
     }
     if (locator == matte_locator) {
       return HostLayerResolveResult::success(
-          {locator, matte_token, matte_composition_owner, matte_av_capable});
+          {locator, matte_token, matte_composition_owner, matte_track_matte_capable});
     }
     return HostLayerResolveResult::failure(
         "STALE_LOCATOR", "fake layer locator is unknown",
@@ -3597,8 +3654,8 @@ class LayerSourceMatteAvHost final : public HostApi {
   std::uintptr_t matte_token{22};
   std::uintptr_t target_composition_owner{101};
   std::uintptr_t matte_composition_owner{101};
-  bool target_av_capable{true};
-  bool matte_av_capable{true};
+  bool target_track_matte_capable{true};
+  bool matte_track_matte_capable{true};
   LayerSourceType source_type{LayerSourceType::kFootage};
   bool matte_active{false};
   LayerTrackMatteMode matte_mode{LayerTrackMatteMode::kNone};
@@ -3908,7 +3965,7 @@ void layer_source_matte_av_preconditions_reject_before_undo_or_mutation() {
   host.reset_observations();
   host.matte_composition_owner = host.target_composition_owner;
 
-  host.matte_av_capable = false;
+  host.matte_track_matte_capable = false;
   require(dispatcher.enqueue(layer_source_matte_av_request(
               clock, "non-av-matte", kLayerTrackMatteSetCapability,
               LayerTrackMatteSetRequest{
@@ -3922,7 +3979,7 @@ void layer_source_matte_av_preconditions_reject_before_undo_or_mutation() {
           && host.mutation_calls == 0 && host.undo_start_calls == 0,
       "non-AV Track Matte layer reached Undo or mutation");
   host.reset_observations();
-  host.matte_av_capable = true;
+  host.matte_track_matte_capable = true;
 
   host.matte_active = false;
   host.matte_mode = LayerTrackMatteMode::kLuma;
@@ -4319,6 +4376,7 @@ int main() {
   ae_path_readback_accepts_only_the_observed_host_quantum();
   keyframe_value_owner_lifetime_is_bound_to_the_sdk_write();
   layer_compositing_writes_read_back_only_their_owned_sdk_fields();
+  track_matte_eligibility_accepts_visual_layer_object_types();
   legacy_effect_metadata_is_utf8_normalized_before_json_evidence();
   effect_enabled_uses_the_sdk_undoable_dynamic_stream_write();
   layer_duplicate_rejects_an_unrelated_layer_result();

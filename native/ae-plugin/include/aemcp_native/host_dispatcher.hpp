@@ -480,7 +480,7 @@ struct HostResolvedLayer {
   ObjectLocator locator;
   std::uintptr_t host_layer{0};
   std::uintptr_t composition_owner{0};
-  bool av_capable{false};
+  bool track_matte_capable{false};
 };
 
 struct ProjectItemEntry {
