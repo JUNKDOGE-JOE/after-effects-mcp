@@ -226,6 +226,11 @@ creates an exclusive `O_EXCL` ownership manifest that binds the run ID,
 condition. It refuses an existing target, symlink, path escape, or mismatched
 manifest.
 
+Run the fixture-create and guarded-close checkpoint scripts through
+`ae_readProps`. They are harness lifecycle operations and must not be wrapped
+in an additional `ae_exec` Undo group, which would contaminate the five real
+GUI Undo checkpoints.
+
 The fixed harness-only ExtendScript closes only an empty untitled project. It
 blocks every other saved or nonempty untitled project before close/save and
 may reuse only the exact runner-owned fixture with the matching embedded owner

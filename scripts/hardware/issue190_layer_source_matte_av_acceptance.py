@@ -2448,9 +2448,12 @@ class Issue190Runner:
                     {
                         "instruction": (
                             "Run the ownership-guarded save-in-place/close script "
-                            "and quit only the exact receipt-bound formal AE process. "
-                            "Do not reset, delete, Save As, or retry any write."
+                            "through ae_readProps without an extra Undo group, then "
+                            "quit only the exact receipt-bound formal AE process. Do "
+                            "not reset, delete, Save As, or retry any write."
                         ),
+                        "executionTool": "ae_readProps",
+                        "undoGroup": False,
                         "script": close_fixture_script(self.config),
                         "fixtureLifecycle": "ephemeral-validation",
                         "preserveUnreconciledWrite": self.unreconciled_write,
@@ -2592,9 +2595,12 @@ class Issue190Runner:
             "create-or-reset-issue190-fixture",
             {
                 "instruction": (
-                    "In formal After Effects, run this exact harness-only script. "
-                    "It creates or resets the one disposable fixture and saves it once."
+                    "In formal After Effects, run this exact harness-only script "
+                    "through ae_readProps without an extra Undo group. It creates or "
+                    "resets the one disposable fixture and saves it once."
                 ),
+                "executionTool": "ae_readProps",
+                "undoGroup": False,
                 "script": fixture_create_script(self.config, wav_path),
                 "fixtureLifecycle": "ephemeral-validation",
                 "activeFixtureCount": 1,
