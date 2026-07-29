@@ -31,6 +31,14 @@ const CLIENT = '33333333-3333-4333-8333-333333333333';
 const SOURCE = 'a'.repeat(40);
 const DIGEST = FULL_REGISTRY.capabilitiesDigest;
 
+function unixSocketTestOptions(platform) {
+    return platform === 'win32'
+        ? { skip: 'requires Unix-domain socket filesystem semantics' }
+        : {};
+}
+
+const UNIX_SOCKET_TEST = unixSocketTestOptions(process.platform);
+
 function descriptor(socketName) {
     return [
         'AEMCP_NATIVE_ENDPOINT_V1',
@@ -425,6 +433,10 @@ function safeWriteFailure(request) {
 }
 
 test('descriptor and fixed transport messages are strict and closed', () => {
+    assert.deepEqual(unixSocketTestOptions('win32'), {
+        skip: 'requires Unix-domain socket filesystem semantics',
+    });
+    assert.deepEqual(unixSocketTestOptions('darwin'), {});
     assert.deepEqual(endpointDescriptor(descriptor('s-123456abcdef.sock')), {
         hostInstanceId: HOST,
         pid: 4242,
@@ -443,7 +455,7 @@ test('descriptor and fixed transport messages are strict and closed', () => {
     });
 });
 
-test('discovery accepts the private descriptor and socket owned by this user', async (t) => {
+test('discovery accepts the private descriptor and socket owned by this user', UNIX_SOCKET_TEST, async (t) => {
     const fixture = await endpointFixture(t);
     assert.deepEqual(discoverNativeEndpoints({ runtimeRoot: fixture.root }), [{
         descriptorPath: path.join(
@@ -462,7 +474,7 @@ test('discovery accepts the private descriptor and socket owned by this user', a
     }]);
 });
 
-test('client negotiates and validates the sole native program descriptor', async (t) => {
+test('client negotiates and validates the sole native program descriptor', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t);
     const result = await client.capabilities({ detail: 'full', limit: 100 });
     assert.deepEqual(result.items.map(function (item) { return item.id; }), [
@@ -473,7 +485,7 @@ test('client negotiates and validates the sole native program descriptor', async
     assert.equal(client.status().nativeExecContractDigest, result.items[0].contractDigest);
 });
 
-test('client rejects a capability page that reintroduces a legacy invoke descriptor', async (t) => {
+test('client rejects a capability page that reintroduces a legacy invoke descriptor', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t, { appendLegacyDescriptor: true });
     await assert.rejects(
         client.capabilities({ detail: 'summary', limit: 100 }),
@@ -483,7 +495,7 @@ test('client rejects a capability page that reintroduces a legacy invoke descrip
     );
 });
 
-test('client sends and verifies one read-only native program', async (t) => {
+test('client sends and verifies one read-only native program', UNIX_SOCKET_TEST, async (t) => {
     const { client, requests } = await connectedFixture(t);
     const result = await invoke(client, 'native-program-read-0001', readProgram());
     assert.equal(result.capabilityId, 'ae.native.exec');
@@ -500,7 +512,7 @@ test('client sends and verifies one read-only native program', async (t) => {
     });
 });
 
-test('client preserves write identity and one common Undo terminal', async (t) => {
+test('client preserves write identity and one common Undo terminal', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t);
     const program = writeProgram();
     const result = await invoke(client, 'native-program-write-0001', program);
@@ -513,7 +525,7 @@ test('client preserves write identity and one common Undo terminal', async (t) =
     assert.equal(result.evidence.effect, 'committed');
 });
 
-test('client rejects operation-specific invoke IDs before native dispatch', async (t) => {
+test('client rejects operation-specific invoke IDs before native dispatch', UNIX_SOCKET_TEST, async (t) => {
     const { client, requests } = await connectedFixture(t);
     await assert.rejects(client.invoke({
         requestId: 'legacy-project-summary',
@@ -530,7 +542,7 @@ test('client rejects operation-specific invoke IDs before native dispatch', asyn
     }), false);
 });
 
-test('client preserves a request-bound completed write failure', async (t) => {
+test('client preserves a request-bound completed write failure', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t, {
         invokeError: safeWriteFailure,
     });
@@ -546,7 +558,7 @@ test('client preserves a request-bound completed write failure', async (t) => {
     );
 });
 
-test('client classifies an open write terminal as possibly side-effecting', async (t) => {
+test('client classifies an open write terminal as possibly side-effecting', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t, {
         mutateInvokeResult: function (result) {
             delete result.undo;
@@ -562,7 +574,7 @@ test('client classifies an open write terminal as possibly side-effecting', asyn
     );
 });
 
-test('client keeps a disconnected dispatched write possibly side-effecting', async (t) => {
+test('client keeps a disconnected dispatched write possibly side-effecting', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t, { disconnectInvoke: true });
     await assert.rejects(
         invoke(client, 'native-program-disconnected', writeProgram()),
@@ -573,7 +585,7 @@ test('client keeps a disconnected dispatched write possibly side-effecting', asy
     );
 });
 
-test('client sends the closed project-graph invalidation control request', async (t) => {
+test('client sends the closed project-graph invalidation control request', UNIX_SOCKET_TEST, async (t) => {
     const { client, requests } = await connectedFixture(t);
     assert.deepEqual(await client.invalidateProjectGraph({
         deadlineUnixMs: Date.now() + 5000,
@@ -587,7 +599,7 @@ test('client sends the closed project-graph invalidation control request', async
     assert.deepEqual(request.params, { reason: 'cep-jsx' });
 });
 
-test('client binds native cancellation to one request identity and session', async (t) => {
+test('client binds native cancellation to one request identity and session', UNIX_SOCKET_TEST, async (t) => {
     const { client, requests } = await connectedFixture(t);
     const result = await client.cancel({
         requestId: 'cancel-control-0001',
@@ -609,7 +621,7 @@ test('client binds native cancellation to one request identity and session', asy
     });
 });
 
-test('client rejects an open project-graph invalidation result', async (t) => {
+test('client rejects an open project-graph invalidation result', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t, {
         invalidateResult: {
             generation: 8,
@@ -625,7 +637,7 @@ test('client rejects an open project-graph invalidation result', async (t) => {
     );
 });
 
-test('client rejects a response rebound to another native session', async (t) => {
+test('client rejects a response rebound to another native session', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t, {
         mutateEnvelope: function (response, request) {
             if (request.method === 'invoke') {
@@ -641,7 +653,7 @@ test('client rejects a response rebound to another native session', async (t) =>
     );
 });
 
-test('client bounds an authenticating wait by the absolute deadline', async (t) => {
+test('client bounds an authenticating wait by the absolute deadline', UNIX_SOCKET_TEST, async (t) => {
     const fixture = await endpointFixture(t);
     installProtocol(fixture.server, { suppressHello: true });
     const client = makeClient(fixture.root, { requestTimeoutMs: 200 });
