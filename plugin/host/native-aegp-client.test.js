@@ -1,42 +1,12 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const crypto = require('crypto');
-const fs = require('fs');
-const net = require('net');
-const os = require('os');
-const path = require('path');
-const nodeTest = require('node:test');
-const { EventEmitter } = require('node:events');
-
-const ACTIVE_PROGRAM_CLIENT_TESTS = [
-    'CEP client automatically consumes the compatibility challenge and decision',
-    'CEP client sends one native program and validates the common terminal',
-    'CEP client accepts a write success only with its real operation key',
-    'CEP client preserves native program operation keys and rejects open terminals',
-    'CEP client keeps a disconnected native program write side-effect uncertain',
-    'CEP client has no operation-specific invoke alias or fallback',
-    'CEP client preserves a safe write failure and balanced Undo fact',
-    'descriptor and fixed transport messages are strict and closed',
-    'discovery accepts only a private descriptor and socket owned by this user',
-    'CEP client sends the closed internal project-graph invalidation contract',
-    'CEP client rejects an open project-graph invalidation result',
-    'CEP client rejects inconsistent project-graph invalidation evidence',
-    'CEP client bounds an authenticating wait by the Core absolute deadline',
-    'CEP client bounds the initial compatibility challenge by the Core absolute deadline',
-    'client does not bypass an explicit native admission rejection',
-    'closing after the compatibility challenge does not create an unhandled connected rejection',
-    'late events from a failed socket cannot tear down its replacement',
-];
-
-function test(name, options, body) {
-    const callback = typeof options === 'function' ? options : body;
-    const settings = typeof options === 'function' ? {} : { ...(options || {}) };
-    if (!ACTIVE_PROGRAM_CLIENT_TESTS.includes(name)) {
-        settings.skip = 'operation-specific invoke carrier is no longer reachable after Task 5';
-    }
-    return nodeTest(name, settings, callback);
-}
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const net = require('node:net');
+const os = require('node:os');
+const path = require('node:path');
+const test = require('node:test');
 
 const {
     createNativeAegpClient,
@@ -45,203 +15,21 @@ const {
     parseAuthChallenge,
     parseAuthDecision,
 } = require('./native-aegp-client');
-const projectCompositionContracts = require('./native-project-composition-contract');
 
-const CAPABILITIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json',
-), 'utf8'));
-const PROJECT_ITEMS_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-project-items-list.json',
-), 'utf8'));
-const COMPOSITION_LAYERS_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-composition-layers-list.json',
-), 'utf8'));
-const COMPOSITION_SELECTED_LAYERS_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-composition-selected-layers-list.json',
-), 'utf8'));
-const COMPOSITION_TIME_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-read.json',
-), 'utf8'));
-const COMPOSITION_TIME_SET_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-composition-time-set.json',
-), 'utf8'));
-const COMPOSITION_CREATE_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-composition-create.json',
-), 'utf8'));
-const COMPOSITION_LAYER_CREATE_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-composition-layer-create.json',
-), 'utf8'));
-const LAYER_EFFECT_APPLY_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-layer-effect-apply.json',
-), 'utf8'));
-const LAYER_PROPERTIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-layer-properties-list.json',
-), 'utf8'));
-const LAYER_PROPERTY_KEYFRAMES_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-keyframes-list.json',
-), 'utf8'));
-const LAYER_PROPERTY_SET_VECTOR = JSON.parse(fs.readFileSync(path.join(
-    __dirname,
-    '../../native/ae-plugin/protocol/fixtures/invoke-layer-property-set.json',
-), 'utf8'));
-const PROJECT_COMPOSITION_VECTOR_FILES = [
-    'invoke-project-context-read.json',
-    'invoke-project-item-metadata-read.json',
-    'invoke-composition-settings-read.json',
-    'invoke-composition-work-area-set.json',
-    'invoke-project-item-name-set.json',
-    'invoke-project-item-comment-set.json',
-    'invoke-project-item-label-set.json',
-    'invoke-composition-duplicate.json',
-    'invoke-layer-details-read.json',
-    'invoke-layer-name-set.json',
-    'invoke-layer-range-set.json',
-    'invoke-layer-start-time-set.json',
-    'invoke-layer-stretch-set.json',
-    'invoke-layer-order-set.json',
-    'invoke-layer-parent-set.json',
-    'invoke-layer-duplicate.json',
-];
-const PROJECT_COMPOSITION_VECTORS = new Map(PROJECT_COMPOSITION_VECTOR_FILES.map(function (name) {
-    const vector = JSON.parse(fs.readFileSync(path.join(
-        __dirname,
-        '../../native/ae-plugin/protocol/fixtures',
-        name,
-    ), 'utf8'));
-    return [vector.request.params.capabilityId, vector];
-}));
-const FRAME_RATE_SET_DESCRIPTOR = CAPABILITIES_VECTOR.items.find(function (descriptor) {
-    return descriptor.id === 'ae.composition.frame-rate.set';
-});
-const FRAME_RATE_SET_EXAMPLE = structuredClone(FRAME_RATE_SET_DESCRIPTOR.examples[0]);
-FRAME_RATE_SET_EXAMPLE.expected.value.after.duration = {
-    value: 300,
-    scale: 30,
-    secondsRational: '10',
-};
-FRAME_RATE_SET_EXAMPLE.expected.value.after.workArea = {
-    start: { value: 0, scale: 30, secondsRational: '0' },
-    duration: { value: 300, scale: 30, secondsRational: '10' },
-};
-FRAME_RATE_SET_EXAMPLE.expected.value.after.displayStartTime = {
-    value: 0,
-    scale: 30,
-    secondsRational: '0',
-};
-const FRAME_RATE_SET_VECTOR = {
-    request: {
-        params: {
-            capabilityId: FRAME_RATE_SET_DESCRIPTOR.id,
-            capabilityVersion: FRAME_RATE_SET_DESCRIPTOR.version,
-            arguments: FRAME_RATE_SET_EXAMPLE.arguments,
-        },
-    },
-    response: {
-        result: {
-            capabilityId: FRAME_RATE_SET_DESCRIPTOR.id,
-            capabilityVersion: FRAME_RATE_SET_DESCRIPTOR.version,
-            engine: 'native-aegp',
-            outcome: 'succeeded',
-            replayed: false,
-            evidence: {
-                engine: 'native-aegp',
-                hostInstanceId: '22222222-2222-4222-8222-222222222222',
-                sessionId: '11111111-1111-4111-8111-111111111111',
-                requestId: 'frame-rate-timescale-fixture',
-                capabilityId: FRAME_RATE_SET_DESCRIPTOR.id,
-                capabilityVersion: FRAME_RATE_SET_DESCRIPTOR.version,
-                startedAtUnixMs: 1900000000000,
-                completedAtUnixMs: 1900000000001,
-                effect: 'committed',
-                requestDigest: '0'.repeat(64),
-                postcondition: {
-                    verified: true,
-                    kind: 'composition-frame-rate-set',
-                    algorithm: 'sha256-rfc8785-jcs-v1',
-                    digest: '0'.repeat(64),
-                },
-                undo: { available: true, verified: false },
-            },
-            value: FRAME_RATE_SET_EXAMPLE.expected.value,
-        },
-    },
-};
+const FULL_REGISTRY = require(
+    '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json'
+);
+const SUMMARY_ITEM = require(
+    '../../native/ae-plugin/protocol/fixtures/capabilities.json'
+).response.result.items[0];
+
 const HOST = '22222222-2222-4222-8222-222222222222';
 const SESSION = '11111111-1111-4111-8111-111111111111';
+const PROJECT = '44444444-4444-4444-8444-444444444444';
+const COMPOSITION = '55555555-5555-4555-8555-555555555555';
 const CLIENT = '33333333-3333-4333-8333-333333333333';
 const SOURCE = 'a'.repeat(40);
-const DIGEST = CAPABILITIES_VECTOR.capabilitiesDigest;
-const BIT_DEPTH_READ_DIGEST = CAPABILITIES_VECTOR.items.find(function (item) {
-    return item.id === 'ae.project.bit-depth.read';
-}).contractDigest;
-const BIT_DEPTH_SET_DIGEST = CAPABILITIES_VECTOR.items.find(function (item) {
-    return item.id === 'ae.project.bit-depth.set';
-}).contractDigest;
-const TSM_VECTORS = new Map(CAPABILITIES_VECTOR.items.filter(function (descriptor) {
-    return descriptor.id.startsWith('ae.shape.') || descriptor.id.startsWith('ae.marker.');
-}).map(function (descriptor) {
-    const example = structuredClone(descriptor.examples[0]);
-    if (descriptor.id === 'ae.marker.list') {
-        const compositionLocator = structuredClone(
-            CAPABILITIES_VECTOR.items.find(function (item) {
-                return item.id === 'ae.shape.layer.create';
-            }).examples[0].arguments.compositionLocator,
-        );
-        example.arguments.target = { kind: 'composition', compositionLocator };
-        example.expected.value.target = structuredClone(example.arguments.target);
-    }
-    const mutating = descriptor.risk === 'write';
-    const evidence = {
-        engine: 'native-aegp',
-        hostInstanceId: HOST,
-        sessionId: SESSION,
-        requestId: 'tsm-fixture-request',
-        capabilityId: descriptor.id,
-        capabilityVersion: 1,
-        startedAtUnixMs: 1900000000000,
-        completedAtUnixMs: 1900000000001,
-        effect: mutating ? 'committed' : 'none',
-        requestDigest: '0'.repeat(64),
-        postcondition: {
-            verified: true,
-            kind: descriptor.id.replace(/^ae\./, '').replaceAll('.', '-'),
-            algorithm: 'sha256-rfc8785-jcs-v1',
-            digest: '0'.repeat(64),
-        },
-    };
-    if (mutating) evidence.undo = { available: true, verified: false };
-    return [descriptor.id, {
-        request: {
-            params: {
-                capabilityId: descriptor.id,
-                capabilityVersion: 1,
-                arguments: example.arguments,
-            },
-        },
-        response: {
-            result: {
-                capabilityId: descriptor.id,
-                capabilityVersion: 1,
-                engine: 'native-aegp',
-                outcome: 'succeeded',
-                replayed: false,
-                evidence,
-                value: example.expected.value,
-            },
-        },
-    }];
-}));
+const DIGEST = FULL_REGISTRY.capabilitiesDigest;
 
 function descriptor(socketName) {
     return [
@@ -283,9 +71,89 @@ function frame(value) {
     return result;
 }
 
+function canonicalize(value) {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (value && typeof value === 'object') {
+        return Object.keys(value).sort().reduce(function (result, key) {
+            result[key] = canonicalize(value[key]);
+            return result;
+        }, {});
+    }
+    return value;
+}
+
+function digest(value) {
+    return crypto.createHash('sha256')
+        .update(JSON.stringify(canonicalize(value)), 'utf8')
+        .digest('hex');
+}
+
+function capabilitiesRequestDigest(request) {
+    return digest({
+        detail: request.params.detail || 'summary',
+        ids: Object.hasOwn(request.params, 'ids') ? request.params.ids : null,
+        limit: request.params.limit === undefined ? 50 : request.params.limit,
+        sessionId: request.sessionId,
+    });
+}
+
+function requestDigest(request) {
+    return digest(request);
+}
+
+function postconditionDigest(operations, outputs) {
+    return digest({ operations, outputs });
+}
+
+function compositionLocator() {
+    return {
+        kind: 'composition',
+        hostInstanceId: HOST,
+        sessionId: SESSION,
+        projectId: PROJECT,
+        generation: 1,
+        objectId: COMPOSITION,
+    };
+}
+
+function readProgram() {
+    return {
+        operations: [{
+            op: 'project.items.list',
+            args: { offset: 0, limit: 1 },
+            returnAs: 'items',
+        }],
+    };
+}
+
+function writeProgram() {
+    return {
+        operationKey: 'native-program-write-0001',
+        undoGroup: 'Native program write',
+        operations: [
+            {
+                op: 'composition.resolve',
+                args: { locator: compositionLocator() },
+                saveAs: 'composition',
+            },
+            {
+                op: 'composition.time.set',
+                args: {
+                    composition: { ref: 'composition' },
+                    targetTime: { value: 24, scale: 24 },
+                },
+                returnAs: 'updated',
+            },
+        ],
+    };
+}
+
 async function endpointFixture(t) {
     const temporaryRoot = process.platform === 'darwin' ? '/private/tmp' : os.tmpdir();
-    const root = fs.realpathSync(fs.mkdtempSync(path.join(temporaryRoot, 'aemcp-native-client-')));
+    const root = fs.realpathSync(fs.mkdtempSync(path.join(
+        temporaryRoot,
+        'aemcp-native-client-',
+    )));
     fs.chmodSync(root, 0o700);
     const directory = path.join(root, 'aemcp-n1');
     fs.mkdirSync(directory, { mode: 0o700 });
@@ -313,15 +181,196 @@ async function endpointFixture(t) {
     return { root, server, socketPath };
 }
 
-function invokeRequestDigest(request) {
-    return jcsDigest(request);
+function installProtocol(server, options) {
+    const input = options || {};
+    const requests = [];
+    server.on('connection', function (socket) {
+        let bytes = Buffer.alloc(0);
+        let authenticated = false;
+        socket.on('data', function (chunk) {
+            bytes = Buffer.concat([bytes, chunk]);
+            if (!authenticated) {
+                if (bytes.length < 24) return;
+                assert.equal(bytes.subarray(0, 8).toString('ascii'), 'AEMCP-A1');
+                bytes = bytes.subarray(24);
+                socket.write(Buffer.concat([
+                    challengeMessage(),
+                    decisionMessage(1, SESSION, 7),
+                ]));
+                authenticated = true;
+            }
+            consume();
+        });
+
+        function consume() {
+            while (authenticated && bytes.length >= 4) {
+                const length = bytes.readUInt32BE(0);
+                if (bytes.length < length + 4) return;
+                const request = JSON.parse(bytes.toString('utf8', 4, length + 4));
+                bytes = bytes.subarray(length + 4);
+                requests.push(request);
+                if (input.suppressHello && request.method === 'hello') continue;
+                if (input.disconnectInvoke && request.method === 'invoke') {
+                    socket.destroy();
+                    continue;
+                }
+                let result;
+                let error = null;
+                if (request.method === 'hello') {
+                    result = {
+                        selectedWireVersion: 1,
+                        pluginVersion: '0.1.0-dev',
+                        compiledSdk: {
+                            version: '25.6.61',
+                            build: 61,
+                            architecture: 'arm64',
+                        },
+                        host: {
+                            application: 'after-effects',
+                            version: '26.3.0',
+                            build: 87,
+                            platform: 'macos-arm64',
+                            instanceId: HOST,
+                        },
+                        sessionId: SESSION,
+                        sessionGeneration: 7,
+                        limits: { maxFrameBytes: 524288 },
+                        capabilitiesDigest: DIGEST,
+                        clientNonce: request.params.nonce,
+                    };
+                } else if (request.method === 'capabilities') {
+                    const source = request.params.detail === 'full'
+                        ? FULL_REGISTRY.items[0] : SUMMARY_ITEM;
+                    const items = request.params.ids === undefined
+                        || request.params.ids.includes('ae.native.exec')
+                        ? [structuredClone(source)] : [];
+                    if (input.appendLegacyDescriptor) {
+                        items.push({
+                            ...structuredClone(SUMMARY_ITEM),
+                            id: 'ae.project.summary',
+                        });
+                    }
+                    result = {
+                        detail: request.params.detail || 'summary',
+                        items,
+                        nextCursor: null,
+                        queryDigest: capabilitiesRequestDigest(request),
+                        capabilitiesDigest: DIGEST,
+                    };
+                } else if (request.method === 'invalidateGraph') {
+                    result = input.invalidateResult || {
+                        generation: 8,
+                        invalidated: true,
+                    };
+                } else if (request.method === 'cancel') {
+                    result = input.cancelResult || {
+                        targetRequestId: request.params.targetRequestId,
+                        state: 'running-not-cancellable',
+                        terminalResponseExpected: true,
+                    };
+                } else if (request.method === 'invoke') {
+                    if (input.invokeError) {
+                        error = typeof input.invokeError === 'function'
+                            ? input.invokeError(request) : input.invokeError;
+                    } else {
+                        const mutating = Object.hasOwn(
+                            request.params.arguments,
+                            'operationKey',
+                        );
+                        const operations = request.params.arguments.operations.map(
+                            function (operation, index) {
+                                return { index, op: operation.op, status: 'completed' };
+                            },
+                        );
+                        const outputs = { result: { value: 12, scale: 24 } };
+                        result = {
+                            capabilityId: 'ae.native.exec',
+                            ...(mutating ? {
+                                operationKey: request.params.arguments.operationKey,
+                            } : {}),
+                            outputs,
+                            operations,
+                            evidence: {
+                                engine: 'native-aegp',
+                                hostInstanceId: HOST,
+                                sessionId: SESSION,
+                                requestId: request.requestId,
+                                capabilityId: 'ae.native.exec',
+                                capabilityVersion: 1,
+                                startedAtUnixMs: 1900000000000,
+                                completedAtUnixMs: 1900000000001,
+                                effect: mutating ? 'committed' : 'none',
+                                requestDigest: requestDigest(request),
+                                postcondition: {
+                                    verified: true,
+                                    kind: 'native-program',
+                                    algorithm: 'sha256-rfc8785-jcs-v1',
+                                    digest: postconditionDigest(operations, outputs),
+                                },
+                            },
+                            undo: mutating ? {
+                                available: true,
+                                verified: false,
+                                groupLabel: request.params.arguments.undoGroup,
+                            } : {
+                                available: false,
+                                verified: false,
+                            },
+                        };
+                        if (input.mutateInvokeResult) {
+                            input.mutateInvokeResult(result, request);
+                        }
+                    }
+                } else {
+                    throw new Error('unexpected test protocol method: ' + request.method);
+                }
+                const response = {
+                    wireVersion: 1,
+                    kind: 'response',
+                    sessionId: SESSION,
+                    requestId: request.requestId,
+                    method: request.method,
+                    ok: error === null,
+                    replayed: false,
+                    ...(error === null ? { result } : { error }),
+                };
+                if (input.mutateEnvelope) input.mutateEnvelope(response, request);
+                socket.write(frame(response));
+            }
+        }
+    });
+    return requests;
 }
 
-function nativeProgramPostconditionDigest(operations, outputs) {
-    return jcsDigest({ operations, outputs });
+function makeClient(root, options) {
+    return createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: options?.requestTimeoutMs || 1000,
+    });
 }
 
-function safeNativeProgramFailure(request) {
+async function connectedFixture(t, options) {
+    const fixture = await endpointFixture(t);
+    const requests = installProtocol(fixture.server, options);
+    const client = makeClient(fixture.root, options);
+    await client.connect(Date.now() + 5000);
+    t.after(function () { return client.close(); });
+    return { client, requests };
+}
+
+function invoke(client, requestId, argumentsValue) {
+    return client.invoke({
+        requestId,
+        capabilityId: 'ae.native.exec',
+        capabilityVersion: 1,
+        arguments: argumentsValue,
+        deadlineUnixMs: Date.now() + 5000,
+    });
+}
+
+function safeWriteFailure(request) {
     const completedOperations = [{
         index: 0,
         op: request.params.arguments.operations[0].op,
@@ -358,15 +407,12 @@ function safeNativeProgramFailure(request) {
                 startedAtUnixMs: 1900000000000,
                 completedAtUnixMs: 1900000000001,
                 effect: 'none',
-                requestDigest: invokeRequestDigest(request),
+                requestDigest: requestDigest(request),
                 postcondition: {
                     verified: false,
                     kind: 'native-program',
                     algorithm: 'sha256-rfc8785-jcs-v1',
-                    digest: nativeProgramPostconditionDigest(
-                        completedOperations,
-                        outputs,
-                    ),
+                    digest: postconditionDigest(completedOperations, outputs),
                 },
             },
             undo: {
@@ -378,2931 +424,232 @@ function safeNativeProgramFailure(request) {
     };
 }
 
-function canonicalize(value) {
-    if (Array.isArray(value)) return value.map(canonicalize);
-    if (value && typeof value === 'object') {
-        return Object.keys(value).sort().reduce(function (result, key) {
-            result[key] = canonicalize(value[key]);
-            return result;
-        }, {});
-    }
-    return value;
-}
-
-function jcsDigest(value) {
-    return crypto.createHash('sha256')
-        .update(JSON.stringify(canonicalize(value)), 'utf8').digest('hex');
-}
-
-function rebindPostcondition(result) {
-    result.evidence.postcondition.digest = jcsDigest({
-        capabilityId: result.capabilityId,
-        capabilityVersion: result.capabilityVersion,
-        value: result.value,
+test('descriptor and fixed transport messages are strict and closed', () => {
+    assert.deepEqual(endpointDescriptor(descriptor('s-123456abcdef.sock')), {
+        hostInstanceId: HOST,
+        pid: 4242,
+        startSeconds: 1700000000,
+        startMicros: 123456,
+        socketName: 's-123456abcdef.sock',
+        wireVersion: 1,
+        sourceCommit: SOURCE,
     });
-}
-
-function bitDepthReadPostconditionDigest(value) {
-    const canonical = {
-        capabilityId: 'ae.project.bit-depth.read',
-        capabilityVersion: 1,
-        value: {
-            bitsPerChannel: value.bitsPerChannel,
-        },
-    };
-    return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
-}
-
-function bitDepthSetPostconditionDigest(value) {
-    const canonical = {
-        capabilityId: 'ae.project.bit-depth.set',
-        capabilityVersion: 1,
-        value: {
-            afterBitsPerChannel: value.afterBitsPerChannel,
-            beforeBitsPerChannel: value.beforeBitsPerChannel,
-            changed: value.changed,
-        },
-    };
-    return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
-}
-
-function capabilitiesRequestDigest(request) {
-    const canonical = {
-        detail: request.params.detail || 'summary',
-        ids: Object.hasOwn(request.params, 'ids') ? request.params.ids : null,
-        limit: request.params.limit === undefined ? 50 : request.params.limit,
-        sessionId: request.sessionId,
-    };
-    return crypto.createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
-}
-
-function installProtocol(server, options) {
-    const input = options || {};
-    let authorize;
-    const authorized = new Promise(function (resolve) { authorize = resolve; });
-    const requests = [];
-    server.on('connection', function (socket) {
-        let bytes = Buffer.alloc(0);
-        let authenticated = false;
-        socket.on('data', function (chunk) {
-            bytes = Buffer.concat([bytes, chunk]);
-            if (!authenticated) {
-                if (bytes.length < 24) return;
-                assert.equal(bytes.subarray(0, 8).toString('ascii'), 'AEMCP-A1');
-                assert.notDeepEqual(bytes.subarray(8, 24), Buffer.alloc(16));
-                bytes = bytes.subarray(24);
-                if (input.autoAuthorize) {
-                    authenticated = true;
-                    socket.write(Buffer.concat([
-                        challengeMessage(),
-                        decisionMessage(1, SESSION, 7),
-                    ]));
-                    consume();
-                    return;
-                }
-                socket.write(challengeMessage());
-                authorized.then(function () {
-                    authenticated = true;
-                    socket.write(decisionMessage(1, SESSION, 7));
-                    consume();
-                });
-                return;
-            }
-            consume();
-        });
-
-        function consume() {
-            while (authenticated && bytes.length >= 4) {
-                const length = bytes.readUInt32BE(0);
-                if (bytes.length < length + 4) return;
-                const request = JSON.parse(bytes.toString('utf8', 4, length + 4));
-                bytes = bytes.subarray(length + 4);
-                requests.push(request);
-                let result;
-                if (request.method === 'hello') {
-                    result = {
-                        selectedWireVersion: 1,
-                        pluginVersion: '0.1.0-dev',
-                        compiledSdk: { version: '25.6.61', build: 61, architecture: 'arm64' },
-                        host: {
-                            application: 'after-effects', version: '26.3.0', build: 87,
-                            platform: 'macos-arm64', instanceId: HOST,
-                        },
-                        sessionId: SESSION,
-                        sessionGeneration: 7,
-                        limits: { maxFrameBytes: 524288 },
-                        capabilitiesDigest: DIGEST,
-                        clientNonce: request.params.nonce,
-                    };
-                } else if (request.method === 'capabilities') {
-                    const requestedIds = request.params.ids;
-                    result = {
-                        detail: request.params.detail || 'summary',
-                        capabilitiesDigest: DIGEST,
-                        queryDigest: capabilitiesRequestDigest(request),
-                        nextCursor: null,
-                        items: requestedIds === undefined
-                            ? CAPABILITIES_VECTOR.items
-                            : CAPABILITIES_VECTOR.items.filter(function (item) {
-                                return requestedIds.includes(item.id);
-                            }),
-                    };
-                } else if (request.method === 'invalidateGraph') {
-                    result = input.invalidateResult || {
-                        generation: 8,
-                        invalidated: true,
-                    };
-                } else if (request.method === 'invoke'
-                    && request.params.capabilityId === 'ae.native.exec') {
-                    if (input.disconnectNativeProgram === true) {
-                        socket.destroy();
-                        continue;
-                    }
-                    const mutating = typeof request.params.arguments.operationKey === 'string';
-                    const operations = request.params.arguments.operations.map(function (operation, index) {
-                        return { index, op: operation.op, status: 'completed' };
-                    });
-                    const outputs = {
-                        result: { value: 12, scale: 24 },
-                    };
-                    result = {
-                        capabilityId: 'ae.native.exec',
-                        ...(mutating
-                            ? { operationKey: request.params.arguments.operationKey }
-                            : {}),
-                        outputs,
-                        operations,
-                        evidence: {
-                            engine: 'native-aegp',
-                            hostInstanceId: HOST,
-                            sessionId: SESSION,
-                            requestId: request.requestId,
-                            capabilityId: 'ae.native.exec',
-                            capabilityVersion: 1,
-                            startedAtUnixMs: 1900000000000,
-                            completedAtUnixMs: 1900000000001,
-                            effect: mutating ? 'committed' : 'none',
-                            requestDigest: invokeRequestDigest(request),
-                            postcondition: {
-                                verified: true,
-                                kind: 'native-program',
-                                algorithm: 'sha256-rfc8785-jcs-v1',
-                                digest: nativeProgramPostconditionDigest(operations, outputs),
-                            },
-                        },
-                        undo: mutating
-                            ? {
-                                available: true,
-                                verified: false,
-                                groupLabel: request.params.arguments.undoGroup,
-                            }
-                            : { available: false, verified: false },
-                    };
-                    if (input.mutateNativeProgram) {
-                        input.mutateNativeProgram(result, request);
-                    }
-                } else if (input.projectCompositionVectors?.has(
-                    request.params.capabilityId,
-                )) {
-                    const vector = input.projectCompositionVectors.get(
-                        request.params.capabilityId,
-                    );
-                    result = structuredClone(vector.response.result);
-                    if (!input.preserveProjectCompositionFixtureEvidence) {
-                        result.evidence.requestId = request.requestId;
-                        result.evidence.requestDigest = invokeRequestDigest(request);
-                        rebindPostcondition(result);
-                    }
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else if (request.params.capabilityId === 'ae.composition.create') {
-                    result = structuredClone(COMPOSITION_CREATE_VECTOR.response.result);
-                    result.evidence.requestId = request.requestId;
-                    result.evidence.requestDigest = invokeRequestDigest(request);
-                    result.evidence.postcondition.digest = jcsDigest({
-                        capabilityId: result.capabilityId,
-                        capabilityVersion: result.capabilityVersion,
-                        value: result.value,
-                    });
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else if (request.params.capabilityId === 'ae.composition.layer.create') {
-                    result = structuredClone(COMPOSITION_LAYER_CREATE_VECTOR.response.result);
-                    result.evidence.requestId = request.requestId;
-                    result.evidence.requestDigest = invokeRequestDigest(request);
-                    result.evidence.postcondition.digest = jcsDigest({
-                        capabilityId: result.capabilityId,
-                        capabilityVersion: result.capabilityVersion,
-                        value: result.value,
-                    });
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else if (request.params.capabilityId === 'ae.layer.effect.apply') {
-                    result = structuredClone(LAYER_EFFECT_APPLY_VECTOR.response.result);
-                    result.evidence.requestId = request.requestId;
-                    result.evidence.requestDigest = invokeRequestDigest(request);
-                    result.evidence.postcondition.digest = jcsDigest({
-                        capabilityId: result.capabilityId,
-                        capabilityVersion: result.capabilityVersion,
-                        value: result.value,
-                    });
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else if (request.params.capabilityId === 'ae.composition.time.set') {
-                    result = structuredClone(COMPOSITION_TIME_SET_VECTOR.response.result);
-                    result.evidence.requestId = request.requestId;
-                    result.evidence.requestDigest = invokeRequestDigest(request);
-                    result.evidence.postcondition.digest = jcsDigest({
-                        capabilityId: result.capabilityId,
-                        capabilityVersion: result.capabilityVersion,
-                        value: result.value,
-                    });
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else if (request.params.capabilityId === 'ae.layer.property.set') {
-                    result = structuredClone(LAYER_PROPERTY_SET_VECTOR.response.result);
-                    result.evidence.requestId = request.requestId;
-                    result.evidence.requestDigest = invokeRequestDigest(request);
-                    result.evidence.postcondition.digest = jcsDigest({
-                        capabilityId: result.capabilityId,
-                        capabilityVersion: result.capabilityVersion,
-                        value: result.value,
-                    });
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else if (request.params.capabilityId
-                    === 'ae.layer.property.keyframes.list') {
-                    result = structuredClone(
-                        LAYER_PROPERTY_KEYFRAMES_VECTOR.response.result,
-                    );
-                    result.evidence.requestId = request.requestId;
-                    result.evidence.requestDigest = invokeRequestDigest(request);
-                    result.evidence.postcondition.digest = jcsDigest({
-                        capabilityId: result.capabilityId,
-                        capabilityVersion: result.capabilityVersion,
-                        value: result.value,
-                    });
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else if (request.params.capabilityId === 'ae.project.items.list'
-                    || request.params.capabilityId === 'ae.composition.layers.list'
-                    || request.params.capabilityId === 'ae.composition.selected-layers.list'
-                    || request.params.capabilityId === 'ae.composition.time.read'
-                    || request.params.capabilityId === 'ae.layer.properties.list') {
-                    const vector = request.params.capabilityId === 'ae.project.items.list'
-                        ? PROJECT_ITEMS_VECTOR
-                        : request.params.capabilityId === 'ae.composition.layers.list'
-                            ? COMPOSITION_LAYERS_VECTOR
-                            : request.params.capabilityId
-                                === 'ae.composition.selected-layers.list'
-                                ? COMPOSITION_SELECTED_LAYERS_VECTOR
-                            : request.params.capabilityId === 'ae.composition.time.read'
-                                ? COMPOSITION_TIME_VECTOR : LAYER_PROPERTIES_VECTOR;
-                    result = structuredClone(vector.response.result);
-                    result.evidence.requestId = request.requestId;
-                    result.evidence.requestDigest = invokeRequestDigest(request);
-                    result.evidence.postcondition.digest = jcsDigest({
-                        capabilityId: result.capabilityId,
-                        capabilityVersion: result.capabilityVersion,
-                        value: result.value,
-                    });
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else if (request.params.capabilityId === 'ae.project.bit-depth.set') {
-                    const value = {
-                        changed: true,
-                        beforeBitsPerChannel: 8,
-                        afterBitsPerChannel: request.params.arguments.targetDepth,
-                    };
-                    result = {
-                        capabilityId: 'ae.project.bit-depth.set',
-                        capabilityVersion: 1,
-                        engine: 'native-aegp',
-                        outcome: 'succeeded',
-                        evidence: {
-                            engine: 'native-aegp',
-                            hostInstanceId: HOST,
-                            sessionId: SESSION,
-                            requestId: request.requestId,
-                            capabilityId: 'ae.project.bit-depth.set',
-                            capabilityVersion: 1,
-                            startedAtUnixMs: 1900000000000,
-                            completedAtUnixMs: 1900000000001,
-                            effect: 'committed',
-                            requestDigest: invokeRequestDigest(request),
-                            postcondition: {
-                                verified: true,
-                                kind: 'project-bit-depth-set',
-                                algorithm: 'sha256-rfc8785-jcs-v1',
-                                digest: bitDepthSetPostconditionDigest(value),
-                            },
-                            undo: { available: true, verified: false },
-                        },
-                        value,
-                    };
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else if (request.params.capabilityId === 'ae.project.bit-depth.read') {
-                    const value = { bitsPerChannel: 8 };
-                    result = {
-                        capabilityId: 'ae.project.bit-depth.read',
-                        capabilityVersion: 1,
-                        engine: 'native-aegp',
-                        outcome: 'succeeded',
-                        evidence: {
-                            engine: 'native-aegp',
-                            hostInstanceId: HOST,
-                            sessionId: SESSION,
-                            requestId: request.requestId,
-                            capabilityId: 'ae.project.bit-depth.read',
-                            capabilityVersion: 1,
-                            startedAtUnixMs: 1900000000000,
-                            completedAtUnixMs: 1900000000001,
-                            effect: 'none',
-                            requestDigest: invokeRequestDigest(request),
-                            postcondition: {
-                                verified: true,
-                                kind: 'project-bit-depth-read',
-                                algorithm: 'sha256-rfc8785-jcs-v1',
-                                digest: bitDepthReadPostconditionDigest(value),
-                            },
-                        },
-                        value,
-                    };
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                } else {
-                    result = {
-                        capabilityId: 'ae.project.summary',
-                        capabilityVersion: 1,
-                        engine: 'native-aegp',
-                        outcome: 'succeeded',
-                        evidence: {
-                            engine: 'native-aegp',
-                            hostInstanceId: HOST,
-                            sessionId: SESSION,
-                            requestId: request.requestId,
-                            capabilityId: 'ae.project.summary',
-                            capabilityVersion: 1,
-                            startedAtUnixMs: 1900000000000,
-                            completedAtUnixMs: 1900000000001,
-                            effect: 'none',
-                            requestDigest: invokeRequestDigest(request),
-                            postcondition: {
-                                verified: true,
-                                kind: 'project-summary',
-                                algorithm: 'sha256-rfc8785-jcs-v1',
-                                digest: '7b5277171cf2d6478d7c95bd99cf25765afac71f8f003c5bf7604f495d7eb4a2',
-                            },
-                        },
-                        value: { projectOpen: true, projectName: 'Fixture.aep', itemCount: 3 },
-                    };
-                    if (input.mutateInvoke) input.mutateInvoke(result, request);
-                }
-                if (input.suppressHello && request.method === 'hello') continue;
-                const responseError = request.method === 'invoke'
-                    ? (request.params.capabilityId === 'ae.native.exec'
-                        && input.safeNativeProgramFailure === true
-                        ? safeNativeProgramFailure(request)
-                        : input.invokeError)
-                    : request.method === 'invalidateGraph'
-                        ? input.invalidateError : null;
-                const replayed = responseError
-                    ? input.errorReplayed === true
-                    : (request.method === 'invoke'
-                        && request.params.capabilityId === 'ae.composition.create'
-                        && request.requestId === input.compositionCreateReplayedRequestId)
-                        || (request.method === 'invoke'
-                        && request.params.capabilityId === 'ae.composition.layer.create'
-                        && request.requestId === input.createReplayedRequestId)
-                        || (request.method === 'invoke'
-                        && request.params.capabilityId === 'ae.layer.effect.apply'
-                        && request.requestId === input.effectApplyReplayedRequestId)
-                        || (request.method === 'invoke'
-                            && request.params.capabilityId === 'ae.project.summary'
-                            && input.summaryReplayed === true);
-                socket.write(frame({
-                    wireVersion: 1,
-                    kind: 'response',
-                    sessionId: SESSION,
-                    requestId: request.requestId,
-                    method: request.method,
-                    ok: responseError ? false : true,
-                    replayed,
-                    ...(responseError ? { error: responseError } : { result }),
-                }));
-            }
-        }
+    assert.equal(endpointDescriptor(descriptor('s-123456abcdef.sock') + 'extra=x\n'), null);
+    assert.equal(parseAuthChallenge(challengeMessage()).hostInstanceId, HOST);
+    assert.deepEqual(parseAuthDecision(decisionMessage(1, SESSION, 7)), {
+        code: 'authorized',
+        sessionId: SESSION,
+        sessionGeneration: 7,
     });
-    return { authorize, requests };
-}
+});
 
-test('CEP client automatically consumes the compatibility challenge and decision', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
+test('discovery accepts the private descriptor and socket owned by this user', async (t) => {
     const fixture = await endpointFixture(t);
-    installProtocol(fixture.server, { autoAuthorize: true });
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-        now: function () { return 1900000000000; },
-    });
-    t.after(function () { return client.close(); });
-
-    const hello = await client.connect();
-
-    assert.equal(hello.host.instanceId, HOST);
-    assert.equal(client.status().state, 'connected');
-});
-
-async function readyNativeClient(t, protocolOptions) {
-    const endpoint = await endpointFixture(t);
-    const protocol = installProtocol(endpoint.server, protocolOptions);
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: endpoint.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-        now: function () { return 1900000000000; },
-    });
-    t.after(function () { return client.close(); });
-    const connecting = client.connect();
-    protocol.authorize();
-    await connecting;
-    await loadFullCapabilities(client);
-    return { client, protocol };
-}
-
-async function loadFullCapabilities(client) {
-    const ids = CAPABILITIES_VECTOR.items.map(function (item) { return item.id; });
-    for (let offset = 0; offset < ids.length; offset += 24) {
-        const chunk = ids.slice(offset, offset + 24);
-        await client.capabilities({
-            ids: chunk,
-            detail: 'full',
-            limit: chunk.length,
-        });
-    }
-}
-
-async function readyNativeProgramClient(t, protocolOptions) {
-    const endpoint = await endpointFixture(t);
-    const protocol = installProtocol(endpoint.server, protocolOptions);
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: endpoint.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-        now: function () { return 1900000000000; },
-    });
-    t.after(function () { return client.close(); });
-    const connecting = client.connect();
-    protocol.authorize();
-    await connecting;
-    return { client, protocol };
-}
-
-test('CEP client sends one native program and validates the common terminal', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client, protocol } = await readyNativeProgramClient(t);
-    const result = await client.invoke({
-        requestId: 'native-program-success',
-        capabilityId: 'ae.native.exec',
-        capabilityVersion: 1,
-        arguments: {
-            operations: [{
-                op: 'project.items.list',
-                args: { offset: 0, limit: 20 },
-                returnAs: 'result',
-            }],
-        },
-        deadlineUnixMs: 1900000005000,
-    });
-
-    assert.deepEqual(result.outputs, { result: { value: 12, scale: 24 } });
-    assert.deepEqual(result.operations, [{
-        index: 0,
-        op: 'project.items.list',
-        status: 'completed',
+    assert.deepEqual(discoverNativeEndpoints({ runtimeRoot: fixture.root }), [{
+        descriptorPath: path.join(
+            fixture.root,
+            'aemcp-n1',
+            'd-' + HOST + '.endpoint',
+        ),
+        socketPath: fixture.socketPath,
+        hostInstanceId: HOST,
+        pid: 4242,
+        startSeconds: 1700000000,
+        startMicros: 123456,
+        socketName: 's-123456abcdef.sock',
+        wireVersion: 1,
+        sourceCommit: SOURCE,
     }]);
+});
+
+test('client negotiates and validates the sole native program descriptor', async (t) => {
+    const { client } = await connectedFixture(t);
+    const result = await client.capabilities({ detail: 'full', limit: 100 });
+    assert.deepEqual(result.items.map(function (item) { return item.id; }), [
+        'ae.native.exec',
+    ]);
+    assert.equal(result.items[0].primitiveCount, 23);
+    assert.equal(result.items[0].requiredSkill, 'builtin:skill:ae-execution-guide');
+    assert.equal(client.status().nativeExecContractDigest, result.items[0].contractDigest);
+});
+
+test('client rejects a capability page that reintroduces a legacy invoke descriptor', async (t) => {
+    const { client } = await connectedFixture(t, { appendLegacyDescriptor: true });
+    await assert.rejects(
+        client.capabilities({ detail: 'summary', limit: 100 }),
+        function (error) {
+            return error.code === 'NATIVE_CONTRACT_MISMATCH';
+        },
+    );
+});
+
+test('client sends and verifies one read-only native program', async (t) => {
+    const { client, requests } = await connectedFixture(t);
+    const result = await invoke(client, 'native-program-read-0001', readProgram());
+    assert.equal(result.capabilityId, 'ae.native.exec');
+    assert.equal(result.operationKey, undefined);
     assert.deepEqual(result.undo, { available: false, verified: false });
-    assert.equal(Object.hasOwn(result, 'operationKey'), false);
-    assert.equal(result.replayed, false);
-    const invokes = protocol.requests.filter(function (request) {
-        return request.method === 'invoke';
+    const request = requests.find(function (entry) {
+        return entry.requestId === 'native-program-read-0001';
     });
-    assert.equal(invokes.length, 1);
-    assert.equal(invokes[0].requestId, 'native-program-success');
-    assert.deepEqual(invokes[0].params, {
+    assert.equal(request.method, 'invoke');
+    assert.deepEqual(request.params, {
         capabilityId: 'ae.native.exec',
         capabilityVersion: 1,
-        arguments: {
-            operations: [{
-                op: 'project.items.list',
-                args: { offset: 0, limit: 20 },
-                returnAs: 'result',
-            }],
-        },
+        arguments: readProgram(),
     });
 });
 
-test('CEP client accepts a write success only with its real operation key', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client } = await readyNativeProgramClient(t);
-    const result = await client.invoke({
-        requestId: 'native-program-write-success',
-        capabilityId: 'ae.native.exec',
-        capabilityVersion: 1,
-        arguments: {
-            operationKey: 'native-program-write-success-key',
-            undoGroup: 'Task 5 write',
-            operations: [{
-                op: 'composition.time.set',
-                args: {
-                    composition: { ref: 'composition' },
-                    time: { value: 12, scale: 24 },
-                },
-                returnAs: 'result',
-            }],
-        },
-        deadlineUnixMs: 1900000005000,
-    });
-
-    assert.equal(result.operationKey, 'native-program-write-success-key');
+test('client preserves write identity and one common Undo terminal', async (t) => {
+    const { client } = await connectedFixture(t);
+    const program = writeProgram();
+    const result = await invoke(client, 'native-program-write-0001', program);
+    assert.equal(result.operationKey, program.operationKey);
     assert.deepEqual(result.undo, {
         available: true,
         verified: false,
-        groupLabel: 'Task 5 write',
+        groupLabel: program.undoGroup,
     });
+    assert.equal(result.evidence.effect, 'committed');
 });
 
-test('CEP client preserves native program operation keys and rejects open terminals', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client, protocol } = await readyNativeProgramClient(t, {
-        mutateNativeProgram: function (result) {
-            result.handle = 9182;
-        },
-    });
+test('client rejects operation-specific invoke IDs before native dispatch', async (t) => {
+    const { client, requests } = await connectedFixture(t);
     await assert.rejects(client.invoke({
-        requestId: 'native-program-open-terminal',
-        capabilityId: 'ae.native.exec',
-        capabilityVersion: 1,
-        arguments: {
-            operationKey: 'native-program-operation-key',
-            undoGroup: 'Task 5 write',
-            operations: [{
-                op: 'composition.time.set',
-                args: {
-                    composition: { ref: 'composition' },
-                    time: { value: 12, scale: 24 },
-                },
-                returnAs: 'result',
-            }],
-        },
-        deadlineUnixMs: 1900000005000,
-    }), function (error) {
-        return error.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE';
-    });
-    const invoke = protocol.requests.find(function (request) {
-        return request.method === 'invoke';
-    });
-    assert.equal(
-        invoke.params.arguments.operationKey,
-        'native-program-operation-key',
-    );
-    assert.equal(invoke.params.arguments.undoGroup, 'Task 5 write');
-});
-
-test('CEP client keeps a disconnected native program write side-effect uncertain', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client, protocol } = await readyNativeProgramClient(t, {
-        disconnectNativeProgram: true,
-    });
-    await assert.rejects(client.invoke({
-        requestId: 'native-program-disconnect',
-        capabilityId: 'ae.native.exec',
-        capabilityVersion: 1,
-        arguments: {
-            operationKey: 'native-program-disconnect-key',
-            undoGroup: 'Task 5 write',
-            operations: [{
-                op: 'composition.time.set',
-                args: {
-                    composition: { ref: 'composition' },
-                    time: { value: 12, scale: 24 },
-                },
-            }],
-        },
-        deadlineUnixMs: 1900000005000,
-    }), function (error) {
-        return error.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE'
-            && error.details.capabilityId === 'ae.native.exec'
-            && error.details.operationKey === 'native-program-disconnect-key';
-    });
-    assert.equal(protocol.requests.filter(function (request) {
-        return request.method === 'invoke';
-    }).length, 1);
-});
-
-test('CEP client has no operation-specific invoke alias or fallback', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client, protocol } = await readyNativeProgramClient(t);
-    await assert.rejects(client.invoke({
-        requestId: 'legacy-operation-specific-call',
+        requestId: 'legacy-project-summary',
         capabilityId: 'ae.project.summary',
         capabilityVersion: 1,
         arguments: {},
-        deadlineUnixMs: 1900000005000,
+        deadlineUnixMs: Date.now() + 5000,
     }), function (error) {
-        return error.code === 'INVALID_ARGUMENT';
+        return error.code === 'INVALID_ARGUMENT'
+            && error.sideEffect === undefined;
     });
-    assert.equal(protocol.requests.filter(function (request) {
-        return request.method === 'invoke';
-    }).length, 0);
+    assert.equal(requests.some(function (request) {
+        return request.requestId === 'legacy-project-summary';
+    }), false);
 });
 
-test('CEP client preserves a safe write failure and balanced Undo fact', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client } = await readyNativeProgramClient(t, {
-        safeNativeProgramFailure: true,
+test('client preserves a request-bound completed write failure', async (t) => {
+    const { client } = await connectedFixture(t, {
+        invokeError: safeWriteFailure,
     });
-    await assert.rejects(client.invoke({
-        requestId: 'native-program-safe-write-failure',
-        capabilityId: 'ae.native.exec',
-        capabilityVersion: 1,
-        arguments: {
-            operationKey: 'native-program-safe-write-key',
-            undoGroup: 'Task 5 safe write',
-            operations: [{
-                op: 'composition.resolve',
-                args: { locator: { synthetic: true } },
-                saveAs: 'composition',
-            }, {
-                op: 'composition.time.set',
-                args: {
-                    composition: { ref: 'composition' },
-                    targetTime: { value: 12, scale: 24 },
-                },
-            }],
-        },
-        deadlineUnixMs: 1900000005000,
-    }), function (error) {
-        return error.code === 'PRECONDITION_FAILED'
-            && error.sideEffect === 'completed'
-            && error.details.operationKey === 'native-program-safe-write-key'
-            && error.details.disposition === 'completed'
-            && error.details.evidence.postcondition.verified === false
-            && error.details.undo.available === true
-            && error.details.undo.groupLabel === 'Task 5 safe write';
-    });
-});
-
-test('CEP client negotiates the complete native registry and verifies prior package vectors', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client, protocol } = await readyNativeClient(t, {
-        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
-    });
-    let index = 0;
-    for (const [capabilityId, vector] of PROJECT_COMPOSITION_VECTORS) {
-        index += 1;
-        let result;
-        try {
-            result = await client.invoke({
-                requestId: 'issue150-success-' + index,
-                capabilityId,
-                capabilityVersion: 1,
-                arguments: structuredClone(vector.request.params.arguments),
-                deadlineUnixMs: 1900000005000,
-            });
-        } catch (error) {
-            error.message = capabilityId + ': ' + error.message;
-            throw error;
-        }
-        assert.deepEqual(result.value, vector.response.result.value, capabilityId);
-        assert.equal(result.replayed, false, capabilityId);
-    }
-    assert.deepEqual(
-        client.status().projectCompositionContractDigests,
-        Object.fromEntries(Object.entries(projectCompositionContracts.CONTRACTS).map(function (entry) {
-            return [entry[0], entry[1].digest];
-        })),
-    );
-    assert.deepEqual(
-        protocol.requests.filter(function (request) { return request.method === 'invoke'; })
-            .map(function (request) { return request.params.capabilityId; }),
-        Array.from(PROJECT_COMPOSITION_VECTORS.keys()),
-    );
-});
-
-test('CEP client accepts frame-rate results whose unchanged times use the new timescale', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const vectors = new Map([['ae.composition.frame-rate.set', FRAME_RATE_SET_VECTOR]]);
-    const { client } = await readyNativeClient(t, {
-        projectCompositionVectors: vectors,
-    });
-    const result = await client.invoke({
-        requestId: 'frame-rate-timescale-success',
-        capabilityId: 'ae.composition.frame-rate.set',
-        capabilityVersion: 1,
-        arguments: structuredClone(FRAME_RATE_SET_VECTOR.request.params.arguments),
-        deadlineUnixMs: 1900000005000,
-    });
-
-    assert.deepEqual(result.value, FRAME_RATE_SET_VECTOR.response.result.value);
-});
-
-test('CEP client keeps frame-rate non-target time changes side-effect uncertain', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const changedVector = structuredClone(FRAME_RATE_SET_VECTOR);
-    changedVector.response.result.value.after.duration = {
-        value: 301,
-        scale: 30,
-        secondsRational: '301/30',
-    };
-    const vectors = new Map([['ae.composition.frame-rate.set', changedVector]]);
-    const { client } = await readyNativeClient(t, {
-        projectCompositionVectors: vectors,
-    });
-
-    await assert.rejects(client.invoke({
-        requestId: 'frame-rate-timescale-tamper',
-        capabilityId: 'ae.composition.frame-rate.set',
-        capabilityVersion: 1,
-        arguments: structuredClone(changedVector.request.params.arguments),
-        deadlineUnixMs: 1900000005000,
-    }), {
-        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
-        retryable: false,
-        sideEffect: 'may-have-occurred',
-    });
-});
-
-test('CEP client dispatches and verifies all eleven TSM contracts', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client, protocol } = await readyNativeClient(t, {
-        projectCompositionVectors: TSM_VECTORS,
-    });
-    let index = 0;
-    for (const [capabilityId, vector] of TSM_VECTORS) {
-        index += 1;
-        const argumentsValue = structuredClone(vector.request.params.arguments);
-        if (capabilityId === 'ae.marker.set') {
-            argumentsValue.patch = {
-                comment: 'Synthetic marker edited',
-            };
-        }
-        const result = await client.invoke({
-            requestId: 'tsm-success-' + index,
-            capabilityId,
-            capabilityVersion: 1,
-            arguments: argumentsValue,
-            deadlineUnixMs: 1900000005000,
-        });
-        assert.deepEqual(result.value, vector.response.result.value, capabilityId);
-        assert.equal(result.replayed, false, capabilityId);
-    }
-    assert.deepEqual(
-        protocol.requests.filter(function (request) { return request.method === 'invoke'; })
-            .map(function (request) { return request.params.capabilityId; }),
-        Array.from(TSM_VECTORS.keys()),
-    );
-    assert.equal(
-        protocol.requests.find(function (request) {
-            return request.params.capabilityId === 'ae.marker.list';
-        }).params.arguments.target.kind,
-        'composition',
-    );
-    assert.deepEqual(
-        protocol.requests.find(function (request) {
-            return request.params.capabilityId === 'ae.marker.set';
-        }).params.arguments.patch,
-        { comment: 'Synthetic marker edited' },
-    );
-});
-
-test('CEP client accepts the shared comment fixture without rebinding native evidence', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client } = await readyNativeClient(t, {
-        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
-        preserveProjectCompositionFixtureEvidence: true,
-    });
-    const vector = PROJECT_COMPOSITION_VECTORS.get('ae.project.item.comment.set');
-    const result = await client.invoke({
-        requestId: vector.request.requestId,
-        capabilityId: vector.request.params.capabilityId,
-        capabilityVersion: vector.request.params.capabilityVersion,
-        arguments: structuredClone(vector.request.params.arguments),
-        deadlineUnixMs: vector.request.deadlineUnixMs,
-    });
-    assert.equal(
-        result.evidence.requestDigest,
-        vector.response.result.evidence.requestDigest,
-    );
-    assert.deepEqual(result.value, vector.response.result.value);
-});
-
-test('CEP client rejects tampered #150 read evidence as a contract mismatch', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client } = await readyNativeClient(t, {
-        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
-        mutateInvoke: function (result, request) {
-            if (request.params.capabilityId === 'ae.project.context.read') {
-                result.value.unadvertised = true;
-            }
-        },
-    });
-    const vector = PROJECT_COMPOSITION_VECTORS.get('ae.project.context.read');
     await assert.rejects(
-        client.invoke({
-            requestId: 'issue150-read-tamper',
-            capabilityId: 'ae.project.context.read',
-            capabilityVersion: 1,
-            arguments: structuredClone(vector.request.params.arguments),
-            deadlineUnixMs: 1900000005000,
-        }),
-        { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false, sideEffect: 'not-started' },
-    );
-});
-
-test('CEP client treats tampered #150 write evidence as side-effect uncertain', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client } = await readyNativeClient(t, {
-        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
-        mutateInvoke: function (result, request) {
-            if (request.params.capabilityId === 'ae.project.item.comment.set') {
-                result.value.afterComment = result.value.beforeComment;
-            }
-        },
-    });
-    const vector = PROJECT_COMPOSITION_VECTORS.get('ae.project.item.comment.set');
-    await assert.rejects(
-        client.invoke({
-            requestId: 'issue150-write-tamper',
-            capabilityId: 'ae.project.item.comment.set',
-            capabilityVersion: 1,
-            arguments: structuredClone(vector.request.params.arguments),
-            deadlineUnixMs: 1900000005000,
-        }),
+        invoke(client, 'native-program-safe-failure', writeProgram()),
         function (error) {
-            assert.equal(error.code, 'POSSIBLY_SIDE_EFFECTING_FAILURE');
-            assert.equal(error.retryable, false);
-            assert.equal(error.sideEffect, 'may-have-occurred');
-            assert.equal(error.recovery.action, 'inspect-state');
-            assert.deepEqual(error.details, {
-                capabilityId: 'ae.project.item.comment.set',
-            });
-            return true;
+            return error.code === 'PRECONDITION_FAILED'
+                && error.sideEffect === 'completed'
+                && error.details.operationKey === 'native-program-write-0001'
+                && error.details.undo.available === true
+                && error.details.undo.verified === false;
         },
     );
 });
 
-test('CEP client rejects tampered #155 read and write results with correct side-effect semantics', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client } = await readyNativeClient(t, {
-        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
-        mutateInvoke: function (result, request) {
-            if (request.params.capabilityId === 'ae.layer.details.read') {
-                result.value.unadvertised = true;
-            } else if (request.params.capabilityId.startsWith('ae.layer.')) {
-                result.evidence.undo.verified = true;
-            }
+test('client classifies an open write terminal as possibly side-effecting', async (t) => {
+    const { client } = await connectedFixture(t, {
+        mutateInvokeResult: function (result) {
+            delete result.undo;
         },
     });
-    const readVector = PROJECT_COMPOSITION_VECTORS.get('ae.layer.details.read');
-    await assert.rejects(client.invoke({
-        requestId: 'issue155-read-tamper',
-        capabilityId: 'ae.layer.details.read',
-        capabilityVersion: 1,
-        arguments: structuredClone(readVector.request.params.arguments),
-        deadlineUnixMs: 1900000005000,
-    }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false, sideEffect: 'not-started' });
-
-    for (const capabilityId of [
-        'ae.layer.name.set',
-        'ae.layer.range.set',
-        'ae.layer.start-time.set',
-        'ae.layer.stretch.set',
-        'ae.layer.order.set',
-        'ae.layer.parent.set',
-        'ae.layer.duplicate',
-    ]) {
-        const vector = PROJECT_COMPOSITION_VECTORS.get(capabilityId);
-        await assert.rejects(client.invoke({
-            requestId: 'issue155-write-tamper-' + capabilityId,
-            capabilityId,
-            capabilityVersion: 1,
-            arguments: structuredClone(vector.request.params.arguments),
-            deadlineUnixMs: 1900000005000,
-        }), {
-            code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
-            retryable: false,
-            sideEffect: 'may-have-occurred',
-        }, capabilityId);
-    }
+    await assert.rejects(
+        invoke(client, 'native-program-open-terminal', writeProgram()),
+        function (error) {
+            return error.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE'
+                && error.sideEffect === 'may-have-occurred'
+                && error.details.operationKey === 'native-program-write-0001';
+        },
+    );
 });
 
-test('CEP client rejects stale #155 layer locators before native dispatch', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const { client, protocol } = await readyNativeClient(t, {
-        projectCompositionVectors: PROJECT_COMPOSITION_VECTORS,
-    });
-    const vector = PROJECT_COMPOSITION_VECTORS.get('ae.layer.details.read');
-    const argumentsValue = structuredClone(vector.request.params.arguments);
-    argumentsValue.layerLocator.sessionId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-    const invokeCount = protocol.requests.filter(function (request) {
-        return request.method === 'invoke';
-    }).length;
-    await assert.rejects(client.invoke({
-        requestId: 'issue155-stale-layer',
-        capabilityId: 'ae.layer.details.read',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000005000,
-    }), function (error) {
-        assert.equal(error.code, 'STALE_LOCATOR');
-        assert.deepEqual(error.details, {
-            field: 'params.arguments.layerLocator',
-            capabilityId: 'ae.layer.details.read',
-        });
-        assert.equal(error.recovery.action, 'refresh-locator');
-        assert.match(error.recovery.hint, /ae_listCompositionLayers/);
-        return true;
-    });
-    assert.equal(protocol.requests.filter(function (request) {
-        return request.method === 'invoke';
-    }).length, invokeCount);
+test('client keeps a disconnected dispatched write possibly side-effecting', async (t) => {
+    const { client } = await connectedFixture(t, { disconnectInvoke: true });
+    await assert.rejects(
+        invoke(client, 'native-program-disconnected', writeProgram()),
+        function (error) {
+            return error.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE'
+                && error.details.operationKey === 'native-program-write-0001';
+        },
+    );
 });
 
-test('descriptor and fixed transport messages are strict and closed', () => {
-    assert.equal(endpointDescriptor(descriptor('s-123456abcdef.sock')).hostInstanceId, HOST);
-    assert.equal(endpointDescriptor(descriptor('../escape.sock')), null);
-    assert.equal(endpointDescriptor(descriptor('s-123456abcdef.sock') + 'extra=1\n'), null);
-    assert.deepEqual(parseAuthChallenge(challengeMessage()), {
-        challengeId: '12AB-34CD', expiresInMs: 60000, hostInstanceId: HOST,
+test('client sends the closed project-graph invalidation control request', async (t) => {
+    const { client, requests } = await connectedFixture(t);
+    assert.deepEqual(await client.invalidateProjectGraph({
+        deadlineUnixMs: Date.now() + 5000,
+    }), {
+        generation: 8,
+        invalidated: true,
     });
-    assert.deepEqual(parseAuthDecision(decisionMessage(1, SESSION, 7)), {
-        code: 'authorized', sessionId: SESSION, sessionGeneration: 7,
+    const request = requests.find(function (entry) {
+        return entry.method === 'invalidateGraph';
     });
-    assert.equal(parseAuthChallenge(Buffer.alloc(57)), null);
-    assert.equal(parseAuthDecision(decisionMessage(1, SESSION, 0)), null);
-
-    const layerPropertiesDescriptor = CAPABILITIES_VECTOR.items.find(function (item) {
-        return item.id === 'ae.layer.properties.list';
-    });
-    const valueVariants = layerPropertiesDescriptor.resultSchema.properties
-        .properties.items.properties.value.oneOf;
-    const scalarSchema = valueVariants.find(function (variant) {
-        return variant.properties?.kind?.const === 'scalar';
-    });
-    const vectorSchema = valueVariants.find(function (variant) {
-        return variant.properties?.kind?.const === 'vector';
-    });
-    assert.deepEqual(vectorSchema.properties.components, {
-        type: 'array',
-        minItems: 2,
-        maxItems: 3,
-        items: scalarSchema.properties.value,
-    });
-});
-
-test('discovery accepts only a private descriptor and socket owned by this user', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    const endpoints = discoverNativeEndpoints({ runtimeRoot: fixture.root });
-    assert.equal(endpoints.length, 1);
-    assert.equal(endpoints[0].hostInstanceId, HOST);
-    assert.equal(endpoints[0].sourceCommit, SOURCE);
-
-    fs.chmodSync(path.join(fixture.root, 'aemcp-n1', 'd-' + HOST + '.endpoint'), 0o644);
-    assert.deepEqual(discoverNativeEndpoints({ runtimeRoot: fixture.root }), []);
-});
-
-test('CEP client sends the closed internal project-graph invalidation contract', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t);
-    const result = await ready.client.invalidateProjectGraph({
-        deadlineUnixMs: 1900000002000,
-    });
-
-    assert.deepEqual(result, { generation: 8, invalidated: true });
-    const request = ready.protocol.requests.at(-1);
-    assert.equal(request.method, 'invalidateGraph');
     assert.deepEqual(request.params, { reason: 'cep-jsx' });
+});
+
+test('client binds native cancellation to one request identity and session', async (t) => {
+    const { client, requests } = await connectedFixture(t);
+    const result = await client.cancel({
+        requestId: 'cancel-control-0001',
+        targetRequestId: 'native-program-target-0001',
+        deadlineUnixMs: Date.now() + 5000,
+    });
+    assert.deepEqual(result, {
+        targetRequestId: 'native-program-target-0001',
+        state: 'running-not-cancellable',
+        terminalResponseExpected: true,
+    });
+    const request = requests.find(function (entry) {
+        return entry.requestId === 'cancel-control-0001';
+    });
+    assert.equal(request.method, 'cancel');
     assert.equal(request.sessionId, SESSION);
-    assert.equal(request.deadlineUnixMs, 1900000002000);
-    assert.deepEqual(Object.keys(request).sort(), [
-        'deadlineUnixMs', 'kind', 'method', 'params', 'requestId', 'sessionId', 'wireVersion',
-    ]);
+    assert.deepEqual(request.params, {
+        targetRequestId: 'native-program-target-0001',
+    });
 });
 
-test('CEP client rejects an open project-graph invalidation result', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        invalidateResult: { generation: 8, invalidated: true, extra: 'open-contract' },
+test('client rejects an open project-graph invalidation result', async (t) => {
+    const { client } = await connectedFixture(t, {
+        invalidateResult: {
+            generation: 8,
+            invalidated: true,
+            legacyCapabilityId: 'ae.project.summary',
+        },
     });
-
     await assert.rejects(
-        ready.client.invalidateProjectGraph({ deadlineUnixMs: 1900000002000 }),
-        (error) => error?.code === 'NATIVE_CONTRACT_MISMATCH'
-            && /invalidation result was malformed/.test(error.message),
-    );
-});
-
-test('CEP client rejects inconsistent project-graph invalidation evidence', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    for (const invalidateResult of [
-        { generation: 0, invalidated: true },
-        { generation: 8, invalidated: false },
-    ]) {
-        const ready = await readyNativeClient(t, { invalidateResult });
-        await assert.rejects(
-            ready.client.invalidateProjectGraph({ deadlineUnixMs: 1900000002000 }),
-            (error) => error?.code === 'NATIVE_CONTRACT_MISMATCH'
-                && /invalidation result was malformed/.test(error.message),
-        );
-        await ready.client.close();
-    }
-});
-
-test('CEP client verifies native project summary and bit-depth read/write capabilities', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    const protocol = installProtocol(fixture.server, { summaryReplayed: true });
-    const deterministic = Buffer.from('00112233445566778899aabbccddeeff0011223344556677', 'hex');
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-        randomBytes: function (size) {
-            return Buffer.concat([deterministic, Buffer.alloc(size)]).subarray(0, size);
-        },
-        requestTimeoutMs: 2000,
-        now: function () { return 1900000000000; },
-    });
-    t.after(function () { return client.close(); });
-
-    const connecting = client.connect();
-    protocol.authorize();
-    const hello = await connecting;
-    assert.equal(hello.host.instanceId, HOST);
-    assert.equal(client.status().state, 'connected');
-    const negotiation = await client.negotiate({ deadlineUnixMs: 1900000005000 });
-    assert.equal(negotiation.sourceCommit, SOURCE);
-    const coreCapabilityIds = [
-        'ae.project.summary',
-        'ae.project.bit-depth.read',
-        'ae.project.bit-depth.set',
-        'ae.project.items.list',
-        'ae.composition.layers.list',
-        'ae.composition.selected-layers.list',
-        'ae.composition.time.read',
-        'ae.composition.time.set',
-        'ae.layer.properties.list',
-        'ae.layer.property.keyframes.list',
-    ];
-    const capabilities = await client.capabilities({
-        ids: coreCapabilityIds,
-        detail: 'full',
-        limit: coreCapabilityIds.length,
-        deadlineUnixMs: 1900000005000,
-    });
-    assert.equal(capabilities.items[0].id, 'ae.project.summary');
-    const summary = await client.invoke({
-        requestId: 'core-project-summary-1',
-        capabilityId: 'ae.project.summary',
-        capabilityVersion: 1,
-        arguments: {},
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.deepEqual(summary.value, {
-        projectOpen: true, projectName: 'Fixture.aep', itemCount: 3,
-    });
-    assert.equal(summary.engine, 'native-aegp');
-    assert.equal(summary.replayed, true);
-    assert.equal(summary.evidence.postcondition.verified, true);
-    assert.equal(
-        client.status().projectSummaryContractDigest,
-        CAPABILITIES_VECTOR.items[0].contractDigest,
-    );
-    assert.equal(client.status().projectBitDepthReadContractDigest, BIT_DEPTH_READ_DIGEST);
-    assert.equal(client.status().projectBitDepthSetContractDigest, BIT_DEPTH_SET_DIGEST);
-    assert.equal(
-        client.status().projectItemsListContractDigest,
-        CAPABILITIES_VECTOR.items.find(function (item) {
-            return item.id === 'ae.project.items.list';
-        }).contractDigest,
-    );
-    assert.equal(
-        client.status().compositionLayersListContractDigest,
-        CAPABILITIES_VECTOR.items.find(function (item) {
-            return item.id === 'ae.composition.layers.list';
-        }).contractDigest,
-    );
-    assert.equal(
-        client.status().compositionSelectedLayersListContractDigest,
-        CAPABILITIES_VECTOR.items.find(function (item) {
-            return item.id === 'ae.composition.selected-layers.list';
-        }).contractDigest,
-    );
-    assert.equal(
-        client.status().compositionTimeReadContractDigest,
-        CAPABILITIES_VECTOR.items.find(function (item) {
-            return item.id === 'ae.composition.time.read';
-        }).contractDigest,
-    );
-    assert.equal(
-        client.status().compositionTimeSetContractDigest,
-        CAPABILITIES_VECTOR.items.find(function (item) {
-            return item.id === 'ae.composition.time.set';
-        }).contractDigest,
-    );
-    assert.equal(
-        client.status().layerPropertiesListContractDigest,
-        CAPABILITIES_VECTOR.items.find(function (item) {
-            return item.id === 'ae.layer.properties.list';
-        }).contractDigest,
-    );
-    assert.equal(
-        client.status().layerPropertyKeyframesListContractDigest,
-        CAPABILITIES_VECTOR.items.find(function (item) {
-            return item.id === 'ae.layer.property.keyframes.list';
-        }).contractDigest,
-    );
-    assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
-        'hello', 'capabilities', 'invoke',
-    ]);
-    assert.deepEqual(protocol.requests[1].params.ids, coreCapabilityIds);
-    assert.equal(protocol.requests[1].params.limit, coreCapabilityIds.length);
-    assert.equal(protocol.requests[2].requestId, 'core-project-summary-1');
-    assert.equal(protocol.requests[2].deadlineUnixMs, 1900000002000);
-    assert.equal(summary.evidence.requestDigest, invokeRequestDigest(protocol.requests[2]));
-
-    const bitDepthRead = await client.invoke({
-        requestId: 'core-bit-depth-read-1',
-        capabilityId: 'ae.project.bit-depth.read',
-        capabilityVersion: 1,
-        arguments: {},
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(bitDepthRead.replayed, false);
-    assert.deepEqual(bitDepthRead.value, { bitsPerChannel: 8 });
-    assert.equal(bitDepthRead.evidence.effect, 'none');
-    assert.equal(bitDepthRead.evidence.undo, undefined);
-    assert.equal(bitDepthRead.evidence.requestDigest, invokeRequestDigest(protocol.requests[3]));
-
-    const bitDepthSet = await client.invoke({
-        requestId: 'core-bit-depth-set-1',
-        capabilityId: 'ae.project.bit-depth.set',
-        capabilityVersion: 1,
-        arguments: {
-            targetDepth: 16,
-            idempotencyKey: 'bit-depth-intent-0001',
-        },
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(bitDepthSet.replayed, false);
-    assert.deepEqual(bitDepthSet.value, {
-        changed: true,
-        beforeBitsPerChannel: 8,
-        afterBitsPerChannel: 16,
-    });
-    assert.deepEqual(bitDepthSet.evidence.undo, { available: true, verified: false });
-    assert.equal(bitDepthSet.evidence.requestDigest, invokeRequestDigest(protocol.requests[4]));
-    assert.deepEqual(protocol.requests[4].params.arguments, {
-        targetDepth: 16, idempotencyKey: 'bit-depth-intent-0001',
-    });
-
-    const projectItems = await client.invoke({
-        requestId: 'core-project-items-1',
-        capabilityId: 'ae.project.items.list',
-        capabilityVersion: 1,
-        arguments: { offset: 0, limit: 25 },
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(projectItems.replayed, false);
-    assert.equal(projectItems.value.returned, 2);
-    const compositionLocator = projectItems.value.items.find(function (item) {
-        return item.type === 'composition';
-    }).locator;
-    assert.equal(projectItems.evidence.requestDigest, invokeRequestDigest(protocol.requests[5]));
-
-    const compositionLayers = await client.invoke({
-        requestId: 'core-composition-layers-1',
-        capabilityId: 'ae.composition.layers.list',
-        capabilityVersion: 1,
-        arguments: { compositionLocator, offset: 0, limit: 25 },
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(compositionLayers.replayed, false);
-    assert.equal(compositionLayers.value.layers[0].locked, false);
-    assert.equal(
-        compositionLayers.evidence.requestDigest,
-        invokeRequestDigest(protocol.requests[6]),
-    );
-    const compositionSelectedLayers = await client.invoke({
-        requestId: 'core-composition-selected-layers-1',
-        capabilityId: 'ae.composition.selected-layers.list',
-        capabilityVersion: 1,
-        arguments: { compositionLocator, offset: 0, limit: 25 },
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(compositionSelectedLayers.replayed, false);
-    assert.deepEqual(
-        compositionSelectedLayers.value.layers.map(function (layer) {
-            return layer.stackIndex;
-        }),
-        [1, 3],
-    );
-    assert.equal(
-        compositionSelectedLayers.evidence.requestDigest,
-        invokeRequestDigest(protocol.requests[7]),
-    );
-    const compositionTime = await client.invoke({
-        requestId: 'core-composition-time-1',
-        capabilityId: 'ae.composition.time.read',
-        capabilityVersion: 1,
-        arguments: { compositionLocator },
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(compositionTime.replayed, false);
-    assert.deepEqual(compositionTime.value, {
-        compositionLocator,
-        currentTime: {
-            value: 3003,
-            scale: 1000,
-            secondsRational: '3003/1000',
-        },
-    });
-    assert.equal(Object.hasOwn(compositionTime.value, 'compositionName'), false);
-    assert.equal(compositionTime.evidence.effect, 'none');
-    assert.equal(compositionTime.evidence.undo, undefined);
-    assert.equal(
-        compositionTime.evidence.requestDigest,
-        invokeRequestDigest(protocol.requests[8]),
-    );
-    const layerProperties = await client.invoke({
-        requestId: 'core-layer-properties-1',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: structuredClone(LAYER_PROPERTIES_VECTOR.request.params.arguments),
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(layerProperties.replayed, false);
-    assert.deepEqual(
-        layerProperties.value.parentPropertyLocator,
-        LAYER_PROPERTIES_VECTOR.request.params.arguments.parentPropertyLocator,
-    );
-    assert.equal(layerProperties.value.properties[0].propertyIndex, 1);
-    assert.equal(
-        layerProperties.evidence.requestDigest,
-        invokeRequestDigest(protocol.requests[9]),
-    );
-    const layerPropertyKeyframes = await client.invoke({
-        requestId: 'core-layer-property-keyframes-1',
-        capabilityId: 'ae.layer.property.keyframes.list',
-        capabilityVersion: 1,
-        arguments: structuredClone(
-            LAYER_PROPERTY_KEYFRAMES_VECTOR.request.params.arguments,
-        ),
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(layerPropertyKeyframes.replayed, false);
-    assert.equal(layerPropertyKeyframes.value.keyframes[1].time.value, 5);
-    assert.equal(layerPropertyKeyframes.value.keyframes[1].time.scale, 2);
-    assert.equal(
-        layerPropertyKeyframes.value.keyframes[1].outInterpolation,
-        'hold',
-    );
-    assert.equal(
-        layerPropertyKeyframes.evidence.requestDigest,
-        invokeRequestDigest(protocol.requests[10]),
-    );
-    assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
-        'hello', 'capabilities', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke', 'invoke',
-        'invoke', 'invoke', 'invoke',
-    ]);
-});
-
-test('CEP graph reads count Unicode scalars rather than UTF-16 code units', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const astral = '😀'.repeat(1024);
-    const ready = await readyNativeClient(t, {
-        mutateInvoke: function (result) {
-            if (result.capabilityId === 'ae.project.items.list') {
-                result.value.items.forEach(function (item) { item.name = astral; });
-            } else if (result.capabilityId === 'ae.composition.layers.list') {
-                result.value.compositionName = astral;
-                result.value.layers.forEach(function (layer) { layer.name = astral; });
-            } else if (result.capabilityId === 'ae.layer.properties.list') {
-                result.value.layerName = astral;
-                result.value.properties.forEach(function (property) { property.name = astral; });
-            }
-            rebindPostcondition(result);
-        },
-    });
-    const project = await ready.client.invoke({
-        requestId: 'unicode-project-items',
-        capabilityId: 'ae.project.items.list',
-        capabilityVersion: 1,
-        arguments: { offset: 0, limit: 25 },
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(Array.from(project.value.items[0].name).length, 1024);
-    const layers = await ready.client.invoke({
-        requestId: 'unicode-composition-layers',
-        capabilityId: 'ae.composition.layers.list',
-        capabilityVersion: 1,
-        arguments: {
-            compositionLocator: COMPOSITION_LAYERS_VECTOR.request.params.arguments.compositionLocator,
-            offset: 0,
-            limit: 25,
-        },
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(Array.from(layers.value.compositionName).length, 1024);
-    assert.equal(Array.from(layers.value.layers[0].name).length, 1024);
-    const properties = await ready.client.invoke({
-        requestId: 'unicode-layer-properties',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: structuredClone(LAYER_PROPERTIES_VECTOR.request.params.arguments),
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(Array.from(properties.value.layerName).length, 1024);
-    assert.equal(Array.from(properties.value.properties[0].name).length, 1024);
-});
-
-test('CEP selected-layer reads accept sparse stack order and reject open results', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        mutateInvoke: function (result, request) {
-            if (result.capabilityId !== 'ae.composition.selected-layers.list') return;
-            if (request.requestId === 'selected-layers-empty') {
-                result.value.total = 0;
-                result.value.returned = 0;
-                result.value.layers = [];
-            } else if (request.requestId === 'selected-layers-page-1') {
-                result.value.offset = 0;
-                result.value.limit = 1;
-                result.value.returned = 1;
-                result.value.hasMore = true;
-                result.value.nextOffset = 1;
-                result.value.layers = [result.value.layers[0]];
-            } else if (request.requestId === 'selected-layers-page-2') {
-                result.value.offset = 1;
-                result.value.limit = 1;
-                result.value.returned = 1;
-                result.value.hasMore = false;
-                result.value.nextOffset = null;
-                result.value.layers = [result.value.layers[1]];
-            } else if (request.requestId === 'selected-layers-reversed') {
-                result.value.layers.reverse();
-            } else if (request.requestId === 'selected-layers-extra-field') {
-                result.value.layers[0].selected = true;
-            } else if (request.requestId === 'selected-layers-wrong-kind') {
-                result.evidence.postcondition.kind = 'composition-layers-list';
-            }
-            rebindPostcondition(result);
-        },
-    });
-    const argumentsValue = structuredClone(
-        COMPOSITION_SELECTED_LAYERS_VECTOR.request.params.arguments,
-    );
-    const accepted = await ready.client.invoke({
-        requestId: 'selected-layers-sparse',
-        capabilityId: 'ae.composition.selected-layers.list',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.deepEqual(accepted.value.layers.map(function (layer) {
-        return layer.stackIndex;
-    }), [1, 3]);
-    assert.equal(accepted.evidence.effect, 'none');
-    assert.equal(accepted.evidence.undo, undefined);
-    const firstPage = await ready.client.invoke({
-        requestId: 'selected-layers-page-1',
-        capabilityId: 'ae.composition.selected-layers.list',
-        capabilityVersion: 1,
-        arguments: { ...argumentsValue, offset: 0, limit: 1 },
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.deepEqual(firstPage.value.layers.map(function (layer) {
-        return layer.stackIndex;
-    }), [1]);
-    assert.equal(firstPage.value.returned, 1);
-    assert.equal(firstPage.value.hasMore, true);
-    assert.equal(firstPage.value.nextOffset, 1);
-    const firstPageRequest = ready.protocol.requests.at(-1);
-    assert.equal(firstPage.evidence.requestDigest, invokeRequestDigest(firstPageRequest));
-
-    const secondPage = await ready.client.invoke({
-        requestId: 'selected-layers-page-2',
-        capabilityId: 'ae.composition.selected-layers.list',
-        capabilityVersion: 1,
-        arguments: { ...argumentsValue, offset: 1, limit: 1 },
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.deepEqual(secondPage.value.layers.map(function (layer) {
-        return layer.stackIndex;
-    }), [3]);
-    assert.equal(secondPage.value.returned, 1);
-    assert.equal(secondPage.value.hasMore, false);
-    assert.equal(secondPage.value.nextOffset, null);
-    const secondPageRequest = ready.protocol.requests.at(-1);
-    assert.equal(secondPage.evidence.requestDigest, invokeRequestDigest(secondPageRequest));
-    assert.notEqual(firstPage.evidence.requestDigest, secondPage.evidence.requestDigest);
-    const empty = await ready.client.invoke({
-        requestId: 'selected-layers-empty',
-        capabilityId: 'ae.composition.selected-layers.list',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(empty.value.total, 0);
-    assert.deepEqual(empty.value.layers, []);
-
-    for (const requestId of [
-        'selected-layers-reversed',
-        'selected-layers-extra-field',
-        'selected-layers-wrong-kind',
-    ]) {
-        await assert.rejects(ready.client.invoke({
-            requestId,
-            capabilityId: 'ae.composition.selected-layers.list',
-            capabilityVersion: 1,
-            arguments: argumentsValue,
-            deadlineUnixMs: 1900000002000,
-        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
-    }
-
-    const beforeInvalidInput = ready.protocol.requests.length;
-    await assert.rejects(ready.client.invoke({
-        requestId: 'selected-layers-extra-input',
-        capabilityId: 'ae.composition.selected-layers.list',
-        capabilityVersion: 1,
-        arguments: { ...argumentsValue, includeProperties: true },
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'INVALID_ARGUMENT', retryable: false });
-    assert.equal(ready.protocol.requests.length, beforeInvalidInput);
-});
-
-test('CEP forwards same-session forged selected-layer locators and preserves native stale recovery', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        invokeError: {
-            code: 'STALE_LOCATOR',
-            message: 'compositionLocator does not identify the open composition',
-            retryable: true,
-            sideEffect: 'not-started',
-            recovery: {
-                action: 'refresh-locator',
-                hint: 'Discard the stale locator and call ae_listProjectItems again.',
-            },
-            details: {
-                field: 'params.arguments.compositionLocator',
-                capabilityId: 'ae.composition.selected-layers.list',
-            },
-        },
-    });
-    const baseArguments = structuredClone(
-        COMPOSITION_SELECTED_LAYERS_VECTOR.request.params.arguments,
-    );
-    const forgedArguments = [
-        {
-            ...baseArguments,
-            compositionLocator: {
-                ...baseArguments.compositionLocator,
-                objectId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-            },
-        },
-        {
-            ...baseArguments,
-            compositionLocator: {
-                ...baseArguments.compositionLocator,
-                generation: baseArguments.compositionLocator.generation + 1,
-            },
-        },
-    ];
-
-    for (let index = 0; index < forgedArguments.length; index += 1) {
-        const before = ready.protocol.requests.length;
-        await assert.rejects(ready.client.invoke({
-            requestId: 'selected-layers-forged-' + String(index + 1),
-            capabilityId: 'ae.composition.selected-layers.list',
-            capabilityVersion: 1,
-            arguments: forgedArguments[index],
-            deadlineUnixMs: 1900000002000,
-        }), function (error) {
-            assert.equal(error.code, 'STALE_LOCATOR');
-            assert.equal(error.retryable, true);
-            assert.equal(error.sideEffect, 'not-started');
-            assert.deepEqual(error.recovery, {
-                action: 'refresh-locator',
-                hint: 'Discard the stale locator and call ae_listProjectItems again.',
-            });
-            assert.deepEqual(error.details, {
-                field: 'params.arguments.compositionLocator',
-                capabilityId: 'ae.composition.selected-layers.list',
-            });
-            return true;
-        });
-        assert.equal(ready.protocol.requests.length, before + 1);
-        assert.deepEqual(
-            ready.protocol.requests.at(-1).params.arguments,
-            forgedArguments[index],
-        );
-    }
-});
-
-test('CEP composition-time read enforces exact rational and closed native evidence', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        mutateInvoke: function (result, request) {
-            if (result.capabilityId !== 'ae.composition.time.read') return;
-            if (request.requestId === 'composition-time-int32-min') {
-                result.value.currentTime = {
-                    value: -2147483648,
-                    scale: 4294967295,
-                    secondsRational: '-2147483648/4294967295',
-                };
-            } else if (request.requestId === 'composition-time-unreduced') {
-                result.value.currentTime = {
-                    value: 60,
-                    scale: 24,
-                    secondsRational: '60/24',
-                };
-            } else if (request.requestId === 'composition-time-extra-field') {
-                result.value.compositionName = 'Main';
-            } else if (request.requestId === 'composition-time-out-of-range') {
-                result.value.currentTime.value = 2147483648;
-                result.value.currentTime.secondsRational = '2147483648/1000';
-            }
-            rebindPostcondition(result);
-        },
-    });
-    const argumentsValue = structuredClone(COMPOSITION_TIME_VECTOR.request.params.arguments);
-    const accepted = await ready.client.invoke({
-        requestId: 'composition-time-int32-min',
-        capabilityId: 'ae.composition.time.read',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.deepEqual(accepted.value.currentTime, {
-        value: -2147483648,
-        scale: 4294967295,
-        secondsRational: '-2147483648/4294967295',
-    });
-
-    for (const requestId of [
-        'composition-time-unreduced',
-        'composition-time-extra-field',
-        'composition-time-out-of-range',
-    ]) {
-        await assert.rejects(ready.client.invoke({
-            requestId,
-            capabilityId: 'ae.composition.time.read',
-            capabilityVersion: 1,
-            arguments: argumentsValue,
-            deadlineUnixMs: 1900000002000,
-        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
-    }
-
-    const beforeInvalidInput = ready.protocol.requests.length;
-    await assert.rejects(ready.client.invoke({
-        requestId: 'composition-time-extra-input',
-        capabilityId: 'ae.composition.time.read',
-        capabilityVersion: 1,
-        arguments: { ...argumentsValue, compositionName: 'Main' },
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'INVALID_ARGUMENT', retryable: false });
-    assert.equal(ready.protocol.requests.length, beforeInvalidInput);
-});
-
-for (const invalidUnicode of [
-    { name: '1025 astral scalars', value: '😀'.repeat(1025) },
-    { name: 'a lone surrogate', value: '\ud800' },
-]) {
-    test('CEP graph reads reject ' + invalidUnicode.name, {
-        skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-    }, async (t) => {
-        const ready = await readyNativeClient(t, {
-            mutateInvoke: function (result) {
-                if (result.capabilityId === 'ae.project.items.list') {
-                    result.value.items[0].name = invalidUnicode.value;
-                    rebindPostcondition(result);
-                }
-            },
-        });
-        await assert.rejects(ready.client.invoke({
-            requestId: 'invalid-unicode-project-items',
-            capabilityId: 'ae.project.items.list',
-            capabilityVersion: 1,
-            arguments: { offset: 0, limit: 25 },
-            deadlineUnixMs: 1900000002000,
-        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
-    });
-}
-
-test('CEP graph reads reject non-advancing pages for all paged native capabilities', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        mutateInvoke: function (result) {
-            if (![
-                'ae.project.items.list', 'ae.composition.layers.list',
-                'ae.composition.selected-layers.list',
-                'ae.layer.properties.list',
-                'ae.layer.property.keyframes.list',
-            ].includes(
-                result.capabilityId,
-            )) return;
-            const member = result.capabilityId === 'ae.project.items.list'
-                ? 'items' : result.capabilityId === 'ae.composition.layers.list'
-                    || result.capabilityId === 'ae.composition.selected-layers.list'
-                    ? 'layers' : result.capabilityId
-                        === 'ae.layer.property.keyframes.list'
-                        ? 'keyframes' : 'properties';
-            result.value.total = 1;
-            result.value.returned = 0;
-            result.value.hasMore = true;
-            result.value.nextOffset = 0;
-            result.value[member] = [];
-            rebindPostcondition(result);
-        },
-    });
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stalled-project-items',
-        capabilityId: 'ae.project.items.list',
-        capabilityVersion: 1,
-        arguments: { offset: 0, limit: 25 },
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stalled-composition-layers',
-        capabilityId: 'ae.composition.layers.list',
-        capabilityVersion: 1,
-        arguments: {
-            compositionLocator: COMPOSITION_LAYERS_VECTOR.request.params.arguments.compositionLocator,
-            offset: 0,
-            limit: 25,
-        },
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stalled-composition-selected-layers',
-        capabilityId: 'ae.composition.selected-layers.list',
-        capabilityVersion: 1,
-        arguments: structuredClone(
-            COMPOSITION_SELECTED_LAYERS_VECTOR.request.params.arguments,
-        ),
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stalled-layer-properties',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: structuredClone(LAYER_PROPERTIES_VECTOR.request.params.arguments),
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stalled-layer-property-keyframes',
-        capabilityId: 'ae.layer.property.keyframes.list',
-        capabilityVersion: 1,
-        arguments: structuredClone(
-            LAYER_PROPERTY_KEYFRAMES_VECTOR.request.params.arguments,
-        ),
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'NATIVE_CONTRACT_MISMATCH' });
-});
-
-test('CEP keyframe reads enforce exact order, time, primitive type, and interpolation', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const mutations = new Map([
-        ['keyframe-bad-index', function (value) {
-            value.keyframes[1].keyframeIndex = 3;
-        }],
-        ['keyframe-bad-time', function (value) {
-            value.keyframes[1].time = { value: 0, scale: 24, mode: 'comp-time' };
-        }],
-        ['keyframe-bad-type', function (value) {
-            value.keyframes[0].value = { kind: 'vector', components: ['1', '2'] };
-        }],
-        ['keyframe-bad-interpolation', function (value) {
-            value.keyframes[0].inInterpolation = 'auto';
-        }],
-        ['keyframe-locator-drift', function (value) {
-            value.propertyLocator.objectId =
-                '99999999-9999-4999-8999-999999999999';
-        }],
-        ['keyframe-bad-pagination', function (value) {
-            value.nextOffset = 1;
-        }],
-    ]);
-    const ready = await readyNativeClient(t, {
-        mutateInvoke: function (result, request) {
-            if (result.capabilityId !== 'ae.layer.property.keyframes.list') return;
-            const mutate = mutations.get(request.requestId);
-            if (mutate) mutate(result.value);
-            rebindPostcondition(result);
-        },
-    });
-    const argumentsValue = structuredClone(
-        LAYER_PROPERTY_KEYFRAMES_VECTOR.request.params.arguments,
-    );
-    const accepted = await ready.client.invoke({
-        requestId: 'keyframe-good',
-        capabilityId: 'ae.layer.property.keyframes.list',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(accepted.value.keyframes[1].outInterpolation, 'hold');
-
-    for (const requestId of mutations.keys()) {
-        await assert.rejects(ready.client.invoke({
-            requestId,
-            capabilityId: 'ae.layer.property.keyframes.list',
-            capabilityVersion: 1,
-            arguments: argumentsValue,
-            deadlineUnixMs: 1900000002000,
-        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
-    }
-
-    const beforeInvalid = ready.protocol.requests.length;
-    await assert.rejects(ready.client.invoke({
-        requestId: 'keyframe-extra-input',
-        capabilityId: 'ae.layer.property.keyframes.list',
-        capabilityVersion: 1,
-        arguments: { ...argumentsValue, layerLocator: argumentsValue.propertyLocator },
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'INVALID_ARGUMENT', retryable: false });
-    assert.equal(ready.protocol.requests.length, beforeInvalid);
-});
-
-test('CEP layer-property reads enforce the closed locator and decimal value union', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const mutations = new Map([
-        ['decimal-wide-valid', function (value) {
-            value.properties[1].value.value = '0.20000000000000001';
-        }],
-        ['vector-three-d-valid', function (value) {
-            value.properties[0].valueType = 'three-d';
-            value.properties[0].value.components.push('30');
-        }],
-        ['root-parent-omitted', function (value) {
-            value.parentPropertyLocator = null;
-        }],
-        ['root-parent-null', function (value) {
-            value.parentPropertyLocator = null;
-        }],
-        ['decimal-negative-zero', function (value) {
-            value.properties[1].value.value = '-0.0';
-        }],
-        ['decimal-underflow', function (value) {
-            value.properties[1].value.value = '1e-999';
-        }],
-        ['decimal-non-finite', function (value) {
-            value.properties[1].value.value = '1e999';
-        }],
-        ['vector-wrong-dimension', function (value) {
-            value.properties[0].value.components = ['10'];
-        }],
-        ['two-d-three-components', function (value) {
-            value.properties[0].value.components.push('30');
-        }],
-        ['three-d-two-components', function (value) {
-            value.properties[0].valueType = 'three-d';
-        }],
-        ['unsupported-has-value', function (value) {
-            value.properties[2].value = { kind: 'scalar', value: '1' };
-        }],
-        ['property-context-drift', function (value) {
-            value.properties[0].propertyLocator.projectId =
-                'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
-        }],
-        ['duplicate-property-locator', function (value) {
-            value.properties[1].propertyLocator = structuredClone(
-                value.properties[0].propertyLocator,
-            );
-        }],
-        ['property-index-drift', function (value) {
-            value.properties[0].propertyIndex = 2;
-        }],
-        ['sample-time-scale-zero', function (value) {
-            value.sampleTime.scale = 0;
-        }],
-        ['group-carries-sample', function (value) {
-            value.properties[0].groupingType = 'named-group';
-            value.properties[0].childCount = 1;
-        }],
-    ]);
-    const ready = await readyNativeClient(t, {
-        mutateInvoke: function (result, request) {
-            if (result.capabilityId !== 'ae.layer.properties.list') return;
-            const mutate = mutations.get(request.requestId);
-            if (mutate) mutate(result.value);
-            rebindPostcondition(result);
-        },
-    });
-    const argumentsValue = structuredClone(
-        LAYER_PROPERTIES_VECTOR.request.params.arguments,
-    );
-    const accepted = await ready.client.invoke({
-        requestId: 'decimal-wide-valid',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(accepted.value.properties[1].value.value, '0.20000000000000001');
-    const acceptedThreeD = await ready.client.invoke({
-        requestId: 'vector-three-d-valid',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.deepEqual(
-        acceptedThreeD.value.properties[0].value.components,
-        ['10', '20', '30'],
-    );
-    const rootArguments = structuredClone(argumentsValue);
-    delete rootArguments.parentPropertyLocator;
-    const rootPage = await ready.client.invoke({
-        requestId: 'root-parent-omitted',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: rootArguments,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(rootPage.value.parentPropertyLocator, null);
-    const omittedParentRequest = ready.protocol.requests.at(-1);
-    assert.equal(
-        Object.hasOwn(omittedParentRequest.params.arguments, 'parentPropertyLocator'),
-        false,
-    );
-    const explicitNullArguments = structuredClone(argumentsValue);
-    explicitNullArguments.parentPropertyLocator = null;
-    const explicitNullPage = await ready.client.invoke({
-        requestId: 'root-parent-null',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: explicitNullArguments,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(explicitNullPage.value.parentPropertyLocator, null);
-    const explicitNullRequest = ready.protocol.requests.at(-1);
-    assert.equal(
-        Object.hasOwn(explicitNullRequest.params.arguments, 'parentPropertyLocator'),
-        false,
-    );
-    const comparableOmittedRequest = structuredClone(omittedParentRequest);
-    comparableOmittedRequest.requestId = explicitNullRequest.requestId;
-    assert.deepEqual(explicitNullRequest, comparableOmittedRequest);
-    assert.equal(
-        explicitNullPage.evidence.requestDigest,
-        invokeRequestDigest(explicitNullRequest),
-    );
-
-    for (const requestId of Array.from(mutations.keys()).slice(4)) {
-        await assert.rejects(ready.client.invoke({
-            requestId,
-            capabilityId: 'ae.layer.properties.list',
-            capabilityVersion: 1,
-            arguments: argumentsValue,
-            deadlineUnixMs: 1900000002000,
-        }), { code: 'NATIVE_CONTRACT_MISMATCH', retryable: false });
-    }
-});
-
-test('CEP layer-property mutation preserves typed native evidence and idempotency', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        mutateInvoke: function (result, request) {
-            if (request.requestId === 'layer-property-set-client-uncertain') {
-                result.evidence.postcondition.digest = '0'.repeat(64);
-            } else if (request.requestId === 'layer-property-set-client-vector') {
-                result.value.valueType = 'two-d';
-                result.value.beforeValue = { components: ['10', '20'], kind: 'vector' };
-                result.value.afterValue = { components: ['40', '50'], kind: 'vector' };
-                result.evidence.postcondition.digest = jcsDigest({
-                    capabilityId: result.capabilityId,
-                    capabilityVersion: result.capabilityVersion,
-                    value: result.value,
-                });
-            } else if (request.requestId === 'layer-property-set-client-color') {
-                result.value.valueType = 'color';
-                result.value.beforeValue = {
-                    alpha: '1', blue: '0.1', green: '0.1', kind: 'color', red: '0.1',
-                };
-                result.value.afterValue = {
-                    alpha: '1', blue: '0.3', green: '0.2', kind: 'color', red: '0.1',
-                };
-                result.evidence.postcondition.digest = jcsDigest({
-                    capabilityId: result.capabilityId,
-                    capabilityVersion: result.capabilityVersion,
-                    value: result.value,
-                });
-            }
-        },
-    });
-    const argumentsValue = structuredClone(
-        LAYER_PROPERTY_SET_VECTOR.request.params.arguments,
-    );
-    const result = await ready.client.invoke({
-        requestId: 'layer-property-set-client-1',
-        capabilityId: 'ae.layer.property.set',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(result.value.changed, true);
-    assert.deepEqual(result.value.afterValue, argumentsValue.value);
-    assert.deepEqual(result.evidence.undo, {
-        available: true,
-        verified: false,
-    });
-    const sent = ready.protocol.requests.at(-1);
-    assert.equal(sent.params.arguments.idempotencyKey, argumentsValue.idempotencyKey);
-    assert.equal(result.evidence.requestDigest, invokeRequestDigest(sent));
-
-    for (const [requestId, value] of [
-        ['layer-property-set-client-vector', {
-            kind: 'vector', components: ['4e1', '50.0'],
-        }],
-        ['layer-property-set-client-color', {
-            kind: 'color', alpha: '1.0', red: '0.10', green: '2e-1', blue: '0.30',
-        }],
-    ]) {
-        const typedArguments = structuredClone(argumentsValue);
-        typedArguments.value = value;
-        typedArguments.idempotencyKey = requestId + '-intent';
-        const typedResult = await ready.client.invoke({
-            requestId,
-            capabilityId: 'ae.layer.property.set',
-            capabilityVersion: 1,
-            arguments: typedArguments,
-            deadlineUnixMs: 1900000002000,
-        });
-        assert.equal(typedResult.value.afterValue.kind, value.kind);
-    }
-
-    const uncertainArguments = structuredClone(argumentsValue);
-    uncertainArguments.idempotencyKey = 'synthetic-property-uncertain-0001';
-    await assert.rejects(ready.client.invoke({
-        requestId: 'layer-property-set-client-uncertain',
-        capabilityId: 'ae.layer.property.set',
-        capabilityVersion: 1,
-        arguments: uncertainArguments,
-        deadlineUnixMs: 1900000002000,
-    }), {
-        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
-        retryable: false,
-        sideEffect: 'may-have-occurred',
-    });
-});
-
-test('CEP composition-time mutation preserves exact rational intent and uncertain failures', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        mutateInvoke: function (result, request) {
-            if (request.requestId === 'composition-time-set-client-uncertain') {
-                result.evidence.postcondition.digest = '0'.repeat(64);
-            }
-        },
-    });
-    const argumentsValue = structuredClone(
-        COMPOSITION_TIME_SET_VECTOR.request.params.arguments,
-    );
-    const result = await ready.client.invoke({
-        requestId: 'composition-time-set-client-1',
-        capabilityId: 'ae.composition.time.set',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000002000,
-    });
-    assert.equal(result.value.changed, true);
-    assert.deepEqual(result.value.afterTime, {
-        value: 1, scale: 1, secondsRational: '1',
-    });
-    assert.deepEqual(result.evidence.undo, {
-        available: true,
-        verified: false,
-    });
-    const sent = ready.protocol.requests.at(-1);
-    assert.deepEqual(sent.params.arguments.targetTime, { value: 1, scale: 1 });
-    assert.equal(sent.params.arguments.idempotencyKey, argumentsValue.idempotencyKey);
-    assert.equal(result.evidence.requestDigest, invokeRequestDigest(sent));
-
-    const requestCount = ready.protocol.requests.length;
-    const invalidArguments = structuredClone(argumentsValue);
-    invalidArguments.targetTime.scale = 0;
-    await assert.rejects(ready.client.invoke({
-        requestId: 'composition-time-set-client-invalid',
-        capabilityId: 'ae.composition.time.set',
-        capabilityVersion: 1,
-        arguments: invalidArguments,
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'INVALID_ARGUMENT', retryable: false });
-    assert.equal(ready.protocol.requests.length, requestCount);
-
-    const uncertainArguments = structuredClone(argumentsValue);
-    uncertainArguments.idempotencyKey = 'synthetic-comp-time-uncertain-0001';
-    await assert.rejects(ready.client.invoke({
-        requestId: 'composition-time-set-client-uncertain',
-        capabilityId: 'ae.composition.time.set',
-        capabilityVersion: 1,
-        arguments: uncertainArguments,
-        deadlineUnixMs: 1900000002000,
-    }), {
-        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
-        retryable: false,
-        sideEffect: 'may-have-occurred',
-    });
-});
-
-test('CEP composition create verifies settings, replay, and uncertain failures', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        compositionCreateReplayedRequestId: 'composition-create-client-replay',
-        mutateInvoke: function (result, request) {
-            if (request.requestId === 'composition-create-client-uncertain') {
-                result.evidence.postcondition.digest = '0'.repeat(64);
-            }
-        },
-    });
-    const argumentsValue = structuredClone(
-        COMPOSITION_CREATE_VECTOR.request.params.arguments,
-    );
-    const created = await ready.client.invoke({
-        requestId: 'composition-create-client-1',
-        capabilityId: 'ae.composition.create',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000005000,
-    });
-    assert.equal(created.replayed, false);
-    assert.equal(created.value.name, 'SYNTHETIC_COMP');
-    assert.equal(created.value.projectItemCountAfter, 2);
-    assert.deepEqual(created.value.duration, {
-        value: 5, scale: 1, secondsRational: '5',
-    });
-    assert.deepEqual(created.value.frameRate, {
-        numerator: 24, denominator: 1, rational: '24',
-    });
-    assert.deepEqual(created.evidence.undo, { available: true, verified: false });
-    const sent = ready.protocol.requests.at(-1);
-    assert.deepEqual(sent.params.arguments, argumentsValue);
-    assert.equal(created.evidence.requestDigest, invokeRequestDigest(sent));
-
-    const replayed = await ready.client.invoke({
-        requestId: 'composition-create-client-replay',
-        capabilityId: 'ae.composition.create',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000005000,
-    });
-    assert.equal(replayed.replayed, true);
-    assert.deepEqual(replayed.value, created.value);
-
-    const requestCount = ready.protocol.requests.length;
-    const invalidArguments = structuredClone(argumentsValue);
-    invalidArguments.duration.value = 0;
-    await assert.rejects(ready.client.invoke({
-        requestId: 'composition-create-client-invalid',
-        capabilityId: 'ae.composition.create',
-        capabilityVersion: 1,
-        arguments: invalidArguments,
-        deadlineUnixMs: 1900000005000,
-    }), { code: 'INVALID_ARGUMENT', retryable: false });
-    assert.equal(ready.protocol.requests.length, requestCount);
-
-    const nulNameArguments = structuredClone(argumentsValue);
-    nulNameArguments.name = 'SYNTHETIC\u0000COMP';
-    await assert.rejects(ready.client.invoke({
-        requestId: 'composition-create-client-nul',
-        capabilityId: 'ae.composition.create',
-        capabilityVersion: 1,
-        arguments: nulNameArguments,
-        deadlineUnixMs: 1900000005000,
-    }), { code: 'INVALID_ARGUMENT', retryable: false });
-    assert.equal(ready.protocol.requests.length, requestCount);
-
-    const uncertainArguments = structuredClone(argumentsValue);
-    uncertainArguments.idempotencyKey = 'synthetic-comp-create-uncertain-0001';
-    await assert.rejects(ready.client.invoke({
-        requestId: 'composition-create-client-uncertain',
-        capabilityId: 'ae.composition.create',
-        capabilityVersion: 1,
-        arguments: uncertainArguments,
-        deadlineUnixMs: 1900000005000,
-    }), {
-        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
-        retryable: false,
-        sideEffect: 'may-have-occurred',
-    });
-});
-
-test('CEP composition-layer create verifies options, replay, and uncertain failures', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        createReplayedRequestId: 'composition-layer-create-client-replay',
-        mutateInvoke: function (result, request) {
-            if (request.requestId === 'composition-layer-create-client-uncertain') {
-                result.evidence.postcondition.digest = '0'.repeat(64);
-            }
-        },
-    });
-    const argumentsValue = structuredClone(
-        COMPOSITION_LAYER_CREATE_VECTOR.request.params.arguments,
-    );
-    const created = await ready.client.invoke({
-        requestId: 'composition-layer-create-client-1',
-        capabilityId: 'ae.composition.layer.create',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000005000,
-    });
-    assert.equal(created.replayed, false);
-    assert.equal(created.value.kind, 'solid');
-    assert.deepEqual(created.value.solid, {
-        color: { red: 12, green: 34, blue: 56, alpha: 255 },
-        width: 640,
-        height: 360,
-        duration: { value: 5, scale: 1, secondsRational: '5' },
-    });
-    assert.deepEqual(created.evidence.undo, { available: true, verified: false });
-    const sent = ready.protocol.requests.at(-1);
-    assert.deepEqual(sent.params.arguments, argumentsValue);
-    assert.equal(created.evidence.requestDigest, invokeRequestDigest(sent));
-
-    const replayed = await ready.client.invoke({
-        requestId: 'composition-layer-create-client-replay',
-        capabilityId: 'ae.composition.layer.create',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000005000,
-    });
-    assert.equal(replayed.replayed, true);
-    assert.deepEqual(replayed.value, created.value);
-
-    const requestCount = ready.protocol.requests.length;
-    const invalidArguments = {
-        compositionLocator: argumentsValue.compositionLocator,
-        kind: 'null',
-        name: 'Invalid Null',
-        width: 640,
-        idempotencyKey: 'synthetic-null-invalid-0001',
-    };
-    await assert.rejects(ready.client.invoke({
-        requestId: 'composition-layer-create-client-invalid',
-        capabilityId: 'ae.composition.layer.create',
-        capabilityVersion: 1,
-        arguments: invalidArguments,
-        deadlineUnixMs: 1900000005000,
-    }), { code: 'INVALID_ARGUMENT', retryable: false });
-    assert.equal(ready.protocol.requests.length, requestCount);
-
-    const uncertainArguments = structuredClone(argumentsValue);
-    uncertainArguments.idempotencyKey = 'synthetic-layer-create-uncertain-0001';
-    await assert.rejects(ready.client.invoke({
-        requestId: 'composition-layer-create-client-uncertain',
-        capabilityId: 'ae.composition.layer.create',
-        capabilityVersion: 1,
-        arguments: uncertainArguments,
-        deadlineUnixMs: 1900000005000,
-    }), {
-        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
-        retryable: false,
-        sideEffect: 'may-have-occurred',
-    });
-});
-
-test('CEP layer-effect apply verifies identity, replay, and uncertain failures', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t, {
-        effectApplyReplayedRequestId: 'layer-effect-apply-client-replay',
-        mutateInvoke: function (result, request) {
-            if (request.requestId === 'layer-effect-apply-client-uncertain') {
-                result.evidence.postcondition.digest = '0'.repeat(64);
-            }
-        },
-    });
-    const argumentsValue = structuredClone(
-        LAYER_EFFECT_APPLY_VECTOR.request.params.arguments,
-    );
-    const applied = await ready.client.invoke({
-        requestId: 'layer-effect-apply-client-1',
-        capabilityId: 'ae.layer.effect.apply',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000005000,
-    });
-    assert.equal(applied.replayed, false);
-    assert.equal(applied.value.matchName, 'ADBE Slider Control');
-    assert.equal(applied.value.effectCountAfter, applied.value.effectCountBefore + 1);
-    assert.equal(
-        applied.value.matchingEffectCountAfter,
-        applied.value.matchingEffectCountBefore + 1,
-    );
-    assert.deepEqual(applied.evidence.undo, { available: true, verified: false });
-    const sent = ready.protocol.requests.at(-1);
-    assert.deepEqual(sent.params.arguments, argumentsValue);
-    assert.equal(applied.evidence.requestDigest, invokeRequestDigest(sent));
-
-    const replayed = await ready.client.invoke({
-        requestId: 'layer-effect-apply-client-replay',
-        capabilityId: 'ae.layer.effect.apply',
-        capabilityVersion: 1,
-        arguments: argumentsValue,
-        deadlineUnixMs: 1900000005000,
-    });
-    assert.equal(replayed.replayed, true);
-    assert.deepEqual(replayed.value, applied.value);
-
-    const requestCount = ready.protocol.requests.length;
-    const invalidArguments = structuredClone(argumentsValue);
-    invalidArguments.effectMatchName = 'x'.repeat(48);
-    await assert.rejects(ready.client.invoke({
-        requestId: 'layer-effect-apply-client-invalid',
-        capabilityId: 'ae.layer.effect.apply',
-        capabilityVersion: 1,
-        arguments: invalidArguments,
-        deadlineUnixMs: 1900000005000,
-    }), { code: 'INVALID_ARGUMENT', retryable: false });
-    assert.equal(ready.protocol.requests.length, requestCount);
-
-    const uncertainArguments = structuredClone(argumentsValue);
-    uncertainArguments.idempotencyKey = 'synthetic-effect-apply-uncertain-0001';
-    await assert.rejects(ready.client.invoke({
-        requestId: 'layer-effect-apply-client-uncertain',
-        capabilityId: 'ae.layer.effect.apply',
-        capabilityVersion: 1,
-        arguments: uncertainArguments,
-        deadlineUnixMs: 1900000005000,
-    }), {
-        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
-        retryable: false,
-        sideEffect: 'may-have-occurred',
-    });
-});
-
-test('CEP stale-locator preflight reports the exact field without inventing generation', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const ready = await readyNativeClient(t);
-    const staleSession = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
-    const overLimitArguments = structuredClone(
-        LAYER_PROPERTIES_VECTOR.request.params.arguments,
-    );
-    overLimitArguments.limit = 26;
-    await assert.rejects(ready.client.invoke({
-        requestId: 'over-limit-layer-properties',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: overLimitArguments,
-        deadlineUnixMs: 1900000002000,
-    }), { code: 'INVALID_ARGUMENT', retryable: false });
-    const projectLocator = structuredClone(
-        PROJECT_ITEMS_VECTOR.response.result.value.projectLocator,
-    );
-    projectLocator.sessionId = staleSession;
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stale-project-locator',
-        capabilityId: 'ae.project.items.list',
-        capabilityVersion: 1,
-        arguments: { projectLocator, offset: 1, limit: 25 },
-        deadlineUnixMs: 1900000002000,
-    }), function (error) {
-        assert.equal(error.code, 'STALE_LOCATOR');
-        assert.deepEqual(error.details, {
-            field: 'params.arguments.projectLocator',
-            capabilityId: 'ae.project.items.list',
-        });
-        assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
-        return true;
-    });
-
-    const compositionLocator = structuredClone(
-        COMPOSITION_LAYERS_VECTOR.request.params.arguments.compositionLocator,
-    );
-    compositionLocator.sessionId = staleSession;
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stale-composition-locator',
-        capabilityId: 'ae.composition.layers.list',
-        capabilityVersion: 1,
-        arguments: { compositionLocator, offset: 0, limit: 25 },
-        deadlineUnixMs: 1900000002000,
-    }), function (error) {
-        assert.equal(error.code, 'STALE_LOCATOR');
-        assert.deepEqual(error.details, {
-            field: 'params.arguments.compositionLocator',
-            capabilityId: 'ae.composition.layers.list',
-        });
-        assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
-        return true;
-    });
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stale-selected-composition-locator',
-        capabilityId: 'ae.composition.selected-layers.list',
-        capabilityVersion: 1,
-        arguments: { compositionLocator, offset: 0, limit: 25 },
-        deadlineUnixMs: 1900000002000,
-    }), function (error) {
-        assert.equal(error.code, 'STALE_LOCATOR');
-        assert.deepEqual(error.details, {
-            field: 'params.arguments.compositionLocator',
-            capabilityId: 'ae.composition.selected-layers.list',
-        });
-        assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
-        return true;
-    });
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stale-composition-time-locator',
-        capabilityId: 'ae.composition.time.read',
-        capabilityVersion: 1,
-        arguments: { compositionLocator },
-        deadlineUnixMs: 1900000002000,
-    }), function (error) {
-        assert.equal(error.code, 'STALE_LOCATOR');
-        assert.deepEqual(error.details, {
-            field: 'params.arguments.compositionLocator',
-            capabilityId: 'ae.composition.time.read',
-        });
-        assert.equal(Object.hasOwn(error.details, 'currentGeneration'), false);
-        return true;
-    });
-
-    const staleLayerArguments = structuredClone(
-        LAYER_PROPERTIES_VECTOR.request.params.arguments,
-    );
-    staleLayerArguments.layerLocator.sessionId = staleSession;
-    staleLayerArguments.parentPropertyLocator.sessionId = staleSession;
-    await assert.rejects(ready.client.invoke({
-        requestId: 'stale-layer-locator',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: staleLayerArguments,
-        deadlineUnixMs: 1900000002000,
-    }), function (error) {
-        assert.equal(error.code, 'STALE_LOCATOR');
-        assert.deepEqual(error.details, {
-            field: 'params.arguments.layerLocator',
-            capabilityId: 'ae.layer.properties.list',
-        });
-        return true;
-    });
-
-    const crossLayerArguments = structuredClone(
-        LAYER_PROPERTIES_VECTOR.request.params.arguments,
-    );
-    crossLayerArguments.parentPropertyLocator.projectId =
-        'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
-    await assert.rejects(ready.client.invoke({
-        requestId: 'cross-layer-parent-locator',
-        capabilityId: 'ae.layer.properties.list',
-        capabilityVersion: 1,
-        arguments: crossLayerArguments,
-        deadlineUnixMs: 1900000002000,
-    }), function (error) {
-        assert.equal(error.code, 'STALE_LOCATOR');
-        assert.deepEqual(error.details, {
-            field: 'params.arguments.parentPropertyLocator',
-            capabilityId: 'ae.layer.properties.list',
-        });
-        return true;
-    });
-    assert.deepEqual(
-        ready.protocol.requests.map(function (request) { return request.method; }),
-        ['hello', 'capabilities', 'capabilities', 'capabilities'],
-    );
-});
-
-test('CEP client preserves the bit-depth no-op INVALID_ARGUMENT contract', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    const protocol = installProtocol(fixture.server, {
-        invokeError: {
-            code: 'INVALID_ARGUMENT',
-            message: 'targetDepth already matches the open project.',
-            retryable: false,
-            sideEffect: 'not-started',
-            recovery: {
-                action: 'change-arguments',
-                hint: 'Choose a targetDepth that differs from the current project bit depth.',
-            },
-            details: { field: 'params.arguments.targetDepth' },
-        },
-    });
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-        now: function () { return 1900000000000; },
-    });
-    t.after(function () { return client.close(); });
-    const connection = client.connect();
-    protocol.authorize();
-    await connection;
-    await loadFullCapabilities(client);
-
-    await assert.rejects(
-        client.invoke({
-            requestId: 'core-bit-depth-no-op',
-            capabilityId: 'ae.project.bit-depth.set',
-            capabilityVersion: 1,
-            arguments: {
-                targetDepth: 16,
-                idempotencyKey: 'bit-depth-intent-no-op',
-            },
-            deadlineUnixMs: 1900000002000,
-        }),
+        client.invalidateProjectGraph({ deadlineUnixMs: Date.now() + 5000 }),
         function (error) {
-            assert.equal(error.code, 'INVALID_ARGUMENT');
-            assert.equal(error.retryable, false);
-            assert.equal(error.sideEffect, 'not-started');
-            assert.equal(error.recovery.action, 'change-arguments');
-            assert.deepEqual(error.details, { field: 'params.arguments.targetDepth' });
-            return true;
+            return error.code === 'NATIVE_CONTRACT_MISMATCH';
         },
     );
 });
 
-test('CEP client treats unverifiable bit-depth write evidence as side-effect uncertain', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    const protocol = installProtocol(fixture.server, {
-        mutateInvoke: function (result, request) {
-            if (request.params.capabilityId === 'ae.project.bit-depth.set') {
-                result.value.beforeBitsPerChannel = result.value.afterBitsPerChannel;
+test('client rejects a response rebound to another native session', async (t) => {
+    const { client } = await connectedFixture(t, {
+        mutateEnvelope: function (response, request) {
+            if (request.method === 'invoke') {
+                response.sessionId = '99999999-9999-4999-8999-999999999999';
             }
         },
     });
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-        now: function () { return 1900000000000; },
-    });
-    t.after(function () { return client.close(); });
-    const connection = client.connect();
-    protocol.authorize();
-    await connection;
-    await loadFullCapabilities(client);
-
     await assert.rejects(
-        client.invoke({
-            requestId: 'core-bit-depth-unverifiable',
-            capabilityId: 'ae.project.bit-depth.set',
-            capabilityVersion: 1,
-            arguments: {
-                targetDepth: 16,
-                idempotencyKey: 'bit-depth-intent-bad-evidence',
-            },
-            deadlineUnixMs: 1900000002000,
-        }),
+        invoke(client, 'native-program-wrong-session', readProgram()),
         function (error) {
-            assert.equal(error.code, 'POSSIBLY_SIDE_EFFECTING_FAILURE');
-            assert.equal(error.retryable, false);
-            assert.equal(error.sideEffect, 'may-have-occurred');
-            assert.equal(error.recovery.action, 'inspect-state');
-            assert.deepEqual(error.details, { capabilityId: 'ae.project.bit-depth.set' });
-            return true;
+            return error.code === 'NATIVE_CONTRACT_MISMATCH';
         },
     );
 });
 
-test('CEP client preserves the complete structured native error contract', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
+test('client bounds an authenticating wait by the absolute deadline', async (t) => {
     const fixture = await endpointFixture(t);
-    const protocol = installProtocol(fixture.server, {
-        invokeError: {
-            code: 'CAPABILITY_FAILED',
-            message: 'project summary failed',
-            retryable: false,
-            sideEffect: 'not-started',
-            recovery: { action: 'inspect-state', hint: 'Inspect the project state.' },
-            details: { capabilityId: 'ae.project.summary' },
-        },
-    });
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-        now: function () { return 1900000000000; },
-    });
-    t.after(function () { return client.close(); });
-    const connection = client.connect();
-    protocol.authorize();
-    await connection;
-    await loadFullCapabilities(client);
+    installProtocol(fixture.server, { suppressHello: true });
+    const client = makeClient(fixture.root, { requestTimeoutMs: 200 });
     await assert.rejects(
-        client.invoke({
-            requestId: 'core-project-summary-error',
-            capabilityId: 'ae.project.summary',
-            capabilityVersion: 1,
-            arguments: {},
-            deadlineUnixMs: 1900000002000,
-        }),
+        client.connect(Date.now() + 120),
         function (error) {
-            assert.equal(error.code, 'CAPABILITY_FAILED');
-            assert.equal(error.message, 'project summary failed');
-            assert.equal(error.retryable, false);
-            assert.equal(error.sideEffect, 'not-started');
-            assert.deepEqual(error.recovery, {
-                action: 'inspect-state', hint: 'Inspect the project state.',
-            });
-            assert.deepEqual(error.details, { capabilityId: 'ae.project.summary' });
-            return true;
+            return error.code === 'DEADLINE_EXCEEDED';
         },
     );
-});
-
-test('CEP client preserves actionable keyframe property precondition recovery', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    const protocol = installProtocol(fixture.server, {
-        invokeError: {
-            code: 'PRECONDITION_FAILED',
-            message: 'property must be a keyframeable primitive leaf stream',
-            retryable: false,
-            sideEffect: 'not-started',
-            recovery: {
-                action: 'change-arguments',
-                hint: 'Copy a keyframeable primitive scalar, vector, or color leaf locator from ae_listLayerProperties.',
-            },
-            details: {
-                capabilityId: 'ae.layer.property.keyframes.list',
-                field: 'params.arguments.propertyLocator',
-            },
-        },
-    });
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-        now: function () { return 1900000000000; },
-    });
-    t.after(function () { return client.close(); });
-    const connection = client.connect();
-    protocol.authorize();
-    await connection;
-    await loadFullCapabilities(client);
-    await assert.rejects(
-        client.invoke({
-            requestId: 'core-keyframe-precondition',
-            capabilityId: 'ae.layer.property.keyframes.list',
-            capabilityVersion: 1,
-            arguments: structuredClone(
-                LAYER_PROPERTY_KEYFRAMES_VECTOR.request.params.arguments,
-            ),
-            deadlineUnixMs: 1900000002000,
-        }),
-        function (error) {
-            assert.equal(error.code, 'PRECONDITION_FAILED');
-            assert.equal(error.retryable, false);
-            assert.equal(error.sideEffect, 'not-started');
-            assert.equal(error.recovery.action, 'change-arguments');
-            assert.equal(error.recovery.hint,
-                'Copy a keyframeable primitive scalar, vector, or color leaf locator from ae_listLayerProperties.');
-            assert.deepEqual(error.details, {
-                capabilityId: 'ae.layer.property.keyframes.list',
-                field: 'params.arguments.propertyLocator',
-            });
-            return true;
-        },
-    );
-});
-
-for (const errorFixture of [
-    {
-        name: 'preserves layer source matte AV domain failures',
-        error: {
-            code: 'LAYER_HAS_NO_AUDIO',
-            message: 'the selected source has no audio capability',
-            retryable: false,
-            sideEffect: 'not-started',
-            recovery: {
-                action: 'change-arguments',
-                hint: 'Choose a source with audio capability.',
-            },
-        },
-        expectedCode: 'LAYER_HAS_NO_AUDIO',
-        expectedAction: 'change-arguments',
-    },
-    {
-        name: 'keeps an actual native INVALID_REQUEST distinct',
-        error: {
-            code: 'INVALID_REQUEST',
-            message: 'native request was invalid',
-            retryable: false,
-            sideEffect: 'not-started',
-            recovery: { action: 'none', hint: 'Do not retry this request.' },
-        },
-        expectedCode: 'INVALID_REQUEST',
-        expectedAction: 'none',
-    },
-    {
-        name: 'labels a malformed native error as a broker contract mismatch',
-        error: {
-            code: 'INVALID_REQUEST',
-            message: 'missing recovery fields',
-            retryable: false,
-            sideEffect: 'not-started',
-        },
-        expectedCode: 'NATIVE_CONTRACT_MISMATCH',
-        expectedAction: 'refresh-capabilities',
-    },
-    {
-        name: 'rejects replayed failure envelopes as a broker contract mismatch',
-        error: {
-            code: 'INVALID_REQUEST',
-            message: 'native request was invalid',
-            retryable: false,
-            sideEffect: 'not-started',
-            recovery: { action: 'none', hint: 'Do not retry this request.' },
-        },
-        errorReplayed: true,
-        expectedCode: 'NATIVE_CONTRACT_MISMATCH',
-        expectedAction: 'refresh-capabilities',
-    },
-]) {
-    test('CEP client ' + errorFixture.name, {
-        skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-    }, async (t) => {
-        const fixture = await endpointFixture(t);
-        const protocol = installProtocol(fixture.server, {
-            invokeError: errorFixture.error,
-            errorReplayed: errorFixture.errorReplayed,
-        });
-        const client = createNativeAegpClient({
-            runtime: { platform: 'darwin', arch: 'arm64' },
-            runtimeRoot: fixture.root,
-            clientInstanceId: CLIENT,
-            requestTimeoutMs: 2000,
-            now: function () { return 1900000000000; },
-        });
-        t.after(function () { return client.close(); });
-        const connection = client.connect();
-        protocol.authorize();
-        await connection;
-        await loadFullCapabilities(client);
-        await assert.rejects(
-            client.invoke({
-                requestId: 'core-error-classification',
-                capabilityId: 'ae.project.summary',
-                capabilityVersion: 1,
-                arguments: {},
-                deadlineUnixMs: 1900000002000,
-            }),
-            function (error) {
-                assert.equal(error.code, errorFixture.expectedCode);
-                assert.equal(error.retryable, false);
-                assert.equal(error.sideEffect, 'not-started');
-                assert.equal(error.recovery.action, errorFixture.expectedAction);
-                return true;
-            },
-        );
-    });
-}
-
-test('CEP client treats a malformed mutation error as side-effect uncertain', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    const protocol = installProtocol(fixture.server, {
-        invokeError: {
-            code: 'PRECONDITION_FAILED',
-            message: 'missing recovery fields',
-            retryable: false,
-            sideEffect: 'not-started',
-        },
-    });
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-        now: function () { return 1900000000000; },
-    });
-    t.after(function () { return client.close(); });
-    const connection = client.connect();
-    protocol.authorize();
-    await connection;
-    await loadFullCapabilities(client);
-    await assert.rejects(client.invoke({
-        requestId: 'layer-property-malformed-error',
-        capabilityId: 'ae.layer.property.set',
-        capabilityVersion: 1,
-        arguments: structuredClone(LAYER_PROPERTY_SET_VECTOR.request.params.arguments),
-        deadlineUnixMs: 1900000002000,
-    }), {
-        code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
-        retryable: false,
-        sideEffect: 'may-have-occurred',
-    });
-});
-
-test('CEP client bounds an authenticating wait by the Core absolute deadline', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    const protocol = installProtocol(fixture.server, { suppressHello: true });
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-    });
-    t.after(function () { return client.close(); });
-    client.connect().catch(function () {});
-    protocol.authorize();
-    while (!protocol.requests.some(function (request) { return request.method === 'hello'; })) {
-        await new Promise(function (resolve) { setImmediate(resolve); });
-    }
-    assert.equal(client.status().state, 'authenticating');
-    await assert.rejects(
-        client.negotiate({ deadlineUnixMs: Date.now() + 40 }),
-        { code: 'DEADLINE_EXCEEDED', retryable: true },
-    );
-    assert.equal(client.status().state, 'authenticating');
-});
-
-test('CEP client bounds the initial compatibility challenge by the Core absolute deadline', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-        requestTimeoutMs: 2000,
-    });
-    t.after(function () { return client.close(); });
-    await assert.rejects(
-        client.connect(Date.now() + 40),
-        { code: 'DEADLINE_EXCEEDED', retryable: true },
-    );
-    assert.equal(client.status().state, 'challenge-pending');
-});
-
-for (const fixture of [
-    {
-        name: 'request digest',
-        mutate: function (result) { result.evidence.requestDigest = '0'.repeat(64); },
-    },
-    {
-        name: 'postcondition value',
-        mutate: function (result) { result.value.itemCount += 1; },
-    },
-]) {
-    test('client rejects tampered native ' + fixture.name + ' evidence', {
-        skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-    }, async (t) => {
-        const endpoint = await endpointFixture(t);
-        const protocol = installProtocol(endpoint.server, { mutateInvoke: fixture.mutate });
-        const client = createNativeAegpClient({
-            runtime: { platform: 'darwin', arch: 'arm64' },
-            runtimeRoot: endpoint.root,
-            clientInstanceId: CLIENT,
-            requestTimeoutMs: 2000,
-            now: function () { return 1900000000000; },
-        });
-        t.after(function () { return client.close(); });
-        const connection = client.connect();
-        protocol.authorize();
-        await connection;
-        await loadFullCapabilities(client);
-        await assert.rejects(client.projectSummary(), function (error) {
-            assert.equal(error.code, 'NATIVE_CONTRACT_MISMATCH');
-            assert.equal(error.retryable, false);
-            assert.equal(error.sideEffect, 'not-started');
-            assert.deepEqual(error.recovery, {
-                action: 'refresh-capabilities',
-                hint: 'Refresh the authenticated native contract before retrying.',
-            });
-            return true;
-        });
-    });
-}
-
-test('client does not bypass an explicit native admission rejection', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    let rejectAdmission;
-    fixture.server.on('connection', function (socket) {
-        socket.once('data', function () {
-            socket.write(challengeMessage());
-            rejectAdmission = function () { socket.write(decisionMessage(2)); };
-        });
-    });
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-    });
-    t.after(function () { return client.close(); });
-    const connection = client.connect();
-    while (!rejectAdmission) {
-        await new Promise(function (resolve) { setImmediate(resolve); });
-    }
-    rejectAdmission();
-    await assert.rejects(connection, { code: 'NATIVE_UNAVAILABLE', retryable: false });
-});
-
-test('closing after the compatibility challenge does not create an unhandled connected rejection', {
-    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
-}, async (t) => {
-    const fixture = await endpointFixture(t);
-    fixture.server.on('connection', function (socket) {
-        socket.once('data', function () { socket.write(challengeMessage()); });
-    });
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        runtimeRoot: fixture.root,
-        clientInstanceId: CLIENT,
-    });
-    const unhandled = [];
-    const capture = function (reason) { unhandled.push(reason); };
-    process.on('unhandledRejection', capture);
-    t.after(function () { process.off('unhandledRejection', capture); });
-
-    client.connect().catch(function () {});
-    await client.close();
-    await new Promise(function (resolve) { setImmediate(resolve); });
-    assert.deepEqual(unhandled, []);
-});
-
-test('late events from a failed socket cannot tear down its replacement', async () => {
-    class FakeSocket extends EventEmitter {
-        write(bytes, callback) { if (callback) callback(); return bytes.length > 0; }
-        destroy() { this.destroyed = true; }
-    }
-    const sockets = [];
-    const client = createNativeAegpClient({
-        runtime: { platform: 'darwin', arch: 'arm64' },
-        clientInstanceId: CLIENT,
-        discoverEndpoints: function () {
-            return [{
-                hostInstanceId: HOST,
-                sourceCommit: SOURCE,
-                socketPath: '/synthetic/aemcp.sock',
-            }];
-        },
-        netImpl: {
-            createConnection: function () {
-                const socket = new FakeSocket();
-                sockets.push(socket);
-                return socket;
-            },
-        },
-    });
-
-    const first = client.connect();
-    sockets[0].emit('error', Object.assign(new Error('first failed'), { code: 'ECONNRESET' }));
-    await assert.rejects(first, { code: 'NATIVE_UNAVAILABLE', retryable: true });
-
-    const second = client.connect();
-    second.catch(function () {});
-    sockets[0].emit('data', Buffer.alloc(100));
-    sockets[0].emit('close');
-    assert.equal(client.status().state, 'challenge-pending');
-    sockets[1].emit('connect');
-    sockets[1].emit('data', challengeMessage());
-    assert.equal(client.status().state, 'decision-pending');
     await client.close();
 });

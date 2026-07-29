@@ -4,7 +4,6 @@ const jsxBridge = require('./jsx-bridge');
 const authToken = require('./auth-token');
 const activity = require('./activity');
 const nativeAegp = require('./native-aegp-client');
-const nativeProjectComposition = require('./native-project-composition-contract');
 const PKG_VERSION = require('./package.json').version;
 
 let app = null;
@@ -28,21 +27,6 @@ const blocked = new Set();
 const INTERNAL_CLIENT = 'panel-diagnostics/internal';
 const NATIVE_MAX_REQUEST_WINDOW_MS = 30000;
 const NATIVE_REQUEST_ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
-const PROJECT_SUMMARY_CAPABILITY = 'ae.project.summary';
-const PROJECT_BIT_DEPTH_READ_CAPABILITY = 'ae.project.bit-depth.read';
-const PROJECT_BIT_DEPTH_SET_CAPABILITY = 'ae.project.bit-depth.set';
-const PROJECT_ITEMS_LIST_CAPABILITY = 'ae.project.items.list';
-const COMPOSITION_LAYERS_LIST_CAPABILITY = 'ae.composition.layers.list';
-const COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY = 'ae.composition.selected-layers.list';
-const COMPOSITION_TIME_READ_CAPABILITY = 'ae.composition.time.read';
-const COMPOSITION_TIME_SET_CAPABILITY = 'ae.composition.time.set';
-const COMPOSITION_CREATE_CAPABILITY = 'ae.composition.create';
-const COMPOSITION_LAYER_CREATE_CAPABILITY = 'ae.composition.layer.create';
-const LAYER_EFFECT_APPLY_CAPABILITY = 'ae.layer.effect.apply';
-const LAYER_PROPERTIES_LIST_CAPABILITY = 'ae.layer.properties.list';
-const LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY = 'ae.layer.property.keyframes.list';
-const LAYER_PROPERTY_SET_CAPABILITY = 'ae.layer.property.set';
-const NATIVE_LOCATOR_UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 
 function setRuntimeDependencies(dependencies) {
     if (!dependencies || typeof dependencies.express !== 'function') {
@@ -142,6 +126,7 @@ function makeNativeAegpClient() {
         || typeof nativeAegpClient.negotiate !== 'function'
         || typeof nativeAegpClient.capabilities !== 'function'
         || typeof nativeAegpClient.invoke !== 'function'
+        || typeof nativeAegpClient.cancel !== 'function'
         || typeof nativeAegpClient.invalidateProjectGraph !== 'function'
         || typeof nativeAegpClient.status !== 'function'
         || typeof nativeAegpClient.close !== 'function') {
@@ -242,275 +227,22 @@ function validDeadline(value) {
     return Number.isSafeInteger(value) && value > 0;
 }
 
-function validProjectBitDepthSetArguments(value) {
-    return exactBody(value, ['targetDepth', 'idempotencyKey'])
-        && [8, 16, 32].includes(value.targetDepth)
-        && typeof value.idempotencyKey === 'string'
-        && value.idempotencyKey.length >= 16
-        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
-}
-
-function validNativeLocator(value, kind) {
-    return exactBody(value, [
-        'kind', 'hostInstanceId', 'sessionId', 'projectId', 'generation', 'objectId',
-    ])
-        && value.kind === kind
-        && NATIVE_LOCATOR_UUID_PATTERN.test(value.hostInstanceId)
-        && NATIVE_LOCATOR_UUID_PATTERN.test(value.sessionId)
-        && NATIVE_LOCATOR_UUID_PATTERN.test(value.projectId)
-        && Number.isSafeInteger(value.generation) && value.generation > 0
-        && NATIVE_LOCATOR_UUID_PATTERN.test(value.objectId);
-}
-
-function validProjectItemsListArguments(value) {
-    return exactBody(value, ['offset', 'limit'], ['projectLocator'])
-        && Number.isSafeInteger(value.offset) && value.offset >= 0
-        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50
-        && (value.projectLocator === undefined
-            ? value.offset === 0 : validNativeLocator(value.projectLocator, 'project'));
-}
-
-function validCompositionLayersListArguments(value) {
-    return exactBody(value, ['compositionLocator', 'offset', 'limit'])
-        && validNativeLocator(value.compositionLocator, 'composition')
-        && Number.isSafeInteger(value.offset) && value.offset >= 0
-        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
-}
-
-function validCompositionSelectedLayersListArguments(value) {
-    return exactBody(value, ['compositionLocator', 'offset', 'limit'])
-        && validNativeLocator(value.compositionLocator, 'composition')
-        && Number.isSafeInteger(value.offset) && value.offset >= 0
-        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 50;
-}
-
-function validCompositionTimeReadArguments(value) {
-    return exactBody(value, ['compositionLocator'])
-        && validNativeLocator(value.compositionLocator, 'composition');
-}
-
-function validCompositionTimeSetArguments(value) {
-    return exactBody(value, ['compositionLocator', 'targetTime', 'idempotencyKey'])
-        && validNativeLocator(value.compositionLocator, 'composition')
-        && exactBody(value.targetTime, ['value', 'scale'])
-        && Number.isInteger(value.targetTime.value)
-        && value.targetTime.value >= -2147483648
-        && value.targetTime.value <= 2147483647
-        && Number.isInteger(value.targetTime.scale)
-        && value.targetTime.scale >= 1
-        && value.targetTime.scale <= 4294967295
-        && typeof value.idempotencyKey === 'string'
-        && value.idempotencyKey.length >= 16
-        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
-}
-
-function validUnicodeScalarCount(value, minimum, maximum) {
-    if (typeof value !== 'string') return false;
-    let count = 0;
-    for (let index = 0; index < value.length; index += 1) {
-        const code = value.charCodeAt(index);
-        if (code >= 0xd800 && code <= 0xdbff) {
-            const next = value.charCodeAt(index + 1);
-            if (!(next >= 0xdc00 && next <= 0xdfff)) return false;
-            index += 1;
-        } else if (code >= 0xdc00 && code <= 0xdfff) {
-            return false;
-        }
-        count += 1;
-    }
-    return count >= minimum && count <= maximum;
-}
-
-function validPositiveRatio(value) {
-    return exactBody(value, ['numerator', 'denominator'])
-        && Number.isInteger(value.numerator) && value.numerator >= 1
-        && value.numerator <= 2147483647
-        && Number.isInteger(value.denominator) && value.denominator >= 1
-        && value.denominator <= 2147483647;
-}
-
-function validCompositionCreateArguments(value) {
-    return exactBody(value, [
-        'name', 'width', 'height', 'duration', 'frameRate',
-        'pixelAspectRatio', 'idempotencyKey',
-    ])
-        && validUnicodeScalarCount(value.name, 1, 255)
-        && !value.name.includes('\u0000')
-        && Number.isInteger(value.width) && value.width >= 1 && value.width <= 30000
-        && Number.isInteger(value.height) && value.height >= 1 && value.height <= 30000
-        && exactBody(value.duration, ['value', 'scale'])
-        && Number.isInteger(value.duration.value)
-        && value.duration.value >= 1 && value.duration.value <= 2147483647
-        && Number.isInteger(value.duration.scale)
-        && value.duration.scale >= 1 && value.duration.scale <= 4294967295
-        && validPositiveRatio(value.frameRate)
-        && validPositiveRatio(value.pixelAspectRatio)
-        && typeof value.idempotencyKey === 'string'
-        && value.idempotencyKey.length >= 16
-        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
-}
-
-function validCompositionLayerCreateArguments(value) {
-    if (!exactBody(value, [
-        'compositionLocator', 'kind', 'name', 'idempotencyKey',
-    ], ['color', 'width', 'height', 'duration'])
-        || !validNativeLocator(value.compositionLocator, 'composition')
-        || !['null', 'solid'].includes(value.kind)
-        || !validUnicodeScalarCount(value.name, 1, 255)
-        || typeof value.idempotencyKey !== 'string'
-        || value.idempotencyKey.length < 16
-        || !NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey)) return false;
-    const solidOnlyProvided = ['color', 'width', 'height', 'duration'].some(function (key) {
-        return Object.hasOwn(value, key);
-    });
-    const validColor = value.color === undefined || (exactBody(
-        value.color, ['red', 'green', 'blue', 'alpha'],
-    ) && ['red', 'green', 'blue', 'alpha'].every(function (channel) {
-        return Number.isInteger(value.color[channel])
-            && value.color[channel] >= 0 && value.color[channel] <= 255;
-    }));
-    const validDuration = value.duration === undefined || (exactBody(
-        value.duration, ['value', 'scale'],
-    ) && Number.isInteger(value.duration.value)
-        && value.duration.value >= -2147483648
-        && value.duration.value <= 2147483647
-        && Number.isInteger(value.duration.scale)
-        && value.duration.scale >= 1 && value.duration.scale <= 4294967295);
-    return !(value.kind === 'null' && solidOnlyProvided)
-        && validColor && validDuration
-        && (value.width === undefined
-            || (Number.isInteger(value.width) && value.width >= 1 && value.width <= 30000))
-        && (value.height === undefined
-            || (Number.isInteger(value.height) && value.height >= 1 && value.height <= 30000));
-}
-
-function validLayerEffectApplyArguments(value) {
-    return exactBody(value, ['layerLocator', 'effectMatchName', 'idempotencyKey'])
-        && validNativeLocator(value.layerLocator, 'layer')
-        && validUnicodeScalarCount(value.effectMatchName, 1, 47)
-        && typeof value.idempotencyKey === 'string'
-        && value.idempotencyKey.length >= 16
-        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
-}
-
-function validLayerPropertiesListArguments(value) {
-    return exactBody(value, ['layerLocator', 'offset', 'limit'], ['parentPropertyLocator'])
-        && validNativeLocator(value.layerLocator, 'layer')
-        && Number.isSafeInteger(value.offset) && value.offset >= 0
-        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 25
-        && (value.parentPropertyLocator === undefined
-            || value.parentPropertyLocator === null
-            || validNativeLocator(value.parentPropertyLocator, 'stream'));
-}
-
-function validLayerPropertyKeyframesListArguments(value) {
-    return exactBody(value, ['propertyLocator', 'offset', 'limit'])
-        && validNativeLocator(value.propertyLocator, 'stream')
-        && Number.isSafeInteger(value.offset) && value.offset >= 0
-        && Number.isSafeInteger(value.limit) && value.limit >= 1 && value.limit <= 25;
-}
-
-function validNativeDecimal(value) {
-    return typeof value === 'string' && value.length >= 1 && value.length <= 32
-        && /^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$/.test(value)
-        && Number.isFinite(Number(value));
-}
-
-function validNativePrimitiveValue(value) {
-    if (exactBody(value, ['kind', 'value']) && value.kind === 'scalar') {
-        return validNativeDecimal(value.value);
-    }
-    if (exactBody(value, ['kind', 'components']) && value.kind === 'vector') {
-        return Array.isArray(value.components)
-            && (value.components.length === 2 || value.components.length === 3)
-            && value.components.every(validNativeDecimal);
-    }
-    return exactBody(value, ['kind', 'alpha', 'red', 'green', 'blue'])
-        && value.kind === 'color'
-        && validNativeDecimal(value.alpha) && validNativeDecimal(value.red)
-        && validNativeDecimal(value.green) && validNativeDecimal(value.blue);
-}
-
-function validLayerPropertySetArguments(value) {
-    return exactBody(value, [
-        'layerLocator', 'propertyLocator', 'value', 'idempotencyKey',
-    ])
-        && validNativeLocator(value.layerLocator, 'layer')
-        && validNativeLocator(value.propertyLocator, 'stream')
-        && value.layerLocator.hostInstanceId === value.propertyLocator.hostInstanceId
-        && value.layerLocator.sessionId === value.propertyLocator.sessionId
-        && value.layerLocator.projectId === value.propertyLocator.projectId
-        && value.layerLocator.generation === value.propertyLocator.generation
-        && validNativePrimitiveValue(value.value)
-        && typeof value.idempotencyKey === 'string'
-        && value.idempotencyKey.length >= 16
-        && NATIVE_REQUEST_ID_PATTERN.test(value.idempotencyKey);
-}
-
 function validNativeInvokeBody(body) {
-    if (!exactBody(body, [
-        'requestId', 'capabilityId', 'capabilityVersion', 'arguments', 'deadlineUnixMs',
+    return nativeAegp.validNativeInvokeRequest(body);
+}
+
+function validNativeCancelBody(body) {
+    return exactBody(body, [
+        'requestId',
+        'targetRequestId',
+        'deadlineUnixMs',
     ])
-        || typeof body.requestId !== 'string' || !NATIVE_REQUEST_ID_PATTERN.test(body.requestId)
-        || !validDeadline(body.deadlineUnixMs)) return false;
-    if (body.capabilityVersion === 1) {
-        const packageContract = nativeProjectComposition.getContract(body.capabilityId);
-        if (packageContract !== null) {
-            return packageContract.validArguments(body.arguments) === true;
-        }
-    }
-    if ((body.capabilityId === PROJECT_SUMMARY_CAPABILITY
-        || body.capabilityId === PROJECT_BIT_DEPTH_READ_CAPABILITY)
-        && body.capabilityVersion === 1) {
-        return exactBody(body.arguments, []);
-    }
-    if (body.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY && body.capabilityVersion === 1) {
-        return validProjectBitDepthSetArguments(body.arguments);
-    }
-    if (body.capabilityId === PROJECT_ITEMS_LIST_CAPABILITY && body.capabilityVersion === 1) {
-        return validProjectItemsListArguments(body.arguments);
-    }
-    if (body.capabilityId === COMPOSITION_LAYERS_LIST_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validCompositionLayersListArguments(body.arguments);
-    }
-    if (body.capabilityId === COMPOSITION_SELECTED_LAYERS_LIST_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validCompositionSelectedLayersListArguments(body.arguments);
-    }
-    if (body.capabilityId === COMPOSITION_TIME_READ_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validCompositionTimeReadArguments(body.arguments);
-    }
-    if (body.capabilityId === COMPOSITION_TIME_SET_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validCompositionTimeSetArguments(body.arguments);
-    }
-    if (body.capabilityId === COMPOSITION_CREATE_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validCompositionCreateArguments(body.arguments);
-    }
-    if (body.capabilityId === COMPOSITION_LAYER_CREATE_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validCompositionLayerCreateArguments(body.arguments);
-    }
-    if (body.capabilityId === LAYER_EFFECT_APPLY_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validLayerEffectApplyArguments(body.arguments);
-    }
-    if (body.capabilityId === LAYER_PROPERTIES_LIST_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validLayerPropertiesListArguments(body.arguments);
-    }
-    if (body.capabilityId === LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validLayerPropertyKeyframesListArguments(body.arguments);
-    }
-    if (body.capabilityId === LAYER_PROPERTY_SET_CAPABILITY
-        && body.capabilityVersion === 1) {
-        return validLayerPropertySetArguments(body.arguments);
-    }
-    return false;
+        && typeof body.requestId === 'string'
+        && NATIVE_REQUEST_ID_PATTERN.test(body.requestId)
+        && typeof body.targetRequestId === 'string'
+        && NATIVE_REQUEST_ID_PATTERN.test(body.targetRequestId)
+        && body.requestId !== body.targetRequestId
+        && validDeadline(body.deadlineUnixMs);
 }
 
 function nativeGateError(code, message, retryable, action, hint) {
@@ -858,6 +590,48 @@ function buildApp() {
                 engine: 'native-aegp',
                 capabilityId: body.capabilityId,
                 requestId: body.requestId,
+                ok: false,
+                error: nativeErrorPayload(error).code,
+                durationMs: Date.now() - startedAt,
+            });
+            sendNativeFailure(res, error);
+        }
+    });
+
+    a.post('/native/cancel', async (req, res) => {
+        const clientLabel = nativeRequestGate(req, res);
+        if (clientLabel === null) return;
+        const body = req.body || {};
+        if (!validNativeCancelBody(body)) {
+            return res.status(400).json({
+                ok: false,
+                error: nativeErrorPayload(Object.assign(
+                    new Error('native cancellation parameters are invalid'),
+                    { code: 'INVALID_ARGUMENT', retryable: false },
+                )),
+            });
+        }
+        const startedAt = Date.now();
+        try {
+            const client = await connectedNativeClient(body.deadlineUnixMs);
+            const result = await client.cancel(body);
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                operation: 'cancel',
+                requestId: body.requestId,
+                targetRequestId: body.targetRequestId,
+                ok: true,
+                durationMs: Date.now() - startedAt,
+            });
+            res.json({ ok: true, result });
+        } catch (error) {
+            activity.record({
+                client: clientLabel,
+                engine: 'native-aegp',
+                operation: 'cancel',
+                requestId: body.requestId,
+                targetRequestId: body.targetRequestId,
                 ok: false,
                 error: nativeErrorPayload(error).code,
                 durationMs: Date.now() - startedAt,
