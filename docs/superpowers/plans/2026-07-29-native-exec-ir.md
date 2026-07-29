@@ -1256,7 +1256,7 @@ ended CLEAN. No AE or HDEV/T5/T6 run occurred in this task.
 - Consumes: all previous tasks.
 - Produces: review receipt, focused CI receipt, and one non-candidate HDEV receipt.
 
-- [ ] **Step 1: Run generated-file and Python verification**
+- [x] **Step 1: Run generated-file and Python verification**
 
 ```bash
 uv run python scripts/generate_native_exec.py --check
@@ -1273,43 +1273,43 @@ uv run pytest \
   packages/bridge/tests/test_development_smoke_driver.py -q
 ```
 
-- [ ] **Step 2: Run protocol and CEP verification**
+- [x] **Step 2: Run protocol and CEP verification**
 
 ```bash
 node --test native/ae-plugin/protocol/protocol.test.mjs
 node --test plugin/host/native-aegp-client.test.js
 ```
 
-- [ ] **Step 3: Run portable native verification**
+- [x] **Step 3: Run portable native verification**
 
 Compile and run `native_program_test`, `host_dispatcher_test`,
 `rpc_codec_test`, and `native_rpc_connection_test` with the exact CI flags.
 
-- [ ] **Step 4: Build the SDK-backed plug-in**
+- [x] **Step 4: Build the SDK-backed plug-in**
 
 Run the contract-checked development build with the configured Adobe SDK.
 Record source revision, canonical output path, component version, size, and
 modification time. Do not perform a full payload hash walk.
 
-- [ ] **Step 5: Request one concentrated review**
+- [x] **Step 5: Request one concentrated review**
 
 Classify findings under `AGENTS.md §5`. Fix only reproduced correctness,
 recovery, audit, or acceptance blockers. Do not accept new generalized
 hardening or runner infrastructure.
 
-- [ ] **Step 6: Run focused CI once**
+- [x] **Step 6: Run focused CI once**
 
 Run the scoped repository CI jobs covering Python Core, native protocol,
 portable C++, CEP client, generated files, bundled skill, and public surface.
 
-- [ ] **Step 7: Run one non-candidate HDEV**
+- [x] **Step 7: Run one non-candidate HDEV**
 
 Use `scripts/hardware/development_smoke.py --scenario native-exec-ir@1` with one
 fresh `ephemeral-validation` fixture. Verify the exact nine-call budget,
 public MCP route, real AE state, native provenance, audit, postcondition, one
 real Undo, and restored readback.
 
-- [ ] **Step 8: Commit only reproduced fixes**
+- [x] **Step 8: Commit only reproduced fixes**
 
 If no fixes were required, do not create an empty commit. If fixes were
 required, rerun only their affected lower tiers and commit them together:
@@ -1318,7 +1318,7 @@ required, rerun only their affected lower tiers and commit them together:
 git commit -m "fix: close native exec acceptance blockers"
 ```
 
-- [ ] **Step 9: Prepare completion receipt**
+- [x] **Step 9: Prepare completion receipt**
 
 Report:
 
@@ -1331,3 +1331,18 @@ Report:
 - real Undo evidence;
 - fixture lifecycle counts;
 - remaining follow-ups classified outside P0.
+
+**Execution record (2026-07-30):** Task 11 completed at `4bf103b`. The
+reviewed product repair is `2c24e28`; the final HEAD adds only the bounded
+runner correction that compares AE `A_Time` values rationally. Generated
+files are current; the focused Core/Bridge set passes 167/167, native protocol
+9/9, CEP client 16/16, and all four portable C++ binaries pass with the exact
+CI warning policy. SDK 25.6.61 built and installed product `0.9.2` from
+`2c24e28`. Final non-candidate HDEV `hdev-1785361292-5815b1fe` passed exactly
+nine public calls with real native provenance/audit/postcondition evidence,
+one committed native time write, one real Cmd+Z, restored native readback, and
+`INVALID_ARGUMENT/not-started` for the final invalid program. Its sole
+`ephemeral-validation` fixture was normally saved, closed, recoverably
+archived, and the active slot was cleared. Earlier stopped attempts are
+reported honestly in the Task 11 receipt; none dispatched an uncertain write.
+No T5, T6, release, pairing, security, process-census, or full-hash work ran.
