@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import os
+import plistlib
 import stat
 import subprocess
 import sys
@@ -240,6 +242,14 @@ def _source_details_payload(source_name: str, *, generation: int = 2) -> dict:
 
 
 def _config(tmp_path: Path) -> object:
+    receipt = driver.base_hdev.FormalAEProcessReceipt(
+        formal_ae_app=str(tmp_path / "formal-ae.app"),
+        executable_path=str(
+            tmp_path / "formal-ae.app/Contents/MacOS/AfterFX"
+        ),
+        pid=4321,
+        start_token="Tue Jul 29 10:11:12 2026",
+    )
     return driver.Issue190Config(
         scenario=spec.SCENARIO_ID,
         selected_components=("core", "native"),
@@ -250,7 +260,19 @@ def _config(tmp_path: Path) -> object:
         formal_ae_app=tmp_path / "formal-ae.app",
         plugin_url="http://127.0.0.1:11488",
         run_id="issue190-hdev-test-run",
+        formal_process_receipt=receipt,
     )
+
+
+def _create_formal_ae_app(path: Path) -> Path:
+    executable = path / "Contents/MacOS/AfterFX"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"formal-ae")
+    executable.chmod(0o755)
+    (path / "Contents/Info.plist").write_bytes(
+        plistlib.dumps({"CFBundleExecutable": "AfterFX"})
+    )
+    return executable.resolve()
 
 
 def test_config_derives_one_fresh_fixture_and_recovery_root_from_home(tmp_path):
@@ -330,6 +352,14 @@ def test_fixture_claim_is_exclusive_and_manifest_is_closed(tmp_path):
         "lifecycle": "ephemeral-validation",
         "ownerMarker": config.owner_marker,
         "formalAeApp": str(config.formal_ae_app),
+        "formalProcessReceipt": {
+            "formalAeApp": str(config.formal_ae_app),
+            "executablePath": str(
+                config.formal_ae_app / "Contents/MacOS/AfterFX"
+            ),
+            "pid": 4321,
+            "startToken": "Tue Jul 29 10:11:12 2026",
+        },
         "fixturePath": str(config.fixture_path),
         "activeRoot": str(config.fixture_path.parent),
         "recoveryRoot": str(config.recovery_root),
@@ -1449,10 +1479,14 @@ async def test_successful_archive_finishes_with_zero_active_and_unclassified(tmp
     runner.claim_fixture()
     config.fixture_path.write_bytes(b"fixture")
     wav_path = driver.generate_fixture_wav(config)
+    runner.current_wav_path = wav_path
     runner.lifecycle.update({"created": 1, "active": 1})
     runner.formal_process_owned = True
 
-    archived = await runner.archive_fixture(wav_path)
+    result = await runner.finalize_owned_fixture(
+        "structured development evidence complete"
+    )
+    archived = config.recovery_root / config.run_id / result["archiveName"]
 
     assert archived.is_file()
     assert not config.fixture_path.exists()
@@ -1732,6 +1766,11 @@ def _owned_process_observation(
             "fixturePath": str(config.fixture_path),
             "ownerMarker": config.owner_marker,
             "formalAeApp": str(config.formal_ae_app),
+            "pid": config.formal_process_receipt.pid,
+            "executablePath": (
+                config.formal_process_receipt.executable_path
+            ),
+            "startToken": config.formal_process_receipt.start_token,
         },
     }
 
@@ -1811,8 +1850,23 @@ async def test_shutdown_ack_does_not_archive_while_owned_process_keeps_running(
 @pytest.mark.asyncio
 async def test_shutdown_ack_archives_only_after_owned_process_becomes_absent(
     tmp_path,
+    monkeypatch,
 ):
     config = _config(tmp_path)
+    actions: list[str] = []
+    real_move = driver.shutil.move
+    real_finish = driver.DevelopmentEvidence.finish
+
+    def move(source: str, destination: str):
+        actions.append("move")
+        return real_move(source, destination)
+
+    def finish(evidence, **kwargs):
+        actions.append("summary")
+        return real_finish(evidence, **kwargs)
+
+    monkeypatch.setattr(driver.shutil, "move", move)
+    monkeypatch.setattr(driver.DevelopmentEvidence, "finish", finish)
     observations = [
         _owned_process_observation(config, "running"),
         _owned_process_observation(config, "running"),
@@ -1824,7 +1878,7 @@ async def test_shutdown_ack_archives_only_after_owned_process_becomes_absent(
 
     result, checkpoints, probe_calls = (
         await _run_failed_issue190_with_process_observations(
-            config, observations
+            config, observations, action_log=actions
         )
     )
 
@@ -1834,6 +1888,18 @@ async def test_shutdown_ack_archives_only_after_owned_process_becomes_absent(
     assert (config.recovery_root / config.run_id).is_dir()
     assert "stop-owned-formal-ae-fallback" in checkpoints
     assert len(probe_calls) == 6
+    assert actions[:7] == [
+        "checkpoint:create-or-reset-issue190-fixture",
+        "probe",
+        "checkpoint:guarded-close-owned-issue190-fixture",
+        "probe",
+        "probe",
+        "probe",
+        "checkpoint:stop-owned-formal-ae-fallback",
+    ]
+    assert actions[7:9] == ["probe", "probe"]
+    assert actions.index("move") > 8
+    assert actions[-1] == "summary"
 
 
 @pytest.mark.asyncio
@@ -1908,13 +1974,13 @@ async def test_generic_absence_waits_for_exact_absence_after_guarded_close(
 
     assert result.summary["aepLifecycle"]["active"] == 0
     assert result.summary["aepLifecycle"]["unclassified"] == 0
-    assert "classify-and-close-failed-issue190-fixture" in checkpoints
+    assert "guarded-close-owned-issue190-fixture" in checkpoints
     assert "stop-owned-formal-ae-fallback" not in checkpoints
     assert len(probe_calls) == 2
     assert actions == [
         "checkpoint:create-or-reset-issue190-fixture",
         "probe",
-        "checkpoint:classify-and-close-failed-issue190-fixture",
+        "checkpoint:guarded-close-owned-issue190-fixture",
         "probe",
     ]
 
@@ -1975,9 +2041,302 @@ async def test_exact_running_then_absent_uses_guarded_close_without_fallback(
 
     assert result.summary["aepLifecycle"]["active"] == 0
     assert result.summary["aepLifecycle"]["unclassified"] == 0
-    assert "classify-and-close-failed-issue190-fixture" in checkpoints
+    assert "guarded-close-owned-issue190-fixture" in checkpoints
     assert "stop-owned-formal-ae-fallback" not in checkpoints
     assert len(probe_calls) == 2
+
+
+def _prepared_owned_runner(config, states: list[str], actions: list[str]):
+    observations = [
+        _owned_process_observation(config, state) for state in states
+    ]
+
+    async def checkpoint(name: str, _details: dict) -> None:
+        actions.append(f"checkpoint:{name}")
+
+    async def probe(_details: dict) -> dict:
+        actions.append("probe")
+        assert observations, "unexpected owned-process probe"
+        return observations.pop(0)
+
+    async def shutdown(_details: dict) -> bool:
+        actions.append("shutdown")
+        return True
+
+    runner = driver.Issue190Runner(
+        config,
+        checkpoint=checkpoint,
+        after_effects_running=lambda: driver.completed_process_check(False),
+        owned_process_shutdown=shutdown,
+        owned_process_probe=probe,
+    )
+    runner.claim_fixture()
+    runner.formal_process_owned = True
+    return runner
+
+
+@pytest.mark.asyncio
+async def test_manifest_only_recovery_requires_exact_absence_before_move(
+    tmp_path,
+    monkeypatch,
+):
+    config = _config(tmp_path)
+    actions: list[str] = []
+    runner = _prepared_owned_runner(config, ["absent"], actions)
+    runner.lifecycle.update({"created": 1, "active": 1})
+    real_move = driver.shutil.move
+
+    def move(source: str, destination: str):
+        actions.append("move")
+        return real_move(source, destination)
+
+    monkeypatch.setattr(driver.shutil, "move", move)
+    result = await runner.finalize_owned_fixture("fixture vanished")
+
+    assert result["disposition"] == "manifest-only-recovery"
+    assert actions == ["probe", "move"]
+    assert runner.lifecycle["active"] == 0
+    assert runner.lifecycle["unclassified"] == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ("running", "mismatch", "unavailable"))
+async def test_manifest_only_unconfirmed_process_never_moves_or_affects_ae(
+    tmp_path,
+    monkeypatch,
+    state,
+):
+    config = _config(tmp_path)
+    actions: list[str] = []
+    runner = _prepared_owned_runner(config, [state], actions)
+    runner.lifecycle.update({"created": 1, "active": 1})
+    moves: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        driver.shutil,
+        "move",
+        lambda source, destination: moves.append((source, destination)),
+    )
+
+    with pytest.raises(driver.Issue190Failure):
+        await runner.finalize_owned_fixture("fixture vanished")
+
+    assert actions == ["probe"]
+    assert moves == []
+    assert config.ownership_manifest_path.is_file()
+    assert runner.lifecycle["active"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "filesystem_state",
+    ("fixture-without-manifest", "recorded-fixture-missing"),
+)
+async def test_contradictory_owned_fixture_state_never_probes_or_moves(
+    tmp_path,
+    monkeypatch,
+    filesystem_state,
+):
+    config = _config(tmp_path)
+    actions: list[str] = []
+    runner = driver.Issue190Runner(
+        config,
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+        owned_process_probe=lambda _details: _record_probe(actions),
+    )
+    runner.lifecycle.update({"created": 1, "active": 1})
+    runner.formal_process_owned = True
+    if filesystem_state == "fixture-without-manifest":
+        config.fixture_path.parent.mkdir(parents=True)
+        config.fixture_path.write_bytes(b"unowned-fixture")
+    moves: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        driver.shutil,
+        "move",
+        lambda source, destination: moves.append((source, destination)),
+    )
+
+    with pytest.raises(driver.Issue190Failure):
+        await runner.finalize_owned_fixture("contradictory fixture state")
+
+    assert actions == []
+    assert moves == []
+    assert runner.lifecycle["active"] == 1
+
+
+async def _record_probe(actions: list[str]) -> dict:
+    actions.append("probe")
+    return {}
+
+
+@pytest.mark.asyncio
+async def test_normal_run_uses_owned_finalizer_before_close_or_move(
+    tmp_path,
+    monkeypatch,
+):
+    config = _config(tmp_path)
+    actions: list[str] = []
+    real_move = driver.shutil.move
+    observations = [_owned_process_observation(config, "absent")]
+
+    async def no_product_calls(_session) -> None:
+        return None
+
+    async def checkpoint(name: str, _details: dict) -> None:
+        actions.append(f"checkpoint:{name}")
+        if name == "create-or-reset-issue190-fixture":
+            config.fixture_path.write_bytes(b"owned-fixture")
+
+    async def probe(_details: dict) -> dict:
+        actions.append("probe")
+        return observations.pop(0)
+
+    def move(source: str, destination: str):
+        actions.append("move")
+        return real_move(source, destination)
+
+    runner = driver.Issue190Runner(
+        config,
+        checkpoint=checkpoint,
+        after_effects_running=lambda: driver.completed_process_check(False),
+        owned_process_probe=probe,
+    )
+    runner.checkpoint = checkpoint
+    runner.execute_plan = no_product_calls
+    monkeypatch.setattr(driver.shutil, "move", move)
+    details = await runner.run(FakeSession((False, {})))
+
+    assert details["fixtureDisposition"]["disposition"] == (
+        "short-lived-recovery"
+    )
+    assert actions[0] == "checkpoint:create-or-reset-issue190-fixture"
+    assert actions[1] == "probe"
+    assert not any(
+        name == "checkpoint:close-and-archive-issue190-fixture"
+        for name in actions
+    )
+    assert actions.index("probe") < actions.index("move")
+
+
+@pytest.mark.asyncio
+async def test_cli_wires_real_exact_process_adapter_into_normal_finalization(
+    tmp_path,
+    monkeypatch,
+):
+    config = _config(tmp_path)
+    executable = _create_formal_ae_app(config.formal_ae_app)
+    commands: list[tuple[str, ...]] = []
+
+    async def inspect(command: tuple[str, ...]):
+        commands.append(command)
+        if command == ("/bin/ps", "-axo", "pid=,lstart=,comm="):
+            return driver.base_hdev.ProcessInspectionResult(
+                returncode=0,
+                stdout=(
+                    f" 9876 Tue Jul 29 11:12:13 2026 {executable}\n"
+                ),
+                stderr="",
+            )
+        return driver.base_hdev.ProcessInspectionResult(
+            returncode=1,
+            stdout="",
+            stderr="",
+        )
+
+    monkeypatch.setattr(
+        driver.base_hdev,
+        "_run_process_inspection",
+        inspect,
+    )
+    prepared, owned_process_probe = (
+        await driver._prepare_cli_process_ownership(config)
+    )
+
+    assert owned_process_probe is not None
+    assert prepared.formal_process_receipt.to_json() == {
+        "formalAeApp": str(config.formal_ae_app.resolve()),
+        "executablePath": str(executable),
+        "pid": 9876,
+        "startToken": "Tue Jul 29 11:12:13 2026",
+    }
+    runner = driver.Issue190Runner(
+        prepared,
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+        owned_process_probe=owned_process_probe,
+    )
+    runner.claim_fixture()
+    prepared.fixture_path.write_bytes(b"owned-fixture")
+    runner.lifecycle.update({"created": 1, "active": 1})
+    runner.formal_process_owned = True
+
+    result = await runner.finalize_owned_fixture("normal CLI finalization")
+
+    assert result["disposition"] == "short-lived-recovery"
+    assert commands == [
+        ("/bin/ps", "-axo", "pid=,lstart=,comm="),
+        ("/bin/ps", "-p", "9876", "-o", "pid=,lstart=,comm="),
+    ]
+    assert runner.lifecycle["active"] == 0
+    assert runner.lifecycle["unclassified"] == 0
+
+
+@pytest.mark.asyncio
+async def test_actual_cli_composition_uses_exact_probe_for_finalization(
+    tmp_path,
+    monkeypatch,
+):
+    config = _config(tmp_path)
+    executable = _create_formal_ae_app(config.formal_ae_app)
+    commands: list[tuple[str, ...]] = []
+    checkpoints: list[str] = []
+
+    async def inspect(command: tuple[str, ...]):
+        commands.append(command)
+        if command == ("/bin/ps", "-axo", "pid=,lstart=,comm="):
+            return driver.base_hdev.ProcessInspectionResult(
+                returncode=0,
+                stdout=(
+                    f" 9876 Tue Jul 29 11:12:13 2026 {executable}\n"
+                ),
+                stderr="",
+            )
+        return driver.base_hdev.ProcessInspectionResult(
+            returncode=1,
+            stdout="",
+            stderr="",
+        )
+
+    @contextlib.asynccontextmanager
+    async def live_session(_config):
+        session = FakeSession((False, {}))
+        session.tool_names = frozenset()
+        yield session
+
+    async def checkpoint(name: str, _details: dict) -> None:
+        checkpoints.append(name)
+        if name == "create-or-reset-issue190-fixture":
+            config.fixture_path.write_bytes(b"owned-fixture")
+
+    monkeypatch.setattr(
+        driver.base_hdev,
+        "_run_process_inspection",
+        inspect,
+    )
+    monkeypatch.setattr(driver.base_hdev, "live_session", live_session)
+    monkeypatch.setattr(driver.base_hdev, "stdin_checkpoint", checkpoint)
+
+    exit_code = await driver._run_cli(config)
+
+    assert exit_code == 2
+    assert checkpoints == ["create-or-reset-issue190-fixture"]
+    assert commands == [
+        ("/bin/ps", "-axo", "pid=,lstart=,comm="),
+        ("/bin/ps", "-p", "9876", "-o", "pid=,lstart=,comm="),
+    ]
+    assert not config.fixture_path.exists()
+    assert (config.recovery_root / config.run_id).is_dir()
+    assert list(config.evidence_dir.glob(f"{config.run_id}.summary.json"))
 
 
 def test_evidence_and_summary_are_permanently_development_only(tmp_path):

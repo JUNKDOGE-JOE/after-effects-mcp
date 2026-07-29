@@ -5,9 +5,11 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import plistlib
 import stat
 import subprocess
 import sys
+from dataclasses import FrozenInstanceError
 from pathlib import Path
 from types import ModuleType
 
@@ -243,6 +245,218 @@ def _config(tmp_path: Path) -> object:
         formal_ae_app=tmp_path / "formal-ae.app",
         plugin_url="http://127.0.0.1:11488",
     )
+
+
+def _formal_ae_app(tmp_path: Path) -> tuple[Path, Path]:
+    app = tmp_path / "Adobe After Effects 2026.app"
+    executable = app / "Contents/MacOS/AfterFX"
+    executable.parent.mkdir(parents=True)
+    executable.write_bytes(b"formal-ae")
+    executable.chmod(0o755)
+    (app / "Contents/Info.plist").write_bytes(
+        plistlib.dumps({"CFBundleExecutable": "AfterFX"})
+    )
+    return app, executable.resolve()
+
+
+def _process_result(
+    *,
+    stdout: str = "",
+    stderr: str = "",
+    returncode: int = 0,
+):
+    return driver.ProcessInspectionResult(
+        returncode=returncode,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+
+@pytest.mark.asyncio
+async def test_capture_formal_ae_process_returns_exact_immutable_receipt(
+    tmp_path,
+    monkeypatch,
+):
+    app, executable = _formal_ae_app(tmp_path)
+    commands: list[tuple[str, ...]] = []
+
+    async def inspect(command: tuple[str, ...]):
+        commands.append(command)
+        return _process_result(
+            stdout=(
+                f" 4321 Tue Jul 29 10:11:12 2026 {executable}\n"
+                " 9876 Tue Jul 29 10:11:13 2026 /usr/bin/other\n"
+            )
+        )
+
+    monkeypatch.setattr(driver, "_run_process_inspection", inspect)
+    receipt = await driver.capture_formal_ae_process(app)
+
+    assert receipt == driver.FormalAEProcessReceipt(
+        formal_ae_app=str(app.resolve()),
+        executable_path=str(executable),
+        pid=4321,
+        start_token="Tue Jul 29 10:11:12 2026",
+    )
+    assert json.loads(json.dumps(receipt.to_json())) == {
+        "formalAeApp": str(app.resolve()),
+        "executablePath": str(executable),
+        "pid": 4321,
+        "startToken": "Tue Jul 29 10:11:12 2026",
+    }
+    assert commands == [("/bin/ps", "-axo", "pid=,lstart=,comm=")]
+    with pytest.raises(FrozenInstanceError):
+        receipt.pid = 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "stdout",
+    (
+        "",
+        (
+            " 4321 Tue Jul 29 10:11:12 2026 {executable}\n"
+            " 4322 Tue Jul 29 10:11:13 2026 {executable}\n"
+        ),
+    ),
+)
+async def test_capture_formal_ae_process_requires_exactly_one_match(
+    tmp_path,
+    monkeypatch,
+    stdout,
+):
+    app, executable = _formal_ae_app(tmp_path)
+
+    async def inspect(_command: tuple[str, ...]):
+        return _process_result(
+            stdout=stdout.format(executable=executable)
+        )
+
+    monkeypatch.setattr(driver, "_run_process_inspection", inspect)
+
+    with pytest.raises(
+        driver.DevelopmentSmokeFailure,
+        match="exactly one formal AE process",
+    ):
+        await driver.capture_formal_ae_process(app)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "result",
+    (
+        pytest.param(
+            _process_result(stdout="not-a-process-row\n"),
+            id="malformed",
+        ),
+        pytest.param(
+            _process_result(stdout="x" * (1024 * 1024 + 1)),
+            id="oversized",
+        ),
+        pytest.param(
+            _process_result(stderr="ps failed", returncode=2),
+            id="inspection-error",
+        ),
+    ),
+)
+async def test_capture_formal_ae_process_fails_closed_on_invalid_inspection(
+    tmp_path,
+    monkeypatch,
+    result,
+):
+    app, _executable = _formal_ae_app(tmp_path)
+
+    async def inspect(_command: tuple[str, ...]):
+        return result
+
+    monkeypatch.setattr(driver, "_run_process_inspection", inspect)
+
+    with pytest.raises(driver.DevelopmentSmokeFailure):
+        await driver.capture_formal_ae_process(app)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("result", "state"),
+    (
+        pytest.param(_process_result(returncode=1), "absent", id="absent"),
+        pytest.param(
+            _process_result(
+                stdout=(
+                    " 4321 Tue Jul 29 10:11:12 2026 "
+                    "/Applications/Adobe After Effects 2026.app/"
+                    "Contents/MacOS/AfterFX\n"
+                )
+            ),
+            "running",
+            id="running",
+        ),
+        pytest.param(
+            _process_result(
+                stdout=(
+                    " 4321 Tue Jul 29 10:11:12 2026 "
+                    "/Applications/Other.app/Contents/MacOS/AfterFX\n"
+                )
+            ),
+            "mismatch",
+            id="pid-reused-different-executable",
+        ),
+        pytest.param(
+            _process_result(
+                stdout=(
+                    " 4321 Tue Jul 29 10:11:13 2026 "
+                    "/Applications/Adobe After Effects 2026.app/"
+                    "Contents/MacOS/AfterFX\n"
+                )
+            ),
+            "mismatch",
+            id="different-start-token",
+        ),
+        pytest.param(
+            _process_result(stdout="malformed\n"),
+            "unavailable",
+            id="malformed",
+        ),
+        pytest.param(
+            _process_result(stdout="x" * (1024 * 1024 + 1)),
+            "unavailable",
+            id="oversized",
+        ),
+        pytest.param(
+            _process_result(stderr="ps failed", returncode=2),
+            "unavailable",
+            id="inspection-error",
+        ),
+    ),
+)
+async def test_probe_formal_ae_process_preserves_closed_state(
+    monkeypatch,
+    result,
+    state,
+):
+    receipt = driver.FormalAEProcessReceipt(
+        formal_ae_app="/Applications/Adobe After Effects 2026.app",
+        executable_path=(
+            "/Applications/Adobe After Effects 2026.app/"
+            "Contents/MacOS/AfterFX"
+        ),
+        pid=4321,
+        start_token="Tue Jul 29 10:11:12 2026",
+    )
+    commands: list[tuple[str, ...]] = []
+
+    async def inspect(command: tuple[str, ...]):
+        commands.append(command)
+        return result
+
+    monkeypatch.setattr(driver, "_run_process_inspection", inspect)
+    observation = await driver.probe_formal_ae_process(receipt)
+
+    assert observation.state == state
+    assert observation.receipt == receipt
+    assert commands == [
+        ("/bin/ps", "-p", "4321", "-o", "pid=,lstart=,comm=")
+    ]
 
 
 @pytest.mark.asyncio
