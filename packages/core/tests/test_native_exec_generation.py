@@ -35,6 +35,20 @@ NATIVE_ROOT = ROOT / "native/ae-plugin"
 CEP_HOST_ROOT = ROOT / "plugin/host"
 
 
+def _cep_production_sources(root: Path) -> dict[Path, str]:
+    sources: dict[Path, str] = {}
+    for path in root.rglob("*.js"):
+        relative = path.relative_to(root)
+        if (
+            "node_modules" in relative.parts
+            or path.name.endswith(".test.js")
+            or not path.is_file()
+        ):
+            continue
+        sources[relative] = path.read_text("utf-8")
+    return sources
+
+
 def _current_native_carrier_sources() -> dict[Path, str]:
     """Return text inputs that define the current native runtime/protocol.
 
@@ -62,10 +76,8 @@ def _current_native_carrier_sources() -> dict[Path, str]:
         }:
             continue
         sources[relative] = path.read_text("utf-8")
-    for path in CEP_HOST_ROOT.rglob("*.js"):
-        if path.name.endswith(".test.js"):
-            continue
-        sources[path.relative_to(ROOT)] = path.read_text("utf-8")
+    for relative, source in _cep_production_sources(CEP_HOST_ROOT).items():
+        sources[Path("plugin/host") / relative] = source
     return sources
 
 
@@ -141,6 +153,22 @@ def test_legacy_native_carriers_are_absent_from_the_current_runtime():
         )
     }
     assert declared_encoders == allowed_encoders
+
+
+def test_cep_source_scan_excludes_dependencies_tests_and_js_directories(
+    tmp_path,
+):
+    (tmp_path / "server.js").write_text("'use strict';")
+    (tmp_path / "server.test.js").write_text("legacy test fixture")
+    dependency = tmp_path / "node_modules" / "package"
+    dependency.mkdir(parents=True)
+    (dependency / "index.js").write_text("legacy dependency")
+    (tmp_path / "node_modules" / "ipaddr.js").mkdir()
+    (tmp_path / "generated.js").mkdir()
+
+    assert _cep_production_sources(tmp_path) == {
+        Path("server.js"): "'use strict';"
+    }
 
 
 def test_migration_is_closed_history_and_current_surface_is_exact():
