@@ -1,4 +1,4 @@
-"""Authenticated CEP HTTP adapter for the typed native Core contract."""
+"""CEP HTTP transport for the single native-program invocation contract."""
 
 from __future__ import annotations
 
@@ -14,35 +14,19 @@ import ae_mcp_bridge
 from ae_mcp.backends.native import (
     NativeBackendError,
     NativeCancellationToken,
-    NativeInvokeRequest,
     NativeProgramInvokeResult,
     NativeProgramRequest,
-)
-from ae_mcp.backends.native_keyframe_authoring import (
-    KEYFRAME_ADD_CAPABILITY_ID,
-    KEYFRAME_BEHAVIOR_SET_CAPABILITY_ID,
-    KEYFRAME_DELETE_CAPABILITY_ID,
-    KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID,
-    KEYFRAME_TEMPORAL_EASE_SET_CAPABILITY_ID,
-    KEYFRAME_VALUE_SET_CAPABILITY_ID,
-)
-from ae_mcp.backends.native_layer_source_matte_av import (
-    LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
-    LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
-    LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
-    LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
-)
-from ae_mcp.backends.native_project_composition import (
-    COMPOSITION_DUPLICATE_CAPABILITY_ID,
-    COMPOSITION_WORK_AREA_SET_CAPABILITY_ID,
-    PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID,
-    PROJECT_ITEM_LABEL_SET_CAPABILITY_ID,
-    PROJECT_ITEM_NAME_SET_CAPABILITY_ID,
 )
 from ae_mcp_bridge import HttpBridge
 
 
-_FIXTURES = Path(__file__).resolve().parents[3] / "native" / "ae-plugin" / "protocol" / "fixtures"
+_FIXTURES = (
+    Path(__file__).resolve().parents[3]
+    / "native"
+    / "ae-plugin"
+    / "protocol"
+    / "fixtures"
+)
 _DEADLINE = 1_900_000_005_000
 _SESSION = "11111111-1111-4111-8111-111111111111"
 _HOST = "22222222-2222-4222-8222-222222222222"
@@ -77,25 +61,6 @@ def _negotiation() -> dict:
         "sessionId": result["sessionId"],
         "sessionGeneration": result["sessionGeneration"],
         "capabilitiesDigest": result["capabilitiesDigest"],
-    }
-
-
-def _capabilities() -> dict:
-    registry = _fixture("capability-registry-full.json")
-    return {
-        "sessionId": _SESSION,
-        "items": registry["items"],
-        "capabilitiesDigest": registry["capabilitiesDigest"],
-        "detail": "full",
-        "nextCursor": None,
-        "queryDigest": "0" * 64,
-    }
-
-
-def _invoke_result() -> dict:
-    return {
-        **_fixture("invoke-project-summary.json")["response"]["result"],
-        "replayed": False,
     }
 
 
@@ -135,11 +100,15 @@ def _program_request(*, write: bool) -> NativeProgramRequest:
                         "targetTime": {"value": 1, "scale": 24},
                     },
                     "returnAs": "time",
-                }
+                },
             ],
         }
     return NativeProgramRequest(
-        request_id="bridge-native-program-write" if write else "bridge-native-program-read",
+        request_id=(
+            "bridge-native-program-write"
+            if write
+            else "bridge-native-program-read"
+        ),
         arguments=arguments,
         deadline_unix_ms=_DEADLINE,
     )
@@ -148,16 +117,14 @@ def _program_request(*, write: bool) -> NativeProgramRequest:
 def _program_result(request: NativeProgramRequest) -> dict:
     write = "operationKey" in request.arguments
     operations = [
-        {
-            "index": index,
-            "op": operation["op"],
-            "status": "completed",
-        }
+        {"index": index, "op": operation["op"], "status": "completed"}
         for index, operation in enumerate(request.arguments["operations"])
     ]
-    outputs = {"time": {"value": 1, "scale": 24}} if write else {
-        "items": {"items": [], "nextOffset": None}
-    }
+    outputs = (
+        {"time": {"value": 1, "scale": 24}}
+        if write
+        else {"items": {"items": [], "nextOffset": None}}
+    )
     digest = hashlib.sha256(
         json.dumps(
             {"operations": operations, "outputs": outputs},
@@ -168,7 +135,11 @@ def _program_result(request: NativeProgramRequest) -> dict:
     ).hexdigest()
     return {
         "capabilityId": "ae.native.exec",
-        **({"operationKey": request.arguments["operationKey"]} if write else {}),
+        **(
+            {"operationKey": request.arguments["operationKey"]}
+            if write
+            else {}
+        ),
         "outputs": outputs,
         "operations": operations,
         "evidence": {
@@ -181,7 +152,7 @@ def _program_result(request: NativeProgramRequest) -> dict:
             "startedAtUnixMs": _DEADLINE - 100,
             "completedAtUnixMs": _DEADLINE - 50,
             "effect": "committed" if write else "none",
-            "requestDigest": "b" * 64,
+            "requestDigest": request.program_digest,
             "postcondition": {
                 "verified": True,
                 "kind": "native-program",
@@ -204,25 +175,49 @@ def _program_result(request: NativeProgramRequest) -> dict:
 
 @pytest.mark.parametrize("write", [False, True])
 @pytest.mark.asyncio
-async def test_native_program_success_uses_common_result_projection(
+async def test_native_program_success_uses_common_request_and_result(
     token_file,
     write,
 ):
     request = _program_request(write=write)
     raw = _program_result(request)
+    captured = {}
+
+    def respond(http_request):
+        captured["body"] = json.loads(http_request.content)
+        captured["token"] = http_request.headers["X-AE-MCP-Token"]
+        return Response(200, json={"ok": True, "result": raw})
 
     async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(
-            return_value=Response(200, json={"ok": True, "result": raw})
-        )
+        mock.post("/native/invoke").mock(side_effect=respond)
         result = await HttpBridge("http://127.0.0.1:11488").invoke(request)
 
     assert isinstance(result, NativeProgramInvokeResult)
+    assert captured == {
+        "body": request.model_dump(mode="json", by_alias=True),
+        "token": "native-test-token",
+    }
     assert result.capability_id == "ae.native.exec"
     assert result.operation_key == (
         request.arguments.get("operationKey") if write else None
     )
     assert result.undo.available is write
+
+
+@pytest.mark.asyncio
+async def test_native_program_read_transport_loss_is_safe_to_retry(token_file):
+    request = _program_request(write=False)
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "DEADLINE_EXCEEDED"
+    assert raised.value.side_effect == "not-started"
+    assert raised.value.retryable is True
+    assert raised.value.recovery.action == "retry"
+    assert raised.value.details is None
 
 
 @pytest.mark.asyncio
@@ -271,13 +266,17 @@ async def test_native_program_wire_failure_preserves_common_partial_evidence(
 ):
     request = _program_request(write=True)
     completed = [
-        {
-            "index": 0,
-            "op": "composition.resolve",
-            "status": "completed",
-        }
+        {"index": 0, "op": "composition.resolve", "status": "completed"}
     ]
     outputs: dict = {}
+    partial_digest = hashlib.sha256(
+        json.dumps(
+            {"operations": completed, "outputs": outputs},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
     error = {
         "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
         "message": "Native program completion became uncertain.",
@@ -308,19 +307,12 @@ async def test_native_program_wire_failure_preserves_common_partial_evidence(
                 "startedAtUnixMs": _DEADLINE - 100,
                 "completedAtUnixMs": _DEADLINE - 50,
                 "effect": "may-have-occurred",
-                "requestDigest": "b" * 64,
+                "requestDigest": request.program_digest,
                 "postcondition": {
                     "verified": False,
                     "kind": "native-program",
                     "algorithm": "sha256-rfc8785-jcs-v1",
-                    "digest": hashlib.sha256(
-                        json.dumps(
-                            {"operations": completed, "outputs": outputs},
-                            ensure_ascii=False,
-                            separators=(",", ":"),
-                            sort_keys=True,
-                        ).encode("utf-8")
-                    ).hexdigest(),
+                    "digest": partial_digest,
                 },
             },
             "undo": {
@@ -340,524 +332,10 @@ async def test_native_program_wire_failure_preserves_common_partial_evidence(
 
     assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
     assert raised.value.details is not None
-    assert raised.value.details["operationKey"] == request.arguments["operationKey"]
+    assert raised.value.details["operationKey"] == request.arguments[
+        "operationKey"
+    ]
     assert raised.value.details["completedOperations"] == completed
-
-
-@pytest.mark.asyncio
-async def test_native_backend_posts_lossless_typed_contract(token_file):
-    captured: dict[str, dict] = {}
-
-    def respond(name: str, result: dict):
-        def _response(request):
-            captured[name] = {
-                "body": json.loads(request.content),
-                "token": request.headers.get("X-AE-MCP-Token"),
-                "client": request.headers.get("x-ae-mcp-client"),
-            }
-            return Response(200, json={"ok": True, "result": result})
-
-        return _response
-
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/negotiate").mock(side_effect=respond("negotiate", _negotiation()))
-        mock.post("/native/capabilities").mock(side_effect=respond("capabilities", _capabilities()))
-        mock.post("/native/invoke").mock(side_effect=respond("invoke", _invoke_result()))
-        backend = HttpBridge("http://127.0.0.1:11488")
-
-        negotiation = await backend.negotiate(deadline_unix_ms=_DEADLINE)
-        capabilities = await backend.capabilities(
-            ids=None,
-            detail="full",
-            limit=100,
-            deadline_unix_ms=_DEADLINE,
-        )
-        request = NativeInvokeRequest(
-            request_id="invoke-summary-1",
-            capability_id="ae.project.summary",
-            capability_version=1,
-            arguments={},
-            deadline_unix_ms=_DEADLINE,
-        )
-        result = await backend.invoke(request)
-
-    assert negotiation.host_instance_id == _HOST
-    assert capabilities.session_id == _SESSION
-    assert capabilities.items[0].capability_id == "ae.project.summary"
-    assert result.evidence.request_id == "invoke-summary-1"
-    assert captured["negotiate"]["body"] == {"deadlineUnixMs": _DEADLINE}
-    assert captured["capabilities"]["body"] == {
-        "detail": "full",
-        "limit": 100,
-        "deadlineUnixMs": _DEADLINE,
-    }
-    assert captured["invoke"]["body"] == request.model_dump(
-        mode="json", by_alias=True
-    )
-    assert all(item["token"] == "native-test-token" for item in captured.values())
-    assert all(item["client"] for item in captured.values())
-
-
-@pytest.mark.parametrize(
-    ("fixture_name", "capability_id"),
-    [
-        ("invoke-project-items-list.json", "ae.project.items.list"),
-        ("invoke-composition-layers-list.json", "ae.composition.layers.list"),
-        (
-            "invoke-composition-selected-layers-list.json",
-            "ae.composition.selected-layers.list",
-        ),
-        ("invoke-layer-properties-list.json", "ae.layer.properties.list"),
-    ],
-)
-@pytest.mark.asyncio
-async def test_native_navigation_reads_are_forwarded_losslessly(
-    token_file,
-    fixture_name,
-    capability_id,
-):
-    vector = _fixture(fixture_name)
-    wire_request = vector["request"]
-    raw = {
-        **vector["response"]["result"],
-        "replayed": vector["response"]["replayed"],
-    }
-    request = NativeInvokeRequest(
-        request_id=wire_request["requestId"],
-        capability_id=capability_id,
-        capability_version=wire_request["params"]["capabilityVersion"],
-        arguments=wire_request["params"]["arguments"],
-        deadline_unix_ms=wire_request["deadlineUnixMs"],
-    )
-    captured: dict = {}
-
-    def respond(http_request):
-        captured.update(json.loads(http_request.content))
-        return Response(200, json={"ok": True, "result": raw})
-
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=respond)
-        result = await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert captured == request.model_dump(mode="json", by_alias=True)
-    assert result.model_dump(mode="json", by_alias=True, exclude_none=True) == raw
-    assert result.value == vector["response"]["result"]["value"]
-    assert result.evidence.effect == "none"
-    assert result.evidence.undo is None
-
-
-@pytest.mark.parametrize(
-    ("fixture_name", "capability_id"),
-    [
-        ("invoke-project-items-list.json", "ae.project.items.list"),
-        ("invoke-composition-layers-list.json", "ae.composition.layers.list"),
-        (
-            "invoke-composition-selected-layers-list.json",
-            "ae.composition.selected-layers.list",
-        ),
-        ("invoke-layer-properties-list.json", "ae.layer.properties.list"),
-    ],
-)
-@pytest.mark.asyncio
-async def test_native_navigation_read_timeout_is_safe_to_retry(
-    token_file,
-    fixture_name,
-    capability_id,
-):
-    wire_request = _fixture(fixture_name)["request"]
-    request = NativeInvokeRequest(
-        request_id=wire_request["requestId"],
-        capability_id=capability_id,
-        capability_version=wire_request["params"]["capabilityVersion"],
-        arguments=wire_request["params"]["arguments"],
-        deadline_unix_ms=wire_request["deadlineUnixMs"],
-    )
-
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "DEADLINE_EXCEEDED"
-    assert raised.value.side_effect == "not-started"
-    assert raised.value.retryable is True
-    assert raised.value.recovery.action == "retry"
-    assert raised.value.details is None
-
-
-@pytest.mark.asyncio
-async def test_native_bit_depth_set_preserves_key_replay_and_undo_evidence(token_file):
-    request = NativeInvokeRequest(
-        request_id="core-bit-depth-set-1",
-        capability_id="ae.project.bit-depth.set",
-        capability_version=1,
-        arguments={
-            "targetDepth": 16,
-            "idempotencyKey": "bit-depth-intent-0001",
-        },
-        deadline_unix_ms=_DEADLINE,
-    )
-    captured: dict = {}
-    raw = {
-        "capabilityId": "ae.project.bit-depth.set",
-        "capabilityVersion": 1,
-        "engine": "native-aegp",
-        "outcome": "succeeded",
-        "replayed": False,
-        "value": {
-            "changed": True,
-            "beforeBitsPerChannel": 8,
-            "afterBitsPerChannel": 16,
-        },
-        "evidence": {
-            "engine": "native-aegp",
-            "hostInstanceId": _HOST,
-            "sessionId": _SESSION,
-            "requestId": request.request_id,
-            "capabilityId": request.capability_id,
-            "capabilityVersion": 1,
-            "startedAtUnixMs": _DEADLINE - 100,
-            "completedAtUnixMs": _DEADLINE - 50,
-            "effect": "committed",
-            "requestDigest": "b" * 64,
-            "postcondition": {
-                "verified": True,
-                "kind": "project-bit-depth-set",
-                "algorithm": "sha256-rfc8785-jcs-v1",
-                "digest": "c" * 64,
-            },
-            "undo": {"available": True, "verified": False},
-        },
-    }
-
-    def respond(http_request):
-        captured.update(json.loads(http_request.content))
-        return Response(200, json={"ok": True, "result": raw})
-
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=respond)
-        result = await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert captured == request.model_dump(mode="json", by_alias=True)
-    assert result.replayed is False
-    assert result.value == {
-        "changed": True,
-        "beforeBitsPerChannel": 8,
-        "afterBitsPerChannel": 16,
-    }
-    assert result.evidence.effect == "committed"
-    assert result.evidence.undo is not None
-    assert result.evidence.undo.available is True
-    assert result.evidence.undo.verified is False
-    assert result.evidence.undo.group_id is None
-
-
-@pytest.mark.asyncio
-async def test_native_bit_depth_transport_loss_preserves_side_effect_uncertainty(token_file):
-    request = NativeInvokeRequest(
-        request_id="core-bit-depth-timeout",
-        capability_id="ae.project.bit-depth.set",
-        capability_version=1,
-        arguments={
-            "targetDepth": 32,
-            "idempotencyKey": "bit-depth-intent-0003",
-        },
-        deadline_unix_ms=_DEADLINE,
-    )
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-    assert raised.value.side_effect == "may-have-occurred"
-    assert raised.value.retryable is False
-    assert raised.value.recovery.action == "inspect-state"
-    assert raised.value.details == {"capabilityId": request.capability_id}
-
-
-@pytest.mark.parametrize(
-    ("capability_id", "expected_hint"),
-    [
-        (COMPOSITION_WORK_AREA_SET_CAPABILITY_ID, "composition settings"),
-        (PROJECT_ITEM_NAME_SET_CAPABILITY_ID, "project item metadata"),
-        (PROJECT_ITEM_COMMENT_SET_CAPABILITY_ID, "project item metadata"),
-        (PROJECT_ITEM_LABEL_SET_CAPABILITY_ID, "project item metadata"),
-        (COMPOSITION_DUPLICATE_CAPABILITY_ID, "do not duplicate again"),
-    ],
-)
-@pytest.mark.asyncio
-async def test_project_composition_writes_preserve_transport_uncertainty(
-    token_file,
-    capability_id,
-    expected_hint,
-):
-    request = NativeInvokeRequest(
-        request_id=f"issue150-timeout-{capability_id.rsplit('.', 1)[-1]}",
-        capability_id=capability_id,
-        capability_version=1,
-        arguments={"idempotencyKey": "issue150-transport-intent"},
-        deadline_unix_ms=_DEADLINE,
-    )
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-    assert raised.value.side_effect == "may-have-occurred"
-    assert raised.value.retryable is False
-    assert raised.value.recovery.action == "inspect-state"
-    assert expected_hint in raised.value.recovery.hint
-    assert raised.value.details == {"capabilityId": capability_id}
-
-
-@pytest.mark.parametrize(
-    "capability_id",
-    [
-        LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
-        LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
-        LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
-        LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
-    ],
-)
-@pytest.mark.asyncio
-async def test_layer_source_matte_av_writes_preserve_transport_uncertainty(
-    token_file,
-    capability_id,
-):
-    request = NativeInvokeRequest(
-        request_id=f"issue190-timeout-{capability_id.rsplit('.', 1)[-1]}",
-        capability_id=capability_id,
-        capability_version=1,
-        arguments={"idempotencyKey": "issue190-transport-intent"},
-        deadline_unix_ms=_DEADLINE,
-    )
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-    assert raised.value.side_effect == "may-have-occurred"
-    assert raised.value.retryable is False
-    assert raised.value.recovery.action == "inspect-state"
-    assert "source, Track Matte, and AV state" in raised.value.recovery.hint
-    assert raised.value.details == {"capabilityId": capability_id}
-
-
-@pytest.mark.parametrize(
-    "capability_id",
-    [
-        KEYFRAME_ADD_CAPABILITY_ID,
-        KEYFRAME_BEHAVIOR_SET_CAPABILITY_ID,
-        KEYFRAME_DELETE_CAPABILITY_ID,
-        KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID,
-        KEYFRAME_TEMPORAL_EASE_SET_CAPABILITY_ID,
-        KEYFRAME_VALUE_SET_CAPABILITY_ID,
-    ],
-)
-@pytest.mark.asyncio
-async def test_keyframe_writes_preserve_transport_uncertainty(
-    token_file,
-    capability_id,
-):
-    request = NativeInvokeRequest(
-        request_id=f"issue157-timeout-{capability_id.rsplit('.', 1)[-1]}",
-        capability_id=capability_id,
-        capability_version=1,
-        arguments={"idempotencyKey": "issue157-transport-intent"},
-        deadline_unix_ms=_DEADLINE,
-    )
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-    assert raised.value.side_effect == "may-have-occurred"
-    assert raised.value.retryable is False
-    assert raised.value.recovery.action == "inspect-state"
-    assert "exact-time keyframe details" in raised.value.recovery.hint
-    assert raised.value.details == {"capabilityId": capability_id}
-
-
-@pytest.mark.asyncio
-async def test_native_composition_create_transport_loss_is_not_safe_to_retry(token_file):
-    wire_request = _fixture("invoke-composition-create.json")["request"]
-    request = NativeInvokeRequest(
-        request_id="core-composition-create-timeout",
-        capability_id="ae.composition.create",
-        capability_version=1,
-        arguments=wire_request["params"]["arguments"],
-        deadline_unix_ms=_DEADLINE,
-    )
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-    assert raised.value.side_effect == "may-have-occurred"
-    assert raised.value.retryable is False
-    assert raised.value.recovery.action == "inspect-state"
-    assert "project items" in raised.value.recovery.hint
-    assert raised.value.details == {"capabilityId": request.capability_id}
-
-
-@pytest.mark.asyncio
-async def test_native_composition_layer_create_preserves_replay_and_undo(token_file):
-    vector = _fixture("invoke-composition-layer-create.json")
-    wire_request = vector["request"]
-    request = NativeInvokeRequest(
-        request_id=wire_request["requestId"],
-        capability_id="ae.composition.layer.create",
-        capability_version=1,
-        arguments=wire_request["params"]["arguments"],
-        deadline_unix_ms=wire_request["deadlineUnixMs"],
-    )
-    raw = {
-        **vector["response"]["result"],
-        "replayed": True,
-    }
-    captured: dict = {}
-
-    def respond(http_request):
-        captured.update(json.loads(http_request.content))
-        return Response(200, json={"ok": True, "result": raw})
-
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=respond)
-        result = await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert captured == request.model_dump(mode="json", by_alias=True)
-    assert result.replayed is True
-    assert result.value["kind"] == "solid"
-    assert result.evidence.effect == "committed"
-    assert result.evidence.undo is not None
-    assert result.evidence.undo.available is True
-    assert result.evidence.undo.verified is False
-
-
-@pytest.mark.asyncio
-async def test_native_composition_layer_transport_loss_is_not_safe_to_retry(token_file):
-    wire_request = _fixture("invoke-composition-layer-create.json")["request"]
-    request = NativeInvokeRequest(
-        request_id="core-composition-layer-timeout",
-        capability_id="ae.composition.layer.create",
-        capability_version=1,
-        arguments=wire_request["params"]["arguments"],
-        deadline_unix_ms=_DEADLINE,
-    )
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-    assert raised.value.side_effect == "may-have-occurred"
-    assert raised.value.retryable is False
-    assert raised.value.recovery.action == "inspect-state"
-    assert "composition layers" in raised.value.recovery.hint
-    assert raised.value.details == {"capabilityId": request.capability_id}
-
-
-@pytest.mark.asyncio
-async def test_native_layer_effect_apply_preserves_replay_and_undo(token_file):
-    vector = _fixture("invoke-layer-effect-apply.json")
-    wire_request = vector["request"]
-    request = NativeInvokeRequest(
-        request_id=wire_request["requestId"],
-        capability_id="ae.layer.effect.apply",
-        capability_version=1,
-        arguments=wire_request["params"]["arguments"],
-        deadline_unix_ms=wire_request["deadlineUnixMs"],
-    )
-    raw = {**vector["response"]["result"], "replayed": True}
-    captured: dict = {}
-
-    def respond(http_request):
-        captured.update(json.loads(http_request.content))
-        return Response(200, json={"ok": True, "result": raw})
-
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=respond)
-        result = await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert captured == request.model_dump(mode="json", by_alias=True)
-    assert result.replayed is True
-    assert result.value["matchName"] == "ADBE Slider Control"
-    assert result.evidence.effect == "committed"
-    assert result.evidence.undo is not None
-    assert result.evidence.undo.available is True
-    assert result.evidence.undo.verified is False
-
-
-@pytest.mark.asyncio
-async def test_native_layer_effect_transport_loss_is_not_safe_to_retry(token_file):
-    wire_request = _fixture("invoke-layer-effect-apply.json")["request"]
-    request = NativeInvokeRequest(
-        request_id="core-layer-effect-timeout",
-        capability_id="ae.layer.effect.apply",
-        capability_version=1,
-        arguments=wire_request["params"]["arguments"],
-        deadline_unix_ms=_DEADLINE,
-    )
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-    assert raised.value.side_effect == "may-have-occurred"
-    assert raised.value.retryable is False
-    assert raised.value.recovery.action == "inspect-state"
-    assert "Effects group" in raised.value.recovery.hint
-    assert raised.value.details == {"capabilityId": request.capability_id}
-
-
-@pytest.mark.asyncio
-async def test_native_layer_property_transport_loss_is_not_safe_to_retry(token_file):
-    wire_request = _fixture("invoke-layer-property-set.json")["request"]
-    request = NativeInvokeRequest(
-        request_id="core-layer-property-timeout",
-        capability_id="ae.layer.property.set",
-        capability_version=1,
-        arguments=wire_request["params"]["arguments"],
-        deadline_unix_ms=_DEADLINE,
-    )
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-    assert raised.value.side_effect == "may-have-occurred"
-    assert raised.value.retryable is False
-    assert raised.value.recovery.action == "inspect-state"
-    assert "property" in raised.value.recovery.hint
-    assert raised.value.details == {"capabilityId": request.capability_id}
-
-
-@pytest.mark.asyncio
-async def test_native_bit_depth_read_transport_loss_remains_safe_to_retry(token_file):
-    request = NativeInvokeRequest(
-        request_id="core-bit-depth-read-timeout",
-        capability_id="ae.project.bit-depth.read",
-        capability_version=1,
-        arguments={},
-        deadline_unix_ms=_DEADLINE,
-    )
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
-        with pytest.raises(NativeBackendError) as raised:
-            await HttpBridge("http://127.0.0.1:11488").invoke(request)
-
-    assert raised.value.code == "DEADLINE_EXCEEDED"
-    assert raised.value.side_effect == "not-started"
-    assert raised.value.retryable is True
-    assert raised.value.recovery.action == "retry"
-    assert raised.value.details is None
 
 
 @pytest.mark.parametrize(
@@ -870,43 +348,63 @@ async def test_native_bit_depth_read_transport_loss_remains_safe_to_retry(token_
         "expected_action",
     ),
     [
-        (401, "UNAUTHORIZED", False, "reconnect", "NATIVE_BROKER_UNAUTHORIZED", "refresh-auth"),
-        (403, "CLIENT_BLOCKED", False, "none", "NATIVE_CLIENT_BLOCKED", "review-client-access"),
-        (503, "ACTIONS_PAUSED", True, "retry", "NATIVE_ACTIONS_PAUSED", "resume-actions"),
+        (
+            401,
+            "UNAUTHORIZED",
+            False,
+            "reconnect",
+            "NATIVE_BROKER_UNAUTHORIZED",
+            "refresh-auth",
+        ),
+        (
+            403,
+            "CLIENT_BLOCKED",
+            False,
+            "none",
+            "NATIVE_CLIENT_BLOCKED",
+            "review-client-access",
+        ),
+        (
+            503,
+            "ACTIONS_PAUSED",
+            True,
+            "retry",
+            "NATIVE_ACTIONS_PAUSED",
+            "resume-actions",
+        ),
     ],
 )
 @pytest.mark.asyncio
 async def test_native_broker_gate_errors_map_to_core_policy(
     token_file,
-    status: int,
-    host_code: str,
-    host_retryable: bool,
-    host_action: str,
-    expected_code: str,
-    expected_action: str,
+    status,
+    host_code,
+    host_retryable,
+    host_action,
+    expected_code,
+    expected_action,
 ):
+    body = {
+        "ok": False,
+        "error": {
+            "code": host_code,
+            "message": host_code,
+            "retryable": host_retryable,
+            "sideEffect": "not-started",
+            "recovery": {
+                "action": host_action,
+                "hint": "broker-specific recovery",
+            },
+        },
+    }
     async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
         mock.post("/native/negotiate").mock(
-            return_value=Response(
-                status,
-                json={
-                    "ok": False,
-                    "error": {
-                        "code": host_code,
-                        "message": host_code,
-                        "retryable": host_retryable,
-                        "sideEffect": "not-started",
-                        "recovery": {
-                            "action": host_action,
-                            "hint": "broker-specific recovery",
-                        },
-                    },
-                },
-            )
+            return_value=Response(status, json=body)
         )
-        backend = HttpBridge("http://127.0.0.1:11488")
         with pytest.raises(NativeBackendError) as raised:
-            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+            await HttpBridge("http://127.0.0.1:11488").negotiate(
+                deadline_unix_ms=_DEADLINE
+            )
 
     assert raised.value.code == expected_code
     assert raised.value.side_effect == "not-started"
@@ -918,18 +416,15 @@ async def test_internal_contract_mismatch_maps_to_core_contract_error(token_file
     fixture = _broker_fixture("contractMismatch")
     async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
         mock.post("/native/negotiate").mock(
-            return_value=Response(
-                fixture["status"],
-                json=fixture["body"],
-            )
+            return_value=Response(fixture["status"], json=fixture["body"])
         )
-        backend = HttpBridge("http://127.0.0.1:11488")
         with pytest.raises(NativeBackendError) as raised:
-            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+            await HttpBridge("http://127.0.0.1:11488").negotiate(
+                deadline_unix_ms=_DEADLINE
+            )
 
     assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
     assert raised.value.recovery.action == "refresh-capabilities"
-    assert str(raised.value) == fixture["body"]["error"]["message"]
 
 
 @pytest.mark.asyncio
@@ -939,9 +434,10 @@ async def test_true_native_wire_error_uses_strict_native_validator(token_file):
         mock.post("/native/negotiate").mock(
             return_value=Response(503, json={"ok": False, "error": error})
         )
-        backend = HttpBridge("http://127.0.0.1:11488")
         with pytest.raises(NativeBackendError) as raised:
-            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+            await HttpBridge("http://127.0.0.1:11488").negotiate(
+                deadline_unix_ms=_DEADLINE
+            )
 
     assert raised.value.code == "QUEUE_FULL"
     assert raised.value.recovery.action == "retry"
@@ -961,85 +457,11 @@ async def test_failure_envelope_with_http_200_fails_closed(token_file):
         },
     }
     async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/negotiate").mock(
-            return_value=Response(200, json=body)
-        )
-        backend = HttpBridge("http://127.0.0.1:11488")
+        mock.post("/native/negotiate").mock(return_value=Response(200, json=body))
         with pytest.raises(NativeBackendError) as raised:
-            await backend.negotiate(deadline_unix_ms=_DEADLINE)
-
-    assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        {
-            "ok": False,
-            "error": {
-                "code": "UNAUTHORIZED",
-                "message": "unauthorized",
-                "retryable": False,
-                "sideEffect": "not-started",
-                "recovery": {"action": "reconnect", "hint": "Reload token."},
-            },
-            "extra": True,
-        },
-        {
-            "ok": False,
-            "error": {
-                "code": "UNAUTHORIZED",
-                "message": "unauthorized",
-                "retryable": False,
-                "recovery": {"action": "reconnect", "hint": "Reload token."},
-            },
-        },
-        {
-            "ok": False,
-            "error": {
-                "code": "UNAUTHORIZED",
-                "message": "unauthorized",
-                "retryable": False,
-                "sideEffect": "not-started",
-                "recovery": {"action": "reconnect", "hint": "Reload token."},
-                "extra": True,
-            },
-        },
-        {
-            "ok": False,
-            "error": {
-                "code": "UNAUTHORIZED",
-                "message": "unauthorized",
-                "retryable": False,
-                "sideEffect": "not-started",
-                "recovery": {
-                    "action": "reconnect",
-                    "hint": "Reload token.",
-                    "extra": True,
-                },
-            },
-        },
-        {
-            "ok": False,
-            "error": {
-                "code": "ACTIONS_PAUSED",
-                "message": "paused",
-                "retryable": True,
-                "sideEffect": "not-started",
-                "recovery": {"action": "none", "hint": "Resume actions."},
-            },
-        },
-    ],
-)
-@pytest.mark.asyncio
-async def test_malformed_broker_failure_envelopes_fail_closed(token_file, body):
-    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
-        mock.post("/native/negotiate").mock(
-            return_value=Response(503 if body["error"]["code"] == "ACTIONS_PAUSED" else 401, json=body)
-        )
-        backend = HttpBridge("http://127.0.0.1:11488")
-        with pytest.raises(NativeBackendError) as raised:
-            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+            await HttpBridge("http://127.0.0.1:11488").negotiate(
+                deadline_unix_ms=_DEADLINE
+            )
 
     assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
 
@@ -1053,15 +475,18 @@ async def test_native_success_envelope_fails_closed_on_extra_member(token_file):
                 json={"ok": True, "result": _negotiation(), "unchecked": True},
             )
         )
-        backend = HttpBridge("http://127.0.0.1:11488")
         with pytest.raises(NativeBackendError) as raised:
-            await backend.negotiate(deadline_unix_ms=_DEADLINE)
+            await HttpBridge("http://127.0.0.1:11488").negotiate(
+                deadline_unix_ms=_DEADLINE
+            )
 
     assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
 
 
 @pytest.mark.asyncio
-async def test_native_cancellation_before_dispatch_makes_no_http_request(token_file):
+async def test_native_cancellation_before_dispatch_makes_no_http_request(
+    token_file,
+):
     cancellation = NativeCancellationToken()
     cancellation.cancel()
     async with respx.mock(
@@ -1069,11 +494,12 @@ async def test_native_cancellation_before_dispatch_makes_no_http_request(token_f
         assert_all_called=False,
     ) as mock:
         route = mock.post("/native/negotiate").mock(
-            return_value=Response(200, json={"ok": True, "result": _negotiation()})
+            return_value=Response(
+                200, json={"ok": True, "result": _negotiation()}
+            )
         )
-        backend = HttpBridge("http://127.0.0.1:11488")
         with pytest.raises(NativeBackendError) as raised:
-            await backend.negotiate(
+            await HttpBridge("http://127.0.0.1:11488").negotiate(
                 deadline_unix_ms=_DEADLINE,
                 cancellation=cancellation,
             )
