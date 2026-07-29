@@ -717,12 +717,16 @@ class Issue190Runner:
         owned_process_shutdown: Callable[
             [Mapping[str, Any]], Awaitable[bool]
         ] | None = None,
+        owned_process_probe: Callable[
+            [Mapping[str, Any]], Awaitable[Mapping[str, Any]]
+        ] | None = None,
         evidence: DevelopmentEvidence | None = None,
     ) -> None:
         self.config = config
         self.checkpoint = checkpoint
         self.after_effects_running = after_effects_running
         self.owned_process_shutdown = owned_process_shutdown
+        self.owned_process_probe = owned_process_probe
         self.evidence = evidence or DevelopmentEvidence(
             config.evidence_dir, run_id=config.run_id
         )
@@ -2193,7 +2197,98 @@ class Issue190Runner:
         )
         return destination
 
-    async def _stop_proven_owned_process(self, reason: str) -> str:
+    def _owned_process_identity(self) -> dict[str, str]:
+        return {
+            "runId": self.config.run_id,
+            "fixturePath": os.fspath(self.config.fixture_path),
+            "ownerMarker": self.config.owner_marker,
+            "formalAeApp": os.fspath(self.config.formal_ae_app),
+        }
+
+    def _owned_process_details(self, reason: str) -> dict[str, Any]:
+        return {
+            "ownershipProven": True,
+            **self._owned_process_identity(),
+            "reason": reason,
+            "validationProfile": "development",
+            "candidateRun": False,
+            "candidateEvidence": False,
+        }
+
+    async def _probe_owned_process_once(self, reason: str) -> str:
+        require(
+            self.formal_process_owned,
+            "formal AE process ownership is not proven; refusing process probe",
+        )
+        require(
+            self.owned_process_probe is not None,
+            "owned formal AE process probe is unavailable",
+        )
+        self.validate_fixture_ownership()
+        details = self._owned_process_details(reason)
+        try:
+            observation = await self.owned_process_probe(details)
+        except Exception as error:
+            raise Issue190Failure(
+                "owned formal AE process probe is unavailable"
+            ) from error
+        require(
+            isinstance(observation, Mapping),
+            "owned formal AE process probe is unavailable",
+        )
+        state = observation.get("state")
+        require(
+            state in {"running", "absent", "unavailable"},
+            "owned formal AE process probe is unavailable",
+        )
+        identity = observation.get("identity")
+        require(
+            isinstance(identity, Mapping),
+            "owned formal AE process identity mismatch",
+        )
+        require(
+            dict(identity) == self._owned_process_identity(),
+            "owned formal AE process identity mismatch",
+        )
+        require(
+            state != "unavailable",
+            "owned formal AE process probe is unavailable",
+        )
+        self.evidence.record(
+            "owned-formal-ae-process-observed",
+            {
+                **self._owned_process_identity(),
+                "state": state,
+                "reason": reason,
+            },
+        )
+        return str(state)
+
+    async def _poll_owned_process_absent(
+        self,
+        reason: str,
+        *,
+        max_attempts: int = 3,
+    ) -> str:
+        for attempt in range(1, max_attempts + 1):
+            state = await self._probe_owned_process_once(
+                f"{reason}; absence check {attempt}/{max_attempts}"
+            )
+            if state == "absent":
+                return self.evidence.record(
+                    "owned-formal-ae-process-absence-confirmed",
+                    {
+                        **self._owned_process_identity(),
+                        "attempt": attempt,
+                        "maxAttempts": max_attempts,
+                        "reason": reason,
+                    },
+                )
+        raise Issue190Failure(
+            "owned formal AE process remained present after shutdown acknowledgement"
+        )
+
+    async def _request_proven_owned_process_stop(self, reason: str) -> str:
         require(
             self.formal_process_owned,
             "formal AE process ownership is not proven; refusing shutdown",
@@ -2204,35 +2299,29 @@ class Issue190Runner:
         )
         self.validate_fixture_ownership()
         details = {
-            "ownershipProven": True,
-            "runId": self.config.run_id,
-            "fixturePath": os.fspath(self.config.fixture_path),
-            "ownerMarker": self.config.owner_marker,
-            "formalAeApp": os.fspath(self.config.formal_ae_app),
-            "reason": reason,
+            **self._owned_process_details(reason),
             "instruction": (
                 "Stop only the exact formal AE process owned by this run. "
                 "Do not kill any unverified or unrelated AE process."
             ),
-            "validationProfile": "development",
-            "candidateRun": False,
-            "candidateEvidence": False,
         }
         try:
-            stopped = await self.owned_process_shutdown(details)
+            acknowledged = await self.owned_process_shutdown(details)
         except Exception as error:
             raise Issue190Failure(
                 "owned formal AE shutdown fallback failed"
             ) from error
-        require(stopped is True, "owned formal AE process stop was not confirmed")
+        require(
+            acknowledged is True,
+            "owned formal AE shutdown request was not acknowledged",
+        )
         return self.evidence.record(
-            "owned-formal-ae-stop-confirmed",
+            "owned-formal-ae-stop-request-acknowledged",
             {
-                "runId": self.config.run_id,
-                "fixturePath": os.fspath(self.config.fixture_path),
-                "formalAeApp": os.fspath(self.config.formal_ae_app),
+                **self._owned_process_identity(),
                 "ownershipProven": True,
-                "stopped": True,
+                "stopAcknowledged": True,
+                "stopped": False,
                 "reason": reason,
             },
         )
@@ -2308,16 +2397,22 @@ class Issue190Runner:
                         "candidateEvidence": False,
                     },
                 )
-                process_stop_confirmed = not await self.after_effects_running()
-                if not process_stop_confirmed:
-                    fallback_reason = "normal close returned while formal AE remained"
             except Exception as error:
                 fallback_reason = (
-                    "normal close or process inspection failed: "
-                    f"{type(error).__name__}"
+                    f"normal close failed: {type(error).__name__}"
                 )
+            else:
+                process_state = await self._probe_owned_process_once(
+                    "normal guarded close completed"
+                )
+                process_stop_confirmed = process_state == "absent"
+                if process_state == "running":
+                    fallback_reason = "normal close returned while formal AE remained"
             if not process_stop_confirmed:
-                await self._stop_proven_owned_process(
+                await self._request_proven_owned_process_stop(
+                    fallback_reason or "normal close did not confirm process stop"
+                )
+                await self._poll_owned_process_absent(
                     fallback_reason or "normal close did not confirm process stop"
                 )
                 process_stop_confirmed = True
@@ -2513,6 +2608,9 @@ async def run_issue190_hdev(
     owned_process_shutdown: Callable[
         [Mapping[str, Any]], Awaitable[bool]
     ] | None = None,
+    owned_process_probe: Callable[
+        [Mapping[str, Any]], Awaitable[Mapping[str, Any]]
+    ] | None = None,
 ) -> Issue190Result:
     if owned_process_shutdown is None:
         async def checkpoint_owned_process_shutdown(
@@ -2528,6 +2626,7 @@ async def run_issue190_hdev(
         checkpoint=checkpoint,
         after_effects_running=after_effects_running,
         owned_process_shutdown=owned_process_shutdown,
+        owned_process_probe=owned_process_probe,
         evidence=evidence,
     )
     passed = False
