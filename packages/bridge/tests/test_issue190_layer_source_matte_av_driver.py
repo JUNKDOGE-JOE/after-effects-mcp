@@ -481,9 +481,15 @@ def test_fixture_jsx_creates_matte_source_as_an_explicit_text_layer(tmp_path):
     runner.claim_fixture()
     script = driver.fixture_create_script(config, driver.generate_fixture_wav(config))
 
-    assert "matteSource = mainComp.layers.addText('MATTE_SOURCE');" in script
+    matte_spacer_index = script.index("matteSpacer = mainComp.layers.addSolid(")
+    matte_source_index = script.index(
+        "matteSource = mainComp.layers.addText('MATTE_SOURCE');"
+    )
+    video_switch_index = script.index("videoSwitch = mainComp.layers.addSolid(")
+
+    assert matte_spacer_index < matte_source_index < video_switch_index
     assert "matteSource.name = 'MATTE_SOURCE';" in script
-    assert "addSolid([1,1,1],'MATTE_SOURCE',640,360,1,5)" not in script
+    assert "matteSource = mainComp.layers.addSolid(" not in script
     assert spec.FIXTURE_SPEC["roleTypes"] == {"MATTE_SOURCE": "text"}
     assert spec.CALL_HARD_LIMIT == len(spec.CALL_PLAN) == 40
 
