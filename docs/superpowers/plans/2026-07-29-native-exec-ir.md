@@ -1173,7 +1173,7 @@ T5/T6, runner, process, pairing, and security work did not enter this task.
 **Files:**
 - Modify: `scripts/hardware/development_smoke_spec.py`
 - Modify: `scripts/hardware/development_smoke.py`
-- Modify: `packages/core/tests/test_development_smoke.py`
+- Modify: `packages/bridge/tests/test_development_smoke_driver.py`
 - Modify: `scripts/hardware/README.md`
 - Delete or archive from active documentation: operation-specific package runner references whose public tools no longer exist.
 
@@ -1181,50 +1181,68 @@ T5/T6, runner, process, pairing, and security work did not enter this task.
 - Reuses: existing `DevelopmentEvidence`, `DevelopmentCallLedger`, fixture, session, and archive lifecycle.
 - Produces: scenario `native-exec-ir@1`.
 
-- [ ] **Step 1: Write failing scenario tests**
+- [x] **Step 1: Write failing scenario tests**
 
-Define an 8-call maximum scenario:
+Define a 9-public-call maximum scenario. The GUI Undo checkpoint is not a
+public MCP call:
 
 1. readiness/status;
 2. `ae_exec` creates the disposable composition/layer fixture;
-3. `ae_nativeExec` resolves composition/layer and reads exact native state;
-4. `ae_nativeExec` performs one exact native write;
-5. independent `ae_nativeExec` readback;
-6. explicit real Undo checkpoint;
-7. independent `ae_nativeExec` restored-state readback;
-8. structurally invalid `ae_nativeExec` rejected before dispatch.
+3. read-only `ae_nativeExec project.items.list` discovers a fresh composition
+   locator;
+4. `ae_nativeExec` resolves the composition and reads exact composition/layer
+   state;
+5. `ae_nativeExec` performs one exact native write;
+6. independent `ae_nativeExec` readback;
+7. explicit real Undo checkpoint followed by a counted fresh-locator discovery;
+8. independent `ae_nativeExec` restored-state readback;
+9. structurally invalid `ae_nativeExec` rejected before dispatch.
 
 Assert no legacy operation-specific public tool name appears in the call plan.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run:
 
 ```bash
-uv run pytest packages/core/tests/test_development_smoke.py -q
+uv run pytest packages/bridge/tests/test_development_smoke_driver.py -q
 ```
 
 Expected: old `core-native-write-undo@1` calls dedicated typed tools.
 
-- [ ] **Step 3: Update the existing runner**
+- [x] **Step 3: Update the existing runner**
 
 Reuse the current fixture creation, evidence, call ledger, uncertain-write stop,
 Undo checkpoint, and archive path. Change only the scenario-specific requests
 and semantic predicates. Do not create another runner or evidence class.
 
-- [ ] **Step 4: Verify GREEN**
+- [x] **Step 4: Verify GREEN**
 
 Run the test from Step 2. Do not launch AE yet.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add scripts/hardware/development_smoke_spec.py \
   scripts/hardware/development_smoke.py \
-  packages/core/tests/test_development_smoke.py \
+  packages/bridge/tests/test_development_smoke_driver.py \
   scripts/hardware/README.md
 git commit -m "test(hardware): cover the two exec routes"
 ```
+
+**Execution record (2026-07-29):** Task 10 completed in commits `fa9ba2b`
+and `ec16f66`. The plan's nonexistent Core test path was corrected to the
+existing Bridge driver test. The call cap changed from eight to nine because
+the generated contract and bundled Skill require an independent read-only
+locator discovery before a native program can use a server-issued locator.
+The existing runner now uses only `ae_status`, `ae_exec`, and
+`ae_nativeExec`; it preserves the external real-Undo checkpoint, uncertain
+write stop, fixture lifecycle, archive, evidence, and ledger. All intended
+native requests validate against the generated public schema, and the runner
+binds common terminal digests, operation summaries, operation keys, Undo,
+effect, and capability identity to the exact request. Focused Bridge tests
+pass 15/15, the Core native schema suite passes 20/20, and scoped re-review
+ended CLEAN. No AE or HDEV/T5/T6 run occurred in this task.
 
 ---
 
