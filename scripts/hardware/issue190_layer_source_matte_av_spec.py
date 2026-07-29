@@ -17,6 +17,12 @@ FIXTURE_SPEC = {
     "lifecycle": "ephemeral-validation",
     "activeSlots": 1,
     "saveAsCopies": 0,
+    "freshPerRun": True,
+    "canonicalActiveRoot": (
+        "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active"
+    ),
+    "ownershipManifest": "O_EXCL run-bound development-only JSON",
+    "failureDisposition": "classified short-lived recovery or evidence snapshot",
     "roles": (
         "SOURCE_COMP_A",
         "SOURCE_COMP_B",
@@ -38,12 +44,12 @@ WAV_SPEC = {
 }
 
 FIXTURE_RECIPE = (
-    "Use exactly one ephemeral-validation active fixture outside the checkout and Adobe scan roots.",
-    "Generate one deterministic short PCM WAV beneath the approved fixture area with no personal data.",
-    "Run the fixed harness-only ExtendScript to create or reset every named role and save the project once.",
+    "Derive one fresh per-run ephemeral-validation path beneath the canonical active root outside the checkout and Adobe scan roots.",
+    "Create an exclusive run-bound ownership manifest before generating the deterministic short PCM WAV.",
+    "Run fail-closed harness-only ExtendScript: block every unowned saved or nonempty untitled project and never overwrite an existing target.",
     "All source, Track Matte, AV, reorder, and readback product operations use public MCP tools.",
     "After initial naming, save only in place and never use Save As.",
-    "After structured evidence, close formal AE and archive the one project plus generated WAV.",
+    "After success or failure, close only the owned project and archive the fixture, manifest, and WAV to classified recovery.",
 )
 
 SOURCE_OPERATION_KEY = "$operation_key:source-replace"

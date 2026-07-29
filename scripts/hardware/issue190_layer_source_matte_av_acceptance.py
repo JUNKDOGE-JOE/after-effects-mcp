@@ -44,6 +44,12 @@ from issue190_layer_source_matte_av_spec import (
 
 COMPONENTS = frozenset({"core", "cep", "native"})
 SHA256 = base_hdev.SHA256
+FIXTURE_ROOT_PARTS = (
+    "Library",
+    "Application Support",
+    "AfterEffectsMCP",
+    "fixtures",
+)
 
 
 class Issue190Failure(RuntimeError):
@@ -52,6 +58,30 @@ class Issue190Failure(RuntimeError):
 
 class ImmediateStop(Issue190Failure):
     """Evidence is no longer safe for a bounded independent-case sweep."""
+
+
+class UncertainWrite(Issue190Failure):
+    """A dispatched write needs frozen public readback and must not be retried."""
+
+    def __init__(
+        self,
+        *,
+        plan_key: str,
+        phase: str,
+        tool: str,
+        arguments: Mapping[str, Any],
+        evidence_ids: Sequence[str],
+        payload: Mapping[str, Any] | None,
+        failing_layer: str,
+    ) -> None:
+        super().__init__(f"uncertain write at {plan_key}; no retry is permitted")
+        self.plan_key = plan_key
+        self.phase = phase
+        self.tool = tool
+        self.arguments = dict(arguments)
+        self.evidence_ids = tuple(evidence_ids)
+        self.payload = dict(payload or {})
+        self.failing_layer = failing_layer
 
 
 def require(condition: Any, message: str) -> None:
@@ -88,11 +118,15 @@ class Issue190Config:
     selected_components: tuple[str, ...]
     reused_components: tuple[str, ...]
     checkout: Path
-    fixture_path: Path
-    recovery_root: Path
+    fixture_home: Path
     evidence_dir: Path
     formal_ae_app: Path
     plugin_url: str
+    run_id: str = dataclasses.field(
+        default_factory=lambda: (
+            f"issue190-hdev-{int(time.time())}-{secrets.token_hex(4)}"
+        )
+    )
 
     def __post_init__(self) -> None:
         require(self.scenario == SCENARIO_ID, "unsupported Issue #190 HDEV scenario")
@@ -109,13 +143,18 @@ class Issue190Config:
         require(bool(selected), "at least one selected component is required")
         for path in (
             self.checkout,
-            self.fixture_path,
-            self.recovery_root,
+            self.fixture_home,
             self.evidence_dir,
             self.formal_ae_app,
         ):
             require(path.is_absolute(), "Issue #190 HDEV paths must be absolute")
-        require(self.fixture_path.suffix.lower() == ".aep", "fixture must end in .aep")
+        require(
+            self.run_id.startswith("issue190-hdev-")
+            and "/" not in self.run_id
+            and "\\" not in self.run_id
+            and self.run_id not in {".", ".."},
+            "Issue #190 run ID is invalid",
+        )
         require(
             not self.fixture_path.is_relative_to(self.checkout),
             "fixture must remain outside the checkout",
@@ -124,6 +163,30 @@ class Issue190Config:
             self.plugin_url.startswith("http://127.0.0.1:"),
             "Issue #190 HDEV plugin URL must be loopback",
         )
+
+    @property
+    def fixture_root(self) -> Path:
+        return self.fixture_home.joinpath(*FIXTURE_ROOT_PARTS)
+
+    @property
+    def active_root(self) -> Path:
+        return self.fixture_root / "active"
+
+    @property
+    def recovery_root(self) -> Path:
+        return self.fixture_root / "recovery"
+
+    @property
+    def fixture_path(self) -> Path:
+        return self.active_root / f"{self.run_id}.aep"
+
+    @property
+    def ownership_manifest_path(self) -> Path:
+        return self.active_root / f"{self.run_id}.ownership.json"
+
+    @property
+    def owner_marker(self) -> str:
+        return f"__AEMCP_ISSUE190_OWNER__:{self.run_id}"
 
     @property
     def component_disposition(self) -> dict[str, list[str]]:
@@ -142,11 +205,13 @@ class Issue190Result:
 class DevelopmentEvidence:
     """Private events and summary that can never become candidate evidence."""
 
-    def __init__(self, root: Path) -> None:
+    def __init__(self, root: Path, *, run_id: str | None = None) -> None:
         self.root = root
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(self.root, stat.S_IRWXU)
-        self.run_id = f"issue190-hdev-{int(time.time())}-{secrets.token_hex(4)}"
+        self.run_id = run_id or (
+            f"issue190-hdev-{int(time.time())}-{secrets.token_hex(4)}"
+        )
         self.events_path = root / f"{self.run_id}.ndjson"
         self.summary_path = root / f"{self.run_id}.summary.json"
         self._events = 0
@@ -317,33 +382,86 @@ class DefectLedger:
 def generate_fixture_wav(config: Issue190Config) -> Path:
     """Create one deterministic, anonymous, 250 ms mono PCM fixture asset."""
 
+    require(
+        config.ownership_manifest_path.is_file()
+        and not config.ownership_manifest_path.is_symlink(),
+        "fixture asset generation requires the runner ownership manifest",
+    )
     asset_root = config.fixture_path.parent / "assets"
     asset_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    require(not asset_root.is_symlink(), "fixture asset root cannot be a symlink")
     os.chmod(asset_root, stat.S_IRWXU)
-    path = asset_root / "issue190-hdev-tone.wav"
+    path = asset_root / f"{config.run_id}.wav"
+    require(
+        not os.path.lexists(path),
+        "Issue #190 WAV target must be fresh and absent",
+    )
     frames = bytearray()
     for index in range(WAV_SPEC["frameCount"]):
         # A bounded square wave avoids platform-dependent floating-point output.
         sample = 1200 if index % 18 < 9 else -1200
         frames.extend(struct.pack("<h", sample))
-    with wave.open(os.fspath(path), "wb") as stream:
-        stream.setnchannels(WAV_SPEC["channels"])
-        stream.setsampwidth(WAV_SPEC["sampleWidthBytes"])
-        stream.setframerate(WAV_SPEC["sampleRateHz"])
-        stream.writeframes(bytes(frames))
+    descriptor = os.open(
+        path,
+        os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+        stat.S_IRUSR | stat.S_IWUSR,
+    )
+    with os.fdopen(descriptor, "wb") as raw_stream:
+        with wave.open(raw_stream, "wb") as stream:
+            stream.setnchannels(WAV_SPEC["channels"])
+            stream.setsampwidth(WAV_SPEC["sampleWidthBytes"])
+            stream.setframerate(WAV_SPEC["sampleRateHz"])
+            stream.writeframes(bytes(frames))
     os.chmod(path, stat.S_IRUSR | stat.S_IWUSR)
     return path
 
 
+def fixture_project_guard(
+    *,
+    project_file: str | None,
+    item_count: int,
+    owner_marker: str | None,
+    expected_fixture: str,
+    expected_owner: str,
+    target_exists: bool,
+) -> str:
+    """Model the fail-closed project guard embedded in the fixture JSX."""
+
+    if (
+        project_file == expected_fixture
+        and owner_marker == expected_owner
+        and target_exists
+    ):
+        return "reuse-owned-fixture"
+    if project_file is not None or item_count != 0:
+        return "block-production-project"
+    if target_exists:
+        return "block-existing-target"
+    return "close-empty-and-create"
+
+
 def fixture_create_script(config: Issue190Config, wav_path: Path) -> str:
-    """Return the fixed ES3 fixture create/reset script for a formal AE checkpoint."""
+    """Return fail-closed ES3 that can create only the runner-owned fixture."""
 
     fixture_literal = json.dumps(os.fspath(config.fixture_path), ensure_ascii=True)
+    manifest_literal = json.dumps(
+        os.fspath(config.ownership_manifest_path), ensure_ascii=True
+    )
     wav_literal = json.dumps(os.fspath(wav_path), ensure_ascii=True)
+    run_literal = json.dumps(config.run_id, ensure_ascii=True)
+    owner_literal = json.dumps(config.owner_marker, ensure_ascii=True)
     return (
         "(function () {\n"
         "  var fixtureFile = new File(" + fixture_literal + ");\n"
+        "  var manifestFile = new File(" + manifest_literal + ");\n"
         "  var wavFile = new File(" + wav_literal + ");\n"
+        "  var expectedRunId = " + run_literal + ";\n"
+        "  var expectedOwner = " + owner_literal + ";\n"
+        "  var manifestText = '';\n"
+        "  var manifest;\n"
+        "  var currentFile;\n"
+        "  var currentOwner = null;\n"
+        "  var itemIndex;\n"
         "  var project;\n"
         "  var sourceA;\n"
         "  var sourceB;\n"
@@ -357,8 +475,42 @@ def fixture_create_script(config: Issue190Config, wav_path: Path) -> str:
         "  var audioSwitch;\n"
         "  var invalidTarget;\n"
         "  if (!wavFile.exists) { return JSON.stringify({ok:false,error:'wav-missing'}); }\n"
-        "  if (app.project !== null) { app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES); }\n"
+        "  if (!manifestFile.exists || !manifestFile.open('r')) {\n"
+        "    return JSON.stringify({ok:false,error:'ownership-manifest-missing'});\n"
+        "  }\n"
+        "  manifestText = manifestFile.read(); manifestFile.close();\n"
+        "  try { manifest = JSON.parse(manifestText); } catch (manifestError) {\n"
+        "    return JSON.stringify({ok:false,error:'ownership-manifest-invalid'});\n"
+        "  }\n"
+        "  if (manifest.runId !== expectedRunId"
+        " || manifest.lifecycle !== 'ephemeral-validation'"
+        " || manifest.fixturePath !== fixtureFile.fsName) {\n"
+        "    return JSON.stringify({ok:false,error:'ownership-manifest-mismatch'});\n"
+        "  }\n"
+        "  if (app.project !== null) {\n"
+        "    currentFile = app.project.file;\n"
+        "    for (itemIndex = 1; itemIndex <= app.project.numItems; itemIndex += 1) {\n"
+        "      if (app.project.item(itemIndex).name === expectedOwner) {\n"
+        "        currentOwner = expectedOwner;\n"
+        "      }\n"
+        "    }\n"
+        "    if (currentFile !== null && currentFile.fsName === fixtureFile.fsName"
+        " && currentOwner === expectedOwner && fixtureFile.exists) {\n"
+        "      return JSON.stringify({ok:true,reused:true,owner:expectedOwner,"
+        "lifecycle:'ephemeral-validation',active:1,saveAsCopies:0});\n"
+        "    }\n"
+        "    if (currentFile !== null || app.project.numItems !== 0) {\n"
+        "      return JSON.stringify({ok:false,error:'block-production-project'});\n"
+        "    }\n"
+        "  }\n"
+        "  if (fixtureFile.exists) {\n"
+        "    return JSON.stringify({ok:false,error:'block-existing-target'});\n"
+        "  }\n"
+        "  if (app.project !== null) {\n"
+        "    app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES);\n"
+        "  }\n"
         "  project = app.newProject();\n"
+        "  project.items.addFolder(expectedOwner);\n"
         "  sourceA = project.items.addComp('SOURCE_COMP_A',320,180,1,2,24);\n"
         "  sourceA.layers.addSolid([1,0,0],'SOURCE_A_PIXEL',320,180,1,2);\n"
         "  sourceB = project.items.addComp('SOURCE_COMP_B',320,180,1,2,24);\n"
@@ -376,7 +528,8 @@ def fixture_create_script(config: Issue190Config, wav_path: Path) -> str:
         "  relink.property('ADBE Transform Group').property('ADBE Position').setValueAtTime(0,[160,180]);\n"
         "  relink.property('ADBE Transform Group').property('ADBE Position').setValueAtTime(1,[480,180]);\n"
         "  project.save(fixtureFile);\n"
-        "  return JSON.stringify({ok:true,lifecycle:'ephemeral-validation',active:1,saveAsCopies:0});\n"
+        "  return JSON.stringify({ok:true,reused:false,owner:expectedOwner,"
+        "lifecycle:'ephemeral-validation',active:1,saveAsCopies:0});\n"
         "}())"
     )
 
@@ -397,26 +550,38 @@ def undo_script(count: int) -> str:
 
 def close_fixture_script(config: Issue190Config) -> str:
     fixture_literal = json.dumps(os.fspath(config.fixture_path), ensure_ascii=True)
+    owner_literal = json.dumps(config.owner_marker, ensure_ascii=True)
     return (
         "(function () {\n"
         "  var expected = new File(" + fixture_literal + ");\n"
+        "  var expectedOwner = " + owner_literal + ";\n"
+        "  var ownerFound = false;\n"
+        "  var itemIndex;\n"
         "  if (app.project === null || app.project.file === null"
         " || app.project.file.fsName !== expected.fsName) {\n"
         "    return JSON.stringify({ok:false,error:'wrong-fixture'});\n"
         "  }\n"
+        "  for (itemIndex = 1; itemIndex <= app.project.numItems; itemIndex += 1) {\n"
+        "    if (app.project.item(itemIndex).name === expectedOwner) { ownerFound = true; }\n"
+        "  }\n"
+        "  if (!ownerFound) { return JSON.stringify({ok:false,error:'wrong-owner'}); }\n"
         "  app.project.save();\n"
         "  app.project.close(CloseOptions.SAVE_CHANGES);\n"
-        "  return JSON.stringify({ok:true,active:0,saveAsCopies:0});\n"
+        "  return JSON.stringify({ok:true,owner:expectedOwner,active:0,saveAsCopies:0});\n"
         "}())"
     )
 
 
-async def _default_reconcile(_record: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "state": "unreconciled",
-        "audit": "unreconciled",
-        "evidenceIds": (),
-    }
+@dataclasses.dataclass
+class PendingWrite:
+    key: str
+    phase: str
+    tool: str
+    arguments: dict[str, Any]
+    evidence_ids: tuple[str, ...]
+    payload: dict[str, Any]
+    uncertain: bool = False
+    failing_layer: str = "none"
 
 
 class Issue190Runner:
@@ -434,6 +599,104 @@ class Issue190Runner:
         "audio-undo-read": "ae_setLayerAudioEnabled",
         "video-undo-read": "ae_setLayerVideoEnabled",
     }
+    _WRITE_VERIFICATION = {
+        "source-replace-a-to-b": "source-transform-after",
+        "source-replace-completed-replay": "source-transform-after",
+        "matte-set-alpha": "matte-read-alpha",
+        "matte-reorder-source": "matte-read-after-reorder",
+        "matte-set-luma": "matte-read-luma",
+        "matte-clear": "matte-read-cleared-luma",
+        "audio-disable": "audio-disable-read",
+        "video-disable": "video-disable-read",
+    }
+    _UNCERTAIN_STATE_READS = {
+        "source-replace-a-to-b": (
+            "source-reacquire-project",
+            "source-reacquire-layers",
+            "source-read-b",
+            "source-transform-after",
+        ),
+        "source-replace-completed-replay": (
+            "source-reacquire-project",
+            "source-reacquire-layers",
+            "source-read-b",
+            "source-transform-after",
+        ),
+        "matte-set-alpha": ("matte-read-alpha",),
+        "matte-reorder-source": ("matte-read-after-reorder",),
+        "matte-set-luma": ("matte-read-luma",),
+        "matte-clear": ("matte-read-cleared-luma",),
+        "audio-disable": ("audio-disable-read",),
+        "video-disable": ("video-disable-read",),
+    }
+    _UNCERTAIN_STATE_KEY = {
+        "source-replace-a-to-b": "source-read-b",
+        "source-replace-completed-replay": "source-read-b",
+        "matte-set-alpha": "matte-read-alpha",
+        "matte-reorder-source": "matte-read-after-reorder",
+        "matte-set-luma": "matte-read-luma",
+        "matte-clear": "matte-read-cleared-luma",
+        "audio-disable": "audio-disable-read",
+        "video-disable": "video-disable-read",
+    }
+    _WRITE_RECOVERY = {
+        "source-replace-a-to-b": (
+            "undo-source-replace",
+            "ae_setLayerSource",
+            1,
+            (
+                "source-undo-reacquire-project",
+                "source-undo-reacquire-layers",
+                "source-undo-read-a",
+            ),
+        ),
+        "source-replace-completed-replay": (
+            "undo-source-replace",
+            "ae_setLayerSource",
+            1,
+            (
+                "source-undo-reacquire-project",
+                "source-undo-reacquire-layers",
+                "source-undo-read-a",
+            ),
+        ),
+        "matte-set-alpha": (
+            "undo-matte-alpha-recovery",
+            "ae_setLayerTrackMatte",
+            1,
+            ("matte-set-undo-reacquire-layers", "matte-set-undo-read-empty"),
+        ),
+        "matte-reorder-source": (
+            "undo-matte-reorder-and-set",
+            "ae_setLayerTrackMatte",
+            2,
+            ("matte-set-undo-reacquire-layers", "matte-set-undo-read-empty"),
+        ),
+        "matte-set-luma": (
+            "undo-matte-luma-recovery",
+            "ae_setLayerTrackMatte",
+            1,
+            ("matte-clear-undo-reacquire-layers", "matte-clear-undo-read-luma"),
+        ),
+        "matte-clear": (
+            "undo-matte-clear",
+            "ae_clearLayerTrackMatte",
+            1,
+            ("matte-clear-undo-reacquire-layers", "matte-clear-undo-read-luma"),
+        ),
+        "audio-disable": (
+            "undo-audio-disable",
+            "ae_setLayerAudioEnabled",
+            1,
+            ("audio-undo-reacquire-layers", "audio-undo-read"),
+        ),
+        "video-disable": (
+            "undo-video-disable",
+            "ae_setLayerVideoEnabled",
+            1,
+            ("video-undo-reacquire-layers", "video-undo-read"),
+        ),
+    }
 
     def __init__(
         self,
@@ -442,15 +705,17 @@ class Issue190Runner:
         checkpoint: Callable[[str, Mapping[str, Any]], Awaitable[None]],
         after_effects_running: Callable[[], Awaitable[bool]],
         evidence: DevelopmentEvidence | None = None,
-        reconcile_uncertain: Callable[
-            [dict[str, Any]], Awaitable[dict[str, Any]]
-        ] = _default_reconcile,
     ) -> None:
         self.config = config
         self.checkpoint = checkpoint
         self.after_effects_running = after_effects_running
-        self.evidence = evidence or DevelopmentEvidence(config.evidence_dir)
-        self.reconcile_uncertain = reconcile_uncertain
+        self.evidence = evidence or DevelopmentEvidence(
+            config.evidence_dir, run_id=config.run_id
+        )
+        require(
+            self.evidence.run_id == config.run_id,
+            "fixture and evidence run ownership must match",
+        )
         self.ledger = CallLedger()
         self.defects = DefectLedger(CASE_DEPENDENCIES)
         self.context: dict[str, Any] = {}
@@ -461,15 +726,160 @@ class Issue190Runner:
         self.host_instance_id: str | None = None
         self.session_id: str | None = None
         self.tool_summary: dict[str, dict[str, Any]] = {}
+        self.pending_writes: list[PendingWrite] = []
+        self.consumed_plan_keys: set[str] = set()
+        self.unreconciled_write = False
+        self.fixture_baseline_restored = True
         self.lifecycle = {
             "created": 0,
             "canonicalRetained": 0,
             "evidenceSnapshotsRetained": 0,
             "archived": 0,
+            "recoveryArchived": 0,
             "active": 0,
             "unclassified": 0,
             "saveAsCopies": 0,
+            "baselineRestored": True,
+            "dispositionReason": None,
+            "cleanupCondition": None,
         }
+        self.current_wav_path: Path | None = None
+
+    def _ownership_payload(self) -> dict[str, Any]:
+        return {
+            "schemaVersion": 1,
+            "validationProfile": "development",
+            "candidateRun": False,
+            "candidateEvidence": False,
+            "runId": self.config.run_id,
+            "lifecycle": "ephemeral-validation",
+            "fixturePath": os.fspath(self.config.fixture_path),
+            "activeRoot": os.fspath(self.config.active_root),
+            "recoveryRoot": os.fspath(self.config.recovery_root),
+            "evidenceRoot": os.fspath(self.config.evidence_dir),
+            "cleanupCondition": (
+                "move the owned fixture and manifest to short-lived recovery "
+                "after structured evidence or any classified failure"
+            ),
+        }
+
+    def _validate_fixture_roots(self) -> None:
+        try:
+            home_info = self.config.fixture_home.lstat()
+        except FileNotFoundError as error:
+            raise Issue190Failure("fixture home does not exist") from error
+        require(
+            stat.S_ISDIR(home_info.st_mode)
+            and not self.config.fixture_home.is_symlink(),
+            "fixture home cannot be a symlink or non-directory",
+        )
+        require(
+            not self.config.active_root.is_relative_to(self.config.checkout),
+            "active fixture root escaped into the checkout",
+        )
+        scan_roots = (
+            self.config.fixture_home
+            / "Library/Application Support/Adobe/CEP/extensions",
+            self.config.fixture_home
+            / "Library/Application Support/Adobe/Common/Plug-ins",
+            Path("/Library/Application Support/Adobe/CEP/extensions"),
+            Path("/Library/Application Support/Adobe/Common/Plug-ins"),
+        )
+        active = self.config.active_root.resolve(strict=False)
+        checkout = self.config.checkout.resolve(strict=False)
+        require(
+            active != checkout and not active.is_relative_to(checkout),
+            "resolved active fixture root escaped into the checkout",
+        )
+        require(
+            not any(
+                active == root.resolve(strict=False)
+                or active.is_relative_to(root.resolve(strict=False))
+                for root in scan_roots
+            ),
+            "active fixture root is inside an Adobe scan root",
+        )
+        self.config.active_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+        current = self.config.fixture_home
+        for part in FIXTURE_ROOT_PARTS + ("active",):
+            current /= part
+            info = current.lstat()
+            require(
+                stat.S_ISDIR(info.st_mode) and not current.is_symlink(),
+                "canonical fixture root contains a symlink or non-directory",
+            )
+        os.chmod(self.config.active_root, stat.S_IRWXU)
+
+    def claim_fixture(self) -> Path:
+        """Exclusively claim a fresh per-run active slot before any AE action."""
+
+        self._validate_fixture_roots()
+        require(
+            not os.path.lexists(self.config.fixture_path),
+            "Issue #190 fixture target must be fresh and absent",
+        )
+        manifest_path = self.config.ownership_manifest_path
+        try:
+            descriptor = os.open(
+                manifest_path,
+                os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+                stat.S_IRUSR | stat.S_IWUSR,
+            )
+        except FileExistsError as error:
+            raise Issue190Failure(
+                "Issue #190 ownership manifest already exists"
+            ) from error
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(
+                self._ownership_payload(),
+                stream,
+                ensure_ascii=False,
+                separators=(",", ":"),
+            )
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chmod(manifest_path, stat.S_IRUSR | stat.S_IWUSR)
+        self.validate_fixture_ownership(fixture_may_be_absent=True)
+        return manifest_path
+
+    def validate_fixture_ownership(self, *, fixture_may_be_absent: bool = False) -> None:
+        path = self.config.ownership_manifest_path
+        try:
+            info = path.lstat()
+        except FileNotFoundError as error:
+            raise Issue190Failure("Issue #190 ownership manifest is missing") from error
+        require(
+            stat.S_ISREG(info.st_mode)
+            and not path.is_symlink()
+            and stat.S_IMODE(info.st_mode) == 0o600
+            and 0 < info.st_size <= 64 * 1024,
+            "Issue #190 ownership manifest is invalid",
+        )
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError) as error:
+            raise Issue190Failure(
+                "Issue #190 ownership manifest is unreadable"
+            ) from error
+        require(
+            payload == self._ownership_payload(),
+            "Issue #190 ownership manifest mismatch",
+        )
+        require(
+            self.config.fixture_path.parent == self.config.active_root,
+            "Issue #190 fixture path escaped the active root",
+        )
+        if not fixture_may_be_absent:
+            try:
+                fixture_info = self.config.fixture_path.lstat()
+            except FileNotFoundError as error:
+                raise Issue190Failure("Issue #190 owned fixture is missing") from error
+            require(
+                stat.S_ISREG(fixture_info.st_mode)
+                and not self.config.fixture_path.is_symlink(),
+                "Issue #190 owned fixture is invalid",
+            )
 
     def operation_key(self, intent: str) -> str:
         """Mint once per evidence session; replay/reconciliation reuse it."""
@@ -673,18 +1083,28 @@ class Issue190Runner:
                     "errorType": type(error).__name__,
                 },
             )
+            if write:
+                raise UncertainWrite(
+                    plan_key=case,
+                    phase=phase,
+                    tool=tool,
+                    arguments=arguments,
+                    evidence_ids=(request_id, failure_id),
+                    payload=None,
+                    failing_layer="transport-after-dispatch",
+                ) from error
             self.defects.record(
                 case,
                 status="INDETERMINATE",
                 failing_layer="transport-or-ae-process",
-                side_effect_state="possible" if write else "unknown",
-                reconciliation="required" if write else "unavailable",
+                side_effect_state="unknown",
+                reconciliation="unavailable",
                 dependency_impact=(),
                 evidence_ids=(request_id, failure_id),
-                message="transport failed after public dispatch; no retry attempted",
+                message="read transport failed after public dispatch",
             )
             raise ImmediateStop(
-                "transport or AE process failed after dispatch; stop without retry"
+                "read transport or AE process failed after dispatch"
             ) from error
         response_id = self.evidence.record(
             "public-tool-response",
@@ -698,6 +1118,7 @@ class Issue190Runner:
             },
         )
         self.call_evidence[case] = (request_id, response_id)
+        self.responses[case] = dict(payload)
         code = error_code(payload)
         if code in {
             "NATIVE_CONTRACT_MISMATCH",
@@ -705,39 +1126,51 @@ class Issue190Runner:
             "BUNDLE_NATIVE_PLUGIN_PROTOCOL_MISMATCH",
             "PROTOCOL_MISMATCH",
         }:
+            self.defects.record(
+                case,
+                status="FAIL",
+                failing_layer="component-or-protocol-compatibility",
+                side_effect_state=(
+                    "not-started"
+                    if mapping(
+                        payload.get("error"), "incompatible response error missing"
+                    ).get("sideEffect")
+                    == "not-started"
+                    else "unknown"
+                ),
+                reconciliation="not-required",
+                dependency_impact=CASE_DEPENDENCIES.get(phase, ()),
+                evidence_ids=(request_id, response_id),
+                message=f"{tool} returned incompatible response {code}",
+            )
+            self.defects.block_dependents(
+                phase, reason=f"{phase} stopped on incompatible response {code}"
+            )
             raise ImmediateStop(
                 f"incompatible component or protocol response from {tool}: {code}"
             )
         if code == "POSSIBLY_SIDE_EFFECTING_FAILURE":
             error = mapping(payload.get("error"), "possible-write error missing")
             details = mapping(error.get("details"), "possible-write identity missing")
-            record = {
-                "case": case,
-                "tool": tool,
-                "operationId": details.get("operationId"),
-                "idempotencyKey": details.get("idempotencyKey"),
-                "action": "read-state-and-audit-without-redispatch",
-            }
-            reconciliation = await self.reconcile_uncertain(record)
-            evidence_ids = tuple(reconciliation.get("evidenceIds") or ())
-            resolved = (
-                reconciliation.get("state") in {"before", "after"}
-                and reconciliation.get("audit") in {"completed", "rejected", "indeterminate"}
+            operation_key = arguments.get("idempotency_key")
+            reported_key = details.get("idempotencyKey")
+            require(
+                isinstance(operation_key, str)
+                and (reported_key is None or reported_key == operation_key),
+                "possible-write operation key drifted",
             )
-            self.defects.record(
-                case,
-                status="INDETERMINATE",
-                failing_layer="post-dispatch-terminal",
-                side_effect_state="possible",
-                reconciliation="reconciled" if resolved else "unreconciled",
-                dependency_impact=(),
-                evidence_ids=(request_id, response_id, *evidence_ids),
-                message="possible write was not retried",
-            )
-            raise ImmediateStop(
-                "reconciled possible write requires the HDEV session to stop"
-                if resolved
-                else "unreconciled possible write requires immediate stop"
+            raise UncertainWrite(
+                plan_key=case,
+                phase=phase,
+                tool=tool,
+                arguments=arguments,
+                evidence_ids=(request_id, response_id),
+                payload={
+                    **dict(payload),
+                    "originalOperationKey": operation_key,
+                    "reportedOperationId": details.get("operationId"),
+                },
+                failing_layer="possibly-side-effecting-terminal",
             )
         if expected_error is not None:
             if not is_error or payload.get("ok") is not False:
@@ -905,7 +1338,11 @@ class Issue190Runner:
         if payload.get("ok") is False:
             return
         value = mapping(payload.get("value"), f"{key} value missing")
-        if key in {"fixture-project-items", "source-reacquire-project", "source-undo-reacquire-project"}:
+        if key in {
+            "fixture-project-items",
+            "source-reacquire-project",
+            "source-undo-reacquire-project",
+        }:
             self._capture_project_items(value)
         elif key in {
             "fixture-main-layers",
@@ -1043,6 +1480,355 @@ class Issue190Runner:
         )
         undo["verified"] += 1
 
+    @staticmethod
+    def _plan(key: str) -> Any:
+        matches = [row for row in CALL_PLAN if row.key == key]
+        require(len(matches) == 1, f"frozen plan row {key!r} is missing")
+        return matches[0]
+
+    def _record_plan_pass(
+        self,
+        plan: Any,
+        *,
+        evidence_ids: Sequence[str] | None = None,
+        reconciliation: str | None = None,
+    ) -> None:
+        self.defects.record(
+            plan.key,
+            status="PASS",
+            failing_layer="none",
+            side_effect_state=(
+                "not-started"
+                if plan.expected_error
+                else "committed-reconciled"
+                if plan.disposition == "write"
+                else "none"
+            ),
+            reconciliation=(
+                reconciliation
+                or (
+                    "public-readback"
+                    if plan.disposition in {"read", "write"}
+                    else "not-required"
+                )
+            ),
+            dependency_impact=(),
+            evidence_ids=(
+                tuple(evidence_ids)
+                if evidence_ids is not None
+                else self.call_evidence.get(plan.key, ())
+            ),
+            message=plan.predicate,
+        )
+
+    async def _dispatch_frozen_read(
+        self,
+        session: PublicSession,
+        key: str,
+        *,
+        assert_expected: bool,
+    ) -> dict[str, Any]:
+        plan = self._plan(key)
+        require(plan.disposition == "read", f"{key} is not a frozen read")
+        require(key not in self.consumed_plan_keys, f"{key} was already consumed")
+        arguments = self._resolve(plan.arguments)
+        payload = await self.public_call(
+            session,
+            case=plan.key,
+            phase=plan.case,
+            tool=plan.tool,
+            arguments=arguments,
+        )
+        self.responses[plan.key] = payload
+        if assert_expected:
+            self._assert_and_capture(plan.key, payload, arguments)
+            self._record_plan_pass(plan)
+        self.consumed_plan_keys.add(key)
+        return payload
+
+    @staticmethod
+    def _audit_outcome(payload: Mapping[str, Any]) -> str:
+        audit = payload.get("audit")
+        error = payload.get("error")
+        details = error.get("details") if isinstance(error, Mapping) else None
+        candidates = []
+        if isinstance(audit, Mapping):
+            candidates.extend((audit.get("outcome"), audit.get("effect")))
+        if isinstance(details, Mapping):
+            candidates.extend(
+                (
+                    details.get("auditOutcome"),
+                    details.get("operationOutcome"),
+                    details.get("outcome"),
+                )
+            )
+        for candidate in candidates:
+            if candidate in {"completed", "committed", "after"}:
+                return "completed"
+            if candidate in {"rejected", "not-started", "before"}:
+                return "rejected"
+        return "unavailable"
+
+    def _classify_uncertain_state(
+        self,
+        pending: PendingWrite,
+        payload: Mapping[str, Any],
+    ) -> str:
+        value = mapping(payload.get("value"), "uncertain write readback value missing")
+        key = pending.key
+        if key.startswith("source-replace"):
+            observed = value.get("sourceName")
+            return (
+                "after"
+                if observed == "SOURCE_COMP_B"
+                else "before"
+                if observed == "SOURCE_COMP_A"
+                else "unknown"
+            )
+        if key == "matte-reorder-source":
+            outcome = self._audit_outcome(pending.payload)
+            if outcome == "completed":
+                return "after"
+            return "before" if outcome == "rejected" else "unknown"
+        if key == "matte-set-alpha":
+            if value.get("active") is False and value.get("matteLayerLocator") is None:
+                return "before"
+            return (
+                "after"
+                if value.get("active") is True and value.get("mode") == "alpha"
+                else "unknown"
+            )
+        if key == "matte-set-luma":
+            if value.get("active") is False and value.get("matteLayerLocator") is None:
+                return "before"
+            return (
+                "after"
+                if value.get("active") is True and value.get("mode") == "luma"
+                else "unknown"
+            )
+        if key == "matte-clear":
+            if value.get("active") is True and value.get("mode") == "luma":
+                return "before"
+            return (
+                "after"
+                if value.get("active") is False
+                and value.get("matteLayerLocator") is None
+                and value.get("mode") == "luma"
+                else "unknown"
+            )
+        if key == "audio-disable":
+            if value.get("hasAudio") is not True:
+                return "unknown"
+            if value.get("audioEnabled") is False:
+                return "after"
+            return "before" if value.get("audioEnabled") is True else "unknown"
+        if key == "video-disable":
+            if value.get("hasVideo") is not True:
+                return "unknown"
+            if value.get("videoEnabled") is False:
+                return "after"
+            return "before" if value.get("videoEnabled") is True else "unknown"
+        return "unknown"
+
+    async def _recovery_undo_checkpoint(
+        self,
+        name: str,
+        *,
+        tool: str,
+        count: int,
+    ) -> None:
+        await self.checkpoint(
+            name,
+            {
+                "instruction": (
+                    "Recovery only: execute the associated harness Undo exactly "
+                    f"{count} time(s), then use only frozen public reads to verify "
+                    "the fixture baseline. Do not retry the write."
+                ),
+                "script": undo_script(count),
+                "undoCount": count,
+                "fixtureLifecycle": "ephemeral-validation",
+                "activeFixtureCount": 1,
+                "saveAsCopies": 0,
+                "validationProfile": "development",
+                "candidateRun": False,
+                "candidateEvidence": False,
+            },
+        )
+        self._tool_row(tool)["undo"]["executed"] += 1
+
+    async def _recover_committed_write(
+        self,
+        session: PublicSession,
+        pending: PendingWrite,
+    ) -> tuple[str, ...]:
+        name, tool, count, read_keys = self._WRITE_RECOVERY[pending.key]
+        self.fixture_baseline_restored = False
+        await self._recovery_undo_checkpoint(name, tool=tool, count=count)
+        recovery_ids: list[str] = []
+        try:
+            for key in read_keys:
+                if key in self.consumed_plan_keys:
+                    continue
+                custom_luma_baseline = (
+                    pending.key == "matte-set-luma"
+                    and key == "matte-clear-undo-read-luma"
+                )
+                payload = await self._dispatch_frozen_read(
+                    session,
+                    key,
+                    assert_expected=not custom_luma_baseline,
+                )
+                if custom_luma_baseline:
+                    self._assert_matte(
+                        mapping(payload.get("value"), "Luma recovery value missing"),
+                        active=False,
+                    )
+                    self._record_plan_pass(
+                        self._plan(key),
+                        reconciliation="recovery-baseline-readback",
+                    )
+                recovery_ids.extend(self.call_evidence.get(key, ()))
+        except (ImmediateStop, Issue190Failure) as error:
+            self.unreconciled_write = True
+            raise ImmediateStop(
+                f"{pending.key} recovery baseline could not be verified"
+            ) from error
+        self.fixture_baseline_restored = True
+        self.mark_undo_verified(tool)
+        recovery_event = self.evidence.record(
+            "write-recovery-verified",
+            {
+                "case": pending.key,
+                "tool": pending.tool,
+                "originalOperationKey": pending.arguments.get("idempotency_key"),
+                "writeEvidenceIds": list(pending.evidence_ids),
+                "readbackEvidenceIds": recovery_ids,
+                "baselineRestored": True,
+                "retryAttempted": False,
+            },
+        )
+        return (*recovery_ids, recovery_event)
+
+    def _record_pending_failure(
+        self,
+        pending: PendingWrite,
+        *,
+        status: str,
+        side_effect_state: str,
+        reconciliation: str,
+        evidence_ids: Sequence[str],
+        message: str,
+    ) -> None:
+        self.defects.record(
+            pending.key,
+            status=status,
+            failing_layer=pending.failing_layer,
+            side_effect_state=side_effect_state,
+            reconciliation=reconciliation,
+            dependency_impact=CASE_DEPENDENCIES.get(pending.phase, ()),
+            evidence_ids=evidence_ids,
+            message=message,
+        )
+        self.defects.block_dependents(
+            pending.phase, reason=f"{pending.phase} failed at {pending.key}"
+        )
+
+    async def _reconcile_uncertain_write(
+        self,
+        session: PublicSession,
+        pending: PendingWrite,
+    ) -> str:
+        state_key = self._UNCERTAIN_STATE_KEY[pending.key]
+        read_ids: list[str] = []
+        state_payload: dict[str, Any] | None = None
+        try:
+            for key in self._UNCERTAIN_STATE_READS[pending.key]:
+                if key in self.consumed_plan_keys:
+                    continue
+                payload = await self._dispatch_frozen_read(
+                    session,
+                    key,
+                    assert_expected=key != state_key,
+                )
+                read_ids.extend(self.call_evidence.get(key, ()))
+                if key == state_key:
+                    state_payload = payload
+                    state = self._classify_uncertain_state(pending, payload)
+                    if state == "after":
+                        self._assert_and_capture(
+                            key, payload, self._resolve(self._plan(key).arguments)
+                        )
+                        self._record_plan_pass(
+                            self._plan(key),
+                            reconciliation="uncertain-write-state-readback",
+                        )
+                    elif state == "before":
+                        self._record_plan_pass(
+                            self._plan(key),
+                            reconciliation="uncertain-write-state-readback",
+                        )
+                        break
+                    else:
+                        break
+        except (ImmediateStop, Issue190Failure):
+            state = "unknown"
+        else:
+            state = (
+                self._classify_uncertain_state(pending, state_payload)
+                if state_payload is not None
+                else "unknown"
+            )
+        reconciliation_event = self.evidence.record(
+            "uncertain-write-reconciled",
+            {
+                "case": pending.key,
+                "tool": pending.tool,
+                "state": state,
+                "auditOutcome": self._audit_outcome(pending.payload),
+                "originalOperationKey": pending.arguments.get("idempotency_key"),
+                "reportedOperationId": pending.payload.get("reportedOperationId"),
+                "writeEvidenceIds": list(pending.evidence_ids),
+                "readbackEvidenceIds": read_ids,
+                "retryAttempted": False,
+            },
+        )
+        evidence_ids = (*pending.evidence_ids, *read_ids, reconciliation_event)
+        if state == "before":
+            self._record_pending_failure(
+                pending,
+                status="FAIL",
+                side_effect_state="not-started",
+                reconciliation="not-occurred-reconciled",
+                evidence_ids=evidence_ids,
+                message="uncertain write did not occur; original operation was not retried",
+            )
+            return "not-occurred-reconciled"
+        if state == "after":
+            recovery_ids = await self._recover_committed_write(session, pending)
+            self._record_pending_failure(
+                pending,
+                status="FAIL",
+                side_effect_state="committed-reconciled",
+                reconciliation="committed-reconciled-and-restored",
+                evidence_ids=(*evidence_ids, *recovery_ids),
+                message="uncertain write committed, was not retried, and was undone",
+            )
+            return "committed-reconciled"
+        self.unreconciled_write = True
+        self.fixture_baseline_restored = False
+        self._record_pending_failure(
+            pending,
+            status="INDETERMINATE",
+            side_effect_state="possible",
+            reconciliation="unreconciled",
+            evidence_ids=evidence_ids,
+            message="write state and audit could not be reconciled; no retry attempted",
+        )
+        raise ImmediateStop(
+            f"unreconciled possible write at {pending.key}; preserve fixture"
+        )
+
     async def execute_plan(self, session: PublicSession) -> None:
         require(
             REQUIRED_PUBLIC_TOOLS <= session.tool_names,
@@ -1050,6 +1836,8 @@ class Issue190Runner:
         )
         failed_cases: set[str] = set()
         for plan in CALL_PLAN:
+            if plan.key in self.consumed_plan_keys:
+                continue
             if plan.case in failed_cases:
                 self.defects.record(
                     plan.key,
@@ -1083,31 +1871,134 @@ class Issue190Runner:
                 )
                 self.responses[plan.key] = payload
                 self._assert_and_capture(plan.key, payload, arguments)
-                if plan.key in self._UNDO_VERIFY_TOOL:
+                if plan.disposition == "write":
+                    self.pending_writes.append(
+                        PendingWrite(
+                            key=plan.key,
+                            phase=plan.case,
+                            tool=plan.tool,
+                            arguments=dict(arguments),
+                            evidence_ids=self.call_evidence.get(plan.key, ()),
+                            payload=dict(payload),
+                        )
+                    )
+                else:
+                    self._record_plan_pass(plan)
+                verified = [
+                    pending
+                    for pending in self.pending_writes
+                    if self._WRITE_VERIFICATION.get(pending.key) == plan.key
+                ]
+                for pending in verified:
+                    write_plan = self._plan(pending.key)
+                    self._record_plan_pass(
+                        write_plan,
+                        evidence_ids=(
+                            *pending.evidence_ids,
+                            *self.call_evidence.get(plan.key, ()),
+                        ),
+                        reconciliation="public-readback",
+                    )
+                    self.pending_writes.remove(pending)
+                if plan.key in self._UNDO_VERIFY_TOOL and not verified:
                     self.mark_undo_verified(self._UNDO_VERIFY_TOOL[plan.key])
-                self.defects.record(
-                    plan.key,
-                    status="PASS",
-                    failing_layer="none",
-                    side_effect_state=(
-                        "not-started"
-                        if plan.expected_error
-                        else "committed-reconciled"
-                        if plan.disposition == "write"
-                        else "none"
-                    ),
-                    reconciliation=(
-                        "public-readback"
-                        if plan.disposition in {"read", "write"}
-                        else "not-required"
-                    ),
-                    dependency_impact=(),
-                    evidence_ids=self.call_evidence.get(plan.key, ()),
-                    message=plan.predicate,
+            except UncertainWrite as error:
+                pending = PendingWrite(
+                    key=plan.key,
+                    phase=plan.case,
+                    tool=plan.tool,
+                    arguments=dict(arguments),
+                    evidence_ids=error.evidence_ids,
+                    payload=error.payload,
+                    uncertain=True,
+                    failing_layer=error.failing_layer,
                 )
-            except ImmediateStop:
-                raise
+                await self._reconcile_uncertain_write(session, pending)
+                failed_cases.add(plan.case)
+                failed_cases.update(CASE_DEPENDENCIES.get(plan.case, ()))
+            except ImmediateStop as error:
+                verified = [
+                    pending
+                    for pending in self.pending_writes
+                    if self._WRITE_VERIFICATION.get(pending.key) == plan.key
+                ]
+                if not verified:
+                    raise
+                self.consumed_plan_keys.add(plan.key)
+                failed_cases.add(plan.case)
+                failed_cases.update(CASE_DEPENDENCIES.get(plan.case, ()))
+                recovery_ids = await self._recover_committed_write(
+                    session, verified[0]
+                )
+                for pending in verified:
+                    self._record_pending_failure(
+                        pending,
+                        status="FAIL",
+                        side_effect_state="committed-reconciled",
+                        reconciliation="readback-failed-restored",
+                        evidence_ids=(*pending.evidence_ids, *recovery_ids),
+                        message=(
+                            f"{plan.key} failed after a successful write; "
+                            "associated Undo restored and verified the baseline"
+                        ),
+                    )
+                    self.pending_writes.remove(pending)
             except Issue190Failure as error:
+                verified = [
+                    pending
+                    for pending in self.pending_writes
+                    if self._WRITE_VERIFICATION.get(pending.key) == plan.key
+                ]
+                if verified:
+                    self.consumed_plan_keys.add(plan.key)
+                    self.defects.record(
+                        plan.key,
+                        status="FAIL",
+                        failing_layer="post-write-public-readback",
+                        side_effect_state="committed-reconciled",
+                        reconciliation="recovery-required",
+                        dependency_impact=CASE_DEPENDENCIES.get(plan.case, ()),
+                        evidence_ids=self.call_evidence.get(plan.key, ()),
+                        message=str(error),
+                    )
+                    recovery_ids = await self._recover_committed_write(
+                        session, verified[0]
+                    )
+                    for pending in verified:
+                        self._record_pending_failure(
+                            pending,
+                            status="FAIL",
+                            side_effect_state="committed-reconciled",
+                            reconciliation="readback-failed-restored",
+                            evidence_ids=(
+                                *pending.evidence_ids,
+                                *self.call_evidence.get(plan.key, ()),
+                                *recovery_ids,
+                            ),
+                            message=(
+                                f"{plan.key} failed after a successful write; "
+                                "associated Undo restored and verified the baseline"
+                            ),
+                        )
+                        self.pending_writes.remove(pending)
+                    failed_cases.add(plan.case)
+                    failed_cases.update(CASE_DEPENDENCIES.get(plan.case, ()))
+                    continue
+                if plan.disposition == "write":
+                    pending = PendingWrite(
+                        key=plan.key,
+                        phase=plan.case,
+                        tool=plan.tool,
+                        arguments=dict(arguments),
+                        evidence_ids=self.call_evidence.get(plan.key, ()),
+                        payload=self.responses.get(plan.key, {}),
+                        uncertain=True,
+                        failing_layer="write-contract-after-dispatch",
+                    )
+                    await self._reconcile_uncertain_write(session, pending)
+                    failed_cases.add(plan.case)
+                    failed_cases.update(CASE_DEPENDENCIES.get(plan.case, ()))
+                    continue
                 failed_cases.add(plan.case)
                 failed_cases.update(CASE_DEPENDENCIES.get(plan.case, ()))
                 self.defects.record(
@@ -1128,44 +2019,195 @@ class Issue190Runner:
                     plan.case,
                     reason=f"{plan.case} failed at {plan.key}",
                 )
-                if (
-                    plan.disposition == "write"
-                    or "reacquire" in plan.key
-                    or plan.key.startswith("fixture-")
-                ):
+                if "reacquire" in plan.key or plan.key.startswith("fixture-"):
                     raise ImmediateStop(
                         f"fixture baseline or write evidence became untrustworthy at {plan.key}"
                     ) from error
-        require(self.ledger.total == CALL_HARD_LIMIT, "Issue #190 call count drifted")
+        require(
+            not self.pending_writes,
+            "one or more writes ended without their frozen public readback",
+        )
+        if not failed_cases:
+            require(self.ledger.total == CALL_HARD_LIMIT, "Issue #190 call count drifted")
         require(
             all(row["status"] == "PASS" for row in self.defects.public_rows()),
             "bounded Issue #190 defect sweep found failures or blocked cases",
         )
 
-    async def archive_fixture(self, wav_path: Path) -> Path:
+    async def archive_fixture(
+        self,
+        wav_path: Path | None,
+        *,
+        reason: str = "structured development evidence complete",
+        evidence_snapshot: bool = False,
+        baseline_restored: bool = True,
+    ) -> Path:
         require(
             not await self.after_effects_running(),
             "formal After Effects still owns the Issue #190 fixture",
         )
-        require(self.config.fixture_path.is_file(), "Issue #190 fixture missing")
-        require(wav_path.is_file(), "Issue #190 generated WAV missing")
+        self.validate_fixture_ownership()
         self.config.recovery_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(self.config.recovery_root, stat.S_IRWXU)
-        suffix = f"{int(time.time())}-{secrets.token_hex(3)}"
-        destination = self.config.recovery_root / (
-            f"{self.config.fixture_path.stem}-{suffix}.aep"
-        )
-        asset_destination = self.config.recovery_root / (
-            f"{wav_path.stem}-{suffix}.wav"
-        )
         require(
-            not destination.exists() and not asset_destination.exists(),
-            "Issue #190 recovery destination already exists",
+            not self.config.recovery_root.is_symlink(),
+            "Issue #190 recovery root cannot be a symlink",
+        )
+        run_directory = self.config.recovery_root / self.config.run_id
+        require(
+            not os.path.lexists(run_directory),
+            "Issue #190 recovery run directory already exists",
+        )
+        run_directory.mkdir(mode=0o700, parents=False)
+        destination = run_directory / self.config.fixture_path.name
+        manifest_destination = (
+            run_directory / self.config.ownership_manifest_path.name
         )
         shutil.move(os.fspath(self.config.fixture_path), os.fspath(destination))
-        shutil.move(os.fspath(wav_path), os.fspath(asset_destination))
-        self.lifecycle.update({"archived": 1, "active": 0, "unclassified": 0})
+        shutil.move(
+            os.fspath(self.config.ownership_manifest_path),
+            os.fspath(manifest_destination),
+        )
+        if wav_path is not None and wav_path.is_file():
+            shutil.move(os.fspath(wav_path), os.fspath(run_directory / wav_path.name))
+        cleanup_condition = (
+            "retain while the unresolved write is investigated; remove after "
+            "structured state/audit evidence resolves the operation"
+            if evidence_snapshot
+            else "remove after the development failure or evidence has been reviewed"
+        )
+        disposition = {
+            "schemaVersion": 1,
+            "validationProfile": "development",
+            "candidateRun": False,
+            "candidateEvidence": False,
+            "runId": self.config.run_id,
+            "lifecycle": "ephemeral-validation",
+            "reason": reason,
+            "baselineRestored": baseline_restored,
+            "evidenceSnapshot": evidence_snapshot,
+            "fixtureName": destination.name,
+            "ownershipManifestName": manifest_destination.name,
+            "cleanupCondition": cleanup_condition,
+        }
+        disposition_path = run_directory / "recovery-disposition.json"
+        descriptor = os.open(
+            disposition_path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL,
+            stat.S_IRUSR | stat.S_IWUSR,
+        )
+        with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+            json.dump(disposition, stream, ensure_ascii=False, indent=2)
+            stream.write("\n")
+        self.lifecycle.update(
+            {
+                "evidenceSnapshotsRetained": 1 if evidence_snapshot else 0,
+                "archived": 1,
+                "recoveryArchived": 1,
+                "active": 0,
+                "unclassified": 0,
+                "baselineRestored": baseline_restored,
+                "dispositionReason": reason,
+                "cleanupCondition": cleanup_condition,
+            }
+        )
         return destination
+
+    async def finalize_failure(self, reason: str) -> dict[str, Any]:
+        """Classify and move every runner-owned failure fixture out of active."""
+
+        manifest_exists = os.path.lexists(self.config.ownership_manifest_path)
+        fixture_exists = os.path.lexists(self.config.fixture_path)
+        if not manifest_exists and not fixture_exists:
+            self.lifecycle.update(
+                {
+                    "active": 0,
+                    "unclassified": 0,
+                    "baselineRestored": self.fixture_baseline_restored,
+                    "dispositionReason": "failure occurred before fixture ownership",
+                    "cleanupCondition": "none",
+                }
+            )
+            return {"disposition": "no-fixture-owned"}
+        if manifest_exists and not fixture_exists:
+            self.config.recovery_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+            run_directory = self.config.recovery_root / self.config.run_id
+            require(
+                not os.path.lexists(run_directory),
+                "Issue #190 manifest recovery directory already exists",
+            )
+            run_directory.mkdir(mode=0o700, parents=False)
+            shutil.move(
+                os.fspath(self.config.ownership_manifest_path),
+                os.fspath(run_directory / self.config.ownership_manifest_path.name),
+            )
+            cleanup = "remove after the pre-fixture failure has been reviewed"
+            self.lifecycle.update(
+                {
+                    "active": 0,
+                    "unclassified": 0,
+                    "recoveryArchived": 1,
+                    "baselineRestored": True,
+                    "dispositionReason": reason,
+                    "cleanupCondition": cleanup,
+                }
+            )
+            return {
+                "disposition": "manifest-only-recovery",
+                "reason": reason,
+                "cleanupCondition": cleanup,
+            }
+        if self.lifecycle["created"] == 0:
+            self.lifecycle.update({"created": 1, "active": 1})
+        ae_running = await self.after_effects_running()
+        if ae_running:
+            await self.checkpoint(
+                "classify-and-close-failed-issue190-fixture",
+                {
+                    "instruction": (
+                        "Run the ownership-guarded save-in-place/close script and "
+                        "quit the exact formal AE process. Do not reset, delete, "
+                        "Save As, or retry any write."
+                    ),
+                    "script": close_fixture_script(self.config),
+                    "fixtureLifecycle": "ephemeral-validation",
+                    "preserveUnreconciledWrite": self.unreconciled_write,
+                    "validationProfile": "development",
+                    "candidateRun": False,
+                    "candidateEvidence": False,
+                },
+            )
+            require(
+                not await self.after_effects_running(),
+                "formal After Effects still owns the failed Issue #190 fixture",
+            )
+        process_gone_without_recovery = (
+            not ae_running
+            and self.unreconciled_write
+            and not self.fixture_baseline_restored
+        )
+        baseline_restored = (
+            self.fixture_baseline_restored and not process_gone_without_recovery
+        )
+        archive = await self.archive_fixture(
+            self.current_wav_path,
+            reason=reason,
+            evidence_snapshot=self.unreconciled_write,
+            baseline_restored=baseline_restored,
+        )
+        disposition = (
+            "evidence-snapshot"
+            if self.unreconciled_write
+            else "short-lived-recovery"
+        )
+        return {
+            "disposition": disposition,
+            "archiveName": archive.name,
+            "reason": reason,
+            "baselineRestored": baseline_restored,
+            "aeProcessGoneWithoutRecovery": process_gone_without_recovery,
+            "cleanupCondition": self.lifecycle["cleanupCondition"],
+        }
 
     def call_summary(self) -> list[dict[str, Any]]:
         """Join the frozen plan, defect disposition, and public evidence."""
@@ -1242,7 +2284,9 @@ class Issue190Runner:
         return result
 
     async def run(self, session: PublicSession) -> dict[str, Any]:
+        self.claim_fixture()
         wav_path = generate_fixture_wav(self.config)
+        self.current_wav_path = wav_path
         await self.checkpoint(
             "create-or-reset-issue190-fixture",
             {
@@ -1278,7 +2322,11 @@ class Issue190Runner:
                 "candidateEvidence": False,
             },
         )
-        archived = await self.archive_fixture(wav_path)
+        archived = await self.archive_fixture(
+            wav_path,
+            reason="structured development evidence complete",
+            baseline_restored=True,
+        )
         archive_id = self.evidence.record(
             "fixture-archived",
             {
@@ -1320,17 +2368,13 @@ async def run_issue190_hdev(
     session: PublicSession,
     checkpoint: Callable[[str, Mapping[str, Any]], Awaitable[None]],
     after_effects_running: Callable[[], Awaitable[bool]],
-    reconcile_uncertain: Callable[
-        [dict[str, Any]], Awaitable[dict[str, Any]]
-    ] = _default_reconcile,
 ) -> Issue190Result:
-    evidence = DevelopmentEvidence(config.evidence_dir)
+    evidence = DevelopmentEvidence(config.evidence_dir, run_id=config.run_id)
     runner = Issue190Runner(
         config,
         checkpoint=checkpoint,
         after_effects_running=after_effects_running,
         evidence=evidence,
-        reconcile_uncertain=reconcile_uncertain,
     )
     passed = False
     exit_code = 2
@@ -1349,9 +2393,27 @@ async def run_issue190_hdev(
     except Issue190Failure as error:
         details = {"failure": str(error)}
         exit_code = 2
-    if not passed and runner.lifecycle["created"] == 1:
-        runner.lifecycle["active"] = 1
-        runner.lifecycle["unclassified"] = 1
+    if not passed:
+        try:
+            failure_reason = str(
+                details.get("message", details.get("failure", "Issue #190 HDEV failed"))
+            )
+            details["fixtureDisposition"] = await runner.finalize_failure(
+                failure_reason
+            )
+        except Issue190Failure as finalization_error:
+            details["fixtureFinalizationFailure"] = str(finalization_error)
+            runner.lifecycle.update(
+                {
+                    "active": int(os.path.lexists(config.fixture_path)),
+                    "unclassified": int(os.path.lexists(config.fixture_path)),
+                    "baselineRestored": runner.fixture_baseline_restored,
+                    "dispositionReason": "fixture finalization failed",
+                    "cleanupCondition": (
+                        "retain until the ownership-aware finalization blocker is fixed"
+                    ),
+                }
+            )
     summary = evidence.finish(
         passed=passed,
         public_calls=runner.ledger.public_dict(),
@@ -1387,8 +2449,6 @@ def parse_args(argv: Sequence[str] | None = None) -> Issue190Config:
     parser.add_argument("--selected-components", required=True)
     parser.add_argument("--reused-components", required=True)
     parser.add_argument("--checkout", type=Path, required=True)
-    parser.add_argument("--fixture-path", type=Path, required=True)
-    parser.add_argument("--recovery-archive-root", type=Path, required=True)
     parser.add_argument("--evidence-dir", type=Path, required=True)
     parser.add_argument("--formal-ae-app", type=Path, required=True)
     parser.add_argument(
@@ -1401,8 +2461,7 @@ def parse_args(argv: Sequence[str] | None = None) -> Issue190Config:
         selected_components=_components(arguments.selected_components),
         reused_components=_components(arguments.reused_components),
         checkout=arguments.checkout,
-        fixture_path=arguments.fixture_path,
-        recovery_root=arguments.recovery_archive_root,
+        fixture_home=Path.home(),
         evidence_dir=arguments.evidence_dir,
         formal_ae_app=arguments.formal_ae_app,
         plugin_url=arguments.plugin_url,

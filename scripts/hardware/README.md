@@ -214,29 +214,51 @@ PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -I \
   --selected-components core,native \
   --reused-components cep \
   --checkout "$PWD" \
-  --fixture-path "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active/issue190-layer-source-matte-av.aep" \
-  --recovery-archive-root "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/recovery" \
   --evidence-dir "$HOME/Library/Application Support/AfterEffectsMCP/evidence/hdev-issue190" \
   --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
 ```
 
-The driver creates or resets exactly one `ephemeral-validation` fixture through
-fixed harness-only ExtendScript. Its exact named roles are `SOURCE_COMP_A`,
+The driver derives a fresh run-ID `.aep` beneath the canonical
+`$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active` root; the
+CLI does not accept an external fixture or recovery path. Before touching AE it
+creates an exclusive `O_EXCL` ownership manifest that binds the run ID,
+`ephemeral-validation` lifecycle, active/recovery/evidence roots, and cleanup
+condition. It refuses an existing target, symlink, path escape, or mismatched
+manifest.
+
+The fixed harness-only ExtendScript closes only an empty untitled project. It
+blocks every other saved or nonempty untitled project before close/save and
+may reuse only the exact runner-owned fixture with the matching embedded owner
+marker and manifest. It never overwrites an existing unowned path. Its exact
+named roles are `SOURCE_COMP_A`,
 `SOURCE_COMP_B`, `RELINK_TARGET`, `MATTE_FILL`, `MATTE_SOURCE`,
 `MATTE_SPACER`, `VIDEO_SWITCH`, and `AUDIO_SWITCH`; the anonymous 250 ms PCM
 WAV is generated beneath the approved fixture area. Product reads and writes
 use public MCP only. Harness-only code performs the five real-Undo checkpoints,
 and every Undo is followed by public locator reacquisition and exact readback.
-After structured evidence, the driver saves in place, closes formal AE, and
-archives the single `.aep` and WAV with zero active and zero unclassified
-fixtures. It never accumulates Save As copies.
+After success or failure, the driver saves in place only when ownership still
+matches, closes formal AE when it is running, and moves the `.aep`, manifest,
+and WAV to a per-run recovery directory with zero active and zero unclassified
+fixtures. A reconciled/restored or pre-dispatch failure is short-lived
+recovery. An unreconciled write or post-dispatch crash is a classified evidence
+snapshot with reason, cleanup condition, and `baselineRestored=false`; if AE is
+already gone, the driver archives the disk fixture without claiming that Undo
+or baseline restoration occurred. It never resets/deletes an unreconciled
+fixture or accumulates Save As copies.
 
 The frozen ledger dispatches exactly 40 public MCP calls and aborts before call
 41. It covers source replacement/preservation/replay/Undo, non-adjacent Track
 Matte set and reorder stability, Luma clear with stored-mode preservation,
 audio/video disable and Undo, and all five structured negative cases. A
-possible write is reconciled through state/audit inspection and stops the run
-without retry. Its defect ledger records every case as `PASS`, `FAIL`,
+write stays pending until its frozen public readback passes. A
+`POSSIBLY_SIDE_EFFECTING_FAILURE` or post-dispatch transport loss reuses the
+original operation key, response/audit identifiers, and only already-planned
+readback calls to classify it as committed-reconciled,
+not-occurred-reconciled, or unreconciled; it is never retried. A successful
+write whose readback fails enters its associated harness Undo and frozen
+locator-reacquisition/baseline reads before any independent case can continue.
+An unreconciled write stops immediately and preserves the fixture. Its defect
+ledger records every case as `PASS`, `FAIL`,
 `BLOCKED`, or `INDETERMINATE`, including the failing layer, side-effect state,
 reconciliation, dependency impact, and evidence IDs.
 
