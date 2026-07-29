@@ -1,0 +1,577 @@
+{
+  "version": 1,
+  "primitives": [
+    {
+      "id": "composition.resolve",
+      "order": 1,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "locator": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "type": "object"
+          },
+          "exportable": {
+            "const": false
+          }
+        }
+      },
+      "executor": "execute_composition_resolve",
+      "summary": "Read composition.resolve.",
+      "example": {},
+      "exportable": false
+    },
+    {
+      "id": "layer.resolve",
+      "order": 2,
+      "mutability": "read",
+      "requiredSuite": "AEGP_LayerSuite9",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "locator": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "type": "object"
+          },
+          "exportable": {
+            "const": false
+          }
+        }
+      },
+      "executor": "execute_layer_resolve",
+      "summary": "Read layer.resolve.",
+      "example": {},
+      "exportable": false
+    },
+    {
+      "id": "property.resolve",
+      "order": 3,
+      "mutability": "read",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "locator": {
+            "type": "object",
+            "additionalProperties": false
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "handle": {
+            "type": "object"
+          },
+          "exportable": {
+            "const": false
+          }
+        }
+      },
+      "executor": "execute_property_resolve",
+      "summary": "Read property.resolve.",
+      "example": {},
+      "exportable": false
+    },
+    {
+      "id": "project.items.list",
+      "order": 4,
+      "mutability": "read",
+      "requiredSuite": "AEGP_ProjSuite6",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "executor": "execute_project_items_list",
+      "summary": "Read project.items.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.layers.list",
+      "order": 5,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "executor": "execute_composition_layers_list",
+      "summary": "Read composition.layers.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.selectedLayers.list",
+      "order": 6,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "executor": "execute_composition_selectedLayers_list",
+      "summary": "Read composition.selectedLayers.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.time.read",
+      "order": 7,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "executor": "execute_composition_time_read",
+      "summary": "Read composition.time.read.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.time.set",
+      "order": 8,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_composition_time_set",
+      "summary": "Write composition.time.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.settings.read",
+      "order": 9,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "executor": "execute_composition_settings_read",
+      "summary": "Read composition.settings.read.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.duration.set",
+      "order": 10,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_composition_duration_set",
+      "summary": "Write composition.duration.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.frameRate.set",
+      "order": 11,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_composition_frameRate_set",
+      "summary": "Write composition.frameRate.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.pixelAspectRatio.set",
+      "order": 12,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_composition_pixelAspectRatio_set",
+      "summary": "Write composition.pixelAspectRatio.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.displayStartTime.set",
+      "order": 13,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_composition_displayStartTime_set",
+      "summary": "Write composition.displayStartTime.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "layer.properties.list",
+      "order": 14,
+      "mutability": "read",
+      "requiredSuite": "AEGP_LayerSuite9",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "executor": "execute_layer_properties_list",
+      "summary": "Read layer.properties.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframes.list",
+      "order": 15,
+      "mutability": "read",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "executor": "execute_property_keyframes_list",
+      "summary": "Read property.keyframes.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.value.set",
+      "order": 16,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_property_value_set",
+      "summary": "Write property.value.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.details.read",
+      "order": 17,
+      "mutability": "read",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false
+      },
+      "executor": "execute_property_keyframe_details_read",
+      "summary": "Read property.keyframe.details.read.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.add",
+      "order": 18,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_property_keyframe_add",
+      "summary": "Write property.keyframe.add.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.value.set",
+      "order": 19,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_property_keyframe_value_set",
+      "summary": "Write property.keyframe.value.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.interpolation.set",
+      "order": 20,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_property_keyframe_interpolation_set",
+      "summary": "Write property.keyframe.interpolation.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.temporalEase.set",
+      "order": 21,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_property_keyframe_temporalEase_set",
+      "summary": "Write property.keyframe.temporalEase.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.behavior.set",
+      "order": 22,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_property_keyframe_behavior_set",
+      "summary": "Write property.keyframe.behavior.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.delete",
+      "order": 23,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "x-contract": "legacy-native-closed-schema"
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "before": {},
+        "after": {},
+        "changed": {
+          "type": "boolean"
+        },
+        "undo": {
+          "type": "object"
+        }
+      },
+      "executor": "execute_property_keyframe_delete",
+      "summary": "Write property.keyframe.delete.",
+      "example": {},
+      "exportable": true
+    }
+  ]
+}

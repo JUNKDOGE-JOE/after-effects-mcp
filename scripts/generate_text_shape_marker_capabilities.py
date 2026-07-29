@@ -10,13 +10,25 @@ from __future__ import annotations
 
 import argparse
 import copy
-import hashlib
 import json
 import math
 import re
 import sys
 from pathlib import Path
 from typing import Any
+
+if __package__:
+    from .native_capability_codegen import (
+        canonical_json,
+        canonical_sha256,
+        descriptor_summary,
+    )
+else:
+    from native_capability_codegen import (
+        canonical_json,
+        canonical_sha256,
+        descriptor_summary,
+    )
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,17 +104,11 @@ COMPOSITION_SNAPSHOT_SCHEMA_DEFINITIONS = {
 
 
 def _canonical(value: Any) -> str:
-    return json.dumps(
-        value,
-        ensure_ascii=False,
-        allow_nan=False,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
+    return canonical_json(value)
 
 
 def _digest(value: Any) -> str:
-    return hashlib.sha256(_canonical(value).encode("utf-8")).hexdigest()
+    return canonical_sha256(value)
 
 
 def _locator(kind: str, object_id: str) -> dict[str, Any]:
@@ -1134,19 +1140,7 @@ def _json_text(value: Any) -> str:
 
 
 def _summary_descriptor(descriptor: dict[str, Any]) -> dict[str, Any]:
-    summary = copy.deepcopy(descriptor)
-    summary["detail"] = "summary"
-    for key in (
-        "inputContractId",
-        "resultContractId",
-        "contractDigest",
-        "inputSchema",
-        "resultSchema",
-        "requirements",
-        "examples",
-    ):
-        summary.pop(key, None)
-    return summary
+    return descriptor_summary(descriptor)
 
 
 def _outputs() -> dict[Path, str]:
