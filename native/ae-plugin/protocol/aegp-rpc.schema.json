@@ -12895,16 +12895,63 @@
         }
       ]
     },
-    "capabilityResultItem": {
+    "nativePrimitiveSummary": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nativePrimitiveDescriptor"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "const": "summary"
+            }
+          }
+        }
+      ]
+    },
+    "nativePrimitiveFull": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nativePrimitiveDescriptor"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "const": "full"
+            }
+          }
+        }
+      ]
+    },
+    "capabilitySummaryItem": {
       "oneOf": [
         {
           "$ref": "#/$defs/capabilitySummary"
         },
         {
+          "$ref": "#/$defs/nativePrimitiveSummary"
+        }
+      ]
+    },
+    "capabilityFullItem": {
+      "oneOf": [
+        {
           "$ref": "#/$defs/capabilityFull"
         },
         {
-          "$ref": "#/$defs/nativePrimitiveDescriptor"
+          "$ref": "#/$defs/nativePrimitiveFull"
+        }
+      ]
+    },
+    "capabilityResultItem": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/capabilitySummaryItem"
+        },
+        {
+          "$ref": "#/$defs/capabilityFullItem"
         }
       ]
     },
@@ -12958,7 +13005,7 @@
               "type": "array",
               "maxItems": 100,
               "items": {
-                "$ref": "#/$defs/capabilitySummary"
+                "$ref": "#/$defs/capabilitySummaryItem"
               }
             }
           }
@@ -12980,7 +13027,7 @@
               "type": "array",
               "maxItems": 100,
               "items": {
-                "$ref": "#/$defs/capabilityFull"
+                "$ref": "#/$defs/capabilityFullItem"
               }
             }
           }

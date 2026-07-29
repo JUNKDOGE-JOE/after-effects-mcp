@@ -277,13 +277,20 @@ def _digest(value: Any) -> str:
 
 
 def _primitive_value_kind(row: PrimitiveRow) -> str:
-    if row.id == "composition.resolve":
-        return "kCompositionHandle"
-    if row.id == "layer.resolve":
-        return "kLayerHandle"
-    if row.id == "property.resolve":
-        return "kPropertyHandle"
-    return "kJson"
+    handle = row.result_schema.get("properties", {}).get("handle")
+    if handle is None:
+        return "kJson"
+    if not isinstance(handle, dict):
+        raise ValueError(f"{row.id}: handle result must be an object schema")
+    kind = handle.get("properties", {}).get("kind", {}).get("const")
+    value_kinds = {
+        "composition": "kCompositionHandle",
+        "layer": "kLayerHandle",
+        "property": "kPropertyHandle",
+    }
+    if kind not in value_kinds:
+        raise ValueError(f"{row.id}: handle result must declare a supported kind")
+    return value_kinds[kind]
 
 
 def _primitive_descriptor(row: PrimitiveRow, detail: str) -> dict[str, Any]:

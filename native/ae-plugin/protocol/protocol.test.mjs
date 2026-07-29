@@ -250,6 +250,30 @@ test('capabilities discovery accepts generated primitive IDs without an alias li
   assert.match(NATIVE_EXEC_REGISTRY_DIGEST, /^[a-f0-9]{64}$/u);
 });
 
+test('complete generated primitive capability responses satisfy the shared wire schema', () => {
+  for (const detail of ['summary', 'full']) {
+    const result = {
+      detail,
+      items: CAPABILITY_DESCRIPTORS[detail],
+      nextCursor: null,
+      queryDigest: 'a'.repeat(64),
+      capabilitiesDigest: NATIVE_EXEC_REGISTRY_DIGEST,
+    };
+    const response = {
+      wireVersion: 1,
+      kind: 'response',
+      sessionId: SESSION,
+      requestId: `generated-primitive-${detail}`,
+      method: 'capabilities',
+      ok: true,
+      replayed: false,
+      result,
+    };
+    assert.equal(schemaAccepts(schema.$defs.capabilitiesResult, result), true);
+    assert.equal(schemaAccepts(schema.$defs.response, response), true);
+  }
+});
+
 test('repository CI executes this contract on Windows, Linux, and stacked PR bases', () => {
   const ci = fs.readFileSync(path.join(here, '..', '..', '..', '.github', 'workflows', 'ci.yml'), 'utf8');
   assert.match(ci, /\n  pull_request: \{\}\n/);
