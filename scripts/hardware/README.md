@@ -194,6 +194,57 @@ wire/capability/RPC digest, strict product-version mismatch, failed native load,
 `POSSIBLY_SIDE_EFFECTING_FAILURE`, corrupted fixture baseline, or AE crash.
 Never retry an uncertain write.
 
+### Issue #190 layer source, Track Matte, and AV HDEV
+
+`issue190_layer_source_matte_av_acceptance.py` is the package-specific,
+current-checkout HDEV for the eight Issue #190 public tools. Run it only after
+the read-only development doctor confirms the canonical component pointers,
+install receipts, compatible component/protocol versions, file sizes, and
+modification times. Reuse unchanged CEP and dependency state; do not turn this
+ordinary development run into a full runtime hash walk or reinstall unchanged
+components. The `selected-components` and `reused-components` arguments must
+describe the components actually synchronized for this checkout.
+
+From the exact checkout being tested:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -I \
+  scripts/hardware/issue190_layer_source_matte_av_acceptance.py \
+  --scenario issue190-layer-source-matte-av@1 \
+  --selected-components core,native \
+  --reused-components cep \
+  --checkout "$PWD" \
+  --fixture-path "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active/issue190-layer-source-matte-av.aep" \
+  --recovery-archive-root "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/recovery" \
+  --evidence-dir "$HOME/Library/Application Support/AfterEffectsMCP/evidence/hdev-issue190" \
+  --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
+```
+
+The driver creates or resets exactly one `ephemeral-validation` fixture through
+fixed harness-only ExtendScript. Its exact named roles are `SOURCE_COMP_A`,
+`SOURCE_COMP_B`, `RELINK_TARGET`, `MATTE_FILL`, `MATTE_SOURCE`,
+`MATTE_SPACER`, `VIDEO_SWITCH`, and `AUDIO_SWITCH`; the anonymous 250 ms PCM
+WAV is generated beneath the approved fixture area. Product reads and writes
+use public MCP only. Harness-only code performs the five real-Undo checkpoints,
+and every Undo is followed by public locator reacquisition and exact readback.
+After structured evidence, the driver saves in place, closes formal AE, and
+archives the single `.aep` and WAV with zero active and zero unclassified
+fixtures. It never accumulates Save As copies.
+
+The frozen ledger dispatches exactly 40 public MCP calls and aborts before call
+41. It covers source replacement/preservation/replay/Undo, non-adjacent Track
+Matte set and reorder stability, Luma clear with stored-mode preservation,
+audio/video disable and Undo, and all five structured negative cases. A
+possible write is reconciled through state/audit inspection and stops the run
+without retry. Its defect ledger records every case as `PASS`, `FAIL`,
+`BLOCKED`, or `INDETERMINATE`, including the failing layer, side-effect state,
+reconciliation, dependency impact, and evidence IDs.
+
+This command is development-only. Every event and summary permanently records
+`validationProfile=development`, `candidateRun=false`, and
+`candidateEvidence=false`. Its output is not candidate, packaged-release, or
+release-acceptance evidence and must never be promoted or relabeled as such.
+
 ## Native editing milestone #167
 
 `issue167_native_media_acceptance.py` drives the frozen 22-tool Effect Stack,
