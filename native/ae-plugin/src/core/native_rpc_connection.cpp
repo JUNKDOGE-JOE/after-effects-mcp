@@ -28,6 +28,26 @@ using rpc::RpcMethod;
 
 constexpr std::chrono::milliseconds kSocketWriteTimeout{1500};
 
+constexpr std::array<std::string_view, 7> kLayerSourceMatteAvCapabilities{{
+    kLayerSourceReadCapability,
+    kLayerTrackMatteReadCapability,
+    kLayerTrackMatteSetCapability,
+    kLayerTrackMatteClearCapability,
+    kLayerAVStateReadCapability,
+    kLayerAudioEnabledSetCapability,
+    kLayerVideoEnabledSetCapability,
+}};
+
+constexpr std::array<std::string_view, 7> kLayerSourceMatteAvContractDigests{{
+    "877ba54bba16bf11432caf0d504b99c753c7843824fcb6a1fcea056d00d5bedb",
+    "d195337021d9d84ff8231d7d0f2b7a2ad9333356924c4e3a3d4c0354979b4571",
+    "979f0c273060da14e8763219d8a4193359c3d24fb067a5c18014887217f27c86",
+    "4591b1d2a8fc5f9f2cf88a780cfc34e0243ec5f5aed43e5323ef256329de1530",
+    "f4a05bfadc549c448e95cc18298a650ae96dfa2839dea457365d6bb9d0486464",
+    "508a96fe62c9f072a6dbe21c34bfb32f617f4c6c525be3a3a269034651b446fb",
+    "536c47c0419099b8c6e084592f36f070cc0a6ba4deafcb847c77d3bba991fcf3",
+}};
+
 struct ActiveEvidence {
   RpcMethod method{RpcMethod::kInvoke};
   std::string request_digest;
@@ -205,6 +225,120 @@ bool keyframe_write_capability(std::string_view capability_id) {
       || capability_id == kLayerPropertyKeyframeDeleteCapability;
 }
 
+bool layer_source_matte_av_write_capability(std::string_view capability_id) {
+  return capability_id == kLayerTrackMatteSetCapability
+      || capability_id == kLayerTrackMatteClearCapability
+      || capability_id == kLayerAudioEnabledSetCapability
+      || capability_id == kLayerVideoEnabledSetCapability;
+}
+
+rpc::LayerSourceType rpc_layer_source_type(LayerSourceType value) {
+  switch (value) {
+    case LayerSourceType::kNone: return rpc::LayerSourceType::kNone;
+    case LayerSourceType::kFootage: return rpc::LayerSourceType::kFootage;
+    case LayerSourceType::kComposition:
+      return rpc::LayerSourceType::kComposition;
+  }
+  throw std::invalid_argument("invalid layer source type");
+}
+
+rpc::LayerTrackMatteMode rpc_track_matte_mode(LayerTrackMatteMode value) {
+  switch (value) {
+    case LayerTrackMatteMode::kNone:
+      return rpc::LayerTrackMatteMode::kNone;
+    case LayerTrackMatteMode::kAlpha:
+      return rpc::LayerTrackMatteMode::kAlpha;
+    case LayerTrackMatteMode::kInvertedAlpha:
+      return rpc::LayerTrackMatteMode::kInvertedAlpha;
+    case LayerTrackMatteMode::kLuma:
+      return rpc::LayerTrackMatteMode::kLuma;
+    case LayerTrackMatteMode::kInvertedLuma:
+      return rpc::LayerTrackMatteMode::kInvertedLuma;
+  }
+  throw std::invalid_argument("invalid layer Track Matte mode");
+}
+
+LayerTrackMatteMode dispatcher_track_matte_mode(
+    rpc::LayerTrackMatteMode value) {
+  switch (value) {
+    case rpc::LayerTrackMatteMode::kAlpha:
+      return LayerTrackMatteMode::kAlpha;
+    case rpc::LayerTrackMatteMode::kInvertedAlpha:
+      return LayerTrackMatteMode::kInvertedAlpha;
+    case rpc::LayerTrackMatteMode::kLuma:
+      return LayerTrackMatteMode::kLuma;
+    case rpc::LayerTrackMatteMode::kInvertedLuma:
+      return LayerTrackMatteMode::kInvertedLuma;
+    case rpc::LayerTrackMatteMode::kNone:
+      break;
+  }
+  throw std::invalid_argument("invalid settable layer Track Matte mode");
+}
+
+rpc::LayerSourceValue rpc_layer_source_value(const LayerSourceValue& value) {
+  return {
+      value.layer_locator,
+      value.source_item_locator,
+      rpc_layer_source_type(value.source_type),
+      value.source_name,
+  };
+}
+
+rpc::LayerTrackMatteValue rpc_layer_track_matte_value(
+    const LayerTrackMatteValue& value) {
+  return {
+      value.layer_locator,
+      value.active,
+      value.matte_layer_locator,
+      rpc_track_matte_mode(value.mode),
+  };
+}
+
+rpc::LayerTrackMatteSetValue rpc_layer_track_matte_set_value(
+    const LayerTrackMatteSetValue& value) {
+  return {
+      value.changed,
+      value.layer_locator,
+      value.before_matte_layer_locator,
+      rpc_track_matte_mode(value.before_mode),
+      value.after_matte_layer_locator,
+      rpc_track_matte_mode(value.after_mode),
+  };
+}
+
+rpc::LayerTrackMatteClearValue rpc_layer_track_matte_clear_value(
+    const LayerTrackMatteClearValue& value) {
+  return {
+      value.changed,
+      value.layer_locator,
+      value.before_matte_layer_locator,
+      rpc_track_matte_mode(value.before_mode),
+      value.after_matte_layer_locator,
+      rpc_track_matte_mode(value.after_mode),
+  };
+}
+
+rpc::LayerAVStateValue rpc_layer_av_state_value(
+    const LayerAVStateValue& value) {
+  return {
+      value.layer_locator,
+      value.has_audio,
+      value.audio_enabled,
+      value.has_video,
+      value.video_enabled,
+  };
+}
+
+rpc::LayerAVSwitchSetValue rpc_layer_av_switch_set_value(
+    const LayerAVSwitchSetValue& value) {
+  return {
+      value.changed,
+      value.layer_locator,
+      rpc_layer_av_state_value(value.before),
+      rpc_layer_av_state_value(value.after),
+  };
+}
+
 bool valid_timing_evidence(
     const ActiveEvidence& evidence, std::uint64_t completed_at_unix_ms) {
   return valid_digest(evidence.request_digest)
@@ -248,6 +382,7 @@ std::string_view post_dispatch_evidence_failure_code(
       || capability_id == kLayerQualitySetCapability
       || capability_id == kLayerBlendingModeSetCapability
       || capability_id == kNativeMediaWriteCapability
+      || layer_source_matte_av_write_capability(capability_id)
       || is_text_shape_marker_write_capability(capability_id);
   return mutating
       ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
@@ -281,6 +416,24 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
         && digest.size() == 64
         && digest
             == rpc::kCompositionSettingCapabilities[index].contract_digest;
+  }
+  const std::array<std::string_view, 7> layer_source_matte_av_contracts{{
+      runtime_.layer_source_read_contract_digest,
+      runtime_.layer_track_matte_read_contract_digest,
+      runtime_.layer_track_matte_set_contract_digest,
+      runtime_.layer_track_matte_clear_contract_digest,
+      runtime_.layer_av_state_read_contract_digest,
+      runtime_.layer_audio_enabled_set_contract_digest,
+      runtime_.layer_video_enabled_set_contract_digest,
+  }};
+  bool layer_source_matte_av_contracts_valid = true;
+  for (std::size_t index = 0;
+       index < layer_source_matte_av_contracts.size();
+       ++index) {
+    layer_source_matte_av_contracts_valid =
+        layer_source_matte_av_contracts_valid
+        && layer_source_matte_av_contracts[index]
+            == kLayerSourceMatteAvContractDigests[index];
   }
   if (runtime_.plugin_version.empty() || runtime_.compiled_sdk_version.empty()
       || runtime_.compiled_sdk_build == 0 || runtime_.host_version.empty()
@@ -327,6 +480,7 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.layer_property_keyframe_delete_contract_digest.size() != 64
       || runtime_.native_media_read_contract_digest.size() != 64
       || runtime_.native_media_write_contract_digest.size() != 64
+      || !layer_source_matte_av_contracts_valid
       || !composition_setting_contracts_valid) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
@@ -512,6 +666,76 @@ void NativeRpcConnectionHandler::serve(
               } else {
                 postcondition_digest = rpc::digest_layer_duplicate_postcondition(
                     std::get<LayerDuplicated>(*completion.layer_timeline_result));
+              }
+            } else if (completion.capability_id == kLayerSourceReadCapability) {
+              const auto* value = std::get_if<LayerSourceValue>(
+                  &completion.layer_source_matte_av_result);
+              if (value == nullptr) {
+                evidence_valid = false;
+              } else {
+                postcondition_digest = rpc::digest_layer_source_postcondition(
+                    rpc_layer_source_value(*value));
+              }
+            } else if (
+                completion.capability_id == kLayerTrackMatteReadCapability) {
+              const auto* value = std::get_if<LayerTrackMatteValue>(
+                  &completion.layer_source_matte_av_result);
+              if (value == nullptr) {
+                evidence_valid = false;
+              } else {
+                postcondition_digest =
+                    rpc::digest_layer_track_matte_read_postcondition(
+                        rpc_layer_track_matte_value(*value));
+              }
+            } else if (
+                completion.capability_id == kLayerTrackMatteSetCapability) {
+              const auto* value = std::get_if<LayerTrackMatteSetValue>(
+                  &completion.layer_source_matte_av_result);
+              if (value == nullptr) {
+                evidence_valid = false;
+              } else {
+                postcondition_digest =
+                    rpc::digest_layer_track_matte_set_postcondition(
+                        rpc_layer_track_matte_set_value(*value));
+              }
+            } else if (
+                completion.capability_id == kLayerTrackMatteClearCapability) {
+              const auto* value = std::get_if<LayerTrackMatteClearValue>(
+                  &completion.layer_source_matte_av_result);
+              if (value == nullptr) {
+                evidence_valid = false;
+              } else {
+                postcondition_digest =
+                    rpc::digest_layer_track_matte_clear_postcondition(
+                        rpc_layer_track_matte_clear_value(*value));
+              }
+            } else if (completion.capability_id == kLayerAVStateReadCapability) {
+              const auto* value = std::get_if<LayerAVStateValue>(
+                  &completion.layer_source_matte_av_result);
+              if (value == nullptr) {
+                evidence_valid = false;
+              } else {
+                postcondition_digest = rpc::digest_layer_av_state_postcondition(
+                    rpc_layer_av_state_value(*value));
+              }
+            } else if (
+                completion.capability_id == kLayerAudioEnabledSetCapability
+                || completion.capability_id
+                    == kLayerVideoEnabledSetCapability) {
+              const auto* value = std::get_if<LayerAVSwitchSetValue>(
+                  &completion.layer_source_matte_av_result);
+              if (value == nullptr) {
+                evidence_valid = false;
+              } else if (
+                  completion.capability_id
+                  == kLayerAudioEnabledSetCapability) {
+                postcondition_digest =
+                    rpc::digest_layer_audio_enabled_set_postcondition(
+                        rpc_layer_av_switch_set_value(*value));
+              } else {
+                postcondition_digest =
+                    rpc::digest_layer_video_enabled_set_postcondition(
+                        rpc_layer_av_switch_set_value(*value));
               }
             } else if (completion.capability_id == kLayerCompositingReadCapability) {
               if (completion.layer_compositing_result == nullptr
@@ -833,6 +1057,71 @@ void NativeRpcConnectionHandler::serve(
                 std::get<LayerDuplicated>(*completion.layer_timeline_result),
                 started_at, completed_at, request_digest, postcondition_digest,
                 completion.replayed});
+          } else if (completion.capability_id == kLayerSourceReadCapability) {
+            response = rpc::encode_layer_source_success({
+                completion.request_id, connection.session_id,
+                runtime_.host_instance_id,
+                rpc_layer_source_value(std::get<LayerSourceValue>(
+                    completion.layer_source_matte_av_result)),
+                started_at, completed_at, request_digest, postcondition_digest,
+                false});
+          } else if (
+              completion.capability_id == kLayerTrackMatteReadCapability) {
+            response = rpc::encode_layer_track_matte_read_success({
+                completion.request_id, connection.session_id,
+                runtime_.host_instance_id,
+                rpc_layer_track_matte_value(std::get<LayerTrackMatteValue>(
+                    completion.layer_source_matte_av_result)),
+                started_at, completed_at, request_digest, postcondition_digest,
+                false});
+          } else if (
+              completion.capability_id == kLayerTrackMatteSetCapability) {
+            response = rpc::encode_layer_track_matte_set_success({
+                completion.request_id, connection.session_id,
+                runtime_.host_instance_id,
+                rpc_layer_track_matte_set_value(
+                    std::get<LayerTrackMatteSetValue>(
+                        completion.layer_source_matte_av_result)),
+                started_at, completed_at, request_digest, postcondition_digest,
+                completion.replayed});
+          } else if (
+              completion.capability_id == kLayerTrackMatteClearCapability) {
+            response = rpc::encode_layer_track_matte_clear_success({
+                completion.request_id, connection.session_id,
+                runtime_.host_instance_id,
+                rpc_layer_track_matte_clear_value(
+                    std::get<LayerTrackMatteClearValue>(
+                        completion.layer_source_matte_av_result)),
+                started_at, completed_at, request_digest, postcondition_digest,
+                completion.replayed});
+          } else if (completion.capability_id == kLayerAVStateReadCapability) {
+            response = rpc::encode_layer_av_state_success({
+                completion.request_id, connection.session_id,
+                runtime_.host_instance_id,
+                rpc_layer_av_state_value(std::get<LayerAVStateValue>(
+                    completion.layer_source_matte_av_result)),
+                started_at, completed_at, request_digest, postcondition_digest,
+                false});
+          } else if (
+              completion.capability_id == kLayerAudioEnabledSetCapability) {
+            response = rpc::encode_layer_audio_enabled_set_success({
+                completion.request_id, connection.session_id,
+                runtime_.host_instance_id,
+                rpc_layer_av_switch_set_value(
+                    std::get<LayerAVSwitchSetValue>(
+                        completion.layer_source_matte_av_result)),
+                started_at, completed_at, request_digest, postcondition_digest,
+                completion.replayed});
+          } else if (
+              completion.capability_id == kLayerVideoEnabledSetCapability) {
+            response = rpc::encode_layer_video_enabled_set_success({
+                completion.request_id, connection.session_id,
+                runtime_.host_instance_id,
+                rpc_layer_av_switch_set_value(
+                    std::get<LayerAVSwitchSetValue>(
+                        completion.layer_source_matte_av_result)),
+                started_at, completed_at, request_digest, postcondition_digest,
+                completion.replayed});
           } else if (completion.capability_id == kLayerCompositingReadCapability) {
             response = rpc::encode_layer_compositing_success({
                 completion.request_id, connection.session_id, runtime_.host_instance_id,
@@ -1121,6 +1410,13 @@ void NativeRpcConnectionHandler::serve(
           const bool include_layer_order = includes("ae.layer.order.set");
           const bool include_layer_parent = includes("ae.layer.parent.set");
           const bool include_layer_duplicate = includes("ae.layer.duplicate");
+          std::array<bool, 7> include_layer_source_matte_av{};
+          for (std::size_t index = 0;
+               index < include_layer_source_matte_av.size();
+               ++index) {
+            include_layer_source_matte_av[index] =
+                includes(kLayerSourceMatteAvCapabilities[index]);
+          }
           const bool include_layer_compositing =
               includes(kLayerCompositingReadCapability);
           const bool include_layer_switch = includes(kLayerSwitchSetCapability);
@@ -1196,6 +1492,10 @@ void NativeRpcConnectionHandler::serve(
               + static_cast<std::size_t>(include_layer_order)
               + static_cast<std::size_t>(include_layer_parent)
               + static_cast<std::size_t>(include_layer_duplicate)
+              + static_cast<std::size_t>(std::count(
+                  include_layer_source_matte_av.begin(),
+                  include_layer_source_matte_av.end(),
+                  true))
               + static_cast<std::size_t>(include_layer_compositing)
               + static_cast<std::size_t>(include_layer_switch)
               + static_cast<std::size_t>(include_layer_quality)
@@ -1279,6 +1579,7 @@ void NativeRpcConnectionHandler::serve(
                   include_layer_order,
                   include_layer_parent,
                   include_layer_duplicate,
+                  include_layer_source_matte_av,
                   include_layer_compositing,
                   include_layer_switch,
                   include_layer_quality,
@@ -1306,6 +1607,15 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.layer_order_set_contract_digest,
                   runtime_.layer_parent_set_contract_digest,
                   runtime_.layer_duplicate_contract_digest,
+                  {
+                      runtime_.layer_source_read_contract_digest,
+                      runtime_.layer_track_matte_read_contract_digest,
+                      runtime_.layer_track_matte_set_contract_digest,
+                      runtime_.layer_track_matte_clear_contract_digest,
+                      runtime_.layer_av_state_read_contract_digest,
+                      runtime_.layer_audio_enabled_set_contract_digest,
+                      runtime_.layer_video_enabled_set_contract_digest,
+                  },
                   runtime_.layer_compositing_read_contract_digest,
                   runtime_.layer_switch_set_contract_digest,
                   runtime_.layer_quality_set_contract_digest,
@@ -1434,13 +1744,48 @@ void NativeRpcConnectionHandler::serve(
               invoke.layer_quality,
               invoke.layer_blending_mode,
           };
-          if (invoke.capability_id == kNativeMediaReadCapability
+          if (invoke.capability_id == kLayerSourceReadCapability) {
+            dispatch_request.layer_source_matte_av_request =
+                LayerSourceReadRequest{*invoke.layer_locator};
+          } else if (
+              invoke.capability_id == kLayerTrackMatteReadCapability) {
+            dispatch_request.layer_source_matte_av_request =
+                LayerTrackMatteReadRequest{*invoke.layer_locator};
+          } else if (
+              invoke.capability_id == kLayerTrackMatteSetCapability) {
+            dispatch_request.layer_source_matte_av_request =
+                LayerTrackMatteSetRequest{
+                    *invoke.layer_locator,
+                    *invoke.matte_layer_locator,
+                    dispatcher_track_matte_mode(invoke.track_matte_mode)};
+          } else if (
+              invoke.capability_id == kLayerTrackMatteClearCapability) {
+            dispatch_request.layer_source_matte_av_request =
+                LayerTrackMatteClearRequest{*invoke.layer_locator};
+          } else if (invoke.capability_id == kLayerAVStateReadCapability) {
+            dispatch_request.layer_source_matte_av_request =
+                LayerAVStateReadRequest{*invoke.layer_locator};
+          } else if (
+              invoke.capability_id == kLayerAudioEnabledSetCapability) {
+            dispatch_request.layer_source_matte_av_request =
+                LayerAudioEnabledSetRequest{
+                    *invoke.layer_locator, *invoke.av_enabled};
+          } else if (
+              invoke.capability_id == kLayerVideoEnabledSetCapability) {
+            dispatch_request.layer_source_matte_av_request =
+                LayerVideoEnabledSetRequest{
+                    *invoke.layer_locator, *invoke.av_enabled};
+          } else if (invoke.capability_id == kNativeMediaReadCapability
               || invoke.capability_id == kNativeMediaWriteCapability
               || is_text_shape_marker_capability(invoke.capability_id)) {
             dispatch_request.native_media = invoke.native_media;
             dispatch_request.native_media.host_instance_id =
                 runtime_.host_instance_id;
             dispatch_request.native_media.session_id = connection.session_id;
+          }
+          if (!std::holds_alternative<std::monostate>(
+                  dispatch_request.layer_source_matte_av_request)) {
+            dispatch_request.layer_locator.reset();
           }
         }
         const std::string dispatched_capability = dispatch_request.capability_id;

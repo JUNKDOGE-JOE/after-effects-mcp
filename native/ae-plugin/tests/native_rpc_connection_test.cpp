@@ -592,6 +592,112 @@ class FakeHost final : public HostApi {
         false, "none"});
   }
 
+  [[nodiscard]] aemcp::native::HostLayerResolveResult resolve_layer(
+      const aemcp::native::ObjectLocator& locator_value, TimePoint) override {
+    ++layer_source_matte_av_resolve_calls;
+    if (locator_value.object_id
+            != "88888888-8888-4888-8888-888888888888"
+        && locator_value.object_id
+            != "99999999-9999-4999-8999-999999999999") {
+      return aemcp::native::HostLayerResolveResult::failure(
+          "STALE_LOCATOR", "fake layer locator is unknown",
+          "params.arguments.layerLocator");
+    }
+    return aemcp::native::HostLayerResolveResult::success({
+        locator_value,
+        locator_value.object_id
+                == "88888888-8888-4888-8888-888888888888"
+            ? 101U : 202U,
+        303U,
+        true,
+    });
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerSourceResult read_layer_source(
+      const aemcp::native::HostResolvedLayer& layer, TimePoint) override {
+    ++layer_source_read_calls;
+    return aemcp::native::HostLayerSourceResult::success({
+        layer.locator,
+        package_locator("item", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+        aemcp::native::LayerSourceType::kFootage,
+        std::string("Fixture Footage"),
+    });
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerTrackMatteResult read_layer_track_matte(
+      const aemcp::native::HostResolvedLayer& layer, TimePoint) override {
+    ++layer_track_matte_read_calls;
+    return aemcp::native::HostLayerTrackMatteResult::success({
+        layer.locator,
+        layer_track_matte_active,
+        layer_track_matte_active
+            ? std::optional<aemcp::native::ObjectLocator>{package_locator(
+                "layer", "99999999-9999-4999-8999-999999999999")}
+            : std::nullopt,
+        layer_track_matte_mode,
+    });
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerAVStateResult read_layer_av_state(
+      const aemcp::native::HostResolvedLayer& layer, TimePoint) override {
+    ++layer_av_state_read_calls;
+    const bool corrupt_after_mutation =
+        invalid_av_postcondition_after_mutation
+        && layer_source_matte_av_mutation_calls
+            >= invalid_av_postcondition_after_mutation;
+    return aemcp::native::HostLayerAVStateResult::success({
+        layer.locator,
+        true,
+        corrupt_after_mutation ? !layer_audio_enabled : layer_audio_enabled,
+        true,
+        layer_video_enabled,
+    });
+  }
+
+  [[nodiscard]] aemcp::native::HostActionResult begin_layer_undo_group(
+      std::string_view, TimePoint) override {
+    ++layer_undo_start_calls;
+    return aemcp::native::HostActionResult::success();
+  }
+
+  [[nodiscard]] aemcp::native::HostActionResult end_layer_undo_group(
+      TimePoint) override {
+    ++layer_undo_end_calls;
+    return aemcp::native::HostActionResult::success();
+  }
+
+  [[nodiscard]] aemcp::native::HostActionResult set_layer_track_matte(
+      const aemcp::native::HostResolvedLayer&,
+      const aemcp::native::HostResolvedLayer&,
+      aemcp::native::LayerTrackMatteMode mode,
+      TimePoint) override {
+    ++layer_source_matte_av_mutation_calls;
+    layer_track_matte_active = true;
+    layer_track_matte_mode = mode;
+    return aemcp::native::HostActionResult::success();
+  }
+
+  [[nodiscard]] aemcp::native::HostActionResult clear_layer_track_matte(
+      const aemcp::native::HostResolvedLayer&, TimePoint) override {
+    ++layer_source_matte_av_mutation_calls;
+    layer_track_matte_active = false;
+    return aemcp::native::HostActionResult::success();
+  }
+
+  [[nodiscard]] aemcp::native::HostActionResult set_layer_audio_enabled(
+      const aemcp::native::HostResolvedLayer&, bool enabled, TimePoint) override {
+    ++layer_source_matte_av_mutation_calls;
+    layer_audio_enabled = enabled;
+    return aemcp::native::HostActionResult::success();
+  }
+
+  [[nodiscard]] aemcp::native::HostActionResult set_layer_video_enabled(
+      const aemcp::native::HostResolvedLayer&, bool enabled, TimePoint) override {
+    ++layer_source_matte_av_mutation_calls;
+    layer_video_enabled = enabled;
+    return aemcp::native::HostActionResult::success();
+  }
+
   [[nodiscard]] HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint) override {
     ++project_graph_invalidation_calls;
@@ -685,6 +791,19 @@ class FakeHost final : public HostApi {
   int layer_property_write_calls{0};
   int layer_compositing_read_calls{0};
   int layer_compositing_write_calls{0};
+  int layer_source_matte_av_resolve_calls{0};
+  int layer_source_read_calls{0};
+  int layer_track_matte_read_calls{0};
+  int layer_av_state_read_calls{0};
+  int layer_source_matte_av_mutation_calls{0};
+  int layer_undo_start_calls{0};
+  int layer_undo_end_calls{0};
+  int invalid_av_postcondition_after_mutation{0};
+  bool layer_track_matte_active{false};
+  bool layer_audio_enabled{true};
+  bool layer_video_enabled{true};
+  aemcp::native::LayerTrackMatteMode layer_track_matte_mode{
+      aemcp::native::LayerTrackMatteMode::kNone};
   int project_graph_invalidation_calls{0};
   std::thread::id project_graph_invalidation_thread;
   aemcp::native::LayerPropertySetCommand observed_property_command;
@@ -768,7 +887,7 @@ class RecordingObserver final : public NativeRpcObserver {
 };
 
 NativeRpcRuntimeInfo runtime() {
-  return {
+  NativeRpcRuntimeInfo value{
       "0.0.0-test",
       "25.6",
       61,
@@ -819,6 +938,13 @@ NativeRpcRuntimeInfo runtime() {
       "a84e5b0971c54eb238ff96652340a7f1b34ebfea56e8238ac73edd11f551fdf9",
       "4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282",
       "a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5",
+      "877ba54bba16bf11432caf0d504b99c753c7843824fcb6a1fcea056d00d5bedb",
+      "d195337021d9d84ff8231d7d0f2b7a2ad9333356924c4e3a3d4c0354979b4571",
+      "979f0c273060da14e8763219d8a4193359c3d24fb067a5c18014887217f27c86",
+      "4591b1d2a8fc5f9f2cf88a780cfc34e0243ec5f5aed43e5323ef256329de1530",
+      "f4a05bfadc549c448e95cc18298a650ae96dfa2839dea457365d6bb9d0486464",
+      "508a96fe62c9f072a6dbe21c34bfb32f617f4c6c525be3a3a269034651b446fb",
+      "536c47c0419099b8c6e084592f36f070cc0a6ba4deafcb847c77d3bba991fcf3",
       {
           "67a37903067278c0fbdf1fb265da232da825ef3250b8b256882de5ee294d5588",
           "16c8b84de5fb7652a6983b7cb1a0739e46c9b0ca7abd59c904969c45f786b1bc",
@@ -828,6 +954,7 @@ NativeRpcRuntimeInfo runtime() {
           "3001a8a910ed8fe425b85157a8ccad48fe1ff4e4966729ba9dba0e108344bb37",
       },
   };
+  return value;
 }
 
 AuthenticatedConnection connection(int socket_fd, std::string route, std::uint32_t generation) {
@@ -937,6 +1064,51 @@ std::string bit_depth_capabilities_json(
       + "\",\"method\":\"capabilities\",\"params\":{\"ids\":[\""
       + std::string(capability_id) + "\"],\"detail\":\"full\","
         "\"limit\":1}}";
+}
+
+std::string graph_locator_json(
+    std::string_view kind, std::string_view object_id);
+
+std::string layer_source_matte_av_capabilities_json(
+    std::string_view request_id,
+    bool filtered,
+    std::string_view detail,
+    std::uint16_t limit) {
+  const std::string ids = filtered
+      ? "\"ids\":[\"ae.layer.source.read\",\"ae.layer.track-matte.read\","
+        "\"ae.layer.track-matte.set\",\"ae.layer.track-matte.clear\","
+        "\"ae.layer.av-state.read\",\"ae.layer.audio-enabled.set\","
+        "\"ae.layer.video-enabled.set\"],"
+      : "";
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"capabilities\",\"params\":{" + ids
+      + "\"detail\":\"" + std::string(detail) + "\",\"limit\":"
+      + std::to_string(limit) + "}}";
+}
+
+std::string layer_source_matte_av_invoke_json(
+    std::string_view request_id,
+    std::string_view capability_id,
+    std::string_view additional_arguments = {}) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"" + std::string(capability_id)
+      + "\",\"capabilityVersion\":1,\"arguments\":{\"layerLocator\":"
+      + graph_locator_json("layer", "88888888-8888-4888-8888-888888888888")
+      + std::string(additional_arguments) + "}}}";
+}
+
+std::size_t count_occurrences(
+    std::string_view value, std::string_view needle) {
+  std::size_t count = 0;
+  std::size_t offset = 0;
+  while ((offset = value.find(needle, offset)) != std::string_view::npos) {
+    ++count;
+    offset += needle.size();
+  }
+  return count;
 }
 
 std::string invoke_json(
@@ -2727,6 +2899,288 @@ void composition_setting_contract_mismatch_is_rejected() {
   (void)dispatcher.shutdown();
 }
 
+void layer_source_matte_and_av_cross_the_authenticated_wire_boundary() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcConnectionHandler handler(
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
+  std::array<int, 2> sockets{};
+  require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0,
+      "layer package socketpair failed");
+  const AuthenticatedConnection authenticated =
+      connection(sockets[1], "route-layer-source-matte-av", 17);
+  std::thread worker([&] { handler.serve(authenticated); });
+
+  send_json(sockets[0], hello_json());
+  require_contains(read_body(sockets[0]), "\"ok\":true", "layer package hello");
+
+  send_json(sockets[0], layer_source_matte_av_capabilities_json(
+      "layer-package-summary", false, "summary", 67));
+  const std::string summary_capabilities = read_body(sockets[0]);
+  require(count_occurrences(summary_capabilities, "\"schemaVersion\":1") == 67,
+      "full summary discovery did not return exactly 67 descriptors");
+  require_contains(
+      summary_capabilities,
+      std::string(aemcp::native::rpc::kCapabilitiesRegistryDigest),
+      "full summary discovery");
+  require(summary_capabilities.find("\"id\":\"ae.layer.source.set\"")
+          == std::string::npos,
+      "summary discovery exposed forbidden native source replacement");
+
+  send_json(sockets[0], layer_source_matte_av_capabilities_json(
+      "layer-package-filtered-summary", true, "summary", 7));
+  const std::string filtered_summary_capabilities = read_body(sockets[0]);
+  require(count_occurrences(
+              filtered_summary_capabilities, "\"schemaVersion\":1") == 7,
+      "filtered summary discovery did not return exactly seven descriptors");
+  require_contains(
+      filtered_summary_capabilities,
+      std::string(aemcp::native::rpc::kCapabilitiesRegistryDigest),
+      "filtered summary discovery");
+
+  send_json(sockets[0], layer_source_matte_av_capabilities_json(
+      "layer-package-full", true, "full", 7));
+  const std::string full_capabilities = read_body(sockets[0]);
+  require(count_occurrences(full_capabilities, "\"schemaVersion\":1") == 7,
+      "bounded full discovery did not return exactly seven descriptors");
+  const std::array<std::string_view, 7> capability_ids{{
+      "ae.layer.source.read",
+      "ae.layer.track-matte.read",
+      "ae.layer.track-matte.set",
+      "ae.layer.track-matte.clear",
+      "ae.layer.av-state.read",
+      "ae.layer.audio-enabled.set",
+      "ae.layer.video-enabled.set",
+  }};
+  const std::array<std::string_view, 7> contract_digests{{
+      "877ba54bba16bf11432caf0d504b99c753c7843824fcb6a1fcea056d00d5bedb",
+      "d195337021d9d84ff8231d7d0f2b7a2ad9333356924c4e3a3d4c0354979b4571",
+      "979f0c273060da14e8763219d8a4193359c3d24fb067a5c18014887217f27c86",
+      "4591b1d2a8fc5f9f2cf88a780cfc34e0243ec5f5aed43e5323ef256329de1530",
+      "f4a05bfadc549c448e95cc18298a650ae96dfa2839dea457365d6bb9d0486464",
+      "508a96fe62c9f072a6dbe21c34bfb32f617f4c6c525be3a3a269034651b446fb",
+      "536c47c0419099b8c6e084592f36f070cc0a6ba4deafcb847c77d3bba991fcf3",
+  }};
+  for (std::size_t index = 0; index < capability_ids.size(); ++index) {
+    require_contains(
+        full_capabilities,
+        "\"id\":\"" + std::string(capability_ids[index]) + "\"",
+        "bounded full discovery");
+    require_contains(
+        full_capabilities,
+        "\"contractDigest\":\"" + std::string(contract_digests[index]) + "\"",
+        "bounded full discovery");
+  }
+  require_contains(
+      full_capabilities,
+      std::string(aemcp::native::rpc::kCapabilitiesRegistryDigest),
+      "bounded full discovery");
+
+  FakeHost host;
+  const auto invoke = [&](std::string_view request_id,
+                          std::string_view capability_id,
+                          std::string_view additional_arguments,
+                          std::string_view expected_result,
+                          std::string_view expected_postcondition_digest) {
+    send_json(sockets[0], layer_source_matte_av_invoke_json(
+        request_id, capability_id, additional_arguments));
+    const std::string progress = read_body(sockets[0]);
+    require_contains(
+        progress,
+        "\"phase\":\"queued\"",
+        std::string(request_id) + " layer package progress: " + progress);
+    wait_until([&] { return dispatcher.queued() == 1; },
+        "queued layer source, Track Matte, or AV invoke");
+    const auto batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1 && batch.completions[0].ok,
+        "owner dispatcher did not produce a layer package result");
+    const std::string response = read_body(sockets[0]);
+    require_contains(
+        response,
+        "\"capabilityId\":\"" + std::string(capability_id) + "\"",
+        "layer package response");
+    require_contains(response, expected_result, "layer package response");
+    require_contains(
+        response,
+        "\"digest\":\"" + std::string(expected_postcondition_digest) + "\"",
+        std::string(request_id) + " layer package response: " + response);
+    return response;
+  };
+
+  (void)invoke(
+      "layer-source-read",
+      "ae.layer.source.read",
+      "",
+      "\"sourceName\":\"Fixture Footage\",\"sourceType\":\"footage\"",
+      "74ae4f4d7e1164157f893261ffede056b9b1195a6c6e21443c349e6cc492becc");
+
+  (void)invoke(
+      "layer-matte-read",
+      "ae.layer.track-matte.read",
+      "",
+      "\"active\":false",
+      "fb95998ea3ac163a6697fc867922532bbb2a78e08af2f723d22ae7dac1c60c93");
+
+  (void)invoke(
+      "layer-matte-set",
+      "ae.layer.track-matte.set",
+      ",\"matteLayerLocator\":"
+          + graph_locator_json(
+              "layer", "99999999-9999-4999-8999-999999999999")
+          + ",\"mode\":\"luma\","
+            "\"idempotencyKey\":\"layer-matte-set-intent-0001\"",
+      "\"afterMode\":\"luma\"",
+      "8f03c3c98d162ae91d0ace200695b699ef7b393fbe4c3155de7935eedb6fe40e");
+
+  (void)invoke(
+      "layer-matte-clear",
+      "ae.layer.track-matte.clear",
+      ",\"idempotencyKey\":\"layer-matte-clear-intent-01\"",
+      "\"afterMatteLayerLocator\":null",
+      "cc55afd14b63459139d6fbddb7c864734fefeb63221da68af780816da20290df");
+
+  (void)invoke(
+      "layer-av-read",
+      "ae.layer.av-state.read",
+      "",
+      "\"audioEnabled\":true",
+      "65f1e2dba83005fe43457c6337430874b3e7d8f47e5a00ffd537e281cdd049c6");
+
+  (void)invoke(
+      "layer-audio-set",
+      "ae.layer.audio-enabled.set",
+      ",\"enabled\":false,"
+        "\"idempotencyKey\":\"layer-audio-set-intent-001\"",
+      "\"after\":{\"audioEnabled\":false",
+      "7238c249fa2f49289f794b9599529ce38d38795409b8ee991427b9afc4bf788f");
+
+  const std::string video_response = invoke(
+      "layer-video-set",
+      "ae.layer.video-enabled.set",
+      ",\"enabled\":false,"
+        "\"idempotencyKey\":\"layer-video-set-intent-001\"",
+      "\"videoEnabled\":false",
+      "377c7d9e7f79d314d7488b289f7e27a75a2cc289de1a1fc33ff0591a3e22e34b");
+  require_contains(video_response, "\"replayed\":false", "initial video write");
+  const int mutation_calls_before_replay =
+      host.layer_source_matte_av_mutation_calls;
+  const int idle_calls_before_replay = idle_signal.calls();
+
+  send_json(sockets[0], layer_source_matte_av_invoke_json(
+      "layer-video-set-replay",
+      "ae.layer.video-enabled.set",
+      ",\"enabled\":false,"
+        "\"idempotencyKey\":\"layer-video-set-intent-001\""));
+  const std::string replay = read_body(sockets[0]);
+  require_contains(
+      replay, "\"code\":\"DUPLICATE_REQUEST\"",
+      "completed replay response: " + replay);
+  require(host.layer_source_matte_av_mutation_calls
+          == mutation_calls_before_replay,
+      "completed replay redispatched the native mutation");
+  require(dispatcher.queued() == 0
+          && idle_signal.calls() == idle_calls_before_replay,
+      "completed replay entered or woke the main-thread dispatcher");
+
+  host.invalid_av_postcondition_after_mutation =
+      host.layer_source_matte_av_mutation_calls + 1;
+  send_json(sockets[0], layer_source_matte_av_invoke_json(
+      "layer-audio-ambiguous",
+      "ae.layer.audio-enabled.set",
+      ",\"enabled\":true,"
+        "\"idempotencyKey\":\"layer-audio-ambiguous-001\""));
+  require_contains(read_body(sockets[0]), "\"phase\":\"queued\"",
+      "ambiguous write progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued ambiguous layer audio invoke");
+  const auto ambiguous_batch = dispatcher.drain(host);
+  require(ambiguous_batch.completions.size() == 1
+          && !ambiguous_batch.completions[0].ok
+          && ambiguous_batch.completions[0].request_id
+              == "layer-audio-ambiguous"
+          && ambiguous_batch.completions[0].idempotency_key
+              == "layer-audio-ambiguous-001",
+      "ambiguous dispatcher completion lost stable operation identity");
+  const std::string ambiguous = read_body(sockets[0]);
+  require_contains(
+      ambiguous,
+      "\"requestId\":\"layer-audio-ambiguous\"",
+      "ambiguous connection response");
+  require_contains(
+      ambiguous,
+      "\"code\":\"POSSIBLY_SIDE_EFFECTING_FAILURE\"",
+      "ambiguous connection response");
+  require_contains(
+      ambiguous,
+      "\"capabilityId\":\"ae.layer.audio-enabled.set\"",
+      "ambiguous connection response");
+  const int mutation_calls_before_ambiguous_replay =
+      host.layer_source_matte_av_mutation_calls;
+
+  send_json(sockets[0], layer_source_matte_av_invoke_json(
+      "layer-audio-ambiguous-retry",
+      "ae.layer.audio-enabled.set",
+      ",\"enabled\":true,"
+        "\"idempotencyKey\":\"layer-audio-ambiguous-001\""));
+  const std::string fenced = read_body(sockets[0]);
+  require_contains(fenced, "\"code\":\"DUPLICATE_REQUEST\"",
+      "ambiguous replay fence");
+  require(host.layer_source_matte_av_mutation_calls
+          == mutation_calls_before_ambiguous_replay,
+      "ambiguous idempotency replay redispatched the native mutation");
+  require(host.layer_source_read_calls == 1
+          && host.layer_track_matte_read_calls == 5
+          && host.layer_av_state_read_calls == 7
+          && host.layer_source_matte_av_resolve_calls == 9
+          && host.layer_source_matte_av_mutation_calls == 5
+          && host.layer_undo_start_calls == 5
+          && host.layer_undo_end_calls == 5,
+      "one or more closed RPC payloads mapped to the wrong dispatcher operation");
+
+  finish_connection(sockets[0], sockets[1], worker);
+  (void)dispatcher.shutdown();
+}
+
+void layer_source_matte_av_contract_mismatches_are_rejected() {
+  using DigestMember = std::string NativeRpcRuntimeInfo::*;
+  const std::array<DigestMember, 7> members{{
+      &NativeRpcRuntimeInfo::layer_source_read_contract_digest,
+      &NativeRpcRuntimeInfo::layer_track_matte_read_contract_digest,
+      &NativeRpcRuntimeInfo::layer_track_matte_set_contract_digest,
+      &NativeRpcRuntimeInfo::layer_track_matte_clear_contract_digest,
+      &NativeRpcRuntimeInfo::layer_av_state_read_contract_digest,
+      &NativeRpcRuntimeInfo::layer_audio_enabled_set_contract_digest,
+      &NativeRpcRuntimeInfo::layer_video_enabled_set_contract_digest,
+  }};
+  for (DigestMember member : members) {
+    FakeDispatcherClock dispatcher_clock;
+    FakeSessionClock session_clock;
+    HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+    RecordingObserver observer;
+    RecordingIdleSignal idle_signal;
+    NativeRpcRuntimeInfo invalid_runtime = runtime();
+    invalid_runtime.*member = std::string(64, '0');
+    bool rejected = false;
+    try {
+      NativeRpcConnectionHandler handler(
+          dispatcher,
+          dispatcher_clock,
+          session_clock,
+          std::move(invalid_runtime),
+          observer,
+          idle_signal);
+    } catch (const std::invalid_argument&) {
+      rejected = true;
+    }
+    require(rejected,
+        "layer source, Track Matte, or AV contract mismatch did not block startup");
+    (void)dispatcher.shutdown();
+  }
+}
+
 }  // namespace
 
 int main() {
@@ -2739,6 +3193,8 @@ int main() {
   composition_setting_post_mutation_evidence_failures_are_ambiguous();
   construction_failure_is_contained_by_noexcept_boundary();
   composition_setting_contract_mismatch_is_rejected();
+  layer_source_matte_and_av_cross_the_authenticated_wire_boundary();
+  layer_source_matte_av_contract_mismatches_are_rejected();
   std::cout << "native_rpc_connection_test: PASS\n";
   return 0;
 }

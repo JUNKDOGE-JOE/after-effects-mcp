@@ -62,6 +62,13 @@ struct NativeRpcRuntimeInfo {
   std::string layer_property_keyframe_delete_contract_digest;
   std::string native_media_read_contract_digest;
   std::string native_media_write_contract_digest;
+  std::string layer_source_read_contract_digest;
+  std::string layer_track_matte_read_contract_digest;
+  std::string layer_track_matte_set_contract_digest;
+  std::string layer_track_matte_clear_contract_digest;
+  std::string layer_av_state_read_contract_digest;
+  std::string layer_audio_enabled_set_contract_digest;
+  std::string layer_video_enabled_set_contract_digest;
   std::array<std::string, 6> composition_setting_contract_digests;
 };
 
