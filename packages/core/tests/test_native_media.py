@@ -137,13 +137,13 @@ def _negotiation() -> NativeNegotiation:
 
 def _capabilities() -> NativeCapabilities:
     raw = _fixture("capabilities.json")["response"]
-    result = raw["result"]
+    registry = _fixture("capability-registry-full.json")
     return NativeCapabilities(
         session_id=raw["sessionId"],
-        detail=result["detail"],
+        detail="full",
         items=tuple(
             NativeCapabilityDescriptor.model_validate(item)
-            for item in result["items"]
+            for item in registry["items"]
         ),
         next_cursor=None,
         query_digest=_capabilities_query_digest(
@@ -152,7 +152,7 @@ def _capabilities() -> NativeCapabilities:
             detail="full",
             limit=100,
         ),
-        capabilities_digest=result["capabilitiesDigest"],
+        capabilities_digest=registry["capabilitiesDigest"],
     )
 
 
@@ -168,8 +168,30 @@ class MediaBackend(NativeInvokeBackend):
     async def negotiate(self, **_: Any) -> NativeNegotiation:
         return self.negotiation
 
-    async def capabilities(self, **_: Any) -> NativeCapabilities:
-        return self.page
+    async def capabilities(
+        self, *, ids, detail, limit, **_: Any
+    ) -> NativeCapabilities:
+        assert detail == "full"
+        items = (
+            self.page.items
+            if ids is None
+            else tuple(
+                item for item in self.page.items if item.capability_id in ids
+            )
+        )
+        return NativeCapabilities(
+            session_id=self.page.session_id,
+            detail="full",
+            items=items,
+            next_cursor=None,
+            query_digest=_capabilities_query_digest(
+                session_id=self.page.session_id,
+                ids=ids,
+                detail="full",
+                limit=limit,
+            ),
+            capabilities_digest=self.page.capabilities_digest,
+        )
 
     async def invoke(self, request: NativeInvokeRequest, **_: Any) -> NativeInvokeResult:
         self.request = request

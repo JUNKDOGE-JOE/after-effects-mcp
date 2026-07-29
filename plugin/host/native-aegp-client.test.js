@@ -20,8 +20,8 @@ const projectCompositionContracts = require('./native-project-composition-contra
 
 const CAPABILITIES_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
-    '../../native/ae-plugin/protocol/fixtures/capabilities.json',
-), 'utf8')).response.result;
+    '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json',
+), 'utf8'));
 const PROJECT_ITEMS_VECTOR = JSON.parse(fs.readFileSync(path.join(
     __dirname,
     '../../native/ae-plugin/protocol/fixtures/invoke-project-items-list.json',
@@ -405,12 +405,17 @@ function installProtocol(server, options) {
                         clientNonce: request.params.nonce,
                     };
                 } else if (request.method === 'capabilities') {
+                    const requestedIds = request.params.ids;
                     result = {
                         detail: request.params.detail || 'summary',
                         capabilitiesDigest: DIGEST,
                         queryDigest: capabilitiesRequestDigest(request),
                         nextCursor: null,
-                        items: CAPABILITIES_VECTOR.items,
+                        items: requestedIds === undefined
+                            ? CAPABILITIES_VECTOR.items
+                            : CAPABILITIES_VECTOR.items.filter(function (item) {
+                                return requestedIds.includes(item.id);
+                            }),
                     };
                 } else if (request.method === 'invalidateGraph') {
                     result = input.invalidateResult || {
@@ -674,8 +679,20 @@ async function readyNativeClient(t, protocolOptions) {
     const connecting = client.connect();
     protocol.authorize();
     await connecting;
-    await client.capabilities({ detail: 'full', limit: 100 });
+    await loadFullCapabilities(client);
     return { client, protocol };
+}
+
+async function loadFullCapabilities(client) {
+    const ids = CAPABILITIES_VECTOR.items.map(function (item) { return item.id; });
+    for (let offset = 0; offset < ids.length; offset += 24) {
+        const chunk = ids.slice(offset, offset + 24);
+        await client.capabilities({
+            ids: chunk,
+            detail: 'full',
+            limit: chunk.length,
+        });
+    }
 }
 
 test('CEP client negotiates the complete native registry and verifies prior package vectors', {
@@ -1083,10 +1100,22 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
     assert.equal(client.status().state, 'connected');
     const negotiation = await client.negotiate({ deadlineUnixMs: 1900000005000 });
     assert.equal(negotiation.sourceCommit, SOURCE);
+    const coreCapabilityIds = [
+        'ae.project.summary',
+        'ae.project.bit-depth.read',
+        'ae.project.bit-depth.set',
+        'ae.project.items.list',
+        'ae.composition.layers.list',
+        'ae.composition.selected-layers.list',
+        'ae.composition.time.read',
+        'ae.composition.time.set',
+        'ae.layer.properties.list',
+        'ae.layer.property.keyframes.list',
+    ];
     const capabilities = await client.capabilities({
-        ids: null,
+        ids: coreCapabilityIds,
         detail: 'full',
-        limit: 100,
+        limit: coreCapabilityIds.length,
         deadlineUnixMs: 1900000005000,
     });
     assert.equal(capabilities.items[0].id, 'ae.project.summary');
@@ -1154,8 +1183,8 @@ test('CEP client verifies native project summary and bit-depth read/write capabi
     assert.deepEqual(protocol.requests.map(function (request) { return request.method; }), [
         'hello', 'capabilities', 'invoke',
     ]);
-    assert.equal(Object.hasOwn(protocol.requests[1].params, 'ids'), false);
-    assert.equal(protocol.requests[1].params.limit, 100);
+    assert.deepEqual(protocol.requests[1].params.ids, coreCapabilityIds);
+    assert.equal(protocol.requests[1].params.limit, coreCapabilityIds.length);
     assert.equal(protocol.requests[2].requestId, 'core-project-summary-1');
     assert.equal(protocol.requests[2].deadlineUnixMs, 1900000002000);
     assert.equal(summary.evidence.requestDigest, invokeRequestDigest(protocol.requests[2]));
@@ -2410,7 +2439,7 @@ test('CEP stale-locator preflight reports the exact field without inventing gene
     });
     assert.deepEqual(
         ready.protocol.requests.map(function (request) { return request.method; }),
-        ['hello', 'capabilities'],
+        ['hello', 'capabilities', 'capabilities', 'capabilities'],
     );
 });
 
@@ -2442,7 +2471,7 @@ test('CEP client preserves the bit-depth no-op INVALID_ARGUMENT contract', {
     const connection = client.connect();
     protocol.authorize();
     await connection;
-    await client.capabilities({ detail: 'full', limit: 100 });
+    await loadFullCapabilities(client);
 
     await assert.rejects(
         client.invoke({
@@ -2488,7 +2517,7 @@ test('CEP client treats unverifiable bit-depth write evidence as side-effect unc
     const connection = client.connect();
     protocol.authorize();
     await connection;
-    await client.capabilities({ detail: 'full', limit: 100 });
+    await loadFullCapabilities(client);
 
     await assert.rejects(
         client.invoke({
@@ -2537,7 +2566,7 @@ test('CEP client preserves the complete structured native error contract', {
     const connection = client.connect();
     protocol.authorize();
     await connection;
-    await client.capabilities({ detail: 'full', limit: 100 });
+    await loadFullCapabilities(client);
     await assert.rejects(
         client.invoke({
             requestId: 'core-project-summary-error',
@@ -2591,7 +2620,7 @@ test('CEP client preserves actionable keyframe property precondition recovery', 
     const connection = client.connect();
     protocol.authorize();
     await connection;
-    await client.capabilities({ detail: 'full', limit: 100 });
+    await loadFullCapabilities(client);
     await assert.rejects(
         client.invoke({
             requestId: 'core-keyframe-precondition',
@@ -2690,7 +2719,7 @@ for (const errorFixture of [
         const connection = client.connect();
         protocol.authorize();
         await connection;
-        await client.capabilities({ detail: 'full', limit: 100 });
+        await loadFullCapabilities(client);
         await assert.rejects(
             client.invoke({
                 requestId: 'core-error-classification',
@@ -2733,7 +2762,7 @@ test('CEP client treats a malformed mutation error as side-effect uncertain', {
     const connection = client.connect();
     protocol.authorize();
     await connection;
-    await client.capabilities({ detail: 'full', limit: 100 });
+    await loadFullCapabilities(client);
     await assert.rejects(client.invoke({
         requestId: 'layer-property-malformed-error',
         capabilityId: 'ae.layer.property.set',
@@ -2816,7 +2845,7 @@ for (const fixture of [
         const connection = client.connect();
         protocol.authorize();
         await connection;
-        await client.capabilities();
+        await loadFullCapabilities(client);
         await assert.rejects(client.projectSummary(), function (error) {
             assert.equal(error.code, 'NATIVE_CONTRACT_MISMATCH');
             assert.equal(error.retryable, false);

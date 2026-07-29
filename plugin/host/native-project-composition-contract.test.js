@@ -446,8 +446,8 @@ test('all twenty-six frozen package contracts accept their closed valid shapes',
 
 test('eleven Text/Shape/Marker contracts admit generated vectors and nested locators', () => {
     const registry = JSON.parse(fs.readFileSync(path.join(
-        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
-    ), 'utf8')).response.result.items;
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json',
+    ), 'utf8')).items;
     const descriptors = registry.filter(function (item) {
         return item.id.startsWith('ae.shape.') || item.id.startsWith('ae.marker.');
     });
@@ -541,8 +541,8 @@ test('eleven Text/Shape/Marker contracts admit generated vectors and nested loca
 test('marker set admits a non-empty sparse patch and rejects unsafe patch shapes', () => {
     const contract = packageContracts.getContract('ae.marker.set');
     const descriptor = JSON.parse(fs.readFileSync(path.join(
-        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
-    ), 'utf8')).response.result.items.find(function (item) {
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json',
+    ), 'utf8')).items.find(function (item) {
         return item.id === 'ae.marker.set';
     });
     const argumentsValue = structuredClone(descriptor.examples[0].arguments);
@@ -894,8 +894,8 @@ test('seven #157 contracts bind checked-in registry metadata and closed typed va
         '../../native/ae-plugin/protocol/fixtures/keyframe-authoring-matrix.json',
     ), 'utf8'));
     const capabilities = JSON.parse(fs.readFileSync(path.join(
-        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
-    ), 'utf8')).response.result.items;
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json',
+    ), 'utf8')).items;
     const vectors = keyframeCases();
     assert.deepEqual(Object.keys(vectors), matrix.cases.map(function (item) {
         return item.capabilityId;

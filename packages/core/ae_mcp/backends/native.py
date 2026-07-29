@@ -369,6 +369,10 @@ class NativeWireRange(_NativeModel):
 class NativeErrorDetails(_NativeModel):
     field: Annotated[StrictStr, Field(min_length=1, max_length=128)] | None = None
     capability_id: CapabilityId | None = None
+    idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ] | None = None
     supported_wire_versions: NativeWireRange | None = None
     current_generation: PositiveInt | None = None
 

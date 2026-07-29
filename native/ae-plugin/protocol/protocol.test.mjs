@@ -372,10 +372,16 @@ test('all checked-in vectors are synthetic and contain no host or Adobe suite cl
       compatibilityEvidence: false,
     });
   }
+  assert.deepEqual(golden('capability-registry-full.json')._fixture, {
+    classification: 'synthetic-non-wire-full-capability-registry',
+    runtimeEvidence: false,
+    compatibilityEvidence: false,
+  });
   const publicText = [
     fs.readFileSync(path.join(here, 'README.md'), 'utf8'),
     fs.readFileSync(path.join(here, 'aegp-rpc.schema.json'), 'utf8'),
     fs.readFileSync(path.join(fixtures, 'capabilities.json'), 'utf8'),
+    fs.readFileSync(path.join(fixtures, 'capability-registry-full.json'), 'utf8'),
   ].join('\n');
   assert.doesNotMatch(publicText, /25\.6\.61|26\.3\.0|AEGP_[A-Za-z0-9_]*Suite/u);
   assert.match(publicText, /product-owned/);
@@ -957,6 +963,12 @@ test('capability discovery uses real canonical digests and keeps compatibility u
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, capabilities, schema), true);
   assert.equal(validateCapabilityDescriptor(descriptor, schema), true);
   assert.equal(descriptor.compatibility.status, 'unverified');
+  const fullRegistryFixture = golden('capability-registry-full.json');
+  assert.deepEqual(fullRegistryFixture.items, registry);
+  assert.equal(
+    fullRegistryFixture.capabilitiesDigest,
+    capabilityDigest(registry),
+  );
 
   const selectedIds = [
     'ae.layer.source.read',

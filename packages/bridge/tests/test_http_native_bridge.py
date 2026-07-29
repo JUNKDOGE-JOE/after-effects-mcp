@@ -78,9 +78,14 @@ def _negotiation() -> dict:
 
 
 def _capabilities() -> dict:
+    registry = _fixture("capability-registry-full.json")
     return {
         "sessionId": _SESSION,
-        **_fixture("capabilities.json")["response"]["result"],
+        "items": registry["items"],
+        "capabilitiesDigest": registry["capabilitiesDigest"],
+        "detail": "full",
+        "nextCursor": None,
+        "queryDigest": "0" * 64,
     }
 
 

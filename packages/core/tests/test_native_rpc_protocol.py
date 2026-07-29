@@ -180,9 +180,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
             "compatibilityEvidence": False,
         }
 
-    items = _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"][
-        "items"
-    ]
+    items = _json(FIXTURE_ROOT / "capability-registry-full.json")["items"]
     descriptor = next(item for item in items if item["id"] == "ae.project.summary")
     assert descriptor["requirements"] == [
         {
@@ -215,19 +213,11 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
     assert hashlib.sha256(_jcs_subset(contract)).hexdigest() == descriptor[
         "contractDigest"
     ]
-    capabilities = _json(FIXTURE_ROOT / "capabilities.json")
+    capabilities = _json(FIXTURE_ROOT / "capability-registry-full.json")
     hello = _json(FIXTURE_ROOT / "hello.json")
-    # Core negotiates the complete closed registry so it can independently
-    # recompute the registry digest advertised by hello.
-    assert capabilities["request"]["params"] == {
-        "detail": "full",
-        "limit": 100,
-    }
-    capability_ids = [
-        item["id"] for item in capabilities["response"]["result"]["items"]
-    ]
+    capability_ids = [item["id"] for item in capabilities["items"]]
     assert len(capability_ids) == len(set(capability_ids))
-    assert capabilities["response"]["result"]["capabilitiesDigest"] == hello[
+    assert capabilities["capabilitiesDigest"] == hello[
         "response"
     ]["result"]["capabilitiesDigest"]
     assert _jcs_subset({"\ue000": 1, "😀": 2}).decode("utf-8") == (
@@ -238,7 +228,7 @@ def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
 def test_native_capabilities_fixture_covers_every_core_capability_contract():
     descriptors = {
         item["id"]: item
-        for item in _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"][
+        for item in _json(FIXTURE_ROOT / "capability-registry-full.json")[
             "items"
         ]
     }
@@ -264,7 +254,7 @@ def test_native_capabilities_fixture_covers_every_core_capability_contract():
 def test_every_core_capability_contract_has_a_valid_native_result_vector():
     descriptors = {
         item["id"]: item
-        for item in _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"][
+        for item in _json(FIXTURE_ROOT / "capability-registry-full.json")[
             "items"
         ]
     }

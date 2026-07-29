@@ -34,12 +34,12 @@ def test_checked_in_native_descriptors_match_all_core_contract_fields():
         / "ae-plugin"
         / "protocol"
         / "fixtures"
-        / "capabilities.json"
+        / "capability-registry-full.json"
     )
     payload = json.loads(fixture_path.read_text(encoding="utf-8"))
     descriptors = {
         item["id"]: N.NativeCapabilityDescriptor.model_validate(item)
-        for item in payload["response"]["result"]["items"]
+        for item in payload["items"]
         if item["id"] in K.CAPABILITY_CONTRACTS
     }
 
@@ -188,17 +188,22 @@ class PackageBackend(N.NativeInvokeBackend):
         return self.negotiation
 
     async def capabilities(self, *, ids, detail, limit, **_kwargs):
-        assert ids is None and detail == "full" and limit == 100
+        assert detail == "full"
+        items = (
+            self.items
+            if ids is None
+            else tuple(item for item in self.items if item.capability_id in ids)
+        )
         return N.NativeCapabilities(
             session_id=SESSION,
             detail="full",
-            items=self.items,
+            items=items,
             next_cursor=None,
             query_digest=N._capabilities_query_digest(
                 session_id=SESSION,
-                ids=None,
+                ids=ids,
                 detail="full",
-                limit=100,
+                limit=limit,
             ),
             capabilities_digest=self.negotiation.capabilities_digest,
         )

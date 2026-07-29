@@ -96,8 +96,10 @@ def layers_value() -> dict[str, Any]:
 
 def test_core_navigation_schemas_and_digests_equal_protocol_descriptors():
     capabilities = json.loads(
-        (PROTOCOL_FIXTURES / "capabilities.json").read_text(encoding="utf-8")
-    )["response"]["result"]["items"]
+        (PROTOCOL_FIXTURES / "capability-registry-full.json").read_text(
+            encoding="utf-8"
+        )
+    )["items"]
     project = next(
         item for item in capabilities if item["id"] == N.PROJECT_ITEMS_LIST_CAPABILITY_ID
     )

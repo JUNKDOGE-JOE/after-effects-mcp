@@ -122,7 +122,6 @@ class Issue190Config:
     evidence_dir: Path
     formal_ae_app: Path
     plugin_url: str
-    formal_process_receipt: base_hdev.FormalAEProcessReceipt | None = None
     run_id: str = dataclasses.field(
         default_factory=lambda: (
             f"issue190-hdev-{int(time.time())}-{secrets.token_hex(4)}"
@@ -164,15 +163,6 @@ class Issue190Config:
             self.plugin_url.startswith("http://127.0.0.1:"),
             "Issue #190 HDEV plugin URL must be loopback",
         )
-        if self.formal_process_receipt is not None:
-            resolved_formal_app = self.formal_ae_app.resolve(strict=False)
-            require(
-                Path(self.formal_process_receipt.formal_ae_app)
-                == resolved_formal_app
-                and self.formal_ae_app == resolved_formal_app,
-                "formal AE process receipt application mismatch",
-            )
-
     @property
     def fixture_root(self) -> Path:
         return self.fixture_home.joinpath(*FIXTURE_ROOT_PARTS)
@@ -738,19 +728,11 @@ class Issue190Runner:
         *,
         checkpoint: Callable[[str, Mapping[str, Any]], Awaitable[None]],
         after_effects_running: Callable[[], Awaitable[bool]],
-        owned_process_shutdown: Callable[
-            [Mapping[str, Any]], Awaitable[bool]
-        ] | None = None,
-        owned_process_probe: Callable[
-            [Mapping[str, Any]], Awaitable[Mapping[str, Any]]
-        ] | None = None,
         evidence: DevelopmentEvidence | None = None,
     ) -> None:
         self.config = config
         self.checkpoint = checkpoint
         self.after_effects_running = after_effects_running
-        self.owned_process_shutdown = owned_process_shutdown
-        self.owned_process_probe = owned_process_probe
         self.evidence = evidence or DevelopmentEvidence(
             config.evidence_dir, run_id=config.run_id
         )
@@ -772,7 +754,6 @@ class Issue190Runner:
         self.consumed_plan_keys: set[str] = set()
         self.unreconciled_write = False
         self.fixture_baseline_restored = True
-        self.formal_process_owned = False
         self.lifecycle = {
             "created": 0,
             "canonicalRetained": 0,
@@ -789,10 +770,6 @@ class Issue190Runner:
         self.current_wav_path: Path | None = None
 
     def _ownership_payload(self) -> dict[str, Any]:
-        require(
-            self.config.formal_process_receipt is not None,
-            "formal AE process receipt is unavailable",
-        )
         return {
             "schemaVersion": 1,
             "validationProfile": "development",
@@ -802,9 +779,6 @@ class Issue190Runner:
             "lifecycle": "ephemeral-validation",
             "ownerMarker": self.config.owner_marker,
             "formalAeApp": os.fspath(self.config.formal_ae_app),
-            "formalProcessReceipt": (
-                self.config.formal_process_receipt.to_json()
-            ),
             "fixturePath": os.fspath(self.config.fixture_path),
             "activeRoot": os.fspath(self.config.active_root),
             "recoveryRoot": os.fspath(self.config.recovery_root),
@@ -2216,152 +2190,13 @@ class Issue190Runner:
         )
         return destination
 
-    def _owned_process_identity(self) -> dict[str, Any]:
-        require(
-            self.config.formal_process_receipt is not None,
-            "formal AE process receipt is unavailable",
-        )
-        receipt = self.config.formal_process_receipt
-        return {
-            "runId": self.config.run_id,
-            "fixturePath": os.fspath(self.config.fixture_path),
-            "ownerMarker": self.config.owner_marker,
-            "formalAeApp": os.fspath(self.config.formal_ae_app),
-            "pid": receipt.pid,
-            "executablePath": receipt.executable_path,
-            "startToken": receipt.start_token,
-        }
-
-    def _owned_process_details(self, reason: str) -> dict[str, Any]:
-        return {
-            "ownershipProven": True,
-            **self._owned_process_identity(),
-            "reason": reason,
-            "validationProfile": "development",
-            "candidateRun": False,
-            "candidateEvidence": False,
-        }
-
-    async def _probe_owned_process_once(
-        self,
-        reason: str,
-        *,
-        fixture_may_be_absent: bool = False,
-    ) -> str:
-        require(
-            self.formal_process_owned,
-            "formal AE process ownership is not proven; refusing process probe",
-        )
-        require(
-            self.owned_process_probe is not None,
-            "owned formal AE process probe is unavailable",
-        )
-        self.validate_fixture_ownership(
-            fixture_may_be_absent=fixture_may_be_absent
-        )
-        details = self._owned_process_details(reason)
+    async def _after_effects_is_running(self) -> bool:
         try:
-            observation = await self.owned_process_probe(details)
+            return await self.after_effects_running()
         except Exception as error:
             raise Issue190Failure(
-                "owned formal AE process probe is unavailable"
+                "could not confirm whether After Effects exited normally"
             ) from error
-        require(
-            isinstance(observation, Mapping),
-            "owned formal AE process probe is unavailable",
-        )
-        state = observation.get("state")
-        require(
-            state in {"running", "absent", "mismatch", "unavailable"},
-            "owned formal AE process probe is unavailable",
-        )
-        identity = observation.get("identity")
-        require(
-            isinstance(identity, Mapping),
-            "owned formal AE process identity mismatch",
-        )
-        require(
-            dict(identity) == self._owned_process_identity(),
-            "owned formal AE process identity mismatch",
-        )
-        require(
-            state not in {"mismatch", "unavailable"},
-            (
-                "owned formal AE process identity mismatch"
-                if state == "mismatch"
-                else "owned formal AE process probe is unavailable"
-            ),
-        )
-        self.evidence.record(
-            "owned-formal-ae-process-observed",
-            {
-                **self._owned_process_identity(),
-                "state": state,
-                "reason": reason,
-            },
-        )
-        return str(state)
-
-    async def _poll_owned_process_absent(
-        self,
-        reason: str,
-        *,
-        max_attempts: int = 3,
-    ) -> bool:
-        for attempt in range(1, max_attempts + 1):
-            state = await self._probe_owned_process_once(
-                f"{reason}; absence check {attempt}/{max_attempts}"
-            )
-            if state == "absent":
-                self.evidence.record(
-                    "owned-formal-ae-process-absence-confirmed",
-                    {
-                        **self._owned_process_identity(),
-                        "attempt": attempt,
-                        "maxAttempts": max_attempts,
-                        "reason": reason,
-                    },
-                )
-                return True
-        return False
-
-    async def _request_proven_owned_process_stop(self, reason: str) -> str:
-        require(
-            self.formal_process_owned,
-            "formal AE process ownership is not proven; refusing shutdown",
-        )
-        require(
-            self.owned_process_shutdown is not None,
-            "owned formal AE shutdown seam is unavailable",
-        )
-        self.validate_fixture_ownership()
-        details = {
-            **self._owned_process_details(reason),
-            "instruction": (
-                "Stop only the exact formal AE process owned by this run. "
-                "Do not kill any unverified or unrelated AE process."
-            ),
-        }
-        try:
-            acknowledged = await self.owned_process_shutdown(details)
-        except Exception as error:
-            raise Issue190Failure(
-                "owned formal AE shutdown fallback failed"
-            ) from error
-        require(
-            acknowledged is True,
-            "owned formal AE shutdown request was not acknowledged",
-        )
-        return self.evidence.record(
-            "owned-formal-ae-stop-request-acknowledged",
-            {
-                **self._owned_process_identity(),
-                "ownershipProven": True,
-                "stopAcknowledged": True,
-                "stopped": False,
-                "reason": reason,
-            },
-        )
 
     async def _move_manifest_only(self, reason: str) -> dict[str, Any]:
         self.config.recovery_root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -2422,63 +2257,42 @@ class Issue190Runner:
             manifest_exists,
             "Issue #190 fixture exists without its ownership manifest",
         )
-        require(
-            self.formal_process_owned,
-            "formal AE process ownership is not proven; refusing finalization",
-        )
         self.validate_fixture_ownership(
             fixture_may_be_absent=not fixture_exists
         )
-        initial_process_state = await self._probe_owned_process_once(
-            "owned fixture finalization precondition",
-            fixture_may_be_absent=not fixture_exists,
-        )
+        initially_running = await self._after_effects_is_running()
         if not fixture_exists:
             require(
-                initial_process_state == "absent",
-                "owned fixture is missing while formal AE remains running",
+                not initially_running,
+                "fixture is missing while After Effects remains running",
             )
             return await self._move_manifest_only(reason)
 
-        process_absent = initial_process_state == "absent"
-        if initial_process_state == "running":
-            try:
-                await self.checkpoint(
-                    "guarded-close-owned-issue190-fixture",
-                    {
-                        "instruction": (
-                            "Run the ownership-guarded save-in-place/close script "
-                            "through ae_readProps without an extra Undo group, then "
-                            "quit only the exact receipt-bound formal AE process. Do "
-                            "not reset, delete, Save As, or retry any write."
-                        ),
-                        "executionTool": "ae_readProps",
-                        "undoGroup": False,
-                        "script": close_fixture_script(self.config),
-                        "fixtureLifecycle": "ephemeral-validation",
-                        "preserveUnreconciledWrite": self.unreconciled_write,
-                        "formalProcessReceipt": (
-                            self.config.formal_process_receipt.to_json()
-                        ),
-                        "validationProfile": "development",
-                        "candidateRun": False,
-                        "candidateEvidence": False,
-                    },
-                )
-            except Exception:
-                pass
-            process_absent = await self._poll_owned_process_absent(
-                "guarded close completed"
+        if initially_running:
+            await self.checkpoint(
+                "guarded-close-and-normal-exit-issue190-fixture",
+                {
+                    "instruction": (
+                        "Run the ownership-guarded save-in-place/close script "
+                        "through ae_readProps without an extra Undo group, then "
+                        "quit After Effects normally. Do not force quit, kill the "
+                        "process, reset, delete, Save As, or retry any write."
+                    ),
+                    "executionTool": "ae_readProps",
+                    "undoGroup": False,
+                    "script": close_fixture_script(self.config),
+                    "fixtureLifecycle": "ephemeral-validation",
+                    "preserveUnreconciledWrite": self.unreconciled_write,
+                    "validationProfile": "development",
+                    "candidateRun": False,
+                    "candidateEvidence": False,
+                },
             )
-            if not process_absent:
+            if await self._after_effects_is_running():
                 raise Issue190Failure(
-                    "owned formal AE process remained present after normal guarded "
-                    "close; forced termination is disabled"
+                    "After Effects remained running after normal exit; forced "
+                    "termination is disabled"
                 )
-        require(
-            process_absent,
-            "owned formal AE process remained present after finalization",
-        )
         snapshot = (
             self.unreconciled_write
             if evidence_snapshot is None
@@ -2490,9 +2304,7 @@ class Issue190Runner:
             else baseline_restored
         )
         process_gone_without_recovery = (
-            initial_process_state == "absent"
-            and snapshot
-            and not restored
+            not initially_running and snapshot and not restored
         )
         archive = await self._move_owned_fixture(
             self.current_wav_path,
@@ -2612,7 +2424,6 @@ class Issue190Runner:
         )
         require(self.config.fixture_path.is_file(), "prepared Issue #190 fixture missing")
         self.lifecycle.update({"created": 1, "active": 1})
-        self.formal_process_owned = True
         await self.execute_plan(session)
         fixture_disposition = await self.finalize_owned_fixture(
             reason="structured development evidence complete",
@@ -2661,28 +2472,12 @@ async def run_issue190_hdev(
     session: PublicSession,
     checkpoint: Callable[[str, Mapping[str, Any]], Awaitable[None]],
     after_effects_running: Callable[[], Awaitable[bool]],
-    owned_process_shutdown: Callable[
-        [Mapping[str, Any]], Awaitable[bool]
-    ] | None = None,
-    owned_process_probe: Callable[
-        [Mapping[str, Any]], Awaitable[Mapping[str, Any]]
-    ] | None = None,
 ) -> Issue190Result:
-    if owned_process_shutdown is None:
-        async def checkpoint_owned_process_shutdown(
-            details: Mapping[str, Any],
-        ) -> bool:
-            await checkpoint("stop-owned-formal-ae-fallback", details)
-            return True
-
-        owned_process_shutdown = checkpoint_owned_process_shutdown
     evidence = DevelopmentEvidence(config.evidence_dir, run_id=config.run_id)
     runner = Issue190Runner(
         config,
         checkpoint=checkpoint,
         after_effects_running=after_effects_running,
-        owned_process_shutdown=owned_process_shutdown,
-        owned_process_probe=owned_process_probe,
         evidence=evidence,
     )
     passed = False
@@ -2769,59 +2564,15 @@ def parse_args(argv: Sequence[str] | None = None) -> Issue190Config:
     )
 
 
-async def _prepare_cli_process_ownership(
-    config: Issue190Config,
-) -> tuple[
-    Issue190Config,
-    Callable[[Mapping[str, Any]], Awaitable[Mapping[str, Any]]],
-]:
-    receipt = await base_hdev.capture_formal_ae_process(
-        config.formal_ae_app
-    )
-    prepared = dataclasses.replace(
-        config,
-        formal_ae_app=Path(receipt.formal_ae_app),
-        formal_process_receipt=receipt,
-    )
-    identity = {
-        "runId": prepared.run_id,
-        "fixturePath": os.fspath(prepared.fixture_path),
-        "ownerMarker": prepared.owner_marker,
-        "formalAeApp": os.fspath(prepared.formal_ae_app),
-        "pid": receipt.pid,
-        "executablePath": receipt.executable_path,
-        "startToken": receipt.start_token,
-    }
-
-    async def owned_process_probe(
-        details: Mapping[str, Any],
-    ) -> Mapping[str, Any]:
-        require(
-            all(details.get(key) == value for key, value in identity.items()),
-            "CLI owned-process probe identity mismatch",
-        )
-        observation = await base_hdev.probe_formal_ae_process(receipt)
-        return {
-            "state": observation.state,
-            "identity": dict(identity),
-        }
-
-    return prepared, owned_process_probe
-
-
 async def _run_cli(config: Issue190Config) -> int:
     # The existing HDEV session verifies this exact checkout and starts its Core
     # directly; it does not use a stable packaged-runtime launcher.
-    config, owned_process_probe = await _prepare_cli_process_ownership(
-        config
-    )
     async with base_hdev.live_session(config) as session:
         result = await run_issue190_hdev(
             config,
             session=session,
             checkpoint=base_hdev.stdin_checkpoint,
             after_effects_running=base_hdev.formal_ae_running,
-            owned_process_probe=owned_process_probe,
         )
     print(
         json.dumps(

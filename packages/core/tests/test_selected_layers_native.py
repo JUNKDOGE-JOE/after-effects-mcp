@@ -138,9 +138,11 @@ def test_selected_layer_descriptor_uses_the_closed_canonical_contract():
 
 def test_selected_layer_descriptor_and_registry_fixture_match_core():
     fixture = json.loads(
-        (PROTOCOL_FIXTURES / "capabilities.json").read_text(encoding="utf-8")
+        (PROTOCOL_FIXTURES / "capability-registry-full.json").read_text(
+            encoding="utf-8"
+        )
     )
-    raw_items = fixture["response"]["result"]["items"]
+    raw_items = fixture["items"]
     items = tuple(N.NativeCapabilityDescriptor.model_validate(item) for item in raw_items)
     selected = next(
         item
@@ -155,7 +157,7 @@ def test_selected_layer_descriptor_and_registry_fixture_match_core():
         host_platform="macos-arm64",
     )
     assert N._capabilities_registry_digest(items) == (
-        fixture["response"]["result"]["capabilitiesDigest"]
+        fixture["capabilitiesDigest"]
     )
 
 
@@ -212,17 +214,22 @@ class SelectedLayersBackend(N.NativeInvokeBackend):
         return self.negotiation
 
     async def capabilities(self, *, ids, detail, limit, **_kwargs):
-        assert ids is None and detail == "full" and limit == 100
+        assert detail == "full"
+        items = (
+            self.items
+            if ids is None
+            else tuple(item for item in self.items if item.capability_id in ids)
+        )
         return N.NativeCapabilities(
             session_id=SESSION,
             detail="full",
-            items=self.items,
+            items=items,
             next_cursor=None,
             query_digest=N._capabilities_query_digest(
                 session_id=SESSION,
-                ids=None,
+                ids=ids,
                 detail="full",
-                limit=100,
+                limit=limit,
             ),
             capabilities_digest=self.negotiation.capabilities_digest,
         )

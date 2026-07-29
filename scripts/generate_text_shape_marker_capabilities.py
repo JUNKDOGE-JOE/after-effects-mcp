@@ -39,6 +39,9 @@ GENERATED_HPP = (
 )
 SCHEMA = PROTOCOL / "aegp-rpc.schema.json"
 CAPABILITIES_FIXTURE = PROTOCOL / "fixtures" / "capabilities.json"
+CAPABILITY_REGISTRY_FIXTURE = (
+    PROTOCOL / "fixtures" / "capability-registry-full.json"
+)
 HELLO_FIXTURE = PROTOCOL / "fixtures" / "hello.json"
 MATRIX_FIXTURES = (
     PROTOCOL / "fixtures" / "layer-compositing-matrix.json",
@@ -903,9 +906,18 @@ def _schema_with_tsm(
 ) -> dict[str, Any]:
     schema = copy.deepcopy(original)
     definitions = schema["$defs"]
+    generated_definition_index = next(
+        (
+            index
+            for index, key in enumerate(definitions)
+            if key.startswith(GENERATED_PREFIX)
+        ),
+        len(definitions),
+    )
     for key in tuple(definitions):
         if key.startswith(GENERATED_PREFIX):
             del definitions[key]
+    generated_union_indexes: dict[tuple[str, str], int] = {}
     for union_name, keyword in (
         ("invokeParams", "oneOf"),
         ("capabilityArguments", "anyOf"),
@@ -913,9 +925,18 @@ def _schema_with_tsm(
         ("capabilityInputSchemaContract", "oneOf"),
         ("capabilityResultSchemaContract", "oneOf"),
     ):
+        union = definitions[union_name][keyword]
+        generated_union_indexes[(union_name, keyword)] = next(
+            (
+                index
+                for index, item in enumerate(union)
+                if _generated_ref(item)
+            ),
+            len(union),
+        )
         definitions[union_name][keyword] = [
             item
-            for item in definitions[union_name][keyword]
+            for item in union
             if not _generated_ref(item)
         ]
 
@@ -987,6 +1008,34 @@ def _schema_with_tsm(
             "capabilityResultSchemaContract",
             result_contract,
             descriptor["resultSchema"],
+        )
+
+    generated_definitions = [
+        (key, value)
+        for key, value in definitions.items()
+        if key.startswith(GENERATED_PREFIX)
+    ]
+    non_generated_definitions = [
+        (key, value)
+        for key, value in definitions.items()
+        if not key.startswith(GENERATED_PREFIX)
+    ]
+    definitions.clear()
+    definitions.update(
+        non_generated_definitions[:generated_definition_index]
+        + generated_definitions
+        + non_generated_definitions[generated_definition_index:]
+    )
+    for (union_name, keyword), insertion_index in generated_union_indexes.items():
+        union = definitions[union_name][keyword]
+        generated_refs = [item for item in union if _generated_ref(item)]
+        non_generated_refs = [
+            item for item in union if not _generated_ref(item)
+        ]
+        definitions[union_name][keyword] = (
+            non_generated_refs[:insertion_index]
+            + generated_refs
+            + non_generated_refs[insertion_index:]
         )
     return schema
 
@@ -1084,21 +1133,50 @@ def _json_text(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
 
 
+def _summary_descriptor(descriptor: dict[str, Any]) -> dict[str, Any]:
+    summary = copy.deepcopy(descriptor)
+    summary["detail"] = "summary"
+    for key in (
+        "inputContractId",
+        "resultContractId",
+        "contractDigest",
+        "inputSchema",
+        "resultSchema",
+        "requirements",
+        "examples",
+    ):
+        summary.pop(key, None)
+    return summary
+
+
 def _outputs() -> dict[Path, str]:
     base_fixture = json.loads(CAPABILITIES_FIXTURE.read_text())
+    base_registry = json.loads(CAPABILITY_REGISTRY_FIXTURE.read_text())
+    base_full_fixture = {
+        "response": {"result": {"items": base_registry["items"]}}
+    }
     descriptors = _descriptors()
     composition_descriptors = _composition_setting_descriptors()
     composition_snapshot_descriptors = _composition_snapshot_descriptors(
-        base_fixture
+        base_full_fixture
     )
     generated_descriptors = [*descriptors, *composition_descriptors]
     all_descriptors = [
         *generated_descriptors,
         *composition_snapshot_descriptors,
     ]
-    fixture, registry_digest = _fixture_with_tsm(
-        base_fixture, all_descriptors
+    full_fixture, registry_digest = _fixture_with_tsm(
+        base_full_fixture, all_descriptors
     )
+    fixture = copy.deepcopy(base_fixture)
+    fixture["response"]["result"]["items"] = [
+        _summary_descriptor(descriptor)
+        for descriptor in full_fixture["response"]["result"]["items"]
+    ]
+    fixture["response"]["result"]["capabilitiesDigest"] = registry_digest
+    registry_fixture = copy.deepcopy(base_registry)
+    registry_fixture["items"] = full_fixture["response"]["result"]["items"]
+    registry_fixture["capabilitiesDigest"] = registry_digest
     schema = _schema_with_tsm(
         json.loads(SCHEMA.read_text()), generated_descriptors
     )
@@ -1121,6 +1199,7 @@ def _outputs() -> dict[Path, str]:
         ),
         SCHEMA: _json_text(schema),
         CAPABILITIES_FIXTURE: _json_text(fixture),
+        CAPABILITY_REGISTRY_FIXTURE: _json_text(registry_fixture),
         HELLO_FIXTURE: _json_text(hello),
     }
     for path in MATRIX_FIXTURES:

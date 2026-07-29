@@ -12,8 +12,8 @@ const brokerFailureFixtures = Object.values(require(
     '../../native/ae-plugin/protocol/fixtures/broker-http-errors.json'
 ));
 const nativeCapabilitiesFixture = require(
-    '../../native/ae-plugin/protocol/fixtures/capabilities.json'
-).response.result;
+    '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json'
+);
 const keyframeAuthoringMatrix = require(
     '../../native/ae-plugin/protocol/fixtures/keyframe-authoring-matrix.json'
 );
