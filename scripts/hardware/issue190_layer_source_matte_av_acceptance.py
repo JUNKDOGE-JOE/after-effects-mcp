@@ -543,18 +543,13 @@ def fixture_create_script(config: Issue190Config, wav_path: Path) -> str:
     )
 
 
-def undo_script(count: int) -> str:
+def undo_gui_action(count: int) -> dict[str, Any]:
     require(count in {1, 2}, "harness Undo count is invalid")
-    calls = "\n".join(
-        "  app.executeCommand(app.findMenuCommandId('Undo'));" for _ in range(count)
-    )
-    return (
-        "(function () {\n"
-        + calls
-        + "\n  return JSON.stringify({ok:true,undoCount:"
-        + str(count)
-        + "});\n}())"
-    )
+    return {
+        "application": "Adobe After Effects 2026",
+        "key": "Cmd+Z",
+        "repeat": count,
+    }
 
 
 def close_fixture_script(config: Issue190Config) -> str:
@@ -1505,10 +1500,11 @@ class Issue190Runner:
             name,
             {
                 "instruction": (
-                    "Run the fixed harness-only ExtendScript to execute exactly "
-                    f"{count} real After Effects Undo command(s). Do not retry a write."
+                    f"Send exactly {count} Command-Z keyboard shortcut(s) to the "
+                    "formal After Effects window. Do not invoke Undo from JSX and "
+                    "do not retry a write."
                 ),
-                "script": undo_script(count),
+                "guiAction": undo_gui_action(count),
                 "undoCount": count,
                 "fixtureLifecycle": "ephemeral-validation",
                 "activeFixtureCount": 1,
@@ -1689,11 +1685,13 @@ class Issue190Runner:
             name,
             {
                 "instruction": (
-                    "Recovery only: execute the associated harness Undo exactly "
-                    f"{count} time(s), then use only frozen public reads to verify "
-                    "the fixture baseline. Do not retry the write."
+                    "Recovery only: send exactly "
+                    f"{count} Command-Z keyboard shortcut(s) to the formal After "
+                    "Effects window, then use only frozen public reads to verify "
+                    "the fixture baseline. Do not invoke Undo from JSX and do not "
+                    "retry the write."
                 ),
-                "script": undo_script(count),
+                "guiAction": undo_gui_action(count),
                 "undoCount": count,
                 "fixtureLifecycle": "ephemeral-validation",
                 "activeFixtureCount": 1,
@@ -2470,11 +2468,9 @@ class Issue190Runner:
                 "guarded close completed"
             )
             if not process_absent:
-                await self._request_proven_owned_process_stop(
-                    "guarded close did not confirm exact process absence"
-                )
-                process_absent = await self._poll_owned_process_absent(
-                    "exact-owned shutdown request acknowledged"
+                raise Issue190Failure(
+                    "owned formal AE process remained present after normal guarded "
+                    "close; forced termination is disabled"
                 )
         require(
             process_absent,

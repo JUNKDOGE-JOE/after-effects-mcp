@@ -234,8 +234,10 @@ named roles are `SOURCE_COMP_A`,
 `SOURCE_COMP_B`, `RELINK_TARGET`, `MATTE_FILL`, `MATTE_SOURCE`,
 `MATTE_SPACER`, `VIDEO_SWITCH`, and `AUDIO_SWITCH`; the anonymous 250 ms PCM
 WAV is generated beneath the approved fixture area. Product reads and writes
-use public MCP only. Harness-only code performs the five real-Undo checkpoints,
-and every Undo is followed by public locator reacquisition and exact readback.
+use public MCP only. The controlling workflow performs the five real-Undo
+checkpoints by sending exact `Cmd+Z` shortcuts to the formal AE window; Undo is
+never invoked from inside JSX. Every Undo is followed by public project,
+composition/layer locator reacquisition and exact readback.
 After success or failure, the driver saves in place only when ownership still
 matches, closes formal AE when it is running, and moves the `.aep`, manifest,
 and WAV to a per-run recovery directory with zero active and zero unclassified
@@ -246,10 +248,9 @@ already gone, the driver archives the disk fixture without claiming that Undo
 or baseline restoration occurred. It never resets/deletes an unreconciled
 fixture or accumulates Save As copies. Base HDEV, checkpoint, and process
 inspection exceptions enter this same finalizer. If normal guarded close fails,
-the runner may use the exact owned-process shutdown checkpoint only after the
-run-bound manifest, fixture, formal app, and process ownership are proven; it
-never stops an unverified AE process. If stop cannot be confirmed, the runner
-raises without emitting a falsely complete lifecycle summary.
+or the exact formal AE process remains present after normal Quit, the runner
+stops and reports without archiving or emitting a falsely complete lifecycle
+summary. Forced termination is not permitted.
 
 The frozen ledger dispatches exactly 40 public MCP calls and aborts before call
 41. It covers source replacement/preservation/replay/Undo, non-adjacent Track

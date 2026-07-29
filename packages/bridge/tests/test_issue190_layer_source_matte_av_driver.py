@@ -1445,13 +1445,42 @@ def test_operation_keys_are_fresh_per_run_and_stable_for_one_intent(tmp_path):
 
 @pytest.mark.asyncio
 async def test_real_undo_execution_and_public_verification_are_separate(tmp_path):
+    checkpoints: list[tuple[str, dict]] = []
+
+    async def checkpoint(name: str, details: dict) -> None:
+        checkpoints.append((name, details))
+
     runner = driver.Issue190Runner(
         _config(tmp_path),
-        checkpoint=lambda *_: driver.completed_checkpoint(),
+        checkpoint=checkpoint,
         after_effects_running=lambda: driver.completed_process_check(False),
     )
 
     await runner._undo_checkpoint("undo-audio-disable")
+    assert checkpoints == [
+        (
+            "undo-audio-disable",
+            {
+                "instruction": (
+                    "Send exactly 1 Command-Z keyboard shortcut(s) to the formal "
+                    "After Effects window. Do not invoke Undo from JSX and do not "
+                    "retry a write."
+                ),
+                "guiAction": {
+                    "application": "Adobe After Effects 2026",
+                    "key": "Cmd+Z",
+                    "repeat": 1,
+                },
+                "undoCount": 1,
+                "fixtureLifecycle": "ephemeral-validation",
+                "activeFixtureCount": 1,
+                "saveAsCopies": 0,
+                "validationProfile": "development",
+                "candidateRun": False,
+                "candidateEvidence": False,
+            },
+        )
+    ]
     undo = runner._tool_row("ae_setLayerAudioEnabled")["undo"]
     assert undo == {"executed": 1, "verified": 0}
 
@@ -1675,7 +1704,7 @@ async def test_generic_process_inspection_failure_cannot_override_exact_absence(
 
 
 @pytest.mark.asyncio
-async def test_failed_normal_finalizer_uses_only_proven_owned_process_fallback(
+async def test_failed_normal_finalizer_stops_without_forced_process_fallback(
     tmp_path,
 ):
     config = _config(tmp_path)
@@ -1697,14 +1726,12 @@ async def test_failed_normal_finalizer_uses_only_proven_owned_process_fallback(
     runner.lifecycle.update({"created": 1, "active": 1})
     runner.formal_process_owned = True
 
-    result = await runner.finalize_failure("normal close checkpoint failed")
+    with pytest.raises(driver.Issue190Failure, match="forced termination is disabled"):
+        await runner.finalize_failure("normal close checkpoint failed")
 
-    assert result["disposition"] == "short-lived-recovery"
-    assert len(shutdowns) == 1
-    assert shutdowns[0]["ownershipProven"] is True
-    assert shutdowns[0]["formalAeApp"] == str(config.formal_ae_app)
-    assert runner.lifecycle["active"] == 0
-    assert runner.lifecycle["unclassified"] == 0
+    assert shutdowns == []
+    assert config.fixture_path.is_file()
+    assert runner.lifecycle["active"] == 1
 
 
 @pytest.mark.asyncio
@@ -1861,7 +1888,7 @@ async def test_shutdown_ack_does_not_archive_while_owned_process_keeps_running(
 
 
 @pytest.mark.asyncio
-async def test_shutdown_ack_archives_only_after_owned_process_becomes_absent(
+async def test_normal_exit_failure_never_requests_forced_stop_or_archives(
     tmp_path,
     monkeypatch,
 ):
@@ -1885,34 +1912,25 @@ async def test_shutdown_ack_archives_only_after_owned_process_becomes_absent(
         _owned_process_observation(config, "running"),
         _owned_process_observation(config, "running"),
         _owned_process_observation(config, "running"),
-        _owned_process_observation(config, "running"),
-        _owned_process_observation(config, "absent"),
     ]
 
-    result, checkpoints, probe_calls = (
+    with pytest.raises(driver.Issue190Failure, match="forced termination is disabled"):
         await _run_failed_issue190_with_process_observations(
             config, observations, action_log=actions
         )
-    )
 
-    assert result.summary["aepLifecycle"]["active"] == 0
-    assert result.summary["aepLifecycle"]["unclassified"] == 0
-    assert not config.fixture_path.exists()
-    assert (config.recovery_root / config.run_id).is_dir()
-    assert "stop-owned-formal-ae-fallback" in checkpoints
-    assert len(probe_calls) == 6
-    assert actions[:7] == [
+    assert config.fixture_path.is_file()
+    assert not (config.recovery_root / config.run_id).exists()
+    assert not (config.evidence_dir / f"{config.run_id}.summary.json").exists()
+    assert "checkpoint:stop-owned-formal-ae-fallback" not in actions
+    assert actions == [
         "checkpoint:create-or-reset-issue190-fixture",
         "probe",
         "checkpoint:guarded-close-owned-issue190-fixture",
         "probe",
         "probe",
         "probe",
-        "checkpoint:stop-owned-formal-ae-fallback",
     ]
-    assert actions[7:9] == ["probe", "probe"]
-    assert actions.index("move") > 8
-    assert actions[-1] == "summary"
 
 
 @pytest.mark.asyncio
