@@ -68,7 +68,7 @@ class PrimitiveRegistry:
 
 
 def _json_object(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text())
+    value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"{path}: expected a JSON object")
     return value
@@ -662,7 +662,7 @@ def _replace_root_definition(path: Path, definition: str, expected: dict[str, An
         return
     if check:
         raise ValueError(f"generated output drift: {path.relative_to(ROOT)} $defs.{definition}")
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     needle = f'    "{definition}": '
     start = text.find(needle)
     if start < 0:
@@ -696,16 +696,16 @@ def _replace_root_definition(path: Path, definition: str, expected: dict[str, An
         raise ValueError(f"unterminated generated definition {definition}")
     replacement = json.dumps(expected, ensure_ascii=False, indent=6, sort_keys=True)
     text = text[:value_start] + replacement + text[end + 1:]
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
 
 
 def _write(path: Path, text: str, *, check: bool) -> None:
     if check:
-        if not path.is_file() or path.read_text() != text:
+        if not path.is_file() or path.read_text(encoding="utf-8") != text:
             raise ValueError(f"generated output drift: {path.relative_to(ROOT)}")
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
 
 
 def _local_definition_references(value: Any) -> set[str]:

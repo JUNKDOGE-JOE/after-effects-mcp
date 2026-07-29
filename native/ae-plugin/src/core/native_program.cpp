@@ -5,6 +5,7 @@
 #include <bit>
 #include <cctype>
 #include <cmath>
+#include <cstdint>
 #include <iomanip>
 #include <regex>
 #include <set>

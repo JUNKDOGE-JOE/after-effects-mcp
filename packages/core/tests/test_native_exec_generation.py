@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -425,3 +427,29 @@ def test_execution_guide_is_a_generated_projection():
 
     generate_all(ROOT, check=True)
     assert EXECUTION_GUIDE.read_text(encoding="utf-8") == before
+
+
+def test_generator_check_is_independent_of_the_process_default_encoding():
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "LANG": "C",
+            "LC_ALL": "C",
+            "PYTHONCOERCECLOCALE": "0",
+            "PYTHONUTF8": "0",
+        }
+    )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/generate_native_exec.py"),
+            "--check",
+        ],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
