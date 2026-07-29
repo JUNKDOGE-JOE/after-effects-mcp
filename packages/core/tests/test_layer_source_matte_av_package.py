@@ -741,6 +741,55 @@ def test_maintained_source_public_tool_exposes_exact_handler_mapping():
 
 
 @pytest.mark.asyncio
+async def test_tools_list_exposes_only_the_frozen_underscore_layer_source_matte_av_names(
+    monkeypatch,
+):
+    """Discovery must agree with the public schemas, handlers, and annotations."""
+    expected = {
+        "ae_getLayerSource": "ae.getLayerSource",
+        "ae_setLayerSource": "ae.setLayerSource",
+        "ae_getLayerTrackMatte": "ae.getLayerTrackMatte",
+        "ae_setLayerTrackMatte": "ae.setLayerTrackMatte",
+        "ae_clearLayerTrackMatte": "ae.clearLayerTrackMatte",
+        "ae_getLayerAVState": "ae.getLayerAVState",
+        "ae_setLayerAudioEnabled": "ae.setLayerAudioEnabled",
+        "ae_setLayerVideoEnabled": "ae.setLayerVideoEnabled",
+    }
+    expected_capabilities = {
+        SMA.LAYER_SOURCE_READ_CAPABILITY_ID,
+        SMA.LAYER_TRACK_MATTE_READ_CAPABILITY_ID,
+        SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+        SMA.LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+        SMA.LAYER_AV_STATE_READ_CAPABILITY_ID,
+        SMA.LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+        SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
+    }
+
+    load_all()
+    monkeypatch.setattr(
+        server_module, "_filtered_tool_names", lambda: set(expected.values())
+    )
+    listed = await server_module.build_server()._ae_list_tools()
+
+    assert {tool.name for tool in listed} == set(expected)
+    assert set(SMA.CAPABILITY_CONTRACTS) == expected_capabilities
+    assert "ae.layer.source.set" not in SMA.CAPABILITY_CONTRACTS
+    handler_names = {
+        public_verb: handler_name
+        for public_verb, _handler_verb, handler_name, *_rest in NATIVE_PUBLIC_TOOLS
+    }
+    handler_names[MAINTAINED_SOURCE_PUBLIC_TOOL[0]] = MAINTAINED_SOURCE_PUBLIC_TOOL[2]
+    for tool in listed:
+        canonical = expected[tool.name]
+        schema_cls, handler = HANDLERS[canonical]
+        assert tool.name == expose_tool_name(canonical)
+        assert tool.inputSchema == schema_cls.model_json_schema()
+        assert tool.inputSchema["additionalProperties"] is False
+        assert tool.annotations == VERB_ANNOTATIONS[canonical]
+        assert handler is getattr(native_handlers, handler_names[canonical])
+
+
+@pytest.mark.asyncio
 async def test_maintained_source_handler_binds_one_selected_backend_and_public_args(
     monkeypatch,
 ):

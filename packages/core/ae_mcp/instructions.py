@@ -72,6 +72,11 @@ WORKFLOW — every task follows this loop:
                 ae_setLayerStretch, ae_reorderLayer, ae_setLayerParent, or
                 ae_duplicateLayer tool with one stable idempotency key. After
                 duplication or Undo, reacquire fresh locators before continuing.
+                For layer source, Track Matte, and AV calls, use fresh locators
+                for every call. A maintained source replacement invalidates the
+                whole native graph: rediscover project, composition, layer, and
+                source locators after it. An arbitrary same-composition Track
+                Matte is allowed and does not depend on adjacency.
   2. Act      — Prefer the typed verbs (ae_createLayer, ae_setProperty,
                 ae_applyEffect, ae_moveLayer, ae_createRig). Drop to ae_exec
                 only for logic the typed verbs can't express.
@@ -141,6 +146,8 @@ SAFETY & RECOVERY:
   snapshot (a full file swap — it cannot partially delete layers). Auto-
   checkpointing is best-effort: if it is skipped the response says so via
   `checkpointSkipped`, and your edit still runs.
+  For an uncertain write, inspect state and audit before any retry; never reuse
+  the same operation blindly. `undo.available` is not `undo.verified`.
 """
 
 # Back-compat: existing imports/tests reference SERVER_INSTRUCTIONS as the
