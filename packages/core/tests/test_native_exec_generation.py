@@ -123,6 +123,24 @@ def test_catalog_rejects_a_primitive_schema_that_is_not_closed(tmp_path):
         load_primitive_registry(path)
 
 
+def test_catalog_rejects_the_former_x_contract_placeholder(tmp_path):
+    catalog = json.loads(PRIMITIVES.read_text())
+    row = next(
+        row for row in catalog["primitives"] if row["id"] == "property.keyframes.list"
+    )
+    row["inputSchema"] = {
+        "type": "object",
+        "additionalProperties": False,
+        "x-contract": "legacy-native-closed-schema",
+    }
+    path = tmp_path / "native-primitives.json"
+    path.write_text(json.dumps(catalog))
+    (tmp_path / "aegp-rpc.schema.json").write_text(AEGP_SCHEMA.read_text())
+
+    with pytest.raises(ValueError, match="closed schema"):
+        load_primitive_registry(path)
+
+
 def test_native_primitive_catalog_is_explicitly_ordered_and_valid():
     registry = load_primitive_registry(PRIMITIVES)
 

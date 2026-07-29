@@ -101,8 +101,24 @@ def _unique(rows: list[dict[str, Any]], key: str, label: str) -> None:
 
 def _is_closed_schema(schema: dict[str, Any], catalog_path: Path) -> bool:
     """Accept a closed inline schema or a closed local AEGP definition ref."""
+    if "x-contract" in schema:
+        return False
     if set(schema) != {"$ref"}:
-        return schema.get("type") == "object" and schema.get("additionalProperties") is False
+        properties = schema.get("properties")
+        required = schema.get("required")
+        has_object_contract = isinstance(properties, dict) and bool(properties)
+        has_object_contract = has_object_contract or (
+            isinstance(required, list) and bool(required)
+        )
+        has_composition = any(
+            isinstance(schema.get(key), list) and bool(schema[key])
+            for key in ("allOf", "anyOf", "oneOf")
+        )
+        return (
+            schema.get("type") == "object"
+            and schema.get("additionalProperties") is False
+            and (has_object_contract or has_composition)
+        )
     reference = schema["$ref"]
     if not isinstance(reference, str) or "#/$defs/" not in reference:
         return False
