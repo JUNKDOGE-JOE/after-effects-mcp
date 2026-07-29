@@ -4605,6 +4605,66 @@ def _capabilities_registry_digest(
     )
 
 
+async def _discover_native_capability(
+    backend: NativeInvokeBackend,
+    *,
+    negotiation: NativeNegotiation,
+    capability_id: str,
+    capability_version: int,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None,
+) -> NativeCapabilityDescriptor:
+    """Fetch one full descriptor while retaining the negotiated registry binding."""
+
+    capability_ids = (capability_id,)
+    capability_detail: CapabilityDetail = "full"
+    capability_limit = 1
+    capabilities = await backend.capabilities(
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    expected_query_digest = _capabilities_query_digest(
+        session_id=negotiation.session_id,
+        ids=capability_ids,
+        detail=capability_detail,
+        limit=capability_limit,
+    )
+    if (
+        capabilities.session_id != negotiation.session_id
+        or capabilities.detail != capability_detail
+        or capabilities.next_cursor is not None
+        or capabilities.query_digest != expected_query_digest
+        or capabilities.capabilities_digest != negotiation.capabilities_digest
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capabilities were not bound to the negotiated session.",
+        )
+    if not capabilities.items:
+        raise _structured_error(
+            "NATIVE_UNSUPPORTED",
+            f"Native host did not advertise {capability_id}@{capability_version}.",
+        )
+    if (
+        len(capabilities.items) != 1
+        or capabilities.items[0].capability_id != capability_id
+    ):
+        raise _structured_error(
+            "NATIVE_CONTRACT_MISMATCH",
+            "Native capability query returned an unexpected descriptor.",
+        )
+    descriptor = capabilities.items[0]
+    if descriptor.capability_version != capability_version:
+        raise _structured_error(
+            "NATIVE_UNSUPPORTED",
+            f"Native host did not advertise {capability_id}@{capability_version}.",
+        )
+    return descriptor
+
+
 def _invoke_request_digest(
     request: NativeInvokeRequest,
     negotiation: NativeNegotiation,
@@ -4682,53 +4742,14 @@ async def _invoke_native_read_request(
         cancellation=cancellation,
     )
     _ensure_active(deadline_unix_ms, cancellation)
-    capability_ids: tuple[str, ...] | None = None
-    capability_detail: CapabilityDetail = "full"
-    capability_limit = 100
-    capabilities = await backend.capabilities(
-        ids=capability_ids,
-        detail=capability_detail,
-        limit=capability_limit,
+    descriptor = await _discover_native_capability(
+        backend,
+        negotiation=negotiation,
+        capability_id=capability_id,
+        capability_version=capability_version,
         deadline_unix_ms=deadline_unix_ms,
         cancellation=cancellation,
     )
-    expected_query_digest = _capabilities_query_digest(
-        session_id=negotiation.session_id,
-        ids=capability_ids,
-        detail=capability_detail,
-        limit=capability_limit,
-    )
-    try:
-        registry_digest = _capabilities_registry_digest(capabilities.items)
-    except (TypeError, ValueError, UnicodeError) as exc:
-        raise _structured_error(
-            "NATIVE_CONTRACT_MISMATCH",
-            "Native capability registry could not be verified.",
-        ) from exc
-    if (
-        capabilities.session_id != negotiation.session_id
-        or capabilities.detail != capability_detail
-        or capabilities.next_cursor is not None
-        or capabilities.query_digest != expected_query_digest
-        or capabilities.capabilities_digest != registry_digest
-        or capabilities.capabilities_digest != negotiation.capabilities_digest
-    ):
-        raise _structured_error(
-            "NATIVE_CONTRACT_MISMATCH",
-            "Native capabilities were not bound to the negotiated session.",
-        )
-    matches = [
-        item
-        for item in capabilities.items
-        if item.capability_id == capability_id
-        and item.capability_version == capability_version
-    ]
-    descriptor = matches[0] if len(matches) == 1 else None
-    if descriptor is None:
-        raise _structured_error(
-            "NATIVE_UNSUPPORTED",
-            f"Native host did not advertise {capability_id}@{capability_version}.",
-        )
     descriptor_validator(descriptor, host_platform=negotiation.host_platform)
     bound_locators = additional_locators
     if locator is not None:

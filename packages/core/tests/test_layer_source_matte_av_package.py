@@ -325,6 +325,7 @@ class PackageBackend(N.NativeInvokeBackend):
         self.items = tuple(_native_descriptor(contract) for contract in SMA.CAPABILITY_CONTRACTS.values())
         self.requests: list[N.NativeInvokeRequest] = []
         self.cancellations: list[N.NativeCancellationToken | None] = []
+        self.capability_queries: list[tuple[tuple[str, ...], str, int]] = []
         self.tamper_postcondition: str | None = None
         self.tamper_result_capability: str | None = None
         self.tamper_evidence_session: str | None = None
@@ -340,11 +341,14 @@ class PackageBackend(N.NativeInvokeBackend):
         return self.negotiation
 
     async def capabilities(self, *, ids, detail, limit, **_kwargs):
-        assert ids is None and detail == "full" and limit == 100
+        assert ids is not None and len(ids) == 1
+        assert detail == "full" and limit == 1
+        self.capability_queries.append((ids, detail, limit))
+        items = tuple(item for item in self.items if item.capability_id in ids)
         return N.NativeCapabilities(
-            session_id=SESSION, detail="full", items=self.items, next_cursor=None,
+            session_id=SESSION, detail="full", items=items, next_cursor=None,
             query_digest=N._capabilities_query_digest(
-                session_id=SESSION, ids=None, detail="full", limit=100,
+                session_id=SESSION, ids=ids, detail="full", limit=1,
             ),
             capabilities_digest=self.negotiation.capabilities_digest,
         )
@@ -591,6 +595,15 @@ async def test_native_source_matte_and_av_contracts_bind_values_postconditions_a
         assert execution.evidence.undo is not None
         assert execution.evidence.undo.available is True
         assert execution.evidence.undo.verified is False
+    assert [query[0][0] for query in backend.capability_queries] == [
+        SMA.LAYER_SOURCE_READ_CAPABILITY_ID,
+        SMA.LAYER_TRACK_MATTE_READ_CAPABILITY_ID,
+        SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+        SMA.LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+        SMA.LAYER_AV_STATE_READ_CAPABILITY_ID,
+        SMA.LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+        SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
+    ]
 
 
 @pytest.mark.asyncio
