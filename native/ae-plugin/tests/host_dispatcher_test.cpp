@@ -2154,15 +2154,39 @@ void track_matte_eligibility_accepts_visual_layer_object_types() {
       "native Track Matte eligibility predicate is missing");
   const std::string_view predicate_source(
       plugin_source.data() + predicate, next_helper - predicate);
-  for (const std::string_view object_type : {
-           "AEGP_ObjectType_AV",
-           "AEGP_ObjectType_TEXT",
-           "AEGP_ObjectType_VECTOR",
-           "AEGP_ObjectType_3D_MODEL",
-       }) {
-    require(predicate_source.find(object_type) != std::string_view::npos,
-        "native Track Matte eligibility excludes a visual layer object type");
+  constexpr std::string_view expected_predicate = R"(bool track_matte_capable(AEGP_ObjectType object_type) {
+    switch (object_type) {
+      case AEGP_ObjectType_AV:
+      case AEGP_ObjectType_TEXT:
+      case AEGP_ObjectType_VECTOR:
+      case AEGP_ObjectType_3D_MODEL:
+        return true;
+      case AEGP_ObjectType_NONE:
+      case AEGP_ObjectType_LIGHT:
+      case AEGP_ObjectType_CAMERA:
+        return false;
+    }
+    return false;
   }
+)";
+  require(predicate_source == expected_predicate,
+      "native Track Matte eligibility predicate does not map visual and non-visual types");
+
+  const std::size_t resolver = plugin_source.find(
+      "HostLayerResolveResult resolve_layer(");
+  const std::size_t next_resolver_method = plugin_source.find(
+      "\n\n  [[nodiscard]] HostLayerSourceResult read_layer_source(", resolver);
+  require(resolver != std::string::npos && next_resolver_method != std::string::npos,
+      "could not isolate native layer resolution implementation");
+  const std::string_view resolver_source(
+      plugin_source.data() + resolver, next_resolver_method - resolver);
+  require(resolver_source.find(R"(return HostLayerResolveResult::success({
+        locator,
+        reinterpret_cast<std::uintptr_t>(resolved->layer),
+        reinterpret_cast<std::uintptr_t>(resolved->composition),
+        track_matte_capable(object_type),
+    });)") != std::string_view::npos,
+      "native layer resolution does not construct Track Matte eligibility from object type");
 
   const std::filesystem::path dispatcher_header_path =
       std::filesystem::path(__FILE__).parent_path().parent_path()
