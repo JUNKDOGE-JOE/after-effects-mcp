@@ -68,7 +68,7 @@ class PlanCall:
     case: str
     tool: str
     arguments: Mapping[str, Any]
-    disposition: Literal["read", "write", "negative"]
+    disposition: Literal["read", "write"]
     predicate: str
     expected_error: str | None = None
     undo_checkpoint: str | None = None
@@ -79,7 +79,7 @@ def _call(
     case: str,
     tool: str,
     arguments: Mapping[str, Any],
-    disposition: Literal["read", "write", "negative"],
+    disposition: Literal["read", "write"],
     predicate: str,
     *,
     expected_error: str | None = None,
@@ -427,7 +427,7 @@ _ROWS = (
             "mode": "alpha",
             "idempotency_key": "$operation_key:negative-cross-comp",
         },
-        "negative",
+        "write",
         "Different-composition Matte is rejected before Undo opens.",
         expected_error="TRACK_MATTE_COMPOSITION_MISMATCH",
     ),
@@ -441,7 +441,7 @@ _ROWS = (
             "mode": "alpha",
             "idempotency_key": "$operation_key:negative-self-matte",
         },
-        "negative",
+        "write",
         "Self Matte is rejected with zero write.",
         expected_error="INVALID_ARGUMENT",
     ),
@@ -454,7 +454,7 @@ _ROWS = (
             "source_item_locator": "$source_comp_b_locator",
             "idempotency_key": "$operation_key:negative-invalid-source",
         },
-        "negative",
+        "write",
         "Text target is rejected before maintained /exec.",
         expected_error="LAYER_SOURCE_NOT_REPLACEABLE",
     ),
@@ -467,7 +467,7 @@ _ROWS = (
             "enabled": True,
             "idempotency_key": "$operation_key:negative-no-audio",
         },
-        "negative",
+        "write",
         "Solid source without audio rejects enable before native dispatch.",
         expected_error="LAYER_HAS_NO_AUDIO",
     ),
@@ -480,7 +480,7 @@ _ROWS = (
             "enabled": True,
             "idempotency_key": "$operation_key:negative-no-video",
         },
-        "negative",
+        "write",
         "Audio-only source rejects video enable before native dispatch.",
         expected_error="LAYER_HAS_NO_VIDEO",
     ),
@@ -554,6 +554,7 @@ CASE_DEPENDENCIES = {
 IMMEDIATE_STOP_REASONS = frozenset(
     {
         "unreconciled-possible-write",
+        "uncertain-negative-write",
         "fixture-baseline-lost",
         "incompatible-component-or-protocol",
         "after-effects-crash-or-corruption",

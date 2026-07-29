@@ -599,15 +599,25 @@ class Issue190Runner:
         "audio-undo-read": "ae_setLayerAudioEnabled",
         "video-undo-read": "ae_setLayerVideoEnabled",
     }
-    _WRITE_VERIFICATION = {
-        "source-replace-a-to-b": "source-transform-after",
-        "source-replace-completed-replay": "source-transform-after",
-        "matte-set-alpha": "matte-read-alpha",
-        "matte-reorder-source": "matte-read-after-reorder",
-        "matte-set-luma": "matte-read-luma",
-        "matte-clear": "matte-read-cleared-luma",
-        "audio-disable": "audio-disable-read",
-        "video-disable": "video-disable-read",
+    _WRITE_VERIFICATION_GROUPS = {
+        "source-replace-a-to-b": (
+            "source-reacquire-project",
+            "source-reacquire-layers",
+            "source-read-b",
+            "source-transform-after",
+        ),
+        "source-replace-completed-replay": (
+            "source-reacquire-project",
+            "source-reacquire-layers",
+            "source-read-b",
+            "source-transform-after",
+        ),
+        "matte-set-alpha": ("matte-read-alpha",),
+        "matte-reorder-source": ("matte-read-after-reorder",),
+        "matte-set-luma": ("matte-read-luma",),
+        "matte-clear": ("matte-read-cleared-luma",),
+        "audio-disable": ("audio-disable-read",),
+        "video-disable": ("video-disable-read",),
     }
     _UNCERTAIN_STATE_READS = {
         "source-replace-a-to-b": (
@@ -704,11 +714,15 @@ class Issue190Runner:
         *,
         checkpoint: Callable[[str, Mapping[str, Any]], Awaitable[None]],
         after_effects_running: Callable[[], Awaitable[bool]],
+        owned_process_shutdown: Callable[
+            [Mapping[str, Any]], Awaitable[bool]
+        ] | None = None,
         evidence: DevelopmentEvidence | None = None,
     ) -> None:
         self.config = config
         self.checkpoint = checkpoint
         self.after_effects_running = after_effects_running
+        self.owned_process_shutdown = owned_process_shutdown
         self.evidence = evidence or DevelopmentEvidence(
             config.evidence_dir, run_id=config.run_id
         )
@@ -730,6 +744,7 @@ class Issue190Runner:
         self.consumed_plan_keys: set[str] = set()
         self.unreconciled_write = False
         self.fixture_baseline_restored = True
+        self.formal_process_owned = False
         self.lifecycle = {
             "created": 0,
             "canonicalRetained": 0,
@@ -1174,12 +1189,14 @@ class Issue190Runner:
             )
         if expected_error is not None:
             if not is_error or payload.get("ok") is not False:
+                self.unreconciled_write = True
+                self.fixture_baseline_restored = False
                 self.defects.record(
                     case,
                     status="INDETERMINATE",
                     failing_layer="negative-pre-dispatch-guard",
                     side_effect_state="possible",
-                    reconciliation="required",
+                    reconciliation="unreconciled",
                     dependency_impact=(),
                     evidence_ids=(request_id, response_id),
                     message="negative probe unexpectedly succeeded; fixture must be reconciled",
@@ -1710,6 +1727,56 @@ class Issue190Runner:
         )
         return (*recovery_ids, recovery_event)
 
+    def _pending_for_verification(self, key: str) -> list[PendingWrite]:
+        return [
+            pending
+            for pending in self.pending_writes
+            if key in self._WRITE_VERIFICATION_GROUPS.get(pending.key, ())
+        ]
+
+    async def _recover_verification_failure(
+        self,
+        session: PublicSession,
+        failed_key: str,
+        error: Exception,
+    ) -> bool:
+        pending_rows = self._pending_for_verification(failed_key)
+        if not pending_rows:
+            return False
+        plan = self._plan(failed_key)
+        self.consumed_plan_keys.add(failed_key)
+        self.defects.record(
+            failed_key,
+            status="FAIL",
+            failing_layer="post-write-public-readback",
+            side_effect_state="none",
+            reconciliation="recovery-required",
+            dependency_impact=CASE_DEPENDENCIES.get(plan.case, ()),
+            evidence_ids=self.call_evidence.get(failed_key, ()),
+            message=str(error),
+        )
+        recovery_ids = await self._recover_committed_write(
+            session, pending_rows[0]
+        )
+        for pending in pending_rows:
+            self._record_pending_failure(
+                pending,
+                status="FAIL",
+                side_effect_state="committed-reconciled",
+                reconciliation="readback-failed-restored",
+                evidence_ids=(
+                    *pending.evidence_ids,
+                    *self.call_evidence.get(failed_key, ()),
+                    *recovery_ids,
+                ),
+                message=(
+                    f"{failed_key} failed within the ordered verification group; "
+                    "associated Undo restored and verified the baseline"
+                ),
+            )
+            self.pending_writes.remove(pending)
+        return True
+
     def _record_pending_failure(
         self,
         pending: PendingWrite,
@@ -1732,6 +1799,26 @@ class Issue190Runner:
         )
         self.defects.block_dependents(
             pending.phase, reason=f"{pending.phase} failed at {pending.key}"
+        )
+
+    def _stop_uncertain_negative(self, error: UncertainWrite) -> None:
+        self.unreconciled_write = True
+        self.fixture_baseline_restored = False
+        self.defects.record(
+            error.plan_key,
+            status="INDETERMINATE",
+            failing_layer=error.failing_layer,
+            side_effect_state="possible",
+            reconciliation="unreconciled-no-frozen-read",
+            dependency_impact=(),
+            evidence_ids=error.evidence_ids,
+            message=(
+                "negative mutating probe became uncertain and has no frozen "
+                "state read; no retry attempted"
+            ),
+        )
+        raise ImmediateStop(
+            f"uncertain negative write at {error.plan_key}; preserve fixture"
         )
 
     async def _reconcile_uncertain_write(
@@ -1764,9 +1851,24 @@ class Issue190Runner:
                             reconciliation="uncertain-write-state-readback",
                         )
                     elif state == "before":
-                        self._record_plan_pass(
-                            self._plan(key),
-                            reconciliation="uncertain-write-state-readback",
+                        observed_value = mapping(
+                            payload.get("value"),
+                            "uncertain before-state readback value missing",
+                        )
+                        self.defects.record(
+                            key,
+                            status="FAIL",
+                            failing_layer="uncertain-write-state-readback",
+                            side_effect_state="none",
+                            reconciliation="observed-before-not-after",
+                            dependency_impact=CASE_DEPENDENCIES.get(
+                                self._plan(key).case, ()
+                            ),
+                            evidence_ids=self.call_evidence.get(key, ()),
+                            message=(
+                                "frozen after-state predicate was not satisfied; "
+                                f"observed before state {observed_value!r}"
+                            ),
                         )
                         break
                     else:
@@ -1871,7 +1973,7 @@ class Issue190Runner:
                 )
                 self.responses[plan.key] = payload
                 self._assert_and_capture(plan.key, payload, arguments)
-                if plan.disposition == "write":
+                if plan.disposition == "write" and plan.expected_error is None:
                     self.pending_writes.append(
                         PendingWrite(
                             key=plan.key,
@@ -1887,7 +1989,8 @@ class Issue190Runner:
                 verified = [
                     pending
                     for pending in self.pending_writes
-                    if self._WRITE_VERIFICATION.get(pending.key) == plan.key
+                    if self._WRITE_VERIFICATION_GROUPS.get(pending.key, ())[-1:]
+                    == (plan.key,)
                 ]
                 for pending in verified:
                     write_plan = self._plan(pending.key)
@@ -1903,6 +2006,8 @@ class Issue190Runner:
                 if plan.key in self._UNDO_VERIFY_TOOL and not verified:
                     self.mark_undo_verified(self._UNDO_VERIFY_TOOL[plan.key])
             except UncertainWrite as error:
+                if plan.expected_error is not None:
+                    self._stop_uncertain_negative(error)
                 pending = PendingWrite(
                     key=plan.key,
                     phase=plan.case,
@@ -1917,72 +2022,45 @@ class Issue190Runner:
                 failed_cases.add(plan.case)
                 failed_cases.update(CASE_DEPENDENCIES.get(plan.case, ()))
             except ImmediateStop as error:
-                verified = [
-                    pending
-                    for pending in self.pending_writes
-                    if self._WRITE_VERIFICATION.get(pending.key) == plan.key
-                ]
-                if not verified:
+                if not await self._recover_verification_failure(
+                    session, plan.key, error
+                ):
                     raise
-                self.consumed_plan_keys.add(plan.key)
                 failed_cases.add(plan.case)
                 failed_cases.update(CASE_DEPENDENCIES.get(plan.case, ()))
-                recovery_ids = await self._recover_committed_write(
-                    session, verified[0]
-                )
-                for pending in verified:
-                    self._record_pending_failure(
-                        pending,
-                        status="FAIL",
-                        side_effect_state="committed-reconciled",
-                        reconciliation="readback-failed-restored",
-                        evidence_ids=(*pending.evidence_ids, *recovery_ids),
-                        message=(
-                            f"{plan.key} failed after a successful write; "
-                            "associated Undo restored and verified the baseline"
-                        ),
-                    )
-                    self.pending_writes.remove(pending)
             except Issue190Failure as error:
-                verified = [
-                    pending
-                    for pending in self.pending_writes
-                    if self._WRITE_VERIFICATION.get(pending.key) == plan.key
-                ]
-                if verified:
-                    self.consumed_plan_keys.add(plan.key)
+                if await self._recover_verification_failure(
+                    session, plan.key, error
+                ):
+                    failed_cases.add(plan.case)
+                    failed_cases.update(CASE_DEPENDENCIES.get(plan.case, ()))
+                    continue
+                if plan.expected_error is not None:
+                    payload = self.responses.get(plan.key, {})
+                    structured_error = payload.get("error")
+                    side_effect = (
+                        structured_error.get("sideEffect")
+                        if isinstance(structured_error, Mapping)
+                        else None
+                    )
+                    if side_effect != "not-started":
+                        self.unreconciled_write = True
+                        self.fixture_baseline_restored = False
+                        raise ImmediateStop(
+                            f"negative write contract failed at {plan.key}; "
+                            "preserve fixture"
+                        ) from error
+                    failed_cases.add(plan.case)
                     self.defects.record(
                         plan.key,
                         status="FAIL",
-                        failing_layer="post-write-public-readback",
-                        side_effect_state="committed-reconciled",
-                        reconciliation="recovery-required",
-                        dependency_impact=CASE_DEPENDENCIES.get(plan.case, ()),
+                        failing_layer="negative-write-contract",
+                        side_effect_state="not-started",
+                        reconciliation="not-required",
+                        dependency_impact=(),
                         evidence_ids=self.call_evidence.get(plan.key, ()),
                         message=str(error),
                     )
-                    recovery_ids = await self._recover_committed_write(
-                        session, verified[0]
-                    )
-                    for pending in verified:
-                        self._record_pending_failure(
-                            pending,
-                            status="FAIL",
-                            side_effect_state="committed-reconciled",
-                            reconciliation="readback-failed-restored",
-                            evidence_ids=(
-                                *pending.evidence_ids,
-                                *self.call_evidence.get(plan.key, ()),
-                                *recovery_ids,
-                            ),
-                            message=(
-                                f"{plan.key} failed after a successful write; "
-                                "associated Undo restored and verified the baseline"
-                            ),
-                        )
-                        self.pending_writes.remove(pending)
-                    failed_cases.add(plan.case)
-                    failed_cases.update(CASE_DEPENDENCIES.get(plan.case, ()))
                     continue
                 if plan.disposition == "write":
                     pending = PendingWrite(
@@ -2041,11 +2119,13 @@ class Issue190Runner:
         reason: str = "structured development evidence complete",
         evidence_snapshot: bool = False,
         baseline_restored: bool = True,
+        process_stop_confirmed: bool = False,
     ) -> Path:
-        require(
-            not await self.after_effects_running(),
-            "formal After Effects still owns the Issue #190 fixture",
-        )
+        if not process_stop_confirmed:
+            require(
+                not await self.after_effects_running(),
+                "formal After Effects still owns the Issue #190 fixture",
+            )
         self.validate_fixture_ownership()
         self.config.recovery_root.mkdir(mode=0o700, parents=True, exist_ok=True)
         os.chmod(self.config.recovery_root, stat.S_IRWXU)
@@ -2113,6 +2193,50 @@ class Issue190Runner:
         )
         return destination
 
+    async def _stop_proven_owned_process(self, reason: str) -> str:
+        require(
+            self.formal_process_owned,
+            "formal AE process ownership is not proven; refusing shutdown",
+        )
+        require(
+            self.owned_process_shutdown is not None,
+            "owned formal AE shutdown seam is unavailable",
+        )
+        self.validate_fixture_ownership()
+        details = {
+            "ownershipProven": True,
+            "runId": self.config.run_id,
+            "fixturePath": os.fspath(self.config.fixture_path),
+            "ownerMarker": self.config.owner_marker,
+            "formalAeApp": os.fspath(self.config.formal_ae_app),
+            "reason": reason,
+            "instruction": (
+                "Stop only the exact formal AE process owned by this run. "
+                "Do not kill any unverified or unrelated AE process."
+            ),
+            "validationProfile": "development",
+            "candidateRun": False,
+            "candidateEvidence": False,
+        }
+        try:
+            stopped = await self.owned_process_shutdown(details)
+        except Exception as error:
+            raise Issue190Failure(
+                "owned formal AE shutdown fallback failed"
+            ) from error
+        require(stopped is True, "owned formal AE process stop was not confirmed")
+        return self.evidence.record(
+            "owned-formal-ae-stop-confirmed",
+            {
+                "runId": self.config.run_id,
+                "fixturePath": os.fspath(self.config.fixture_path),
+                "formalAeApp": os.fspath(self.config.formal_ae_app),
+                "ownershipProven": True,
+                "stopped": True,
+                "reason": reason,
+            },
+        )
+
     async def finalize_failure(self, reason: str) -> dict[str, Any]:
         """Classify and move every runner-owned failure fixture out of active."""
 
@@ -2159,28 +2283,44 @@ class Issue190Runner:
             }
         if self.lifecycle["created"] == 0:
             self.lifecycle.update({"created": 1, "active": 1})
-        ae_running = await self.after_effects_running()
+        process_stop_confirmed = False
+        try:
+            ae_running = await self.after_effects_running()
+            process_stop_confirmed = not ae_running
+        except Exception:
+            ae_running = True
+        fallback_reason: str | None = None
         if ae_running:
-            await self.checkpoint(
-                "classify-and-close-failed-issue190-fixture",
-                {
-                    "instruction": (
-                        "Run the ownership-guarded save-in-place/close script and "
-                        "quit the exact formal AE process. Do not reset, delete, "
-                        "Save As, or retry any write."
-                    ),
-                    "script": close_fixture_script(self.config),
-                    "fixtureLifecycle": "ephemeral-validation",
-                    "preserveUnreconciledWrite": self.unreconciled_write,
-                    "validationProfile": "development",
-                    "candidateRun": False,
-                    "candidateEvidence": False,
-                },
-            )
-            require(
-                not await self.after_effects_running(),
-                "formal After Effects still owns the failed Issue #190 fixture",
-            )
+            try:
+                await self.checkpoint(
+                    "classify-and-close-failed-issue190-fixture",
+                    {
+                        "instruction": (
+                            "Run the ownership-guarded save-in-place/close script "
+                            "and quit the exact formal AE process. Do not reset, "
+                            "delete, Save As, or retry any write."
+                        ),
+                        "script": close_fixture_script(self.config),
+                        "fixtureLifecycle": "ephemeral-validation",
+                        "preserveUnreconciledWrite": self.unreconciled_write,
+                        "validationProfile": "development",
+                        "candidateRun": False,
+                        "candidateEvidence": False,
+                    },
+                )
+                process_stop_confirmed = not await self.after_effects_running()
+                if not process_stop_confirmed:
+                    fallback_reason = "normal close returned while formal AE remained"
+            except Exception as error:
+                fallback_reason = (
+                    "normal close or process inspection failed: "
+                    f"{type(error).__name__}"
+                )
+            if not process_stop_confirmed:
+                await self._stop_proven_owned_process(
+                    fallback_reason or "normal close did not confirm process stop"
+                )
+                process_stop_confirmed = True
         process_gone_without_recovery = (
             not ae_running
             and self.unreconciled_write
@@ -2194,6 +2334,7 @@ class Issue190Runner:
             reason=reason,
             evidence_snapshot=self.unreconciled_write,
             baseline_restored=baseline_restored,
+            process_stop_confirmed=process_stop_confirmed,
         )
         disposition = (
             "evidence-snapshot"
@@ -2305,6 +2446,7 @@ class Issue190Runner:
         )
         require(self.config.fixture_path.is_file(), "prepared Issue #190 fixture missing")
         self.lifecycle.update({"created": 1, "active": 1})
+        self.formal_process_owned = True
         await self.execute_plan(session)
         await self.checkpoint(
             "close-and-archive-issue190-fixture",
@@ -2368,12 +2510,24 @@ async def run_issue190_hdev(
     session: PublicSession,
     checkpoint: Callable[[str, Mapping[str, Any]], Awaitable[None]],
     after_effects_running: Callable[[], Awaitable[bool]],
+    owned_process_shutdown: Callable[
+        [Mapping[str, Any]], Awaitable[bool]
+    ] | None = None,
 ) -> Issue190Result:
+    if owned_process_shutdown is None:
+        async def checkpoint_owned_process_shutdown(
+            details: Mapping[str, Any],
+        ) -> bool:
+            await checkpoint("stop-owned-formal-ae-fallback", details)
+            return True
+
+        owned_process_shutdown = checkpoint_owned_process_shutdown
     evidence = DevelopmentEvidence(config.evidence_dir, run_id=config.run_id)
     runner = Issue190Runner(
         config,
         checkpoint=checkpoint,
         after_effects_running=after_effects_running,
+        owned_process_shutdown=owned_process_shutdown,
         evidence=evidence,
     )
     passed = False
@@ -2393,27 +2547,19 @@ async def run_issue190_hdev(
     except Issue190Failure as error:
         details = {"failure": str(error)}
         exit_code = 2
+    except Exception as error:
+        details = {
+            "failure": str(error),
+            "failureType": type(error).__name__,
+        }
+        exit_code = 2
     if not passed:
-        try:
-            failure_reason = str(
-                details.get("message", details.get("failure", "Issue #190 HDEV failed"))
-            )
-            details["fixtureDisposition"] = await runner.finalize_failure(
-                failure_reason
-            )
-        except Issue190Failure as finalization_error:
-            details["fixtureFinalizationFailure"] = str(finalization_error)
-            runner.lifecycle.update(
-                {
-                    "active": int(os.path.lexists(config.fixture_path)),
-                    "unclassified": int(os.path.lexists(config.fixture_path)),
-                    "baselineRestored": runner.fixture_baseline_restored,
-                    "dispositionReason": "fixture finalization failed",
-                    "cleanupCondition": (
-                        "retain until the ownership-aware finalization blocker is fixed"
-                    ),
-                }
-            )
+        failure_reason = str(
+            details.get("message", details.get("failure", "Issue #190 HDEV failed"))
+        )
+        details["fixtureDisposition"] = await runner.finalize_failure(
+            failure_reason
+        )
     summary = evidence.finish(
         passed=passed,
         public_calls=runner.ledger.public_dict(),

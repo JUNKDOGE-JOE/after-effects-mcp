@@ -186,6 +186,59 @@ def _main_layers_payload(*, generation: int = 2) -> dict:
     )
 
 
+def _project_items_payload(*, generation: int = 2) -> dict:
+    return _native_payload(
+        "ae.project.items.list",
+        {
+            "items": [
+                {
+                    "name": "ISSUE190_MAIN",
+                    "locator": _locator(
+                        "composition",
+                        COMP,
+                        generation=generation,
+                    ),
+                },
+                {
+                    "name": "SOURCE_COMP_A",
+                    "locator": _locator(
+                        "composition",
+                        "77777777-7777-4777-8777-777777777777",
+                        generation=generation,
+                    ),
+                },
+                {
+                    "name": "SOURCE_COMP_B",
+                    "locator": _locator(
+                        "composition",
+                        "88888888-8888-4888-8888-888888888888",
+                        generation=generation,
+                    ),
+                },
+            ]
+        },
+    )
+
+
+def _source_details_payload(source_name: str, *, generation: int = 2) -> dict:
+    return _native_payload(
+        "ae.layer.details.get",
+        {
+            "layerLocator": _locator(generation=generation),
+            "sourceName": source_name,
+            "sourceItemLocator": _locator(
+                "composition",
+                (
+                    "77777777-7777-4777-8777-777777777777"
+                    if source_name == "SOURCE_COMP_A"
+                    else "88888888-8888-4888-8888-888888888888"
+                ),
+                generation=generation,
+            ),
+        },
+    )
+
+
 def _config(tmp_path: Path) -> object:
     return driver.Issue190Config(
         scenario=spec.SCENARIO_ID,
@@ -454,6 +507,19 @@ def test_call_plan_is_exactly_forty_and_covers_the_frozen_matrix():
         "audio-undo-reacquire-layers",
         "video-undo-reacquire-layers",
     )
+    negative_rows = [
+        row for row in spec.CALL_PLAN if row.expected_error is not None
+    ]
+    assert len(negative_rows) == 5
+    assert {row.disposition for row in negative_rows} == {"write"}
+    operation_addresses = [
+        row.arguments["idempotency_key"] for row in negative_rows
+    ]
+    assert all(
+        address.startswith("$operation_key:negative-")
+        for address in operation_addresses
+    )
+    assert len(set(operation_addresses)) == 5
 
 
 def test_fixture_recipe_is_one_ephemeral_slot_with_exact_roles_and_pcm_asset():
@@ -718,6 +784,22 @@ async def test_uncertain_audio_write_uses_frozen_read_to_prove_not_occurred(tmp_
         evidence_id.startswith(runner.evidence.run_id)
         for evidence_id in row["evidenceIds"][2:]
     )
+    read_row = runner.defects.row("audio-disable-read")
+    assert read_row["status"] == "FAIL"
+    assert read_row["failingLayer"] == "uncertain-write-state-readback"
+    assert read_row["reconciliation"] == "observed-before-not-after"
+    assert read_row["evidenceIds"] == list(runner.call_evidence["audio-disable-read"])
+    summary = {
+        call["key"]: call
+        for call in runner.call_summary()
+    }
+    assert summary["audio-disable-read"]["status"] == "FAIL"
+    assert summary["audio-disable-read"]["value"]["audioEnabled"] is True
+    assert not any(
+        call["status"] == "PASS"
+        and call["key"] == "audio-disable-read"
+        for call in summary.values()
+    )
 
 
 @pytest.mark.asyncio
@@ -952,6 +1034,200 @@ async def test_luma_support_write_recovery_verifies_the_empty_prewrite_baseline(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "failed_key",
+    [
+        "source-reacquire-project",
+        "source-reacquire-layers",
+        "source-read-b",
+        "source-transform-after",
+    ],
+)
+async def test_every_source_verification_stage_recovers_before_independent_work(
+    tmp_path,
+    failed_key,
+):
+    independent = _native_payload(
+        "ae.layer.track-matte.get",
+        {
+            "layerLocator": _locator(generation=2),
+            "active": False,
+            "matteLayerLocator": None,
+            "mode": "none",
+            "inverted": False,
+        },
+    )
+    session = SequenceSession(
+        [
+            (False, _project_items_payload()),
+            (False, _main_layers_payload()),
+            (False, _source_details_payload("SOURCE_COMP_A")),
+            (False, independent),
+        ]
+    )
+    runner = driver.Issue190Runner(
+        _config(tmp_path),
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+    runner.context.update(
+        {
+            "main_composition_locator": _locator("composition", COMP),
+            "baseline_layer_order": (
+                "MATTE_FILL",
+                "MATTE_SOURCE",
+                "MATTE_SPACER",
+                "RELINK_TARGET",
+                "VIDEO_SWITCH",
+                "AUDIO_SWITCH",
+                "INVALID_SOURCE_TARGET",
+            ),
+        }
+    )
+    pending = driver.PendingWrite(
+        key="source-replace-a-to-b",
+        phase="source",
+        tool="ae_setLayerSource",
+        arguments={"idempotency_key": "source-key"},
+        evidence_ids=("source-write-request", "source-write-response"),
+        payload={},
+        failing_layer="post-write-public-readback",
+    )
+    runner.pending_writes.append(pending)
+    runner.call_evidence[failed_key] = (
+        f"{failed_key}-request",
+        f"{failed_key}-response",
+    )
+
+    handled = await runner._recover_verification_failure(
+        session,
+        failed_key,
+        driver.Issue190Failure(f"{failed_key} failed"),
+    )
+
+    assert handled is True
+    assert [tool for tool, _arguments in session.calls] == [
+        "ae_listProjectItems",
+        "ae_listCompositionLayers",
+        "ae_getLayerSource",
+    ]
+    assert len(session.responses) == 1
+    assert runner.pending_writes == []
+    assert runner.fixture_baseline_restored is True
+    assert runner.defects.row(failed_key)["status"] == "FAIL"
+    write_row = runner.defects.row("source-replace-a-to-b")
+    assert write_row["status"] == "FAIL"
+    assert write_row["reconciliation"] == "readback-failed-restored"
+    assert runner._tool_row("ae_setLayerSource")["undo"] == {
+        "executed": 1,
+        "verified": 1,
+    }
+
+
+@pytest.mark.asyncio
+async def test_expected_negative_write_is_safe_only_when_not_started(tmp_path):
+    response = {
+        "ok": False,
+        "error": {
+            "code": "INVALID_ARGUMENT",
+            "retryable": False,
+            "sideEffect": "not-started",
+            "details": {"field": "matte_layer_locator"},
+        },
+    }
+    session = FakeSession((True, response))
+    runner = driver.Issue190Runner(
+        _config(tmp_path),
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+
+    observed = await runner.public_call(
+        session,
+        case="negative-self-matte",
+        phase="negative-self-matte",
+        tool="ae_setLayerTrackMatte",
+        arguments={
+            "layer_locator": _locator(),
+            "matte_layer_locator": _locator(),
+            "mode": "alpha",
+            "idempotency_key": "negative-self-key",
+        },
+        write=True,
+        expected_error="INVALID_ARGUMENT",
+    )
+
+    assert observed["error"]["sideEffect"] == "not-started"
+    assert runner.unreconciled_write is False
+    assert runner.fixture_baseline_restored is True
+    assert len(session.calls) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure_kind", ["possible", "transport"])
+async def test_uncertain_negative_write_stops_unreconciled_without_map_lookup(
+    tmp_path,
+    failure_kind,
+):
+    if failure_kind == "possible":
+        response = (
+            True,
+            {
+                "ok": False,
+                "error": {
+                    "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                    "retryable": False,
+                    "sideEffect": "possible",
+                    "details": {
+                        "operationId": "negative-operation",
+                        "idempotencyKey": "negative-self-key",
+                    },
+                },
+            },
+        )
+        session = FakeSession(response)
+    else:
+        class BrokenNegativeSession(FakeSession):
+            async def call(self, tool: str, arguments: dict):
+                self.calls.append((tool, arguments))
+                raise ConnectionError("negative transport lost")
+
+        session = BrokenNegativeSession((False, {}))
+    runner = driver.Issue190Runner(
+        _config(tmp_path),
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+
+    with pytest.raises(driver.UncertainWrite) as caught:
+        await runner.public_call(
+            session,
+            case="negative-self-matte",
+            phase="negative-self-matte",
+            tool="ae_setLayerTrackMatte",
+            arguments={
+                "layer_locator": _locator(),
+                "matte_layer_locator": _locator(),
+                "mode": "alpha",
+                "idempotency_key": "negative-self-key",
+            },
+            write=True,
+            expected_error="INVALID_ARGUMENT",
+        )
+    with pytest.raises(driver.ImmediateStop, match="uncertain negative write"):
+        runner._stop_uncertain_negative(caught.value)
+
+    assert len(session.calls) == 1
+    assert runner.unreconciled_write is True
+    assert runner.fixture_baseline_restored is False
+    row = runner.defects.row("negative-self-matte")
+    assert row["status"] == "INDETERMINATE"
+    assert row["reconciliation"] == "unreconciled-no-frozen-read"
+    assert row["sideEffectState"] == "possible"
+    assert row["evidenceIds"] == list(caught.value.evidence_ids)
+
+
+@pytest.mark.asyncio
 async def test_negative_probe_that_unexpectedly_writes_stops_the_sweep(tmp_path):
     payload = _native_payload(
         "ae.layer.track-matte.set",
@@ -986,9 +1262,15 @@ async def test_negative_probe_that_unexpectedly_writes_stops_the_sweep(tmp_path)
                 "mode": "alpha",
                 "idempotency_key": "negative-self-key",
             },
+            write=True,
             expected_error="INVALID_ARGUMENT",
         )
     assert len(session.calls) == 1
+    assert runner.unreconciled_write is True
+    assert runner.fixture_baseline_restored is False
+    row = runner.defects.row("negative-self-matte")
+    assert row["status"] == "INDETERMINATE"
+    assert row["reconciliation"] == "unreconciled"
 
 
 @pytest.mark.asyncio
@@ -1265,6 +1547,141 @@ async def test_unreconciled_or_crashed_write_is_preserved_as_classified_snapshot
     assert disposition["reason"].startswith("transport lost")
     assert disposition["evidenceSnapshot"] is True
     assert disposition["baselineRestored"] is False
+
+
+@pytest.mark.asyncio
+async def test_base_checkpoint_failure_after_fixture_creation_still_finalizes(
+    tmp_path,
+):
+    config = _config(tmp_path)
+
+    async def checkpoint(name: str, _payload: dict) -> None:
+        if name == "create-or-reset-issue190-fixture":
+            config.fixture_path.write_bytes(b"fixture-created-before-checkpoint-failure")
+        raise driver.base_hdev.DevelopmentSmokeFailure("checkpoint transport failed")
+
+    result = await driver.run_issue190_hdev(
+        config,
+        session=FakeSession((False, {})),
+        checkpoint=checkpoint,
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+
+    assert result.exit_code == 2
+    assert result.summary["passed"] is False
+    assert result.summary["aepLifecycle"]["active"] == 0
+    assert result.summary["aepLifecycle"]["unclassified"] == 0
+    assert result.summary["aepLifecycle"]["recoveryArchived"] == 1
+    assert result.summary["fixtureDisposition"]["disposition"] == (
+        "short-lived-recovery"
+    )
+    assert not config.fixture_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_process_inspection_failure_uses_owned_shutdown_fallback(tmp_path):
+    config = _config(tmp_path)
+    checkpoints: list[str] = []
+    shutdowns: list[dict] = []
+
+    async def checkpoint(name: str, _payload: dict) -> None:
+        checkpoints.append(name)
+        if name == "create-or-reset-issue190-fixture":
+            config.fixture_path.write_bytes(b"owned-fixture")
+
+    async def broken_process_check() -> bool:
+        raise driver.base_hdev.DevelopmentSmokeFailure(
+            "could not inspect formal AE process state"
+        )
+
+    async def owned_shutdown(details: dict) -> bool:
+        shutdowns.append(details)
+        return True
+
+    session = FakeSession((False, {}))
+    session.tool_names = frozenset()
+    result = await driver.run_issue190_hdev(
+        config,
+        session=session,
+        checkpoint=checkpoint,
+        after_effects_running=broken_process_check,
+        owned_process_shutdown=owned_shutdown,
+    )
+
+    assert result.exit_code == 2
+    assert checkpoints == [
+        "create-or-reset-issue190-fixture",
+        "classify-and-close-failed-issue190-fixture",
+    ]
+    assert len(shutdowns) == 1
+    assert shutdowns[0]["ownershipProven"] is True
+    assert shutdowns[0]["runId"] == config.run_id
+    assert shutdowns[0]["fixturePath"] == str(config.fixture_path)
+    assert result.summary["aepLifecycle"]["active"] == 0
+    assert result.summary["aepLifecycle"]["unclassified"] == 0
+
+
+@pytest.mark.asyncio
+async def test_failed_normal_finalizer_uses_only_proven_owned_process_fallback(
+    tmp_path,
+):
+    config = _config(tmp_path)
+    shutdowns: list[dict] = []
+    runner = driver.Issue190Runner(
+        config,
+        checkpoint=lambda *_: _raise_checkpoint_failure(),
+        after_effects_running=lambda: driver.completed_process_check(True),
+        owned_process_shutdown=lambda details: _record_owned_shutdown(
+            shutdowns, details
+        ),
+    )
+    runner.claim_fixture()
+    config.fixture_path.write_bytes(b"owned-fixture")
+    runner.lifecycle.update({"created": 1, "active": 1})
+    runner.formal_process_owned = True
+
+    result = await runner.finalize_failure("normal close checkpoint failed")
+
+    assert result["disposition"] == "short-lived-recovery"
+    assert len(shutdowns) == 1
+    assert shutdowns[0]["ownershipProven"] is True
+    assert shutdowns[0]["formalAeApp"] == str(config.formal_ae_app)
+    assert runner.lifecycle["active"] == 0
+    assert runner.lifecycle["unclassified"] == 0
+
+
+@pytest.mark.asyncio
+async def test_finalizer_refuses_shutdown_without_process_ownership_proof(tmp_path):
+    config = _config(tmp_path)
+    shutdowns: list[dict] = []
+    runner = driver.Issue190Runner(
+        config,
+        checkpoint=lambda *_: _raise_checkpoint_failure(),
+        after_effects_running=lambda: driver.completed_process_check(True),
+        owned_process_shutdown=lambda details: _record_owned_shutdown(
+            shutdowns, details
+        ),
+    )
+    runner.claim_fixture()
+    config.fixture_path.write_bytes(b"unproven-process-fixture")
+    runner.lifecycle.update({"created": 1, "active": 1})
+    runner.formal_process_owned = False
+
+    with pytest.raises(driver.Issue190Failure, match="ownership is not proven"):
+        await runner.finalize_failure("cannot close unproven process")
+
+    assert shutdowns == []
+    assert config.fixture_path.is_file()
+    assert runner.lifecycle["active"] == 1
+
+
+async def _raise_checkpoint_failure() -> None:
+    raise driver.base_hdev.DevelopmentSmokeFailure("normal finalizer failed")
+
+
+async def _record_owned_shutdown(rows: list[dict], details: dict) -> bool:
+    rows.append(details)
+    return True
 
 
 def test_evidence_and_summary_are_permanently_development_only(tmp_path):

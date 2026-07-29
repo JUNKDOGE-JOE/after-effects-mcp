@@ -244,7 +244,12 @@ recovery. An unreconciled write or post-dispatch crash is a classified evidence
 snapshot with reason, cleanup condition, and `baselineRestored=false`; if AE is
 already gone, the driver archives the disk fixture without claiming that Undo
 or baseline restoration occurred. It never resets/deletes an unreconciled
-fixture or accumulates Save As copies.
+fixture or accumulates Save As copies. Base HDEV, checkpoint, and process
+inspection exceptions enter this same finalizer. If normal guarded close fails,
+the runner may use the exact owned-process shutdown checkpoint only after the
+run-bound manifest, fixture, formal app, and process ownership are proven; it
+never stops an unverified AE process. If stop cannot be confirmed, the runner
+raises without emitting a falsely complete lifecycle summary.
 
 The frozen ledger dispatches exactly 40 public MCP calls and aborts before call
 41. It covers source replacement/preservation/replay/Undo, non-adjacent Track
@@ -255,8 +260,21 @@ write stays pending until its frozen public readback passes. A
 original operation key, response/audit identifiers, and only already-planned
 readback calls to classify it as committed-reconciled,
 not-occurred-reconciled, or unreconciled; it is never retried. A successful
-write whose readback fails enters its associated harness Undo and frozen
-locator-reacquisition/baseline reads before any independent case can continue.
+source replacement remains pending across its entire ordered verification
+group: project reacquisition, layer reacquisition, source readback, and keyed
+transform witness. Failure at any of those rows enters the same associated
+harness Undo and frozen locator-reacquisition/baseline reads before any
+independent case can continue. A BEFORE-state reconciliation never relabels an
+unsatisfied frozen AFTER predicate as PASS: the read row records the observed
+state as FAIL while the write separately records
+`not-occurred-reconciled`.
+
+All five negative probes are mutating public tools with fresh stable operation
+keys. Their expected structured `sideEffect=not-started` result is the only
+safe negative PASS. Possible side effect, post-dispatch transport loss, or
+unexpected success stops immediately as unreconciled and preserves a
+classified evidence snapshot; because no frozen negative-state read exists,
+the driver never invents reconciliation or retries the probe.
 An unreconciled write stops immediately and preserves the fixture. Its defect
 ledger records every case as `PASS`, `FAIL`,
 `BLOCKED`, or `INDETERMINATE`, including the failing layer, side-effect state,
