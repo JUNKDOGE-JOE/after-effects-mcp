@@ -6047,6 +6047,63 @@
       "properties": {
             "arguments": {
                   "additionalProperties": false,
+                  "allOf": [
+                        {
+                              "else": {
+                                    "required": [
+                                          "operationKey",
+                                          "undoGroup"
+                                    ]
+                              },
+                              "if": {
+                                    "properties": {
+                                          "operations": {
+                                                "items": {
+                                                      "properties": {
+                                                            "op": {
+                                                                  "enum": [
+                                                                        "composition.resolve",
+                                                                        "layer.resolve",
+                                                                        "property.resolve",
+                                                                        "project.items.list",
+                                                                        "composition.layers.list",
+                                                                        "composition.selectedLayers.list",
+                                                                        "composition.time.read",
+                                                                        "composition.settings.read",
+                                                                        "layer.properties.list",
+                                                                        "property.keyframes.list",
+                                                                        "property.keyframe.details.read"
+                                                                  ]
+                                                            }
+                                                      },
+                                                      "required": [
+                                                            "op"
+                                                      ]
+                                                }
+                                          }
+                                    },
+                                    "required": [
+                                          "operations"
+                                    ]
+                              },
+                              "then": {
+                                    "not": {
+                                          "anyOf": [
+                                                {
+                                                      "required": [
+                                                            "operationKey"
+                                                      ]
+                                                },
+                                                {
+                                                      "required": [
+                                                            "undoGroup"
+                                                      ]
+                                                }
+                                          ]
+                                    }
+                              }
+                        }
+                  ],
                   "properties": {
                         "operationKey": {
                               "maxLength": 64,

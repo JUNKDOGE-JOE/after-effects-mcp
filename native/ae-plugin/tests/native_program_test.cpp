@@ -67,6 +67,27 @@ void read_program_needs_no_write_key() {
   require(!admission.contains_write, "read program was classified as a write");
 }
 
+void read_program_rejects_write_metadata() {
+  const std::string operations =
+      R"([{"op":"project.items.list","args":{"offset":0,"limit":1}}])";
+  rejects([&] {
+    (void)admit(
+        R"({"operationKey":"read-program-key-0001","operations":)"
+        + operations + "}");
+  }, "read program with operationKey");
+  rejects([&] {
+    (void)admit(
+        R"({"undoGroup":"Read must not open Undo","operations":)"
+        + operations + "}");
+  }, "read program with undoGroup");
+  rejects([&] {
+    (void)admit(
+        R"({"operationKey":"read-program-key-0001",)"
+        R"("undoGroup":"Read must not open Undo","operations":)"
+        + operations + "}");
+  }, "read program with operationKey and undoGroup");
+}
+
 void write_program_requires_operation_key_and_undo_group() {
   const std::string operations = R"([{"op":"composition.resolve","args":{"locator":)"
       + composition_locator() + R"(},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":1}}}])";
@@ -175,6 +196,7 @@ void codec_accepts_only_the_native_program_invoke_shape() {
 int main() {
   try {
     read_program_needs_no_write_key();
+    read_program_rejects_write_metadata();
     write_program_requires_operation_key_and_undo_group();
     unknown_primitive_duplicate_or_invalid_refs_fail_admission();
     reference_kinds_and_exports_are_closed();

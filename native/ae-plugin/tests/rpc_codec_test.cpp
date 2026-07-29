@@ -701,6 +701,14 @@ void native_exec_is_the_only_typed_invoke_and_control_plane_stays_typed() {
       "native-extra", 1'900'000'005'000ULL,
       R"({"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1,"extra":true}}]})"))); },
       "INVALID_ARGUMENT", "native program extra literal was accepted");
+  expect_codec_error([&] { (void)decode_request_frame(frame(native_exec_json(
+      "native-read-key", 1'900'000'005'000ULL,
+      R"({"operationKey":"read-program-key-0001","operations":[{"op":"project.items.list","args":{"offset":0,"limit":1}}]})"))); },
+      "INVALID_ARGUMENT", "native read program operationKey was accepted");
+  expect_codec_error([&] { (void)decode_request_frame(frame(native_exec_json(
+      "native-read-undo", 1'900'000'005'000ULL,
+      R"({"undoGroup":"Read must not open Undo","operations":[{"op":"project.items.list","args":{"offset":0,"limit":1}}]})"))); },
+      "INVALID_ARGUMENT", "native read program undoGroup was accepted");
 
   const std::string capabilities_json = "{\"wireVersion\":1,\"kind\":\"request\","
       "\"sessionId\":\"" + std::string(kSession)

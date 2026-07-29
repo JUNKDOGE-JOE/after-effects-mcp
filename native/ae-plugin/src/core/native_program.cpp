@@ -564,6 +564,10 @@ ProgramAdmission validate_native_program(
   if (result.contains_write && (program.operation_key.empty() || program.undo_group.empty())) {
     invalid("write program requires operationKey and undoGroup");
   }
+  if (!result.contains_write
+      && (!program.operation_key.empty() || !program.undo_group.empty())) {
+    invalid("read program must not include operationKey or undoGroup");
+  }
   result.program_digest = digest_native_program(program);
   return result;
 }

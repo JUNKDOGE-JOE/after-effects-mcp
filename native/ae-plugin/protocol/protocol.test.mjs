@@ -33,6 +33,28 @@ test('native program is the sole invoke wire shape', () => {
     operations: [{ op: 'composition.resolve', args: { locator }, saveAs: 'composition' }],
   });
   assert.equal(schemaAccepts(schema.$defs.request, valid, schema), true);
+  assert.equal(schemaAccepts(schema.$defs.request, nativeRequest({
+    operationKey: 'read-program-key-0001',
+    operations: [{ op: 'project.items.list', args: { offset: 0, limit: 1 } }],
+  }), schema), false);
+  assert.equal(schemaAccepts(schema.$defs.request, nativeRequest({
+    undoGroup: 'Read must not open Undo',
+    operations: [{ op: 'project.items.list', args: { offset: 0, limit: 1 } }],
+  }), schema), false);
+  assert.equal(schemaAccepts(schema.$defs.request, nativeRequest({
+    operationKey: 'write-program-key-0001',
+    undoGroup: 'Task 5 write',
+    operations: [
+      { op: 'composition.resolve', args: { locator }, saveAs: 'composition' },
+      {
+        op: 'composition.time.set',
+        args: {
+          composition: { ref: 'composition' },
+          targetTime: { value: 1, scale: 24 },
+        },
+      },
+    ],
+  }), schema), true);
   const legacy = nativeRequest({});
   legacy.params.capabilityId = 'ae.layer.track-matte.set';
   assert.equal(schemaAccepts(schema.$defs.request, legacy, schema), false);

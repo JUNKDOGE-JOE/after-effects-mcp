@@ -402,10 +402,37 @@ def _model_input_schema(row: PrimitiveRow, root_definitions: dict[str, Any]) -> 
 
 def _native_program_schema(registry: PrimitiveRegistry, root_definitions: dict[str, Any]) -> dict[str, Any]:
     """The one generated public wire shape and the C++ admission contract."""
+    read_primitive_ids = [
+        row.id for row in registry.rows if row.mutability == "read"
+    ]
     return {
         "type": "object",
         "additionalProperties": False,
         "required": ["operations"],
+        "allOf": [{
+            "if": {
+                "required": ["operations"],
+                "properties": {
+                    "operations": {
+                        "items": {
+                            "required": ["op"],
+                            "properties": {
+                                "op": {"enum": read_primitive_ids},
+                            },
+                        },
+                    },
+                },
+            },
+            "then": {
+                "not": {
+                    "anyOf": [
+                        {"required": ["operationKey"]},
+                        {"required": ["undoGroup"]},
+                    ],
+                },
+            },
+            "else": {"required": ["operationKey", "undoGroup"]},
+        }],
         "properties": {
             "operationKey": _inline_schema({"$ref": "#/$defs/idempotencyKey"}, root_definitions),
             "undoGroup": {"type": "string", "minLength": 1, "maxLength": 256},

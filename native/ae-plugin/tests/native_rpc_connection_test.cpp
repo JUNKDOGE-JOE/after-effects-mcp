@@ -1184,6 +1184,18 @@ std::string native_program_json(
         "\"capabilityVersion\":1,\"arguments\":" + arguments + "}}";
 }
 
+std::string read_program_with_write_metadata_json(
+    std::string_view request_id,
+    std::string_view metadata) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.native.exec\","
+        "\"capabilityVersion\":1,\"arguments\":{" + std::string(metadata)
+      + "\"operations\":[{\"op\":\"project.items.list\","
+        "\"args\":{\"offset\":0,\"limit\":1},\"returnAs\":\"items\"}]}}}";
+}
+
 std::string bit_depth_capabilities_json(
     std::string_view request_id, std::string_view capability_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
@@ -3588,6 +3600,45 @@ void native_program_connection_returns_one_common_terminal_and_replays() {
   (void)dispatcher.shutdown();
 }
 
+void native_program_read_metadata_is_rejected_before_dispatch() {
+  const std::array<std::pair<std::string_view, std::string_view>, 2> cases{{
+      {"native-program-read-key", "\"operationKey\":\"read-program-key-0001\","},
+      {"native-program-read-undo", "\"undoGroup\":\"Read must not open Undo\","},
+  }};
+  std::uint32_t generation = 20;
+  for (const auto& [request_id, metadata] : cases) {
+    FakeDispatcherClock dispatcher_clock;
+    FakeSessionClock session_clock;
+    HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+    RecordingObserver observer;
+    RecordingIdleSignal idle_signal;
+    NativeRpcConnectionHandler handler(
+        dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
+    std::array<int, 2> sockets{};
+    require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0,
+        "native-program read-metadata socketpair failed");
+    const AuthenticatedConnection authenticated =
+        connection(sockets[1], std::string(request_id) + "-route", generation++);
+    std::thread worker([&] { handler.serve(authenticated); });
+    send_json(sockets[0], hello_json());
+    (void)read_body(sockets[0]);
+
+    send_json(
+        sockets[0],
+        read_program_with_write_metadata_json(request_id, metadata));
+    wait_until([&] {
+      return observer.has_event(
+          "connection", "none", "codec-or-transport-failure");
+    }, "native read metadata codec rejection");
+    worker.join();
+    require(dispatcher.queued() == 0 && idle_signal.calls() == 0,
+        "read program write metadata reached native dispatch");
+    (void)::close(sockets[0]);
+    (void)::close(sockets[1]);
+    (void)dispatcher.shutdown();
+  }
+}
+
 void native_program_disconnect_after_write_dispatch_replays_uncertainty() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
@@ -3663,6 +3714,7 @@ void native_program_disconnect_after_write_dispatch_replays_uncertainty() {
 
 int main() {
   generated_registry_identity_is_not_runtime_supplied();
+  native_program_read_metadata_is_rejected_before_dispatch();
   native_program_connection_returns_one_common_terminal_and_replays();
   native_program_disconnect_after_write_dispatch_replays_uncertainty();
   std::cout << "native_rpc_connection_test: PASS\n";
