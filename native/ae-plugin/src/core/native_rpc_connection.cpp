@@ -1719,6 +1719,21 @@ void NativeRpcConnectionHandler::serve(
         const std::uint64_t effective_deadline = *ingress.effective_deadline_unix_ms;
         const std::uint64_t ttl = effective_deadline > now_unix
             ? effective_deadline - now_unix : 0;
+        if (request.method == RpcMethod::kInvoke
+            && std::holds_alternative<rpc::NativeProgramParams>(request.params)) {
+          if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
+                  request,
+                  connection.session_id,
+                  "NATIVE_UNAVAILABLE",
+                  "native program admitted; executor is not yet wired",
+                  "ae.native.exec")))) {
+            connected = false;
+            break;
+          }
+          (void)front_door.complete_request(request.request_id);
+          observer_.on_rpc_event("invoke", request.request_id, "native-program-not-yet-wired");
+          continue;
+        }
         Request dispatch_request;
         if (request.method == RpcMethod::kInvalidateGraph) {
           dispatch_request = {

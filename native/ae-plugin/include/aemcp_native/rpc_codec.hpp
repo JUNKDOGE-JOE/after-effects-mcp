@@ -1,6 +1,7 @@
 #pragma once
 
 #include "aemcp_native/host_dispatcher.hpp"
+#include "aemcp_native/native_program.hpp"
 
 #include <cstddef>
 #include <cstdint>
@@ -144,6 +145,13 @@ struct InvokeParams {
   std::string native_media_arguments_json;
 };
 
+// The legacy typed invoke envelope remains an internal host migration carrier.
+// It is deliberately not a wire decode target after native-program admission.
+struct NativeProgramParams {
+  NativeProgram program;
+  ProgramAdmission admission;
+};
+
 struct CancelParams {
   std::string target_request_id;
 };
@@ -157,6 +165,7 @@ struct InvalidateGraphParams {
 using RequestParams = std::variant<
     HelloParams,
     CapabilitiesParams,
+    NativeProgramParams,
     InvokeParams,
     CancelParams,
     InvalidateGraphParams>;

@@ -6,6 +6,7 @@
       "order": 1,
       "mutability": "read",
       "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {},
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -58,6 +59,7 @@
       "order": 2,
       "mutability": "read",
       "requiredSuite": "AEGP_LayerSuite9",
+      "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -110,6 +112,7 @@
       "order": 3,
       "mutability": "read",
       "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"layer": "LayerHandle"},
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -162,9 +165,8 @@
       "order": 4,
       "mutability": "read",
       "requiredSuite": "AEGP_ProjSuite6",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/projectItemsListArguments"
-      },
+      "referenceArguments": {},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":50},"projectLocator":{"$ref":"aegp-rpc.schema.json#/$defs/projectLocator"}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/projectItemsListValue"
       },
@@ -178,9 +180,8 @@
       "order": 5,
       "mutability": "read",
       "requiredSuite": "AEGP_CompSuite12",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/compositionLayersListArguments"
-      },
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/compositionLayersListValue"
       },
@@ -194,9 +195,8 @@
       "order": 6,
       "mutability": "read",
       "requiredSuite": "AEGP_CompSuite12",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/compositionLayersListArguments"
-      },
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/compositionSelectedLayersListInvokeResult"
       },
@@ -210,9 +210,8 @@
       "order": 7,
       "mutability": "read",
       "requiredSuite": "AEGP_CompSuite12",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeReadArguments"
-      },
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":[],"properties":{}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeReadValue"
       },
@@ -226,9 +225,8 @@
       "order": 8,
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeSetArguments"
-      },
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["targetTime"],"properties":{"targetTime":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeSetInvokeResult"
       },
@@ -242,9 +240,8 @@
       "order": 9,
       "mutability": "read",
       "requiredSuite": "AEGP_CompSuite12",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsReadArguments"
-      },
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":[],"properties":{}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsReadValue"
       },
@@ -258,9 +255,8 @@
       "order": 10,
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDurationSetArguments"
-      },
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["duration"],"properties":{"duration":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":1,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -280,9 +276,8 @@
       "order": 11,
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionFrameRateSetArguments"
-      },
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["frameRate"],"properties":{"frameRate":{"type":"object","additionalProperties":false,"required":["numerator","denominator"],"properties":{"numerator":{"type":"integer","minimum":1,"maximum":2147483647},"denominator":{"type":"integer","minimum":1,"maximum":2147483647}}}}},
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -302,9 +297,8 @@
       "order": 12,
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionPixelAspectRatioSetArguments"
-      },
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["pixelAspectRatio"],"properties":{"pixelAspectRatio":{"type":"object","additionalProperties":false,"required":["numerator","denominator"],"properties":{"numerator":{"type":"integer","minimum":1,"maximum":2147483647},"denominator":{"type":"integer","minimum":1,"maximum":2147483647}}}}},
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -324,9 +318,8 @@
       "order": 13,
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetArguments"
-      },
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["displayStartTime"],"properties":{"displayStartTime":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -346,9 +339,8 @@
       "order": 14,
       "mutability": "read",
       "requiredSuite": "AEGP_LayerSuite9",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertiesListArguments"
-      },
+      "referenceArguments": {"layer": "LayerHandle", "parentProperty": {"kind": "PropertyHandle", "required": false}},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/layerPropertiesListValue"
       },
@@ -362,9 +354,8 @@
       "order": 15,
       "mutability": "read",
       "requiredSuite": "AEGP_StreamSuite5",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListArguments"
-      },
+      "referenceArguments": {"property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListValue"
       },
@@ -378,9 +369,8 @@
       "order": 16,
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertySetArguments"
-      },
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/layerPropertySetInvokeResult"
       },
@@ -394,9 +384,8 @@
       "order": 17,
       "mutability": "read",
       "requiredSuite": "AEGP_StreamSuite5",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeDetailsArguments"
-      },
+      "referenceArguments": {"property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/keyframeDetailsValue"
       },
@@ -410,9 +399,8 @@
       "order": 18,
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeValueArguments"
-      },
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","value"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/keyframeAddInvokeResult"
       },
@@ -426,9 +414,8 @@
       "order": 19,
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeValueArguments"
-      },
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","value"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/keyframeValueSetInvokeResult"
       },
@@ -442,9 +429,8 @@
       "order": 20,
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeInterpolationArguments"
-      },
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","inInterpolation","outInterpolation"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"inInterpolation":{"enum":["linear","bezier","hold"]},"outInterpolation":{"enum":["linear","bezier","hold"]}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/keyframeInterpolationSetInvokeResult"
       },
@@ -458,9 +444,8 @@
       "order": 21,
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeTemporalEaseArguments"
-      },
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","dimensions"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"dimensions":{"type":"array","minItems":1,"maxItems":4,"items":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeEaseDimension"}}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/keyframeTemporalEaseSetInvokeResult"
       },
@@ -474,9 +459,8 @@
       "order": 22,
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeBehaviorArguments"
-      },
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","behavior","enabled"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"behavior":{"enum":["temporal-continuous","temporal-auto-bezier","spatial-continuous","spatial-auto-bezier","roving"]},"enabled":{"type":"boolean"}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/keyframeBehaviorSetInvokeResult"
       },
@@ -490,9 +474,8 @@
       "order": 23,
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
-      "inputSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeDeleteArguments"
-      },
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}}},
       "resultSchema": {
         "$ref": "aegp-rpc.schema.json#/$defs/keyframeDeleteInvokeResult"
       },

@@ -6042,6 +6042,37 @@
       ],
       "x-invariant": "every-invoke-variant-is-compile-time-allowlisted-and-closed"
     },
+    "nativeProgramInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capabilityId", "capabilityVersion", "arguments"],
+      "properties": {
+        "capabilityId": {"const": "ae.native.exec"},
+        "capabilityVersion": {"const": 1},
+        "arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["operations"],
+          "properties": {
+            "operationKey": {"$ref": "#/$defs/idempotencyKey"},
+            "undoGroup": {"type": "string", "minLength": 1, "maxLength": 256},
+            "operations": {
+              "type": "array", "minItems": 1, "maxItems": 64,
+              "items": {
+                "type": "object", "additionalProperties": false,
+                "required": ["op", "args"],
+                "properties": {
+                  "op": {"enum": ["composition.resolve", "layer.resolve", "property.resolve", "project.items.list", "composition.layers.list", "composition.selectedLayers.list", "composition.time.read", "composition.time.set", "composition.settings.read", "composition.duration.set", "composition.frameRate.set", "composition.pixelAspectRatio.set", "composition.displayStartTime.set", "layer.properties.list", "property.keyframes.list", "property.value.set", "property.keyframe.details.read", "property.keyframe.add", "property.keyframe.value.set", "property.keyframe.interpolation.set", "property.keyframe.temporalEase.set", "property.keyframe.behavior.set", "property.keyframe.delete"]},
+                  "args": {"type": "object"},
+                  "saveAs": {"type": "string", "minLength": 1},
+                  "returnAs": {"type": "string", "minLength": 1}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "cancelParams": {
       "type": "object",
       "additionalProperties": false,
@@ -6160,7 +6191,7 @@
               "const": "invoke"
             },
             "params": {
-              "$ref": "#/$defs/invokeParams"
+              "$ref": "#/$defs/nativeProgramInvokeParams"
             }
           }
         }

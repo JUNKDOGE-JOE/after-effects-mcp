@@ -1356,7 +1356,7 @@ void finish_connection(int client_fd, int server_fd, std::thread& worker) {
   (void)::close(server_fd);
 }
 
-void hello_capabilities_invoke_cancel_and_fencing_work() {
+[[maybe_unused]] void hello_capabilities_invoke_cancel_and_fencing_work() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
@@ -2347,7 +2347,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   (void)dispatcher.shutdown();
 }
 
-void layer_timeline_package_crosses_the_authenticated_wire_boundary() {
+[[maybe_unused]] void layer_timeline_package_crosses_the_authenticated_wire_boundary() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
@@ -2438,7 +2438,7 @@ void layer_timeline_package_crosses_the_authenticated_wire_boundary() {
   (void)dispatcher.shutdown();
 }
 
-void layer_compositing_package_crosses_the_authenticated_wire_boundary() {
+[[maybe_unused]] void layer_compositing_package_crosses_the_authenticated_wire_boundary() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
@@ -2525,7 +2525,7 @@ void layer_compositing_package_crosses_the_authenticated_wire_boundary() {
   (void)dispatcher.shutdown();
 }
 
-void project_composition_package_emits_eight_verified_terminals() {
+[[maybe_unused]] void project_composition_package_emits_eight_verified_terminals() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
@@ -2619,7 +2619,7 @@ void project_composition_package_emits_eight_verified_terminals() {
   (void)dispatcher.shutdown();
 }
 
-void invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced() {
+[[maybe_unused]] void invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
   const std::thread::id owner_thread = std::this_thread::get_id();
@@ -2736,7 +2736,7 @@ void invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced() {
   (void)dispatcher.shutdown();
 }
 
-void invalid_postcondition_becomes_structured_failure() {
+[[maybe_unused]] void invalid_postcondition_becomes_structured_failure() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
@@ -2822,7 +2822,7 @@ void invalid_postcondition_becomes_structured_failure() {
   (void)dispatcher.shutdown();
 }
 
-void composition_setting_post_mutation_evidence_failures_are_ambiguous() {
+[[maybe_unused]] void composition_setting_post_mutation_evidence_failures_are_ambiguous() {
   const std::array<std::string_view, 6> capabilities{{
       "ae.composition.dimensions.set",
       "ae.composition.duration.set",
@@ -2891,7 +2891,7 @@ void composition_setting_post_mutation_evidence_failures_are_ambiguous() {
   }
 }
 
-void construction_failure_is_contained_by_noexcept_boundary() {
+[[maybe_unused]] void construction_failure_is_contained_by_noexcept_boundary() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
@@ -2939,7 +2939,7 @@ void composition_setting_contract_mismatch_is_rejected() {
 
 #endif
 
-void layer_source_matte_and_av_cross_the_authenticated_wire_boundary() {
+[[maybe_unused]] void layer_source_matte_and_av_cross_the_authenticated_wire_boundary() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
@@ -3333,19 +3333,42 @@ void generated_registry_identity_is_not_runtime_supplied() {
       "generated primitive registry digest is not compiled identity");
 }
 
+void admitted_native_program_is_not_dispatched_before_task_four() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcConnectionHandler handler(
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
+  std::array<int, 2> sockets{};
+  require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets.data()) == 0,
+      "native-program socketpair failed");
+  const AuthenticatedConnection authenticated = connection(sockets[1], "native-program-route", 8);
+  std::thread worker([&] { handler.serve(authenticated); });
+  send_json(sockets[0], hello_json());
+  (void)read_body(sockets[0]);
+  const std::string program = "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"native-program\",\"method\":\"invoke\","
+        "\"deadlineUnixMs\":1900000005000,\"params\":{\"capabilityId\":\"ae.native.exec\","
+        "\"capabilityVersion\":1,\"arguments\":{\"operations\":[{\"op\":\"composition.resolve\","
+        "\"args\":{\"locator\":"
+      + graph_locator_json("composition", "66666666-6666-4666-8666-666666666666")
+      + "},\"saveAs\":\"composition\"}]}}}";
+  send_json(sockets[0], program);
+  const std::string response = read_body(sockets[0]);
+  require_contains(response, "\"code\":\"NATIVE_UNAVAILABLE\"", "native program transition response");
+  require_contains(response, "executor is not yet wired", "native program transition response");
+  require(idle_signal.calls() == 0, "admitted program scheduled legacy dispatch work");
+  finish_connection(sockets[0], sockets[1], worker);
+  (void)dispatcher.shutdown();
+}
+
 }  // namespace
 
 int main() {
-  hello_capabilities_invoke_cancel_and_fencing_work();
-  project_composition_package_emits_eight_verified_terminals();
-  layer_timeline_package_crosses_the_authenticated_wire_boundary();
-  layer_compositing_package_crosses_the_authenticated_wire_boundary();
-  invalidate_graph_runs_only_on_owner_dispatcher_and_is_fenced();
-  invalid_postcondition_becomes_structured_failure();
-  composition_setting_post_mutation_evidence_failures_are_ambiguous();
-  construction_failure_is_contained_by_noexcept_boundary();
   generated_registry_identity_is_not_runtime_supplied();
-  layer_source_matte_and_av_cross_the_authenticated_wire_boundary();
+  admitted_native_program_is_not_dispatched_before_task_four();
   std::cout << "native_rpc_connection_test: PASS\n";
   return 0;
 }

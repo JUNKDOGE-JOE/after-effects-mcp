@@ -1280,6 +1280,11 @@ std::string canonical_request(const ParsedRequest& request) {
       break;
     }
     case RpcMethod::kInvoke: {
+      if (const auto* native_program = std::get_if<NativeProgramParams>(&request.params)) {
+        params = "{\"arguments\":" + canonical_native_program(native_program->program)
+            + ",\"capabilityId\":\"ae.native.exec\",\"capabilityVersion\":1}";
+        break;
+      }
       const auto& value = std::get<InvokeParams>(request.params);
       std::string arguments = "{}";
       if (value.capability_id == "ae.project.bit-depth.set") {
@@ -1704,6 +1709,28 @@ ParsedRequest classify_request(const JsonValue& root) {
       }
       request.params = std::move(result);
     } else if (request.method == RpcMethod::kInvoke) {
+      if (!exact_keys(*params, {"capabilityId", "capabilityVersion", "arguments"},
+          {"capabilityId", "capabilityVersion", "arguments"})) {
+        invalid_argument("invalid native program invoke params");
+      }
+      const std::string capability = required_string(
+          *params, "capabilityId", CodecErrorKind::kInvalidArgument);
+      const std::uint64_t version = required_uint(
+          *params, "capabilityVersion", CodecErrorKind::kInvalidArgument, 1, kMaxSafeInteger);
+      const JsonValue* arguments_value = member(*params, "arguments");
+      const JsonValue::Object* arguments = arguments_value == nullptr ? nullptr : object_of(*arguments_value);
+      if (capability != "ae.native.exec" || version != 1 || arguments == nullptr) {
+        invalid_argument("invoke must target ae.native.exec version 1");
+      }
+      try {
+        NativeProgramParams result;
+        result.program = parse_native_program(parse_json_object(canonical_json(JsonValue{*arguments})));
+        result.admission = validate_native_program(result.program, native_primitive_registry());
+        request.params = std::move(result);
+      } catch (const std::exception& error) {
+        invalid_argument(error.what());
+      }
+    } else if (false) {  // Legacy typed parsing remains compiled only for the Task 4 host migration.
       if (!exact_keys(*params, {"capabilityId", "capabilityVersion", "arguments"},
           {"capabilityId", "capabilityVersion", "arguments"})) invalid_argument("invalid invoke params");
       const std::string capability = required_string(*params, "capabilityId", CodecErrorKind::kInvalidArgument);
@@ -6215,7 +6242,7 @@ SessionIngressResult RpcSessionFrontDoor::admit(const ParsedRequest& request) {
       || (request.method == RpcMethod::kCapabilities
         && std::holds_alternative<CapabilitiesParams>(request.params))
       || (request.method == RpcMethod::kInvoke
-        && std::holds_alternative<InvokeParams>(request.params))
+        && std::holds_alternative<NativeProgramParams>(request.params))
       || (request.method == RpcMethod::kCancel
         && std::holds_alternative<CancelParams>(request.params))
       || (request.method == RpcMethod::kInvalidateGraph

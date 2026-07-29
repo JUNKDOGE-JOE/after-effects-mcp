@@ -11,11 +11,18 @@ namespace aemcp::native {
 enum class PrimitiveMutability { kRead, kWrite };
 enum class PrimitiveValueKind { kJson, kCompositionHandle, kLayerHandle, kPropertyHandle };
 
+struct NativeReferenceArgument {
+  std::string_view name;
+  PrimitiveValueKind kind;
+  bool required;
+};
+
 struct NativePrimitiveDescriptor {
   std::string_view id;
   PrimitiveMutability mutability;
   std::string_view required_suite;
   std::string_view input_schema_json;
+  std::span<const NativeReferenceArgument> reference_arguments;
   std::string_view result_schema_json;
   std::string_view summary;
   std::string_view executor_symbol;
@@ -24,7 +31,105 @@ struct NativePrimitiveDescriptor {
 };
 
 inline constexpr std::size_t kNativePrimitiveCount = 23;
-inline constexpr std::string_view kNativeExecRegistryDigest = "250a39dfd802d8bfc4a762d714d20b984c4c6ebb16f7a8a313188213b8b5b617";
+inline constexpr std::string_view kNativeExecRegistryDigest = "ac1353a16a045105ea189038ee707bdcf35b5d146056d7c1757b2bdb8acfdbd7";
+inline constexpr std::array<NativeReferenceArgument, 0> kNativePrimitiveReferenceArguments0{{
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments1{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments2{{
+    NativeReferenceArgument{"layer", PrimitiveValueKind::kLayerHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 0> kNativePrimitiveReferenceArguments3{{
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments4{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments5{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments6{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments7{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments8{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments9{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments10{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments11{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments12{{
+    NativeReferenceArgument{"composition", PrimitiveValueKind::kCompositionHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 2> kNativePrimitiveReferenceArguments13{{
+    NativeReferenceArgument{"layer", PrimitiveValueKind::kLayerHandle, true},
+    NativeReferenceArgument{"parentProperty", PrimitiveValueKind::kPropertyHandle, false},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments14{{
+    NativeReferenceArgument{"property", PrimitiveValueKind::kPropertyHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 2> kNativePrimitiveReferenceArguments15{{
+    NativeReferenceArgument{"layer", PrimitiveValueKind::kLayerHandle, true},
+    NativeReferenceArgument{"property", PrimitiveValueKind::kPropertyHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 1> kNativePrimitiveReferenceArguments16{{
+    NativeReferenceArgument{"property", PrimitiveValueKind::kPropertyHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 2> kNativePrimitiveReferenceArguments17{{
+    NativeReferenceArgument{"layer", PrimitiveValueKind::kLayerHandle, true},
+    NativeReferenceArgument{"property", PrimitiveValueKind::kPropertyHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 2> kNativePrimitiveReferenceArguments18{{
+    NativeReferenceArgument{"layer", PrimitiveValueKind::kLayerHandle, true},
+    NativeReferenceArgument{"property", PrimitiveValueKind::kPropertyHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 2> kNativePrimitiveReferenceArguments19{{
+    NativeReferenceArgument{"layer", PrimitiveValueKind::kLayerHandle, true},
+    NativeReferenceArgument{"property", PrimitiveValueKind::kPropertyHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 2> kNativePrimitiveReferenceArguments20{{
+    NativeReferenceArgument{"layer", PrimitiveValueKind::kLayerHandle, true},
+    NativeReferenceArgument{"property", PrimitiveValueKind::kPropertyHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 2> kNativePrimitiveReferenceArguments21{{
+    NativeReferenceArgument{"layer", PrimitiveValueKind::kLayerHandle, true},
+    NativeReferenceArgument{"property", PrimitiveValueKind::kPropertyHandle, true},
+}};
+
+inline constexpr std::array<NativeReferenceArgument, 2> kNativePrimitiveReferenceArguments22{{
+    NativeReferenceArgument{"layer", PrimitiveValueKind::kLayerHandle, true},
+    NativeReferenceArgument{"property", PrimitiveValueKind::kPropertyHandle, true},
+}};
+
 inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
     kNativePrimitiveRegistry{{
     NativePrimitiveDescriptor{
@@ -32,6 +137,7 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         PrimitiveMutability::kRead,
         "AEGP_CompSuite12",
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"locator":{"$ref":"aegp-rpc.schema.json#/$defs/compositionLocator"}},"required":["locator"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments0},
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"exportable":{"const":false},"handle":{"additionalProperties":false,"properties":{"kind":{"const":"composition"},"value":{"minimum":1,"type":"integer"}},"required":["kind","value"],"type":"object"}},"required":["handle","exportable"],"type":"object"})NATIVEEXEC",
         R"NATIVEEXEC(Read composition.resolve.)NATIVEEXEC",
         "execute_composition_resolve",
@@ -43,6 +149,7 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         PrimitiveMutability::kRead,
         "AEGP_LayerSuite9",
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"locator":{"$ref":"aegp-rpc.schema.json#/$defs/layerLocator"}},"required":["locator"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments1},
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"exportable":{"const":false},"handle":{"additionalProperties":false,"properties":{"kind":{"const":"layer"},"value":{"minimum":1,"type":"integer"}},"required":["kind","value"],"type":"object"}},"required":["handle","exportable"],"type":"object"})NATIVEEXEC",
         R"NATIVEEXEC(Read layer.resolve.)NATIVEEXEC",
         "execute_layer_resolve",
@@ -54,6 +161,7 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         PrimitiveMutability::kRead,
         "AEGP_StreamSuite5",
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"locator":{"$ref":"aegp-rpc.schema.json#/$defs/streamLocator"}},"required":["locator"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments2},
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"exportable":{"const":false},"handle":{"additionalProperties":false,"properties":{"kind":{"const":"property"},"value":{"minimum":1,"type":"integer"}},"required":["kind","value"],"type":"object"}},"required":["handle","exportable"],"type":"object"})NATIVEEXEC",
         R"NATIVEEXEC(Read property.resolve.)NATIVEEXEC",
         "execute_property_resolve",
@@ -64,7 +172,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "project.items.list",
         PrimitiveMutability::kRead,
         "AEGP_ProjSuite6",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/projectItemsListArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"limit":{"maximum":50,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"projectLocator":{"$ref":"aegp-rpc.schema.json#/$defs/projectLocator"}},"required":["offset","limit"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments3},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/projectItemsListValue"})NATIVEEXEC",
         R"NATIVEEXEC(Read project.items.list.)NATIVEEXEC",
         "execute_project_items_list",
@@ -75,7 +184,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "composition.layers.list",
         PrimitiveMutability::kRead,
         "AEGP_CompSuite12",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionLayersListArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"limit":{"maximum":25,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"}},"required":["offset","limit"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments4},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionLayersListValue"})NATIVEEXEC",
         R"NATIVEEXEC(Read composition.layers.list.)NATIVEEXEC",
         "execute_composition_layers_list",
@@ -86,7 +196,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "composition.selectedLayers.list",
         PrimitiveMutability::kRead,
         "AEGP_CompSuite12",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionLayersListArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"limit":{"maximum":25,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"}},"required":["offset","limit"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments5},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionSelectedLayersListInvokeResult"})NATIVEEXEC",
         R"NATIVEEXEC(Read composition.selectedLayers.list.)NATIVEEXEC",
         "execute_composition_selectedLayers_list",
@@ -97,7 +208,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "composition.time.read",
         PrimitiveMutability::kRead,
         "AEGP_CompSuite12",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeReadArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{},"required":[],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments6},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeReadValue"})NATIVEEXEC",
         R"NATIVEEXEC(Read composition.time.read.)NATIVEEXEC",
         "execute_composition_time_read",
@@ -108,7 +220,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "composition.time.set",
         PrimitiveMutability::kWrite,
         "AEGP_CompSuite12",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeSetArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"targetTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale"],"type":"object"}},"required":["targetTime"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments7},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeSetInvokeResult"})NATIVEEXEC",
         R"NATIVEEXEC(Write composition.time.set.)NATIVEEXEC",
         "execute_composition_time_set",
@@ -119,7 +232,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "composition.settings.read",
         PrimitiveMutability::kRead,
         "AEGP_CompSuite12",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionSettingsReadArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{},"required":[],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments8},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/compositionSettingsReadValue"})NATIVEEXEC",
         R"NATIVEEXEC(Read composition.settings.read.)NATIVEEXEC",
         "execute_composition_settings_read",
@@ -130,7 +244,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "composition.duration.set",
         PrimitiveMutability::kWrite,
         "AEGP_CompSuite12",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDurationSetArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["value","scale"],"type":"object"}},"required":["duration"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments9},
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDurationSetValue"}},"required":["value","evidence"],"type":"object"})NATIVEEXEC",
         R"NATIVEEXEC(Write composition.duration.set.)NATIVEEXEC",
         "execute_composition_duration_set",
@@ -141,7 +256,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "composition.frameRate.set",
         PrimitiveMutability::kWrite,
         "AEGP_CompSuite12",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionFrameRateSetArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["numerator","denominator"],"type":"object"}},"required":["frameRate"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments10},
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionFrameRateSetValue"}},"required":["value","evidence"],"type":"object"})NATIVEEXEC",
         R"NATIVEEXEC(Write composition.frameRate.set.)NATIVEEXEC",
         "execute_composition_frameRate_set",
@@ -152,7 +268,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "composition.pixelAspectRatio.set",
         PrimitiveMutability::kWrite,
         "AEGP_CompSuite12",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionPixelAspectRatioSetArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["numerator","denominator"],"type":"object"}},"required":["pixelAspectRatio"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments11},
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionPixelAspectRatioSetValue"}},"required":["value","evidence"],"type":"object"})NATIVEEXEC",
         R"NATIVEEXEC(Write composition.pixelAspectRatio.set.)NATIVEEXEC",
         "execute_composition_pixelAspectRatio_set",
@@ -163,7 +280,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "composition.displayStartTime.set",
         PrimitiveMutability::kWrite,
         "AEGP_CompSuite12",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale"],"type":"object"}},"required":["displayStartTime"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments12},
         R"NATIVEEXEC({"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetValue"}},"required":["value","evidence"],"type":"object"})NATIVEEXEC",
         R"NATIVEEXEC(Write composition.displayStartTime.set.)NATIVEEXEC",
         "execute_composition_displayStartTime_set",
@@ -174,7 +292,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "layer.properties.list",
         PrimitiveMutability::kRead,
         "AEGP_LayerSuite9",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/layerPropertiesListArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"limit":{"maximum":25,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"}},"required":["offset","limit"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments13},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/layerPropertiesListValue"})NATIVEEXEC",
         R"NATIVEEXEC(Read layer.properties.list.)NATIVEEXEC",
         "execute_layer_properties_list",
@@ -185,7 +304,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "property.keyframes.list",
         PrimitiveMutability::kRead,
         "AEGP_StreamSuite5",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"limit":{"maximum":25,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"}},"required":["offset","limit"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments14},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListValue"})NATIVEEXEC",
         R"NATIVEEXEC(Read property.keyframes.list.)NATIVEEXEC",
         "execute_property_keyframes_list",
@@ -196,7 +316,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "property.value.set",
         PrimitiveMutability::kWrite,
         "AEGP_StreamSuite5",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/layerPropertySetArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}},"required":["value"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments15},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/layerPropertySetInvokeResult"})NATIVEEXEC",
         R"NATIVEEXEC(Write property.value.set.)NATIVEEXEC",
         "execute_property_value_set",
@@ -207,7 +328,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "property.keyframe.details.read",
         PrimitiveMutability::kRead,
         "AEGP_StreamSuite5",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeDetailsArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments16},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeDetailsValue"})NATIVEEXEC",
         R"NATIVEEXEC(Read property.keyframe.details.read.)NATIVEEXEC",
         "execute_property_keyframe_details_read",
@@ -218,7 +340,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "property.keyframe.add",
         PrimitiveMutability::kWrite,
         "AEGP_StreamSuite5",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeValueArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}},"required":["time","value"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments17},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeAddInvokeResult"})NATIVEEXEC",
         R"NATIVEEXEC(Write property.keyframe.add.)NATIVEEXEC",
         "execute_property_keyframe_add",
@@ -229,7 +352,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "property.keyframe.value.set",
         PrimitiveMutability::kWrite,
         "AEGP_StreamSuite5",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeValueArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}},"required":["time","value"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments18},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeValueSetInvokeResult"})NATIVEEXEC",
         R"NATIVEEXEC(Write property.keyframe.value.set.)NATIVEEXEC",
         "execute_property_keyframe_value_set",
@@ -240,7 +364,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "property.keyframe.interpolation.set",
         PrimitiveMutability::kWrite,
         "AEGP_StreamSuite5",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeInterpolationArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"inInterpolation":{"enum":["linear","bezier","hold"]},"outInterpolation":{"enum":["linear","bezier","hold"]},"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time","inInterpolation","outInterpolation"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments19},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeInterpolationSetInvokeResult"})NATIVEEXEC",
         R"NATIVEEXEC(Write property.keyframe.interpolation.set.)NATIVEEXEC",
         "execute_property_keyframe_interpolation_set",
@@ -251,7 +376,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "property.keyframe.temporalEase.set",
         PrimitiveMutability::kWrite,
         "AEGP_StreamSuite5",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeTemporalEaseArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"dimensions":{"items":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeEaseDimension"},"maxItems":4,"minItems":1,"type":"array"},"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time","dimensions"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments20},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeTemporalEaseSetInvokeResult"})NATIVEEXEC",
         R"NATIVEEXEC(Write property.keyframe.temporalEase.set.)NATIVEEXEC",
         "execute_property_keyframe_temporalEase_set",
@@ -262,7 +388,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "property.keyframe.behavior.set",
         PrimitiveMutability::kWrite,
         "AEGP_StreamSuite5",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeBehaviorArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"behavior":{"enum":["temporal-continuous","temporal-auto-bezier","spatial-continuous","spatial-auto-bezier","roving"]},"enabled":{"type":"boolean"},"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time","behavior","enabled"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments21},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeBehaviorSetInvokeResult"})NATIVEEXEC",
         R"NATIVEEXEC(Write property.keyframe.behavior.set.)NATIVEEXEC",
         "execute_property_keyframe_behavior_set",
@@ -273,7 +400,8 @@ inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>
         "property.keyframe.delete",
         PrimitiveMutability::kWrite,
         "AEGP_StreamSuite5",
-        R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeDeleteArguments"})NATIVEEXEC",
+        R"NATIVEEXEC({"additionalProperties":false,"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time"],"type":"object"})NATIVEEXEC",
+        std::span<const NativeReferenceArgument>{kNativePrimitiveReferenceArguments22},
         R"NATIVEEXEC({"$ref":"aegp-rpc.schema.json#/$defs/keyframeDeleteInvokeResult"})NATIVEEXEC",
         R"NATIVEEXEC(Write property.keyframe.delete.)NATIVEEXEC",
         "execute_property_keyframe_delete",
@@ -312,26 +440,26 @@ inline constexpr std::array<std::string_view, kNativePrimitiveCount> kNativePrim
     R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"bedb1cb0f0f0975d070328ded85b0206e10c94929f8c3756862395722e05a7ea","detail":"full","id":"composition.resolve","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{"locator":{"$ref":"aegp-rpc.schema.json#/$defs/compositionLocator"}},"required":["locator"],"type":"object"},"mutability":"read-only","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"additionalProperties":false,"properties":{"exportable":{"const":false},"handle":{"additionalProperties":false,"properties":{"kind":{"const":"composition"},"value":{"minimum":1,"type":"integer"}},"required":["kind","value"],"type":"object"}},"required":["handle","exportable"],"type":"object"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read composition.resolve.","undo":"not-applicable","valueKind":"CompositionHandle","version":1})NATIVEEXEC",
     R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"7deebcae2527ae8fc22afa2d7398781144690b774e294b4b7b04c1bf4be24cdf","detail":"full","id":"layer.resolve","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{"locator":{"$ref":"aegp-rpc.schema.json#/$defs/layerLocator"}},"required":["locator"],"type":"object"},"mutability":"read-only","preconditions":["AEGP_LayerSuite9 must be available."],"requiredSuite":"AEGP_LayerSuite9","resultSchema":{"additionalProperties":false,"properties":{"exportable":{"const":false},"handle":{"additionalProperties":false,"properties":{"kind":{"const":"layer"},"value":{"minimum":1,"type":"integer"}},"required":["kind","value"],"type":"object"}},"required":["handle","exportable"],"type":"object"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read layer.resolve.","undo":"not-applicable","valueKind":"LayerHandle","version":1})NATIVEEXEC",
     R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"089dbacfc20ef6638fb85ab98f45442772c1b9251282910cb2f3def0a9d46571","detail":"full","id":"property.resolve","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{"locator":{"$ref":"aegp-rpc.schema.json#/$defs/streamLocator"}},"required":["locator"],"type":"object"},"mutability":"read-only","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"additionalProperties":false,"properties":{"exportable":{"const":false},"handle":{"additionalProperties":false,"properties":{"kind":{"const":"property"},"value":{"minimum":1,"type":"integer"}},"required":["kind","value"],"type":"object"}},"required":["handle","exportable"],"type":"object"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read property.resolve.","undo":"not-applicable","valueKind":"PropertyHandle","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"5428f2961c74e2ab39d963f561af5c922a72ece47797b054a9d7e80d49a7fa27","detail":"full","id":"project.items.list","idempotency":"idempotent","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/projectItemsListArguments"},"mutability":"read-only","preconditions":["AEGP_ProjSuite6 must be available."],"requiredSuite":"AEGP_ProjSuite6","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/projectItemsListValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read project.items.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"2c68d6ff714c1a4655eff96a5c3a0a9c7a6584d9ddf1b85fbf9fd83afffa48ca","detail":"full","id":"composition.layers.list","idempotency":"idempotent","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionLayersListArguments"},"mutability":"read-only","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionLayersListValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read composition.layers.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"210cfe32718b22555e3d88cc7269b3d5f15937b9d83bd309b80e3a3feb933aec","detail":"full","id":"composition.selectedLayers.list","idempotency":"idempotent","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionLayersListArguments"},"mutability":"read-only","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionSelectedLayersListInvokeResult"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read composition.selectedLayers.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"394c41e446f4752426fe141a4cf569aa4d0d9a3e8fab69339d150e0fd1e1c7d7","detail":"full","id":"composition.time.read","idempotency":"idempotent","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeReadArguments"},"mutability":"read-only","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeReadValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read composition.time.read.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"1c10b410b7cd3030bb84d8ed0f4f179531c3b3f1de5d0e85dc47b4555301fce7","detail":"full","id":"composition.time.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeSetArguments"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.time.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"948b355349d9e5716140a40bb6b3134e163b641be95bb7829d43a55437f6c848","detail":"full","id":"composition.settings.read","idempotency":"idempotent","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionSettingsReadArguments"},"mutability":"read-only","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionSettingsReadValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read composition.settings.read.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"1bf16fd4506e736a2f2745c4a8594d76387867da267f79b524cdf87fd2a4424b","detail":"full","id":"composition.duration.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDurationSetArguments"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDurationSetValue"}},"required":["value","evidence"],"type":"object"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.duration.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"87f78e8f5eeca1adb131dee084d36064d0e02e39b86e49c7ab49adb681320e3a","detail":"full","id":"composition.frameRate.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionFrameRateSetArguments"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionFrameRateSetValue"}},"required":["value","evidence"],"type":"object"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.frameRate.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"e5a09b7c698e7812f66d79bec8ae129ff548490c66494df5331fdea6d8057cca","detail":"full","id":"composition.pixelAspectRatio.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionPixelAspectRatioSetArguments"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionPixelAspectRatioSetValue"}},"required":["value","evidence"],"type":"object"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.pixelAspectRatio.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"c9d855038d9f5b611085bb7aa314614b85a8f30a4f12ca69333021dc4a0b8ccd","detail":"full","id":"composition.displayStartTime.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetArguments"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetValue"}},"required":["value","evidence"],"type":"object"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.displayStartTime.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"f4d4bd7d0e86e972dec2da1af4e88649b12d853fe5c5d7f2aa672cd01afc8993","detail":"full","id":"layer.properties.list","idempotency":"idempotent","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertiesListArguments"},"mutability":"read-only","preconditions":["AEGP_LayerSuite9 must be available."],"requiredSuite":"AEGP_LayerSuite9","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertiesListValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read layer.properties.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"f745aff1de078d05013cf2394247d428d194a5abb9189d1b3f1dd2f252bfadda","detail":"full","id":"property.keyframes.list","idempotency":"idempotent","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListArguments"},"mutability":"read-only","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read property.keyframes.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"c9c2a49a998df464b77a083a9c249a2dfa384c3aa7734c042653bee7ce2f7fac","detail":"full","id":"property.value.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertySetArguments"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertySetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.value.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"58e010720a99dfbf8f89bec8a37760d399d7ba356ee81a497fd563ab19b60652","detail":"full","id":"property.keyframe.details.read","idempotency":"idempotent","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeDetailsArguments"},"mutability":"read-only","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeDetailsValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read property.keyframe.details.read.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"af742c8803dd068f538376c4646186ffe28d436fd8a41f9eda09f223c395a247","detail":"full","id":"property.keyframe.add","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeValueArguments"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeAddInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.add.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"0a6775789da3d7f80adabcaa7984a7fc1e20517dcab07d73d74c94e30924b51b","detail":"full","id":"property.keyframe.value.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeValueArguments"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeValueSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.value.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"05feef9da5fcf7f55af5a0ce7304ac3ffa2cea7aefc6a6e17ec42f02599a51ab","detail":"full","id":"property.keyframe.interpolation.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeInterpolationArguments"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeInterpolationSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.interpolation.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"844bbb852fd1548f2bd4017be1751242212657823be604fdeff243ce5be486c9","detail":"full","id":"property.keyframe.temporalEase.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTemporalEaseArguments"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTemporalEaseSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.temporalEase.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"d18855fb839baa3b6b3b7c235fc429b226abd05bc6f933d818f2fd6efc57c6c6","detail":"full","id":"property.keyframe.behavior.set","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeBehaviorArguments"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeBehaviorSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.behavior.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
-    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"fcbd1233310cc9f2fa9733c8f29b147b6f9e684f5081ab02612bfb7cba2390b2","detail":"full","id":"property.keyframe.delete","idempotency":"idempotency-key","inputSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeDeleteArguments"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeDeleteInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.delete.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"bd2695a9eb0b09fcd8bf8284dc3f86fb44b7dd274b2e3c40b5d1686432831c46","detail":"full","id":"project.items.list","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{"limit":{"maximum":50,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"projectLocator":{"$ref":"aegp-rpc.schema.json#/$defs/projectLocator"}},"required":["offset","limit"],"type":"object"},"mutability":"read-only","preconditions":["AEGP_ProjSuite6 must be available."],"requiredSuite":"AEGP_ProjSuite6","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/projectItemsListValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read project.items.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"d741de7107adfec5c8560ac721a68a980f2dda388162c6b7f6983baa74f3034c","detail":"full","id":"composition.layers.list","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{"limit":{"maximum":25,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"}},"required":["offset","limit"],"type":"object"},"mutability":"read-only","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionLayersListValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read composition.layers.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"971107b295c6b0955693034292e707d87020b789e30be21022787e5756228072","detail":"full","id":"composition.selectedLayers.list","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{"limit":{"maximum":25,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"}},"required":["offset","limit"],"type":"object"},"mutability":"read-only","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionSelectedLayersListInvokeResult"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read composition.selectedLayers.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"b68e454a203d6cb2a542224661219ad810335dc2eee1ea3a1985e17883836eb2","detail":"full","id":"composition.time.read","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{},"required":[],"type":"object"},"mutability":"read-only","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeReadValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read composition.time.read.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"134a1392c886f4225df74e82fc1ed5419153ec29c7974c9e6f0d6d871027b370","detail":"full","id":"composition.time.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"targetTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale"],"type":"object"}},"required":["targetTime"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionTimeSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.time.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"fa019292708c3492259971a5959d336e122f4056d87363ae500b66a1147bf9b5","detail":"full","id":"composition.settings.read","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{},"required":[],"type":"object"},"mutability":"read-only","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/compositionSettingsReadValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read composition.settings.read.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"b14d0ddfcbe108225e7944a0db25cbaf77064792d12c34b757ba177b4e2d7254","detail":"full","id":"composition.duration.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"duration":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["value","scale"],"type":"object"}},"required":["duration"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDurationSetValue"}},"required":["value","evidence"],"type":"object"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.duration.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"d43da388606a16143d06532a3a1bffe73745f0bc16ae8732e2d7a3d7a73b62cd","detail":"full","id":"composition.frameRate.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"frameRate":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["numerator","denominator"],"type":"object"}},"required":["frameRate"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionFrameRateSetValue"}},"required":["value","evidence"],"type":"object"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.frameRate.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"badc62f7fc0f0f9bc6f4b9f196535bf86b8b5cd3bffc71cdc1f3d840673916c4","detail":"full","id":"composition.pixelAspectRatio.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"pixelAspectRatio":{"additionalProperties":false,"properties":{"denominator":{"maximum":2147483647,"minimum":1,"type":"integer"},"numerator":{"maximum":2147483647,"minimum":1,"type":"integer"}},"required":["numerator","denominator"],"type":"object"}},"required":["pixelAspectRatio"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionPixelAspectRatioSetValue"}},"required":["value","evidence"],"type":"object"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.pixelAspectRatio.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"e3393749544fe2ebbd56d0d4a135e866c79250e12cb3f79ff6bdac02414d5b6e","detail":"full","id":"composition.displayStartTime.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"displayStartTime":{"additionalProperties":false,"properties":{"scale":{"maximum":4294967295,"minimum":1,"type":"integer"},"value":{"maximum":2147483647,"minimum":-2147483648,"type":"integer"}},"required":["value","scale"],"type":"object"}},"required":["displayStartTime"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_CompSuite12 must be available."],"requiredSuite":"AEGP_CompSuite12","resultSchema":{"additionalProperties":false,"properties":{"evidence":{"$ref":"aegp-rpc.schema.json#/$defs/executionEvidence"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetValue"}},"required":["value","evidence"],"type":"object"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write composition.displayStartTime.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"051e745c3df7a1135f2559c0aad052bfb0567f02d35925b006de80b5d3b999a3","detail":"full","id":"layer.properties.list","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{"limit":{"maximum":25,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"}},"required":["offset","limit"],"type":"object"},"mutability":"read-only","preconditions":["AEGP_LayerSuite9 must be available."],"requiredSuite":"AEGP_LayerSuite9","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertiesListValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read layer.properties.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"e9f84f6a282734e76dbba79edeb25b9d4b25d40e4169541a782fa28c9845120d","detail":"full","id":"property.keyframes.list","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{"limit":{"maximum":25,"minimum":1,"type":"integer"},"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"}},"required":["offset","limit"],"type":"object"},"mutability":"read-only","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read property.keyframes.list.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"4635375dc6c905a212dede8a37ef623c0f9d948eb9e913c84625d099aa8ffaa7","detail":"full","id":"property.value.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}},"required":["value"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertySetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.value.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"e5572da81eb8aae1ab8f5a1eb7c5c90c45db2ba071f45203d2f4420a98e95631","detail":"full","id":"property.keyframe.details.read","idempotency":"idempotent","inputSchema":{"additionalProperties":false,"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time"],"type":"object"},"mutability":"read-only","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeDetailsValue"},"risk":"read","schemaVersion":1,"sideEffectSummary":"Reads After Effects state without changing it.","summary":"Read property.keyframe.details.read.","undo":"not-applicable","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"7fb5dba2374ae2ad9caf4c82d348264dde31d7d2f78090ed55655e2256676585","detail":"full","id":"property.keyframe.add","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}},"required":["time","value"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeAddInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.add.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"70f43eace3d3173f68cf2e3d76225e25c974ea5851ca97759656373d903a7e83","detail":"full","id":"property.keyframe.value.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}},"required":["time","value"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeValueSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.value.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"e52cb0c2bda4e5c40f2d3b5fd70a214b4715034381ea7eb67bd5a53f658a7e2b","detail":"full","id":"property.keyframe.interpolation.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"inInterpolation":{"enum":["linear","bezier","hold"]},"outInterpolation":{"enum":["linear","bezier","hold"]},"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time","inInterpolation","outInterpolation"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeInterpolationSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.interpolation.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"d9592296b2747a20f52dc19a4f11fd79382cb1805e3992bfd3f97981fd95e726","detail":"full","id":"property.keyframe.temporalEase.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"dimensions":{"items":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeEaseDimension"},"maxItems":4,"minItems":1,"type":"array"},"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time","dimensions"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTemporalEaseSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.temporalEase.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"fcdf78a9cab89688f334c7cd897d0d55fa225073fc90bbe6c7f69f8253502d5e","detail":"full","id":"property.keyframe.behavior.set","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"behavior":{"enum":["temporal-continuous","temporal-auto-bezier","spatial-continuous","spatial-auto-bezier","roving"]},"enabled":{"type":"boolean"},"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time","behavior","enabled"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeBehaviorSetInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.behavior.set.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
+    R"NATIVEEXEC({"cancellation":"before-dispatch","compatibility":{"intendedPlatforms":["macos-arm64","windows-x64"],"status":"unverified"},"contractDigest":"3c55651f88aa696be0fe825113c31bd6066cb23b0152940a1b7ac486fc638114","detail":"full","id":"property.keyframe.delete","idempotency":"idempotency-key","inputSchema":{"additionalProperties":false,"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}},"required":["time"],"type":"object"},"mutability":"mutating","preconditions":["AEGP_StreamSuite5 must be available."],"requiredSuite":"AEGP_StreamSuite5","resultSchema":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeDeleteInvokeResult"},"risk":"write","schemaVersion":1,"sideEffectSummary":"Changes After Effects state within one native program Undo group.","summary":"Write property.keyframe.delete.","undo":"ae-undo-group","valueKind":"Json","version":1})NATIVEEXEC",
 }};
 
 inline std::span<const NativePrimitiveDescriptor> native_primitive_registry() {

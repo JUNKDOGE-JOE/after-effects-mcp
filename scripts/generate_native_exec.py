@@ -52,6 +52,7 @@ class PrimitiveRow:
     order: int
     mutability: str
     required_suite: str
+    reference_arguments: tuple[tuple[str, str, bool], ...]
     input_schema: dict[str, Any]
     result_schema: dict[str, Any]
     executor: str
@@ -108,10 +109,7 @@ def _is_closed_schema(schema: dict[str, Any], catalog_path: Path) -> bool:
     if set(schema) != {"$ref"}:
         properties = schema.get("properties")
         required = schema.get("required")
-        has_object_contract = isinstance(properties, dict) and bool(properties)
-        has_object_contract = has_object_contract or (
-            isinstance(required, list) and bool(required)
-        )
+        has_object_contract = isinstance(properties, dict) or isinstance(required, list)
         has_composition = any(
             isinstance(schema.get(key), list) and bool(schema[key])
             for key in ("allOf", "anyOf", "oneOf")
@@ -184,6 +182,25 @@ def load_primitive_registry(path: Path) -> PrimitiveRegistry:
         mutability = _required_string(raw, "mutability", row_id)
         if mutability not in {"read", "write"}:
             raise ValueError(f"{row_id}: mutability must be read or write")
+        raw_reference_arguments = raw.get("referenceArguments")
+        if not isinstance(raw_reference_arguments, dict):
+            raise ValueError(f"{row_id}: referenceArguments must be an object")
+        value_kinds = {"CompositionHandle", "LayerHandle", "PropertyHandle"}
+        normalized_reference_arguments: list[tuple[str, str, bool]] = []
+        for name, raw_kind in raw_reference_arguments.items():
+            required = True
+            kind = raw_kind
+            if isinstance(raw_kind, dict):
+                kind = raw_kind.get("kind")
+                required = raw_kind.get("required", True)
+            if (not isinstance(name, str) or not name or not isinstance(kind, str)
+                    or kind not in value_kinds or not isinstance(required, bool)):
+                raise ValueError(
+                    f"{row_id}: referenceArguments must map names to supported handle kinds")
+            normalized_reference_arguments.append((name, kind, required))
+        if len({name for name, _, _ in normalized_reference_arguments}) != len(
+                normalized_reference_arguments):
+            raise ValueError(f"{row_id}: referenceArguments must map names to supported handle kinds")
         input_schema = raw.get("inputSchema")
         result_schema = raw.get("resultSchema")
         example = raw.get("example")
@@ -218,6 +235,7 @@ def load_primitive_registry(path: Path) -> PrimitiveRegistry:
                 order=order,
                 mutability=mutability,
                 required_suite=_required_string(raw, "requiredSuite", row_id),
+                reference_arguments=tuple(sorted(normalized_reference_arguments)),
                 input_schema=input_schema,
                 result_schema=result_schema,
                 executor=_required_string(raw, "executor", row_id),
@@ -337,6 +355,28 @@ def _cpp_raw(value: str) -> str:
     return f'R"{delimiter}({value}){delimiter}"'
 
 
+def _model_input_schema(row: PrimitiveRow) -> dict[str, Any]:
+    """Merge generated typed references into the row's JSON-safe literals."""
+    schema = json.loads(json.dumps(row.input_schema))
+    if schema.get("type") != "object" or schema.get("additionalProperties") is not False:
+        raise ValueError(f"{row.id}: literal input schema must be a closed object")
+    properties = schema.setdefault("properties", {})
+    required = schema.setdefault("required", [])
+    for name, _kind, reference_required in row.reference_arguments:
+        if name in properties:
+            raise ValueError(f"{row.id}: literal schema retains reference argument {name}")
+        properties[name] = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["ref"],
+            "properties": {"ref": {"type": "string", "minLength": 1}},
+        }
+        if reference_required:
+            required.append(name)
+    schema["required"] = sorted(set(required))
+    return schema
+
+
 def _write(path: Path, text: str, *, check: bool) -> None:
     if check:
         if not path.is_file() or path.read_text() != text:
@@ -365,11 +405,18 @@ def _generate_cpp_header(registry: PrimitiveRegistry) -> str:
         "enum class PrimitiveMutability { kRead, kWrite };",
         "enum class PrimitiveValueKind { kJson, kCompositionHandle, kLayerHandle, kPropertyHandle };",
         "",
+        "struct NativeReferenceArgument {",
+        "  std::string_view name;",
+        "  PrimitiveValueKind kind;",
+        "  bool required;",
+        "};",
+        "",
         "struct NativePrimitiveDescriptor {",
         "  std::string_view id;",
         "  PrimitiveMutability mutability;",
         "  std::string_view required_suite;",
         "  std::string_view input_schema_json;",
+        "  std::span<const NativeReferenceArgument> reference_arguments;",
         "  std::string_view result_schema_json;",
         "  std::string_view summary;",
         "  std::string_view executor_symbol;",
@@ -379,9 +426,22 @@ def _generate_cpp_header(registry: PrimitiveRegistry) -> str:
         "",
         f"inline constexpr std::size_t kNativePrimitiveCount = {len(rows)};",
         f'inline constexpr std::string_view kNativeExecRegistryDigest = "{registry_digest}";',
+    ]
+    for index, row in enumerate(rows):
+        lines.extend([
+            f"inline constexpr std::array<NativeReferenceArgument, {len(row.reference_arguments)}> "
+            f"kNativePrimitiveReferenceArguments{index}{{{{",
+        ])
+        lines.extend(
+            f'    NativeReferenceArgument{{"{name}", PrimitiveValueKind::k{kind}, '
+            f"{'true' if required else 'false'}}},"
+            for name, kind, required in row.reference_arguments
+        )
+        lines.extend(["}};", ""])
+    lines.extend([
         "inline constexpr std::array<NativePrimitiveDescriptor, kNativePrimitiveCount>",
         "    kNativePrimitiveRegistry{{",
-    ]
+    ])
     for row in rows:
         lines.extend([
             "    NativePrimitiveDescriptor{",
@@ -390,6 +450,7 @@ def _generate_cpp_header(registry: PrimitiveRegistry) -> str:
             if row.mutability == "write" else "        PrimitiveMutability::kRead,",
             f'        "{row.required_suite}",',
             f"        {_cpp_raw(_canonical_json(row.input_schema))},",
+            f"        std::span<const NativeReferenceArgument>{{kNativePrimitiveReferenceArguments{rows.index(row)}}},",
             f"        {_cpp_raw(_canonical_json(row.result_schema))},",
             f"        {_cpp_raw(row.summary)},",
             f'        "{row.executor}",',
@@ -439,7 +500,12 @@ def _generate_mjs(registry: PrimitiveRegistry) -> str:
             "id": row.id,
             "mutability": row.mutability,
             "requiredSuite": row.required_suite,
+            "referenceArguments": {
+                name: {"kind": kind, "required": required}
+                for name, kind, required in row.reference_arguments
+            },
             "inputSchema": row.input_schema,
+            "modelInputSchema": _model_input_schema(row),
             "resultSchema": row.result_schema,
             "summary": row.summary,
             "executor": row.executor,
@@ -455,17 +521,21 @@ def _generate_mjs(registry: PrimitiveRegistry) -> str:
         "required": ["operations"],
         "properties": {
             "operations": {
-                "type": "array",
-                "minItems": 1,
-                "items": {
-                    "type": "object",
-                    "additionalProperties": False,
-                    "required": ["op", "arguments"],
-                    "properties": {
-                        "op": {"enum": [row.id for row in registry.rows]},
-                        "arguments": {"type": "object"},
-                    },
-                },
+                "type": "array", "minItems": 1, "maxItems": 64,
+                "items": {"oneOf": [
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["op", "args"],
+                        "properties": {
+                            "op": {"const": row.id},
+                            "args": _model_input_schema(row),
+                            "saveAs": {"type": "string", "minLength": 1},
+                            "returnAs": {"type": "string", "minLength": 1},
+                        },
+                    }
+                    for row in registry.rows
+                ]},
             },
         },
     }
@@ -490,7 +560,12 @@ def _generate_python(registry: PrimitiveRegistry) -> str:
             "id": row.id,
             "mutability": row.mutability,
             "required_suite": row.required_suite,
+            "reference_arguments": {
+                name: {"kind": kind, "required": required}
+                for name, kind, required in row.reference_arguments
+            },
             "input_schema": row.input_schema,
+            "model_input_schema": _model_input_schema(row),
             "result_schema": row.result_schema,
             "summary": row.summary,
             "executor": row.executor,
