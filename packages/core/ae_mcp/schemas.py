@@ -15,7 +15,7 @@ from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
 from jsonschema import Draft202012Validator
 from pydantic import (
-    BaseModel,
+    BaseModel as _PydanticBaseModel,
     ConfigDict,
     Field,
     constr,
@@ -39,7 +39,7 @@ OutputFormat = Literal["json", "text"]
 NonNegativeFloat = Annotated[float, Field(ge=0)]
 
 
-class _StrictModel(BaseModel):
+class _StrictModel(_PydanticBaseModel):
     """Base: forbid extras so typos surface early."""
     model_config = ConfigDict(extra="forbid")
 
@@ -50,38 +50,6 @@ class _StrictModel(BaseModel):
 
 
 _LOCATOR_UUID = r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-
-
-class _AeLocatorInput(BaseModel):
-    """Camel-case locator shape copied verbatim from native read results."""
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-        strict=True,
-    )
-
-    host_instance_id: str = Field(alias="hostInstanceId", pattern=_LOCATOR_UUID)
-    session_id: str = Field(alias="sessionId", pattern=_LOCATOR_UUID)
-    project_id: str = Field(alias="projectId", pattern=_LOCATOR_UUID)
-    generation: int = Field(ge=1, le=9_007_199_254_740_991)
-    object_id: str = Field(alias="objectId", pattern=_LOCATOR_UUID)
-
-
-class AeProjectLocator(_AeLocatorInput):
-    kind: Literal["project"]
-
-
-class AeCompositionLocator(_AeLocatorInput):
-    kind: Literal["composition"]
-
-
-class AeLayerLocator(_AeLocatorInput):
-    kind: Literal["layer"]
-
-
-class AePropertyLocator(_AeLocatorInput):
-    kind: Literal["stream"]
 
 
 _TRANSFORM_DECIMAL = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
@@ -125,33 +93,6 @@ def _valid_layer_name(value: str, *, field: str) -> str:
 _LAYER_STRETCH_DECIMAL = r"^-?(?:0|[1-9][0-9]{0,3})(?:\.[0-9]{1,6})?$"
 
 
-class AeCompositionTimeInput(_StrictModel):
-    """Exact A_Time value/scale pair accepted by native composition writes."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    value: int = Field(..., ge=-2_147_483_648, le=2_147_483_647)
-    scale: int = Field(..., ge=1, le=4_294_967_295)
-
-
-class AePositiveCompositionTimeInput(AeCompositionTimeInput):
-    """Exact positive A_Time value/scale pair for composition durations."""
-
-    value: int = Field(..., ge=1, le=2_147_483_647)
-
-
-class AeNonNegativeCompositionTimeInput(AeCompositionTimeInput):
-    """Exact non-negative time used for a composition work-area start."""
-
-    value: int = Field(..., ge=0, le=2_147_483_647)
-
-
-class AeProjectItemLocator(_AeLocatorInput):
-    """Opaque project-item locator copied from a native project-context result."""
-
-    kind: Literal["item", "composition"]
-
-
 def _same_locator_context(left: _AeLocatorInput, right: _AeLocatorInput) -> bool:
     """Return whether two locators belong to the same native graph context."""
 
@@ -168,112 +109,7 @@ def _same_locator_context(left: _AeLocatorInput, right: _AeLocatorInput) -> bool
     )
 
 
-class AeLayerSolidColorInput(_StrictModel):
-    """Integer RGBA color avoids ambiguous floating-point JSON."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    red: int = Field(255, ge=0, le=255)
-    green: int = Field(255, ge=0, le=255)
-    blue: int = Field(255, ge=0, le=255)
-    alpha: int = Field(255, ge=0, le=255)
-
-
-class AePositiveRatioInput(_StrictModel):
-    """Exact positive numerator/denominator pair for native A_Ratio values."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    numerator: int = Field(..., ge=1, le=2_147_483_647)
-    denominator: int = Field(..., ge=1, le=2_147_483_647)
-
-
-class AeCompositionColorInput(_StrictModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    red: int = Field(..., ge=0, le=255)
-    green: int = Field(..., ge=0, le=255)
-    blue: int = Field(..., ge=0, le=255)
-    alpha: Literal[255]
-
-
 _PROPERTY_DECIMAL = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
-
-
-class AePropertyScalarInput(_StrictModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    kind: Literal["scalar"]
-    value: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
-
-
-class AePropertyVectorInput(_StrictModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    kind: Literal["vector"]
-    components: List[
-        Annotated[str, Field(min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)]
-    ] = Field(..., min_length=2, max_length=3)
-
-
-class AePropertyColorInput(_StrictModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-    kind: Literal["color"]
-    alpha: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
-    red: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
-    green: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
-    blue: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
-
-
-class AeKeyframeEaseInput(_StrictModel):
-    """One native temporal-ease speed/influence pair as finite decimals."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    speed: str = Field(..., min_length=1, max_length=32, pattern=_PROPERTY_DECIMAL)
-    influence: str = Field(
-        ...,
-        min_length=1,
-        max_length=32,
-        pattern=_PROPERTY_DECIMAL,
-        description="Influence percentage in the inclusive range 0..100.",
-    )
-
-    @model_validator(mode="after")
-    def _finite_ease(self) -> "AeKeyframeEaseInput":
-        try:
-            speed = Decimal(self.speed)
-            influence = Decimal(self.influence)
-            speed_binary = float(self.speed)
-            influence_binary = float(self.influence)
-        except (InvalidOperation, OverflowError, ValueError) as error:
-            raise ValueError("keyframe ease values must be finite decimals") from error
-        if (
-            not speed.is_finite()
-            or not influence.is_finite()
-            or not math.isfinite(speed_binary)
-            or not math.isfinite(influence_binary)
-        ):
-            raise ValueError("keyframe ease values must be finite decimals")
-        for text, decimal_value, binary_value in (
-            (self.speed, speed, speed_binary),
-            (self.influence, influence, influence_binary),
-        ):
-            if binary_value == 0 and not decimal_value.is_zero():
-                raise ValueError("keyframe ease values must not underflow binary64")
-            if binary_value == 0 and text.startswith("-"):
-                raise ValueError("keyframe ease values must normalize negative zero to 0")
-        if influence < 0 or influence > 100:
-            raise ValueError("keyframe ease influence must be within 0..100")
-        return self
-
-
-class AeKeyframeEaseDimensionInput(_StrictModel):
-    """Ease for one zero-based property dimension."""
-
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-    dimension: int = Field(..., ge=0, le=3)
-    in_ease: AeKeyframeEaseInput
-    out_ease: AeKeyframeEaseInput
 
 
 class AeExecArgs(_StrictModel):
@@ -516,27 +352,6 @@ RigType = Literal["transform_controller", "effect_controls", "puppet_pin_nulls",
 RigControlType = Literal["slider", "angle", "checkbox", "color"]
 
 
-class RigControl(_StrictModel):
-    """A single expression control for createRig's effect_controls rig.
-
-    Each control becomes a native AE expression-control effect on the
-    controller (Slider/Angle/Checkbox/Color) wired to drive `property`.
-    """
-    name: str = Field(
-        ..., min_length=1, description="Control display name (also the effect name)."
-    )
-    type: RigControlType = Field(
-        "slider", description="Control kind -> native AE expression control."
-    )
-    property: str = Field(
-        "Transform/Opacity",
-        description=(
-            "Target property to drive. Currently wired for the transform paths "
-            "Transform/Position|Scale|Rotation|Opacity."
-        ),
-    )
-
-
 class AeSkillListArgs(_StrictModel):
     """ae.skillList — list stored reusable prompt/JSX skills."""
     include_templates: bool = Field(
@@ -749,142 +564,7 @@ class AeToolUseArgs(_StrictModel):
         return self
 
 
-class AeMediaColor(_StrictModel):
-    """Closed 8-bit RGBA color."""
-
-    red: int = Field(..., ge=0, le=255)
-    green: int = Field(..., ge=0, le=255)
-    blue: int = Field(..., ge=0, le=255)
-    alpha: int = Field(..., ge=0, le=255)
-
-
-class AeMaskPropertiesPatch(_StrictModel):
-    """Non-empty closed patch for one mask's non-path properties.
-
-    ``ae_setLayerMaskProperties`` does not guarantee one After Effects Undo
-    step for this patch. In particular, the native ``roto_bezier`` setter is
-    verified by write readback but is not recorded by AE's Undo stack.
-    """
-
-    mode: Optional[
-        Literal["none", "add", "subtract", "intersect", "lighten", "darken", "difference"]
-    ] = None
-    inverted: Optional[bool] = None
-    motion_blur: Optional[Literal["same-as-layer", "off", "on"]] = None
-    feather_falloff: Optional[Literal["smooth", "linear"]] = None
-    color: Optional[AeMediaColor] = None
-    locked: Optional[bool] = None
-    roto_bezier: Optional[bool] = Field(
-        default=None,
-        description=(
-            "Enable or disable RotoBezier. The write is verified by native "
-            "readback, but After Effects does not record this SDK setter in "
-            "the tool's Undo group; do not rely on Undo to restore it."
-        ),
-    )
-
-    @model_validator(mode="after")
-    def _nonempty_patch(self) -> "AeMaskPropertiesPatch":
-        if not self.model_fields_set or not any(
-            getattr(self, field) is not None for field in self.model_fields_set
-        ):
-            raise ValueError("properties must contain at least one requested field")
-        return self
-
-
 _MEDIA_DECIMAL = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
-
-
-class AeMaskVertexInput(_StrictModel):
-    """One mask vertex with position and relative tangent pairs."""
-
-    position: Tuple[
-        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
-        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
-    ]
-    in_tangent: Tuple[
-        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
-        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
-    ]
-    out_tangent: Tuple[
-        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
-        Annotated[str, Field(min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)],
-    ]
-
-    @model_validator(mode="after")
-    def _finite_coordinates(self) -> "AeMaskVertexInput":
-        for text in (*self.position, *self.in_tangent, *self.out_tangent):
-            try:
-                decimal = Decimal(text)
-                binary = float(text)
-            except (InvalidOperation, OverflowError, ValueError) as error:
-                raise ValueError("mask coordinates must be finite decimals") from error
-            if not decimal.is_finite() or not math.isfinite(binary):
-                raise ValueError("mask coordinates must be finite decimals")
-            if binary == 0 and (not decimal.is_zero() or text.startswith("-")):
-                raise ValueError("mask coordinates must use canonical finite decimals")
-        return self
-
-
-class AeFootageSequenceOptions(_StrictModel):
-    """Optional file-sequence import bounds."""
-
-    enabled: bool
-    force_alphabetical: Optional[bool] = None
-    start_frame: Optional[int] = Field(None, ge=0, le=2_147_483_647)
-    end_frame: Optional[int] = Field(None, ge=0, le=2_147_483_647)
-
-    @model_validator(mode="after")
-    def _valid_sequence(self) -> "AeFootageSequenceOptions":
-        if not self.enabled and (
-            self.force_alphabetical is True
-            or self.start_frame is not None
-            or self.end_frame is not None
-        ):
-            raise ValueError("disabled sequence cannot include sequence options")
-        if (
-            self.start_frame is not None
-            and self.end_frame is not None
-            and self.end_frame < self.start_frame
-        ):
-            raise ValueError("end_frame must not precede start_frame")
-        return self
-
-
-class AePositiveRatioInput(_StrictModel):
-    numerator: int = Field(..., ge=1, le=2_147_483_647)
-    denominator: int = Field(..., ge=1, le=2_147_483_647)
-
-
-class AeFootageInterpretationPatch(_StrictModel):
-    """Non-empty interpretation patch."""
-
-    loop_count: Optional[int] = Field(None, ge=1, le=4_294_967_295)
-    pixel_aspect: Optional[AePositiveRatioInput] = None
-    native_fps: Optional[str] = Field(None, min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)
-    conform_fps: Optional[str] = Field(None, min_length=1, max_length=32, pattern=_MEDIA_DECIMAL)
-    alpha_mode: Optional[Literal["straight", "premultiplied", "ignore"]] = None
-    premultiply_color: Optional[AeMediaColor] = None
-
-    @model_validator(mode="after")
-    def _valid_interpretation(self) -> "AeFootageInterpretationPatch":
-        if not self.model_fields_set or not any(
-            getattr(self, field) is not None for field in self.model_fields_set
-        ):
-            raise ValueError("interpretation must contain at least one requested field")
-        if self.premultiply_color is not None and self.alpha_mode != "premultiplied":
-            raise ValueError("premultiply_color requires alpha_mode='premultiplied'")
-        for text in (self.native_fps, self.conform_fps):
-            if text is None:
-                continue
-            try:
-                decimal = Decimal(text)
-                binary = float(text)
-            except (InvalidOperation, OverflowError, ValueError) as error:
-                raise ValueError("frame rates must be finite decimals") from error
-            if not decimal.is_finite() or not math.isfinite(binary) or binary < 0:
-                raise ValueError("frame rates must be finite non-negative decimals")
-        return self
 
 
 def _valid_media_path(value: str) -> None:

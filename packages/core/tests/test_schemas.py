@@ -49,6 +49,24 @@ def test_public_args_exports_match_only_the_final_schema_registry():
             exec(f"from {module_name} import {class_name}", {})
 
 
+def test_public_basemodel_exports_match_only_the_final_schema_registry():
+    expected = {
+        ("ae_mcp.schemas", schema.__name__)
+        for schema in S.SCHEMAS.values()
+    }
+    exported = {
+        (module.__name__, name)
+        for module in (S, TSM)
+        for name, value in vars(module).items()
+        if (
+            not name.startswith("_")
+            and isinstance(value, type)
+            and issubclass(value, BaseModel)
+        )
+    }
+    assert exported == expected
+
+
 def _locator(kind: str = "project") -> dict[str, object]:
     return {
         "kind": kind,

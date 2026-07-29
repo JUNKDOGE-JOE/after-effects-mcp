@@ -34,11 +34,7 @@ from ae_mcp.backends.native_layer_source_matte_av import (
 )
 from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.jsx_result import parse_jsx_result
-from ae_mcp.schemas import (
-    AeLayerLocator,
-    AeProjectItemLocator,
-    _StrictModel,
-)
+from ae_mcp.schemas import _StrictModel
 
 
 TEMPLATE_ID = "aemcp.layer.source.replace.v1"
@@ -52,6 +48,10 @@ AUDIT_ENV = "AE_MCP_LAYER_SOURCE_AUDIT_PATH"
 CONTRACT_ID = "ae.layer.source.set"
 CONTRACT_VERSION = 1
 MAX_REPLAY_ENTRIES = 256
+_LOCATOR_UUID = (
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-"
+    r"[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+)
 INVARIANT_FIELDS = frozenset(
     {
         "name",
@@ -82,13 +82,35 @@ INVARIANT_FIELDS = frozenset(
 )
 
 
+class _LocatorInput(_StrictModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        strict=True,
+    )
+
+    host_instance_id: str = Field(alias="hostInstanceId", pattern=_LOCATOR_UUID)
+    session_id: str = Field(alias="sessionId", pattern=_LOCATOR_UUID)
+    project_id: str = Field(alias="projectId", pattern=_LOCATOR_UUID)
+    generation: int = Field(ge=1, le=9_007_199_254_740_991)
+    object_id: str = Field(alias="objectId", pattern=_LOCATOR_UUID)
+
+
+class _LayerLocator(_LocatorInput):
+    kind: Literal["layer"]
+
+
+class _ProjectItemLocator(_LocatorInput):
+    kind: Literal["item", "composition"]
+
+
 class _LayerSourceReplaceInput(_StrictModel):
     """Private maintained-JSX input; not an MCP tool schema."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    layer_locator: AeLayerLocator
-    source_item_locator: AeProjectItemLocator
+    layer_locator: _LayerLocator
+    source_item_locator: _ProjectItemLocator
     idempotency_key: str = Field(
         ...,
         min_length=16,
