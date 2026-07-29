@@ -243,6 +243,8 @@ git commit -m "test: freeze native exec migration catalog"
 - Create: `native/ae-plugin/protocol/native_exec.generated.mjs`
 - Create: `packages/core/ae_mcp/native_exec_generated.py`
 - Modify: `scripts/generate_native_exec.py`
+- Modify: `native/ae-plugin/protocol/aegp-rpc.schema.json`
+- Modify: `native/ae-plugin/protocol/protocol.test.mjs`
 - Modify: `native/ae-plugin/include/aemcp_native/native_rpc_connection.hpp`
 - Modify: `native/ae-plugin/include/aemcp_native/rpc_codec.hpp`
 - Modify: `native/ae-plugin/src/core/native_rpc_connection.cpp`
@@ -273,6 +275,13 @@ require(std::ranges::all_of(native_primitive_registry(), unique_ids),
 Add a capabilities-encoding test that selects descriptors through an ordered
 `std::vector<std::size_t>` and checks summary/full output and digest without
 setting any per-capability Boolean or digest fields.
+
+Add protocol conformance coverage that generated primitive IDs such as
+`composition.time.read` and lower-camel segments such as
+`composition.selectedLayers.list` are valid discovery IDs. The Task 2
+capabilities result contains the 23 generated primitive descriptors, not the
+67 legacy `ae.*` capability descriptors. Keep the still-internal legacy invoke
+fixtures valid only until Task 3 replaces their wire admission.
 
 - [ ] **Step 2: Verify RED**
 
@@ -324,6 +333,14 @@ std::string query_digest;
 Read compiled contract and registry digests directly from the generated
 registry. Change query filtering, selected counts, full/summary encoding, and
 complete-registry digest verification to iterate the selected indices.
+
+This task owns the narrow capabilities-discovery protocol transition required
+by the unified registry. Update the shared capability-ID/schema conformance so
+the generated primitive descriptors validate without adding a second
+hand-maintained primitive-ID list. The transitional schema may continue to
+accept legacy `ae.*` invoke IDs until Task 3, but the capabilities response
+must emit only generated primitive rows. Task 3 still owns replacement of the
+wire invoke arguments with the bounded native program.
 
 At this task boundary, old invoke paths may still compile internally, but old
 capability metadata must no longer be carried as parallel scalar fields.
