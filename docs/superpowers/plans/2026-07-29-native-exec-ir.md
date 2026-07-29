@@ -885,6 +885,7 @@ git commit -m "feat(core): expose bounded native exec programs"
 - Modify: `packages/core/tests/test_skill_store.py`
 - Modify: `packages/core/tests/test_server_instructions.py`
 - Modify: `packages/core/tests/test_native_exec_generation.py`
+- Create: `packages/core/tests/fixtures/native-exec-skill-pressure.json`
 
 **Interfaces:**
 - Produces: trusted bundled `builtin:skill:ae-execution-guide`.
