@@ -788,6 +788,11 @@ git commit -m "feat(native): return common native program evidence"
 - Modify: `packages/bridge/tests/test_http_native_bridge.py`
 - Modify: `scripts/generate_native_exec.py`
 - Modify: `packages/core/tests/test_native_exec_generation.py`
+- Regenerate: `native/ae-plugin/protocol/aegp-rpc.schema.json`
+- Regenerate: `native/ae-plugin/protocol/native_exec.generated.mjs`
+- Regenerate: `packages/core/ae_mcp/native_exec_generated.py`
+- Modify: `native/ae-plugin/src/core/native_program.cpp`
+- Modify: `native/ae-plugin/tests/native_program_test.cpp`
 
 **Interfaces:**
 - Produces: `AeNativeExecArgs`
