@@ -608,7 +608,9 @@ class FakeHost final : public HostApi {
         locator_value.object_id
                 == "88888888-8888-4888-8888-888888888888"
             ? 101U : 202U,
-        303U,
+        locator_value.object_id
+                == "88888888-8888-4888-8888-888888888888"
+            ? 303U : matte_composition_owner,
         true,
     });
   }
@@ -647,9 +649,9 @@ class FakeHost final : public HostApi {
             >= invalid_av_postcondition_after_mutation;
     return aemcp::native::HostLayerAVStateResult::success({
         layer.locator,
-        true,
+        layer_has_audio,
         corrupt_after_mutation ? !layer_audio_enabled : layer_audio_enabled,
-        true,
+        layer_has_video,
         layer_video_enabled,
     });
   }
@@ -800,8 +802,11 @@ class FakeHost final : public HostApi {
   int layer_undo_end_calls{0};
   int invalid_av_postcondition_after_mutation{0};
   bool layer_track_matte_active{false};
+  bool layer_has_audio{true};
+  bool layer_has_video{true};
   bool layer_audio_enabled{true};
   bool layer_video_enabled{true};
+  std::uintptr_t matte_composition_owner{303U};
   aemcp::native::LayerTrackMatteMode layer_track_matte_mode{
       aemcp::native::LayerTrackMatteMode::kNone};
   int project_graph_invalidation_calls{0};
@@ -3145,6 +3150,61 @@ void layer_source_matte_and_av_cross_the_authenticated_wire_boundary() {
           && host.layer_undo_start_calls == 5
           && host.layer_undo_end_calls == 5,
       "one or more closed RPC payloads mapped to the wrong dispatcher operation");
+
+  const auto invoke_failure = [&](
+                                  std::string_view request_id,
+                                  std::string_view capability_id,
+                                  std::string_view additional_arguments,
+                                  std::string_view expected_code) {
+    send_json(sockets[0], layer_source_matte_av_invoke_json(
+        request_id, capability_id, additional_arguments));
+    require_contains(
+        read_body(sockets[0]), "\"phase\":\"queued\"",
+        std::string(request_id) + " domain failure progress");
+    wait_until([&] { return dispatcher.queued() == 1; },
+        "queued layer package domain failure");
+    const auto batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1 && !batch.completions[0].ok,
+        "domain failure did not reach a failed dispatcher completion");
+    const std::string response = read_body(sockets[0]);
+    require_contains(
+        response,
+        "\"code\":\"" + std::string(expected_code) + "\"",
+        std::string(request_id) + " domain failure response");
+    require_contains(
+        response, "\"sideEffect\":\"not-started\"",
+        std::string(request_id) + " domain failure response");
+  };
+
+  host.matte_composition_owner = 404U;
+  invoke_failure(
+      "layer-matte-cross-composition",
+      "ae.layer.track-matte.set",
+      ",\"matteLayerLocator\":"
+          + graph_locator_json(
+              "layer", "99999999-9999-4999-8999-999999999999")
+          + ",\"mode\":\"alpha\","
+            "\"idempotencyKey\":\"layer-matte-cross-intent-01\"",
+      "TRACK_MATTE_COMPOSITION_MISMATCH");
+  host.matte_composition_owner = 303U;
+
+  host.layer_has_audio = false;
+  invoke_failure(
+      "layer-audio-missing",
+      "ae.layer.audio-enabled.set",
+      ",\"enabled\":true,"
+        "\"idempotencyKey\":\"layer-audio-missing-intent-01\"",
+      "LAYER_HAS_NO_AUDIO");
+  host.layer_has_audio = true;
+
+  host.layer_has_video = false;
+  invoke_failure(
+      "layer-video-missing",
+      "ae.layer.video-enabled.set",
+      ",\"enabled\":true,"
+        "\"idempotencyKey\":\"layer-video-missing-intent-01\"",
+      "LAYER_HAS_NO_VIDEO");
+  host.layer_has_video = true;
 
   finish_connection(sockets[0], sockets[1], worker);
   (void)dispatcher.shutdown();

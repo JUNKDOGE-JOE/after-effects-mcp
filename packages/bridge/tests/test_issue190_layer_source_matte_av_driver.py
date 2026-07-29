@@ -554,6 +554,13 @@ def test_call_plan_is_exactly_forty_and_covers_the_frozen_matrix():
         for address in operation_addresses
     )
     assert len(set(operation_addresses)) == 5
+    ordered_keys = [row.key for row in spec.CALL_PLAN]
+    assert ordered_keys.index("fixture-cross-composition-layers") > ordered_keys.index(
+        "video-undo-reacquire-project"
+    )
+    assert ordered_keys.index("fixture-cross-composition-layers") < ordered_keys.index(
+        "negative-cross-composition-matte"
+    )
 
 
 def test_fixture_recipe_is_one_ephemeral_slot_with_exact_roles_and_pcm_asset():

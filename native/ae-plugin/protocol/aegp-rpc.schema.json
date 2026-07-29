@@ -17864,6 +17864,9 @@
         "WIRE_VERSION_MISMATCH",
         "INVALID_REQUEST",
         "INVALID_ARGUMENT",
+        "TRACK_MATTE_COMPOSITION_MISMATCH",
+        "LAYER_HAS_NO_AUDIO",
+        "LAYER_HAS_NO_VIDEO",
         "DUPLICATE_REQUEST",
         "PRECONDITION_FAILED",
         "STALE_LOCATOR",
@@ -18022,7 +18025,12 @@
         {
           "properties": {
             "code": {
-              "const": "INVALID_ARGUMENT"
+              "enum": [
+                "INVALID_ARGUMENT",
+                "TRACK_MATTE_COMPOSITION_MISMATCH",
+                "LAYER_HAS_NO_AUDIO",
+                "LAYER_HAS_NO_VIDEO"
+              ]
             },
             "retryable": {
               "const": false

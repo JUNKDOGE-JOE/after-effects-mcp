@@ -116,14 +116,6 @@ _ROWS = (
         "Acquire every exact main-composition role and record baseline stack order.",
     ),
     _call(
-        "fixture-cross-composition-layers",
-        "fixture",
-        "ae_listCompositionLayers",
-        {"composition_locator": "$source_comp_b_locator", "offset": 0, "limit": 25},
-        "read",
-        "Acquire CROSS_COMP_MATTE from SOURCE_COMP_B for the structured negative.",
-    ),
-    _call(
         "source-replace-a-to-b",
         "source",
         "ae_setLayerSource",
@@ -408,6 +400,14 @@ _ROWS = (
         {"composition_locator": "$main_composition_locator", "offset": 0, "limit": 25},
         "read",
         "After video Undo, reacquire all role locators.",
+    ),
+    _call(
+        "fixture-cross-composition-layers",
+        "fixture",
+        "ae_listCompositionLayers",
+        {"composition_locator": "$source_comp_b_locator", "offset": 0, "limit": 25},
+        "read",
+        "Acquire a current CROSS_COMP_MATTE locator after the final graph-invalidating Undo.",
     ),
     _call(
         "video-undo-read",

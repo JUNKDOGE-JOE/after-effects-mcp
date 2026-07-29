@@ -1436,6 +1436,17 @@ test('invoke is a closed capability-specific allowlist, including nested executa
 });
 
 test('every error code has one safe retry/side-effect/recovery tuple', () => {
+  for (const code of [
+    'TRACK_MATTE_COMPOSITION_MISMATCH',
+    'LAYER_HAS_NO_AUDIO',
+    'LAYER_HAS_NO_VIDEO',
+  ]) {
+    assert.deepEqual(
+      ERROR_POLICIES[code],
+      [false, 'not-started', 'change-arguments'],
+      code,
+    );
+  }
   for (const code of Object.keys(ERROR_POLICIES)) {
     const valid = errorVector(code);
     assert.equal(schemaAccepts(schema.$defs.rpcError, valid), true, code);

@@ -8064,6 +8064,13 @@ ErrorPolicy error_policy(RpcErrorCode code) {
       return {"INVALID_REQUEST", false, "not-started", "none", false};
     case RpcErrorCode::kInvalidArgument:
       return {"INVALID_ARGUMENT", false, "not-started", "change-arguments", false};
+    case RpcErrorCode::kTrackMatteCompositionMismatch:
+      return {"TRACK_MATTE_COMPOSITION_MISMATCH", false, "not-started",
+          "change-arguments", false};
+    case RpcErrorCode::kLayerHasNoAudio:
+      return {"LAYER_HAS_NO_AUDIO", false, "not-started", "change-arguments", false};
+    case RpcErrorCode::kLayerHasNoVideo:
+      return {"LAYER_HAS_NO_VIDEO", false, "not-started", "change-arguments", false};
     case RpcErrorCode::kDuplicateRequest:
       return {"DUPLICATE_REQUEST", false, "not-started", "inspect-state", false};
     case RpcErrorCode::kPreconditionFailed:

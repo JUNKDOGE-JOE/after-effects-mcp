@@ -3478,6 +3478,26 @@ void response_helpers_are_bounded_and_typed() {
       && error_body.find("\"retryAfterMs\":250") != std::string::npos,
       "error serializer violated the bound policy tuple");
 
+  for (const auto [code, expected] :
+       std::array<std::pair<RpcErrorCode, std::string_view>, 3>{{
+         {RpcErrorCode::kTrackMatteCompositionMismatch,
+          "TRACK_MATTE_COMPOSITION_MISMATCH"},
+         {RpcErrorCode::kLayerHasNoAudio, "LAYER_HAS_NO_AUDIO"},
+         {RpcErrorCode::kLayerHasNoVideo, "LAYER_HAS_NO_VIDEO"},
+       }}) {
+    error.code = code;
+    error.retry_after_ms.reset();
+    error.details = ErrorDetails{};
+    error.details->capability_id = "ae.layer.track-matte.set";
+    const std::string domain_error = body(encode_error_response(error));
+    require(domain_error.find(
+                "\"code\":\"" + std::string(expected) + "\"")
+            != std::string::npos
+        && domain_error.find("\"action\":\"change-arguments\"")
+            != std::string::npos,
+        "layer source/matte/AV domain error lost its wire identity");
+  }
+
   error.code = RpcErrorCode::kPossiblySideEffectingFailure;
   error.retry_after_ms.reset();
   error.details = ErrorDetails{};

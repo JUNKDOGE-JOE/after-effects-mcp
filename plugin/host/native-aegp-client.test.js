@@ -2620,6 +2620,21 @@ test('CEP client preserves actionable keyframe property precondition recovery', 
 
 for (const errorFixture of [
     {
+        name: 'preserves layer source matte AV domain failures',
+        error: {
+            code: 'LAYER_HAS_NO_AUDIO',
+            message: 'the selected source has no audio capability',
+            retryable: false,
+            sideEffect: 'not-started',
+            recovery: {
+                action: 'change-arguments',
+                hint: 'Choose a source with audio capability.',
+            },
+        },
+        expectedCode: 'LAYER_HAS_NO_AUDIO',
+        expectedAction: 'change-arguments',
+    },
+    {
         name: 'keeps an actual native INVALID_REQUEST distinct',
         error: {
             code: 'INVALID_REQUEST',

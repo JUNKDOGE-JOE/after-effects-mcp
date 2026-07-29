@@ -82,6 +82,11 @@ RpcErrorCode rpc_error_code(std::string_view code) {
   if (code == "NATIVE_UNSUPPORTED") return RpcErrorCode::kNativeUnsupported;
   if (code == "WIRE_VERSION_MISMATCH") return RpcErrorCode::kWireVersionMismatch;
   if (code == "INVALID_ARGUMENT") return RpcErrorCode::kInvalidArgument;
+  if (code == "TRACK_MATTE_COMPOSITION_MISMATCH") {
+    return RpcErrorCode::kTrackMatteCompositionMismatch;
+  }
+  if (code == "LAYER_HAS_NO_AUDIO") return RpcErrorCode::kLayerHasNoAudio;
+  if (code == "LAYER_HAS_NO_VIDEO") return RpcErrorCode::kLayerHasNoVideo;
   if (code == "DUPLICATE_REQUEST") return RpcErrorCode::kDuplicateRequest;
   if (code == "PRECONDITION_FAILED") return RpcErrorCode::kPreconditionFailed;
   if (code == "STALE_LOCATOR") return RpcErrorCode::kStaleLocator;
@@ -103,6 +108,12 @@ std::string recovery_hint(RpcErrorCode code) {
     case RpcErrorCode::kNativeUnsupported: return "Refresh capabilities before retrying.";
     case RpcErrorCode::kWireVersionMismatch: return "Reconnect with a supported wire version.";
     case RpcErrorCode::kInvalidArgument: return "Change the invalid request arguments.";
+    case RpcErrorCode::kTrackMatteCompositionMismatch:
+      return "Choose a distinct current Matte layer from the target composition.";
+    case RpcErrorCode::kLayerHasNoAudio:
+      return "Choose a source with audio capability or keep audio disabled.";
+    case RpcErrorCode::kLayerHasNoVideo:
+      return "Choose a source with video capability or keep video disabled.";
     case RpcErrorCode::kDuplicateRequest: return "Inspect the original request state.";
     case RpcErrorCode::kPreconditionFailed: return "Open an After Effects project first.";
     case RpcErrorCode::kStaleLocator:

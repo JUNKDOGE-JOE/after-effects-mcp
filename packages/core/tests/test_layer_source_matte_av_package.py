@@ -935,6 +935,30 @@ def test_native_source_matte_av_validation_is_bounded_to_the_seven_native_capabi
     assert error["details"]["capabilityId"] == SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        "TRACK_MATTE_COMPOSITION_MISMATCH",
+        "LAYER_HAS_NO_AUDIO",
+        "LAYER_HAS_NO_VIDEO",
+    ],
+)
+def test_core_preserves_layer_source_matte_av_domain_errors(code: str):
+    error = N.NativeBackendError.from_payload({
+        "code": code,
+        "message": "synthetic pre-dispatch rejection",
+        "retryable": False,
+        "sideEffect": "not-started",
+        "recovery": {
+            "action": "change-arguments",
+            "hint": "Choose arguments compatible with the selected layer.",
+        },
+    })
+    assert error.code == code
+    assert error.side_effect == "not-started"
+    assert error.recovery.action == "change-arguments"
+
+
 def test_maintained_source_validation_requires_fresh_locators_and_graph_rediscovery():
     capability_id, hint = server_module._PROJECT_COMPOSITION_VALIDATION[
         "ae.setLayerSource"
