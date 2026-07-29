@@ -784,6 +784,8 @@ git commit -m "feat(native): return common native program evidence"
 - Create: `packages/core/tests/test_server_native_tools.py`
 - Modify: `packages/core/tests/test_schemas.py`
 - Modify: `packages/core/tests/test_annotations.py`
+- Modify: `packages/bridge/ae_mcp_bridge/__init__.py`
+- Modify: `packages/bridge/tests/test_http_native_bridge.py`
 
 **Interfaces:**
 - Produces: `AeNativeExecArgs`
@@ -830,7 +832,10 @@ Require keys only when a generated primitive row is mutating.
 Create one `NativeProgramRequest`, negotiate the single native-exec contract,
 invoke it once, and return the common result. Use the existing progress,
 cancellation, audit, uncertain-write, and timeout mechanisms without
-capability-specific wrappers.
+capability-specific wrappers. The concrete HTTP bridge must route
+`ae.native.exec` through the common program result model, treat the presence of
+`operationKey` as the write signal, and preserve that real key in uncertain
+write details; legacy invoke parsing remains unchanged.
 
 - [ ] **Step 5: Verify GREEN**
 
