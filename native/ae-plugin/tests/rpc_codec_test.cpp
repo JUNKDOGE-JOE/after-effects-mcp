@@ -3478,7 +3478,7 @@ void response_helpers_are_bounded_and_typed() {
       && error_body.find("\"retryAfterMs\":250") != std::string::npos,
       "error serializer violated the bound policy tuple");
 
-  for (const auto [code, expected] :
+  for (const auto& [code, expected] :
        std::array<std::pair<RpcErrorCode, std::string_view>, 3>{{
          {RpcErrorCode::kTrackMatteCompositionMismatch,
           "TRACK_MATTE_COMPOSITION_MISMATCH"},
