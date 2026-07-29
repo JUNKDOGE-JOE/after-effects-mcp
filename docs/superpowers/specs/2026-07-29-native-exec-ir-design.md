@@ -167,6 +167,7 @@ struct NativePrimitiveEntry {
   PrimitiveMutability mutability;
   std::string_view required_suite;
   JsonSchemaView input_schema;
+  ReferenceArgumentView reference_arguments;
   JsonSchemaView result_schema;
   PrimitiveExecutor execute;
 };
@@ -193,6 +194,16 @@ Per-capability digest fields, include fields, hand-written selection counts, and
 parallel full-registry tests are removed. The runtime carries a selected ordered
 view of registry entries rather than one Boolean and one digest field per
 operation.
+
+`reference_arguments` is generated from the same primitive source row and maps
+top-level argument names to request-local value kinds. The model-facing `args`
+schema merges strict `{"ref":"<earlier-name>"}` objects at those declared
+positions with the row's JSON-safe literal argument schema. Admission must not
+infer reference kinds from primitive IDs or field-name conventions. Stable
+locators enter through resolver primitives; downstream composition, layer, and
+property operations consume typed request-local references. Write replay
+identity belongs to the program-level `operationKey`, not to per-operation
+`idempotencyKey` fields.
 
 Primitive executors remain strongly typed C++ adapters. The table must not
 become raw function reflection, untyped varargs, or a generic pointer-calling
@@ -391,4 +402,3 @@ The redesign is accepted when:
   state, audit, postcondition, and real Undo; and
 - remaining unsupported AEGP SDK operations are documented as future primitive
   candidates rather than exposed speculatively.
-

@@ -403,8 +403,15 @@ git commit -m "refactor(native): generate primitive registry metadata"
 - Create: `native/ae-plugin/include/aemcp_native/native_program.hpp`
 - Create: `native/ae-plugin/src/core/native_program.cpp`
 - Create: `native/ae-plugin/tests/native_program_test.cpp`
+- Modify: `native/ae-plugin/protocol/native-primitives.json`
+- Modify: `scripts/generate_native_exec.py`
+- Regenerate: `native/ae-plugin/include/aemcp_native/native_primitive_registry.generated.hpp`
+- Regenerate: `native/ae-plugin/protocol/native_exec.generated.mjs`
+- Regenerate: `packages/core/ae_mcp/native_exec_generated.py`
 - Modify: `native/ae-plugin/include/aemcp_native/rpc_codec.hpp`
 - Modify: `native/ae-plugin/src/core/rpc_codec.cpp`
+- Modify: `native/ae-plugin/src/core/native_rpc_connection.cpp`
+- Modify: `native/ae-plugin/tests/native_rpc_connection_test.cpp`
 - Modify: `native/ae-plugin/protocol/aegp-rpc.schema.json`
 - Modify: `native/ae-plugin/protocol/protocol.test.mjs`
 - Modify: `.github/workflows/ci.yml`
@@ -429,6 +436,30 @@ Cover:
 - 65 operations fail when `kMaxNativeProgramOperations == 64`;
 - program digest changes when operation arguments change;
 - old `capabilityId: ae.layer.track-matte.set` invoke fails admission.
+
+The registry is also the sole source of argument-level reference typing.
+Declare top-level `referenceArguments` on each source row and generate it into
+portable metadata; admission must never infer expected handle kinds from
+primitive IDs or argument names. Freeze this V1 map:
+
+```text
+composition.resolve                         no refs; literal locator
+layer.resolve                               composition: CompositionHandle; literal locator
+property.resolve                            layer: LayerHandle; literal locator
+project.items.list                          no refs
+composition.* except composition.resolve   composition: CompositionHandle
+layer.properties.list                       layer: LayerHandle; optional parentProperty: PropertyHandle
+property.keyframes.list                     property: PropertyHandle
+property.keyframe.details.read              property: PropertyHandle
+property.value.set and keyframe writes      layer: LayerHandle, property: PropertyHandle
+```
+
+The source `inputSchema` describes the remaining JSON-safe literal arguments.
+Generated model-facing argument schemas merge those literals with strict
+`{"ref":"<earlier-name>"}` objects at the declared reference arguments.
+Remove legacy per-operation locator fields that those refs replace and remove
+legacy per-operation `idempotencyKey` fields; one program-level
+`operationKey` owns write replay fencing.
 
 - [ ] **Step 2: Compile and verify RED**
 
@@ -469,6 +500,14 @@ Replace the wire-level operation-specific `InvokeParams` fields with
 `NativeProgramParams`. Old typed host structs remain internal until their
 executors are migrated; they are no longer wire parse targets.
 
+The model-facing operation object uses `op`, `args`, optional `saveAs`, and
+optional `returnAs`. `arguments` remains only the internal C++ field name.
+Because `native_rpc_connection.cpp` consumes parsed params, update its
+transitional branch so the repository continues to compile after the wire
+replacement. Until Task 4 installs the dispatcher request, an admitted native
+program may return a structured native-unavailable/not-yet-wired result; do
+not retain an operation-specific wire fallback.
+
 - [ ] **Step 5: Update protocol schema and tests**
 
 The only model-facing native invoke capability becomes `ae.native.exec` with
@@ -498,6 +537,14 @@ c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread \
   -o /tmp/ae-mcp-native-program-test
 /tmp/ae-mcp-native-program-test
 node --test native/ae-plugin/protocol/protocol.test.mjs
+c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread \
+  -I native/ae-plugin/include \
+  native/ae-plugin/src/core/host_dispatcher.cpp \
+  native/ae-plugin/src/core/rpc_codec.cpp \
+  native/ae-plugin/src/core/native_rpc_connection.cpp \
+  native/ae-plugin/tests/native_rpc_connection_test.cpp \
+  -o /tmp/ae-mcp-native-rpc-connection-test
+/tmp/ae-mcp-native-rpc-connection-test
 ```
 
 - [ ] **Step 7: Commit**
