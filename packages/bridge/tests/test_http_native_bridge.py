@@ -23,6 +23,12 @@ from ae_mcp.backends.native_keyframe_authoring import (
     KEYFRAME_TEMPORAL_EASE_SET_CAPABILITY_ID,
     KEYFRAME_VALUE_SET_CAPABILITY_ID,
 )
+from ae_mcp.backends.native_layer_source_matte_av import (
+    LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+    LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+    LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+    LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
+)
 from ae_mcp.backends.native_project_composition import (
     COMPOSITION_DUPLICATE_CAPABILITY_ID,
     COMPOSITION_WORK_AREA_SET_CAPABILITY_ID,
@@ -350,6 +356,40 @@ async def test_project_composition_writes_preserve_transport_uncertainty(
     assert raised.value.retryable is False
     assert raised.value.recovery.action == "inspect-state"
     assert expected_hint in raised.value.recovery.hint
+    assert raised.value.details == {"capabilityId": capability_id}
+
+
+@pytest.mark.parametrize(
+    "capability_id",
+    [
+        LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+        LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+        LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+        LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
+    ],
+)
+@pytest.mark.asyncio
+async def test_layer_source_matte_av_writes_preserve_transport_uncertainty(
+    token_file,
+    capability_id,
+):
+    request = NativeInvokeRequest(
+        request_id=f"issue190-timeout-{capability_id.rsplit('.', 1)[-1]}",
+        capability_id=capability_id,
+        capability_version=1,
+        arguments={"idempotencyKey": "issue190-transport-intent"},
+        deadline_unix_ms=_DEADLINE,
+    )
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.side_effect == "may-have-occurred"
+    assert raised.value.retryable is False
+    assert raised.value.recovery.action == "inspect-state"
+    assert "source, Track Matte, and AV state" in raised.value.recovery.hint
     assert raised.value.details == {"capabilityId": capability_id}
 
 
