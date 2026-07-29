@@ -340,7 +340,8 @@ def test_fixture_claim_is_exclusive_and_manifest_is_closed(tmp_path):
             "after structured evidence or any classified failure"
         ),
     }
-    assert stat.S_IMODE(manifest.stat().st_mode) == 0o600
+    if os.name != "nt":
+        assert stat.S_IMODE(manifest.stat().st_mode) == 0o600
     with pytest.raises(driver.Issue190Failure, match="ownership manifest already exists"):
         runner.claim_fixture()
 
