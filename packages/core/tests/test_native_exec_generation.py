@@ -96,7 +96,13 @@ def test_legacy_native_carriers_are_absent_from_the_current_runtime():
     }
     for symbol, label in forbidden_symbols.items():
         offenders = sorted(
-            str(path) for path, source in sources.items() if symbol in source
+            str(path)
+            for path, source in sources.items()
+            if symbol in source
+            and (
+                symbol != "InvokeParams"
+                or path.suffix in {".cpp", ".hpp", ".inc"}
+            )
         )
         assert offenders == [], f"{label}: {offenders}"
 

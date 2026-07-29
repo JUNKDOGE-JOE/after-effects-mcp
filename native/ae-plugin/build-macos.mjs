@@ -399,8 +399,6 @@ async function buildMacPluginInternal({
     await fs.promises.mkdir(stage, { mode: 0o700 });
     stageOwned = true;
     const productInputPaths = [
-      'native/ae-plugin/include/aemcp_native/ae_path_numeric.hpp',
-      'native/ae-plugin/include/aemcp_native/effect_stack.hpp',
       'native/ae-plugin/include/aemcp_native/endpoint_registry_macos.hpp',
       'native/ae-plugin/include/aemcp_native/host_dispatcher.hpp',
       'native/ae-plugin/include/aemcp_native/mac_ipc_server.hpp',
@@ -413,7 +411,6 @@ async function buildMacPluginInternal({
       'native/ae-plugin/include/aemcp_native/rpc_codec.hpp',
       'native/ae-plugin/include/aemcp_native/selection_collection.hpp',
       'native/ae-plugin/include/aemcp_native/secure_random_macos.hpp',
-      'native/ae-plugin/include/aemcp_native/text_shape_marker_capabilities.generated.hpp',
       'native/ae-plugin/include/aemcp_native/transport_auth.hpp',
       'native/ae-plugin/src/core/host_dispatcher.cpp',
       'native/ae-plugin/src/core/native_program.cpp',

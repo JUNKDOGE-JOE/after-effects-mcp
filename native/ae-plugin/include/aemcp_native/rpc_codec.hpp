@@ -31,41 +31,24 @@ enum class CodecErrorKind {
 };
 
 class CodecError final : public std::runtime_error {
- public:
+public:
   CodecError(CodecErrorKind kind, std::string message);
   [[nodiscard]] CodecErrorKind kind() const noexcept { return kind_; }
   [[nodiscard]] std::string_view error_code() const noexcept;
 
- private:
+private:
   CodecErrorKind kind_;
 };
 
-enum class RpcMethod { kHello, kCapabilities, kInvoke, kCancel, kInvalidateGraph };
+enum class RpcMethod {
+  kHello,
+  kCapabilities,
+  kInvoke,
+  kCancel,
+  kInvalidateGraph
+};
 enum class ClientComponent { kCoreBroker, kDevelopmentSmoke };
 enum class CapabilityDetail { kSummary, kFull };
-enum class LayerSourceType { kNone, kFootage, kComposition };
-enum class LayerTrackMatteMode {
-  kNone,
-  kAlpha,
-  kInvertedAlpha,
-  kLuma,
-  kInvertedLuma,
-};
-
-inline constexpr std::string_view kLayerSourceReadCapability =
-    "ae.layer.source.read";
-inline constexpr std::string_view kLayerTrackMatteReadCapability =
-    "ae.layer.track-matte.read";
-inline constexpr std::string_view kLayerTrackMatteSetCapability =
-    "ae.layer.track-matte.set";
-inline constexpr std::string_view kLayerTrackMatteClearCapability =
-    "ae.layer.track-matte.clear";
-inline constexpr std::string_view kLayerAVStateReadCapability =
-    "ae.layer.av-state.read";
-inline constexpr std::string_view kLayerAudioEnabledSetCapability =
-    "ae.layer.audio-enabled.set";
-inline constexpr std::string_view kLayerVideoEnabledSetCapability =
-    "ae.layer.video-enabled.set";
 
 struct HelloParams {
   std::uint16_t minimum_wire_version{0};
@@ -84,69 +67,6 @@ struct CapabilitiesParams {
   bool limit_was_provided{false};
 };
 
-struct InvokeParams {
-  std::string capability_id{"ae.project.summary"};
-  std::uint16_t capability_version{1};
-  std::int32_t target_depth{0};
-  std::string idempotency_key;
-  // SHA-256 over the JCS-canonical capability arguments only. This is the
-  // mutation fence identity and is deliberately distinct from the complete
-  // transport request fingerprint.
-  std::string arguments_fingerprint_sha256;
-  std::uint64_t offset{0};
-  std::uint16_t limit{0};
-  std::optional<ObjectLocator> project_locator;
-  std::optional<ObjectLocator> composition_locator;
-  CompositionCurrentTime target_time;
-  std::optional<ObjectLocator> layer_locator;
-  std::optional<ObjectLocator> parent_property_locator;
-  std::optional<ObjectLocator> property_locator;
-  LayerPropertyValue property_value;
-  std::string layer_create_kind;
-  std::string layer_create_name;
-  std::optional<CompositionLayerCreateColor> layer_create_color;
-  std::optional<std::uint32_t> layer_create_width;
-  std::optional<std::uint32_t> layer_create_height;
-  std::optional<CompositionCurrentTime> layer_create_duration;
-  std::string composition_create_name;
-  std::uint32_t composition_create_width{0};
-  std::uint32_t composition_create_height{0};
-  CompositionCurrentTime composition_create_duration;
-  CompositionPositiveRatio composition_create_frame_rate;
-  CompositionPositiveRatio composition_create_pixel_aspect_ratio;
-  std::string layer_effect_match_name;
-  std::optional<ObjectLocator> item_locator;
-  CompositionCurrentTime work_area_start;
-  CompositionCurrentTime work_area_duration;
-  std::string item_text;
-  std::uint8_t item_label_id{0};
-  std::string duplicate_new_name;
-  std::optional<ObjectLocator> layer_parent_locator;
-  std::optional<ObjectLocator> matte_layer_locator;
-  LayerTrackMatteMode track_matte_mode{LayerTrackMatteMode::kNone};
-  std::optional<bool> av_enabled;
-  CompositionCurrentTime layer_in_point;
-  CompositionCurrentTime layer_duration;
-  CompositionCurrentTime layer_start_time;
-  LayerStretchRatio layer_stretch;
-  std::uint64_t target_stack_index{0};
-  std::string layer_new_name;
-  LayerPropertySampleTime keyframe_time;
-  std::string keyframe_in_interpolation;
-  std::string keyframe_out_interpolation;
-  std::vector<LayerPropertyKeyframeDimensionEase> keyframe_temporal_ease;
-  std::string keyframe_behavior;
-  std::optional<bool> keyframe_behavior_enabled;
-  std::string layer_switch_name;
-  std::optional<bool> layer_switch_enabled;
-  std::string layer_quality;
-  std::string layer_blending_mode;
-  NativeMediaCommand native_media;
-  std::string native_media_arguments_json;
-};
-
-// The legacy typed invoke envelope remains an internal host migration carrier.
-// It is deliberately not a wire decode target after native-program admission.
 struct NativeProgramParams {
   NativeProgram program;
   ProgramAdmission admission;
@@ -162,13 +82,9 @@ struct InvalidateGraphParams {
   enum class Reason { kCepJsx } reason{Reason::kCepJsx};
 };
 
-using RequestParams = std::variant<
-    HelloParams,
-    CapabilitiesParams,
-    NativeProgramParams,
-    InvokeParams,
-    CancelParams,
-    InvalidateGraphParams>;
+using RequestParams =
+    std::variant<HelloParams, CapabilitiesParams, NativeProgramParams,
+                 CancelParams, InvalidateGraphParams>;
 
 struct ParsedRequest {
   RpcMethod method{RpcMethod::kHello};
@@ -182,259 +98,37 @@ struct ParsedRequest {
   std::string request_fingerprint_sha256;
 };
 
-[[nodiscard]] ParsedRequest decode_request_frame(std::span<const std::uint8_t> frame);
-[[nodiscard]] std::string digest_capabilities_query(
-    std::string_view session_id,
-    const CapabilitiesParams& params);
-[[nodiscard]] std::string digest_project_summary_postcondition(
-    bool project_open,
-    std::string_view project_name,
-    std::uint64_t item_count);
-[[nodiscard]] std::string digest_project_bit_depth_read_postcondition(
-    std::int32_t bits_per_channel);
-[[nodiscard]] std::string digest_project_bit_depth_set_arguments(
-    std::int32_t target_depth,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_project_bit_depth_set_postcondition(
-    bool changed,
-    std::int32_t before_bits_per_channel,
-    std::int32_t after_bits_per_channel);
-[[nodiscard]] std::string digest_project_items_postcondition(
-    const ProjectItemsPage& page);
-[[nodiscard]] std::string digest_composition_layers_postcondition(
-    const CompositionLayersPage& page);
-[[nodiscard]] std::string digest_composition_selected_layers_postcondition(
-    const CompositionLayersPage& page);
-[[nodiscard]] std::string digest_composition_time_postcondition(
-    const CompositionTimeRead& value);
-[[nodiscard]] std::string digest_composition_time_set_arguments(
-    const ObjectLocator& composition_locator,
-    const CompositionCurrentTime& target_time,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_composition_time_set_postcondition(
-    const CompositionTimeChanged& value);
-[[nodiscard]] std::string digest_project_context_postcondition(
-    const ProjectContext& value);
-[[nodiscard]] std::string digest_project_item_metadata_postcondition(
-    const ProjectItemMetadata& value);
-[[nodiscard]] std::string digest_composition_settings_postcondition(
-    const CompositionSettings& value);
-[[nodiscard]] std::string digest_composition_work_area_set_arguments(
-    const ObjectLocator& composition_locator,
-    const CompositionCurrentTime& start,
-    const CompositionCurrentTime& duration,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_composition_work_area_set_postcondition(
-    const CompositionWorkAreaChanged& value);
-[[nodiscard]] std::string digest_composition_settings_set_postcondition(
-    std::string_view capability_id,
-    const CompositionSettingsChanged& value);
-[[nodiscard]] std::string digest_project_item_text_set_arguments(
-    std::string_view capability_id,
-    const ObjectLocator& item_locator,
-    std::string_view field_name,
-    std::string_view value,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_project_item_text_set_postcondition(
-    std::string_view capability_id,
-    const ProjectItemTextChanged& value);
-[[nodiscard]] std::string digest_project_item_label_set_arguments(
-    const ObjectLocator& item_locator,
-    std::uint8_t label_id,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_project_item_label_set_postcondition(
-    const ProjectItemLabelChanged& value);
-[[nodiscard]] std::string digest_composition_duplicate_arguments(
-    const ObjectLocator& composition_locator,
-    std::string_view new_name,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_composition_duplicate_postcondition(
-    const CompositionDuplicated& value);
-[[nodiscard]] std::string digest_layer_details_postcondition(
-    const LayerDetails& value);
-[[nodiscard]] std::string digest_layer_name_set_postcondition(
-    const LayerNameChanged& value);
-[[nodiscard]] std::string digest_layer_range_set_postcondition(
-    const LayerRangeChanged& value);
-[[nodiscard]] std::string digest_layer_start_time_set_postcondition(
-    const LayerStartTimeChanged& value);
-[[nodiscard]] std::string digest_layer_stretch_set_postcondition(
-    const LayerStretchChanged& value);
-[[nodiscard]] std::string digest_layer_order_set_postcondition(
-    const LayerOrderChanged& value);
-[[nodiscard]] std::string digest_layer_parent_set_postcondition(
-    const LayerParentChanged& value);
-[[nodiscard]] std::string digest_layer_duplicate_postcondition(
-    const LayerDuplicated& value);
-struct LayerSourceValue {
-  ObjectLocator layer_locator;
-  std::optional<ObjectLocator> source_item_locator;
-  LayerSourceType source_type{LayerSourceType::kNone};
-  std::optional<std::string> source_name;
-};
-struct LayerTrackMatteValue {
-  ObjectLocator layer_locator;
-  bool active{false};
-  std::optional<ObjectLocator> matte_layer_locator;
-  LayerTrackMatteMode mode{LayerTrackMatteMode::kNone};
-};
-struct LayerTrackMatteSetValue {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  std::optional<ObjectLocator> before_matte_layer_locator;
-  LayerTrackMatteMode before_mode{LayerTrackMatteMode::kNone};
-  ObjectLocator after_matte_layer_locator;
-  LayerTrackMatteMode after_mode{LayerTrackMatteMode::kAlpha};
-};
-struct LayerTrackMatteClearValue {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  ObjectLocator before_matte_layer_locator;
-  LayerTrackMatteMode before_mode{LayerTrackMatteMode::kAlpha};
-  std::optional<ObjectLocator> after_matte_layer_locator;
-  LayerTrackMatteMode after_mode{LayerTrackMatteMode::kAlpha};
-};
-struct LayerAVStateValue {
-  ObjectLocator layer_locator;
-  bool has_audio{false};
-  bool audio_enabled{false};
-  bool has_video{false};
-  bool video_enabled{false};
-};
-struct LayerAVSwitchSetValue {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  LayerAVStateValue before;
-  LayerAVStateValue after;
-};
-[[nodiscard]] std::string digest_layer_source_postcondition(
-    const LayerSourceValue& value);
-[[nodiscard]] std::string digest_layer_track_matte_read_postcondition(
-    const LayerTrackMatteValue& value);
-[[nodiscard]] std::string digest_layer_track_matte_set_postcondition(
-    const LayerTrackMatteSetValue& value);
-[[nodiscard]] std::string digest_layer_track_matte_clear_postcondition(
-    const LayerTrackMatteClearValue& value);
-[[nodiscard]] std::string digest_layer_av_state_postcondition(
-    const LayerAVStateValue& value);
-[[nodiscard]] std::string digest_layer_audio_enabled_set_postcondition(
-    const LayerAVSwitchSetValue& value);
-[[nodiscard]] std::string digest_layer_video_enabled_set_postcondition(
-    const LayerAVSwitchSetValue& value);
-[[nodiscard]] std::string digest_layer_compositing_postcondition(
-    const LayerCompositingState& value);
-[[nodiscard]] std::string digest_layer_switch_set_postcondition(
-    const LayerSwitchChanged& value);
-[[nodiscard]] std::string digest_layer_quality_set_postcondition(
-    const LayerQualityChanged& value);
-[[nodiscard]] std::string digest_layer_blending_mode_set_postcondition(
-    const LayerBlendingModeChanged& value);
-[[nodiscard]] std::string digest_composition_create_arguments(
-    std::string_view name,
-    std::uint32_t width,
-    std::uint32_t height,
-    const CompositionCurrentTime& duration,
-    const CompositionPositiveRatio& frame_rate,
-    const CompositionPositiveRatio& pixel_aspect_ratio,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_composition_create_postcondition(
-    const CompositionCreated& value);
-[[nodiscard]] std::string composition_create_persistent_diagnostic_fields(
-    const CompositionCreated& value);
-[[nodiscard]] std::string project_context_persistent_diagnostic_fields(
-    const ProjectContext& value);
-[[nodiscard]] std::string project_item_metadata_persistent_diagnostic_fields(
-    const ProjectItemMetadata& value);
-[[nodiscard]] std::string composition_settings_persistent_diagnostic_fields(
-    const CompositionSettings& value);
-[[nodiscard]] std::string composition_settings_change_persistent_diagnostic_fields(
-    std::string_view capability_id,
-    const CompositionSettingsChanged& value);
-[[nodiscard]] std::string composition_work_area_persistent_diagnostic_fields(
-    const CompositionWorkAreaChanged& value);
-[[nodiscard]] std::string project_item_name_persistent_diagnostic_fields(
-    const ProjectItemTextChanged& value);
-[[nodiscard]] std::string project_item_comment_persistent_diagnostic_fields(
-    const ProjectItemTextChanged& value);
-[[nodiscard]] std::string project_item_label_persistent_diagnostic_fields(
-    const ProjectItemLabelChanged& value);
-[[nodiscard]] std::string composition_duplicate_persistent_diagnostic_fields(
-    const CompositionDuplicated& value);
-[[nodiscard]] std::string digest_composition_layer_create_arguments(
-    const ObjectLocator& composition_locator,
-    std::string_view kind,
-    std::string_view name,
-    const std::optional<CompositionLayerCreateColor>& color,
-    const std::optional<std::uint32_t>& width,
-    const std::optional<std::uint32_t>& height,
-    const std::optional<CompositionCurrentTime>& duration,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_composition_layer_create_postcondition(
-    const CompositionLayerCreated& value);
-[[nodiscard]] std::string digest_layer_effect_apply_arguments(
-    const ObjectLocator& layer_locator,
-    std::string_view effect_match_name,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_layer_effect_apply_postcondition(
-    const LayerEffectApplied& value);
-[[nodiscard]] std::string digest_native_media_arguments(
-    std::string_view canonical_arguments_json);
-[[nodiscard]] std::string canonicalize_native_media_value(
-    std::string_view value_json);
-[[nodiscard]] std::string digest_native_media_postcondition(
-    std::string_view capability_id,
-    std::string_view canonical_value_json);
-[[nodiscard]] std::string digest_layer_properties_postcondition(
-    const LayerPropertiesPage& page);
-[[nodiscard]] std::string digest_layer_property_keyframes_postcondition(
-    const LayerPropertyKeyframesPage& page);
-[[nodiscard]] std::string digest_layer_property_set_arguments(
-    const ObjectLocator& layer_locator,
-    const ObjectLocator& property_locator,
-    const LayerPropertyValue& value,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_layer_property_set_postcondition(
-    const LayerPropertyChanged& value);
-[[nodiscard]] std::string digest_layer_property_keyframe_details_postcondition(
-    const LayerPropertyKeyframeDetails& value);
-[[nodiscard]] std::string digest_layer_property_keyframe_write_arguments(
-    std::string_view capability_id,
-    const ObjectLocator& layer_locator,
-    const ObjectLocator& property_locator,
-    const LayerPropertySampleTime& time,
-    const LayerPropertyValue& value,
-    std::string_view in_interpolation,
-    std::string_view out_interpolation,
-    const std::vector<LayerPropertyKeyframeDimensionEase>& temporal_ease,
-    std::string_view behavior,
-    const std::optional<bool>& behavior_enabled,
-    std::string_view idempotency_key);
-[[nodiscard]] std::string digest_layer_property_keyframe_write_postcondition(
-    std::string_view capability_id,
-    const LayerPropertyKeyframeChanged& value);
+[[nodiscard]] ParsedRequest
+decode_request_frame(std::span<const std::uint8_t> frame);
+[[nodiscard]] std::string
+digest_capabilities_query(std::string_view session_id,
+                          const CapabilitiesParams &params);
 
 class FrameDecoder final {
- public:
+public:
   // A transport adapter must pass chunks no larger than one maximum frame and
   // its prefix. One push can still yield multiple small frames.
-  [[nodiscard]] std::vector<ParsedRequest> push(std::span<const std::uint8_t> chunk);
+  [[nodiscard]] std::vector<ParsedRequest>
+  push(std::span<const std::uint8_t> chunk);
   void finalize();
   [[nodiscard]] bool failed() const noexcept { return failed_; }
-  [[nodiscard]] std::size_t pending_bytes() const noexcept { return pending_.size(); }
+  [[nodiscard]] std::size_t pending_bytes() const noexcept {
+    return pending_.size();
+  }
 
- private:
+private:
   std::vector<std::uint8_t> pending_;
   bool failed_{false};
 };
 
 class SessionClock {
- public:
+public:
   virtual ~SessionClock() = default;
   [[nodiscard]] virtual std::uint64_t now_unix_ms() const noexcept = 0;
 };
 
 class SystemSessionClock final : public SessionClock {
- public:
+public:
   [[nodiscard]] std::uint64_t now_unix_ms() const noexcept override;
 };
 
@@ -467,8 +161,8 @@ struct SessionIngressResult {
   bool duplicate_content_matches{false};
 
   [[nodiscard]] bool accepted() const noexcept {
-    return code == SessionIngressCode::kAcceptedHello
-        || code == SessionIngressCode::kAcceptedRequest;
+    return code == SessionIngressCode::kAcceptedHello ||
+           code == SessionIngressCode::kAcceptedRequest;
   }
   [[nodiscard]] bool dispatchable() const noexcept {
     return code == SessionIngressCode::kAcceptedRequest;
@@ -482,27 +176,34 @@ struct SessionIngressResult {
 // The AE owner thread publishes dispatcher completions to an outbound queue and
 // never calls this object. Concurrent use is unsupported.
 class RpcSessionFrontDoor final {
- public:
-  RpcSessionFrontDoor(
-      std::string connection_id,
-      std::string host_instance_id,
-      std::string session_id,
-      SessionClock& clock,
-      SessionFrontDoorConfig config = {});
+public:
+  RpcSessionFrontDoor(std::string connection_id, std::string host_instance_id,
+                      std::string session_id, SessionClock &clock,
+                      SessionFrontDoorConfig config = {});
 
-  [[nodiscard]] SessionIngressResult admit(const ParsedRequest& request);
+  [[nodiscard]] SessionIngressResult admit(const ParsedRequest &request);
   [[nodiscard]] bool complete_request(std::string_view request_id);
   void close() noexcept;
 
   [[nodiscard]] bool hello_complete() const noexcept { return hello_complete_; }
   [[nodiscard]] bool closed() const noexcept { return closed_; }
-  [[nodiscard]] std::string_view connection_id() const noexcept { return connection_id_; }
-  [[nodiscard]] std::string_view host_instance_id() const noexcept { return host_instance_id_; }
-  [[nodiscard]] std::string_view session_id() const noexcept { return session_id_; }
-  [[nodiscard]] std::size_t active_request_count() const noexcept { return active_.size(); }
-  [[nodiscard]] std::size_t tombstone_count() const noexcept { return tombstones_.size(); }
+  [[nodiscard]] std::string_view connection_id() const noexcept {
+    return connection_id_;
+  }
+  [[nodiscard]] std::string_view host_instance_id() const noexcept {
+    return host_instance_id_;
+  }
+  [[nodiscard]] std::string_view session_id() const noexcept {
+    return session_id_;
+  }
+  [[nodiscard]] std::size_t active_request_count() const noexcept {
+    return active_.size();
+  }
+  [[nodiscard]] std::size_t tombstone_count() const noexcept {
+    return tombstones_.size();
+  }
 
- private:
+private:
   struct ActiveEntry {
     std::string fingerprint;
     std::uint64_t effective_deadline_unix_ms{0};
@@ -514,13 +215,13 @@ class RpcSessionFrontDoor final {
   };
 
   void cleanup(std::uint64_t now);
-  void add_tombstone(
-      std::string request_id, std::string fingerprint, std::uint64_t now);
+  void add_tombstone(std::string request_id, std::string fingerprint,
+                     std::uint64_t now);
 
   std::string connection_id_;
   std::string host_instance_id_;
   std::string session_id_;
-  SessionClock& clock_;
+  SessionClock &clock_;
   SessionFrontDoorConfig config_;
   bool hello_complete_{false};
   bool closed_{false};
@@ -600,248 +301,6 @@ struct NativeProgramSuccess {
   bool replayed{false};
 };
 
-struct ProjectSummarySuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  bool project_open{false};
-  std::string project_name;
-  std::uint64_t item_count{0};
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct ProjectBitDepthReadSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  std::int32_t bits_per_channel{0};
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct ProjectBitDepthSetSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  bool changed{true};
-  std::int32_t before_bits_per_channel{0};
-  std::int32_t after_bits_per_channel{0};
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct ProjectItemsSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  ProjectItemsPage value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct CompositionLayersSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  CompositionLayersPage value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-using CompositionSelectedLayersSuccess = CompositionLayersSuccess;
-
-struct CompositionTimeSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  CompositionTimeRead value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct CompositionTimeSetSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  CompositionTimeChanged value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-template <typename Value>
-struct NativeValueSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  Value value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-using ProjectContextSuccess = NativeValueSuccess<ProjectContext>;
-using ProjectItemMetadataSuccess = NativeValueSuccess<ProjectItemMetadata>;
-using CompositionSettingsSuccess = NativeValueSuccess<CompositionSettings>;
-using CompositionWorkAreaSetSuccess = NativeValueSuccess<CompositionWorkAreaChanged>;
-using CompositionSettingsSetSuccess = NativeValueSuccess<CompositionSettingsChanged>;
-using ProjectItemNameSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
-using ProjectItemCommentSetSuccess = NativeValueSuccess<ProjectItemTextChanged>;
-using ProjectItemLabelSetSuccess = NativeValueSuccess<ProjectItemLabelChanged>;
-using CompositionDuplicateSuccess = NativeValueSuccess<CompositionDuplicated>;
-using LayerDetailsSuccess = NativeValueSuccess<LayerDetails>;
-using LayerNameSetSuccess = NativeValueSuccess<LayerNameChanged>;
-using LayerRangeSetSuccess = NativeValueSuccess<LayerRangeChanged>;
-using LayerStartTimeSetSuccess = NativeValueSuccess<LayerStartTimeChanged>;
-using LayerStretchSetSuccess = NativeValueSuccess<LayerStretchChanged>;
-using LayerOrderSetSuccess = NativeValueSuccess<LayerOrderChanged>;
-using LayerParentSetSuccess = NativeValueSuccess<LayerParentChanged>;
-using LayerDuplicateSuccess = NativeValueSuccess<LayerDuplicated>;
-using LayerSourceSuccess = NativeValueSuccess<LayerSourceValue>;
-using LayerTrackMatteReadSuccess = NativeValueSuccess<LayerTrackMatteValue>;
-using LayerTrackMatteSetSuccess = NativeValueSuccess<LayerTrackMatteSetValue>;
-using LayerTrackMatteClearSuccess = NativeValueSuccess<LayerTrackMatteClearValue>;
-using LayerAVStateSuccess = NativeValueSuccess<LayerAVStateValue>;
-using LayerAudioEnabledSetSuccess = NativeValueSuccess<LayerAVSwitchSetValue>;
-using LayerVideoEnabledSetSuccess = NativeValueSuccess<LayerAVSwitchSetValue>;
-using LayerCompositingSuccess = NativeValueSuccess<LayerCompositingState>;
-using LayerSwitchSetSuccess = NativeValueSuccess<LayerSwitchChanged>;
-using LayerQualitySetSuccess = NativeValueSuccess<LayerQualityChanged>;
-using LayerBlendingModeSetSuccess = NativeValueSuccess<LayerBlendingModeChanged>;
-
-struct CompositionCreateSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  CompositionCreated value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct CompositionLayerCreateSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  CompositionLayerCreated value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct LayerEffectApplySuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  LayerEffectApplied value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct NativeMediaSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  std::string capability_id;
-  std::string canonical_value_json;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct LayerPropertiesSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  LayerPropertiesPage value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct LayerPropertyKeyframesSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  LayerPropertyKeyframesPage value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct LayerPropertySetSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  LayerPropertyChanged value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct LayerPropertyKeyframeDetailsSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  LayerPropertyKeyframeDetails value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
-struct LayerPropertyKeyframeWriteSuccess {
-  std::string request_id;
-  std::string session_id;
-  std::string host_instance_id;
-  std::string capability_id;
-  LayerPropertyKeyframeChanged value;
-  std::uint64_t started_at_unix_ms{0};
-  std::uint64_t completed_at_unix_ms{0};
-  std::string request_digest;
-  std::string postcondition_digest;
-  bool replayed{false};
-};
-
 enum class CancelState {
   kQueuedCancelled,
   kRunningCancelRequested,
@@ -871,9 +330,6 @@ enum class RpcErrorCode {
   kWireVersionMismatch,
   kInvalidRequest,
   kInvalidArgument,
-  kTrackMatteCompositionMismatch,
-  kLayerHasNoAudio,
-  kLayerHasNoVideo,
   kDuplicateRequest,
   kPreconditionFailed,
   kStaleLocator,
@@ -928,114 +384,24 @@ struct ErrorResponse {
   std::optional<ErrorDetails> details;
 };
 
-[[nodiscard]] std::vector<std::uint8_t> encode_hello_success(const HelloSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_capabilities_success(
-    const CapabilitiesSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_progress_event(const ProgressEvent& event);
+[[nodiscard]] std::vector<std::uint8_t>
+encode_hello_success(const HelloSuccess &response);
+[[nodiscard]] std::vector<std::uint8_t>
+encode_capabilities_success(const CapabilitiesSuccess &response);
+[[nodiscard]] std::vector<std::uint8_t>
+encode_progress_event(const ProgressEvent &event);
 [[nodiscard]] std::string digest_native_program_postcondition(
-    const JsonObject& outputs,
-    const std::vector<NativeProgramOperationSummary>& completed_operations);
-[[nodiscard]] std::vector<std::uint8_t> encode_native_program_success(
-    const NativeProgramSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_native_program_failure(
-    const NativeProgramFailure& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_project_summary_success(
-    const ProjectSummarySuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_project_bit_depth_read_success(
-    const ProjectBitDepthReadSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_project_bit_depth_set_success(
-    const ProjectBitDepthSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_project_items_success(
-    const ProjectItemsSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_layers_success(
-    const CompositionLayersSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_selected_layers_success(
-    const CompositionSelectedLayersSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_time_success(
-    const CompositionTimeSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_time_set_success(
-    const CompositionTimeSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_project_context_success(
-    const ProjectContextSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_project_item_metadata_success(
-    const ProjectItemMetadataSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_settings_success(
-    const CompositionSettingsSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_work_area_set_success(
-    const CompositionWorkAreaSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_settings_set_success(
-    std::string_view capability_id,
-    const CompositionSettingsSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_project_item_name_set_success(
-    const ProjectItemNameSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_project_item_comment_set_success(
-    const ProjectItemCommentSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_project_item_label_set_success(
-    const ProjectItemLabelSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_duplicate_success(
-    const CompositionDuplicateSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_details_success(
-    const LayerDetailsSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_name_set_success(
-    const LayerNameSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_range_set_success(
-    const LayerRangeSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_start_time_set_success(
-    const LayerStartTimeSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_stretch_set_success(
-    const LayerStretchSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_order_set_success(
-    const LayerOrderSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_parent_set_success(
-    const LayerParentSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_duplicate_success(
-    const LayerDuplicateSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_source_success(
-    const LayerSourceSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_track_matte_read_success(
-    const LayerTrackMatteReadSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_track_matte_set_success(
-    const LayerTrackMatteSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_track_matte_clear_success(
-    const LayerTrackMatteClearSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_av_state_success(
-    const LayerAVStateSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_audio_enabled_set_success(
-    const LayerAudioEnabledSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_video_enabled_set_success(
-    const LayerVideoEnabledSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_compositing_success(
-    const LayerCompositingSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_switch_set_success(
-    const LayerSwitchSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_quality_set_success(
-    const LayerQualitySetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_blending_mode_set_success(
-    const LayerBlendingModeSetSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_create_success(
-    const CompositionCreateSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_composition_layer_create_success(
-    const CompositionLayerCreateSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_effect_apply_success(
-    const LayerEffectApplySuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_native_media_success(
-    const NativeMediaSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_properties_success(
-    const LayerPropertiesSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_property_keyframes_success(
-    const LayerPropertyKeyframesSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_layer_property_set_success(
-    const LayerPropertySetSuccess& response);
+    const JsonObject &outputs,
+    const std::vector<NativeProgramOperationSummary> &completed_operations);
 [[nodiscard]] std::vector<std::uint8_t>
-    encode_layer_property_keyframe_details_success(
-        const LayerPropertyKeyframeDetailsSuccess& response);
+encode_native_program_success(const NativeProgramSuccess &response);
 [[nodiscard]] std::vector<std::uint8_t>
-    encode_layer_property_keyframe_write_success(
-        const LayerPropertyKeyframeWriteSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_cancel_success(
-    const CancelSuccess& response);
+encode_native_program_failure(const NativeProgramFailure &response);
+[[nodiscard]] std::vector<std::uint8_t>
+encode_cancel_success(const CancelSuccess &response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_graph_invalidate_success(
-    const ProjectGraphInvalidateSuccess& response);
-[[nodiscard]] std::vector<std::uint8_t> encode_error_response(const ErrorResponse& response);
+    const ProjectGraphInvalidateSuccess &response);
+[[nodiscard]] std::vector<std::uint8_t>
+encode_error_response(const ErrorResponse &response);
 
-}  // namespace aemcp::native::rpc
+} // namespace aemcp::native::rpc

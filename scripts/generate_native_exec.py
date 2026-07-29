@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import pprint
@@ -219,6 +220,15 @@ def load_primitive_registry(path: Path) -> PrimitiveRegistry:
         has_invoke_evidence = (
             isinstance(result_ref, str) and result_ref.endswith("InvokeResult")
         )
+        has_program_write_value = isinstance(result_ref, str) and any(
+            result_ref.endswith(f"#/$defs/{definition}")
+            for definition in {
+                "compositionTimeSetValue",
+                "compositionSettingsChangedValue",
+                "layerPropertySetValue",
+                "keyframeMutationValue",
+            }
+        )
         has_embedded_evidence = isinstance(result_schema.get("properties"), dict) and (
             "evidence" in result_schema["properties"]
         )
@@ -226,6 +236,7 @@ def load_primitive_registry(path: Path) -> PrimitiveRegistry:
             mutability == "write"
             and not WRITE_EVIDENCE_KEYS <= set(result_schema)
             and not has_invoke_evidence
+            and not has_program_write_value
             and not has_embedded_evidence
         ):
             raise ValueError(f"{row_id}: write result needs before/after/changed/undo evidence")
@@ -262,10 +273,6 @@ def validate_sources(root: Path) -> None:
             unknown = set(row.replacement) - primitive_ids
             if unknown:
                 raise ValueError(f"{row.id}: unknown replacement primitives {sorted(unknown)}")
-    legacy = _json_object(root / "native/ae-plugin/protocol/fixtures/capability-registry-full.json")
-    legacy_ids = {row["id"] for row in _rows(legacy.get("items"), "legacy items")}
-    if legacy_ids != set(migration.native_capabilities):
-        raise ValueError("migration manifest must cover the legacy registry exactly")
     from ae_mcp import schemas
     from ae_mcp.annotations import VERB_ANNOTATIONS
     from ae_mcp.backends.base import ALL_VERBS
@@ -495,6 +502,159 @@ def _native_program_invoke_params(registry: PrimitiveRegistry, root_definitions:
     }
 
 
+def _native_exec_capability_descriptor(
+    registry: PrimitiveRegistry,
+    root_definitions: dict[str, Any],
+    detail: str,
+) -> dict[str, Any]:
+    descriptor: dict[str, Any] = {
+        "cancellation": "before-dispatch",
+        "compatibility": {
+            "intendedPlatforms": ["macos-arm64", "windows-x64"],
+            "status": "unverified",
+        },
+        "detail": detail,
+        "id": "ae.native.exec",
+        "idempotency": "idempotency-key",
+        "mutability": "mutating",
+        "preconditions": [
+            "Load builtin:skill:ae-execution-guide before composing a native program."
+        ],
+        "primitiveCount": len(registry.rows),
+        "requiredSkill": "builtin:skill:ae-execution-guide",
+        "requiredSuite": "generated-primitive-union",
+        "risk": "write",
+        "schemaVersion": 1,
+        "sideEffectSummary": (
+            "Runs one bounded native AEGP program; writes use one AE Undo group."
+        ),
+        "summary": (
+            "Execute a bounded native AEGP program. Load the default execution "
+            "guide before composing operations."
+        ),
+        "undo": "ae-undo-group",
+        "valueKind": "Json",
+        "version": 1,
+    }
+    if detail == "full":
+        input_schema = _native_program_schema(registry, root_definitions)
+        result_schema = {
+            "$ref": "aegp-rpc.schema.json#/$defs/nativeProgramInvokeResult"
+        }
+        primitives = [
+            _primitive_descriptor(row, "full") for row in registry.rows
+        ]
+        descriptor.update(
+            {
+                "contractDigest": _digest(
+                    {
+                        "inputSchema": input_schema,
+                        "primitives": primitives,
+                        "requiredSkill": descriptor["requiredSkill"],
+                        "resultSchema": result_schema,
+                    }
+                ),
+                "inputSchema": input_schema,
+                "primitives": primitives,
+                "resultSchema": result_schema,
+            }
+        )
+    return descriptor
+
+
+def _native_exec_capability_descriptor_schema(
+    primitive_count: int,
+) -> dict[str, Any]:
+    common_required = [
+        "detail",
+        "id",
+        "version",
+        "schemaVersion",
+        "summary",
+        "risk",
+        "mutability",
+        "idempotency",
+        "cancellation",
+        "undo",
+        "sideEffectSummary",
+        "preconditions",
+        "compatibility",
+        "requiredSuite",
+        "valueKind",
+        "requiredSkill",
+        "primitiveCount",
+    ]
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": common_required,
+        "properties": {
+            "detail": {"enum": ["summary", "full"]},
+            "id": {"const": "ae.native.exec"},
+            "version": {"const": 1},
+            "schemaVersion": {"const": 1},
+            "summary": {"type": "string", "minLength": 1, "maxLength": 160},
+            "risk": {"const": "write"},
+            "mutability": {"const": "mutating"},
+            "idempotency": {"const": "idempotency-key"},
+            "cancellation": {"const": "before-dispatch"},
+            "undo": {"const": "ae-undo-group"},
+            "sideEffectSummary": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 160,
+            },
+            "preconditions": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 16,
+                "items": {"type": "string", "minLength": 1, "maxLength": 128},
+            },
+            "compatibility": {"$ref": "#/$defs/compatibility"},
+            "requiredSuite": {
+                "const": "generated-primitive-union",
+            },
+            "valueKind": {"const": "Json"},
+            "requiredSkill": {
+                "const": "builtin:skill:ae-execution-guide",
+            },
+            "primitiveCount": {"const": primitive_count},
+            "contractDigest": {"$ref": "#/$defs/sha256"},
+            "inputSchema": {"type": "object"},
+            "resultSchema": {"type": "object"},
+            "primitives": {
+                "type": "array",
+                "minItems": primitive_count,
+                "maxItems": primitive_count,
+                "items": {"type": "object"},
+            },
+        },
+        "allOf": [
+            {
+                "if": {"properties": {"detail": {"const": "full"}}},
+                "then": {
+                    "required": [
+                        "contractDigest",
+                        "inputSchema",
+                        "resultSchema",
+                        "primitives",
+                    ]
+                },
+                "else": {
+                    "not": {
+                        "anyOf": [
+                            {"required": ["contractDigest"]},
+                            {"required": ["inputSchema"]},
+                            {"required": ["resultSchema"]},
+                            {"required": ["primitives"]},
+                        ]
+                    }
+                },
+            }
+        ],
+    }
+
+
 def _replace_root_definition(path: Path, definition: str, expected: dict[str, Any], *, check: bool) -> None:
     document = _json_object(path)
     actual = document.get("$defs", {}).get(definition)
@@ -548,11 +708,113 @@ def _write(path: Path, text: str, *, check: bool) -> None:
     path.write_text(text)
 
 
+def _local_definition_references(value: Any) -> set[str]:
+    references: set[str] = set()
+    if isinstance(value, dict):
+        reference = value.get("$ref")
+        if isinstance(reference, str) and "#/$defs/" in reference:
+            name = reference.split("#/$defs/", 1)[1].split("/", 1)[0]
+            references.add(name.replace("~1", "/").replace("~0", "~"))
+        for member in value.values():
+            references.update(_local_definition_references(member))
+    elif isinstance(value, list):
+        for member in value:
+            references.update(_local_definition_references(member))
+    return references
+
+
+def _native_exec_rpc_schema(
+    document: dict[str, Any],
+    registry: PrimitiveRegistry,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Replace the retired direct-invoke graph and retain shared value defs."""
+
+    generated = copy.deepcopy(document)
+    definitions = generated.get("$defs")
+    if not isinstance(definitions, dict):
+        raise ValueError("aegp-rpc.schema.json: missing $defs")
+
+    definitions["nativeProgramInvokeParams"] = _native_program_invoke_params(
+        registry, definitions
+    )
+    definitions["nativePrimitiveDescriptor"] = (
+        _native_exec_capability_descriptor_schema(len(registry.rows))
+    )
+    definitions["compositionSettingsChangedValue"] = {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["changed", "compositionLocator", "before", "after"],
+        "properties": {
+            "changed": {"const": True},
+            "compositionLocator": {
+                "$ref": "#/$defs/compositionLocator",
+            },
+            "before": {
+                "$ref": "#/$defs/compositionSettingsReadValue",
+            },
+            "after": {
+                "$ref": "#/$defs/compositionSettingsReadValue",
+            },
+        },
+    }
+    definitions["invokeParams"] = {
+        "$ref": "#/$defs/nativeProgramInvokeParams"
+    }
+    definitions["invokeResult"] = {
+        "$ref": "#/$defs/nativeProgramInvokeResult"
+    }
+    definitions["capabilityId"] = {"const": "ae.native.exec"}
+    definitions["capabilitySummaryItem"] = {
+        "allOf": [
+            {"$ref": "#/$defs/nativePrimitiveDescriptor"},
+            {"properties": {"detail": {"const": "summary"}}},
+        ]
+    }
+    definitions["capabilityFullItem"] = {
+        "allOf": [
+            {"$ref": "#/$defs/nativePrimitiveDescriptor"},
+            {"properties": {"detail": {"const": "full"}}},
+        ]
+    }
+    invoke_success = definitions.get("invokeSuccess")
+    if not isinstance(invoke_success, dict):
+        raise ValueError("aegp-rpc.schema.json: missing invokeSuccess")
+    invoke_success.pop("allOf", None)
+
+    root = {key: value for key, value in generated.items() if key != "$defs"}
+    pending = list(_local_definition_references(root))
+    for row in registry.rows:
+        pending.extend(_local_definition_references(row.input_schema))
+        pending.extend(_local_definition_references(row.result_schema))
+    retained: set[str] = set()
+    while pending:
+        name = pending.pop()
+        if name in retained:
+            continue
+        definition = definitions.get(name)
+        if definition is None:
+            raise ValueError(
+                f"aegp-rpc.schema.json: unresolved $defs reference {name}"
+            )
+        retained.add(name)
+        pending.extend(_local_definition_references(definition) - retained)
+    generated["$defs"] = {
+        name: definitions[name] for name in sorted(retained)
+    }
+    return generated, definitions
+
+
 def _generate_cpp_header(registry: PrimitiveRegistry, root_definitions: dict[str, Any]) -> str:
     rows = registry.rows
     summaries = [_primitive_descriptor(row, "summary") for row in rows]
     full = [_primitive_descriptor(row, "full") for row in rows]
-    registry_digest = _digest(full)
+    capability_summary = _native_exec_capability_descriptor(
+        registry, root_definitions, "summary"
+    )
+    capability_full = _native_exec_capability_descriptor(
+        registry, root_definitions, "full"
+    )
+    registry_digest = _digest([capability_full])
     lines = [
         "// Generated by scripts/generate_native_exec.py. Do not edit by hand.",
         "#pragma once",
@@ -588,6 +850,13 @@ def _generate_cpp_header(registry: PrimitiveRegistry, root_definitions: dict[str
         "",
         f"inline constexpr std::size_t kNativePrimitiveCount = {len(rows)};",
         f'inline constexpr std::string_view kNativeExecRegistryDigest = "{registry_digest}";',
+        "inline constexpr std::string_view kNativeExecSummaryJson =",
+        f"    {_cpp_raw(_canonical_json(capability_summary))};",
+        "inline constexpr std::string_view kNativeExecFullJson =",
+        f"    {_cpp_raw(_canonical_json(capability_full))};",
+        "inline constexpr std::string_view kNativeExecInputSchemaJson =",
+        f"    {_cpp_raw(_canonical_json(_native_program_schema(registry, root_definitions)))};",
+        "",
     ]
     for index, row in enumerate(rows):
         lines.extend([
@@ -680,15 +949,19 @@ def _generate_mjs(registry: PrimitiveRegistry, root_definitions: dict[str, Any])
     input_schema = _native_program_schema(registry, root_definitions)
     payload = _canonical_json(rows)
     descriptors = {
-        "summary": [_primitive_descriptor(row, "summary") for row in registry.rows],
-        "full": [_primitive_descriptor(row, "full") for row in registry.rows],
+        detail: [
+            _native_exec_capability_descriptor(
+                registry, root_definitions, detail
+            )
+        ]
+        for detail in ("summary", "full")
     }
     return "\n".join([
         "// Generated by scripts/generate_native_exec.py. Do not edit by hand.",
         f"export const PRIMITIVES = Object.freeze({payload});",
         f"export const CAPABILITY_DESCRIPTORS = Object.freeze({_canonical_json(descriptors)});",
         f"export const NATIVE_EXEC_INPUT_SCHEMA = Object.freeze({_canonical_json(input_schema)});",
-        f"export const NATIVE_EXEC_REGISTRY_DIGEST = \"{_digest([_primitive_descriptor(row, 'full') for row in registry.rows])}\";",
+        f"export const NATIVE_EXEC_REGISTRY_DIGEST = \"{_digest(descriptors['full'])}\";",
         "",
     ])
 
@@ -715,15 +988,103 @@ def _generate_python(registry: PrimitiveRegistry, root_definitions: dict[str, An
         for row in registry.rows
     ]
     input_schema = _native_program_schema(registry, root_definitions)
+    descriptors = {
+        detail: [
+            _native_exec_capability_descriptor(
+                registry, root_definitions, detail
+            )
+        ]
+        for detail in ("summary", "full")
+    }
     return "\n".join([
         "# Generated by scripts/generate_native_exec.py. Do not edit by hand.",
         "from __future__ import annotations",
         "",
         f"PRIMITIVES = {pprint.pformat(rows, sort_dicts=True, width=100)}",
         f"NATIVE_EXEC_INPUT_SCHEMA = {pprint.pformat(input_schema, sort_dicts=True, width=100)}",
-        f"NATIVE_EXEC_REGISTRY_DIGEST = \"{_digest([_primitive_descriptor(row, 'full') for row in registry.rows])}\"",
+        f"CAPABILITY_DESCRIPTORS = {pprint.pformat(descriptors, sort_dicts=True, width=100)}",
+        f"NATIVE_EXEC_REGISTRY_DIGEST = \"{_digest(descriptors['full'])}\"",
         "",
     ])
+
+
+def _generate_protocol_fixtures(
+    root: Path,
+    registry: PrimitiveRegistry,
+    root_definitions: dict[str, Any],
+    *,
+    check: bool,
+) -> None:
+    summary = _native_exec_capability_descriptor(
+        registry, root_definitions, "summary"
+    )
+    full = _native_exec_capability_descriptor(
+        registry, root_definitions, "full"
+    )
+    digest = _digest([full])
+    fixture_meta = {
+        "classification": "synthetic-contract-vector",
+        "runtimeEvidence": False,
+        "compatibilityEvidence": False,
+    }
+    session_id = "11111111-1111-4111-8111-111111111111"
+    query_digest = _digest(
+        {
+            "detail": "summary",
+            "ids": None,
+            "limit": 50,
+            "sessionId": session_id,
+        }
+    )
+    capabilities = {
+        "_fixture": fixture_meta,
+        "request": {
+            "wireVersion": 1,
+            "kind": "request",
+            "sessionId": session_id,
+            "requestId": "capabilities-1",
+            "method": "capabilities",
+            "params": {"detail": "summary", "limit": 50},
+        },
+        "response": {
+            "wireVersion": 1,
+            "kind": "response",
+            "sessionId": session_id,
+            "requestId": "capabilities-1",
+            "method": "capabilities",
+            "ok": True,
+            "replayed": False,
+            "result": {
+                "detail": "summary",
+                "items": [summary],
+                "nextCursor": None,
+                "queryDigest": query_digest,
+                "capabilitiesDigest": digest,
+            },
+        },
+    }
+    full_fixture = {
+        "_fixture": fixture_meta,
+        "capabilitiesDigest": digest,
+        "items": [full],
+    }
+    for name, document in (
+        ("capabilities.json", capabilities),
+        ("capability-registry-full.json", full_fixture),
+    ):
+        _write(
+            root / "native/ae-plugin/protocol/fixtures" / name,
+            json.dumps(document, ensure_ascii=False, indent=2) + "\n",
+            check=check,
+        )
+    hello_path = root / "native/ae-plugin/protocol/fixtures/hello.json"
+    hello = _json_object(hello_path)
+    hello["response"]["result"]["capabilitiesDigest"] = digest
+    _write(
+        hello_path,
+        json.dumps(hello, ensure_ascii=False, indent=2) + "\n",
+        check=check,
+    )
 
 
 def _require_primitive(registry: PrimitiveRegistry, primitive_id: str) -> PrimitiveRow:
@@ -926,17 +1287,19 @@ def generate_all(root: Path, *, check: bool) -> None:
     validate_sources(root)
     registry = load_primitive_registry(root / "native/ae-plugin/protocol/native-primitives.json")
     rpc_schema_path = root / "native/ae-plugin/protocol/aegp-rpc.schema.json"
-    rpc_definitions = _json_object(rpc_schema_path).get("$defs")
-    if not isinstance(rpc_definitions, dict):
-        raise ValueError("aegp-rpc.schema.json: missing $defs")
-    _replace_root_definition(
-        rpc_schema_path,
-        "nativeProgramInvokeParams",
-        _native_program_invoke_params(registry, rpc_definitions),
-        check=check,
+    rpc_schema, rpc_definitions = _native_exec_rpc_schema(
+        _json_object(rpc_schema_path), registry
     )
     generate_projections(root, registry, rpc_definitions, check=check)
     generate_execution_guide(root, registry, check=check)
+    _generate_protocol_fixtures(
+        root, registry, rpc_definitions, check=check
+    )
+    _write(
+        rpc_schema_path,
+        json.dumps(rpc_schema, ensure_ascii=False, indent=2) + "\n",
+        check=check,
+    )
 
 
 def main() -> int:

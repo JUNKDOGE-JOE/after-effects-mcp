@@ -24,223 +24,6 @@
 namespace aemcp::native {
 
 inline constexpr std::string_view kNativeProgramCapability = "ae.native.exec";
-inline constexpr std::string_view kProjectSummaryCapability = "ae.project.summary";
-inline constexpr std::string_view kProjectBitDepthReadCapability =
-    "ae.project.bit-depth.read";
-inline constexpr std::string_view kProjectBitDepthSetCapability =
-    "ae.project.bit-depth.set";
-inline constexpr std::string_view kProjectItemsListCapability =
-    "ae.project.items.list";
-inline constexpr std::string_view kCompositionLayersListCapability =
-    "ae.composition.layers.list";
-inline constexpr std::string_view kCompositionSelectedLayersListCapability =
-    "ae.composition.selected-layers.list";
-inline constexpr std::string_view kCompositionTimeReadCapability =
-    "ae.composition.time.read";
-inline constexpr std::string_view kCompositionTimeSetCapability =
-    "ae.composition.time.set";
-inline constexpr std::string_view kCompositionCreateCapability =
-    "ae.composition.create";
-inline constexpr std::string_view kCompositionLayerCreateCapability =
-    "ae.composition.layer.create";
-inline constexpr std::string_view kLayerEffectApplyCapability =
-    "ae.layer.effect.apply";
-inline constexpr std::string_view kLayerPropertiesListCapability =
-    "ae.layer.properties.list";
-inline constexpr std::string_view kLayerPropertyKeyframesListCapability =
-    "ae.layer.property.keyframes.list";
-inline constexpr std::string_view kLayerPropertySetCapability =
-    "ae.layer.property.set";
-inline constexpr std::string_view kLayerPropertyKeyframeDetailsReadCapability =
-    "ae.layer.property.keyframe.details.read";
-inline constexpr std::string_view kLayerPropertyKeyframeAddCapability =
-    "ae.layer.property.keyframe.add";
-inline constexpr std::string_view kLayerPropertyKeyframeValueSetCapability =
-    "ae.layer.property.keyframe.value.set";
-inline constexpr std::string_view kLayerPropertyKeyframeInterpolationSetCapability =
-    "ae.layer.property.keyframe.interpolation.set";
-inline constexpr std::string_view kLayerPropertyKeyframeTemporalEaseSetCapability =
-    "ae.layer.property.keyframe.temporal-ease.set";
-inline constexpr std::string_view kLayerPropertyKeyframeBehaviorSetCapability =
-    "ae.layer.property.keyframe.behavior.set";
-inline constexpr std::string_view kLayerPropertyKeyframeDeleteCapability =
-    "ae.layer.property.keyframe.delete";
-inline constexpr std::string_view kProjectContextReadCapability =
-    "ae.project.context.read";
-inline constexpr std::string_view kProjectItemMetadataReadCapability =
-    "ae.project.item.metadata.read";
-inline constexpr std::string_view kCompositionSettingsReadCapability =
-    "ae.composition.settings.read";
-inline constexpr std::string_view kCompositionWorkAreaSetCapability =
-    "ae.composition.work-area.set";
-inline constexpr std::string_view kCompositionDimensionsSetCapability =
-    "ae.composition.dimensions.set";
-inline constexpr std::string_view kCompositionDurationSetCapability =
-    "ae.composition.duration.set";
-inline constexpr std::string_view kCompositionFrameRateSetCapability =
-    "ae.composition.frame-rate.set";
-inline constexpr std::string_view kCompositionPixelAspectRatioSetCapability =
-    "ae.composition.pixel-aspect-ratio.set";
-inline constexpr std::string_view kCompositionBackgroundColorSetCapability =
-    "ae.composition.background-color.set";
-inline constexpr std::string_view kCompositionDisplayStartTimeSetCapability =
-    "ae.composition.display-start-time.set";
-inline constexpr std::string_view kProjectItemNameSetCapability =
-    "ae.project.item.name.set";
-inline constexpr std::string_view kProjectItemCommentSetCapability =
-    "ae.project.item.comment.set";
-inline constexpr std::string_view kProjectItemLabelSetCapability =
-    "ae.project.item.label.set";
-inline constexpr std::string_view kCompositionDuplicateCapability =
-    "ae.composition.duplicate";
-inline constexpr std::string_view kLayerDetailsReadCapability =
-    "ae.layer.details.read";
-inline constexpr std::string_view kLayerNameSetCapability =
-    "ae.layer.name.set";
-inline constexpr std::string_view kLayerRangeSetCapability =
-    "ae.layer.range.set";
-inline constexpr std::string_view kLayerStartTimeSetCapability =
-    "ae.layer.start-time.set";
-inline constexpr std::string_view kLayerStretchSetCapability =
-    "ae.layer.stretch.set";
-inline constexpr std::string_view kLayerOrderSetCapability =
-    "ae.layer.order.set";
-inline constexpr std::string_view kLayerParentSetCapability =
-    "ae.layer.parent.set";
-inline constexpr std::string_view kLayerDuplicateCapability =
-    "ae.layer.duplicate";
-inline constexpr std::string_view kLayerCompositingReadCapability =
-    "ae.layer.compositing.read";
-inline constexpr std::string_view kLayerSwitchSetCapability =
-    "ae.layer.switch.set";
-inline constexpr std::string_view kLayerQualitySetCapability =
-    "ae.layer.quality.set";
-inline constexpr std::string_view kLayerBlendingModeSetCapability =
-    "ae.layer.blending-mode.set";
-inline constexpr std::string_view kLayerSourceReadCapability =
-    "ae.layer.source.read";
-inline constexpr std::string_view kLayerTrackMatteReadCapability =
-    "ae.layer.track-matte.read";
-inline constexpr std::string_view kLayerTrackMatteSetCapability =
-    "ae.layer.track-matte.set";
-inline constexpr std::string_view kLayerTrackMatteClearCapability =
-    "ae.layer.track-matte.clear";
-inline constexpr std::string_view kLayerAVStateReadCapability =
-    "ae.layer.av-state.read";
-inline constexpr std::string_view kLayerAudioEnabledSetCapability =
-    "ae.layer.audio-enabled.set";
-inline constexpr std::string_view kLayerVideoEnabledSetCapability =
-    "ae.layer.video-enabled.set";
-inline constexpr std::string_view kNativeMediaReadCapability =
-    "ae.native.media.read";
-inline constexpr std::string_view kNativeMediaWriteCapability =
-    "ae.native.media.write";
-inline constexpr std::string_view kShapeLayerCreateCapability =
-    "ae.shape.layer.create";
-inline constexpr std::string_view kShapeGroupsListCapability =
-    "ae.shape.groups.list";
-inline constexpr std::string_view kShapeGroupCreateCapability =
-    "ae.shape.group.create";
-inline constexpr std::string_view kShapePathSetCapability =
-    "ae.shape.path.set";
-inline constexpr std::string_view kShapeFillStyleSetCapability =
-    "ae.shape.fill-style.set";
-inline constexpr std::string_view kShapeStrokeStyleSetCapability =
-    "ae.shape.stroke-style.set";
-inline constexpr std::string_view kShapeGroupReorderCapability =
-    "ae.shape.group.reorder";
-inline constexpr std::string_view kMarkerListCapability = "ae.marker.list";
-inline constexpr std::string_view kMarkerCreateCapability = "ae.marker.create";
-inline constexpr std::string_view kMarkerSetCapability = "ae.marker.set";
-inline constexpr std::string_view kMarkerDeleteCapability = "ae.marker.delete";
-inline constexpr std::array<std::string_view, 11> kTextShapeMarkerCapabilities{
-    kShapeLayerCreateCapability,
-    kShapeGroupsListCapability,
-    kShapeGroupCreateCapability,
-    kShapePathSetCapability,
-    kShapeFillStyleSetCapability,
-    kShapeStrokeStyleSetCapability,
-    kShapeGroupReorderCapability,
-    kMarkerListCapability,
-    kMarkerCreateCapability,
-    kMarkerSetCapability,
-    kMarkerDeleteCapability,
-};
-[[nodiscard]] inline constexpr bool is_text_shape_marker_capability(
-    std::string_view capability_id) noexcept {
-  for (const std::string_view candidate : kTextShapeMarkerCapabilities) {
-    if (candidate == capability_id) return true;
-  }
-  return false;
-}
-[[nodiscard]] inline constexpr bool is_text_shape_marker_write_capability(
-    std::string_view capability_id) noexcept {
-  return is_text_shape_marker_capability(capability_id)
-      && capability_id != kShapeGroupsListCapability
-      && capability_id != kMarkerListCapability;
-}
-inline constexpr std::array<std::string_view, 60> kAdvertisedNativeCapabilities{
-    kProjectSummaryCapability,
-    kProjectBitDepthReadCapability,
-    kProjectBitDepthSetCapability,
-    kProjectItemsListCapability,
-    kCompositionLayersListCapability,
-    kCompositionSelectedLayersListCapability,
-    kCompositionTimeReadCapability,
-    kCompositionTimeSetCapability,
-    kCompositionCreateCapability,
-    kCompositionLayerCreateCapability,
-    kLayerEffectApplyCapability,
-    kLayerPropertiesListCapability,
-    kLayerPropertyKeyframesListCapability,
-    kLayerPropertySetCapability,
-    kProjectContextReadCapability,
-    kProjectItemMetadataReadCapability,
-    kCompositionSettingsReadCapability,
-    kCompositionWorkAreaSetCapability,
-    kCompositionDimensionsSetCapability,
-    kCompositionDurationSetCapability,
-    kCompositionFrameRateSetCapability,
-    kCompositionPixelAspectRatioSetCapability,
-    kCompositionBackgroundColorSetCapability,
-    kCompositionDisplayStartTimeSetCapability,
-    kProjectItemNameSetCapability,
-    kProjectItemCommentSetCapability,
-    kProjectItemLabelSetCapability,
-    kCompositionDuplicateCapability,
-    kLayerDetailsReadCapability,
-    kLayerNameSetCapability,
-    kLayerRangeSetCapability,
-    kLayerStartTimeSetCapability,
-    kLayerStretchSetCapability,
-    kLayerOrderSetCapability,
-    kLayerParentSetCapability,
-    kLayerDuplicateCapability,
-    kLayerCompositingReadCapability,
-    kLayerSwitchSetCapability,
-    kLayerQualitySetCapability,
-    kLayerBlendingModeSetCapability,
-    kLayerPropertyKeyframeDetailsReadCapability,
-    kLayerPropertyKeyframeAddCapability,
-    kLayerPropertyKeyframeValueSetCapability,
-    kLayerPropertyKeyframeInterpolationSetCapability,
-    kLayerPropertyKeyframeTemporalEaseSetCapability,
-    kLayerPropertyKeyframeBehaviorSetCapability,
-    kLayerPropertyKeyframeDeleteCapability,
-    kNativeMediaReadCapability,
-    kNativeMediaWriteCapability,
-    kShapeLayerCreateCapability,
-    kShapeGroupsListCapability,
-    kShapeGroupCreateCapability,
-    kShapePathSetCapability,
-    kShapeFillStyleSetCapability,
-    kShapeStrokeStyleSetCapability,
-    kShapeGroupReorderCapability,
-    kMarkerListCapability,
-    kMarkerCreateCapability,
-    kMarkerSetCapability,
-    kMarkerDeleteCapability,
-};
 // Authenticated broker control-plane operation. This is deliberately omitted
 // from model-facing capability discovery and can only fence native locator
 // cache state; it never changes the After Effects project.
@@ -252,59 +35,42 @@ inline constexpr std::size_t kNativePageValueBudgetBytes = 48U * 1024U;
 // non-empty GetLayerName source result, then the associated source Item name.
 // This does not infer the current Layer Name/Source Name UI column toggle.
 [[nodiscard]] inline std::optional<std::string> select_effective_layer_name(
-    const std::optional<std::string>& layer_name,
-    const std::optional<std::string>& source_name,
-    const std::optional<std::string>& source_item_name) {
-  if (layer_name.has_value() && !layer_name->empty()) return layer_name;
-  if (source_name.has_value() && !source_name->empty()) return source_name;
+    const std::optional<std::string> &layer_name,
+    const std::optional<std::string> &source_name,
+    const std::optional<std::string> &source_item_name) {
+  if (layer_name.has_value() && !layer_name->empty())
+    return layer_name;
+  if (source_name.has_value() && !source_name->empty())
+    return source_name;
   if (source_item_name.has_value() && !source_item_name->empty()) {
     return source_item_name;
   }
-  if (layer_name.has_value()) return layer_name;
-  if (source_name.has_value()) return source_name;
+  if (layer_name.has_value())
+    return layer_name;
+  if (source_name.has_value())
+    return source_name;
   return source_item_name;
-}
-
-struct IndexedGroupReorderPlan {
-  bool valid{false};
-  bool required{false};
-  std::uint64_t target_zero_index{0};
-};
-
-// AE reports an error dialog when AEGP_ReorderStream is asked to move an
-// indexed-group child to the position it already occupies. Plan the SDK call
-// only after the newly created child has been located by stable identity.
-[[nodiscard]] inline constexpr IndexedGroupReorderPlan plan_indexed_group_reorder(
-    std::uint64_t current_one_index,
-    std::uint64_t target_one_index,
-    std::uint64_t resulting_count) noexcept {
-  if (current_one_index < 1 || current_one_index > resulting_count
-      || target_one_index < 1 || target_one_index > resulting_count) {
-    return {};
-  }
-  return {
-      true,
-      current_one_index != target_one_index,
-      target_one_index - 1U,
-  };
 }
 
 // Returns the exact byte count used by the codec's JSON string serializer,
 // including quotes and control-character escaping. It is intentionally
 // independent of AE SDK types so bounded page assembly is portable-testable.
-[[nodiscard]] std::size_t json_encoded_string_size(std::string_view value) noexcept;
+[[nodiscard]] std::size_t
+json_encoded_string_size(std::string_view value) noexcept;
 
 class BoundedPageBudget final {
- public:
+public:
   explicit BoundedPageBudget(
       std::size_t initial_bytes,
       std::size_t maximum_bytes = kNativePageValueBudgetBytes) noexcept;
 
   [[nodiscard]] bool try_reserve(std::size_t bytes) noexcept;
   [[nodiscard]] std::size_t used_bytes() const noexcept { return used_bytes_; }
-  [[nodiscard]] std::size_t maximum_bytes() const noexcept { return maximum_bytes_; }
+  [[nodiscard]] std::size_t maximum_bytes() const noexcept {
+    return maximum_bytes_;
+  }
 
- private:
+private:
   std::size_t used_bytes_{0};
   std::size_t maximum_bytes_{0};
 };
@@ -312,7 +78,7 @@ class BoundedPageBudget final {
 using TimePoint = std::chrono::steady_clock::time_point;
 
 class Clock {
- public:
+public:
   virtual ~Clock() = default;
   // Dispatch admission and transport workers may call this concurrently.
   // Implementations must be thread-safe and monotonic.
@@ -320,24 +86,8 @@ class Clock {
 };
 
 class SystemClock final : public Clock {
- public:
+public:
   [[nodiscard]] TimePoint now() const noexcept override;
-};
-
-struct ProjectSummary {
-  bool project_open{false};
-  std::string project_name;
-  std::int64_t item_count{0};
-};
-
-struct ProjectBitDepth {
-  std::int32_t bits_per_channel{0};
-};
-
-struct ProjectBitDepthChanged {
-  bool changed{true};
-  std::int32_t before_bits_per_channel{0};
-  std::int32_t after_bits_per_channel{0};
 };
 
 struct ProjectGraphInvalidation {
@@ -353,127 +103,8 @@ struct ObjectLocator {
   std::uint64_t generation{0};
   std::string object_id;
 
-  [[nodiscard]] bool operator==(const ObjectLocator&) const = default;
+  [[nodiscard]] bool operator==(const ObjectLocator &) const = default;
 };
-
-enum class LayerSourceType { kNone, kFootage, kComposition };
-enum class LayerTrackMatteMode {
-  kNone,
-  kAlpha,
-  kInvertedAlpha,
-  kLuma,
-  kInvertedLuma,
-};
-
-struct LayerSourceReadRequest {
-  ObjectLocator layer_locator;
-};
-
-struct LayerTrackMatteReadRequest {
-  ObjectLocator layer_locator;
-};
-
-struct LayerTrackMatteSetRequest {
-  ObjectLocator layer_locator;
-  ObjectLocator matte_layer_locator;
-  LayerTrackMatteMode mode{LayerTrackMatteMode::kNone};
-};
-
-struct LayerTrackMatteClearRequest {
-  ObjectLocator layer_locator;
-};
-
-struct LayerAVStateReadRequest {
-  ObjectLocator layer_locator;
-};
-
-struct LayerAudioEnabledSetRequest {
-  ObjectLocator layer_locator;
-  bool enabled{false};
-};
-
-struct LayerVideoEnabledSetRequest {
-  ObjectLocator layer_locator;
-  bool enabled{false};
-};
-
-using LayerSourceMatteAvRequest = std::variant<
-    std::monostate,
-    LayerSourceReadRequest,
-    LayerTrackMatteReadRequest,
-    LayerTrackMatteSetRequest,
-    LayerTrackMatteClearRequest,
-    LayerAVStateReadRequest,
-    LayerAudioEnabledSetRequest,
-    LayerVideoEnabledSetRequest>;
-
-struct LayerSourceValue {
-  ObjectLocator layer_locator;
-  std::optional<ObjectLocator> source_item_locator;
-  LayerSourceType source_type{LayerSourceType::kNone};
-  std::optional<std::string> source_name;
-
-  [[nodiscard]] bool operator==(const LayerSourceValue&) const = default;
-};
-
-struct LayerTrackMatteValue {
-  ObjectLocator layer_locator;
-  bool active{false};
-  std::optional<ObjectLocator> matte_layer_locator;
-  LayerTrackMatteMode mode{LayerTrackMatteMode::kNone};
-
-  [[nodiscard]] bool operator==(const LayerTrackMatteValue&) const = default;
-};
-
-struct LayerTrackMatteSetValue {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  std::optional<ObjectLocator> before_matte_layer_locator;
-  LayerTrackMatteMode before_mode{LayerTrackMatteMode::kNone};
-  ObjectLocator after_matte_layer_locator;
-  LayerTrackMatteMode after_mode{LayerTrackMatteMode::kAlpha};
-
-  [[nodiscard]] bool operator==(const LayerTrackMatteSetValue&) const = default;
-};
-
-struct LayerTrackMatteClearValue {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  ObjectLocator before_matte_layer_locator;
-  LayerTrackMatteMode before_mode{LayerTrackMatteMode::kAlpha};
-  std::optional<ObjectLocator> after_matte_layer_locator;
-  LayerTrackMatteMode after_mode{LayerTrackMatteMode::kAlpha};
-
-  [[nodiscard]] bool operator==(const LayerTrackMatteClearValue&) const = default;
-};
-
-struct LayerAVStateValue {
-  ObjectLocator layer_locator;
-  bool has_audio{false};
-  bool audio_enabled{false};
-  bool has_video{false};
-  bool video_enabled{false};
-
-  [[nodiscard]] bool operator==(const LayerAVStateValue&) const = default;
-};
-
-struct LayerAVSwitchSetValue {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  LayerAVStateValue before;
-  LayerAVStateValue after;
-
-  [[nodiscard]] bool operator==(const LayerAVSwitchSetValue&) const = default;
-};
-
-using LayerSourceMatteAvResult = std::variant<
-    std::monostate,
-    LayerSourceValue,
-    LayerTrackMatteValue,
-    LayerTrackMatteSetValue,
-    LayerTrackMatteClearValue,
-    LayerAVStateValue,
-    LayerAVSwitchSetValue>;
 
 // Host-only resolution evidence. Neither token is part of the locator wire
 // shape or any completion. composition_owner is the invariant that lets the
@@ -483,7 +114,6 @@ struct HostResolvedLayer {
   ObjectLocator locator;
   std::uintptr_t host_layer{0};
   std::uintptr_t composition_owner{0};
-  bool track_matte_capable{false};
 };
 
 struct ProjectItemEntry {
@@ -501,18 +131,6 @@ struct ProjectItemsPage {
   bool has_more{false};
   std::optional<std::uint64_t> next_offset;
   std::vector<ProjectItemEntry> items;
-};
-
-struct ProjectContext {
-  ObjectLocator project_locator;
-  std::optional<ProjectItemEntry> active_item;
-  std::optional<ProjectItemEntry> most_recently_used_composition;
-  std::uint64_t selection_total{0};
-  std::uint64_t selection_offset{0};
-  std::uint16_t selection_limit{0};
-  bool selection_has_more{false};
-  std::optional<std::uint64_t> selection_next_offset;
-  std::vector<ProjectItemEntry> selected_items;
 };
 
 struct CompositionLayerEntry {
@@ -543,148 +161,8 @@ struct CompositionCurrentTime {
   std::uint32_t scale{1};
   std::string seconds_rational{"0"};
 
-  [[nodiscard]] bool operator==(const CompositionCurrentTime&) const = default;
+  [[nodiscard]] bool operator==(const CompositionCurrentTime &) const = default;
 };
-
-struct LayerStretchRatio {
-  std::int32_t numerator{1};
-  std::int32_t denominator{1};
-  std::string rational{"1"};
-
-  [[nodiscard]] bool operator==(const LayerStretchRatio&) const = default;
-};
-
-struct LayerDetails {
-  ObjectLocator layer_locator;
-  ObjectLocator composition_locator;
-  std::uint64_t stack_index{0};
-  std::string name;
-  std::string type;
-  bool video_enabled{false};
-  bool is_three_d{false};
-  bool locked{false};
-  std::optional<ObjectLocator> parent_locator;
-  std::optional<ObjectLocator> source_item_locator;
-  CompositionCurrentTime in_point;
-  CompositionCurrentTime duration;
-  CompositionCurrentTime start_time;
-  LayerStretchRatio stretch;
-};
-
-struct LayerNameChanged {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  std::string before_name;
-  std::string after_name;
-};
-
-struct LayerRangeChanged {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  CompositionCurrentTime before_in_point;
-  CompositionCurrentTime before_duration;
-  CompositionCurrentTime after_in_point;
-  CompositionCurrentTime after_duration;
-};
-
-struct LayerStartTimeChanged {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  CompositionCurrentTime before_start_time;
-  CompositionCurrentTime after_start_time;
-};
-
-struct LayerStretchChanged {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  LayerStretchRatio before_stretch;
-  LayerStretchRatio after_stretch;
-};
-
-struct LayerOrderChanged {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  std::uint64_t before_stack_index{0};
-  std::uint64_t after_stack_index{0};
-};
-
-struct LayerParentChanged {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  std::optional<ObjectLocator> before_parent_locator;
-  std::optional<ObjectLocator> after_parent_locator;
-};
-
-struct LayerDuplicated {
-  bool changed{true};
-  ObjectLocator source_layer_locator;
-  ObjectLocator new_layer_locator;
-  ObjectLocator composition_locator;
-  std::uint64_t layer_count_before{0};
-  std::uint64_t layer_count_after{0};
-  LayerDetails new_layer;
-  // Internal verification evidence. The public wire result intentionally keeps
-  // the frozen shape and exposes only new_layer; Core obtains the fresh source
-  // through ae.layer.details.read after graph invalidation.
-  std::optional<LayerDetails> source_layer;
-};
-
-using LayerTimelineResult = std::variant<
-    std::monostate,
-    LayerDetails,
-    LayerNameChanged,
-    LayerRangeChanged,
-    LayerStartTimeChanged,
-    LayerStretchChanged,
-    LayerOrderChanged,
-    LayerParentChanged,
-    LayerDuplicated>;
-
-struct LayerCompositingState {
-  ObjectLocator layer_locator;
-  bool visibility_enabled{false};
-  bool solo{false};
-  bool locked{false};
-  bool shy{false};
-  bool motion_blur{false};
-  bool three_d{false};
-  bool adjustment{false};
-  std::string quality;
-  std::string blending_mode;
-  bool preserve_alpha{false};
-  std::string track_matte;
-};
-
-struct LayerSwitchChanged {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  std::string switch_name;
-  bool before_enabled{false};
-  bool after_enabled{false};
-};
-
-struct LayerQualityChanged {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  std::string before_quality;
-  std::string after_quality;
-};
-
-struct LayerBlendingModeChanged {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  std::string before_mode;
-  std::string after_mode;
-  bool preserve_alpha{false};
-  std::string track_matte;
-};
-
-using LayerCompositingResult = std::variant<
-    std::monostate,
-    LayerCompositingState,
-    LayerSwitchChanged,
-    LayerQualityChanged,
-    LayerBlendingModeChanged>;
 
 struct CompositionTimeRead {
   ObjectLocator composition_locator;
@@ -703,7 +181,8 @@ struct CompositionPositiveRatio {
   std::int32_t denominator{1};
   std::string rational{"1"};
 
-  [[nodiscard]] bool operator==(const CompositionPositiveRatio&) const = default;
+  [[nodiscard]] bool
+  operator==(const CompositionPositiveRatio &) const = default;
 };
 
 struct CompositionColor {
@@ -712,21 +191,7 @@ struct CompositionColor {
   std::uint8_t blue{0};
   std::uint8_t alpha{255};
 
-  [[nodiscard]] bool operator==(const CompositionColor&) const = default;
-};
-
-struct ProjectItemMetadata {
-  ObjectLocator item_locator;
-  std::string name;
-  std::string type;
-  std::optional<ObjectLocator> parent_locator;
-  std::string comment;
-  std::uint8_t label_id{0};
-  std::optional<std::uint32_t> width;
-  std::optional<std::uint32_t> height;
-  std::optional<CompositionCurrentTime> duration;
-  std::optional<CompositionPositiveRatio> pixel_aspect_ratio;
-  std::optional<std::uint64_t> layer_count;
+  [[nodiscard]] bool operator==(const CompositionColor &) const = default;
 };
 
 struct CompositionSettings {
@@ -744,15 +209,13 @@ struct CompositionSettings {
   CompositionCurrentTime display_start_time;
   std::uint64_t layer_count{0};
 
-  [[nodiscard]] bool operator==(const CompositionSettings&) const = default;
+  [[nodiscard]] bool operator==(const CompositionSettings &) const = default;
 };
 
 enum class CompositionSettingKind {
-  kDimensions,
   kDuration,
   kFrameRate,
   kPixelAspectRatio,
-  kBackgroundColor,
   kDisplayStartTime,
 };
 
@@ -763,107 +226,18 @@ struct CompositionSettingsChanged {
   CompositionSettings after;
 };
 
-struct CompositionWorkAreaChanged {
-  bool changed{true};
-  ObjectLocator composition_locator;
-  CompositionCurrentTime before_start;
-  CompositionCurrentTime before_duration;
-  CompositionCurrentTime after_start;
-  CompositionCurrentTime after_duration;
-};
-
-struct ProjectItemTextChanged {
-  bool changed{true};
-  ObjectLocator item_locator;
-  std::string before_value;
-  std::string after_value;
-};
-
-struct ProjectItemLabelChanged {
-  bool changed{true};
-  ObjectLocator item_locator;
-  std::uint8_t before_label_id{0};
-  std::uint8_t after_label_id{0};
-};
-
-struct CompositionDuplicated {
-  bool changed{true};
-  ObjectLocator source_composition_locator;
-  ObjectLocator new_composition_locator;
-  std::uint64_t project_item_count_before{0};
-  std::uint64_t project_item_count_after{0};
-  CompositionSettings source_settings;
-  CompositionSettings new_settings;
-};
-
-struct CompositionCreated {
-  bool changed{true};
-  std::string name;
-  ObjectLocator composition_locator;
-  std::uint64_t project_item_count_before{0};
-  std::uint64_t project_item_count_after{0};
-  std::uint64_t layer_count{0};
-  std::uint32_t width{0};
-  std::uint32_t height{0};
-  CompositionCurrentTime duration;
-  CompositionPositiveRatio frame_rate;
-  CompositionPositiveRatio pixel_aspect_ratio;
-};
-
-struct CompositionLayerCreateColor {
-  std::uint16_t red{255};
-  std::uint16_t green{255};
-  std::uint16_t blue{255};
-  std::uint16_t alpha{255};
-
-  [[nodiscard]] bool operator==(const CompositionLayerCreateColor&) const = default;
-};
-
-struct CompositionLayerSolidSpec {
-  CompositionLayerCreateColor color;
-  std::uint32_t width{0};
-  std::uint32_t height{0};
-  CompositionCurrentTime duration;
-};
-
-struct CompositionLayerCreated {
-  bool changed{true};
-  std::string kind;
-  std::string name;
-  std::uint64_t stack_index{0};
-  ObjectLocator composition_locator;
-  ObjectLocator layer_locator;
-  std::optional<ObjectLocator> source_item_locator;
-  std::uint64_t layer_count_before{0};
-  std::uint64_t layer_count_after{0};
-  std::uint64_t project_item_count_before{0};
-  std::uint64_t project_item_count_after{0};
-  std::optional<CompositionLayerSolidSpec> solid;
-};
-
-struct LayerEffectApplied {
-  bool changed{true};
-  ObjectLocator layer_locator;
-  std::string name;
-  std::string match_name;
-  std::uint64_t effect_index{0};
-  std::uint64_t effect_count_before{0};
-  std::uint64_t effect_count_after{0};
-  std::uint64_t matching_effect_count_before{0};
-  std::uint64_t matching_effect_count_after{0};
-};
-
 // Canonical reduced representation of value / scale. This deliberately
 // promotes signed SDK values before magnitude conversion so INT32_MIN is safe.
-[[nodiscard]] inline std::string canonical_seconds_rational(
-    std::int64_t value, std::uint64_t scale) {
+[[nodiscard]] inline std::string
+canonical_seconds_rational(std::int64_t value, std::uint64_t scale) {
   if (scale == 0) {
     throw std::invalid_argument("composition time scale must be positive");
   }
-  if (value == 0) return "0";
-  const std::uint64_t magnitude = value < 0
-      ? static_cast<std::uint64_t>(-(value + 1)) + 1U
-      : static_cast<std::uint64_t>(value);
+  if (value == 0)
+    return "0";
+  const std::uint64_t magnitude =
+      value < 0 ? static_cast<std::uint64_t>(-(value + 1)) + 1U
+                : static_cast<std::uint64_t>(value);
   const std::uint64_t divisor = std::gcd(magnitude, scale);
   std::string result = value < 0 ? "-" : "";
   result += std::to_string(magnitude / divisor);
@@ -879,17 +253,20 @@ struct LayerPropertySampleTime {
   std::int64_t value{0};
   std::uint64_t scale{1};
 
-  [[nodiscard]] bool operator==(const LayerPropertySampleTime&) const = default;
+  [[nodiscard]] bool
+  operator==(const LayerPropertySampleTime &) const = default;
 };
 
 struct LayerPropertyScalarValue {
   std::string value;
-  [[nodiscard]] bool operator==(const LayerPropertyScalarValue&) const = default;
+  [[nodiscard]] bool
+  operator==(const LayerPropertyScalarValue &) const = default;
 };
 
 struct LayerPropertyVectorValue {
   std::vector<std::string> components;
-  [[nodiscard]] bool operator==(const LayerPropertyVectorValue&) const = default;
+  [[nodiscard]] bool
+  operator==(const LayerPropertyVectorValue &) const = default;
 };
 
 struct LayerPropertyColorValue {
@@ -897,14 +274,13 @@ struct LayerPropertyColorValue {
   std::string red;
   std::string green;
   std::string blue;
-  [[nodiscard]] bool operator==(const LayerPropertyColorValue&) const = default;
+  [[nodiscard]] bool
+  operator==(const LayerPropertyColorValue &) const = default;
 };
 
-using LayerPropertyValue = std::variant<
-    std::monostate,
-    LayerPropertyScalarValue,
-    LayerPropertyVectorValue,
-    LayerPropertyColorValue>;
+using LayerPropertyValue =
+    std::variant<std::monostate, LayerPropertyScalarValue,
+                 LayerPropertyVectorValue, LayerPropertyColorValue>;
 
 struct LayerPropertyChanged {
   bool changed{true};
@@ -968,7 +344,8 @@ struct LayerPropertyKeyframeEase {
   std::string speed;
   std::string influence;
 
-  [[nodiscard]] bool operator==(const LayerPropertyKeyframeEase&) const = default;
+  [[nodiscard]] bool
+  operator==(const LayerPropertyKeyframeEase &) const = default;
 };
 
 struct LayerPropertyKeyframeDimensionEase {
@@ -976,8 +353,8 @@ struct LayerPropertyKeyframeDimensionEase {
   LayerPropertyKeyframeEase in_ease;
   LayerPropertyKeyframeEase out_ease;
 
-  [[nodiscard]] bool operator==(
-      const LayerPropertyKeyframeDimensionEase&) const = default;
+  [[nodiscard]] bool
+  operator==(const LayerPropertyKeyframeDimensionEase &) const = default;
 };
 
 struct LayerPropertyKeyframeBehavior {
@@ -987,7 +364,8 @@ struct LayerPropertyKeyframeBehavior {
   bool spatial_auto_bezier{false};
   bool roving{false};
 
-  [[nodiscard]] bool operator==(const LayerPropertyKeyframeBehavior&) const = default;
+  [[nodiscard]] bool
+  operator==(const LayerPropertyKeyframeBehavior &) const = default;
 };
 
 struct LayerPropertyKeyframeDetails {
@@ -1001,7 +379,8 @@ struct LayerPropertyKeyframeDetails {
   std::vector<LayerPropertyKeyframeDimensionEase> temporal_ease;
   LayerPropertyKeyframeBehavior behavior;
 
-  [[nodiscard]] bool operator==(const LayerPropertyKeyframeDetails&) const = default;
+  [[nodiscard]] bool
+  operator==(const LayerPropertyKeyframeDetails &) const = default;
 };
 
 struct LayerPropertyKeyframeChanged {
@@ -1046,54 +425,6 @@ struct CompositionTimeQuery {
   ObjectLocator composition_locator;
 };
 
-struct LayerDetailsQuery {
-  std::string host_instance_id;
-  std::string session_id;
-  ObjectLocator layer_locator;
-};
-
-struct LayerNameSetCommand : LayerDetailsQuery {
-  std::string name;
-};
-
-struct LayerRangeSetCommand : LayerDetailsQuery {
-  CompositionCurrentTime in_point;
-  CompositionCurrentTime duration;
-};
-
-struct LayerStartTimeSetCommand : LayerDetailsQuery {
-  CompositionCurrentTime start_time;
-};
-
-struct LayerStretchSetCommand : LayerDetailsQuery {
-  LayerStretchRatio stretch;
-};
-
-struct LayerOrderSetCommand : LayerDetailsQuery {
-  std::uint64_t target_stack_index{0};
-};
-
-struct LayerParentSetCommand : LayerDetailsQuery {
-  std::optional<ObjectLocator> parent_layer_locator;
-};
-
-struct LayerDuplicateCommand : LayerDetailsQuery {
-  std::string new_name;
-};
-
-struct LayerSwitchSetCommand : LayerDetailsQuery {
-  std::string switch_name;
-  bool enabled{false};
-};
-
-struct LayerQualitySetCommand : LayerDetailsQuery {
-  std::string quality;
-};
-
-struct LayerBlendingModeSetCommand : LayerDetailsQuery {
-  std::string mode;
-};
-
 struct CompositionTimeSetCommand {
   std::string host_instance_id;
   std::string session_id;
@@ -1101,167 +432,10 @@ struct CompositionTimeSetCommand {
   CompositionCurrentTime target_time;
 };
 
-struct CompositionCreateCommand {
-  std::string host_instance_id;
-  std::string session_id;
-  std::string name;
-  std::uint32_t width{0};
-  std::uint32_t height{0};
-  CompositionCurrentTime duration;
-  CompositionPositiveRatio frame_rate;
-  CompositionPositiveRatio pixel_aspect_ratio;
-};
-
-struct CompositionLayerCreateCommand {
-  std::string host_instance_id;
-  std::string session_id;
-  ObjectLocator composition_locator;
-  std::string kind;
-  std::string name;
-  std::optional<CompositionLayerCreateColor> color;
-  std::optional<std::uint32_t> width;
-  std::optional<std::uint32_t> height;
-  std::optional<CompositionCurrentTime> duration;
-};
-
-struct LayerEffectApplyCommand {
-  std::string host_instance_id;
-  std::string session_id;
-  ObjectLocator layer_locator;
-  std::string effect_match_name;
-};
-
-struct NativeMediaMaskVertex {
-  std::string position_x;
-  std::string position_y;
-  std::string in_tangent_x;
-  std::string in_tangent_y;
-  std::string out_tangent_x;
-  std::string out_tangent_y;
-
-  [[nodiscard]] bool operator==(const NativeMediaMaskVertex&) const = default;
-};
-
 // Text/Shape/Marker keeps the proven native-media JSON result/evidence bridge,
 // but carries frozen typed arguments to the main-thread host implementation.
 // Shape paths deliberately reuse NativeMediaMaskVertex instead of defining a
 // second Bezier representation.
-struct ShapeGroupReference {
-  ObjectLocator layer_locator;
-  std::uint64_t group_index{0};
-  std::int32_t stream_id{0};
-};
-
-struct ShapeFillStyle {
-  bool enabled{false};
-  CompositionLayerCreateColor color;
-  std::string opacity_percent;
-
-  [[nodiscard]] bool operator==(const ShapeFillStyle&) const = default;
-};
-
-struct ShapeStrokeStyle {
-  bool enabled{false};
-  CompositionLayerCreateColor color;
-  std::string opacity_percent;
-  std::string width_pixels;
-  bool stroke_over_fill{false};
-
-  [[nodiscard]] bool operator==(const ShapeStrokeStyle&) const = default;
-};
-
-struct CuePointParameter {
-  std::string key;
-  std::string value;
-
-  [[nodiscard]] bool operator==(const CuePointParameter&) const = default;
-};
-
-struct MarkerValueInput {
-  CompositionCurrentTime duration;
-  std::string comment;
-  std::string chapter;
-  std::string url;
-  std::string frame_target;
-  std::string cue_point_name;
-  std::vector<CuePointParameter> cue_point_parameters;
-  bool navigation{false};
-  bool protected_region{false};
-  std::uint8_t label_id{0};
-};
-
-struct MarkerPatchInput {
-  std::optional<CompositionCurrentTime> duration;
-  std::optional<std::string> comment;
-  std::optional<std::string> chapter;
-  std::optional<std::string> url;
-  std::optional<std::string> frame_target;
-  std::optional<std::string> cue_point_name;
-  std::optional<std::vector<CuePointParameter>> cue_point_parameters;
-  std::optional<bool> navigation;
-  std::optional<bool> protected_region;
-  std::optional<std::uint8_t> label_id;
-};
-
-struct NativeMediaMaskProperties {
-  std::optional<std::string> mode;
-  std::optional<bool> inverted;
-  std::optional<std::string> motion_blur;
-  std::optional<std::string> feather_falloff;
-  std::optional<CompositionLayerCreateColor> color;
-  std::optional<bool> locked;
-  std::optional<bool> roto_bezier;
-};
-
-struct NativeMediaSequenceOptions {
-  bool enabled{false};
-  bool force_alphabetical{false};
-  std::int32_t start_frame{-1};
-  std::int32_t end_frame{-1};
-};
-
-struct NativeMediaInterpretation {
-  std::optional<std::uint32_t> loop_count;
-  std::optional<std::int32_t> pixel_aspect_numerator;
-  std::optional<std::int32_t> pixel_aspect_denominator;
-  std::optional<std::string> native_fps;
-  std::optional<std::string> conform_fps;
-  std::optional<std::string> alpha_mode;
-  std::optional<CompositionLayerCreateColor> premultiply_color;
-};
-
-struct NativeMediaCommand {
-  std::string host_instance_id;
-  std::string session_id;
-  std::string operation;
-  std::optional<ObjectLocator> layer_locator;
-  std::optional<ObjectLocator> composition_locator;
-  std::optional<ObjectLocator> item_locator;
-  std::optional<ObjectLocator> folder_locator;
-  std::uint64_t offset{0};
-  std::uint16_t limit{0};
-  std::uint64_t effect_index{0};
-  std::int64_t installed_effect_key{0};
-  std::uint64_t mask_index{0};
-  std::int64_t mask_id{0};
-  std::uint64_t target_index{0};
-  std::optional<bool> enabled;
-  NativeMediaMaskProperties mask_properties;
-  std::optional<bool> mask_closed;
-  std::vector<NativeMediaMaskVertex> mask_vertices;
-  std::string source_path;
-  NativeMediaSequenceOptions sequence;
-  bool proxy{false};
-  std::optional<NativeMediaInterpretation> interpretation;
-  std::string name;
-  std::optional<ShapeGroupReference> shape_group_ref;
-  std::optional<ShapeFillStyle> shape_fill;
-  std::optional<ShapeStrokeStyle> shape_stroke;
-  std::string marker_target_kind;
-  CompositionCurrentTime marker_time;
-  std::optional<MarkerValueInput> marker_value;
-  std::optional<MarkerPatchInput> marker_patch;
-};
 
 struct LayerPropertiesQuery {
   std::string host_instance_id;
@@ -1301,7 +475,8 @@ struct LayerPropertyKeyframeMutationCommand {
   ObjectLocator layer_locator;
   ObjectLocator property_locator;
   LayerPropertySampleTime time;
-  LayerPropertyKeyframeMutationKind kind{LayerPropertyKeyframeMutationKind::kAdd};
+  LayerPropertyKeyframeMutationKind kind{
+      LayerPropertyKeyframeMutationKind::kAdd};
   LayerPropertyValue value;
   std::string in_interpolation;
   std::string out_interpolation;
@@ -1310,97 +485,19 @@ struct LayerPropertyKeyframeMutationCommand {
   bool enabled{false};
 };
 
-struct ProjectContextQuery {
-  std::string host_instance_id;
-  std::string session_id;
-  std::uint64_t selection_offset{0};
-  std::uint16_t selection_limit{0};
-};
-
-struct ProjectItemQuery {
-  std::string host_instance_id;
-  std::string session_id;
-  ObjectLocator item_locator;
-};
-
 struct CompositionSettingsQuery {
   std::string host_instance_id;
   std::string session_id;
   ObjectLocator composition_locator;
 };
 
-struct CompositionWorkAreaSetCommand {
-  std::string host_instance_id;
-  std::string session_id;
-  ObjectLocator composition_locator;
-  CompositionCurrentTime start;
-  CompositionCurrentTime duration;
-};
-
 struct CompositionSettingsSetCommand {
   std::string host_instance_id;
   std::string session_id;
   ObjectLocator composition_locator;
-  CompositionSettingKind kind{CompositionSettingKind::kDimensions};
-  std::uint32_t width{0};
-  std::uint32_t height{0};
+  CompositionSettingKind kind{CompositionSettingKind::kDuration};
   CompositionCurrentTime time;
   CompositionPositiveRatio ratio;
-  CompositionColor color;
-};
-
-struct ProjectItemTextSetCommand {
-  std::string host_instance_id;
-  std::string session_id;
-  ObjectLocator item_locator;
-  std::string value;
-};
-
-struct ProjectItemLabelSetCommand {
-  std::string host_instance_id;
-  std::string session_id;
-  ObjectLocator item_locator;
-  std::uint8_t label_id{0};
-};
-
-struct CompositionDuplicateCommand {
-  std::string host_instance_id;
-  std::string session_id;
-  ObjectLocator composition_locator;
-  std::string new_name;
-};
-
-struct HostReadResult {
-  bool ok{false};
-  ProjectSummary value;
-  std::string error_code;
-  std::string message;
-
-  [[nodiscard]] static HostReadResult success(ProjectSummary summary);
-  [[nodiscard]] static HostReadResult failure(std::string code, std::string detail);
-};
-
-struct HostBitDepthReadResult {
-  bool ok{false};
-  ProjectBitDepth value;
-  std::string error_code;
-  std::string message;
-
-  [[nodiscard]] static HostBitDepthReadResult success(ProjectBitDepth result);
-  [[nodiscard]] static HostBitDepthReadResult failure(
-      std::string code, std::string detail);
-};
-
-struct HostBitDepthWriteResult {
-  bool ok{false};
-  ProjectBitDepthChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostBitDepthWriteResult success(ProjectBitDepthChanged result);
-  [[nodiscard]] static HostBitDepthWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
 };
 
 struct HostProjectItemsResult {
@@ -1411,32 +508,8 @@ struct HostProjectItemsResult {
   std::string error_field;
 
   [[nodiscard]] static HostProjectItemsResult success(ProjectItemsPage page);
-  [[nodiscard]] static HostProjectItemsResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostProjectContextResult {
-  bool ok{false};
-  ProjectContext value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostProjectContextResult success(ProjectContext value);
-  [[nodiscard]] static HostProjectContextResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostProjectItemMetadataResult {
-  bool ok{false};
-  ProjectItemMetadata value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostProjectItemMetadataResult success(ProjectItemMetadata value);
-  [[nodiscard]] static HostProjectItemMetadataResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostProjectItemsResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostCompositionSettingsResult {
@@ -1446,22 +519,10 @@ struct HostCompositionSettingsResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostCompositionSettingsResult success(CompositionSettings value);
-  [[nodiscard]] static HostCompositionSettingsResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostCompositionWorkAreaWriteResult {
-  bool ok{false};
-  CompositionWorkAreaChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostCompositionWorkAreaWriteResult success(
-      CompositionWorkAreaChanged value);
-  [[nodiscard]] static HostCompositionWorkAreaWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostCompositionSettingsResult
+  success(CompositionSettings value);
+  [[nodiscard]] static HostCompositionSettingsResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostCompositionSettingsWriteResult {
@@ -1471,49 +532,10 @@ struct HostCompositionSettingsWriteResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostCompositionSettingsWriteResult success(
-      CompositionSettingsChanged value);
-  [[nodiscard]] static HostCompositionSettingsWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostProjectItemTextWriteResult {
-  bool ok{false};
-  ProjectItemTextChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostProjectItemTextWriteResult success(
-      ProjectItemTextChanged value);
-  [[nodiscard]] static HostProjectItemTextWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostProjectItemLabelWriteResult {
-  bool ok{false};
-  ProjectItemLabelChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostProjectItemLabelWriteResult success(
-      ProjectItemLabelChanged value);
-  [[nodiscard]] static HostProjectItemLabelWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostCompositionDuplicateResult {
-  bool ok{false};
-  CompositionDuplicated value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostCompositionDuplicateResult success(
-      CompositionDuplicated value);
-  [[nodiscard]] static HostCompositionDuplicateResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostCompositionSettingsWriteResult
+  success(CompositionSettingsChanged value);
+  [[nodiscard]] static HostCompositionSettingsWriteResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostCompositionLayersResult {
@@ -1523,9 +545,10 @@ struct HostCompositionLayersResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostCompositionLayersResult success(CompositionLayersPage page);
-  [[nodiscard]] static HostCompositionLayersResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostCompositionLayersResult
+  success(CompositionLayersPage page);
+  [[nodiscard]] static HostCompositionLayersResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostCompositionTimeResult {
@@ -1535,9 +558,10 @@ struct HostCompositionTimeResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostCompositionTimeResult success(CompositionTimeRead value);
-  [[nodiscard]] static HostCompositionTimeResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostCompositionTimeResult
+  success(CompositionTimeRead value);
+  [[nodiscard]] static HostCompositionTimeResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostCompositionTimeWriteResult {
@@ -1547,60 +571,10 @@ struct HostCompositionTimeWriteResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostCompositionTimeWriteResult success(
-      CompositionTimeChanged value);
-  [[nodiscard]] static HostCompositionTimeWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostCompositionCreateResult {
-  bool ok{false};
-  CompositionCreated value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostCompositionCreateResult success(CompositionCreated value);
-  [[nodiscard]] static HostCompositionCreateResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostCompositionLayerCreateResult {
-  bool ok{false};
-  CompositionLayerCreated value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostCompositionLayerCreateResult success(
-      CompositionLayerCreated value);
-  [[nodiscard]] static HostCompositionLayerCreateResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerEffectApplyResult {
-  bool ok{false};
-  LayerEffectApplied value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostLayerEffectApplyResult success(
-      LayerEffectApplied value);
-  [[nodiscard]] static HostLayerEffectApplyResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostNativeMediaResult {
-  bool ok{false};
-  std::string canonical_value_json;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostNativeMediaResult success(std::string canonical_value_json);
-  [[nodiscard]] static HostNativeMediaResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostCompositionTimeWriteResult
+  success(CompositionTimeChanged value);
+  [[nodiscard]] static HostCompositionTimeWriteResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostLayerPropertiesResult {
@@ -1610,9 +584,10 @@ struct HostLayerPropertiesResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostLayerPropertiesResult success(LayerPropertiesPage page);
-  [[nodiscard]] static HostLayerPropertiesResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostLayerPropertiesResult
+  success(LayerPropertiesPage page);
+  [[nodiscard]] static HostLayerPropertiesResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostLayerPropertyKeyframesResult {
@@ -1622,10 +597,10 @@ struct HostLayerPropertyKeyframesResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostLayerPropertyKeyframesResult success(
-      LayerPropertyKeyframesPage page);
-  [[nodiscard]] static HostLayerPropertyKeyframesResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostLayerPropertyKeyframesResult
+  success(LayerPropertyKeyframesPage page);
+  [[nodiscard]] static HostLayerPropertyKeyframesResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostLayerPropertyWriteResult {
@@ -1635,10 +610,10 @@ struct HostLayerPropertyWriteResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostLayerPropertyWriteResult success(
-      LayerPropertyChanged value);
-  [[nodiscard]] static HostLayerPropertyWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostLayerPropertyWriteResult
+  success(LayerPropertyChanged value);
+  [[nodiscard]] static HostLayerPropertyWriteResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostLayerPropertyKeyframeDetailsResult {
@@ -1648,10 +623,10 @@ struct HostLayerPropertyKeyframeDetailsResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostLayerPropertyKeyframeDetailsResult success(
-      LayerPropertyKeyframeDetails value);
-  [[nodiscard]] static HostLayerPropertyKeyframeDetailsResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostLayerPropertyKeyframeDetailsResult
+  success(LayerPropertyKeyframeDetails value);
+  [[nodiscard]] static HostLayerPropertyKeyframeDetailsResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostLayerPropertyKeyframeWriteResult {
@@ -1661,145 +636,10 @@ struct HostLayerPropertyKeyframeWriteResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static HostLayerPropertyKeyframeWriteResult success(
-      LayerPropertyKeyframeChanged value);
-  [[nodiscard]] static HostLayerPropertyKeyframeWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerDetailsResult {
-  bool ok{false};
-  LayerDetails value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostLayerDetailsResult success(LayerDetails value);
-  [[nodiscard]] static HostLayerDetailsResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerNameWriteResult {
-  bool ok{false};
-  LayerNameChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerNameWriteResult success(LayerNameChanged value);
-  [[nodiscard]] static HostLayerNameWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerRangeWriteResult {
-  bool ok{false};
-  LayerRangeChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerRangeWriteResult success(LayerRangeChanged value);
-  [[nodiscard]] static HostLayerRangeWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerStartTimeWriteResult {
-  bool ok{false};
-  LayerStartTimeChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerStartTimeWriteResult success(LayerStartTimeChanged value);
-  [[nodiscard]] static HostLayerStartTimeWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerStretchWriteResult {
-  bool ok{false};
-  LayerStretchChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerStretchWriteResult success(LayerStretchChanged value);
-  [[nodiscard]] static HostLayerStretchWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerOrderWriteResult {
-  bool ok{false};
-  LayerOrderChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerOrderWriteResult success(LayerOrderChanged value);
-  [[nodiscard]] static HostLayerOrderWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerParentWriteResult {
-  bool ok{false};
-  LayerParentChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerParentWriteResult success(LayerParentChanged value);
-  [[nodiscard]] static HostLayerParentWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerDuplicateResult {
-  bool ok{false};
-  LayerDuplicated value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerDuplicateResult success(LayerDuplicated value);
-  [[nodiscard]] static HostLayerDuplicateResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerCompositingReadResult {
-  bool ok{false};
-  LayerCompositingState value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerCompositingReadResult success(
-      LayerCompositingState value);
-  [[nodiscard]] static HostLayerCompositingReadResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerSwitchWriteResult {
-  bool ok{false};
-  LayerSwitchChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerSwitchWriteResult success(LayerSwitchChanged value);
-  [[nodiscard]] static HostLayerSwitchWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerQualityWriteResult {
-  bool ok{false};
-  LayerQualityChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerQualityWriteResult success(LayerQualityChanged value);
-  [[nodiscard]] static HostLayerQualityWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerBlendingModeWriteResult {
-  bool ok{false};
-  LayerBlendingModeChanged value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-  [[nodiscard]] static HostLayerBlendingModeWriteResult success(
-      LayerBlendingModeChanged value);
-  [[nodiscard]] static HostLayerBlendingModeWriteResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostLayerPropertyKeyframeWriteResult
+  success(LayerPropertyKeyframeChanged value);
+  [[nodiscard]] static HostLayerPropertyKeyframeWriteResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostActionResult {
@@ -1809,57 +649,8 @@ struct HostActionResult {
   std::string error_field;
 
   [[nodiscard]] static HostActionResult success();
-  [[nodiscard]] static HostActionResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerResolveResult {
-  bool ok{false};
-  HostResolvedLayer value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostLayerResolveResult success(HostResolvedLayer value);
-  [[nodiscard]] static HostLayerResolveResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerSourceResult {
-  bool ok{false};
-  LayerSourceValue value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostLayerSourceResult success(LayerSourceValue value);
-  [[nodiscard]] static HostLayerSourceResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerTrackMatteResult {
-  bool ok{false};
-  LayerTrackMatteValue value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostLayerTrackMatteResult success(
-      LayerTrackMatteValue value);
-  [[nodiscard]] static HostLayerTrackMatteResult failure(
-      std::string code, std::string detail, std::string field = {});
-};
-
-struct HostLayerAVStateResult {
-  bool ok{false};
-  LayerAVStateValue value;
-  std::string error_code;
-  std::string message;
-  std::string error_field;
-
-  [[nodiscard]] static HostLayerAVStateResult success(LayerAVStateValue value);
-  [[nodiscard]] static HostLayerAVStateResult failure(
-      std::string code, std::string detail, std::string field = {});
+  [[nodiscard]] static HostActionResult
+  failure(std::string code, std::string detail, std::string field = {});
 };
 
 struct HostProjectGraphInvalidationResult {
@@ -1868,10 +659,10 @@ struct HostProjectGraphInvalidationResult {
   std::string error_code;
   std::string message;
 
-  [[nodiscard]] static HostProjectGraphInvalidationResult success(
-      ProjectGraphInvalidation result);
-  [[nodiscard]] static HostProjectGraphInvalidationResult failure(
-      std::string code, std::string detail);
+  [[nodiscard]] static HostProjectGraphInvalidationResult
+  success(ProjectGraphInvalidation result);
+  [[nodiscard]] static HostProjectGraphInvalidationResult
+  failure(std::string code, std::string detail);
 };
 
 enum class NativeProgramDisposition {
@@ -1899,311 +690,79 @@ struct NativeProgramHostResult {
   std::string message;
   std::string error_field;
 
-  [[nodiscard]] static NativeProgramHostResult success(
-      std::vector<NativeProgramOperationOutcome> operations,
-      JsonObject outputs);
-  [[nodiscard]] static NativeProgramHostResult failure(
-      std::string code,
-      std::string detail,
-      std::string field,
-      std::vector<std::size_t> completed_indices,
-      std::optional<std::size_t> failed_index,
-      bool write_started,
-      NativeProgramDisposition disposition,
-      std::vector<NativeProgramOperationOutcome> operations = {},
-      JsonObject outputs = {});
+  [[nodiscard]] static NativeProgramHostResult
+  success(std::vector<NativeProgramOperationOutcome> operations,
+          JsonObject outputs);
+  [[nodiscard]] static NativeProgramHostResult
+  failure(std::string code, std::string detail, std::string field,
+          std::vector<std::size_t> completed_indices,
+          std::optional<std::size_t> failed_index, bool write_started,
+          NativeProgramDisposition disposition,
+          std::vector<NativeProgramOperationOutcome> operations = {},
+          JsonObject outputs = {});
 };
 
 class HostApi {
- public:
+public:
   virtual ~HostApi() = default;
-  [[nodiscard]] virtual NativeProgramHostResult execute_native_program(
-      const NativeProgram& program,
-      std::string_view host_instance_id,
-      std::string_view session_id,
-      TimePoint work_deadline);
-  [[nodiscard]] virtual HostReadResult read_project_summary(TimePoint work_deadline) = 0;
-  [[nodiscard]] virtual HostBitDepthReadResult read_project_bit_depth(
-      TimePoint work_deadline);
-  [[nodiscard]] virtual HostBitDepthWriteResult set_project_bit_depth(
-      std::int32_t target_depth, TimePoint work_deadline);
-  [[nodiscard]] virtual HostProjectItemsResult list_project_items(
-      const ProjectItemsQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostProjectContextResult read_project_context(
-      const ProjectContextQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostProjectItemMetadataResult read_project_item_metadata(
-      const ProjectItemQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionSettingsResult read_composition_settings(
-      const CompositionSettingsQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionWorkAreaWriteResult set_composition_work_area(
-      const CompositionWorkAreaSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionSettingsWriteResult set_composition_setting(
-      const CompositionSettingsSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostProjectItemTextWriteResult set_project_item_name(
-      const ProjectItemTextSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostProjectItemTextWriteResult set_project_item_comment(
-      const ProjectItemTextSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostProjectItemLabelWriteResult set_project_item_label(
-      const ProjectItemLabelSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionDuplicateResult duplicate_composition(
-      const CompositionDuplicateCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionLayersResult list_composition_layers(
-      const CompositionLayersQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionLayersResult list_selected_composition_layers(
-      const CompositionLayersQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionTimeResult read_composition_time(
-      const CompositionTimeQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionTimeWriteResult set_composition_time(
-      const CompositionTimeSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionCreateResult create_composition(
-      const CompositionCreateCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostCompositionLayerCreateResult create_composition_layer(
-      const CompositionLayerCreateCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerEffectApplyResult apply_layer_effect(
-      const LayerEffectApplyCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostNativeMediaResult execute_native_media(
-      const NativeMediaCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerPropertiesResult list_layer_properties(
-      const LayerPropertiesQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerPropertyKeyframesResult list_layer_property_keyframes(
-      const LayerPropertyKeyframesQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerPropertyWriteResult set_layer_property(
-      const LayerPropertySetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual NativeProgramHostResult
+  execute_native_program(const NativeProgram &program,
+                         std::string_view host_instance_id,
+                         std::string_view session_id, TimePoint work_deadline);
+  [[nodiscard]] virtual HostProjectItemsResult
+  list_project_items(const ProjectItemsQuery &query, TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionSettingsResult
+  read_composition_settings(const CompositionSettingsQuery &query,
+                            TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionSettingsWriteResult
+  set_composition_setting(const CompositionSettingsSetCommand &command,
+                          TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionLayersResult
+  list_composition_layers(const CompositionLayersQuery &query,
+                          TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionLayersResult
+  list_selected_composition_layers(const CompositionLayersQuery &query,
+                                   TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionTimeResult
+  read_composition_time(const CompositionTimeQuery &query,
+                        TimePoint work_deadline);
+  [[nodiscard]] virtual HostCompositionTimeWriteResult
+  set_composition_time(const CompositionTimeSetCommand &command,
+                       TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerPropertiesResult
+  list_layer_properties(const LayerPropertiesQuery &query,
+                        TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerPropertyKeyframesResult
+  list_layer_property_keyframes(const LayerPropertyKeyframesQuery &query,
+                                TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerPropertyWriteResult
+  set_layer_property(const LayerPropertySetCommand &command,
+                     TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertyKeyframeDetailsResult
-      read_layer_property_keyframe_details(
-          const LayerPropertyKeyframeDetailsQuery& query,
-          TimePoint work_deadline);
+  read_layer_property_keyframe_details(
+      const LayerPropertyKeyframeDetailsQuery &query, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerPropertyKeyframeWriteResult
-      mutate_layer_property_keyframe(
-          const LayerPropertyKeyframeMutationCommand& command,
-          TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerDetailsResult read_layer_details(
-      const LayerDetailsQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerNameWriteResult set_layer_name(
-      const LayerNameSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerRangeWriteResult set_layer_range(
-      const LayerRangeSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerStartTimeWriteResult set_layer_start_time(
-      const LayerStartTimeSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerStretchWriteResult set_layer_stretch(
-      const LayerStretchSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerOrderWriteResult set_layer_order(
-      const LayerOrderSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerParentWriteResult set_layer_parent(
-      const LayerParentSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerDuplicateResult duplicate_layer(
-      const LayerDuplicateCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerCompositingReadResult read_layer_compositing(
-      const LayerDetailsQuery& query, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerSwitchWriteResult set_layer_switch(
-      const LayerSwitchSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerQualityWriteResult set_layer_quality(
-      const LayerQualitySetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerBlendingModeWriteResult set_layer_blending_mode(
-      const LayerBlendingModeSetCommand& command, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerResolveResult resolve_layer(
-      const ObjectLocator& locator, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerSourceResult read_layer_source(
-      const HostResolvedLayer& layer, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerTrackMatteResult read_layer_track_matte(
-      const HostResolvedLayer& layer, TimePoint work_deadline);
-  [[nodiscard]] virtual HostLayerAVStateResult read_layer_av_state(
-      const HostResolvedLayer& layer, TimePoint work_deadline);
-  [[nodiscard]] virtual HostActionResult begin_undo_group(
-      std::string_view label, TimePoint work_deadline);
-  [[nodiscard]] virtual HostActionResult end_undo_group(
+  mutate_layer_property_keyframe(
+      const LayerPropertyKeyframeMutationCommand &command,
       TimePoint work_deadline);
-  [[nodiscard]] virtual HostActionResult set_layer_track_matte(
-      const HostResolvedLayer& layer,
-      const HostResolvedLayer& matte,
-      LayerTrackMatteMode mode,
-      TimePoint work_deadline);
-  [[nodiscard]] virtual HostActionResult clear_layer_track_matte(
-      const HostResolvedLayer& layer, TimePoint work_deadline);
-  [[nodiscard]] virtual HostActionResult set_layer_audio_enabled(
-      const HostResolvedLayer& layer, bool enabled, TimePoint work_deadline);
-  [[nodiscard]] virtual HostActionResult set_layer_video_enabled(
-      const HostResolvedLayer& layer, bool enabled, TimePoint work_deadline);
-  [[nodiscard]] virtual HostProjectGraphInvalidationResult invalidate_project_graph(
-      TimePoint work_deadline);
+  [[nodiscard]] virtual HostActionResult
+  begin_undo_group(std::string_view label, TimePoint work_deadline);
+  [[nodiscard]] virtual HostActionResult
+  end_undo_group(TimePoint work_deadline);
+  [[nodiscard]] virtual HostProjectGraphInvalidationResult
+  invalidate_project_graph(TimePoint work_deadline);
 };
 
 struct Request {
-  Request() = default;
-  Request(
-      std::string request_id_value,
-      std::string capability_id_value,
-      TimePoint deadline_value,
-      std::string route_id_value = {},
-      std::uint64_t session_generation_value = 0,
-      std::int32_t target_depth_value = 0,
-      std::string idempotency_key_value = {},
-      std::string arguments_fingerprint_value = {},
-      std::string host_instance_id_value = {},
-      std::string session_id_value = {},
-      std::uint64_t offset_value = 0,
-      std::uint16_t limit_value = 0,
-      std::optional<ObjectLocator> project_locator_value = std::nullopt,
-      std::optional<ObjectLocator> composition_locator_value = std::nullopt,
-      std::optional<ObjectLocator> layer_locator_value = std::nullopt,
-      std::optional<ObjectLocator> parent_property_locator_value = std::nullopt,
-      std::optional<ObjectLocator> property_locator_value = std::nullopt,
-      LayerPropertyValue property_value_value = {},
-      CompositionCurrentTime target_time_value = {},
-      std::string layer_create_kind_value = {},
-      std::string layer_create_name_value = {},
-      std::optional<CompositionLayerCreateColor> layer_create_color_value = std::nullopt,
-      std::optional<std::uint32_t> layer_create_width_value = std::nullopt,
-      std::optional<std::uint32_t> layer_create_height_value = std::nullopt,
-      std::optional<CompositionCurrentTime> layer_create_duration_value = std::nullopt,
-      std::string composition_create_name_value = {},
-      std::uint32_t composition_create_width_value = 0,
-      std::uint32_t composition_create_height_value = 0,
-      CompositionCurrentTime composition_create_duration_value = {},
-      CompositionPositiveRatio composition_create_frame_rate_value = {},
-      CompositionPositiveRatio composition_create_pixel_aspect_ratio_value = {},
-      std::string layer_effect_match_name_value = {},
-      std::optional<ObjectLocator> item_locator_value = std::nullopt,
-      CompositionCurrentTime work_area_start_value = {},
-      CompositionCurrentTime work_area_duration_value = {},
-      std::string item_text_value = {},
-      std::uint8_t item_label_id_value = 0,
-      std::string duplicate_new_name_value = {},
-      std::optional<ObjectLocator> layer_parent_locator_value = std::nullopt,
-      CompositionCurrentTime layer_in_point_value = {},
-      CompositionCurrentTime layer_duration_value = {},
-      CompositionCurrentTime layer_start_time_value = {},
-      LayerStretchRatio layer_stretch_value = {},
-      std::uint64_t target_stack_index_value = 0,
-      std::string layer_new_name_value = {},
-      LayerPropertySampleTime keyframe_time_value = {},
-      std::string keyframe_in_interpolation_value = {},
-      std::string keyframe_out_interpolation_value = {},
-      std::vector<LayerPropertyKeyframeDimensionEase>
-          keyframe_temporal_ease_value = {},
-      std::string keyframe_behavior_value = {},
-      std::optional<bool> keyframe_behavior_enabled_value = std::nullopt,
-      std::string layer_switch_name_value = {},
-      std::optional<bool> layer_switch_enabled_value = std::nullopt,
-      std::string layer_quality_value = {},
-      std::string layer_blending_mode_value = {})
-      : request_id(std::move(request_id_value)),
-        capability_id(std::move(capability_id_value)),
-        deadline(deadline_value),
-        route_id(std::move(route_id_value)),
-        session_generation(session_generation_value),
-        target_depth(target_depth_value),
-        idempotency_key(std::move(idempotency_key_value)),
-        arguments_fingerprint_sha256(std::move(arguments_fingerprint_value)),
-        host_instance_id(std::move(host_instance_id_value)),
-        session_id(std::move(session_id_value)),
-        offset(offset_value),
-        limit(limit_value),
-        project_locator(std::move(project_locator_value)),
-        composition_locator(std::move(composition_locator_value)),
-        layer_locator(std::move(layer_locator_value)),
-        parent_property_locator(std::move(parent_property_locator_value)),
-        property_locator(std::move(property_locator_value)),
-        property_value(std::move(property_value_value)),
-        target_time(std::move(target_time_value)),
-        layer_create_kind(std::move(layer_create_kind_value)),
-        layer_create_name(std::move(layer_create_name_value)),
-        layer_create_color(std::move(layer_create_color_value)),
-        layer_create_width(layer_create_width_value),
-        layer_create_height(layer_create_height_value),
-        layer_create_duration(std::move(layer_create_duration_value)),
-        composition_create_name(std::move(composition_create_name_value)),
-        composition_create_width(composition_create_width_value),
-        composition_create_height(composition_create_height_value),
-        composition_create_duration(std::move(composition_create_duration_value)),
-        composition_create_frame_rate(std::move(composition_create_frame_rate_value)),
-        composition_create_pixel_aspect_ratio(
-            std::move(composition_create_pixel_aspect_ratio_value)),
-        layer_effect_match_name(std::move(layer_effect_match_name_value)),
-        item_locator(std::move(item_locator_value)),
-        work_area_start(std::move(work_area_start_value)),
-        work_area_duration(std::move(work_area_duration_value)),
-        item_text(std::move(item_text_value)),
-        item_label_id(item_label_id_value),
-        duplicate_new_name(std::move(duplicate_new_name_value)),
-        layer_parent_locator(std::move(layer_parent_locator_value)),
-        layer_in_point(std::move(layer_in_point_value)),
-        layer_duration(std::move(layer_duration_value)),
-        layer_start_time(std::move(layer_start_time_value)),
-        layer_stretch(std::move(layer_stretch_value)),
-        target_stack_index(target_stack_index_value),
-        layer_new_name(std::move(layer_new_name_value)),
-        keyframe_time(std::move(keyframe_time_value)),
-        keyframe_in_interpolation(std::move(keyframe_in_interpolation_value)),
-        keyframe_out_interpolation(std::move(keyframe_out_interpolation_value)),
-        keyframe_temporal_ease(std::move(keyframe_temporal_ease_value)),
-        keyframe_behavior(std::move(keyframe_behavior_value)),
-        keyframe_behavior_enabled(keyframe_behavior_enabled_value),
-        layer_switch_name(std::move(layer_switch_name_value)),
-        layer_switch_enabled(layer_switch_enabled_value),
-        layer_quality(std::move(layer_quality_value)),
-        layer_blending_mode(std::move(layer_blending_mode_value)) {}
-
   std::string request_id;
-  std::string capability_id;
+  std::string capability_id{std::string(kNativeProgramCapability)};
   TimePoint deadline;
-  // Opaque transport ownership. Authenticated IPC callers must supply a
-  // non-empty route and monotonically increase the generation whenever that
-  // route is re-bound.
-  std::string route_id{};
+  std::string route_id;
   std::uint64_t session_generation{0};
-  std::int32_t target_depth{0};
   std::string idempotency_key;
   std::string arguments_fingerprint_sha256;
   std::string host_instance_id;
   std::string session_id;
-  std::uint64_t offset{0};
-  std::uint16_t limit{0};
-  std::optional<ObjectLocator> project_locator;
-  std::optional<ObjectLocator> composition_locator;
-  std::optional<ObjectLocator> layer_locator;
-  std::optional<ObjectLocator> parent_property_locator;
-  std::optional<ObjectLocator> property_locator;
-  LayerPropertyValue property_value;
-  CompositionCurrentTime target_time;
-  std::string layer_create_kind;
-  std::string layer_create_name;
-  std::optional<CompositionLayerCreateColor> layer_create_color;
-  std::optional<std::uint32_t> layer_create_width;
-  std::optional<std::uint32_t> layer_create_height;
-  std::optional<CompositionCurrentTime> layer_create_duration;
-  std::string composition_create_name;
-  std::uint32_t composition_create_width{0};
-  std::uint32_t composition_create_height{0};
-  CompositionCurrentTime composition_create_duration;
-  CompositionPositiveRatio composition_create_frame_rate;
-  CompositionPositiveRatio composition_create_pixel_aspect_ratio;
-  std::string layer_effect_match_name;
-  std::optional<ObjectLocator> item_locator;
-  CompositionCurrentTime work_area_start;
-  CompositionCurrentTime work_area_duration;
-  std::string item_text;
-  std::uint8_t item_label_id{0};
-  std::string duplicate_new_name;
-  std::optional<ObjectLocator> layer_parent_locator;
-  CompositionCurrentTime layer_in_point;
-  CompositionCurrentTime layer_duration;
-  CompositionCurrentTime layer_start_time;
-  LayerStretchRatio layer_stretch;
-  std::uint64_t target_stack_index{0};
-  std::string layer_new_name;
-  LayerPropertySampleTime keyframe_time;
-  std::string keyframe_in_interpolation;
-  std::string keyframe_out_interpolation;
-  std::vector<LayerPropertyKeyframeDimensionEase> keyframe_temporal_ease;
-  std::string keyframe_behavior;
-  std::optional<bool> keyframe_behavior_enabled;
-  std::string layer_switch_name;
-  std::optional<bool> layer_switch_enabled;
-  std::string layer_quality;
-  std::string layer_blending_mode;
-  NativeMediaCommand native_media;
-  LayerSourceMatteAvRequest layer_source_matte_av_request;
   std::optional<NativeProgram> native_program;
 };
 
@@ -2220,13 +779,10 @@ enum class EnqueueCode {
 
 struct EnqueueResult {
   EnqueueResult() = default;
-  EnqueueResult(
-      EnqueueCode code_value,
-      std::string error_code_value = {},
-      std::string message_value = {},
-      std::string error_field_value = {})
-      : code(code_value),
-        error_code(std::move(error_code_value)),
+  EnqueueResult(EnqueueCode code_value, std::string error_code_value = {},
+                std::string message_value = {},
+                std::string error_field_value = {})
+      : code(code_value), error_code(std::move(error_code_value)),
         message(std::move(message_value)),
         error_field(std::move(error_field_value)) {}
 
@@ -2242,46 +798,14 @@ struct Completion {
   std::string route_id;
   std::uint64_t session_generation{0};
   bool ok{false};
-  ProjectSummary result;
-  ProjectBitDepth bit_depth_result;
-  ProjectBitDepthChanged bit_depth_change_result;
-  ProjectItemsPage project_items_result;
-  CompositionLayersPage composition_layers_result;
-  CompositionLayersPage composition_selected_layers_result;
-  CompositionTimeRead composition_time_result;
-  CompositionTimeChanged composition_time_change_result;
-  CompositionCreated composition_create_result;
-  CompositionLayerCreated composition_layer_create_result;
-  LayerEffectApplied layer_effect_apply_result;
-  std::string native_media_result_json;
-  LayerPropertiesPage layer_properties_result;
-  LayerPropertyKeyframesPage layer_property_keyframes_result;
-  LayerPropertyChanged layer_property_change_result;
-  LayerPropertyKeyframeDetails layer_property_keyframe_details_result;
-  LayerPropertyKeyframeChanged layer_property_keyframe_change_result;
-  ProjectContext project_context_result;
-  ProjectItemMetadata project_item_metadata_result;
-  CompositionSettings composition_settings_result;
-  CompositionWorkAreaChanged composition_work_area_change_result;
-  CompositionSettingsChanged composition_settings_change_result;
-  ProjectItemTextChanged project_item_text_change_result;
-  ProjectItemLabelChanged project_item_label_change_result;
-  CompositionDuplicated composition_duplicate_result;
-  std::shared_ptr<LayerTimelineResult> layer_timeline_result;
-  std::shared_ptr<LayerCompositingResult> layer_compositing_result;
-  LayerSourceMatteAvResult layer_source_matte_av_result;
   NativeProgramHostResult native_program_result;
   ProjectGraphInvalidation project_graph_invalidation_result;
-  // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;
   std::string error_code;
   std::string message;
   std::string error_field;
   bool late_result_discarded{false};
   bool replayed{false};
-  // This is a snapshot for audit/filtering, not a send authorization. A
-  // transport must exact-match route+generation under the same connection lock
-  // used by close/revoke immediately before writing to a socket.
   bool route_revoked{false};
 };
 
@@ -2329,38 +853,38 @@ struct DispatcherConfig {
 };
 
 class HostDispatcher final {
- public:
-  HostDispatcher(std::thread::id owner_thread, Clock& clock, DispatcherConfig config = {});
-  HostDispatcher(const HostDispatcher&) = delete;
-  HostDispatcher& operator=(const HostDispatcher&) = delete;
+public:
+  HostDispatcher(std::thread::id owner_thread, Clock &clock,
+                 DispatcherConfig config = {});
+  HostDispatcher(const HostDispatcher &) = delete;
+  HostDispatcher &operator=(const HostDispatcher &) = delete;
 
   [[nodiscard]] EnqueueResult enqueue(Request request);
-  [[nodiscard]] CancelResult cancel(
-      std::string_view route_id,
-      std::uint64_t session_generation,
-      std::string_view target_request_id);
-  [[nodiscard]] RouteRevocationResult revoke_route(
-      std::string_view route_id, std::uint64_t session_generation);
-  [[nodiscard]] DrainBatch drain(HostApi& host);
+  [[nodiscard]] CancelResult cancel(std::string_view route_id,
+                                    std::uint64_t session_generation,
+                                    std::string_view target_request_id);
+  [[nodiscard]] RouteRevocationResult
+  revoke_route(std::string_view route_id, std::uint64_t session_generation);
+  [[nodiscard]] DrainBatch drain(HostApi &host);
   // Worker-side transfer only. Host suite calls and socket I/O intentionally
   // live on opposite sides of this bounded queue. Returned generations remain
   // immutable, but the transport owns the final synchronized send decision.
-  [[nodiscard]] std::vector<Completion> take_outbound(std::size_t max_items = 64);
+  [[nodiscard]] std::vector<Completion>
+  take_outbound(std::size_t max_items = 64);
   // Lifecycle shutdown is owner-thread-only, keeping destruction serialized
   // with drain/HostApi execution. Wrong-thread calls throw std::logic_error.
   [[nodiscard]] std::vector<Completion> shutdown();
   [[nodiscard]] std::size_t queued() const;
   [[nodiscard]] std::size_t outbound() const;
   [[nodiscard]] std::size_t terminal_count();
-  [[nodiscard]] bool has_terminal(
-      std::string_view route_id,
-      std::uint64_t session_generation,
-      std::string_view request_id);
+  [[nodiscard]] bool has_terminal(std::string_view route_id,
+                                  std::uint64_t session_generation,
+                                  std::string_view request_id);
   void mark_idempotency_ambiguous(std::string_view idempotency_key);
   void invalidate_composition_creation_replays();
   [[nodiscard]] bool running() const;
 
- private:
+private:
   enum class State { kRunning, kStopping, kStopped };
 
   struct RequestKey {
@@ -2368,11 +892,11 @@ class HostDispatcher final {
     std::uint64_t session_generation{0};
     std::string request_id;
 
-    [[nodiscard]] bool operator==(const RequestKey&) const = default;
+    [[nodiscard]] bool operator==(const RequestKey &) const = default;
   };
 
   struct RequestKeyHash {
-    [[nodiscard]] std::size_t operator()(const RequestKey& key) const noexcept;
+    [[nodiscard]] std::size_t operator()(const RequestKey &key) const noexcept;
   };
 
   struct TerminalTombstone {
@@ -2388,24 +912,27 @@ class HostDispatcher final {
     std::optional<Completion> replay_completion;
   };
 
-  [[nodiscard]] Completion expired(const Request& request, bool late) const;
-  [[nodiscard]] static RequestKey key_for(const Request& request);
-  [[nodiscard]] bool route_revoked_locked(
-      std::string_view route_id, std::uint64_t session_generation) const;
-  [[nodiscard]] bool route_stale_locked(
-      std::string_view route_id, std::uint64_t session_generation) const;
-  [[nodiscard]] bool pending_outbound_locked(const RequestKey& key) const;
-  [[nodiscard]] bool terminal_locked(const RequestKey& key) const;
+  [[nodiscard]] Completion expired(const Request &request, bool late) const;
+  [[nodiscard]] static RequestKey key_for(const Request &request);
+  [[nodiscard]] bool
+  route_revoked_locked(std::string_view route_id,
+                       std::uint64_t session_generation) const;
+  [[nodiscard]] bool route_stale_locked(std::string_view route_id,
+                                        std::uint64_t session_generation) const;
+  [[nodiscard]] bool pending_outbound_locked(const RequestKey &key) const;
+  [[nodiscard]] bool terminal_locked(const RequestKey &key) const;
   void purge_terminal_locked(TimePoint now);
   void remember_terminal_locked(RequestKey key, TimePoint now);
   void invalidate_composition_creation_replays_locked();
-  [[nodiscard]] bool fence_route_locked(
-      std::string route_id, std::uint64_t session_generation);
-  void finish_request_locked(const RequestKey& key, Completion& completion, TimePoint now);
-  void finish_idempotency_locked(const Request& request, const Completion& completion);
+  [[nodiscard]] bool fence_route_locked(std::string route_id,
+                                        std::uint64_t session_generation);
+  void finish_request_locked(const RequestKey &key, Completion &completion,
+                             TimePoint now);
+  void finish_idempotency_locked(const Request &request,
+                                 const Completion &completion);
 
   const std::thread::id owner_thread_;
-  Clock& clock_;
+  Clock &clock_;
   const DispatcherConfig config_;
   mutable std::mutex mutex_;
   State state_{State::kRunning};
@@ -2419,4 +946,4 @@ class HostDispatcher final {
   bool route_fences_saturated_{false};
 };
 
-}  // namespace aemcp::native
+} // namespace aemcp::native

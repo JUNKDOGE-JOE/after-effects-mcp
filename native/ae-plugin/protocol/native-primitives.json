@@ -198,7 +198,7 @@
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
       "resultSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/compositionSelectedLayersListInvokeResult"
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionLayersListValue"
       },
       "executor": "execute_composition_selectedLayers_list",
       "summary": "Read composition.selectedLayers.list.",
@@ -228,7 +228,7 @@
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["targetTime"],"properties":{"targetTime":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
       "resultSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeSetInvokeResult"
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeSetValue"
       },
       "executor": "execute_composition_time_set",
       "summary": "Write composition.time.set.",
@@ -258,13 +258,7 @@
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["duration"],"properties":{"duration":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":1,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["value", "evidence"],
-        "properties": {
-          "value": {"$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDurationSetValue"},
-          "evidence": {"$ref": "aegp-rpc.schema.json#/$defs/executionEvidence"}
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsChangedValue"
       },
       "executor": "execute_composition_duration_set",
       "summary": "Write composition.duration.set.",
@@ -279,13 +273,7 @@
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["frameRate"],"properties":{"frameRate":{"type":"object","additionalProperties":false,"required":["numerator","denominator"],"properties":{"numerator":{"type":"integer","minimum":1,"maximum":2147483647},"denominator":{"type":"integer","minimum":1,"maximum":2147483647}}}}},
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["value", "evidence"],
-        "properties": {
-          "value": {"$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionFrameRateSetValue"},
-          "evidence": {"$ref": "aegp-rpc.schema.json#/$defs/executionEvidence"}
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsChangedValue"
       },
       "executor": "execute_composition_frameRate_set",
       "summary": "Write composition.frameRate.set.",
@@ -300,13 +288,7 @@
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["pixelAspectRatio"],"properties":{"pixelAspectRatio":{"type":"object","additionalProperties":false,"required":["numerator","denominator"],"properties":{"numerator":{"type":"integer","minimum":1,"maximum":2147483647},"denominator":{"type":"integer","minimum":1,"maximum":2147483647}}}}},
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["value", "evidence"],
-        "properties": {
-          "value": {"$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionPixelAspectRatioSetValue"},
-          "evidence": {"$ref": "aegp-rpc.schema.json#/$defs/executionEvidence"}
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsChangedValue"
       },
       "executor": "execute_composition_pixelAspectRatio_set",
       "summary": "Write composition.pixelAspectRatio.set.",
@@ -321,13 +303,7 @@
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["displayStartTime"],"properties":{"displayStartTime":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": ["value", "evidence"],
-        "properties": {
-          "value": {"$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetValue"},
-          "evidence": {"$ref": "aegp-rpc.schema.json#/$defs/executionEvidence"}
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsChangedValue"
       },
       "executor": "execute_composition_displayStartTime_set",
       "summary": "Write composition.displayStartTime.set.",
@@ -372,7 +348,7 @@
       "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}}},
       "resultSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertySetInvokeResult"
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertySetValue"
       },
       "executor": "execute_property_value_set",
       "summary": "Write property.value.set.",
@@ -402,7 +378,7 @@
       "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["time","value"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}}},
       "resultSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeAddInvokeResult"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
       },
       "executor": "execute_property_keyframe_add",
       "summary": "Write property.keyframe.add.",
@@ -417,7 +393,7 @@
       "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["time","value"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}}},
       "resultSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeValueSetInvokeResult"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
       },
       "executor": "execute_property_keyframe_value_set",
       "summary": "Write property.keyframe.value.set.",
@@ -432,7 +408,7 @@
       "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["time","inInterpolation","outInterpolation"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"inInterpolation":{"enum":["linear","bezier","hold"]},"outInterpolation":{"enum":["linear","bezier","hold"]}}},
       "resultSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeInterpolationSetInvokeResult"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
       },
       "executor": "execute_property_keyframe_interpolation_set",
       "summary": "Write property.keyframe.interpolation.set.",
@@ -447,7 +423,7 @@
       "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["time","dimensions"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"dimensions":{"type":"array","minItems":1,"maxItems":4,"items":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeEaseDimension"}}}},
       "resultSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeTemporalEaseSetInvokeResult"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
       },
       "executor": "execute_property_keyframe_temporalEase_set",
       "summary": "Write property.keyframe.temporalEase.set.",
@@ -462,7 +438,7 @@
       "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["time","behavior","enabled"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"behavior":{"enum":["temporal-continuous","temporal-auto-bezier","spatial-continuous","spatial-auto-bezier","roving"]},"enabled":{"type":"boolean"}}},
       "resultSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeBehaviorSetInvokeResult"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
       },
       "executor": "execute_property_keyframe_behavior_set",
       "summary": "Write property.keyframe.behavior.set.",
@@ -477,7 +453,7 @@
       "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["time"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}}},
       "resultSchema": {
-        "$ref": "aegp-rpc.schema.json#/$defs/keyframeDeleteInvokeResult"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
       },
       "executor": "execute_property_keyframe_delete",
       "summary": "Write property.keyframe.delete.",

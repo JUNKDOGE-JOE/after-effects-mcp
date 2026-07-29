@@ -56,7 +56,7 @@ test('native program is the sole invoke wire shape', () => {
     ],
   }), schema), true);
   const legacy = nativeRequest({});
-  legacy.params.capabilityId = 'ae.layer.track-matte.set';
+  legacy.params.capabilityId = 'ae.retired.direct';
   assert.equal(schemaAccepts(schema.$defs.request, legacy, schema), false);
   const unknown = nativeRequest({ operations: [{ op: 'unknown.op', args: {} }] });
   assert.equal(schemaAccepts(schema.$defs.request, unknown, schema), false);
@@ -71,6 +71,164 @@ test('generated primitive projection is the reference-typing source', () => {
   assert.deepEqual(layerProperties.referenceArguments.parentProperty,
     { kind: 'PropertyHandle', required: false });
   assert.equal(NATIVE_EXEC_INPUT_SCHEMA.properties.operations.maxItems, 64);
+});
+
+test('all 23 primitive result contracts accept representative executor output', () => {
+  const projectLocator = { ...locator, kind: 'project' };
+  const layerLocator = { ...locator, kind: 'layer' };
+  const propertyLocator = { ...locator, kind: 'stream' };
+  const exactTime = { value: 0, scale: 24, secondsRational: '0' };
+  const laterTime = { value: 1, scale: 24, secondsRational: '1/24' };
+  const scalar = { kind: 'scalar', value: '1' };
+  const compositionSettings = {
+    compositionLocator: locator,
+    name: 'Task 9 fixture',
+    width: 1920,
+    height: 1080,
+    duration: { value: 240, scale: 24, secondsRational: '10' },
+    frameDuration: { value: 1, scale: 24, secondsRational: '1/24' },
+    frameRate: { numerator: 24, denominator: 1, rational: '24' },
+    pixelAspectRatio: { numerator: 1, denominator: 1, rational: '1' },
+    backgroundColor: { red: 0, green: 0, blue: 0, alpha: 255 },
+    workArea: {
+      start: exactTime,
+      duration: { value: 240, scale: 24, secondsRational: '10' },
+    },
+    displayStartTime: exactTime,
+    layerCount: 0,
+  };
+  const keyframeDetails = {
+    propertyLocator,
+    time: exactTime,
+    temporalDimensionality: 1,
+    valueType: 'one-d',
+    value: scalar,
+    inInterpolation: 'linear',
+    outInterpolation: 'linear',
+    temporalEaseDimensions: [{
+      dimension: 0,
+      inEase: { speed: '0', influence: '33.333' },
+      outEase: { speed: '0', influence: '33.333' },
+    }],
+    behaviors: {
+      temporalContinuous: false,
+      temporalAutoBezier: false,
+      spatialContinuous: false,
+      spatialAutoBezier: false,
+      roving: false,
+    },
+  };
+  const samples = {
+    'composition.resolve': {
+      handle: { kind: 'composition', value: 1 }, exportable: false,
+    },
+    'layer.resolve': {
+      handle: { kind: 'layer', value: 2 }, exportable: false,
+    },
+    'property.resolve': {
+      handle: { kind: 'property', value: 3 }, exportable: false,
+    },
+    'project.items.list': {
+      projectLocator, total: 0, offset: 0, limit: 50, returned: 0,
+      hasMore: false, nextOffset: null, items: [],
+    },
+    'composition.layers.list': {
+      compositionLocator: locator, compositionName: 'Task 9 fixture',
+      total: 0, offset: 0, limit: 25, returned: 0, hasMore: false,
+      nextOffset: null, layers: [],
+    },
+    'composition.selectedLayers.list': {
+      compositionLocator: locator, compositionName: 'Task 9 fixture',
+      total: 0, offset: 0, limit: 25, returned: 0, hasMore: false,
+      nextOffset: null, layers: [],
+    },
+    'composition.time.read': {
+      compositionLocator: locator, currentTime: exactTime,
+    },
+    'composition.time.set': {
+      changed: true, compositionLocator: locator,
+      beforeTime: exactTime, afterTime: laterTime,
+    },
+    'composition.settings.read': compositionSettings,
+    'composition.duration.set': {
+      changed: true, compositionLocator: locator,
+      before: compositionSettings, after: compositionSettings,
+    },
+    'composition.frameRate.set': {
+      changed: true, compositionLocator: locator,
+      before: compositionSettings, after: compositionSettings,
+    },
+    'composition.pixelAspectRatio.set': {
+      changed: true, compositionLocator: locator,
+      before: compositionSettings, after: compositionSettings,
+    },
+    'composition.displayStartTime.set': {
+      changed: true, compositionLocator: locator,
+      before: compositionSettings, after: compositionSettings,
+    },
+    'layer.properties.list': {
+      layerLocator, parentPropertyLocator: null, layerName: 'Layer 1',
+      sampleTime: { value: 0, scale: 24, mode: 'comp-time' },
+      total: 0, offset: 0, limit: 25, returned: 0, hasMore: false,
+      nextOffset: null, properties: [],
+    },
+    'property.keyframes.list': {
+      propertyLocator, valueType: 'one-d', total: 0, offset: 0,
+      limit: 25, returned: 0, hasMore: false, nextOffset: null,
+      keyframes: [],
+    },
+    'property.value.set': {
+      changed: true, layerLocator, propertyLocator, valueType: 'one-d',
+      beforeValue: { kind: 'scalar', value: '0' }, afterValue: scalar,
+    },
+    'property.keyframe.details.read': keyframeDetails,
+    'property.keyframe.add': {
+      changed: true, layerLocator, propertyLocator, time: exactTime,
+      keyframeCountBefore: 0, keyframeCountAfter: 1,
+      beforeKeyframe: null, afterKeyframe: keyframeDetails,
+    },
+    'property.keyframe.value.set': {
+      changed: true, layerLocator, propertyLocator, time: exactTime,
+      keyframeCountBefore: 1, keyframeCountAfter: 1,
+      beforeKeyframe: keyframeDetails, afterKeyframe: keyframeDetails,
+    },
+    'property.keyframe.interpolation.set': {
+      changed: true, layerLocator, propertyLocator, time: exactTime,
+      keyframeCountBefore: 1, keyframeCountAfter: 1,
+      beforeKeyframe: keyframeDetails, afterKeyframe: keyframeDetails,
+    },
+    'property.keyframe.temporalEase.set': {
+      changed: true, layerLocator, propertyLocator, time: exactTime,
+      keyframeCountBefore: 1, keyframeCountAfter: 1,
+      beforeKeyframe: keyframeDetails, afterKeyframe: keyframeDetails,
+    },
+    'property.keyframe.behavior.set': {
+      changed: true, layerLocator, propertyLocator, time: exactTime,
+      keyframeCountBefore: 1, keyframeCountAfter: 1,
+      beforeKeyframe: keyframeDetails, afterKeyframe: keyframeDetails,
+    },
+    'property.keyframe.delete': {
+      changed: true, layerLocator, propertyLocator, time: exactTime,
+      keyframeCountBefore: 1, keyframeCountAfter: 0,
+      beforeKeyframe: keyframeDetails, afterKeyframe: null,
+    },
+  };
+  assert.deepEqual(
+    Object.keys(samples).sort(),
+    PRIMITIVES.map(({ id }) => id).sort(),
+  );
+  for (const primitive of PRIMITIVES) {
+    const resultSchema = primitive.resultSchema.$ref
+      ? { $ref: primitive.resultSchema.$ref.slice(
+        primitive.resultSchema.$ref.indexOf('#'),
+      ) }
+      : primitive.resultSchema;
+    assert.equal(
+      schemaAccepts(resultSchema, samples[primitive.id], schema),
+      true,
+      primitive.id,
+    );
+  }
 });
 
 test('native program schema rejects extra envelope and operation fields', () => {

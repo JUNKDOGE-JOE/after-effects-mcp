@@ -60,7 +60,7 @@
         "maxTerminalCacheEntries": 128,
         "terminalCacheTtlMs": 60000
       },
-      "capabilitiesDigest": "07946484629c79f518fdf5912d3edf790bf9741db4bf2fe5b21ab80623c1a3a4",
+      "capabilitiesDigest": "a48f507dab63e2455394f4b305b58ba56521dd0a68a3650acf6a0166d796f98f",
       "clientNonce": "abcdefghijklmnopqrstuvwxyzABCDEF"
     }
   }

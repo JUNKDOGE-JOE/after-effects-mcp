@@ -19,7 +19,8 @@ struct JsonNumber {
 struct JsonValue {
   using Array = std::vector<JsonValue>;
   using Object = std::vector<std::pair<std::string, JsonValue>>;
-  std::variant<std::nullptr_t, bool, JsonNumber, std::string, Array, Object> value;
+  std::variant<std::nullptr_t, bool, JsonNumber, std::string, Array, Object>
+      value;
 };
 
 using JsonObject = JsonValue::Object;
@@ -40,18 +41,22 @@ struct NativeProgram {
 };
 
 struct ProgramAdmission {
-  std::vector<const NativePrimitiveDescriptor*> descriptors;
+  std::vector<const NativePrimitiveDescriptor *> descriptors;
   std::unordered_map<std::string, PrimitiveValueKind> named_value_kinds;
   bool contains_write{false};
   std::string program_digest;
 };
 
+[[nodiscard]] JsonValue parse_json(std::string_view json);
 [[nodiscard]] JsonObject parse_json_object(std::string_view json);
-[[nodiscard]] NativeProgram parse_native_program(const JsonObject& object);
-[[nodiscard]] ProgramAdmission validate_native_program(
-    const NativeProgram& program,
-    std::span<const NativePrimitiveDescriptor> registry);
-[[nodiscard]] std::string canonical_native_program(const NativeProgram& program);
-[[nodiscard]] std::string digest_native_program(const NativeProgram& program);
+[[nodiscard]] std::string canonicalize_json(const JsonValue &value);
+[[nodiscard]] std::string sha256_hex_digest(std::string_view value);
+[[nodiscard]] NativeProgram parse_native_program(const JsonObject &object);
+[[nodiscard]] ProgramAdmission
+validate_native_program(const NativeProgram &program,
+                        std::span<const NativePrimitiveDescriptor> registry);
+[[nodiscard]] std::string
+canonical_native_program(const NativeProgram &program);
+[[nodiscard]] std::string digest_native_program(const NativeProgram &program);
 
-}  // namespace aemcp::native
+} // namespace aemcp::native
