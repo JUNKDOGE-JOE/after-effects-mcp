@@ -471,6 +471,23 @@ def test_fixture_jsx_embeds_the_same_owner_guard_before_any_close(tmp_path):
     assert "app.project.close(CloseOptions.DO_NOT_SAVE_CHANGES)" in script
 
 
+def test_fixture_jsx_creates_matte_source_as_an_explicit_text_layer(tmp_path):
+    config = _config(tmp_path)
+    runner = driver.Issue190Runner(
+        config,
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+    runner.claim_fixture()
+    script = driver.fixture_create_script(config, driver.generate_fixture_wav(config))
+
+    assert "matteSource = mainComp.layers.addText('MATTE_SOURCE');" in script
+    assert "matteSource.name = 'MATTE_SOURCE';" in script
+    assert "addSolid([1,1,1],'MATTE_SOURCE',640,360,1,5)" not in script
+    assert spec.FIXTURE_SPEC["roleTypes"] == {"MATTE_SOURCE": "text"}
+    assert spec.CALL_HARD_LIMIT == len(spec.CALL_PLAN) == 40
+
+
 def test_call_plan_is_exactly_forty_and_covers_the_frozen_matrix():
     assert spec.CALL_HARD_LIMIT == 40
     assert [row.ordinal for row in spec.CALL_PLAN] == list(range(1, 41))

@@ -238,7 +238,8 @@ marker and manifest. It never overwrites an existing unowned path. Its exact
 named roles are `SOURCE_COMP_A`,
 `SOURCE_COMP_B`, `RELINK_TARGET`, `MATTE_FILL`, `MATTE_SOURCE`,
 `MATTE_SPACER`, `VIDEO_SWITCH`, and `AUDIO_SWITCH`; the anonymous 250 ms PCM
-WAV is generated beneath the approved fixture area. Product reads and writes
+WAV is generated beneath the approved fixture area. `MATTE_SOURCE` is a
+deterministic text layer. Product reads and writes
 use public MCP only. The controlling workflow performs the five real-Undo
 checkpoints by sending exact `Cmd+Z` shortcuts to the formal AE window; Undo is
 never invoked from inside JSX. Every Undo is followed by public project,

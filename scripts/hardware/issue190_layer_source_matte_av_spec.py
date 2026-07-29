@@ -33,6 +33,7 @@ FIXTURE_SPEC = {
         "VIDEO_SWITCH",
         "AUDIO_SWITCH",
     ),
+    "roleTypes": {"MATTE_SOURCE": "text"},
 }
 
 WAV_SPEC = {
