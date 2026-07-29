@@ -1270,7 +1270,7 @@ uv run pytest \
   packages/core/tests/test_backend_base.py \
   packages/core/tests/test_skill_store.py \
   packages/core/tests/test_server_instructions.py \
-  packages/core/tests/test_development_smoke.py -q
+  packages/bridge/tests/test_development_smoke_driver.py -q
 ```
 
 - [ ] **Step 2: Run protocol and CEP verification**
@@ -1305,7 +1305,7 @@ portable C++, CEP client, generated files, bundled skill, and public surface.
 - [ ] **Step 7: Run one non-candidate HDEV**
 
 Use `scripts/hardware/development_smoke.py --scenario native-exec-ir@1` with one
-fresh `ephemeral-validation` fixture. Verify the exact eight-call budget,
+fresh `ephemeral-validation` fixture. Verify the exact nine-call budget,
 public MCP route, real AE state, native provenance, audit, postcondition, one
 real Undo, and restored readback.
 
