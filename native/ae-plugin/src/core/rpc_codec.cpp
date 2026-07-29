@@ -860,11 +860,16 @@ encode_native_program_failure(const NativeProgramFailure &response) {
     invalid_argument("invalid native program failure write envelope");
   }
   const char *side_effect = "not-started";
+  bool retryable = policy.retryable;
+  const char *recovery = policy.recovery;
   if (response.disposition == NativeProgramDisposition::kCompleted) {
     side_effect = "completed";
+    retryable = false;
+    recovery = "inspect-state";
   } else if (response.disposition ==
              NativeProgramDisposition::kPossiblySideEffecting) {
     side_effect = "may-have-occurred";
+    recovery = "inspect-state";
   }
   std::string details =
       "{\"capabilityId\":\"ae.native.exec\","
@@ -910,10 +915,10 @@ encode_native_program_failure(const NativeProgramFailure &response) {
       "{\"error\":{\"code\":" + json_string(policy.code) +
       ",\"details\":" + details +
       ",\"message\":" + json_string(response.message) +
-      ",\"recovery\":{\"action\":" + json_string(policy.recovery) +
+      ",\"recovery\":{\"action\":" + json_string(recovery) +
       ",\"hint\":\"Inspect After Effects state before retrying.\"},"
       "\"retryable\":" +
-      (policy.retryable ? "true" : "false") +
+      (retryable ? "true" : "false") +
       ",\"sideEffect\":" + json_string(side_effect) +
       "},\"kind\":\"response\",\"method\":\"invoke\",\"ok\":false,"
       "\"replayed\":" +

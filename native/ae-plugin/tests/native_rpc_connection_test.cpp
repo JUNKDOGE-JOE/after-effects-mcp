@@ -479,9 +479,12 @@ void write_terminals_close_the_common_program_contract() {
                 completed.find(
                     "\"operationKey\":\"write-key-safe-fail-01\"") !=
                     std::string::npos &&
-                completed.find("\"sideEffect\":\"completed\"") !=
-                    std::string::npos,
-            "completed safe failure used a generic not-started policy");
+                completed.find(
+                    "\"recovery\":{\"action\":\"inspect-state\","
+                    "\"hint\":\"Inspect After Effects state before "
+                    "retrying.\"},\"retryable\":false,"
+                    "\"sideEffect\":\"completed\"") != std::string::npos,
+            "completed safe failure did not close the terminal policy");
   } catch (...) {
     (void)::shutdown(sockets[1], SHUT_RDWR);
     (void)::close(sockets[1]);

@@ -128,7 +128,7 @@ void native_program_success_and_failure_are_structured() {
   failure.request_id = kRequest;
   failure.session_id = kSession;
   failure.host_instance_id = kHost;
-  failure.code = RpcErrorCode::kPossiblySideEffectingFailure;
+  failure.code = RpcErrorCode::kDeadlineExceeded;
   failure.message = "write outcome requires reconciliation";
   failure.disposition = NativeProgramDisposition::kPossiblySideEffecting;
   failure.failed_operation =
@@ -141,9 +141,13 @@ void native_program_success_and_failure_are_structured() {
   failure.write_started = true;
   const std::string failure_json =
       payload(encode_native_program_failure(failure));
-  require(failure_json.find("POSSIBLY_SIDE_EFFECTING_FAILURE") !=
+  require(failure_json.find("\"sideEffect\":\"may-have-occurred\"") !=
               std::string::npos,
           "program failure lost uncertain-write classification");
+  require(failure_json.find(
+              "\"recovery\":{\"action\":\"inspect-state\"") !=
+              std::string::npos,
+          "uncertain write failure did not require state inspection");
   require(failure_json.find("\"failedOperation\"") != std::string::npos,
           "program failure omitted failed operation");
 
@@ -174,6 +178,7 @@ void native_program_success_and_failure_are_structured() {
           "Undo-open failure advertised an unavailable group label");
 
   NativeProgramFailure completed_failure = undo_open_failure;
+  completed_failure.code = RpcErrorCode::kDeadlineExceeded;
   completed_failure.operation_key = "native-write-key-0003";
   completed_failure.disposition = NativeProgramDisposition::kCompleted;
   completed_failure.failed_operation =
@@ -185,6 +190,12 @@ void native_program_success_and_failure_are_structured() {
   require(completed_json.find("\"sideEffect\":\"completed\"") !=
               std::string::npos,
           "completed safe failure used generic error side-effect policy");
+  require(
+      completed_json.find(
+          "\"recovery\":{\"action\":\"inspect-state\",\"hint\":\"Inspect "
+          "After Effects state before retrying.\"},\"retryable\":false,"
+          "\"sideEffect\":\"completed\"") != std::string::npos,
+      "completed failure did not override retry and recovery policy");
 }
 
 class TestClock final : public SessionClock {
