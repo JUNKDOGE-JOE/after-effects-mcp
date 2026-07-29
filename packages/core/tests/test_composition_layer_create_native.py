@@ -230,38 +230,3 @@ async def test_tampered_postcondition_is_uncertain_and_never_retried():
     assert raised.value.retryable is False
     assert raised.value.side_effect == "may-have-occurred"
     assert raised.value.recovery.action == "inspect-state"
-
-
-@pytest.mark.asyncio
-async def test_public_mcp_schema_is_registered_and_rejects_before_dispatch(monkeypatch):
-    load_all()
-    schema_cls, _ = HANDLERS["ae.createCompositionLayer"]
-
-    async def _must_not_dispatch(_validated, _ctx):
-        pytest.fail("invalid public MCP arguments reached the native handler")
-
-    monkeypatch.setitem(
-        HANDLERS,
-        "ae.createCompositionLayer",
-        (schema_cls, _must_not_dispatch),
-    )
-    result = await build_server()._ae_call_tool(
-        "ae_createCompositionLayer",
-        {
-            "composition_locator": INPUT["compositionLocator"],
-            "kind": "null",
-            "name": "Null",
-            "width": 640,
-            "idempotency_key": "synthetic-null-create-0005",
-        },
-    )
-
-    assert result.isError is True
-    payload = json.loads(result.content[0].text)
-    assert payload["error"]["code"] == "INVALID_ARGUMENT"
-    assert payload["error"]["sideEffect"] == "not-started"
-    assert payload["error"]["recovery"]["action"] == "change-arguments"
-    assert payload["error"]["details"] == {
-        "field": "arguments",
-        "capabilityId": "ae.composition.layer.create",
-    }

@@ -248,39 +248,3 @@ async def test_malformed_post_dispatch_result_preserves_side_effect_uncertainty(
         )
     assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
     assert raised.value.side_effect == "may-have-occurred"
-
-
-@pytest.mark.asyncio
-async def test_public_mcp_schema_rejection_is_structured_and_never_dispatches(
-    monkeypatch,
-):
-    load_all()
-    schema_cls, _ = HANDLERS["ae.setLayerPropertyValue"]
-
-    async def _must_not_dispatch(_validated, _ctx):
-        pytest.fail("invalid public MCP arguments reached the native handler")
-
-    monkeypatch.setitem(
-        HANDLERS,
-        "ae.setLayerPropertyValue",
-        (schema_cls, _must_not_dispatch),
-    )
-    result = await build_server()._ae_call_tool(
-        "ae_setLayerPropertyValue",
-        {
-            "layer_locator": LAYER,
-            "property_locator": STREAM,
-            "value": {"kind": "scalar", "value": "40"},
-            "idempotency_key": "short",
-        },
-    )
-
-    assert result.isError is True
-    payload = json.loads(result.content[0].text)
-    assert payload["error"]["code"] == "INVALID_ARGUMENT"
-    assert payload["error"]["sideEffect"] == "not-started"
-    assert payload["error"]["recovery"]["action"] == "change-arguments"
-    assert payload["error"]["details"] == {
-        "field": "arguments.idempotency_key",
-        "capabilityId": "ae.layer.property.set",
-    }

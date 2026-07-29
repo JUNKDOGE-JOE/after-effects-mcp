@@ -38,14 +38,6 @@ TOOL_VERBS = {
     "ae.toolSearch",
     "ae.toolInspect",
     "ae.toolUse",
-    "ae.toolCreate",
-    "ae.toolEdit",
-    "ae.toolDelete",
-    "ae.toolArchive",
-    "ae.toolDuplicate",
-    "ae.toolPromoteFromHistory",
-    "ae.toolImport",
-    "ae.toolExport",
 }
 
 
@@ -424,7 +416,7 @@ async def test_system_commands_are_hidden_by_default_and_visible_only_as_develop
     token = handlers.client_identity.set_panel_developer(True)
     try:
         developer = await handlers._run_tool_index(
-            S.AePanelToolIndexArgs(), None
+            S._AePanelToolIndexArgs(), None
         )
         developer_inspect = await handlers._run_tool_inspect(
             S.AeToolInspectArgs(artifact_id=service.store.artifact.id),
@@ -599,53 +591,3 @@ async def test_corrupt_execution_history_fails_closed_through_public_index(
         }
     finally:
         reset_default_tool_service_for_tests()
-
-
-@pytest.mark.asyncio
-async def test_import_and_export_wire_payloads_exclude_source_paths(service, tmp_path):
-    preview = await handlers._run_tool_import(
-        S.AeToolImportArgs(action="preview", path=str(tmp_path / "in.aemcptools")),
-        None,
-    )
-    exported = await handlers._run_tool_export(
-        S.AeToolExportArgs(
-            artifact_ids=["user:1"], out_path=str(tmp_path / "out.aemcptools")
-        ),
-        None,
-    )
-
-    assert preview["importId"] == "imp"
-    assert preview["artifacts"][0]["contentChanged"] is False
-    assert exported == {
-        "ok": True,
-        "path": str(tmp_path / "out.aemcptools"),
-        "packageSha256": "d" * 64,
-    }
-
-
-@pytest.mark.asyncio
-async def test_promote_from_history_rejects_imported_candidates(service):
-    artifact = service.store.artifact
-    service.store.artifact = replace(
-        artifact,
-        status="candidate",
-        source=ToolSource(
-            "imported",
-            "package:test",
-            None,
-            None,
-            {"contentHash": artifact.content_hash},
-        ),
-    )
-    result = await handlers._run_tool_promote(
-        S.AeToolPromoteFromHistoryArgs(
-            artifact_id=artifact.id,
-            expected_revision=artifact.revision,
-            expected_content_hash=artifact.content_hash,
-        ),
-        None,
-    )
-
-    assert result["ok"] is False
-    assert result["error"] == "tool_store_invalid_request"
-    assert not any(call[0] == "promote" for call in service.store.calls)

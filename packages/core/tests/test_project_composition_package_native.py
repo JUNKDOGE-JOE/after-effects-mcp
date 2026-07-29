@@ -384,19 +384,6 @@ def _deadline() -> int:
     return int(time.time() * 1000) + 5_000
 
 
-def test_public_schema_names_are_frozen_closed_and_annotated():
-    load_all()
-    for verb, expected_fields in PUBLIC_TOOLS.items():
-        schema_cls, _handler = HANDLERS[verb]
-        schema = schema_cls.model_json_schema()
-        assert schema["additionalProperties"] is False
-        assert set(schema["properties"]) == set(expected_fields)
-        assert VERB_ANNOTATIONS[verb].destructiveHint is False
-        assert VERB_ANNOTATIONS[verb].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.getProjectContext"].readOnlyHint is True
-    assert VERB_ANNOTATIONS["ae.duplicateComposition"].readOnlyHint is False
-
-
 def test_native_contracts_are_closed_and_digest_bound():
     assert len(PC.CAPABILITY_CONTRACTS) == 14
     for contract in PC.CAPABILITY_CONTRACTS.values():
@@ -417,27 +404,6 @@ def test_native_contracts_are_closed_and_digest_bound():
             PC.COMPOSITION_DISPLAY_START_TIME_SET_CAPABILITY_ID
         ],
     )
-
-
-@pytest.mark.asyncio
-async def test_composition_setting_tools_are_registered_and_listed(monkeypatch):
-    load_all()
-    assert set(COMPOSITION_SETTING_PUBLIC_TOOLS) <= set(HANDLERS)
-    for verb, expected_fields in COMPOSITION_SETTING_PUBLIC_TOOLS.items():
-        schema_cls, _handler = HANDLERS[verb]
-        schema = schema_cls.model_json_schema()
-        assert schema["additionalProperties"] is False
-        assert set(schema["properties"]) == set(expected_fields)
-    monkeypatch.setattr(
-        server_module,
-        "_filtered_tool_names",
-        lambda: set(COMPOSITION_SETTING_PUBLIC_TOOLS),
-    )
-    server = server_module.build_server()
-    listed = await server._ae_list_tools()
-    assert {tool.name for tool in listed} == {
-        name.replace(".", "_") for name in COMPOSITION_SETTING_PUBLIC_TOOLS
-    }
 
 
 @pytest.mark.asyncio
@@ -532,25 +498,6 @@ def test_project_item_metadata_preserves_native_optional_fact_omission():
     assert "width" not in result_schema["required"]
     assert result_schema["properties"]["parentLocator"]["anyOf"][-1] == {
         "type": "null",
-    }
-
-
-def test_public_validation_error_is_structured_and_actionable():
-    with pytest.raises(ValidationError) as raised:
-        schemas.AeSetProjectItemLabelArgs.model_validate({
-            "item_locator": _locator("composition", COMP_OBJECT),
-            "label_id": 17,
-            "idempotency_key": "project-label-intent-0001",
-        })
-    error = server_module._project_composition_validation_error(
-        "ae.setProjectItemLabel", raised.value
-    )
-    assert error["code"] == "INVALID_ARGUMENT"
-    assert error["sideEffect"] == "not-started"
-    assert error["recovery"]["action"] == "change-arguments"
-    assert error["details"] == {
-        "field": "arguments.label_id",
-        "capabilityId": PC.PROJECT_ITEM_LABEL_SET_CAPABILITY_ID,
     }
 
 
@@ -766,27 +713,3 @@ async def test_tampered_write_evidence_preserves_side_effect_uncertainty():
     assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
     assert raised.value.side_effect == "may-have-occurred"
     assert raised.value.retryable is False
-
-
-@pytest.mark.asyncio
-async def test_public_handlers_map_snake_case_inputs_to_camel_case_native_wire(monkeypatch):
-    backend = PackageBackend()
-    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
-    context = await native_handlers._run_get_project_context(
-        schemas.AeGetProjectContextArgs(), None
-    )
-    renamed = await native_handlers._run_rename_project_item(
-        schemas.AeRenameProjectItemArgs(
-            item_locator=_locator("composition", COMP_OBJECT),
-            name="Renamed",
-            idempotency_key="rename-item-intent-0003",
-        ),
-        None,
-    )
-    assert context["ok"] is True
-    assert context["implementation"]["capabilityId"] == PC.PROJECT_CONTEXT_READ_CAPABILITY_ID
-    assert context["implementation"]["undo"] == "not-applicable"
-    assert renamed["ok"] is True
-    assert renamed["audit"]["effect"] == "committed"
-    assert backend.requests[0].arguments == {"selectionOffset": 0, "selectionLimit": 50}
-    assert set(backend.requests[1].arguments) == {"itemLocator", "name", "idempotencyKey"}

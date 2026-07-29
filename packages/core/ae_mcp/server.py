@@ -52,8 +52,8 @@ _PANEL_DEVELOPER_TOOLS = frozenset(
     {"ae.toolIndex", "ae.toolSearch", "ae.toolInspect"}
 )
 _PANEL_DEVELOPER_SCHEMAS = {
-    "ae.toolIndex": schemas.AePanelToolIndexArgs,
-    "ae.toolSearch": schemas.AePanelToolSearchArgs,
+    "ae.toolIndex": schemas._AePanelToolIndexArgs,
+    "ae.toolSearch": schemas._AePanelToolSearchArgs,
     "ae.toolInspect": schemas.AeToolInspectArgs,
 }
 

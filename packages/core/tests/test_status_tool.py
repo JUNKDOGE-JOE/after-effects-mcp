@@ -7,7 +7,6 @@ from ae_mcp.backends.discovery import BackendSelectionError
 from ae_mcp.backends.mock import MockBackend
 from ae_mcp.backends.native import NativeInvokeBackend
 from ae_mcp.handlers import HANDLERS, load_all
-from ae_mcp.schemas_tsm import PUBLIC_SCHEMAS as TSM_PUBLIC_SCHEMAS
 from ae_mcp.server import _filtered_tool_names
 
 
@@ -95,25 +94,12 @@ async def test_status_reports_native_plane_without_claiming_active_routing(monke
     monkeypatch.setattr("ae_mcp.backends.discovery.list_installed_backends", lambda: {"mock": NativeMockBackend})
     monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
 
-    assert "ae.projectSummary" in _filtered_tool_names()
-    assert "ae.listProjectItems" in _filtered_tool_names()
-    assert "ae.listCompositionLayers" in _filtered_tool_names()
-    assert "ae.listSelectedLayers" in _filtered_tool_names()
-    assert "ae.getCompositionTime" in _filtered_tool_names()
-    assert "ae.listLayerProperties" in _filtered_tool_names()
-    assert "ae.listLayerPropertyKeyframes" in _filtered_tool_names()
-    assert "ae.setLayerPropertyValue" in _filtered_tool_names()
-    assert "ae.getLayerPropertyKeyframeDetails" in _filtered_tool_names()
-    assert "ae.addLayerPropertyKeyframe" in _filtered_tool_names()
-    assert "ae.setLayerPropertyKeyframeValue" in _filtered_tool_names()
-    assert "ae.setLayerPropertyKeyframeInterpolation" in _filtered_tool_names()
-    assert "ae.setLayerPropertyKeyframeTemporalEase" in _filtered_tool_names()
-    assert "ae.setLayerPropertyKeyframeBehavior" in _filtered_tool_names()
-    assert "ae.deleteLayerPropertyKeyframe" in _filtered_tool_names()
-    assert "ae.createComposition" in _filtered_tool_names()
-    assert "ae.createCompositionLayer" in _filtered_tool_names()
-    assert "ae.applyLayerEffect" in _filtered_tool_names()
-    assert set(TSM_PUBLIC_SCHEMAS) <= _filtered_tool_names()
+    assert _filtered_tool_names() == {
+        "ae.diagnose",
+        "ae.nativeExec",
+        "ae.ping",
+        "ae.status",
+    }
     schema_cls, run_fn = _load_status_handler()
     result = await run_fn(schema_cls(), None)
 

@@ -223,21 +223,6 @@ def _deadline() -> int:
     return int(time.time() * 1000) + 5_000
 
 
-def test_public_schemas_are_closed_annotated_and_hide_the_generic_switch():
-    load_all()
-    for verb, expected_fields in PUBLIC_TOOLS.items():
-        schema_cls, _handler = HANDLERS[verb]
-        schema = schema_cls.model_json_schema()
-        assert schema["additionalProperties"] is False
-        assert set(schema["properties"]) == set(expected_fields)
-        assert "switch" not in schema["properties"]
-        assert VERB_ANNOTATIONS[verb].destructiveHint is False
-        assert VERB_ANNOTATIONS[verb].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.getLayerCompositingState"].readOnlyHint is True
-    for verb in tuple(PUBLIC_TOOLS)[1:]:
-        assert VERB_ANNOTATIONS[verb].readOnlyHint is False
-
-
 def test_core_contracts_equal_frozen_native_protocol_contracts():
     protocol = json.loads(Path("native/ae-plugin/protocol/aegp-rpc.schema.json").read_text())["$defs"]
     definitions = {
@@ -296,45 +281,6 @@ async def test_four_native_capabilities_bind_readback_audit_and_undo():
         assert execution.evidence.undo is not None
         assert execution.evidence.undo.available is True
         assert execution.evidence.undo.verified is False
-
-
-@pytest.mark.asyncio
-async def test_public_handlers_bind_fixed_switch_names_and_closed_wire(monkeypatch):
-    backend = PackageBackend()
-    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
-    locator = _locator()
-    read = await native_handlers._run_get_layer_compositing_state(
-        schemas.AeGetLayerCompositingStateArgs(layer_locator=locator), None,
-    )
-    assert read["ok"] is True
-    assert backend.requests[-1].arguments == {"layerLocator": locator}
-
-    for index, (handler, switch) in enumerate(SWITCH_HANDLERS.items(), start=1):
-        schema_cls = HANDLERS[{value: key for key, value in {
-            "ae.setLayerVisibility": "visibility", "ae.setLayerSolo": "solo",
-            "ae.setLayerLocked": "locked", "ae.setLayerShy": "shy",
-            "ae.setLayerMotionBlur": "motion-blur", "ae.setLayerThreeD": "three-d",
-            "ae.setLayerAdjustment": "adjustment",
-        }.items()}[switch]][0]
-        result = await handler(schema_cls(
-            layer_locator=locator, enabled=True,
-            idempotency_key=f"switch-handler-intent-{index:04d}",
-        ), None)
-        assert result["ok"] is True
-        assert backend.requests[-1].arguments["switch"] == switch
-
-    quality = await native_handlers._run_set_layer_quality(
-        schemas.AeSetLayerQualityArgs(
-            layer_locator=locator, quality="draft", idempotency_key="quality-handler-intent-0001",
-        ), None,
-    )
-    blend = await native_handlers._run_set_layer_blending_mode(
-        schemas.AeSetLayerBlendingModeArgs(
-            layer_locator=locator, mode="multiply", idempotency_key="blend-handler-intent-0001",
-        ), None,
-    )
-    assert quality["implementation"]["capabilityId"] == LC.LAYER_QUALITY_SET_CAPABILITY_ID
-    assert blend["implementation"]["capabilityId"] == LC.LAYER_BLENDING_MODE_SET_CAPABILITY_ID
 
 
 @pytest.mark.asyncio

@@ -268,58 +268,6 @@ PUBLIC_CASES = (
 )
 
 
-@pytest.mark.parametrize(("name", "operation", "arguments"), PUBLIC_CASES)
-def test_public_media_schemas_are_closed_and_registered(
-    name: str,
-    operation: str,
-    arguments: dict[str, Any],
-) -> None:
-    schema = schemas.SCHEMAS[name]
-    parsed = schema.model_validate(arguments)
-    assert parsed.model_dump(mode="json", exclude_none=True)
-    grouped = NativeMediaArguments.model_validate({
-        "operation": operation,
-        **parsed.model_dump(mode="json", exclude_none=True),
-    })
-    assert grouped.operation == operation
-    with pytest.raises(ValidationError):
-        schema.model_validate({**arguments, "unknown": True})
-    load_all()
-    assert HANDLERS[name][0] is schema
-
-
-@pytest.mark.parametrize(
-    ("schema", "arguments"),
-    (
-        (
-            schemas.AeSetLayerMaskPropertiesArgs,
-            {
-                "layer_locator": LAYER,
-                "mask_index": 1,
-                "mask_id": 7,
-                "properties": {"mode": None},
-                "idempotency_key": KEY,
-            },
-        ),
-        (
-            schemas.AeSetFootageInterpretationArgs,
-            {
-                "item_locator": ITEM,
-                "proxy": False,
-                "interpretation": {"loop_count": None},
-                "idempotency_key": KEY,
-            },
-        ),
-    ),
-)
-def test_public_media_patches_reject_null_only_payloads(
-    schema: type,
-    arguments: dict[str, Any],
-) -> None:
-    with pytest.raises(ValidationError):
-        schema.model_validate(arguments)
-
-
 def test_grouped_media_contract_rejects_present_but_null_required_fields() -> None:
     with pytest.raises(ValidationError):
         NativeMediaArguments.model_validate({
@@ -339,77 +287,6 @@ def test_native_media_wire_payload_recursively_omits_unset_patch_nulls() -> None
     assert "motionBlur" not in wire["properties"]
     assert "featherFalloff" not in wire["properties"]
     assert "null" not in json.dumps(wire, separators=(",", ":"), sort_keys=True)
-
-
-def test_mask_properties_public_schema_discloses_undo_limitation() -> None:
-    description = tool_description(
-        schemas.AeSetLayerMaskPropertiesArgs,
-        "ae.setLayerMaskProperties",
-    )
-    roto = schemas.AeMaskPropertiesPatch.model_json_schema()["properties"][
-        "roto_bezier"
-    ]
-    assert description.startswith("ae_setLayerMaskProperties")
-    assert "Undo is not guaranteed" in description
-    assert "does not record this SDK setter" in roto["description"]
-
-
-@pytest.mark.asyncio
-async def test_mask_properties_public_response_does_not_claim_undo_guarantee(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    value = {
-        "operation": "mask-properties",
-        "changed": True,
-        "mask": {
-            "maskIndex": 1,
-            "maskId": 7,
-            "mode": "add",
-            "inverted": False,
-            "motionBlur": "same-as-layer",
-            "featherFalloff": "smooth",
-            "color": {"red": 255, "green": 0, "blue": 0, "alpha": 255},
-            "locked": False,
-            "rotoBezier": True,
-        },
-    }
-    backend = MediaBackend(value)
-    monkeypatch.setattr(
-        "ae_mcp.handlers.native._discovery.select_backend",
-        lambda: backend,
-    )
-    monkeypatch.setattr(
-        "ae_mcp.handlers.native.time.time",
-        lambda: 2_000_000_000,
-    )
-    arguments = schemas.AeSetLayerMaskPropertiesArgs.model_validate({
-        "layer_locator": LAYER,
-        "mask_index": 1,
-        "mask_id": 7,
-        "properties": {"roto_bezier": True},
-        "idempotency_key": KEY,
-    })
-
-    response = await _run_native_media(
-        arguments,
-        None,
-        operation="mask-properties",
-        write=True,
-    )
-
-    assert response["implementation"]["undo"] == "not-guaranteed"
-    assert response["implementation"]["nativeUndoBoundary"] == "ae-undo-group"
-    assert response["implementation"]["undoLimitation"]["guaranteed"] is False
-    assert response["audit"]["undoAvailable"] is False
-    assert response["audit"]["nativeUndoBoundaryAvailable"] is True
-    assert response["evidence"]["undo"] == {
-        "available": False,
-        "verified": False,
-    }
-    assert response["evidence"]["nativeUndoBoundary"] == {
-        "available": True,
-        "verified": False,
-    }
 
 
 def test_native_media_python_wire_snapshot_matches_cpp_admission_fixture() -> None:

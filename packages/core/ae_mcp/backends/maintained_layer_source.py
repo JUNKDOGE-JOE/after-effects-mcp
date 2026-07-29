@@ -12,7 +12,7 @@ from collections import OrderedDict
 from pathlib import Path
 from typing import Annotated, Any, Literal, Mapping
 
-from pydantic import Field, StrictBool, StrictStr, model_validator
+from pydantic import ConfigDict, Field, StrictBool, StrictStr, model_validator
 
 from ae_mcp.backends.maintained_text import (
     _core_version,
@@ -34,6 +34,11 @@ from ae_mcp.backends.native_layer_source_matte_av import (
 )
 from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.jsx_result import parse_jsx_result
+from ae_mcp.schemas import (
+    AeLayerLocator,
+    AeProjectItemLocator,
+    _StrictModel,
+)
 
 
 TEMPLATE_ID = "aemcp.layer.source.replace.v1"
@@ -75,6 +80,39 @@ INVARIANT_FIELDS = frozenset(
         "trackMatteLayerIndex",
     }
 )
+
+
+class _LayerSourceReplaceInput(_StrictModel):
+    """Private maintained-JSX input; not an MCP tool schema."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator
+    source_item_locator: AeProjectItemLocator
+    idempotency_key: str = Field(
+        ...,
+        min_length=16,
+        max_length=64,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+    )
+
+    @model_validator(mode="after")
+    def _matching_source_context(self) -> "_LayerSourceReplaceInput":
+        layer = self.layer_locator
+        source = self.source_item_locator
+        if (
+            layer.host_instance_id,
+            layer.session_id,
+            layer.project_id,
+            layer.generation,
+        ) != (
+            source.host_instance_id,
+            source.session_id,
+            source.project_id,
+            source.generation,
+        ):
+            raise ValueError("source_item_locator must match layer_locator context")
+        return self
 
 
 class ResolvedSourceReplacement(_NativeModel):

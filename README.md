@@ -252,7 +252,8 @@ node native/ae-plugin/install-dev-macos.mjs recover
 
 Ad-hoc signing and a successful local build are development evidence only. The generated receipt
 deliberately keeps `distributionApproved`, `runtimeEvidence`, and `compatibilityEvidence` false;
-each candidate still requires a recorded component-set real-AE gate through the public MCP surface. The
+each candidate still requires a recorded component-set real-AE gate through the public MCP surface.
+
 The public AE execution surface has two routes. Use `ae_exec` for maintained
 After Effects scripting-object-model operations. Use `ae_nativeExec` only for
 curated AEGP primitives that require exact native graph, time, ratio, or

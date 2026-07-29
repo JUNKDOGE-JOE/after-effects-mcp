@@ -297,7 +297,6 @@ async def test_orientation_requires_3d_before_dispatch(monkeypatch):
         )
 
 
-
 @pytest.mark.asyncio
 async def test_equal_current_value_still_reaches_native_idempotency_ledger(monkeypatch):
     await _install_tree(monkeypatch, dimensions=2)
@@ -327,98 +326,3 @@ async def test_equal_current_value_still_reaches_native_idempotency_ledger(monke
         idempotency_key="issue165-opacity-replay", deadline_unix_ms=10_000,
     )
     assert dispatched is True
-
-
-def test_public_schemas_are_closed_low_ambiguity_and_annotated():
-    load_all()
-    expected = {
-        "ae.getLayerTransform": {"layer_locator"},
-        "ae.setLayerAnchorPoint": {"layer_locator", "idempotency_key", "anchor_point"},
-        "ae.setLayerPosition": {"layer_locator", "idempotency_key", "position"},
-        "ae.setLayerScale": {"layer_locator", "idempotency_key", "scale_percent"},
-        "ae.setLayerRotation": {"layer_locator", "idempotency_key", "rotation_degrees"},
-        "ae.setLayerOpacity": {"layer_locator", "idempotency_key", "opacity_percent"},
-        "ae.setLayerOrientation": {"layer_locator", "idempotency_key", "orientation_degrees"},
-    }
-    for verb, fields in expected.items():
-        schema_cls, _handler = HANDLERS[verb]
-        schema = schema_cls.model_json_schema()
-        assert schema["additionalProperties"] is False
-        assert set(schema["properties"]) == fields
-        assert "property_locator" not in schema["properties"]
-        assert "match_name" not in schema["properties"]
-        assert VERB_ANNOTATIONS[verb].destructiveHint is False
-        assert VERB_ANNOTATIONS[verb].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.getLayerTransform"].readOnlyHint is True
-    for verb in tuple(expected)[1:]:
-        assert VERB_ANNOTATIONS[verb].readOnlyHint is False
-
-
-def test_public_schema_rejects_non_finite_underflow_negative_zero_and_opacity_range():
-    locator = LAYER_LOCATOR.model_dump(mode="json", by_alias=True)
-    base = {"layer_locator": locator, "idempotency_key": "issue165-valid-key"}
-    for value in ("1e309", "1e-4000", "-0"):
-        with pytest.raises(ValidationError):
-            schemas.AeSetLayerRotationArgs(**base, rotation_degrees=value)
-    with pytest.raises(ValidationError):
-        schemas.AeSetLayerOpacityArgs(**base, opacity_percent="101")
-    with pytest.raises(ValidationError):
-        schemas.AeSetLayerOrientationArgs(**base, orientation_degrees=["1", "2"])
-
-
-@pytest.mark.asyncio
-async def test_public_transport_returns_structured_transform_validation_without_dispatch(monkeypatch):
-    load_all()
-    schema_cls, _handler = HANDLERS["ae.setLayerOpacity"]
-
-    async def _must_not_dispatch(_validated, _ctx):
-        pytest.fail("invalid transform arguments reached the native handler")
-
-    monkeypatch.setitem(
-        HANDLERS, "ae.setLayerOpacity", (schema_cls, _must_not_dispatch),
-    )
-    result = await build_server()._ae_call_tool(
-        "ae_setLayerOpacity",
-        {
-            "layer_locator": LAYER_LOCATOR.model_dump(mode="json", by_alias=True),
-            "opacity_percent": "101",
-            "idempotency_key": "issue165-invalid-opacity",
-        },
-    )
-    assert result.isError is True
-    payload = json.loads(result.content[0].text)
-    assert payload["ok"] is False
-    assert payload["error"]["code"] == "INVALID_ARGUMENT"
-    assert payload["error"]["sideEffect"] == "not-started"
-    assert payload["error"]["details"] == {
-        "field": "arguments.opacity_percent",
-        "capabilityId": "ae.layer.property.set",
-    }
-
-
-@pytest.mark.asyncio
-async def test_public_wrappers_bind_each_semantic_field_without_exposing_generic_choice(monkeypatch):
-    calls: list[tuple[str, dict[str, Any], str]] = []
-
-    async def _capture(_args, _ctx, *, field, value, label):
-        calls.append((field, value, label))
-        return {"ok": True}
-
-    monkeypatch.setattr(native_handlers, "_run_set_layer_transform", _capture)
-    locator = LAYER_LOCATOR.model_dump(mode="json", by_alias=True)
-    key = "issue165-wrapper-key"
-    cases = (
-        (native_handlers._run_set_layer_anchor_point, schemas.AeSetLayerAnchorPointArgs(
-            layer_locator=locator, idempotency_key=key, anchor_point=["1", "2"],
-        ), "anchor-point", {"kind": "vector", "components": ["1", "2"]}),
-        (native_handlers._run_set_layer_rotation, schemas.AeSetLayerRotationArgs(
-            layer_locator=locator, idempotency_key=key, rotation_degrees="12",
-        ), "rotation", {"kind": "scalar", "value": "12"}),
-        (native_handlers._run_set_layer_opacity, schemas.AeSetLayerOpacityArgs(
-            layer_locator=locator, idempotency_key=key, opacity_percent="75",
-        ), "opacity", {"kind": "scalar", "value": "75"}),
-    )
-    for handler, args, expected_field, expected_value in cases:
-        assert await handler(args, None) == {"ok": True}
-        assert calls[-1][0] == expected_field
-        assert calls[-1][1] == expected_value

@@ -58,12 +58,6 @@ def bounded_decimal(
     return value
 
 
-class TsmWriteArgs(_StrictModel):
-    idempotency_key: str = Field(
-        ..., min_length=16, max_length=64, pattern=IDEMPOTENCY_PATTERN
-    )
-
-
 class AeFontSelection(_StrictModel):
     preferred_postscript_name: str = Field(..., min_length=1, max_length=255)
     fallback_postscript_names: list[str] = Field(..., min_length=0, max_length=4)
@@ -202,59 +196,6 @@ class AeTextParagraphStylePatch(_StrictModel):
         return self
 
 
-class AeListInstalledFontsArgs(_StrictModel):
-    offset: int = Field(0, ge=0, le=SAFE_MAX)
-    limit: int = Field(50, ge=1, le=100)
-
-
-class AeCreateTextLayerArgs(TsmWriteArgs):
-    composition_locator: AeCompositionLocator
-    name: str = Field(..., min_length=1, max_length=255)
-    text: str = Field(..., max_length=32_767)
-    text_kind: Literal["point", "box"] = "point"
-    box_size: AeTextBoxSize | None = None
-
-    @field_validator("name")
-    @classmethod
-    def name_scalars(cls, value: str) -> str:
-        return unicode_scalars(value, field="name", minimum=1, maximum=255)
-
-    @field_validator("text")
-    @classmethod
-    def text_scalars(cls, value: str) -> str:
-        return unicode_scalars(value, field="text", maximum=32_767)
-
-    @model_validator(mode="after")
-    def box_contract(self) -> "AeCreateTextLayerArgs":
-        if (self.text_kind == "box") != (self.box_size is not None):
-            raise ValueError("box_size is required exactly when text_kind is box")
-        return self
-
-
-class AeGetTextDocumentArgs(_StrictModel):
-    layer_locator: AeLayerLocator
-
-
-class AeSetTextContentArgs(TsmWriteArgs):
-    layer_locator: AeLayerLocator
-    text: str = Field(..., max_length=32_767)
-
-    @field_validator("text")
-    @classmethod
-    def text_scalars(cls, value: str) -> str:
-        return unicode_scalars(value, field="text", maximum=32_767)
-
-
-class AeSetTextCharacterStyleArgs(TsmWriteArgs):
-    layer_locator: AeLayerLocator
-    style: AeTextCharacterStylePatch
-
-
-class AeSetTextParagraphStyleArgs(TsmWriteArgs):
-    layer_locator: AeLayerLocator
-    style: AeTextParagraphStylePatch
-
-
 class AeBezierPathInput(_StrictModel):
     closed: bool
     vertices: list[AeMaskVertexInput] = Field(..., min_length=2, max_length=128)
@@ -313,61 +254,6 @@ class AeCreateShapeFillInput(AeShapeFillInput):
 
 class AeCreateShapeStrokeInput(AeShapeStrokeInput):
     opacity_percent: DecimalString = "100"
-
-
-class AeCreateShapeLayerArgs(TsmWriteArgs):
-    composition_locator: AeCompositionLocator
-    name: str = Field(..., min_length=1, max_length=255)
-
-    @field_validator("name")
-    @classmethod
-    def name_scalars(cls, value: str) -> str:
-        return unicode_scalars(value, field="name", minimum=1, maximum=255)
-
-
-class AeListShapeGroupsArgs(_StrictModel):
-    layer_locator: AeLayerLocator
-    offset: int = Field(0, ge=0, le=SAFE_MAX)
-    limit: int = Field(25, ge=1, le=50)
-
-
-class AeCreateShapeGroupArgs(TsmWriteArgs):
-    layer_locator: AeLayerLocator
-    name: str = Field(..., min_length=1, max_length=255)
-    path: AeBezierPathInput
-    fill: AeCreateShapeFillInput
-    stroke: AeCreateShapeStrokeInput
-
-    @field_validator("name")
-    @classmethod
-    def name_scalars(cls, value: str) -> str:
-        return unicode_scalars(value, field="name", minimum=1, maximum=255)
-
-
-class AeSetShapePathArgs(TsmWriteArgs):
-    group_ref: AeShapeGroupRefInput
-    path: AeBezierPathInput
-
-
-class AeSetShapeFillStyleArgs(TsmWriteArgs):
-    group_ref: AeShapeGroupRefInput
-    fill: AeShapeFillInput
-
-
-class AeSetShapeStrokeStyleArgs(TsmWriteArgs):
-    group_ref: AeShapeGroupRefInput
-    stroke: AeShapeStrokeInput
-
-
-class AeReorderShapeGroupArgs(TsmWriteArgs):
-    group_ref: AeShapeGroupRefInput
-    target_index: int = Field(..., ge=1, le=SAFE_MAX)
-
-    @model_validator(mode="after")
-    def different_index(self) -> "AeReorderShapeGroupArgs":
-        if self.target_index == self.group_ref.group_index:
-            raise ValueError("target_index must differ from group_ref.group_index")
-        return self
 
 
 class AeExactTimeInput(_StrictModel):
@@ -510,27 +396,6 @@ class AeMarkerPatch(_StrictModel):
         if self.duration is not None and self.duration.value < 0:
             raise ValueError("marker duration must be non-negative")
         return self
-
-
-class AeListMarkersArgs(_StrictModel):
-    target: AeMarkerTargetInput = Field(..., discriminator="kind")
-    offset: int = Field(0, ge=0, le=SAFE_MAX)
-    limit: int = Field(25, ge=1, le=50)
-
-
-class AeCreateMarkerArgs(TsmWriteArgs):
-    target: AeMarkerTargetInput = Field(..., discriminator="kind")
-    time: AeExactTimeInput
-    marker: AeMarkerValueInput
-
-
-class AeSetMarkerArgs(TsmWriteArgs):
-    marker_ref: AeMarkerRefInput
-    patch: AeMarkerPatch
-
-
-class AeDeleteMarkerArgs(TsmWriteArgs):
-    marker_ref: AeMarkerRefInput
 
 
 # Retained only as private value-model definitions for legacy native carrier

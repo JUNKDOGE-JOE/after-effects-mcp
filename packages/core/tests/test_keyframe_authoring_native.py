@@ -349,24 +349,6 @@ def common() -> dict[str, Any]:
     }
 
 
-def test_public_handlers_are_frozen_native_only_and_annotated():
-    load_all()
-    expected = {
-        "ae.getLayerPropertyKeyframeDetails": schemas.AeGetLayerPropertyKeyframeDetailsArgs,
-        "ae.addLayerPropertyKeyframe": schemas.AeAddLayerPropertyKeyframeArgs,
-        "ae.setLayerPropertyKeyframeValue": schemas.AeSetLayerPropertyKeyframeValueArgs,
-        "ae.setLayerPropertyKeyframeInterpolation": schemas.AeSetLayerPropertyKeyframeInterpolationArgs,
-        "ae.setLayerPropertyKeyframeTemporalEase": schemas.AeSetLayerPropertyKeyframeTemporalEaseArgs,
-        "ae.setLayerPropertyKeyframeBehavior": schemas.AeSetLayerPropertyKeyframeBehaviorArgs,
-        "ae.deleteLayerPropertyKeyframe": schemas.AeDeleteLayerPropertyKeyframeArgs,
-    }
-    for verb, model in expected.items():
-        assert HANDLERS[verb][0] is model
-        assert VERB_ANNOTATIONS[verb].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.getLayerPropertyKeyframeDetails"].readOnlyHint
-    assert VERB_ANNOTATIONS["ae.deleteLayerPropertyKeyframe"].destructiveHint
-
-
 @pytest.mark.asyncio
 async def test_read_and_six_writes_bind_typed_readback_audit_and_undo():
     backend = PackageBackend()
@@ -1017,26 +999,3 @@ async def test_stale_locator_fails_before_dispatch():
         )
     assert raised.value.code == "STALE_LOCATOR"
     assert backend.requests == []
-
-
-@pytest.mark.asyncio
-async def test_public_handler_maps_snake_case_to_closed_native_wire(monkeypatch):
-    backend = PackageBackend()
-    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
-    response = await native_handlers._run_set_layer_property_keyframe_behavior(
-        schemas.AeSetLayerPropertyKeyframeBehaviorArgs(
-            **common(), behavior="roving", enabled=True
-        ),
-        None,
-    )
-    assert response["ok"] is True
-    assert response["implementation"]["engine"] == "native-aegp"
-    assert response["audit"]["effect"] == "committed"
-    assert backend.requests[0].arguments == {
-        "propertyLocator": locator("stream", STREAM),
-        "time": {"value": 12, "scale": 24},
-        "layerLocator": locator("layer", LAYER),
-        "idempotencyKey": "issue157-keyframe-intent-0001",
-        "behavior": "roving",
-        "enabled": True,
-    }

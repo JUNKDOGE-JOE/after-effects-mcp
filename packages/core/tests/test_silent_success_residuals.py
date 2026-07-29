@@ -3,12 +3,6 @@ from __future__ import annotations
 from pathlib import Path
 from string import Template
 
-import pytest
-from pydantic import ValidationError
-
-from ae_mcp.schemas import AeGetPropertiesArgs
-
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -39,14 +33,3 @@ def test_get_properties_template_reports_missing_layers_explicitly():
     )
     assert "missingLayerIds" in rendered
     assert "no valid layers" in rendered
-
-
-@pytest.mark.parametrize("layer_ids", ([0], [-1], []))
-def test_get_properties_schema_rejects_invalid_layer_ids(layer_ids: list[int]):
-    with pytest.raises(ValidationError):
-        AeGetPropertiesArgs(layer_ids=layer_ids, query="position")
-
-
-def test_get_properties_schema_accepts_positive_layer_ids():
-    args = AeGetPropertiesArgs(layer_ids=[1, 2], query="position")
-    assert args.layer_ids == [1, 2]

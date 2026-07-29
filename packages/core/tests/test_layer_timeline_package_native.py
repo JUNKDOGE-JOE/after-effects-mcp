@@ -307,19 +307,6 @@ def _deadline() -> int:
     return int(time.time() * 1000) + 5_000
 
 
-def test_public_schema_names_are_frozen_closed_and_annotated():
-    load_all()
-    for verb, expected_fields in PUBLIC_TOOLS.items():
-        schema_cls, _handler = HANDLERS[verb]
-        schema = schema_cls.model_json_schema()
-        assert schema["additionalProperties"] is False
-        assert set(schema["properties"]) == set(expected_fields)
-        assert VERB_ANNOTATIONS[verb].destructiveHint is False
-        assert VERB_ANNOTATIONS[verb].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.getLayerDetails"].readOnlyHint is True
-    assert VERB_ANNOTATIONS["ae.duplicateLayer"].readOnlyHint is False
-
-
 def test_core_contracts_equal_the_frozen_native_protocol_contracts():
     protocol = json.loads(Path("native/ae-plugin/protocol/aegp-rpc.schema.json").read_text())["$defs"]
     definitions = {
@@ -349,23 +336,6 @@ def test_public_stretch_percentage_is_exactly_canonicalized_for_aegp():
     assert TL.stretch_percent_to_ratio("-50").model_dump(by_alias=True) == {"num": -1, "den": 2}
     assert TL.stretch_percent_to_ratio("0.000001").model_dump(by_alias=True) == {
         "num": 1, "den": 100_000_000,
-    }
-
-
-def test_public_validation_error_is_structured_and_actionable():
-    with pytest.raises(ValidationError) as raised:
-        schemas.AeSetLayerStretchArgs.model_validate({
-            "layer_locator": _locator("layer", LAYER_OBJECT),
-            "stretch_percent": "0",
-            "idempotency_key": "layer-stretch-intent-0001",
-        })
-    error = server_module._project_composition_validation_error("ae.setLayerStretch", raised.value)
-    assert error["code"] == "INVALID_ARGUMENT"
-    assert error["sideEffect"] == "not-started"
-    assert error["recovery"]["action"] == "change-arguments"
-    assert error["details"] == {
-        "field": "arguments.stretch_percent",
-        "capabilityId": TL.LAYER_STRETCH_SET_CAPABILITY_ID,
     }
 
 
@@ -498,31 +468,3 @@ async def test_duplicate_rejects_unrelated_layer_semantics_after_commit():
     assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
     assert raised.value.side_effect == "may-have-occurred"
     assert raised.value.retryable is False
-
-
-@pytest.mark.asyncio
-async def test_public_handlers_map_snake_case_to_closed_native_wire(monkeypatch):
-    backend = PackageBackend()
-    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
-    layer = _locator("layer", LAYER_OBJECT)
-    read = await native_handlers._run_get_layer_details(
-        schemas.AeGetLayerDetailsArgs(layer_locator=layer), None,
-    )
-    stretch = await native_handlers._run_set_layer_stretch(
-        schemas.AeSetLayerStretchArgs(
-            layer_locator=layer,
-            stretch_percent="125",
-            idempotency_key="public-stretch-intent-0001",
-        ),
-        None,
-    )
-    assert read["ok"] is True
-    assert read["implementation"]["capabilityId"] == TL.LAYER_DETAILS_READ_CAPABILITY_ID
-    assert stretch["ok"] is True
-    assert stretch["audit"]["effect"] == "committed"
-    assert backend.requests[0].arguments == {"layerLocator": layer}
-    assert backend.requests[1].arguments == {
-        "layerLocator": layer,
-        "stretch": {"num": 5, "den": 4},
-        "idempotencyKey": "public-stretch-intent-0001",
-    }
