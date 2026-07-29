@@ -30,7 +30,13 @@ from pydantic import (
 )
 
 from ae_mcp.backends.base import BackendError, ExecutionEngine
-from ae_mcp.native_exec_generated import NATIVE_EXEC_INPUT_SCHEMA
+from ae_mcp.native_exec_generated import (
+    MODEL_RESULT_DEFINITIONS,
+    MODEL_RESULT_SCHEMA_INDEXES,
+    MODEL_RESULT_SCHEMAS,
+    NATIVE_EXEC_INPUT_SCHEMA,
+    PRIMITIVES as NATIVE_EXEC_PRIMITIVES,
+)
 
 
 NativeSideEffect: TypeAlias = Literal[
@@ -271,6 +277,17 @@ class NativeInvokeRequest(_NativeModel):
 
 
 _NATIVE_EXEC_ARGUMENTS_VALIDATOR = Draft202012Validator(NATIVE_EXEC_INPUT_SCHEMA)
+_NATIVE_EXEC_RESULT_VALIDATORS = {
+    primitive["id"]: Draft202012Validator(
+        {
+            "$defs": MODEL_RESULT_DEFINITIONS,
+            **MODEL_RESULT_SCHEMAS[
+                MODEL_RESULT_SCHEMA_INDEXES[primitive["id"]]
+            ],
+        }
+    )
+    for primitive in NATIVE_EXEC_PRIMITIVES
+}
 
 
 class NativeProgramRequest(NativeInvokeRequest):
@@ -4947,6 +4964,32 @@ def _native_program_result_error(
     )
 
 
+def _native_program_outputs_match_generated_contract(
+    *,
+    arguments: Mapping[str, Any],
+    outputs: Mapping[str, Any],
+    completed_count: int,
+) -> bool:
+    operations = arguments.get("operations")
+    if not isinstance(operations, list) or completed_count > len(operations):
+        return False
+    expected: dict[str, Draft202012Validator] = {}
+    for operation in operations[:completed_count]:
+        if not isinstance(operation, dict):
+            return False
+        return_as = operation.get("returnAs")
+        if return_as is None:
+            continue
+        validator = _NATIVE_EXEC_RESULT_VALIDATORS.get(operation.get("op"))
+        if not isinstance(return_as, str) or validator is None:
+            return False
+        expected[return_as] = validator
+    return set(outputs) == set(expected) and all(
+        validator.is_valid(outputs[name])
+        for name, validator in expected.items()
+    )
+
+
 async def invoke_native_program(
     backend: NativeInvokeBackend,
     *,
@@ -5003,6 +5046,11 @@ async def invoke_native_program(
         == _invoke_request_digest(request, negotiation)
         and result.evidence.completed_at_unix_ms <= deadline_unix_ms
         and actual_operations == expected_operations
+        and _native_program_outputs_match_generated_contract(
+            arguments=request.arguments,
+            outputs=result.outputs,
+            completed_count=len(result.operations),
+        )
         and result.evidence.postcondition.digest == expected_postcondition
         and result.undo.available is (operation_key is not None)
         and result.undo.group_label == undo_group
@@ -5109,6 +5157,11 @@ def _validate_native_program_failure_binding(
         == _invoke_request_digest(request, negotiation)
         and actual_completed == completed_prefix
         and failed_operation_matches
+        and _native_program_outputs_match_generated_contract(
+            arguments=request.arguments,
+            outputs=details.outputs,
+            completed_count=len(details.completed_operations),
+        )
         and details.evidence.postcondition.digest == expected_postcondition
         and (
             not details.undo.available

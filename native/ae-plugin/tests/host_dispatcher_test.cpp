@@ -143,8 +143,8 @@ void write_program_has_one_undo_group_and_replays_idempotently() {
   const auto replay = dispatcher.take_outbound();
   require(replay.size() == 1 && replay[0].replayed && replay[0].ok,
           "idempotent completion was not replayed");
-  require(!replay[0].native_program_result.undo_available,
-          "replay incorrectly advertised a new Undo action");
+  require(replay[0].native_program_result.undo_available,
+          "replay lost the recorded Undo envelope");
   require(host.programs == 1, "idempotent replay executed twice");
 }
 

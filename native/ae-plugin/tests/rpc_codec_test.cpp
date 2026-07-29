@@ -87,6 +87,23 @@ void capabilities_expose_one_top_level_descriptor() {
           "capabilities response did not contain exactly one top-level route");
 }
 
+void progress_uses_the_protocol_event_envelope() {
+  ProgressEvent event;
+  event.request_id = kRequest;
+  event.session_id = kSession;
+  event.sequence = 1;
+  event.phase = ProgressPhase::kQueued;
+  event.fraction = 0.0;
+  event.message = "queued";
+  const std::string json = payload(encode_progress_event(event));
+  require(json.find("\"kind\":\"event\"") != std::string::npos,
+          "progress frame did not use the protocol event kind");
+  require(json.find("\"event\":\"progress\"") != std::string::npos,
+          "progress frame omitted the progress event discriminator");
+  require(json.find("\"progress\":{\"fraction\":0") != std::string::npos,
+          "progress payload was not nested under progress");
+}
+
 void native_program_success_and_failure_are_structured() {
   NativeProgramSuccess success;
   success.request_id = kRequest;
@@ -121,7 +138,6 @@ void native_program_success_and_failure_are_structured() {
   failure.request_digest = kDigest;
   failure.postcondition_digest = kDigest;
   failure.operation_key = "native-write-key-0001";
-  failure.undo_group = "Set depth";
   failure.write_started = true;
   const std::string failure_json =
       payload(encode_native_program_failure(failure));
@@ -130,6 +146,45 @@ void native_program_success_and_failure_are_structured() {
           "program failure lost uncertain-write classification");
   require(failure_json.find("\"failedOperation\"") != std::string::npos,
           "program failure omitted failed operation");
+
+  NativeProgramFailure undo_open_failure;
+  undo_open_failure.request_id = kRequest;
+  undo_open_failure.session_id = kSession;
+  undo_open_failure.host_instance_id = kHost;
+  undo_open_failure.code = RpcErrorCode::kCapabilityFailed;
+  undo_open_failure.message = "Undo group could not be opened";
+  undo_open_failure.disposition = NativeProgramDisposition::kNotStarted;
+  undo_open_failure.started_at_unix_ms = 1;
+  undo_open_failure.completed_at_unix_ms = 2;
+  undo_open_failure.request_digest = kDigest;
+  undo_open_failure.postcondition_digest = kDigest;
+  undo_open_failure.operation_key = "native-write-key-0002";
+  const std::string undo_open_json =
+      payload(encode_native_program_failure(undo_open_failure));
+  require(undo_open_json.find(
+              "\"operationKey\":\"native-write-key-0002\"") !=
+              std::string::npos,
+          "write failure without Undo lost its operation key");
+  require(undo_open_json.find("\"sideEffect\":\"not-started\"") !=
+              std::string::npos,
+          "not-started failure used the wrong side-effect state");
+  require(undo_open_json.find(
+              "\"undo\":{\"available\":false,\"verified\":false}") !=
+              std::string::npos,
+          "Undo-open failure advertised an unavailable group label");
+
+  NativeProgramFailure completed_failure = undo_open_failure;
+  completed_failure.operation_key = "native-write-key-0003";
+  completed_failure.disposition = NativeProgramDisposition::kCompleted;
+  completed_failure.failed_operation =
+      NativeProgramOperationSummary{0, "composition.duration.set", "failed"};
+  completed_failure.undo_available = true;
+  completed_failure.undo_group = "Set duration";
+  const std::string completed_json =
+      payload(encode_native_program_failure(completed_failure));
+  require(completed_json.find("\"sideEffect\":\"completed\"") !=
+              std::string::npos,
+          "completed safe failure used generic error side-effect policy");
 }
 
 class TestClock final : public SessionClock {
@@ -173,6 +228,7 @@ int main() {
   try {
     decodes_only_program_and_control_requests();
     capabilities_expose_one_top_level_descriptor();
+    progress_uses_the_protocol_event_envelope();
     native_program_success_and_failure_are_structured();
     framing_and_session_front_door_remain_bounded();
   } catch (const std::exception &error) {

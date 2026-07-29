@@ -4,15 +4,23 @@ from __future__ import annotations
 
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator, ValidationError
 
 ROOT = Path(__file__).resolve().parents[3]
 CORE = ROOT / "packages" / "core"
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(CORE))
 
+from ae_mcp.native_exec_generated import (  # noqa: E402
+    MODEL_RESULT_DEFINITIONS,
+    MODEL_RESULT_SCHEMA_INDEXES,
+    MODEL_RESULT_SCHEMAS,
+    PRIMITIVES as GENERATED_PRIMITIVES,
+)
 from scripts.generate_native_exec import (  # noqa: E402
     _inline_schema,
     _native_program_invoke_params,
@@ -278,6 +286,53 @@ def test_catalog_uses_real_closed_contracts_and_typed_internal_handles():
             "exportable": {"const": False},
         },
     }
+
+
+def test_generated_primitive_result_schemas_validate_exported_time_shapes():
+    for primitive_id in (
+        "layer.properties.list",
+        "property.keyframes.list",
+        "property.keyframe.details.read",
+        "property.keyframe.add",
+        "property.keyframe.value.set",
+        "property.keyframe.interpolation.set",
+        "property.keyframe.temporalEase.set",
+        "property.keyframe.behavior.set",
+        "property.keyframe.delete",
+    ):
+        assert primitive_id in MODEL_RESULT_SCHEMA_INDEXES
+
+    layer_schema = {
+        "$defs": MODEL_RESULT_DEFINITIONS,
+        **MODEL_RESULT_SCHEMAS[
+            MODEL_RESULT_SCHEMA_INDEXES["layer.properties.list"]
+        ],
+    }
+    value = {
+        "layerLocator": {
+            "kind": "layer",
+            "hostInstanceId": "11111111-1111-4111-8111-111111111111",
+            "sessionId": "22222222-2222-4222-8222-222222222222",
+            "projectId": "33333333-3333-4333-8333-333333333333",
+            "generation": 1,
+            "objectId": "44444444-4444-4444-8444-444444444444",
+        },
+        "parentPropertyLocator": None,
+        "layerName": "Layer",
+        "sampleTime": {"mode": "comp-time", "value": -3, "scale": 24},
+        "total": 0,
+        "offset": 0,
+        "limit": 1,
+        "returned": 0,
+        "hasMore": False,
+        "nextOffset": None,
+        "properties": [],
+    }
+    Draft202012Validator(layer_schema).validate(value)
+    invalid = deepcopy(value)
+    invalid["sampleTime"].pop("mode")
+    with pytest.raises(ValidationError):
+        Draft202012Validator(layer_schema).validate(invalid)
 
 
 def test_catalog_rejects_a_primitive_schema_that_is_not_closed(tmp_path):

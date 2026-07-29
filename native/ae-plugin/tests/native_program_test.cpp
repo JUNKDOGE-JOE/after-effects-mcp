@@ -1,8 +1,10 @@
 #include "aemcp_native/native_primitive_registry.generated.hpp"
 #include "aemcp_native/native_program.hpp"
 #include "aemcp_native/rpc_codec.hpp"
+#include "../src/aegp/native_program_executor.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <functional>
 #include <iostream>
@@ -19,6 +21,7 @@ using aemcp::native::parse_json_object;
 using aemcp::native::parse_native_program;
 using aemcp::native::ProgramAdmission;
 using aemcp::native::validate_native_program;
+using namespace std::chrono_literals;
 
 void require(bool condition, const std::string &message) {
   if (!condition)
@@ -40,6 +43,10 @@ std::string composition_locator() {
 
 std::string property_locator() {
   return R"({"kind":"stream","hostInstanceId":"11111111-1111-4111-8111-111111111111","sessionId":"22222222-2222-4222-8222-222222222222","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"55555555-5555-4555-8555-555555555555"})";
+}
+
+std::string layer_locator() {
+  return R"({"kind":"layer","hostInstanceId":"11111111-1111-4111-8111-111111111111","sessionId":"22222222-2222-4222-8222-222222222222","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"66666666-6666-4666-8666-666666666666"})";
 }
 
 NativeProgram program(const std::string &json) {
@@ -301,6 +308,178 @@ void codec_accepts_only_the_native_program_invoke_shape() {
           "native program did not become the invoke wire parameter");
 }
 
+class PropertyResultHost final
+    : public aemcp::native::NativeProgramPrimitiveHost {
+public:
+  [[nodiscard]] aemcp::native::NativeHandleResolveResult
+  resolve_native_handle(
+      aemcp::native::HandleKind kind,
+      const aemcp::native::ObjectLocator &locator,
+      const std::optional<aemcp::native::ObjectLocator> &owner_locator,
+      aemcp::native::TimePoint) override {
+    if (kind == aemcp::native::HandleKind::kComposition) {
+      return aemcp::native::NativeHandleResolveResult::success(
+          aemcp::native::ScopedCompositionHandle{locator, 1});
+    }
+    if (!owner_locator.has_value()) {
+      return aemcp::native::NativeHandleResolveResult::failure(
+          "INVALID_ARGUMENT", "owner locator is required");
+    }
+    if (kind == aemcp::native::HandleKind::kLayer) {
+      return aemcp::native::NativeHandleResolveResult::success(
+          aemcp::native::ScopedLayerHandle{
+              {locator, 2, 1},
+          });
+    }
+    return aemcp::native::NativeHandleResolveResult::success(
+        aemcp::native::ScopedPropertyHandle{locator, *owner_locator, 3});
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerPropertiesResult
+  list_layer_properties(const aemcp::native::LayerPropertiesQuery &query,
+                        aemcp::native::TimePoint) override {
+    aemcp::native::LayerPropertiesPage page;
+    page.layer_locator = query.layer_locator;
+    page.layer_name = "Layer";
+    page.sample_time = {-3, 24};
+    page.limit = query.limit;
+    return aemcp::native::HostLayerPropertiesResult::success(std::move(page));
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerPropertyKeyframesResult
+  list_layer_property_keyframes(
+      const aemcp::native::LayerPropertyKeyframesQuery &query,
+      aemcp::native::TimePoint) override {
+    aemcp::native::LayerPropertyKeyframesPage page;
+    page.property_locator = query.property_locator;
+    page.value_type = "one-d";
+    page.total = 1;
+    page.limit = query.limit;
+    page.keyframes.push_back({
+        1,
+        {5, 24},
+        aemcp::native::LayerPropertyScalarValue{"1"},
+        "linear",
+        "linear",
+    });
+    return aemcp::native::HostLayerPropertyKeyframesResult::success(
+        std::move(page));
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerPropertyKeyframeDetailsResult
+  read_layer_property_keyframe_details(
+      const aemcp::native::LayerPropertyKeyframeDetailsQuery &query,
+      aemcp::native::TimePoint) override {
+    return aemcp::native::HostLayerPropertyKeyframeDetailsResult::success(
+        details(query.property_locator, {7, 24}));
+  }
+
+  [[nodiscard]] aemcp::native::HostLayerPropertyKeyframeWriteResult
+  mutate_layer_property_keyframe(
+      const aemcp::native::LayerPropertyKeyframeMutationCommand &command,
+      aemcp::native::TimePoint) override {
+    aemcp::native::LayerPropertyKeyframeChanged changed;
+    changed.layer_locator = command.layer_locator;
+    changed.property_locator = command.property_locator;
+    changed.time = command.time;
+    changed.keyframe_count_before = 1;
+    changed.keyframe_count_after = 1;
+    return aemcp::native::HostLayerPropertyKeyframeWriteResult::success(
+        std::move(changed));
+  }
+
+private:
+  [[nodiscard]] static aemcp::native::LayerPropertyKeyframeDetails
+  details(const aemcp::native::ObjectLocator &property,
+          aemcp::native::LayerPropertySampleTime time) {
+    aemcp::native::LayerPropertyKeyframeDetails result;
+    result.property_locator = property;
+    result.time = time;
+    result.value_type = "one-d";
+    result.value = aemcp::native::LayerPropertyScalarValue{"1"};
+    result.temporal_dimensionality = 1;
+    result.in_interpolation = "linear";
+    result.out_interpolation = "linear";
+    result.temporal_ease.push_back({
+        0,
+        {"0", "33"},
+        {"0", "33"},
+    });
+    return result;
+  }
+};
+
+std::size_t count_text(std::string_view value, std::string_view needle) {
+  std::size_t count = 0;
+  std::size_t offset = 0;
+  while ((offset = value.find(needle, offset)) != std::string_view::npos) {
+    ++count;
+    offset += needle.size();
+  }
+  return count;
+}
+
+void property_and_keyframe_adapters_emit_generated_time_shapes() {
+  PropertyResultHost host;
+  const std::string handles =
+      R"({"op":"composition.resolve","args":{"locator":)" +
+      composition_locator() +
+      R"(},"saveAs":"composition"},{"op":"layer.resolve","args":{"composition":{"ref":"composition"},"locator":)" +
+      layer_locator() +
+      R"(},"saveAs":"layer"},{"op":"property.resolve","args":{"layer":{"ref":"layer"},"locator":)" +
+      property_locator() + R"(},"saveAs":"property"})";
+  const NativeProgram read = program(
+      R"({"operations":[)" + handles +
+      R"(,{"op":"layer.properties.list","args":{"layer":{"ref":"layer"},"offset":0,"limit":1},"returnAs":"properties"},{"op":"property.keyframes.list","args":{"property":{"ref":"property"},"offset":0,"limit":1},"returnAs":"keyframes"},{"op":"property.keyframe.details.read","args":{"property":{"ref":"property"},"time":{"value":7,"scale":24}},"returnAs":"details"}]})");
+  const auto read_result = aemcp::native::execute_native_program(
+      host, read, "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+      std::chrono::steady_clock::now() + 1s);
+  require(read_result.ok, "property read adapter program failed");
+  const std::string read_json = aemcp::native::canonicalize_json(
+      aemcp::native::JsonValue{read_result.outputs});
+  require(read_json.find(
+              "\"sampleTime\":{\"mode\":\"comp-time\",\"scale\":24,"
+              "\"value\":-3}") != std::string::npos,
+          "layer.properties.list sampleTime does not match generated schema");
+  require(read_json.find(
+              "\"time\":{\"mode\":\"comp-time\",\"scale\":24,\"value\":5}") !=
+              std::string::npos,
+          "property.keyframes.list time does not match generated schema");
+  require(read_json.find(
+              "\"time\":{\"scale\":24,\"secondsRational\":\"7/24\","
+              "\"value\":7}") != std::string::npos,
+          "keyframe details time is not an exact canonical rational");
+
+  const std::string time = R"({"value":9,"scale":24})";
+  const NativeProgram writes = program(
+      R"({"operationKey":"property-keyframe-write-0001","undoGroup":"Mutate keyframes","operations":[)" +
+      handles +
+      R"(,{"op":"property.keyframe.add","args":{"layer":{"ref":"layer"},"property":{"ref":"property"},"time":)" +
+      time +
+      R"(,"value":{"kind":"scalar","value":"1"}},"returnAs":"add"},{"op":"property.keyframe.value.set","args":{"layer":{"ref":"layer"},"property":{"ref":"property"},"time":)" +
+      time +
+      R"(,"value":{"kind":"scalar","value":"2"}},"returnAs":"value"},{"op":"property.keyframe.interpolation.set","args":{"layer":{"ref":"layer"},"property":{"ref":"property"},"time":)" +
+      time +
+      R"(,"inInterpolation":"linear","outInterpolation":"bezier"},"returnAs":"interpolation"},{"op":"property.keyframe.temporalEase.set","args":{"layer":{"ref":"layer"},"property":{"ref":"property"},"time":)" +
+      time +
+      R"(,"dimensions":[{"dimension":0,"inEase":{"speed":"0","influence":"33"},"outEase":{"speed":"0","influence":"33"}}]},"returnAs":"temporalEase"},{"op":"property.keyframe.behavior.set","args":{"layer":{"ref":"layer"},"property":{"ref":"property"},"time":)" +
+      time +
+      R"(,"behavior":"temporal-continuous","enabled":true},"returnAs":"behavior"},{"op":"property.keyframe.delete","args":{"layer":{"ref":"layer"},"property":{"ref":"property"},"time":)" +
+      time + R"(},"returnAs":"delete"}]})");
+  const auto write_result = aemcp::native::execute_native_program(
+      host, writes, "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222",
+      std::chrono::steady_clock::now() + 1s);
+  require(write_result.ok, "keyframe mutation adapter program failed");
+  const std::string write_json = aemcp::native::canonicalize_json(
+      aemcp::native::JsonValue{write_result.outputs});
+  require(count_text(write_json, "\"secondsRational\":\"3/8\"") == 6,
+          "six keyframe mutation results did not use canonical exact time");
+  require(write_json.find("\"mode\":\"comp-time\"") == std::string::npos,
+          "keyframe mutation result reused the list sample-time shape");
+}
+
 } // namespace
 
 int main() {
@@ -315,6 +494,7 @@ int main() {
     literal_schemas_are_closed_and_bounded_before_dispatch();
     named_results_and_unicode_parser_are_uniform();
     codec_accepts_only_the_native_program_invoke_shape();
+    property_and_keyframe_adapters_emit_generated_time_shapes();
     std::cout << "native_program_test: PASS\n";
     return 0;
   } catch (const std::exception &error) {

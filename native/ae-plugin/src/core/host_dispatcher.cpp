@@ -575,7 +575,6 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         replay.route_id = request.route_id;
         replay.session_generation = request.session_generation;
         replay.replayed = true;
-        replay.native_program_result.undo_available = false;
         outbound_.push_back(replay);
         remember_terminal_locked(key, now);
         return {EnqueueCode::kAccepted};

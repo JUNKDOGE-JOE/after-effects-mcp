@@ -967,6 +967,41 @@ def _generate_mjs(registry: PrimitiveRegistry, root_definitions: dict[str, Any])
 
 
 def _generate_python(registry: PrimitiveRegistry, root_definitions: dict[str, Any]) -> str:
+    model_result_definitions: dict[str, Any] = {}
+
+    def localize_result_refs(value: Any) -> Any:
+        if isinstance(value, list):
+            return [localize_result_refs(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        if set(value) == {"$ref"}:
+            reference = value["$ref"]
+            if isinstance(reference, str) and "#/$defs/" in reference:
+                definition = reference.split("#/$defs/", 1)[1]
+                if definition not in root_definitions:
+                    raise ValueError(f"unknown RPC definition {definition}")
+                if definition not in model_result_definitions:
+                    model_result_definitions[definition] = {}
+                    model_result_definitions[definition] = localize_result_refs(
+                        root_definitions[definition]
+                    )
+                return {"$ref": f"#/$defs/{definition}"}
+        return {
+            key: localize_result_refs(item)
+            for key, item in value.items()
+        }
+
+    model_result_schemas: list[dict[str, Any]] = []
+    model_result_schema_indexes: dict[str, int] = {}
+    result_schema_indexes: dict[str, int] = {}
+    for row in registry.rows:
+        key = _canonical_json(row.result_schema)
+        index = result_schema_indexes.get(key)
+        if index is None:
+            index = len(model_result_schemas)
+            result_schema_indexes[key] = index
+            model_result_schemas.append(localize_result_refs(row.result_schema))
+        model_result_schema_indexes[row.id] = index
     rows = [
         {
             "id": row.id,
@@ -1001,6 +1036,9 @@ def _generate_python(registry: PrimitiveRegistry, root_definitions: dict[str, An
         "from __future__ import annotations",
         "",
         f"PRIMITIVES = {pprint.pformat(rows, sort_dicts=True, width=100)}",
+        f"MODEL_RESULT_DEFINITIONS = {pprint.pformat(model_result_definitions, sort_dicts=True, width=100)}",
+        f"MODEL_RESULT_SCHEMAS = {pprint.pformat(model_result_schemas, sort_dicts=True, width=100)}",
+        f"MODEL_RESULT_SCHEMA_INDEXES = {pprint.pformat(model_result_schema_indexes, sort_dicts=True, width=100)}",
         f"NATIVE_EXEC_INPUT_SCHEMA = {pprint.pformat(input_schema, sort_dicts=True, width=100)}",
         f"CAPABILITY_DESCRIPTORS = {pprint.pformat(descriptors, sort_dicts=True, width=100)}",
         f"NATIVE_EXEC_REGISTRY_DIGEST = \"{_digest(descriptors['full'])}\"",

@@ -44,11 +44,43 @@ def _composition_locator() -> dict[str, Any]:
     }
 
 
+def _project_locator() -> dict[str, Any]:
+    return {
+        **_composition_locator(),
+        "kind": "project",
+    }
+
+
 def _layer_locator() -> dict[str, Any]:
     return {
         **_composition_locator(),
         "kind": "layer",
         "objectId": "55555555-5555-4555-8555-555555555555",
+    }
+
+
+def _layer_properties_program() -> dict[str, Any]:
+    return {
+        "operations": [
+            {
+                "op": "composition.resolve",
+                "args": {"locator": _composition_locator()},
+                "saveAs": "composition",
+            },
+            {
+                "op": "layer.resolve",
+                "args": {
+                    "composition": {"ref": "composition"},
+                    "locator": _layer_locator(),
+                },
+                "saveAs": "layer",
+            },
+            {
+                "op": "layer.properties.list",
+                "args": {"layer": {"ref": "layer"}, "offset": 0, "limit": 1},
+                "returnAs": "properties",
+            },
+        ]
     }
 
 
@@ -263,7 +295,72 @@ def _program_success(
     operations = [
         {"index": 0, "op": "project.items.list", "status": "completed"}
     ]
-    outputs = {"items": {"items": [], "nextOffset": None}}
+    outputs = {
+        "items": {
+            "projectLocator": _project_locator(),
+            "total": 0,
+            "offset": 0,
+            "limit": 1,
+            "returned": 0,
+            "hasMore": False,
+            "nextOffset": None,
+            "items": [],
+        }
+    }
+    return N.NativeProgramInvokeResult.model_validate(
+        {
+            "capabilityId": "ae.native.exec",
+            "outputs": outputs,
+            "operations": operations,
+            "evidence": {
+                "engine": "native-aegp",
+                "hostInstanceId": _HOST,
+                "sessionId": _SESSION,
+                "requestId": request.request_id,
+                "capabilityId": "ae.native.exec",
+                "capabilityVersion": 1,
+                "startedAtUnixMs": request.deadline_unix_ms - 100,
+                "completedAtUnixMs": request.deadline_unix_ms - 50,
+                "effect": "none",
+                "requestDigest": _canonical_digest(
+                    {
+                        "wireVersion": negotiation.selected_wire_version,
+                        "kind": "request",
+                        "sessionId": negotiation.session_id,
+                        "requestId": request.request_id,
+                        "method": "invoke",
+                        "deadlineUnixMs": request.deadline_unix_ms,
+                        "params": {
+                            "capabilityId": request.capability_id,
+                            "capabilityVersion": request.capability_version,
+                            "arguments": request.arguments,
+                        },
+                    }
+                ),
+                "postcondition": {
+                    "verified": True,
+                    "kind": "native-program",
+                    "algorithm": "sha256-rfc8785-jcs-v1",
+                    "digest": _canonical_digest(
+                        {"operations": operations, "outputs": outputs}
+                    ),
+                },
+            },
+            "undo": {"available": False, "verified": False},
+            "replayed": False,
+        }
+    )
+
+
+def _program_success_with_outputs(
+    request: N.NativeProgramRequest,
+    negotiation: N.NativeNegotiation,
+    outputs: dict[str, Any],
+) -> N.NativeProgramInvokeResult:
+    operations = [
+        {"index": index, "op": operation["op"], "status": "completed"}
+        for index, operation in enumerate(request.arguments["operations"])
+    ]
     return N.NativeProgramInvokeResult.model_validate(
         {
             "capabilityId": "ae.native.exec",
@@ -389,6 +486,7 @@ class _ProgramBackend(N.NativeInvokeBackend):
         self.negotiation = _negotiation()
         self.requests: list[N.NativeProgramRequest] = []
         self.invoke_error: N.NativeBackendError | None = None
+        self.invoke_result: N.NativeProgramInvokeResult | None = None
 
     async def negotiate(self, **_kwargs) -> N.NativeNegotiation:
         return self.negotiation
@@ -406,6 +504,8 @@ class _ProgramBackend(N.NativeInvokeBackend):
         self.requests.append(request)
         if self.invoke_error is not None:
             raise self.invoke_error
+        if self.invoke_result is not None:
+            return self.invoke_result
         return _program_success(request, self.negotiation)
 
 
@@ -421,8 +521,46 @@ async def test_native_exec_negotiates_once_invokes_once_and_projects_common_succ
 
     assert len(backend.requests) == 1
     assert execution.request.program_digest == _canonical_digest(_read_program())
-    assert execution.result.outputs == {"items": {"items": [], "nextOffset": None}}
+    assert execution.result.outputs["items"]["items"] == []
+    assert execution.result.outputs["items"]["projectLocator"] == _project_locator()
     assert execution.result.evidence.request_id == "mcp-native-program-3"
+
+
+@pytest.mark.asyncio
+async def test_native_exec_validates_exported_values_against_generated_result_schema():
+    backend = _ProgramBackend()
+    args = S.AeNativeExecArgs.model_validate(_layer_properties_program())
+    request = N.NativeProgramRequest.from_args(
+        request_id="mcp-native-program-result-schema",
+        args=args,
+        deadline_unix_ms=_DEADLINE,
+    )
+    output = {
+        "layerLocator": _layer_locator(),
+        "parentPropertyLocator": None,
+        "layerName": "Layer",
+        "sampleTime": {"value": -3, "scale": 24},
+        "total": 0,
+        "offset": 0,
+        "limit": 1,
+        "returned": 0,
+        "hasMore": False,
+        "nextOffset": None,
+        "properties": [],
+    }
+    backend.invoke_result = _program_success_with_outputs(
+        request,
+        backend.negotiation,
+        {"properties": output},
+    )
+    with pytest.raises(N.NativeBackendError) as raised:
+        await N.invoke_native_program(
+            backend,
+            request_id=request.request_id,
+            args=args,
+            deadline_unix_ms=request.deadline_unix_ms,
+        )
+    assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
 
 
 @pytest.mark.asyncio
@@ -540,7 +678,9 @@ async def test_native_exec_handler_returns_common_result_and_preserves_uncertain
     success = await run(S.AeNativeExecArgs.model_validate(_read_program()), None)
     assert success["ok"] is True
     assert success["capabilityId"] == "ae.native.exec"
-    assert success["outputs"] == {"items": {"items": [], "nextOffset": None}}
+    assert success["outputs"]["items"]["items"] == []
+    assert success["outputs"]["items"]["nextOffset"] is None
+    assert success["outputs"]["items"]["projectLocator"] == _project_locator()
     assert success["audit"]["programDigest"] == _canonical_digest(_read_program())
 
     backend.invoke_error = N.NativeBackendError(

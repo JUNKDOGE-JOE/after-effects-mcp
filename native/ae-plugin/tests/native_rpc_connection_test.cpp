@@ -76,11 +76,31 @@ public:
 
 class TestHost final : public HostApi {
 public:
+  enum class ProgramMode {
+    kSuccess,
+    kCompletedSafeFailure,
+    kInvalidEvidence,
+  };
+
   [[nodiscard]] NativeProgramHostResult
   execute_native_program(const NativeProgram &program, std::string_view,
                          std::string_view, TimePoint) override {
     ++programs;
+    if (program_mode == ProgramMode::kInvalidEvidence) {
+      return NativeProgramHostResult::success({}, {});
+    }
     std::vector<NativeProgramOperationOutcome> operations;
+    if (program_mode == ProgramMode::kCompletedSafeFailure) {
+      operations.push_back({
+          0,
+          program.operations[0].primitive_id,
+          JsonValue{nullptr},
+      });
+      return NativeProgramHostResult::failure(
+          "PRECONDITION_FAILED", "write precondition was not satisfied", {},
+          {0}, 1, false, NativeProgramDisposition::kCompleted,
+          std::move(operations), {});
+    }
     for (std::size_t index = 0; index < program.operations.size(); ++index) {
       operations.push_back({
           index,
@@ -91,6 +111,24 @@ public:
     return NativeProgramHostResult::success(std::move(operations), {});
   }
 
+  [[nodiscard]] HostActionResult
+  begin_undo_group(std::string_view, TimePoint) override {
+    ++undo_begins;
+    return undo_begin_ok
+               ? HostActionResult::success()
+               : HostActionResult::failure(
+                     "CAPABILITY_FAILED", "Undo group could not be opened");
+  }
+
+  [[nodiscard]] HostActionResult end_undo_group(TimePoint) override {
+    ++undo_ends;
+    return undo_end_ok
+               ? HostActionResult::success()
+               : HostActionResult::failure(
+                     "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                     "Undo group could not be closed");
+  }
+
   [[nodiscard]] HostProjectGraphInvalidationResult
   invalidate_project_graph(TimePoint) override {
     ++invalidations;
@@ -99,6 +137,11 @@ public:
 
   std::size_t programs{0};
   std::size_t invalidations{0};
+  std::size_t undo_begins{0};
+  std::size_t undo_ends{0};
+  ProgramMode program_mode{ProgramMode::kSuccess};
+  bool undo_begin_ok{true};
+  bool undo_end_ok{true};
 };
 
 std::vector<std::uint8_t> frame(std::string_view json) {
@@ -151,6 +194,70 @@ std::string read_frame(int socket_fd) {
   return body;
 }
 
+std::string write_program_request(std::string_view request_id,
+                                  std::string_view operation_key) {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\"" +
+         std::string(kSession) + "\",\"requestId\":\"" +
+         std::string(request_id) +
+         "\",\"method\":\"invoke\",\"params\":{\"capabilityId\":"
+         "\"ae.native.exec\",\"capabilityVersion\":1,\"arguments\":{"
+         "\"operationKey\":\"" +
+         std::string(operation_key) +
+         "\",\"undoGroup\":\"Set duration\",\"operations\":[{"
+         "\"op\":\"composition.resolve\",\"args\":{\"locator\":{"
+         "\"kind\":\"composition\",\"hostInstanceId\":\"" +
+         std::string(kHost) +
+         "\",\"sessionId\":\"" + std::string(kSession) +
+         "\",\"projectId\":\"33333333-3333-4333-8333-333333333333\","
+         "\"generation\":1,\"objectId\":"
+         "\"44444444-4444-4444-8444-444444444444\"}},"
+         "\"saveAs\":\"composition\"},{\"op\":\"composition.duration.set\","
+         "\"args\":{\"composition\":{\"ref\":\"composition\"},"
+         "\"duration\":{\"value\":10,\"scale\":1}}}]}}}";
+}
+
+void handshake(int socket_fd) {
+  write_all(
+      socket_fd,
+      frame(
+          R"({"wireVersion":1,"kind":"request","requestId":"hello-write","method":"hello","params":{"supportedWireVersions":{"minimum":1,"maximum":1},"client":{"component":"core-broker","version":"1.0.0","instanceId":"33333333-3333-4333-8333-333333333333"},"nonce":"abcdefghijklmnopqrstuvwxyzABCDEF"}})"));
+  const std::string hello = read_frame(socket_fd);
+  require(hello.find("\"method\":\"hello\"") != std::string::npos &&
+              hello.find("\"ok\":true") != std::string::npos,
+          "write-session hello did not complete");
+}
+
+std::string invoke_and_drain(int socket_fd, HostDispatcher &dispatcher,
+                             TestHost &host, std::string_view request_id,
+                             std::string_view operation_key,
+                             bool drain_dispatcher = true) {
+  write_all(socket_fd,
+            frame(write_program_request(request_id, operation_key)));
+  std::string progress;
+  try {
+    progress = read_frame(socket_fd);
+  } catch (const std::exception &error) {
+    throw std::runtime_error(std::string(request_id) +
+                             " progress read failed: " + error.what());
+  }
+  require(progress.find("\"kind\":\"event\"") != std::string::npos &&
+              progress.find("\"event\":\"progress\"") != std::string::npos &&
+              progress.find("\"requestId\":\"" + std::string(request_id) +
+                            "\"") != std::string::npos,
+          "write request progress was not associated");
+  if (drain_dispatcher) {
+    const DrainBatch batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1,
+            "write request did not produce one dispatcher completion");
+  }
+  try {
+    return read_frame(socket_fd);
+  } catch (const std::exception &error) {
+    throw std::runtime_error(std::string(request_id) +
+                             " terminal read failed: " + error.what());
+  }
+}
+
 void program_and_control_round_trip() {
   TestDispatcherClock dispatcher_clock;
   TestSessionClock session_clock;
@@ -198,8 +305,10 @@ void program_and_control_round_trip() {
       frame(
           R"({"wireVersion":1,"kind":"request","sessionId":"11111111-1111-4111-8111-111111111111","requestId":"invoke-1","method":"invoke","params":{"capabilityId":"ae.native.exec","capabilityVersion":1,"arguments":{"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1}}]}}})"));
   const std::string progress = read_frame(sockets[1]);
-  require(progress.find("\"kind\":\"progress\"") != std::string::npos,
-          "invoke did not publish queued progress");
+  const bool invoke_progress_valid =
+      progress.find("\"kind\":\"event\"") != std::string::npos &&
+      progress.find("\"event\":\"progress\"") != std::string::npos &&
+      progress.find("\"requestId\":\"invoke-1\"") != std::string::npos;
 
   TestHost host;
   const DrainBatch program = dispatcher.drain(host);
@@ -218,9 +327,12 @@ void program_and_control_round_trip() {
       frame(
           R"({"wireVersion":1,"kind":"request","sessionId":"11111111-1111-4111-8111-111111111111","requestId":"invalidate-1","method":"invalidateGraph","params":{"reason":"cep-jsx"}})"));
   const std::string invalidation_progress = read_frame(sockets[1]);
-  require(invalidation_progress.find("\"kind\":\"progress\"") !=
-              std::string::npos,
-          "graph invalidation did not publish queued progress");
+  const bool invalidation_progress_valid =
+      invalidation_progress.find("\"kind\":\"event\"") != std::string::npos &&
+      invalidation_progress.find("\"event\":\"progress\"") !=
+          std::string::npos &&
+      invalidation_progress.find("\"requestId\":\"invalidate-1\"") !=
+          std::string::npos;
   const DrainBatch graph = dispatcher.drain(host);
   require(graph.completions.size() == 1 && graph.completions[0].ok,
           "graph invalidation did not drain");
@@ -243,6 +355,10 @@ void program_and_control_round_trip() {
   (void)::close(sockets[1]);
   worker.join();
   (void)::close(sockets[0]);
+  require(invoke_progress_valid,
+          "invoke progress was not an associated protocol event");
+  require(invalidation_progress_valid,
+          "graph invalidation progress was not an associated protocol event");
 }
 
 void evidence_failure_classification_is_program_level() {
@@ -256,12 +372,136 @@ void evidence_failure_classification_is_program_level() {
           "graph evidence failure was not classified as control-plane failure");
 }
 
+void write_terminals_close_the_common_program_contract() {
+  TestDispatcherClock dispatcher_clock;
+  TestSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  TestObserver observer;
+  TestIdleSignal idle_signal;
+  NativeRpcConnectionHandler handler(
+      dispatcher, dispatcher_clock, session_clock,
+      NativeRpcRuntimeInfo{"1.0.0", "25.6.61", 61, "26.0", 1,
+                           std::string(kHost)},
+      observer, idle_signal);
+
+  int sockets[2]{-1, -1};
+  require(::socketpair(AF_UNIX, SOCK_STREAM, 0, sockets) == 0,
+          "write socketpair failed");
+  AuthenticatedConnection connection;
+  connection.socket_fd = sockets[0];
+  connection.peer.connection_id = "connection-write";
+  connection.peer.host_instance_id = kHost;
+  connection.session_id = kSession;
+  connection.session_generation = 1;
+  std::thread worker([&] { handler.serve(connection); });
+
+  try {
+    handshake(sockets[1]);
+    TestHost host;
+    const std::string first =
+        invoke_and_drain(sockets[1], dispatcher, host, "invoke-write-1",
+                         "write-key-success-0001");
+    require(first.find("\"ok\":true") != std::string::npos &&
+                first.find("\"replayed\":false") != std::string::npos &&
+                first.find("\"undo\":{\"available\":true,"
+                           "\"groupLabel\":\"Set duration\","
+                           "\"verified\":false}") != std::string::npos,
+            "committed write terminal lost its Undo envelope");
+
+    const std::string replay =
+        invoke_and_drain(sockets[1], dispatcher, host, "invoke-write-2",
+                         "write-key-success-0001", false);
+    require(replay.find("\"ok\":true") != std::string::npos &&
+                replay.find("\"replayed\":true") != std::string::npos &&
+                replay.find("\"undo\":{\"available\":true,"
+                            "\"groupLabel\":\"Set duration\","
+                            "\"verified\":false}") != std::string::npos,
+            "committed replay lost its recorded Undo envelope");
+    require(host.programs == 1 && host.undo_begins == 1 && host.undo_ends == 1,
+            "committed replay performed a second write or Undo group");
+
+    host.undo_begin_ok = false;
+    const std::string undo_open =
+        invoke_and_drain(sockets[1], dispatcher, host, "invoke-write-3",
+                         "write-key-openfail-01");
+    require(undo_open.find("\"code\":\"CAPABILITY_FAILED\"") !=
+                    std::string::npos &&
+                undo_open.find("\"disposition\":\"not-started\"") !=
+                    std::string::npos &&
+                undo_open.find(
+                    "\"operationKey\":\"write-key-openfail-01\"") !=
+                    std::string::npos &&
+                undo_open.find("\"sideEffect\":\"not-started\"") !=
+                    std::string::npos &&
+                undo_open.find(
+                    "\"undo\":{\"available\":false,\"verified\":false}") !=
+                    std::string::npos,
+            "Undo-open failure was not a bound not-started write terminal");
+
+    host.undo_begin_ok = true;
+    host.undo_end_ok = false;
+    const std::string undo_close =
+        invoke_and_drain(sockets[1], dispatcher, host, "invoke-write-4",
+                         "write-key-closefail-1");
+    require(
+        undo_close.find("\"code\":\"POSSIBLY_SIDE_EFFECTING_FAILURE\"") !=
+                std::string::npos &&
+            undo_close.find("\"disposition\":\"possibly-side-effecting\"") !=
+                std::string::npos &&
+            undo_close.find("\"operationKey\":\"write-key-closefail-1\"") !=
+                std::string::npos &&
+            undo_close.find("\"sideEffect\":\"may-have-occurred\"") !=
+                std::string::npos,
+        "Undo-close uncertainty was not bound to the write program");
+
+    host.undo_end_ok = true;
+    host.program_mode = TestHost::ProgramMode::kInvalidEvidence;
+    const std::string evidence =
+        invoke_and_drain(sockets[1], dispatcher, host, "invoke-write-5",
+                         "write-key-evidence-001");
+    require(
+        evidence.find("\"code\":\"POSSIBLY_SIDE_EFFECTING_FAILURE\"") !=
+                std::string::npos &&
+            evidence.find("\"operationKey\":\"write-key-evidence-001\"") !=
+                std::string::npos &&
+            evidence.find("\"sideEffect\":\"may-have-occurred\"") !=
+                std::string::npos,
+        "evidence uncertainty lost its operation binding");
+
+    host.program_mode = TestHost::ProgramMode::kCompletedSafeFailure;
+    const std::string completed =
+        invoke_and_drain(sockets[1], dispatcher, host, "invoke-write-6",
+                         "write-key-safe-fail-01");
+    require(completed.find("\"code\":\"PRECONDITION_FAILED\"") !=
+                    std::string::npos &&
+                completed.find("\"disposition\":\"completed\"") !=
+                    std::string::npos &&
+                completed.find(
+                    "\"operationKey\":\"write-key-safe-fail-01\"") !=
+                    std::string::npos &&
+                completed.find("\"sideEffect\":\"completed\"") !=
+                    std::string::npos,
+            "completed safe failure used a generic not-started policy");
+  } catch (...) {
+    (void)::shutdown(sockets[1], SHUT_RDWR);
+    (void)::close(sockets[1]);
+    worker.join();
+    (void)::close(sockets[0]);
+    throw;
+  }
+  (void)::shutdown(sockets[1], SHUT_RDWR);
+  (void)::close(sockets[1]);
+  worker.join();
+  (void)::close(sockets[0]);
+}
+
 } // namespace
 
 int main() {
   try {
     evidence_failure_classification_is_program_level();
     program_and_control_round_trip();
+    write_terminals_close_the_common_program_contract();
   } catch (const std::exception &error) {
     std::cerr << "native_rpc_connection_test failed: " << error.what() << '\n';
     return 1;

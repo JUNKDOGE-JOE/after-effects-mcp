@@ -332,6 +332,21 @@ function installProtocol(server, options) {
                 } else {
                     throw new Error('unexpected test protocol method: ' + request.method);
                 }
+                if (input.emitProgress && request.method === 'invoke') {
+                    socket.write(frame({
+                        wireVersion: 1,
+                        kind: 'event',
+                        sessionId: SESSION,
+                        requestId: request.requestId,
+                        event: 'progress',
+                        sequence: 1,
+                        progress: {
+                            phase: 'queued',
+                            fraction: 0,
+                            message: 'Queued for the AE main thread.',
+                        },
+                    }));
+                }
                 const response = {
                     wireVersion: 1,
                     kind: 'response',
@@ -510,6 +525,13 @@ test('client sends and verifies one read-only native program', UNIX_SOCKET_TEST,
         capabilityVersion: 1,
         arguments: readProgram(),
     });
+});
+
+test('client accepts associated progress before the native terminal', UNIX_SOCKET_TEST, async (t) => {
+    const { client } = await connectedFixture(t, { emitProgress: true });
+    const result = await invoke(client, 'request-progress-12345678', readProgram());
+    assert.equal(result.operations.length, 1);
+    assert.deepEqual(result.outputs.result, { value: 12, scale: 24 });
 });
 
 test('client preserves write identity and one common Undo terminal', UNIX_SOCKET_TEST, async (t) => {

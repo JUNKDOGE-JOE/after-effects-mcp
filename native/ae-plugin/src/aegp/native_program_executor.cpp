@@ -168,10 +168,22 @@ template <typename Integer>
   });
 }
 
-[[nodiscard]] JsonValue sample_time_json(const LayerPropertySampleTime &time) {
+[[nodiscard]] JsonValue
+comp_sample_time_json(const LayerPropertySampleTime &time) {
   return json_value({
       {"value", json_number(time.value)},
       {"scale", json_number(time.scale)},
+      {"mode", JsonValue{"comp-time"}},
+  });
+}
+
+[[nodiscard]] JsonValue
+exact_keyframe_time_json(const LayerPropertySampleTime &time) {
+  return json_value({
+      {"value", json_number(time.value)},
+      {"scale", json_number(time.scale)},
+      {"secondsRational",
+       JsonValue{canonical_seconds_rational(time.value, time.scale)}},
   });
 }
 
@@ -443,7 +455,7 @@ composition_settings_changed_json(const CompositionSettingsChanged &value) {
            ? locator_json(*page.parent_property_locator)
            : JsonValue{nullptr}},
       {"layerName", JsonValue{page.layer_name}},
-      {"sampleTime", sample_time_json(page.sample_time)},
+      {"sampleTime", comp_sample_time_json(page.sample_time)},
       {"total", json_number(page.total)},
       {"offset", json_number(page.offset)},
       {"limit", json_number(static_cast<std::uint64_t>(page.limit))},
@@ -462,7 +474,7 @@ composition_settings_changed_json(const CompositionSettingsChanged &value) {
 keyframe_entry_json(const LayerPropertyKeyframeEntry &value) {
   return json_value({
       {"keyframeIndex", json_number(value.keyframe_index)},
-      {"time", sample_time_json(value.time)},
+      {"time", comp_sample_time_json(value.time)},
       {"value", property_value_json(value.value)},
       {"inInterpolation", JsonValue{value.in_interpolation}},
       {"outInterpolation", JsonValue{value.out_interpolation}},
@@ -515,7 +527,7 @@ keyframe_details_json(const LayerPropertyKeyframeDetails &value) {
   }
   return json_value({
       {"propertyLocator", locator_json(value.property_locator)},
-      {"time", sample_time_json(value.time)},
+      {"time", exact_keyframe_time_json(value.time)},
       {"valueType", JsonValue{value.value_type}},
       {"value", property_value_json(value.value)},
       {"temporalDimensionality",
@@ -554,7 +566,7 @@ keyframe_changed_json(const LayerPropertyKeyframeChanged &value) {
       {"changed", JsonValue{value.changed}},
       {"layerLocator", locator_json(value.layer_locator)},
       {"propertyLocator", locator_json(value.property_locator)},
-      {"time", sample_time_json(value.time)},
+      {"time", exact_keyframe_time_json(value.time)},
       {"keyframeCountBefore", json_number(value.keyframe_count_before)},
       {"keyframeCountAfter", json_number(value.keyframe_count_after)},
       {"beforeKeyframe", value.before.has_value()

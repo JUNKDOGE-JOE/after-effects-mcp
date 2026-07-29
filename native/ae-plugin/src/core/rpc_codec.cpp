@@ -771,11 +771,11 @@ std::vector<std::uint8_t> encode_progress_event(const ProgressEvent &event) {
     invalid_argument("invalid progress fraction");
   }
   std::string json =
-      "{\"fraction\":" +
+      "{\"event\":\"progress\",\"kind\":\"event\",\"progress\":{\"fraction\":" +
       canonicalize_json(JsonValue{JsonNumber{event.fraction}}) +
-      ",\"kind\":\"progress\",\"message\":" + json_string(event.message) +
+      ",\"message\":" + json_string(event.message) +
       ",\"phase\":" + json_string(progress_phase(event.phase)) +
-      ",\"requestId\":" + json_string(event.request_id) +
+      "},\"requestId\":" + json_string(event.request_id) +
       ",\"sequence\":" + std::to_string(event.sequence) +
       ",\"sessionId\":" + json_string(event.session_id) + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
@@ -854,7 +854,18 @@ encode_native_program_failure(const NativeProgramFailure &response) {
   require_digest(response.request_digest, "request digest");
   require_digest(response.postcondition_digest, "postcondition digest");
   const ErrorPolicy policy = error_policy(response.code);
-  const bool write = response.undo_group.has_value();
+  const bool write = !response.operation_key.empty();
+  if (response.undo_available != response.undo_group.has_value() ||
+      (!write && (response.undo_available || response.write_started))) {
+    invalid_argument("invalid native program failure write envelope");
+  }
+  const char *side_effect = "not-started";
+  if (response.disposition == NativeProgramDisposition::kCompleted) {
+    side_effect = "completed";
+  } else if (response.disposition ==
+             NativeProgramDisposition::kPossiblySideEffecting) {
+    side_effect = "may-have-occurred";
+  }
   std::string details =
       "{\"capabilityId\":\"ae.native.exec\","
       "\"completedOperations\":" +
@@ -891,7 +902,7 @@ encode_native_program_failure(const NativeProgramFailure &response) {
   }
   details += ",\"undo\":{\"available\":" +
              std::string(response.undo_available ? "true" : "false");
-  if (write) {
+  if (response.undo_group.has_value()) {
     details += ",\"groupLabel\":" + json_string(*response.undo_group);
   }
   details += ",\"verified\":false}}";
@@ -903,7 +914,7 @@ encode_native_program_failure(const NativeProgramFailure &response) {
       ",\"hint\":\"Inspect After Effects state before retrying.\"},"
       "\"retryable\":" +
       (policy.retryable ? "true" : "false") +
-      ",\"sideEffect\":" + json_string(policy.side_effect) +
+      ",\"sideEffect\":" + json_string(side_effect) +
       "},\"kind\":\"response\",\"method\":\"invoke\",\"ok\":false,"
       "\"replayed\":" +
       (response.replayed ? "true" : "false") +
