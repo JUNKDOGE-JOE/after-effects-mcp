@@ -9,19 +9,39 @@
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
+        "required": [
+          "locator"
+        ],
         "properties": {
           "locator": {
-            "type": "object",
-            "additionalProperties": false
+            "$ref": "aegp-rpc.schema.json#/$defs/compositionLocator"
           }
         }
       },
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
+        "required": [
+          "handle",
+          "exportable"
+        ],
         "properties": {
           "handle": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value"
+            ],
+            "properties": {
+              "kind": {
+                "const": "composition"
+              },
+              "value": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
           },
           "exportable": {
             "const": false
@@ -41,19 +61,39 @@
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
+        "required": [
+          "locator"
+        ],
         "properties": {
           "locator": {
-            "type": "object",
-            "additionalProperties": false
+            "$ref": "aegp-rpc.schema.json#/$defs/layerLocator"
           }
         }
       },
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
+        "required": [
+          "handle",
+          "exportable"
+        ],
         "properties": {
           "handle": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "value": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
           },
           "exportable": {
             "const": false
@@ -73,19 +113,39 @@
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
+        "required": [
+          "locator"
+        ],
         "properties": {
           "locator": {
-            "type": "object",
-            "additionalProperties": false
+            "$ref": "aegp-rpc.schema.json#/$defs/streamLocator"
           }
         }
       },
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
+        "required": [
+          "handle",
+          "exportable"
+        ],
         "properties": {
           "handle": {
-            "type": "object"
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value"
+            ],
+            "properties": {
+              "kind": {
+                "const": "property"
+              },
+              "value": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
           },
           "exportable": {
             "const": false
@@ -103,13 +163,10 @@
       "mutability": "read",
       "requiredSuite": "AEGP_ProjSuite6",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/projectItemsListArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false
+        "$ref": "aegp-rpc.schema.json#/$defs/projectItemsListValue"
       },
       "executor": "execute_project_items_list",
       "summary": "Read project.items.list.",
@@ -122,13 +179,10 @@
       "mutability": "read",
       "requiredSuite": "AEGP_CompSuite12",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionLayersListArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionLayersListValue"
       },
       "executor": "execute_composition_layers_list",
       "summary": "Read composition.layers.list.",
@@ -141,13 +195,10 @@
       "mutability": "read",
       "requiredSuite": "AEGP_CompSuite12",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionLayersListArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSelectedLayersListInvokeResult"
       },
       "executor": "execute_composition_selectedLayers_list",
       "summary": "Read composition.selectedLayers.list.",
@@ -160,13 +211,10 @@
       "mutability": "read",
       "requiredSuite": "AEGP_CompSuite12",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeReadArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeReadValue"
       },
       "executor": "execute_composition_time_read",
       "summary": "Read composition.time.read.",
@@ -179,21 +227,10 @@
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeSetArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeSetInvokeResult"
       },
       "executor": "execute_composition_time_set",
       "summary": "Write composition.time.set.",
@@ -206,13 +243,10 @@
       "mutability": "read",
       "requiredSuite": "AEGP_CompSuite12",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsReadArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsReadValue"
       },
       "executor": "execute_composition_settings_read",
       "summary": "Read composition.settings.read.",
@@ -225,20 +259,15 @@
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDurationSetArguments"
       },
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
+        "required": ["value", "evidence"],
+        "properties": {
+          "value": {"$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDurationSetValue"},
+          "evidence": {"$ref": "aegp-rpc.schema.json#/$defs/executionEvidence"}
         }
       },
       "executor": "execute_composition_duration_set",
@@ -252,20 +281,15 @@
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionFrameRateSetArguments"
       },
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
+        "required": ["value", "evidence"],
+        "properties": {
+          "value": {"$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionFrameRateSetValue"},
+          "evidence": {"$ref": "aegp-rpc.schema.json#/$defs/executionEvidence"}
         }
       },
       "executor": "execute_composition_frameRate_set",
@@ -279,20 +303,15 @@
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionPixelAspectRatioSetArguments"
       },
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
+        "required": ["value", "evidence"],
+        "properties": {
+          "value": {"$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionPixelAspectRatioSetValue"},
+          "evidence": {"$ref": "aegp-rpc.schema.json#/$defs/executionEvidence"}
         }
       },
       "executor": "execute_composition_pixelAspectRatio_set",
@@ -306,20 +325,15 @@
       "mutability": "write",
       "requiredSuite": "AEGP_CompSuite12",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetArguments"
       },
       "resultSchema": {
         "type": "object",
         "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
+        "required": ["value", "evidence"],
+        "properties": {
+          "value": {"$ref": "aegp-rpc.schema.json#/$defs/tsmGeneratedAeCompositionDisplayStartTimeSetValue"},
+          "evidence": {"$ref": "aegp-rpc.schema.json#/$defs/executionEvidence"}
         }
       },
       "executor": "execute_composition_displayStartTime_set",
@@ -333,13 +347,10 @@
       "mutability": "read",
       "requiredSuite": "AEGP_LayerSuite9",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertiesListArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertiesListValue"
       },
       "executor": "execute_layer_properties_list",
       "summary": "Read layer.properties.list.",
@@ -352,13 +363,10 @@
       "mutability": "read",
       "requiredSuite": "AEGP_StreamSuite5",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListValue"
       },
       "executor": "execute_property_keyframes_list",
       "summary": "Read property.keyframes.list.",
@@ -371,21 +379,10 @@
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertySetArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertySetInvokeResult"
       },
       "executor": "execute_property_value_set",
       "summary": "Write property.value.set.",
@@ -398,13 +395,10 @@
       "mutability": "read",
       "requiredSuite": "AEGP_StreamSuite5",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeDetailsArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeDetailsValue"
       },
       "executor": "execute_property_keyframe_details_read",
       "summary": "Read property.keyframe.details.read.",
@@ -417,21 +411,10 @@
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeValueArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeAddInvokeResult"
       },
       "executor": "execute_property_keyframe_add",
       "summary": "Write property.keyframe.add.",
@@ -444,21 +427,10 @@
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeValueArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeValueSetInvokeResult"
       },
       "executor": "execute_property_keyframe_value_set",
       "summary": "Write property.keyframe.value.set.",
@@ -471,21 +443,10 @@
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeInterpolationArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeInterpolationSetInvokeResult"
       },
       "executor": "execute_property_keyframe_interpolation_set",
       "summary": "Write property.keyframe.interpolation.set.",
@@ -498,21 +459,10 @@
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeTemporalEaseArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeTemporalEaseSetInvokeResult"
       },
       "executor": "execute_property_keyframe_temporalEase_set",
       "summary": "Write property.keyframe.temporalEase.set.",
@@ -525,21 +475,10 @@
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeBehaviorArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeBehaviorSetInvokeResult"
       },
       "executor": "execute_property_keyframe_behavior_set",
       "summary": "Write property.keyframe.behavior.set.",
@@ -552,21 +491,10 @@
       "mutability": "write",
       "requiredSuite": "AEGP_StreamSuite5",
       "inputSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "x-contract": "legacy-native-closed-schema"
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeDeleteArguments"
       },
       "resultSchema": {
-        "type": "object",
-        "additionalProperties": false,
-        "before": {},
-        "after": {},
-        "changed": {
-          "type": "boolean"
-        },
-        "undo": {
-          "type": "object"
-        }
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeDeleteInvokeResult"
       },
       "executor": "execute_property_keyframe_delete",
       "summary": "Write property.keyframe.delete.",

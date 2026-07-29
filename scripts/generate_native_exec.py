@@ -10,19 +10,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-if __package__:
-    from .native_capability_codegen import (
-        canonical_json,
-        canonical_sha256,
-        descriptor_summary,
-    )
-else:
-    from native_capability_codegen import (
-        canonical_json,
-        canonical_sha256,
-        descriptor_summary,
-    )
-
 
 ROOT = Path(__file__).resolve().parents[1]
 CORE = ROOT / "packages" / "core"
@@ -99,7 +86,9 @@ def _required_string(row: dict[str, Any], key: str, label: str) -> str:
 def _replacement(value: Any, label: str) -> tuple[str, ...]:
     if isinstance(value, str):
         return (value,)
-    if isinstance(value, list) and all(isinstance(item, str) and item for item in value):
+    if value and isinstance(value, list) and all(
+        isinstance(item, str) and item for item in value
+    ):
         return tuple(value)
     raise ValueError(f"{label}: replacement must be a non-empty string or string array")
 
@@ -108,6 +97,27 @@ def _unique(rows: list[dict[str, Any]], key: str, label: str) -> None:
     values = [_required_string(row, key, label) for row in rows]
     if len(values) != len(set(values)):
         raise ValueError(f"{label}: duplicate {key}")
+
+
+def _is_closed_schema(schema: dict[str, Any], catalog_path: Path) -> bool:
+    """Accept a closed inline schema or a closed local AEGP definition ref."""
+    if set(schema) != {"$ref"}:
+        return schema.get("type") == "object" and schema.get("additionalProperties") is False
+    reference = schema["$ref"]
+    if not isinstance(reference, str) or "#/$defs/" not in reference:
+        return False
+    filename, definition = reference.split("#/$defs/", 1)
+    target_path = catalog_path.parent / filename
+    if not target_path.is_file() or not definition:
+        return False
+    target = _json_object(target_path).get("$defs", {}).get(definition)
+    if not isinstance(target, dict):
+        return False
+    if "const" in target:
+        target = target["const"]
+    return isinstance(target, dict) and target.get("type") == "object" and target.get(
+        "additionalProperties"
+    ) is False
 
 
 def load_migration_manifest(path: Path) -> MigrationManifest:
@@ -161,12 +171,28 @@ def load_primitive_registry(path: Path) -> PrimitiveRegistry:
         example = raw.get("example")
         if not all(isinstance(value, dict) for value in (input_schema, result_schema, example)):
             raise ValueError(f"{row_id}: schemas and example must be objects")
+        if not _is_closed_schema(input_schema, path) or not _is_closed_schema(
+            result_schema, path
+        ):
+            raise ValueError(f"{row_id}: inputSchema and resultSchema must be closed schemas")
         exportable = raw.get("exportable", True)
         if not isinstance(exportable, bool):
             raise ValueError(f"{row_id}: exportable must be boolean")
         if row_id.endswith(".resolve") and exportable:
             raise ValueError(f"{row_id}: resolver handles must not be exportable")
-        if mutability == "write" and not WRITE_EVIDENCE_KEYS <= set(result_schema):
+        result_ref = result_schema.get("$ref")
+        has_invoke_evidence = (
+            isinstance(result_ref, str) and result_ref.endswith("InvokeResult")
+        )
+        has_embedded_evidence = isinstance(result_schema.get("properties"), dict) and (
+            "evidence" in result_schema["properties"]
+        )
+        if (
+            mutability == "write"
+            and not WRITE_EVIDENCE_KEYS <= set(result_schema)
+            and not has_invoke_evidence
+            and not has_embedded_evidence
+        ):
             raise ValueError(f"{row_id}: write result needs before/after/changed/undo evidence")
         rows.append(
             PrimitiveRow(
