@@ -413,7 +413,9 @@ git commit -m "refactor(native): generate primitive registry metadata"
 - Modify: `native/ae-plugin/src/core/native_rpc_connection.cpp`
 - Modify: `native/ae-plugin/tests/native_rpc_connection_test.cpp`
 - Modify: `native/ae-plugin/protocol/aegp-rpc.schema.json`
+- Modify: `native/ae-plugin/protocol/conformance.mjs`
 - Modify: `native/ae-plugin/protocol/protocol.test.mjs`
+- Create/Modify/Delete: `native/ae-plugin/protocol/fixtures/*.json` as required by the breaking invoke-wire switch
 - Modify: `.github/workflows/ci.yml`
 
 **Interfaces:**
@@ -523,6 +525,16 @@ arguments:
 
 The schema references generated primitive argument definitions and rejects
 additional properties.
+
+Task 3 is the intentional breaking root-wire switch. Replace the active
+operation-specific invoke conformance matrix with native-program positive and
+negative fixtures. Remove obsolete operation-specific invoke descriptors,
+goldens, and helper paths from active protocol conformance when they have no
+remaining non-wire consumer; do not preserve them behind a compatibility
+schema. Keep and adapt independent framing, hello, session, capabilities,
+cancel, graph invalidation, limits, and generic error tests. Task 5 will add
+the new common native-program result/evidence transcript matrix, so legacy
+per-operation result fixtures are not a reason to retain the old invoke wire.
 
 - [ ] **Step 6: Verify GREEN**
 
