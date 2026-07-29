@@ -48,6 +48,7 @@ PROCESS_ROW = re.compile(
     r"(.+)$"
 )
 PROCESS_OUTPUT_LIMIT = 1024 * 1024
+PROCESS_OBSERVED_IDENTITY_LIMIT = 16
 FIXTURE_NAME = "HDEV Core Native Fixture"
 CORE_BOOTSTRAP = (
     "import runpy,sys;"
@@ -120,14 +121,55 @@ class FormalAEProcessReceipt:
 
 
 @dataclasses.dataclass(frozen=True)
+class FormalAEProcessIdentity:
+    pid: int
+    start_token: str
+    executable_path: str
+
+    def __post_init__(self) -> None:
+        require(
+            isinstance(self.pid, int)
+            and not isinstance(self.pid, bool)
+            and self.pid > 0,
+            "observed formal AE process PID is invalid",
+        )
+        require(
+            bool(PROCESS_START_TOKEN.fullmatch(self.start_token)),
+            "observed formal AE process start token is invalid",
+        )
+        require(
+            Path(self.executable_path).is_absolute(),
+            "observed formal AE process executable path is invalid",
+        )
+
+    def to_json(self) -> dict[str, Any]:
+        return {
+            "pid": self.pid,
+            "startToken": self.start_token,
+            "executablePath": self.executable_path,
+        }
+
+
+@dataclasses.dataclass(frozen=True)
 class FormalAEProcessObservation:
     state: str
     receipt: FormalAEProcessReceipt
+    observed_identities: tuple[FormalAEProcessIdentity, ...] = ()
 
     def __post_init__(self) -> None:
         require(
             self.state in {"running", "absent", "mismatch", "unavailable"},
             "formal AE process observation state is invalid",
+        )
+        require(
+            isinstance(self.observed_identities, tuple)
+            and len(self.observed_identities)
+            <= PROCESS_OBSERVED_IDENTITY_LIMIT
+            and all(
+                isinstance(identity, FormalAEProcessIdentity)
+                for identity in self.observed_identities
+            ),
+            "observed formal AE process identities are invalid",
         )
 
 
@@ -1081,7 +1123,32 @@ async def probe_formal_ae_process(
         result = await _run_process_inspection(command)
         _validate_process_result(result)
         if result.returncode == 1 and not result.stdout and not result.stderr:
-            return FormalAEProcessObservation("absent", receipt)
+            census = await _run_process_inspection(
+                ("/bin/ps", "-axo", "pid=,lstart=,comm=")
+            )
+            _validate_process_result(census)
+            if census.returncode != 0 or census.stderr:
+                return FormalAEProcessObservation("unavailable", receipt)
+            matches = [
+                row
+                for row in _parse_process_rows(census.stdout)
+                if row[2] == receipt.executable_path
+            ]
+            observed_identities = tuple(
+                FormalAEProcessIdentity(
+                    pid=pid,
+                    start_token=start_token,
+                    executable_path=executable_path,
+                )
+                for pid, start_token, executable_path in matches[
+                    :PROCESS_OBSERVED_IDENTITY_LIMIT
+                ]
+            )
+            return FormalAEProcessObservation(
+                "mismatch" if matches else "absent",
+                receipt,
+                observed_identities,
+            )
         if result.returncode != 0 or result.stderr:
             return FormalAEProcessObservation("unavailable", receipt)
         rows = _parse_process_rows(result.stdout)

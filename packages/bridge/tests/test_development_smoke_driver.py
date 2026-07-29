@@ -379,7 +379,6 @@ async def test_capture_formal_ae_process_fails_closed_on_invalid_inspection(
 @pytest.mark.parametrize(
     ("result", "state"),
     (
-        pytest.param(_process_result(returncode=1), "absent", id="absent"),
         pytest.param(
             _process_result(
                 stdout=(
@@ -456,6 +455,143 @@ async def test_probe_formal_ae_process_preserves_closed_state(
     assert observation.receipt == receipt
     assert commands == [
         ("/bin/ps", "-p", "4321", "-o", "pid=,lstart=,comm=")
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("census_result", "state", "observed_identities"),
+    (
+        pytest.param(
+            _process_result(),
+            "absent",
+            (),
+            id="no-replacement",
+        ),
+        pytest.param(
+            _process_result(
+                stdout=(
+                    " 5432 Tue Jul 29 10:12:12 2026 "
+                    "/Applications/Adobe After Effects 2026.app/"
+                    "Contents/MacOS/AfterFX\n"
+                )
+            ),
+            "mismatch",
+            (
+                {
+                    "pid": 5432,
+                    "startToken": "Tue Jul 29 10:12:12 2026",
+                    "executablePath": (
+                        "/Applications/Adobe After Effects 2026.app/"
+                        "Contents/MacOS/AfterFX"
+                    ),
+                },
+            ),
+            id="one-exact-replacement",
+        ),
+        pytest.param(
+            _process_result(
+                stdout=(
+                    " 5432 Tue Jul 29 10:12:12 2026 "
+                    "/Applications/Adobe After Effects 2026.app/"
+                    "Contents/MacOS/AfterFX\n"
+                    " 5433 Tue Jul 29 10:12:13 2026 "
+                    "/Applications/Adobe After Effects 2026.app/"
+                    "Contents/MacOS/AfterFX\n"
+                )
+            ),
+            "mismatch",
+            (
+                {
+                    "pid": 5432,
+                    "startToken": "Tue Jul 29 10:12:12 2026",
+                    "executablePath": (
+                        "/Applications/Adobe After Effects 2026.app/"
+                        "Contents/MacOS/AfterFX"
+                    ),
+                },
+                {
+                    "pid": 5433,
+                    "startToken": "Tue Jul 29 10:12:13 2026",
+                    "executablePath": (
+                        "/Applications/Adobe After Effects 2026.app/"
+                        "Contents/MacOS/AfterFX"
+                    ),
+                },
+            ),
+            id="multiple-exact-replacements",
+        ),
+        pytest.param(
+            _process_result(
+                stdout=(
+                    " 5432 Tue Jul 29 10:12:12 2026 "
+                    "/Applications/Other.app/Contents/MacOS/AfterFX\n"
+                )
+            ),
+            "absent",
+            (),
+            id="unrelated-process-only",
+        ),
+        pytest.param(
+            _process_result(stderr="ps failed", returncode=2),
+            "unavailable",
+            (),
+            id="census-error",
+        ),
+        pytest.param(
+            _process_result(stdout="malformed\n"),
+            "unavailable",
+            (),
+            id="census-malformed",
+        ),
+        pytest.param(
+            _process_result(stdout="x" * (1024 * 1024 + 1)),
+            "unavailable",
+            (),
+            id="census-oversized",
+        ),
+    ),
+)
+async def test_probe_formal_ae_process_censuses_exact_executable_when_pid_absent(
+    monkeypatch,
+    census_result,
+    state,
+    observed_identities,
+):
+    receipt = driver.FormalAEProcessReceipt(
+        formal_ae_app="/Applications/Adobe After Effects 2026.app",
+        executable_path=(
+            "/Applications/Adobe After Effects 2026.app/"
+            "Contents/MacOS/AfterFX"
+        ),
+        pid=4321,
+        start_token="Tue Jul 29 10:11:12 2026",
+    )
+    commands: list[tuple[str, ...]] = []
+
+    async def inspect(command: tuple[str, ...]):
+        commands.append(command)
+        if command == (
+            "/bin/ps",
+            "-p",
+            "4321",
+            "-o",
+            "pid=,lstart=,comm=",
+        ):
+            return _process_result(returncode=1)
+        return census_result
+
+    monkeypatch.setattr(driver, "_run_process_inspection", inspect)
+    observation = await driver.probe_formal_ae_process(receipt)
+
+    assert observation.state == state
+    assert tuple(
+        identity.to_json()
+        for identity in observation.observed_identities
+    ) == observed_identities
+    assert commands == [
+        ("/bin/ps", "-p", "4321", "-o", "pid=,lstart=,comm="),
+        ("/bin/ps", "-axo", "pid=,lstart=,comm="),
     ]
 
 

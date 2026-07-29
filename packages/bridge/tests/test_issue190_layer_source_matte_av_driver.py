@@ -2219,21 +2219,31 @@ async def test_normal_run_uses_owned_finalizer_before_close_or_move(
 
 
 @pytest.mark.asyncio
-async def test_cli_wires_real_exact_process_adapter_into_normal_finalization(
+async def test_cli_adapter_propagates_restarted_formal_ae_as_mismatch(
     tmp_path,
     monkeypatch,
 ):
     config = _config(tmp_path)
     executable = _create_formal_ae_app(config.formal_ae_app)
     commands: list[tuple[str, ...]] = []
+    census_calls = 0
 
     async def inspect(command: tuple[str, ...]):
+        nonlocal census_calls
         commands.append(command)
         if command == ("/bin/ps", "-axo", "pid=,lstart=,comm="):
+            census_calls += 1
             return driver.base_hdev.ProcessInspectionResult(
                 returncode=0,
                 stdout=(
-                    f" 9876 Tue Jul 29 11:12:13 2026 {executable}\n"
+                    (
+                        f" 9876 Tue Jul 29 11:12:13 2026 {executable}\n"
+                        if census_calls == 1
+                        else (
+                            " 9999 Tue Jul 29 11:13:14 2026 "
+                            f"{executable}\n"
+                        )
+                    )
                 ),
                 stderr="",
             )
@@ -2270,14 +2280,19 @@ async def test_cli_wires_real_exact_process_adapter_into_normal_finalization(
     runner.lifecycle.update({"created": 1, "active": 1})
     runner.formal_process_owned = True
 
-    result = await runner.finalize_owned_fixture("normal CLI finalization")
+    with pytest.raises(
+        driver.Issue190Failure,
+        match="owned formal AE process identity mismatch",
+    ):
+        await runner.finalize_owned_fixture("normal CLI finalization")
 
-    assert result["disposition"] == "short-lived-recovery"
     assert commands == [
         ("/bin/ps", "-axo", "pid=,lstart=,comm="),
         ("/bin/ps", "-p", "9876", "-o", "pid=,lstart=,comm="),
+        ("/bin/ps", "-axo", "pid=,lstart=,comm="),
     ]
-    assert runner.lifecycle["active"] == 0
+    assert prepared.fixture_path.is_file()
+    assert runner.lifecycle["active"] == 1
     assert runner.lifecycle["unclassified"] == 0
 
 
@@ -2290,14 +2305,21 @@ async def test_actual_cli_composition_uses_exact_probe_for_finalization(
     executable = _create_formal_ae_app(config.formal_ae_app)
     commands: list[tuple[str, ...]] = []
     checkpoints: list[str] = []
+    census_calls = 0
 
     async def inspect(command: tuple[str, ...]):
+        nonlocal census_calls
         commands.append(command)
         if command == ("/bin/ps", "-axo", "pid=,lstart=,comm="):
+            census_calls += 1
             return driver.base_hdev.ProcessInspectionResult(
                 returncode=0,
                 stdout=(
-                    f" 9876 Tue Jul 29 11:12:13 2026 {executable}\n"
+                    (
+                        f" 9876 Tue Jul 29 11:12:13 2026 {executable}\n"
+                        if census_calls == 1
+                        else ""
+                    )
                 ),
                 stderr="",
             )
@@ -2333,6 +2355,7 @@ async def test_actual_cli_composition_uses_exact_probe_for_finalization(
     assert commands == [
         ("/bin/ps", "-axo", "pid=,lstart=,comm="),
         ("/bin/ps", "-p", "9876", "-o", "pid=,lstart=,comm="),
+        ("/bin/ps", "-axo", "pid=,lstart=,comm="),
     ]
     assert not config.fixture_path.exists()
     assert (config.recovery_root / config.run_id).is_dir()
