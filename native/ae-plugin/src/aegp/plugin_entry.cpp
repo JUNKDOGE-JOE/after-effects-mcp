@@ -83,6 +83,7 @@ using aemcp::native::HostCompositionSettingsWriteResult;
 using aemcp::native::HostProjectItemTextWriteResult;
 using aemcp::native::HostProjectItemLabelWriteResult;
 using aemcp::native::HostCompositionDuplicateResult;
+using aemcp::native::HostActionResult;
 using aemcp::native::HostProjectGraphInvalidationResult;
 using aemcp::native::HostLayerPropertiesResult;
 using aemcp::native::HostLayerPropertyKeyframesResult;
@@ -101,6 +102,10 @@ using aemcp::native::HostLayerCompositingReadResult;
 using aemcp::native::HostLayerSwitchWriteResult;
 using aemcp::native::HostLayerQualityWriteResult;
 using aemcp::native::HostLayerBlendingModeWriteResult;
+using aemcp::native::HostLayerResolveResult;
+using aemcp::native::HostLayerSourceResult;
+using aemcp::native::HostLayerTrackMatteResult;
+using aemcp::native::HostLayerAVStateResult;
 using aemcp::native::HostNativeMediaResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
@@ -134,6 +139,8 @@ using aemcp::native::LayerStartTimeChanged;
 using aemcp::native::NativeMediaCommand;
 using aemcp::native::LayerStretchChanged;
 using aemcp::native::LayerCompositingState;
+using aemcp::native::LayerSourceType;
+using aemcp::native::LayerTrackMatteMode;
 using aemcp::native::LayerPropertyKeyframeDetails;
 using aemcp::native::LayerPropertyKeyframeChanged;
 using aemcp::native::LayerPropertySampleTime;
@@ -297,6 +304,20 @@ constexpr std::string_view kNativeMediaReadContractDigest =
     "4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282";
 constexpr std::string_view kNativeMediaWriteContractDigest =
     "a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5";
+constexpr std::string_view kLayerSourceReadContractDigest =
+    "877ba54bba16bf11432caf0d504b99c753c7843824fcb6a1fcea056d00d5bedb";
+constexpr std::string_view kLayerTrackMatteReadContractDigest =
+    "d195337021d9d84ff8231d7d0f2b7a2ad9333356924c4e3a3d4c0354979b4571";
+constexpr std::string_view kLayerTrackMatteSetContractDigest =
+    "979f0c273060da14e8763219d8a4193359c3d24fb067a5c18014887217f27c86";
+constexpr std::string_view kLayerTrackMatteClearContractDigest =
+    "4591b1d2a8fc5f9f2cf88a780cfc34e0243ec5f5aed43e5323ef256329de1530";
+constexpr std::string_view kLayerAVStateReadContractDigest =
+    "f4a05bfadc549c448e95cc18298a650ae96dfa2839dea457365d6bb9d0486464";
+constexpr std::string_view kLayerAudioEnabledSetContractDigest =
+    "508a96fe62c9f072a6dbe21c34bfb32f617f4c6c525be3a3a269034651b446fb";
+constexpr std::string_view kLayerVideoEnabledSetContractDigest =
+    "536c47c0419099b8c6e084592f36f070cc0a6ba4deafcb847c77d3bba991fcf3";
 constexpr std::int64_t kMaximumProjectItems = 100000;
 constexpr A_long kMaximumLayerEffects = 4096;
 static_assert(kSourceCommit.size() == 40);
@@ -1623,8 +1644,20 @@ constexpr std::size_t literal_size(const char (&)[Size]) noexcept {
 class AegpHostApi final : public HostApi {
  public:
   AegpHostApi(
-      SPBasicSuite* basic, AEGP_PluginID plugin_id, ProjectGraphRegistry& graph)
-      : basic_(basic), plugin_id_(plugin_id), graph_(graph) {}
+      SPBasicSuite* basic,
+      AEGP_PluginID plugin_id,
+      ProjectGraphRegistry& graph,
+      const AEGP_UtilitySuite6* utility_suite)
+      : basic_(basic),
+        plugin_id_(plugin_id),
+        graph_(graph),
+        utility_suite_(utility_suite) {}
+
+  ~AegpHostApi() override {
+    if (layer_undo_open_ && utility_suite_ != nullptr) {
+      (void)utility_suite_->AEGP_EndUndoGroup();
+    }
+  }
 
   [[nodiscard]] HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint work_deadline) override {
@@ -10712,6 +10745,341 @@ class AegpHostApi final : public HostApi {
         + "}");
   }
 
+  [[nodiscard]] HostLayerResolveResult resolve_layer(
+      const ObjectLocator& locator,
+      TimePoint work_deadline) override {
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerResolveResult::failure(
+          "DEADLINE_EXCEEDED", "layer resolution budget elapsed");
+    }
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr) {
+      return HostLayerResolveResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer resolution suites unavailable");
+    }
+    const auto resolved = resolve_layer(
+        project_suite.get(), item_suite.get(), comp_suite.get(),
+        layer_suite.get(), memory_suite.get(), locator,
+        locator.host_instance_id, locator.session_id, work_deadline);
+    if (!resolved.has_value()) {
+      return HostLayerResolveResult::failure(
+          "STALE_LOCATOR", "layer locator is no longer current");
+    }
+    AEGP_ObjectType object_type = AEGP_ObjectType_NONE;
+    if (layer_suite->AEGP_GetLayerObjectType(
+            resolved->layer, &object_type) != A_Err_NONE) {
+      return HostLayerResolveResult::failure(
+          "CAPABILITY_FAILED", "could not read the resolved layer type");
+    }
+    return HostLayerResolveResult::success({
+        locator,
+        reinterpret_cast<std::uintptr_t>(resolved->layer),
+        reinterpret_cast<std::uintptr_t>(resolved->composition),
+        object_type == AEGP_ObjectType_AV,
+    });
+  }
+
+  [[nodiscard]] HostLayerSourceResult read_layer_source(
+      const aemcp::native::HostResolvedLayer& layer,
+      TimePoint work_deadline) override {
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerSourceResult::failure(
+          "DEADLINE_EXCEEDED", "layer source read budget elapsed");
+    }
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    const AEGP_LayerH layer_handle =
+        reinterpret_cast<AEGP_LayerH>(layer.host_layer);
+    if (item_suite.get() == nullptr || layer_suite.get() == nullptr
+        || memory_suite.get() == nullptr || layer_handle == nullptr) {
+      return HostLayerSourceResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer source suites unavailable");
+    }
+    AEGP_ItemH source = nullptr;
+    if (layer_suite->AEGP_GetLayerSourceItem(
+            layer_handle, &source) != A_Err_NONE) {
+      return HostLayerSourceResult::failure(
+          "CAPABILITY_FAILED", "could not read the layer source item");
+    }
+    if (source == nullptr) {
+      return HostLayerSourceResult::success({
+          layer.locator, std::nullopt, LayerSourceType::kNone, std::nullopt});
+    }
+    AEGP_ItemType type = AEGP_ItemType_NONE;
+    A_long item_id = 0;
+    if (item_suite->AEGP_GetItemType(source, &type) != A_Err_NONE
+        || item_suite->AEGP_GetItemID(source, &item_id) != A_Err_NONE) {
+      return HostLayerSourceResult::failure(
+          "CAPABILITY_FAILED", "could not identify the layer source item");
+    }
+    LayerSourceType source_type = LayerSourceType::kNone;
+    if (type == AEGP_ItemType_COMP) {
+      source_type = LayerSourceType::kComposition;
+    } else if (type == AEGP_ItemType_FOOTAGE
+        || type == AEGP_ItemType_SOLID_defunct) {
+      source_type = LayerSourceType::kFootage;
+    } else {
+      return HostLayerSourceResult::failure(
+          "CAPABILITY_FAILED", "layer source returned an unsupported item type");
+    }
+    const auto name = read_item_name(
+        item_suite.get(), memory_suite.get(), source);
+    if (!name.has_value()) {
+      return HostLayerSourceResult::failure(
+          "CAPABILITY_FAILED", "could not read the layer source item name");
+    }
+    return HostLayerSourceResult::success({
+        layer.locator,
+        graph_.item_locator(
+            item_id, type == AEGP_ItemType_COMP,
+            layer.locator.host_instance_id, layer.locator.session_id),
+        source_type,
+        *name,
+    });
+  }
+
+  [[nodiscard]] HostLayerTrackMatteResult read_layer_track_matte(
+      const aemcp::native::HostResolvedLayer& layer,
+      TimePoint work_deadline) override {
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerTrackMatteResult::failure(
+          "DEADLINE_EXCEEDED", "layer Track Matte read budget elapsed");
+    }
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    const AEGP_LayerH layer_handle =
+        reinterpret_cast<AEGP_LayerH>(layer.host_layer);
+    if (layer_suite.get() == nullptr || layer_handle == nullptr) {
+      return HostLayerTrackMatteResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer Track Matte suite unavailable");
+    }
+    AEGP_LayerH matte = nullptr;
+    AEGP_LayerTransferMode transfer{};
+    if (layer_suite->AEGP_GetTrackMatteLayer(
+            layer_handle, &matte) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerTransferMode(
+            layer_handle, &transfer) != A_Err_NONE) {
+      return HostLayerTrackMatteResult::failure(
+          "CAPABILITY_FAILED", "could not read the layer Track Matte state");
+    }
+    const auto mode = layer_track_matte_mode(transfer.track_matte);
+    if (!mode.has_value()) {
+      return HostLayerTrackMatteResult::failure(
+          "CAPABILITY_FAILED", "layer returned an unsupported Track Matte mode");
+    }
+    std::optional<ObjectLocator> matte_locator;
+    if (matte != nullptr) {
+      if (matte == layer_handle || *mode == LayerTrackMatteMode::kNone) {
+        return HostLayerTrackMatteResult::failure(
+            "CAPABILITY_FAILED", "layer returned an incoherent Track Matte state");
+      }
+      const auto address = graph_.resolve_layer(
+          layer.locator,
+          layer.locator.host_instance_id,
+          layer.locator.session_id);
+      AEGP_LayerIDVal matte_id = 0;
+      if (!address.has_value()
+          || layer_suite->AEGP_GetLayerID(matte, &matte_id) != A_Err_NONE) {
+        return HostLayerTrackMatteResult::failure(
+            "CAPABILITY_FAILED", "could not register the Track Matte layer");
+      }
+      matte_locator = graph_.layer_locator(
+          address->composition_item_id,
+          matte_id,
+          layer.locator.host_instance_id,
+          layer.locator.session_id);
+    }
+    return HostLayerTrackMatteResult::success({
+        layer.locator,
+        matte != nullptr,
+        std::move(matte_locator),
+        *mode,
+    });
+  }
+
+  [[nodiscard]] HostLayerAVStateResult read_layer_av_state(
+      const aemcp::native::HostResolvedLayer& layer,
+      TimePoint work_deadline) override {
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerAVStateResult::failure(
+          "DEADLINE_EXCEEDED", "layer AV-state read budget elapsed");
+    }
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    const AEGP_LayerH layer_handle =
+        reinterpret_cast<AEGP_LayerH>(layer.host_layer);
+    if (item_suite.get() == nullptr || layer_suite.get() == nullptr
+        || layer_handle == nullptr) {
+      return HostLayerAVStateResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer AV-state suites unavailable");
+    }
+    AEGP_ItemH source = nullptr;
+    AEGP_LayerFlags layer_flags = 0;
+    if (layer_suite->AEGP_GetLayerSourceItem(
+            layer_handle, &source) != A_Err_NONE
+        || layer_suite->AEGP_GetLayerFlags(
+            layer_handle, &layer_flags) != A_Err_NONE) {
+      return HostLayerAVStateResult::failure(
+          "CAPABILITY_FAILED", "could not read the layer AV state");
+    }
+    AEGP_ItemFlags item_flags = 0;
+    if (source != nullptr
+        && item_suite->AEGP_GetItemFlags(source, &item_flags) != A_Err_NONE) {
+      return HostLayerAVStateResult::failure(
+          "CAPABILITY_FAILED", "could not read the source AV capabilities");
+    }
+    return HostLayerAVStateResult::success({
+        layer.locator,
+        (item_flags & AEGP_ItemFlag_HAS_AUDIO) != 0,
+        (layer_flags & AEGP_LayerFlag_AUDIO_ACTIVE) != 0,
+        (item_flags & AEGP_ItemFlag_HAS_VIDEO) != 0,
+        (layer_flags & AEGP_LayerFlag_VIDEO_ACTIVE) != 0,
+    });
+  }
+
+  [[nodiscard]] HostActionResult begin_layer_undo_group(
+      std::string_view label,
+      TimePoint work_deadline) override {
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostActionResult::failure(
+          "DEADLINE_EXCEEDED", "layer Undo begin budget elapsed");
+    }
+    if (utility_suite_ == nullptr || layer_undo_open_ || label.empty()) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "layer Undo group is unavailable");
+    }
+    const std::string null_terminated_label(label);
+    if (utility_suite_->AEGP_StartUndoGroup(
+            null_terminated_label.c_str()) != A_Err_NONE) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "could not start the layer Undo group");
+    }
+    layer_undo_open_ = true;
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult end_layer_undo_group(
+      TimePoint) override {
+    if (utility_suite_ == nullptr || !layer_undo_open_) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "layer Undo group is not open");
+    }
+    layer_undo_open_ = false;
+    if (utility_suite_->AEGP_EndUndoGroup() != A_Err_NONE) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "could not end the layer Undo group");
+    }
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult set_layer_track_matte(
+      const aemcp::native::HostResolvedLayer& layer,
+      const aemcp::native::HostResolvedLayer& matte,
+      LayerTrackMatteMode mode,
+      TimePoint work_deadline) override {
+    if (layer.host_layer == 0 || matte.host_layer == 0
+        || layer.composition_owner == 0 || matte.composition_owner == 0) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "resolved Track Matte handles are unavailable");
+    }
+    if (layer.host_layer == matte.host_layer) {
+      return HostActionResult::failure(
+          "TRACK_MATTE_SELF_REFERENCE",
+          "target and Matte resolved to the same host layer",
+          "params.arguments.matteLayerLocator");
+    }
+    if (layer.composition_owner != matte.composition_owner) {
+      return HostActionResult::failure(
+          "TRACK_MATTE_COMPOSITION_MISMATCH",
+          "target and Matte are owned by different compositions",
+          "params.arguments.matteLayerLocator");
+    }
+    const auto sdk_mode = sdk_track_matte_mode(mode);
+    if (!sdk_mode.has_value()) {
+      return HostActionResult::failure(
+          "INVALID_ARGUMENT", "Track Matte set requires an active mode",
+          "params.arguments.mode");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostActionResult::failure(
+          "DEADLINE_EXCEEDED", "layer Track Matte set budget elapsed");
+    }
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    if (layer_suite.get() == nullptr) {
+      return HostActionResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer Track Matte suite unavailable");
+    }
+    if (layer_suite->AEGP_SetTrackMatte(
+            reinterpret_cast<AEGP_LayerH>(layer.host_layer),
+            reinterpret_cast<AEGP_LayerH>(matte.host_layer),
+            *sdk_mode) != A_Err_NONE) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "could not set the layer Track Matte");
+    }
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult clear_layer_track_matte(
+      const aemcp::native::HostResolvedLayer& layer,
+      TimePoint work_deadline) override {
+    if (layer.host_layer == 0) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "resolved Track Matte layer is unavailable");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostActionResult::failure(
+          "DEADLINE_EXCEEDED", "layer Track Matte clear budget elapsed");
+    }
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    if (layer_suite.get() == nullptr) {
+      return HostActionResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer Track Matte suite unavailable");
+    }
+    if (layer_suite->AEGP_RemoveTrackMatte(
+            reinterpret_cast<AEGP_LayerH>(layer.host_layer)) != A_Err_NONE) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "could not clear the layer Track Matte");
+    }
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult set_layer_audio_enabled(
+      const aemcp::native::HostResolvedLayer& layer,
+      bool enabled,
+      TimePoint work_deadline) override {
+    return set_layer_av_flag(
+        layer, AEGP_LayerFlag_AUDIO_ACTIVE, enabled,
+        "audio", work_deadline);
+  }
+
+  [[nodiscard]] HostActionResult set_layer_video_enabled(
+      const aemcp::native::HostResolvedLayer& layer,
+      bool enabled,
+      TimePoint work_deadline) override {
+    return set_layer_av_flag(
+        layer, AEGP_LayerFlag_VIDEO_ACTIVE, enabled,
+        "video", work_deadline);
+  }
+
  private:
   struct OpenProject {
     AEGP_ProjectH project{nullptr};
@@ -10858,6 +11226,68 @@ class AegpHostApi final : public HostApi {
     if (matte == AEGP_TrackMatte_LUMA) return "luma";
     if (matte == AEGP_TrackMatte_NOT_LUMA) return "inverted-luma";
     return std::nullopt;
+  }
+
+  [[nodiscard]] static std::optional<LayerTrackMatteMode>
+      layer_track_matte_mode(AEGP_TrackMatte matte) {
+    if (matte == AEGP_TrackMatte_NO_TRACK_MATTE) {
+      return LayerTrackMatteMode::kNone;
+    }
+    if (matte == AEGP_TrackMatte_ALPHA) return LayerTrackMatteMode::kAlpha;
+    if (matte == AEGP_TrackMatte_NOT_ALPHA) {
+      return LayerTrackMatteMode::kInvertedAlpha;
+    }
+    if (matte == AEGP_TrackMatte_LUMA) return LayerTrackMatteMode::kLuma;
+    if (matte == AEGP_TrackMatte_NOT_LUMA) {
+      return LayerTrackMatteMode::kInvertedLuma;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] static std::optional<AEGP_TrackMatte>
+      sdk_track_matte_mode(LayerTrackMatteMode mode) {
+    switch (mode) {
+      case LayerTrackMatteMode::kAlpha: return AEGP_TrackMatte_ALPHA;
+      case LayerTrackMatteMode::kInvertedAlpha:
+        return AEGP_TrackMatte_NOT_ALPHA;
+      case LayerTrackMatteMode::kLuma: return AEGP_TrackMatte_LUMA;
+      case LayerTrackMatteMode::kInvertedLuma:
+        return AEGP_TrackMatte_NOT_LUMA;
+      case LayerTrackMatteMode::kNone: return std::nullopt;
+    }
+    return std::nullopt;
+  }
+
+  [[nodiscard]] HostActionResult set_layer_av_flag(
+      const aemcp::native::HostResolvedLayer& layer,
+      AEGP_LayerFlags flag,
+      bool enabled,
+      std::string_view switch_name,
+      TimePoint work_deadline) {
+    if (layer.host_layer == 0) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "resolved layer handle is unavailable");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostActionResult::failure(
+          "DEADLINE_EXCEEDED",
+          "layer " + std::string(switch_name) + " switch budget elapsed");
+    }
+    SuiteLease<AEGP_LayerSuite9> layer_suite(
+        basic_, kAEGPLayerSuite, kAEGPLayerSuiteVersion9);
+    if (layer_suite.get() == nullptr) {
+      return HostActionResult::failure(
+          "NATIVE_UNSUPPORTED", "required layer switch suite unavailable");
+    }
+    if (layer_suite->AEGP_SetLayerFlag(
+            reinterpret_cast<AEGP_LayerH>(layer.host_layer),
+            flag,
+            enabled ? TRUE : FALSE) != A_Err_NONE) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED",
+          "could not set the layer " + std::string(switch_name) + " switch");
+    }
+    return HostActionResult::success();
   }
 
   [[nodiscard]] std::optional<LayerCompositingState>
@@ -11571,6 +12001,8 @@ class AegpHostApi final : public HostApi {
   SPBasicSuite* basic_{nullptr};
   AEGP_PluginID plugin_id_{0};
   ProjectGraphRegistry& graph_;
+  const AEGP_UtilitySuite6* utility_suite_{nullptr};
+  bool layer_undo_open_{false};
 };
 
 class AegpHostIdleSignal final : public aemcp::native::HostIdleSignal {
@@ -11667,6 +12099,13 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             std::string(kLayerPropertyKeyframeDeleteContractDigest),
             std::string(kNativeMediaReadContractDigest),
             std::string(kNativeMediaWriteContractDigest),
+            std::string(kLayerSourceReadContractDigest),
+            std::string(kLayerTrackMatteReadContractDigest),
+            std::string(kLayerTrackMatteSetContractDigest),
+            std::string(kLayerTrackMatteClearContractDigest),
+            std::string(kLayerAVStateReadContractDigest),
+            std::string(kLayerAudioEnabledSetContractDigest),
+            std::string(kLayerVideoEnabledSetContractDigest),
             {
                 std::string(kCompositionDimensionsSetContractDigest),
                 std::string(kCompositionDurationSetContractDigest),
@@ -12123,7 +12562,11 @@ A_Err idle_hook(
     auto* state = reinterpret_cast<PluginState*>(idle_refcon);
     if (state == nullptr) state = reinterpret_cast<PluginState*>(global_refcon);
     if (state == nullptr) return A_Err_GENERIC;
-    AegpHostApi host(state->basic, state->plugin_id, state->project_graph);
+    AegpHostApi host(
+        state->basic,
+        state->plugin_id,
+        state->project_graph,
+        state->utility_suite.get());
     const DrainBatch batch = state->dispatcher.drain(host);
     if (batch.wrong_thread) {
       state->log.append(event_prefix(*state, "dispatch.wrong-thread") + "}");
