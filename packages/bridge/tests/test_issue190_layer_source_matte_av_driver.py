@@ -328,6 +328,8 @@ def test_fixture_claim_is_exclusive_and_manifest_is_closed(tmp_path):
         "candidateEvidence": False,
         "runId": "issue190-hdev-test-run",
         "lifecycle": "ephemeral-validation",
+        "ownerMarker": config.owner_marker,
+        "formalAeApp": str(config.formal_ae_app),
         "fixturePath": str(config.fixture_path),
         "activeRoot": str(config.fixture_path.parent),
         "recoveryRoot": str(config.recovery_root),
@@ -1442,11 +1444,13 @@ async def test_successful_archive_finishes_with_zero_active_and_unclassified(tmp
         config,
         checkpoint=lambda *_: driver.completed_checkpoint(),
         after_effects_running=lambda: driver.completed_process_check(False),
+        owned_process_probe=_sequence_owned_process_probe(config, ["absent"]),
     )
     runner.claim_fixture()
     config.fixture_path.write_bytes(b"fixture")
     wav_path = driver.generate_fixture_wav(config)
     runner.lifecycle.update({"created": 1, "active": 1})
+    runner.formal_process_owned = True
 
     archived = await runner.archive_fixture(wav_path)
 
@@ -1483,11 +1487,13 @@ async def test_safe_failure_is_classified_into_recovery_with_zero_active(tmp_pat
         config,
         checkpoint=lambda *_: driver.completed_checkpoint(),
         after_effects_running=lambda: driver.completed_process_check(False),
+        owned_process_probe=_sequence_owned_process_probe(config, ["absent"]),
     )
     runner.claim_fixture()
     config.fixture_path.write_bytes(b"fixture")
     runner.current_wav_path = driver.generate_fixture_wav(config)
     runner.lifecycle.update({"created": 1, "active": 1})
+    runner.formal_process_owned = True
 
     result = await runner.finalize_failure("incompatible protocol before write")
 
@@ -1514,13 +1520,16 @@ async def test_unreconciled_or_crashed_write_is_preserved_as_classified_snapshot
     runner = driver.Issue190Runner(
         config,
         checkpoint=checkpoint,
-        # False models the formal AE process already being gone after transport loss.
+        # The generic process check is only an informational hint.
         after_effects_running=lambda: driver.completed_process_check(False),
+        # Exact owned-process absence is the archive precondition.
+        owned_process_probe=_sequence_owned_process_probe(config, ["absent"]),
     )
     runner.claim_fixture()
     config.fixture_path.write_bytes(b"fixture-after-transport-loss")
     runner.current_wav_path = driver.generate_fixture_wav(config)
     runner.lifecycle.update({"created": 1, "active": 1})
+    runner.formal_process_owned = True
     runner.unreconciled_write = True
     runner.fixture_baseline_restored = False
 
@@ -1550,7 +1559,7 @@ async def test_unreconciled_or_crashed_write_is_preserved_as_classified_snapshot
 
 
 @pytest.mark.asyncio
-async def test_base_checkpoint_failure_after_fixture_creation_still_finalizes(
+async def test_base_checkpoint_failure_without_process_ownership_stays_active(
     tmp_path,
 ):
     config = _config(tmp_path)
@@ -1560,26 +1569,25 @@ async def test_base_checkpoint_failure_after_fixture_creation_still_finalizes(
             config.fixture_path.write_bytes(b"fixture-created-before-checkpoint-failure")
         raise driver.base_hdev.DevelopmentSmokeFailure("checkpoint transport failed")
 
-    result = await driver.run_issue190_hdev(
-        config,
-        session=FakeSession((False, {})),
-        checkpoint=checkpoint,
-        after_effects_running=lambda: driver.completed_process_check(False),
-    )
+    with pytest.raises(driver.Issue190Failure, match="ownership is not proven"):
+        await driver.run_issue190_hdev(
+            config,
+            session=FakeSession((False, {})),
+            checkpoint=checkpoint,
+            after_effects_running=lambda: driver.completed_process_check(False),
+        )
 
-    assert result.exit_code == 2
-    assert result.summary["passed"] is False
-    assert result.summary["aepLifecycle"]["active"] == 0
-    assert result.summary["aepLifecycle"]["unclassified"] == 0
-    assert result.summary["aepLifecycle"]["recoveryArchived"] == 1
-    assert result.summary["fixtureDisposition"]["disposition"] == (
-        "short-lived-recovery"
-    )
-    assert not config.fixture_path.exists()
+    assert config.fixture_path.is_file()
+    assert not (config.recovery_root / config.run_id).exists()
+    assert not (
+        config.evidence_dir / f"{config.run_id}.summary.json"
+    ).exists()
 
 
 @pytest.mark.asyncio
-async def test_process_inspection_failure_uses_owned_shutdown_fallback(tmp_path):
+async def test_generic_process_inspection_failure_cannot_override_exact_absence(
+    tmp_path,
+):
     config = _config(tmp_path)
     checkpoints: list[str] = []
     shutdowns: list[dict] = []
@@ -1588,10 +1596,6 @@ async def test_process_inspection_failure_uses_owned_shutdown_fallback(tmp_path)
         checkpoints.append(name)
         if name == "create-or-reset-issue190-fixture":
             config.fixture_path.write_bytes(b"owned-fixture")
-        if name == "classify-and-close-failed-issue190-fixture":
-            raise driver.base_hdev.DevelopmentSmokeFailure(
-                "normal finalizer failed"
-            )
 
     async def broken_process_check() -> bool:
         raise driver.base_hdev.DevelopmentSmokeFailure(
@@ -1617,14 +1621,8 @@ async def test_process_inspection_failure_uses_owned_shutdown_fallback(tmp_path)
     )
 
     assert result.exit_code == 2
-    assert checkpoints == [
-        "create-or-reset-issue190-fixture",
-        "classify-and-close-failed-issue190-fixture",
-    ]
-    assert len(shutdowns) == 1
-    assert shutdowns[0]["ownershipProven"] is True
-    assert shutdowns[0]["runId"] == config.run_id
-    assert shutdowns[0]["fixturePath"] == str(config.fixture_path)
+    assert checkpoints == ["create-or-reset-issue190-fixture"]
+    assert shutdowns == []
     assert result.summary["aepLifecycle"]["active"] == 0
     assert result.summary["aepLifecycle"]["unclassified"] == 0
 
@@ -1642,8 +1640,9 @@ async def test_failed_normal_finalizer_uses_only_proven_owned_process_fallback(
         owned_process_shutdown=lambda details: _record_owned_shutdown(
             shutdowns, details
         ),
-        owned_process_probe=lambda _details: _completed_owned_process_probe(
-            config, "absent"
+        owned_process_probe=_sequence_owned_process_probe(
+            config,
+            ["running", "running", "running", "running", "absent"],
         ),
     )
     runner.claim_fixture()
@@ -1664,14 +1663,25 @@ async def test_failed_normal_finalizer_uses_only_proven_owned_process_fallback(
 @pytest.mark.asyncio
 async def test_finalizer_refuses_shutdown_without_process_ownership_proof(tmp_path):
     config = _config(tmp_path)
+    checkpoints: list[str] = []
+    probes: list[dict] = []
     shutdowns: list[dict] = []
+
+    async def checkpoint(name: str, _details: dict) -> None:
+        checkpoints.append(name)
+
+    async def probe(details: dict) -> dict:
+        probes.append(details)
+        return _owned_process_observation(config, "absent")
+
     runner = driver.Issue190Runner(
         config,
-        checkpoint=lambda *_: _raise_checkpoint_failure(),
+        checkpoint=checkpoint,
         after_effects_running=lambda: driver.completed_process_check(True),
         owned_process_shutdown=lambda details: _record_owned_shutdown(
             shutdowns, details
         ),
+        owned_process_probe=probe,
     )
     runner.claim_fixture()
     config.fixture_path.write_bytes(b"unproven-process-fixture")
@@ -1681,6 +1691,8 @@ async def test_finalizer_refuses_shutdown_without_process_ownership_proof(tmp_pa
     with pytest.raises(driver.Issue190Failure, match="ownership is not proven"):
         await runner.finalize_failure("cannot close unproven process")
 
+    assert checkpoints == []
+    assert probes == []
     assert shutdowns == []
     assert config.fixture_path.is_file()
     assert runner.lifecycle["active"] == 1
@@ -1695,8 +1707,16 @@ async def _record_owned_shutdown(rows: list[dict], details: dict) -> bool:
     return True
 
 
-async def _completed_owned_process_probe(config, state: str) -> dict:
-    return _owned_process_observation(config, state)
+def _sequence_owned_process_probe(config, states: list[str]):
+    observations = [
+        _owned_process_observation(config, state) for state in states
+    ]
+
+    async def probe(_details: dict) -> dict:
+        assert observations, "unexpected owned-process probe"
+        return observations.pop(0)
+
+    return probe
 
 
 def _owned_process_observation(
@@ -1721,12 +1741,16 @@ async def _run_failed_issue190_with_process_observations(
     observations: list[dict],
     *,
     normal_close_fails: bool = True,
+    generic_running: bool = True,
+    action_log: list[str] | None = None,
 ):
     checkpoints: list[str] = []
     probe_calls: list[dict] = []
+    actions = action_log if action_log is not None else []
 
     async def checkpoint(name: str, _payload: dict) -> None:
         checkpoints.append(name)
+        actions.append(f"checkpoint:{name}")
         if name == "create-or-reset-issue190-fixture":
             config.fixture_path.write_bytes(b"owned-fixture")
         if (
@@ -1739,6 +1763,7 @@ async def _run_failed_issue190_with_process_observations(
 
     async def probe(details: dict) -> dict:
         probe_calls.append(details)
+        actions.append("probe")
         assert observations, "unexpected owned-process probe"
         return observations.pop(0)
 
@@ -1748,7 +1773,9 @@ async def _run_failed_issue190_with_process_observations(
         config,
         session=session,
         checkpoint=checkpoint,
-        after_effects_running=lambda: driver.completed_process_check(True),
+        after_effects_running=lambda: driver.completed_process_check(
+            generic_running
+        ),
         owned_process_probe=probe,
     )
     return result, checkpoints, probe_calls
@@ -1760,6 +1787,10 @@ async def test_shutdown_ack_does_not_archive_while_owned_process_keeps_running(
 ):
     config = _config(tmp_path)
     observations = [
+        _owned_process_observation(config, "running"),
+        _owned_process_observation(config, "running"),
+        _owned_process_observation(config, "running"),
+        _owned_process_observation(config, "running"),
         _owned_process_observation(config, "running"),
         _owned_process_observation(config, "running"),
         _owned_process_observation(config, "running"),
@@ -1784,6 +1815,10 @@ async def test_shutdown_ack_archives_only_after_owned_process_becomes_absent(
     config = _config(tmp_path)
     observations = [
         _owned_process_observation(config, "running"),
+        _owned_process_observation(config, "running"),
+        _owned_process_observation(config, "running"),
+        _owned_process_observation(config, "running"),
+        _owned_process_observation(config, "running"),
         _owned_process_observation(config, "absent"),
     ]
 
@@ -1798,7 +1833,7 @@ async def test_shutdown_ack_archives_only_after_owned_process_becomes_absent(
     assert not config.fixture_path.exists()
     assert (config.recovery_root / config.run_id).is_dir()
     assert "stop-owned-formal-ae-fallback" in checkpoints
-    assert len(probe_calls) == 2
+    assert len(probe_calls) == 6
 
 
 @pytest.mark.asyncio
@@ -1834,7 +1869,7 @@ async def test_unconfirmed_owned_process_probe_blocks_archive(
 
 
 @pytest.mark.asyncio
-async def test_normal_guarded_close_archives_without_shutdown_fallback(tmp_path):
+async def test_exact_absence_archives_without_close_or_shutdown_fallback(tmp_path):
     config = _config(tmp_path)
     result, checkpoints, probe_calls = (
         await _run_failed_issue190_with_process_observations(
@@ -1846,9 +1881,103 @@ async def test_normal_guarded_close_archives_without_shutdown_fallback(tmp_path)
 
     assert result.summary["aepLifecycle"]["active"] == 0
     assert result.summary["aepLifecycle"]["unclassified"] == 0
-    assert "classify-and-close-failed-issue190-fixture" in checkpoints
+    assert "classify-and-close-failed-issue190-fixture" not in checkpoints
     assert "stop-owned-formal-ae-fallback" not in checkpoints
     assert len(probe_calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_generic_absence_waits_for_exact_absence_after_guarded_close(
+    tmp_path,
+):
+    config = _config(tmp_path)
+    actions: list[str] = []
+
+    result, checkpoints, probe_calls = (
+        await _run_failed_issue190_with_process_observations(
+            config,
+            [
+                _owned_process_observation(config, "running"),
+                _owned_process_observation(config, "absent"),
+            ],
+            normal_close_fails=False,
+            generic_running=False,
+            action_log=actions,
+        )
+    )
+
+    assert result.summary["aepLifecycle"]["active"] == 0
+    assert result.summary["aepLifecycle"]["unclassified"] == 0
+    assert "classify-and-close-failed-issue190-fixture" in checkpoints
+    assert "stop-owned-formal-ae-fallback" not in checkpoints
+    assert len(probe_calls) == 2
+    assert actions == [
+        "checkpoint:create-or-reset-issue190-fixture",
+        "probe",
+        "checkpoint:classify-and-close-failed-issue190-fixture",
+        "probe",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "observation",
+    ("mismatch", "unavailable"),
+)
+async def test_generic_absence_with_unconfirmed_exact_probe_takes_no_action(
+    tmp_path,
+    observation,
+):
+    config = _config(tmp_path)
+    actions: list[str] = []
+    process_observation = (
+        _owned_process_observation(config, "absent", run_id="another-run")
+        if observation == "mismatch"
+        else _owned_process_observation(config, "unavailable")
+    )
+
+    with pytest.raises(driver.Issue190Failure):
+        await _run_failed_issue190_with_process_observations(
+            config,
+            [process_observation],
+            normal_close_fails=False,
+            generic_running=False,
+            action_log=actions,
+        )
+
+    assert actions == [
+        "checkpoint:create-or-reset-issue190-fixture",
+        "probe",
+    ]
+    assert config.fixture_path.is_file()
+    assert not (config.recovery_root / config.run_id).exists()
+    assert not (
+        config.evidence_dir / f"{config.run_id}.summary.json"
+    ).exists()
+
+
+@pytest.mark.asyncio
+async def test_exact_running_then_absent_uses_guarded_close_without_fallback(
+    tmp_path,
+):
+    config = _config(tmp_path)
+
+    result, checkpoints, probe_calls = (
+        await _run_failed_issue190_with_process_observations(
+            config,
+            [
+                _owned_process_observation(config, "running"),
+                _owned_process_observation(config, "absent"),
+            ],
+            normal_close_fails=False,
+        )
+    )
+
+    assert result.summary["aepLifecycle"]["active"] == 0
+    assert result.summary["aepLifecycle"]["unclassified"] == 0
+    assert "classify-and-close-failed-issue190-fixture" in checkpoints
+    assert "stop-owned-formal-ae-fallback" not in checkpoints
+    assert len(probe_calls) == 2
 
 
 def test_evidence_and_summary_are_permanently_development_only(tmp_path):

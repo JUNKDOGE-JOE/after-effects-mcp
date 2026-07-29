@@ -772,6 +772,8 @@ class Issue190Runner:
             "candidateEvidence": False,
             "runId": self.config.run_id,
             "lifecycle": "ephemeral-validation",
+            "ownerMarker": self.config.owner_marker,
+            "formalAeApp": os.fspath(self.config.formal_ae_app),
             "fixturePath": os.fspath(self.config.fixture_path),
             "activeRoot": os.fspath(self.config.active_root),
             "recoveryRoot": os.fspath(self.config.recovery_root),
@@ -2126,9 +2128,12 @@ class Issue190Runner:
         process_stop_confirmed: bool = False,
     ) -> Path:
         if not process_stop_confirmed:
+            process_state = await self._probe_owned_process_once(
+                "fixture archive precondition"
+            )
             require(
-                not await self.after_effects_running(),
-                "formal After Effects still owns the Issue #190 fixture",
+                process_state == "absent",
+                "owned formal AE process is still present; refusing fixture archive",
             )
         self.validate_fixture_ownership()
         self.config.recovery_root.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -2269,13 +2274,13 @@ class Issue190Runner:
         reason: str,
         *,
         max_attempts: int = 3,
-    ) -> str:
+    ) -> bool:
         for attempt in range(1, max_attempts + 1):
             state = await self._probe_owned_process_once(
                 f"{reason}; absence check {attempt}/{max_attempts}"
             )
             if state == "absent":
-                return self.evidence.record(
+                self.evidence.record(
                     "owned-formal-ae-process-absence-confirmed",
                     {
                         **self._owned_process_identity(),
@@ -2284,9 +2289,8 @@ class Issue190Runner:
                         "reason": reason,
                     },
                 )
-        raise Issue190Failure(
-            "owned formal AE process remained present after shutdown acknowledgement"
-        )
+                return True
+        return False
 
     async def _request_proven_owned_process_stop(self, reason: str) -> str:
         require(
@@ -2372,14 +2376,17 @@ class Issue190Runner:
             }
         if self.lifecycle["created"] == 0:
             self.lifecycle.update({"created": 1, "active": 1})
-        process_stop_confirmed = False
-        try:
-            ae_running = await self.after_effects_running()
-            process_stop_confirmed = not ae_running
-        except Exception:
-            ae_running = True
+        require(
+            self.formal_process_owned,
+            "formal AE process ownership is not proven; refusing finalization",
+        )
+        self.validate_fixture_ownership()
+        initial_process_state = await self._probe_owned_process_once(
+            "failure finalization precondition"
+        )
+        process_stop_confirmed = initial_process_state == "absent"
         fallback_reason: str | None = None
-        if ae_running:
+        if initial_process_state == "running":
             try:
                 await self.checkpoint(
                     "classify-and-close-failed-issue190-fixture",
@@ -2401,23 +2408,27 @@ class Issue190Runner:
                 fallback_reason = (
                     f"normal close failed: {type(error).__name__}"
                 )
-            else:
-                process_state = await self._probe_owned_process_once(
-                    "normal guarded close completed"
-                )
-                process_stop_confirmed = process_state == "absent"
-                if process_state == "running":
-                    fallback_reason = "normal close returned while formal AE remained"
+            process_stop_confirmed = await self._poll_owned_process_absent(
+                "normal guarded close completed"
+            )
             if not process_stop_confirmed:
+                if fallback_reason is None:
+                    fallback_reason = (
+                        "normal close returned while formal AE remained"
+                    )
                 await self._request_proven_owned_process_stop(
-                    fallback_reason or "normal close did not confirm process stop"
+                    fallback_reason
                 )
-                await self._poll_owned_process_absent(
-                    fallback_reason or "normal close did not confirm process stop"
+                process_stop_confirmed = await self._poll_owned_process_absent(
+                    fallback_reason
                 )
-                process_stop_confirmed = True
+                require(
+                    process_stop_confirmed,
+                    "owned formal AE process remained present after "
+                    "shutdown acknowledgement",
+                )
         process_gone_without_recovery = (
-            not ae_running
+            initial_process_state == "absent"
             and self.unreconciled_write
             and not self.fixture_baseline_restored
         )
