@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import time
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -453,6 +455,34 @@ def test_seven_native_contracts_are_closed_and_exclude_maintained_jsx_source_set
             assert contract.idempotency == "idempotent"
 
 
+def test_core_contract_schemas_match_the_protocol_registry_source():
+    schema_path = (
+        Path(__file__).resolve().parents[3]
+        / "native"
+        / "ae-plugin"
+        / "protocol"
+        / "aegp-rpc.schema.json"
+    )
+    protocol_defs = json.loads(schema_path.read_text(encoding="utf-8"))["$defs"]
+    schema_names = {
+        SMA.LAYER_SOURCE_READ_CAPABILITY_ID: "layerSourceRead",
+        SMA.LAYER_TRACK_MATTE_READ_CAPABILITY_ID: "layerTrackMatteRead",
+        SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID: "layerTrackMatteSet",
+        SMA.LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID: "layerTrackMatteClear",
+        SMA.LAYER_AV_STATE_READ_CAPABILITY_ID: "layerAvStateRead",
+        SMA.LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID: "layerAudioEnabledSet",
+        SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID: "layerVideoEnabledSet",
+    }
+    for capability_id, schema_name in schema_names.items():
+        contract = SMA.CAPABILITY_CONTRACTS[capability_id]
+        assert contract.input_schema == protocol_defs[
+            f"{schema_name}InputSchemaContract"
+        ]["const"]
+        assert contract.result_schema == protocol_defs[
+            f"{schema_name}ResultSchemaContract"
+        ]["const"]
+
+
 EXPECTED_SCHEMA_KEYS = {
     SMA.LAYER_SOURCE_READ_CAPABILITY_ID: (
         {"layerLocator"},
@@ -504,9 +534,12 @@ def test_contract_schemas_have_hand_derived_exact_input_and_result_keys():
             SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
         }:
             for state_key in ("before", "after"):
-                state_schema = contract.result_schema["properties"][state_key]
-                assert set(state_schema["required"]) == _EXPECTED_AV_STATE_KEYS
-                assert set(state_schema["properties"]) == _EXPECTED_AV_STATE_KEYS
+                assert contract.result_schema["properties"][state_key] == {
+                    "$ref": "#/$defs/avState"
+                }
+            state_schema = contract.result_schema["$defs"]["avState"]
+            assert set(state_schema["required"]) == _EXPECTED_AV_STATE_KEYS
+            assert set(state_schema["properties"]) == _EXPECTED_AV_STATE_KEYS
 
 
 def test_result_models_serialize_to_the_hand_derived_result_keys():

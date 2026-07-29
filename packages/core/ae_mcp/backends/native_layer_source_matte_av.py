@@ -33,7 +33,6 @@ from ae_mcp.backends.native_project_composition import (
     _WriteExecution,
     _bounded_unicode,
     _descriptor_validator,
-    _locator_schema,
     _value_digest,
 )
 
@@ -277,15 +276,52 @@ LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID = "ae.layer.audio-enabled.set"
 LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID = "ae.layer.video-enabled.set"
 
 
-def _nullable_locator_schema(*kinds: str) -> dict[str, Any]:
-    return {"anyOf": [_locator_schema(*kinds), {"type": "null"}]}
+_SAFE_MAX = 9_007_199_254_740_991
+_UUID_PATTERN = (
+    "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-"
+    "[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+)
+
+
+def _locator_definition(kind: str) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": [
+            "kind", "hostInstanceId", "sessionId", "projectId", "generation", "objectId",
+        ],
+        "properties": {
+            "kind": {"const": kind},
+            "hostInstanceId": {"$ref": "#/$defs/uuid"},
+            "sessionId": {"$ref": "#/$defs/uuid"},
+            "projectId": {"$ref": "#/$defs/uuid"},
+            "generation": {"type": "integer", "minimum": 1, "maximum": _SAFE_MAX},
+            "objectId": {"$ref": "#/$defs/uuid"},
+        },
+    }
+
+
+def _locator_defs(*kinds: str) -> dict[str, Any]:
+    return {
+        "uuid": {"type": "string", "pattern": _UUID_PATTERN},
+        **{f"{kind}Locator": _locator_definition(kind) for kind in kinds},
+    }
+
+
+def _locator_ref(kind: str) -> dict[str, str]:
+    return {"$ref": f"#/$defs/{kind}Locator"}
+
+
+def _nullable_locator_ref(*kinds: str) -> dict[str, Any]:
+    return {"oneOf": [{"type": "null"}, *(_locator_ref(kind) for kind in kinds)]}
 
 
 def _layer_read_schema() -> dict[str, Any]:
     return {
         "type": "object", "additionalProperties": False,
         "required": ["layerLocator"],
-        "properties": {"layerLocator": _locator_schema("layer")},
+        "properties": {"layerLocator": _locator_ref("layer")},
+        "$defs": _locator_defs("layer"),
     }
 
 
@@ -294,9 +330,10 @@ def _layer_write_schema(properties: dict[str, Any], required: list[str]) -> dict
         "type": "object", "additionalProperties": False,
         "required": ["layerLocator", *required, "idempotencyKey"],
         "properties": {
-            "layerLocator": _locator_schema("layer"), **properties,
+            "layerLocator": _locator_ref("layer"), **properties,
             "idempotencyKey": _IDEMPOTENCY_SCHEMA,
         },
+        "$defs": _locator_defs("layer"),
     }
 
 
@@ -304,25 +341,36 @@ _SOURCE_READ_RESULT_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "required": ["layerLocator", "sourceItemLocator", "sourceType", "sourceName"],
     "properties": {
-        "layerLocator": _locator_schema("layer"),
-        "sourceItemLocator": _nullable_locator_schema("item", "composition"),
+        "layerLocator": _locator_ref("layer"),
+        "sourceItemLocator": _nullable_locator_ref("item", "composition"),
         "sourceType": {"enum": list(_SOURCE_TYPES)},
-        "sourceName": {"anyOf": [{"type": "string", "maxLength": 1024}, {"type": "null"}]},
+        "sourceName": {"oneOf": [{"type": "null"}, {"type": "string", "maxLength": 1024}]},
     },
-    "x-invariant": "sourceType-none-iff-sourceItemLocator-and-sourceName-are-null",
+    "$defs": _locator_defs("layer", "item", "composition"),
+    "x-invariant": (
+        "sourceType-none-implies-null-source;footage-implies-item;"
+        "composition-implies-composition"
+    ),
 }
 _TRACK_MATTE_READ_RESULT_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "required": ["layerLocator", "active", "matteLayerLocator", "mode"],
     "properties": {
-        "layerLocator": _locator_schema("layer"), "active": {"type": "boolean"},
-        "matteLayerLocator": _nullable_locator_schema("layer"),
+        "layerLocator": _locator_ref("layer"), "active": {"type": "boolean"},
+        "matteLayerLocator": _nullable_locator_ref("layer"),
         "mode": {"enum": list(_TRACK_MATTE_MODES)},
     },
-    "x-invariant": "active-equals-matteLayerLocator-present;active-requires-non-none-mode",
+    "$defs": _locator_defs("layer"),
+    "x-invariant": (
+        "active-iff-matteLayerLocator-non-null;active-mode-not-none;"
+        "matte-distinct-and-same-project-context"
+    ),
 }
 _TRACK_MATTE_SET_INPUT_SCHEMA = _layer_write_schema(
-    {"matteLayerLocator": _locator_schema("layer"), "mode": {"enum": list(_SETTABLE_TRACK_MATTE_MODES)}},
+    {
+        "matteLayerLocator": _locator_ref("layer"),
+        "mode": {"enum": list(_SETTABLE_TRACK_MATTE_MODES)},
+    },
     ["matteLayerLocator", "mode"],
 )
 _TRACK_MATTE_SET_RESULT_SCHEMA = {
@@ -332,13 +380,17 @@ _TRACK_MATTE_SET_RESULT_SCHEMA = {
         "afterMatteLayerLocator", "afterMode",
     ],
     "properties": {
-        "changed": {"const": True}, "layerLocator": _locator_schema("layer"),
-        "beforeMatteLayerLocator": _nullable_locator_schema("layer"),
+        "changed": {"const": True}, "layerLocator": _locator_ref("layer"),
+        "beforeMatteLayerLocator": _nullable_locator_ref("layer"),
         "beforeMode": {"enum": list(_TRACK_MATTE_MODES)},
-        "afterMatteLayerLocator": _locator_schema("layer"),
+        "afterMatteLayerLocator": _locator_ref("layer"),
         "afterMode": {"enum": list(_SETTABLE_TRACK_MATTE_MODES)},
     },
-    "x-invariant": "after-matte-and-mode-equal-request;relationship-or-mode-changes",
+    "$defs": _locator_defs("layer"),
+    "x-invariant": (
+        "after-matte-and-mode-equal-request;before-differs;"
+        "all-matte-locators-distinct-and-same-project-context"
+    ),
 }
 _TRACK_MATTE_CLEAR_INPUT_SCHEMA = _layer_write_schema({}, [])
 _TRACK_MATTE_CLEAR_RESULT_SCHEMA = {
@@ -348,35 +400,64 @@ _TRACK_MATTE_CLEAR_RESULT_SCHEMA = {
         "afterMatteLayerLocator", "afterMode",
     ],
     "properties": {
-        "changed": {"const": True}, "layerLocator": _locator_schema("layer"),
-        "beforeMatteLayerLocator": _locator_schema("layer"),
+        "changed": {"const": True}, "layerLocator": _locator_ref("layer"),
+        "beforeMatteLayerLocator": _locator_ref("layer"),
         "beforeMode": {"enum": list(_SETTABLE_TRACK_MATTE_MODES)},
         "afterMatteLayerLocator": {"type": "null"},
-        "afterMode": {"enum": list(_TRACK_MATTE_MODES)},
+        "afterMode": {"enum": list(_SETTABLE_TRACK_MATTE_MODES)},
     },
-    "x-invariant": "afterMatteLayerLocator-null;afterMode-equals-beforeMode",
+    "$defs": _locator_defs("layer"),
+    "x-invariant": (
+        "after-matte-null;afterMode-equals-beforeMode;"
+        "before-matte-distinct-and-same-project-context"
+    ),
 }
-_AV_STATE_SCHEMA = {
+_AV_STATE_READ_RESULT_SCHEMA = {
     "type": "object", "additionalProperties": False,
     "required": ["layerLocator", "hasAudio", "audioEnabled", "hasVideo", "videoEnabled"],
     "properties": {
-        "layerLocator": _locator_schema("layer"), "hasAudio": {"type": "boolean"},
+        "layerLocator": _locator_ref("layer"), "hasAudio": {"type": "boolean"},
         "audioEnabled": {"type": "boolean"}, "hasVideo": {"type": "boolean"},
         "videoEnabled": {"type": "boolean"},
     },
+    "$defs": _locator_defs("layer"),
+    "x-invariant": "av-switches-report-raw-layer-state",
 }
-_AV_STATE_READ_RESULT_SCHEMA = _AV_STATE_SCHEMA
 
 
 def _av_switch_result_schema(changed_field: str) -> dict[str, Any]:
+    selected_source_field = "hasAudio" if changed_field == "audioEnabled" else "hasVideo"
+    av_state_properties = {
+        "layerLocator": _locator_ref("layer"),
+        "hasAudio": {"type": "boolean"},
+        "audioEnabled": {"type": "boolean"},
+        "hasVideo": {"type": "boolean"},
+        "videoEnabled": {"type": "boolean"},
+    }
+    av_state_properties[selected_source_field] = {"const": True}
     return {
         "type": "object", "additionalProperties": False,
         "required": ["changed", "layerLocator", "before", "after"],
         "properties": {
-            "changed": {"const": True}, "layerLocator": _locator_schema("layer"),
-            "before": _AV_STATE_SCHEMA, "after": _AV_STATE_SCHEMA,
+            "changed": {"const": True}, "layerLocator": _locator_ref("layer"),
+            "before": {"$ref": "#/$defs/avState"},
+            "after": {"$ref": "#/$defs/avState"},
         },
-        "x-invariant": f"after-{changed_field}-equals-request;all-other-av-state-fields-preserved",
+        "$defs": {
+            **_locator_defs("layer"),
+            "avState": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": [
+                    "layerLocator", "hasAudio", "audioEnabled", "hasVideo", "videoEnabled",
+                ],
+                "properties": av_state_properties,
+            },
+        },
+        "x-invariant": (
+            f"selected-{selected_source_field}-true-before-and-after;"
+            f"after-{changed_field}-equals-request;all-other-av-state-fields-preserved"
+        ),
     }
 
 
