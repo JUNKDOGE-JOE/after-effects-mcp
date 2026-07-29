@@ -34,11 +34,11 @@ void rejects(const std::function<void()>& action, const std::string& label) {
 }
 
 std::string composition_locator() {
-  return R"({"kind":"composition","hostInstanceId":"host","sessionId":"session","projectId":"project","generation":1,"objectId":"composition"})";
+  return R"({"kind":"composition","hostInstanceId":"11111111-1111-4111-8111-111111111111","sessionId":"22222222-2222-4222-8222-222222222222","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"})";
 }
 
 std::string property_locator() {
-  return R"({"kind":"stream","hostInstanceId":"host","sessionId":"session","projectId":"project","generation":1,"objectId":"property"})";
+  return R"({"kind":"stream","hostInstanceId":"11111111-1111-4111-8111-111111111111","sessionId":"22222222-2222-4222-8222-222222222222","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"55555555-5555-4555-8555-555555555555"})";
 }
 
 NativeProgram program(const std::string& json) {
@@ -116,6 +116,47 @@ void program_is_bounded_and_digest_binds_arguments() {
       "program digest ignored operation arguments");
 }
 
+void literal_schemas_are_closed_and_bounded_before_dispatch() {
+  rejects([] { (void)admit(R"({"operations":[{"op":"composition.resolve","args":{"unexpected":true}}]})"); },
+      "unexpected composition.resolve literal");
+  rejects([] { (void)admit(R"({"operations":[{"op":"composition.resolve","args":{}}]})"); },
+      "missing composition locator");
+  rejects([] { (void)admit(R"({"operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"not-a-uuid","sessionId":"22222222-2222-4222-8222-222222222222","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}}}]})"); },
+      "bad root-ref locator");
+  rejects([] { (void)admit(R"({"operations":[{"op":"project.items.list","args":{"offset":-1,"limit":1}}]})"); },
+      "negative page offset");
+  rejects([] { (void)admit(R"({"operations":[{"op":"project.items.list","args":{"offset":0,"limit":51}}]})"); },
+      "limit upper bound");
+  rejects([&] { (void)admit(
+      R"({"operationKey":"program-key-0001","undoGroup":"Set time","operations":[{"op":"composition.resolve","args":{"locator":)"
+      + composition_locator() + R"(},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":"1","scale":1}}}]})"); },
+      "wrong exact-time value type");
+  rejects([&] { (void)admit(
+      R"({"operationKey":"program-key-0001","undoGroup":"Set time","operations":[{"op":"composition.resolve","args":{"locator":)"
+      + composition_locator() + R"(},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":0}}}]})"); },
+      "exact-time scale bound");
+}
+
+void named_results_and_unicode_parser_are_uniform() {
+  rejects([&] { (void)admit(
+      R"({"operations":[{"op":"composition.resolve","args":{"locator":)" + composition_locator()
+      + R"(},"returnAs":"name"},{"op":"project.items.list","args":{"offset":0,"limit":1},"returnAs":"name"}]})"); },
+      "duplicate returnAs");
+  rejects([&] { (void)admit(
+      R"({"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1},"saveAs":"name"},{"op":"project.items.list","args":{"offset":0,"limit":1},"returnAs":"name"}]})"); },
+      "saveAs returnAs namespace collision");
+  const NativeProgram escaped = program(R"({"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1},"returnAs":"\uD83D\uDE80"}]})");
+  const NativeProgram utf8 = program("{\"operations\":[{\"op\":\"project.items.list\",\"args\":{\"offset\":0,\"limit\":1},\"returnAs\":\"\xF0\x9F\x9A\x80\"}]}");
+  require(digest_native_program(escaped) == digest_native_program(utf8),
+      "unicode escape and UTF-8 JSON do not canonicalize identically");
+  const std::string escaped_wire = R"({"wireVersion":1,"kind":"request","sessionId":"11111111-1111-4111-8111-111111111111","requestId":"unicode","method":"invoke","params":{"capabilityId":"ae.native.exec","capabilityVersion":1,"arguments":{"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1},"returnAs":"\uD83D\uDE80"}]}}})";
+  const std::string utf8_wire = "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\"11111111-1111-4111-8111-111111111111\",\"requestId\":\"unicode\",\"method\":\"invoke\",\"params\":{\"capabilityId\":\"ae.native.exec\",\"capabilityVersion\":1,\"arguments\":{\"operations\":[{\"op\":\"project.items.list\",\"args\":{\"offset\":0,\"limit\":1},\"returnAs\":\"\xF0\x9F\x9A\x80\"}]}}}";
+  require(aemcp::native::rpc::decode_request_frame(frame(escaped_wire)).request_fingerprint_sha256
+          == aemcp::native::rpc::decode_request_frame(frame(utf8_wire)).request_fingerprint_sha256,
+      "direct parser unicode canonicalization diverged from the wire path");
+  rejects([] { (void)program(R"({"operations":[],"undoGroup":"\uD83D"})"); }, "unpaired surrogate");
+}
+
 void codec_accepts_only_the_native_program_invoke_shape() {
   const std::string legacy = R"({"wireVersion":1,"kind":"request","sessionId":"session","requestId":"legacy","method":"invoke","params":{"capabilityId":"ae.layer.track-matte.set","capabilityVersion":1,"arguments":{}}})";
   rejects([&] {
@@ -138,6 +179,8 @@ int main() {
     unknown_primitive_duplicate_or_invalid_refs_fail_admission();
     reference_kinds_and_exports_are_closed();
     program_is_bounded_and_digest_binds_arguments();
+    literal_schemas_are_closed_and_bounded_before_dispatch();
+    named_results_and_unicode_parser_are_uniform();
     codec_accepts_only_the_native_program_invoke_shape();
     std::cout << "native_program_test: PASS\n";
     return 0;

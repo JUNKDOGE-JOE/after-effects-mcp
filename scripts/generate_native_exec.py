@@ -294,6 +294,29 @@ def _digest(value: Any) -> str:
     return hashlib.sha256(_canonical_json(value).encode("utf-8")).hexdigest()
 
 
+def _inline_schema(value: Any, root_definitions: dict[str, Any], trail: tuple[str, ...] = ()) -> Any:
+    """Inline the local RPC definitions used by the portable admission plane.
+
+    The native program decoder deliberately has no general JSON Schema engine.
+    Its generated input literals must therefore be self-contained: a `$ref` left
+    here would create a wire-only validation gap before dispatch.
+    """
+    if isinstance(value, list):
+        return [_inline_schema(item, root_definitions, trail) for item in value]
+    if not isinstance(value, dict):
+        return value
+    if set(value) == {"$ref"}:
+        reference = value["$ref"]
+        if isinstance(reference, str) and "#/$defs/" in reference:
+            definition = reference.split("#/$defs/", 1)[1]
+            if definition not in root_definitions:
+                raise ValueError(f"unknown RPC definition {definition}")
+            if definition in trail:
+                raise ValueError(f"recursive RPC definition in native admission: {definition}")
+            return _inline_schema(root_definitions[definition], root_definitions, trail + (definition,))
+    return {key: _inline_schema(item, root_definitions, trail) for key, item in value.items()}
+
+
 def _primitive_value_kind(row: PrimitiveRow) -> str:
     handle = row.result_schema.get("properties", {}).get("handle")
     if handle is None:
@@ -355,9 +378,9 @@ def _cpp_raw(value: str) -> str:
     return f'R"{delimiter}({value}){delimiter}"'
 
 
-def _model_input_schema(row: PrimitiveRow) -> dict[str, Any]:
+def _model_input_schema(row: PrimitiveRow, root_definitions: dict[str, Any]) -> dict[str, Any]:
     """Merge generated typed references into the row's JSON-safe literals."""
-    schema = json.loads(json.dumps(row.input_schema))
+    schema = _inline_schema(row.input_schema, root_definitions)
     if schema.get("type") != "object" or schema.get("additionalProperties") is not False:
         raise ValueError(f"{row.id}: literal input schema must be a closed object")
     properties = schema.setdefault("properties", {})
@@ -377,6 +400,93 @@ def _model_input_schema(row: PrimitiveRow) -> dict[str, Any]:
     return schema
 
 
+def _native_program_schema(registry: PrimitiveRegistry, root_definitions: dict[str, Any]) -> dict[str, Any]:
+    """The one generated public wire shape and the C++ admission contract."""
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["operations"],
+        "properties": {
+            "operationKey": _inline_schema({"$ref": "#/$defs/idempotencyKey"}, root_definitions),
+            "undoGroup": {"type": "string", "minLength": 1, "maxLength": 256},
+            "operations": {
+                "type": "array", "minItems": 1, "maxItems": 64,
+                "items": {"oneOf": [
+                    {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "required": ["op", "args"],
+                        "properties": {
+                            "op": {"const": row.id},
+                            "args": _model_input_schema(row, root_definitions),
+                            "saveAs": {"type": "string", "minLength": 1, "maxLength": 64},
+                            "returnAs": {"type": "string", "minLength": 1, "maxLength": 64},
+                        },
+                    }
+                    for row in registry.rows
+                ]},
+            },
+        },
+    }
+
+
+def _native_program_invoke_params(registry: PrimitiveRegistry, root_definitions: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["capabilityId", "capabilityVersion", "arguments"],
+        "properties": {
+            "capabilityId": {"const": "ae.native.exec"},
+            "capabilityVersion": {"const": 1},
+            "arguments": _native_program_schema(registry, root_definitions),
+        },
+    }
+
+
+def _replace_root_definition(path: Path, definition: str, expected: dict[str, Any], *, check: bool) -> None:
+    document = _json_object(path)
+    actual = document.get("$defs", {}).get(definition)
+    if actual == expected:
+        return
+    if check:
+        raise ValueError(f"generated output drift: {path.relative_to(ROOT)} $defs.{definition}")
+    text = path.read_text()
+    needle = f'    "{definition}": '
+    start = text.find(needle)
+    if start < 0:
+        raise ValueError(f"missing generated definition {definition}")
+    value_start = start + len(needle)
+    if value_start >= len(text) or text[value_start] != "{":
+        raise ValueError(f"generated definition {definition} is not an object")
+    depth = 0
+    in_string = False
+    escaped = False
+    end = value_start
+    for end in range(value_start, len(text)):
+        character = text[end]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == '"':
+                in_string = False
+            continue
+        if character == '"':
+            in_string = True
+        elif character == "{":
+            depth += 1
+        elif character == "}":
+            depth -= 1
+            if depth == 0:
+                break
+    else:
+        raise ValueError(f"unterminated generated definition {definition}")
+    replacement = json.dumps(expected, ensure_ascii=False, indent=6, sort_keys=True)
+    text = text[:value_start] + replacement + text[end + 1:]
+    path.write_text(text)
+
+
 def _write(path: Path, text: str, *, check: bool) -> None:
     if check:
         if not path.is_file() or path.read_text() != text:
@@ -386,7 +496,7 @@ def _write(path: Path, text: str, *, check: bool) -> None:
     path.write_text(text)
 
 
-def _generate_cpp_header(registry: PrimitiveRegistry) -> str:
+def _generate_cpp_header(registry: PrimitiveRegistry, root_definitions: dict[str, Any]) -> str:
     rows = registry.rows
     summaries = [_primitive_descriptor(row, "summary") for row in rows]
     full = [_primitive_descriptor(row, "full") for row in rows]
@@ -449,7 +559,7 @@ def _generate_cpp_header(registry: PrimitiveRegistry) -> str:
             "        PrimitiveMutability::kWrite,"
             if row.mutability == "write" else "        PrimitiveMutability::kRead,",
             f'        "{row.required_suite}",',
-            f"        {_cpp_raw(_canonical_json(row.input_schema))},",
+            f"        {_cpp_raw(_canonical_json(_model_input_schema(row, root_definitions)))},",
             f"        std::span<const NativeReferenceArgument>{{kNativePrimitiveReferenceArguments{rows.index(row)}}},",
             f"        {_cpp_raw(_canonical_json(row.result_schema))},",
             f"        {_cpp_raw(row.summary)},",
@@ -494,7 +604,7 @@ def _generate_bindings(registry: PrimitiveRegistry) -> str:
     return "\n".join(lines) + "\n"
 
 
-def _generate_mjs(registry: PrimitiveRegistry) -> str:
+def _generate_mjs(registry: PrimitiveRegistry, root_definitions: dict[str, Any]) -> str:
     rows = [
         {
             "id": row.id,
@@ -505,7 +615,7 @@ def _generate_mjs(registry: PrimitiveRegistry) -> str:
                 for name, kind, required in row.reference_arguments
             },
             "inputSchema": row.input_schema,
-            "modelInputSchema": _model_input_schema(row),
+            "modelInputSchema": _model_input_schema(row, root_definitions),
             "resultSchema": row.result_schema,
             "summary": row.summary,
             "executor": row.executor,
@@ -515,30 +625,7 @@ def _generate_mjs(registry: PrimitiveRegistry) -> str:
         }
         for row in registry.rows
     ]
-    input_schema = {
-        "type": "object",
-        "additionalProperties": False,
-        "required": ["operations"],
-        "properties": {
-            "operations": {
-                "type": "array", "minItems": 1, "maxItems": 64,
-                "items": {"oneOf": [
-                    {
-                        "type": "object",
-                        "additionalProperties": False,
-                        "required": ["op", "args"],
-                        "properties": {
-                            "op": {"const": row.id},
-                            "args": _model_input_schema(row),
-                            "saveAs": {"type": "string", "minLength": 1},
-                            "returnAs": {"type": "string", "minLength": 1},
-                        },
-                    }
-                    for row in registry.rows
-                ]},
-            },
-        },
-    }
+    input_schema = _native_program_schema(registry, root_definitions)
     payload = _canonical_json(rows)
     descriptors = {
         "summary": [_primitive_descriptor(row, "summary") for row in registry.rows],
@@ -554,7 +641,7 @@ def _generate_mjs(registry: PrimitiveRegistry) -> str:
     ])
 
 
-def _generate_python(registry: PrimitiveRegistry) -> str:
+def _generate_python(registry: PrimitiveRegistry, root_definitions: dict[str, Any]) -> str:
     rows = [
         {
             "id": row.id,
@@ -565,7 +652,7 @@ def _generate_python(registry: PrimitiveRegistry) -> str:
                 for name, kind, required in row.reference_arguments
             },
             "input_schema": row.input_schema,
-            "model_input_schema": _model_input_schema(row),
+            "model_input_schema": _model_input_schema(row, root_definitions),
             "result_schema": row.result_schema,
             "summary": row.summary,
             "executor": row.executor,
@@ -575,10 +662,7 @@ def _generate_python(registry: PrimitiveRegistry) -> str:
         }
         for row in registry.rows
     ]
-    input_schema = {
-        "type": "object", "additionalProperties": False, "required": ["operations"],
-        "properties": {"operations": {"type": "array", "minItems": 1}},
-    }
+    input_schema = _native_program_schema(registry, root_definitions)
     return "\n".join([
         "# Generated by scripts/generate_native_exec.py. Do not edit by hand.",
         "from __future__ import annotations",
@@ -590,25 +674,37 @@ def _generate_python(registry: PrimitiveRegistry) -> str:
     ])
 
 
-def generate_projections(root: Path, registry: PrimitiveRegistry, *, check: bool) -> None:
+def generate_projections(
+    root: Path, registry: PrimitiveRegistry, root_definitions: dict[str, Any], *, check: bool
+) -> None:
     _write(
         root / "native/ae-plugin/include/aemcp_native/native_primitive_registry.generated.hpp",
-        _generate_cpp_header(registry), check=check)
+        _generate_cpp_header(registry, root_definitions), check=check)
     _write(
         root / "native/ae-plugin/src/aegp/native_primitive_bindings.generated.inc",
         _generate_bindings(registry), check=check)
     _write(
         root / "native/ae-plugin/protocol/native_exec.generated.mjs",
-        _generate_mjs(registry), check=check)
+        _generate_mjs(registry, root_definitions), check=check)
     _write(
         root / "packages/core/ae_mcp/native_exec_generated.py",
-        _generate_python(registry), check=check)
+        _generate_python(registry, root_definitions), check=check)
 
 
 def generate_all(root: Path, *, check: bool) -> None:
     validate_sources(root)
     registry = load_primitive_registry(root / "native/ae-plugin/protocol/native-primitives.json")
-    generate_projections(root, registry, check=check)
+    rpc_schema_path = root / "native/ae-plugin/protocol/aegp-rpc.schema.json"
+    rpc_definitions = _json_object(rpc_schema_path).get("$defs")
+    if not isinstance(rpc_definitions, dict):
+        raise ValueError("aegp-rpc.schema.json: missing $defs")
+    _replace_root_definition(
+        rpc_schema_path,
+        "nativeProgramInvokeParams",
+        _native_program_invoke_params(registry, rpc_definitions),
+        check=check,
+    )
+    generate_projections(root, registry, rpc_definitions, check=check)
 
 
 def main() -> int:

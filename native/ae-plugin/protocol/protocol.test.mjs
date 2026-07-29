@@ -78,6 +78,20 @@ test('framing and independent control-plane schemas remain closed', () => {
     method: 'invalidateGraph', params: { reason: 'cep-jsx' } };
   assert.equal(schemaAccepts(schema.$defs.request, cancel, schema), true);
   assert.equal(schemaAccepts(schema.$defs.request, invalidate, schema), true);
+  assert.equal(schemaAccepts(schema.$defs.request, {
+    ...cancel, params: { ...cancel.params, extra: true },
+  }, schema), false);
+  assert.equal(schemaAccepts(schema.$defs.request, {
+    ...invalidate, params: { ...invalidate.params, extra: true },
+  }, schema), false);
+  assert.equal(schemaAccepts(schema.$defs.request, {
+    ...nativeRequest({ operations: [{ op: 'project.items.list', args: { offset: 0, limit: 1 } }] }),
+    sessionId: undefined,
+  }, schema), false);
+  assert.equal(schemaAccepts(schema.$defs.request, {
+    ...cancel, deadlineUnixMs: 0,
+  }, schema), false);
+  assert.equal(schemaAccepts(schema.$defs.capabilitiesParams, { limit: 101 }, schema), false);
 });
 
 test('strict framing and JSON limits remain independently covered', () => {
@@ -111,6 +125,16 @@ test('generated capabilities summary/full and generic error policy remain valid'
     result.items = CAPABILITY_DESCRIPTORS[detail === 'summary' ? 'full' : 'summary'];
     assert.equal(schemaAccepts(schema.$defs.capabilitiesResult, result, schema), false, `${detail} binding`);
   }
+  const retryableError = {
+    code: 'NATIVE_UNAVAILABLE', message: 'executor absent', retryable: true,
+    sideEffect: 'not-started', recovery: { action: 'reconnect', hint: 'native executor is unavailable' },
+  };
+  assert.equal(schemaAccepts(schema.$defs.rpcError, retryableError, schema), true);
+  assert.equal(schemaAccepts(schema.$defs.rpcError, { ...retryableError, extra: true }, schema), false);
+  assert.equal(schemaAccepts(schema.$defs.cancelResult, {
+    targetRequestId: 'native-program', state: 'queued-cancelled', terminalResponseExpected: true,
+  }, schema), true);
+  assert.equal(schemaAccepts(schema.$defs.invalidateGraphResult, { generation: 1, invalidated: true }, schema), true);
   for (const [code, [retryable, sideEffect, action]] of Object.entries(ERROR_POLICIES)) {
     assert.equal(typeof retryable, 'boolean', code);
     assert.ok(['not-started', 'completed', 'possibly-side-effecting', 'may-have-occurred'].includes(sideEffect), code);

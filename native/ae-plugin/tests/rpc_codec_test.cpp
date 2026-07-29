@@ -21,6 +21,10 @@
 
 namespace {
 
+// Historical per-capability invoke vectors remain as migration fixtures, but
+// Task 3 executes only the native-program and control-plane corpus below.
+#pragma GCC diagnostic ignored "-Wunused-function"
+
 using aemcp::native::rpc::CapabilitiesParams;
 using aemcp::native::rpc::CapabilitiesSuccess;
 using aemcp::native::rpc::CompositionLayersSuccess;
@@ -71,6 +75,7 @@ using aemcp::native::rpc::HelloParams;
 using aemcp::native::rpc::HelloSuccess;
 using aemcp::native::rpc::InvalidateGraphParams;
 using aemcp::native::rpc::InvokeParams;
+using aemcp::native::rpc::NativeProgramParams;
 using aemcp::native::rpc::ParsedRequest;
 using aemcp::native::rpc::ProgressEvent;
 using aemcp::native::rpc::ProgressPhase;
@@ -340,6 +345,17 @@ std::string invoke_json(
       + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
       + "\",\"method\":\"invoke\",\"deadlineUnixMs\":" + std::to_string(deadline)
       + ",\"params\":{\"capabilityId\":\"ae.project.summary\","
+        "\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
+}
+
+std::string native_exec_json(
+    std::string_view request_id = "native-exec-1",
+    std::uint64_t deadline = 1'900'000'005'000ULL,
+    std::string_view arguments = R"({"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1}}]})") {
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":" + std::to_string(deadline)
+      + ",\"params\":{\"capabilityId\":\"ae.native.exec\","
         "\"capabilityVersion\":1,\"arguments\":" + std::string(arguments) + "}}";
 }
 
@@ -666,6 +682,47 @@ void advertised_native_capabilities_are_parseable_from_invoke_requests() {
   require(
       parsed_count == aemcp::native::kAdvertisedNativeCapabilities.size(),
       "advertised invoke corpus did not cover the complete native registry");
+}
+
+void native_exec_is_the_only_typed_invoke_and_control_plane_stays_typed() {
+  const ParsedRequest invoke = decode_request_frame(frame(native_exec_json()));
+  require(invoke.method == RpcMethod::kInvoke && invoke.session_id == kSession
+      && std::holds_alternative<NativeProgramParams>(invoke.params),
+      "native exec invoke did not decode to the bounded program variant");
+  expect_codec_error([&] { (void)decode_request_frame(frame(invoke_json())); },
+      "INVALID_ARGUMENT", "legacy invoke was accepted");
+  expect_codec_error([&] { (void)decode_request_frame(frame(native_exec_json(
+      "native-extra", 1'900'000'005'000ULL,
+      R"({"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1,"extra":true}}]})"))); },
+      "INVALID_ARGUMENT", "native program extra literal was accepted");
+
+  const std::string capabilities_json = "{\"wireVersion\":1,\"kind\":\"request\","
+      "\"sessionId\":\"" + std::string(kSession)
+      + "\",\"requestId\":\"capabilities-1\",\"method\":\"capabilities\","
+        "\"params\":{\"ids\":[\"composition.time.read\"],\"detail\":\"full\",\"limit\":1}}";
+  const ParsedRequest capabilities = decode_request_frame(frame(capabilities_json));
+  const auto& query = std::get<CapabilitiesParams>(capabilities.params);
+  require(query.detail == CapabilityDetail::kFull && query.ids->size() == 1,
+      "capabilities query lost detail binding");
+  CapabilitiesSuccess response;
+  response.request_id = capabilities.request_id;
+  response.session_id = *capabilities.session_id;
+  response.detail = query.detail;
+  response.selected_primitive_indices = {6};
+  response.query_digest = digest_capabilities_query(*capabilities.session_id, query);
+  const std::string capability_body = body(encode_capabilities_success(response));
+  require(capability_body.find("\"queryDigest\":\"" + response.query_digest + "\"") != std::string::npos
+      && capability_body.find("\"inputSchema\"") != std::string::npos,
+      "capabilities response lost query-digest/full-schema binding");
+
+  const ParsedRequest cancel = decode_request_frame(frame("{\"wireVersion\":1,\"kind\":\"request\","
+      "\"sessionId\":\"" + std::string(kSession)
+      + "\",\"requestId\":\"cancel-1\",\"method\":\"cancel\",\"params\":{\"targetRequestId\":\"native-exec-1\"}}"));
+  require(cancel.method == RpcMethod::kCancel, "cancel exchange was not retained");
+  expect_codec_error([&] { (void)decode_request_frame(frame("{\"wireVersion\":1,\"kind\":\"request\","
+      "\"sessionId\":\"" + std::string(kSession)
+      + "\",\"requestId\":\"cancel-extra\",\"method\":\"cancel\",\"params\":{\"targetRequestId\":\"x\",\"extra\":true}}")); },
+      "INVALID_ARGUMENT", "cancel extra field was accepted");
 }
 
 void golden_requests_are_typed_and_closed() {
@@ -2771,8 +2828,8 @@ void strict_json_and_frame_limits_fail_closed() {
     {"invalid escape", "{\"x\":\"\\q\"}"},
     {"lone high surrogate", "{\"x\":\"\\ud800\"}"},
     {"lone low surrogate", "{\"x\":\"\\udc00\"}"},
-    {"unsafe integer", invoke_json("unsafe", 9'007'199'254'740'991ULL).replace(
-      invoke_json("unsafe", 9'007'199'254'740'991ULL).find("9007199254740991"), 16,
+    {"unsafe integer", native_exec_json("unsafe", 9'007'199'254'740'991ULL).replace(
+      native_exec_json("unsafe", 9'007'199'254'740'991ULL).find("9007199254740991"), 16,
       "9007199254740992")},
     {"non-finite", "{\"wireVersion\":1e999,\"kind\":\"request\"}"},
     {"trailing comma", "{\"wireVersion\":1,}"},
@@ -2812,15 +2869,15 @@ void strict_json_and_frame_limits_fail_closed() {
       "maximum-size frame was rejected");
 
   std::string at_depth = "0";
-  for (int level = 0; level < 28; ++level) at_depth = "[" + at_depth + "]";
+  for (int level = 0; level < 26; ++level) at_depth = "[" + at_depth + "]";
   expect_codec_error([&] {
-    (void)decode_request_frame(frame(invoke_json("depth-16", 1'900'000'005'000ULL,
-      "{\"x\":" + at_depth + "}")));
+    (void)decode_request_frame(frame(native_exec_json("depth-16", 1'900'000'005'000ULL,
+      "{\"operations\":[{\"op\":\"project.items.list\",\"args\":{\"offset\":0,\"limit\":1},\"saveAs\":" + at_depth + "}]}")));
   }, "INVALID_ARGUMENT", "depth 32 closed-argument rejection");
   at_depth = "[" + at_depth + "]";
   expect_codec_error([&] {
-    (void)decode_request_frame(frame(invoke_json("depth-17", 1'900'000'005'000ULL,
-      "{\"x\":" + at_depth + "}")));
+    (void)decode_request_frame(frame(native_exec_json("depth-17", 1'900'000'005'000ULL,
+      "{\"operations\":[{\"op\":\"project.items.list\",\"args\":{\"offset\":0,\"limit\":1},\"saveAs\":" + at_depth + "}]}")));
   }, "INVALID_REQUEST", "depth 33 parser rejection");
 }
 
@@ -2831,18 +2888,18 @@ void negative_contract_vectors_are_classified() {
         "\"params\":{}}", "INVALID_REQUEST"},
     {"invoke missing session", "{\"wireVersion\":1,\"kind\":\"request\","
       "\"requestId\":\"bad-2\",\"method\":\"invoke\",\"params\":{"
-      "\"capabilityId\":\"ae.project.summary\",\"capabilityVersion\":1,"
-      "\"arguments\":{}}}", "SESSION_STALE"},
+      "\"capabilityId\":\"ae.native.exec\",\"capabilityVersion\":1,"
+      "\"arguments\":{\"operations\":[{\"op\":\"project.items.list\",\"args\":{\"offset\":0,\"limit\":1}}]}}}", "SESSION_STALE"},
     {"wrong detail enum", "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
       + std::string(kSession) + "\",\"requestId\":\"bad-3\","
         "\"method\":\"capabilities\",\"params\":{\"detail\":\"everything\"}}",
       "INVALID_ARGUMENT"},
     {"missing capability version", "{\"wireVersion\":1,\"kind\":\"request\","
       "\"sessionId\":\"" + std::string(kSession) + "\",\"requestId\":\"bad-5\","
-      "\"method\":\"invoke\",\"params\":{\"capabilityId\":\"ae.project.summary\","
-      "\"arguments\":{}}}", "INVALID_ARGUMENT"},
-    {"nested executable alias", invoke_json("bad-7", 1'900'000'005'000ULL,
-      "{\"payload\":{\"code\":\"synthetic executable input\"}}"), "INVALID_ARGUMENT"},
+      "\"method\":\"invoke\",\"params\":{\"capabilityId\":\"ae.native.exec\","
+      "\"arguments\":{\"operations\":[]}}}", "INVALID_ARGUMENT"},
+    {"nested executable alias", native_exec_json("bad-7", 1'900'000'005'000ULL,
+      "{\"operations\":[{\"op\":\"project.items.list\",\"args\":{\"offset\":0,\"limit\":1,\"payload\":{\"code\":\"synthetic executable input\"}}}]}"), "INVALID_ARGUMENT"},
   };
   for (const auto& [name, json, expected] : cases) {
     expect_codec_error([&] { (void)decode_request_frame(frame(json)); }, expected, name);
@@ -2868,7 +2925,7 @@ void authorization_session_and_replay_gate_are_bounded() {
       "opaque-connection-7", std::string(kHost), std::string(kSession), clock,
       SessionFrontDoorConfig{1, 2, 1'000, 5'000, 30'000});
   const ParsedRequest hello = decode_request_frame(frame(hello_json()));
-  const ParsedRequest invoke = decode_request_frame(frame(invoke_json(
+  const ParsedRequest invoke = decode_request_frame(frame(native_exec_json(
       "invoke-1", clock.now + 5'000)));
   require(door.admit(invoke).code == SessionIngressCode::kHelloRequired,
       "request was accepted before hello");
@@ -2887,7 +2944,7 @@ void authorization_session_and_replay_gate_are_bounded() {
   require(content_mismatch.code == SessionIngressCode::kDuplicateRequest
       && !content_mismatch.duplicate_content_matches, "content-mismatched replay was not distinguished");
 
-  const ParsedRequest second = decode_request_frame(frame(invoke_json("invoke-2", clock.now + 5'000)));
+  const ParsedRequest second = decode_request_frame(frame(native_exec_json("invoke-2", clock.now + 5'000)));
   require(door.admit(second).code == SessionIngressCode::kLedgerFull,
       "active ledger capacity was not enforced");
   require(door.complete_request("invoke-1") && door.tombstone_count() == 1,
@@ -2916,11 +2973,11 @@ void authorization_session_and_replay_gate_are_bounded() {
   require(defaulted.effective_deadline_unix_ms == clock.now + 5'000,
       "omitted deadline did not materialize to five seconds");
   require(deadlines.complete_request("cap-deadline"), "defaulted request did not complete");
-  require(deadlines.admit(decode_request_frame(frame(invoke_json("expired", clock.now)))).code
+  require(deadlines.admit(decode_request_frame(frame(native_exec_json("expired", clock.now)))).code
       == SessionIngressCode::kDeadlineExceeded, "expired request entered dispatch");
-  require(deadlines.admit(decode_request_frame(frame(invoke_json("too-far", clock.now + 30'001)))).code
+  require(deadlines.admit(decode_request_frame(frame(native_exec_json("too-far", clock.now + 30'001)))).code
       == SessionIngressCode::kInvalidDeadline, "over-maximum deadline entered dispatch");
-  std::string wrong_session_json = invoke_json("wrong-session", clock.now + 5'000);
+  std::string wrong_session_json = native_exec_json("wrong-session", clock.now + 5'000);
   wrong_session_json.replace(wrong_session_json.find(kSession), kSession.size(),
       "44444444-4444-4444-8444-444444444444");
   require(deadlines.admit(decode_request_frame(frame(wrong_session_json))).code
@@ -4059,7 +4116,7 @@ void text_shape_marker_codec_preserves_frozen_native_contracts() {
 }
 
 void fixed_seed_mutation_fuzz_is_bounded() {
-  const auto golden = frame(invoke_json("fuzz-1", 1'900'000'005'000ULL));
+  const auto golden = frame(native_exec_json("fuzz-1", 1'900'000'005'000ULL));
   std::uint32_t state = 0x5eed1234U;
   std::size_t accepted = 0;
   std::size_t rejected = 0;
@@ -4139,18 +4196,8 @@ void generated_primitive_registry_is_unique_and_capabilities_use_indices() {
 }  // namespace
 
 int main() {
-  advertised_native_capabilities_are_parseable_from_invoke_requests();
-  golden_requests_are_typed_and_closed();
-  project_bit_depth_invokes_are_closed_and_explicitly_mapped();
+  native_exec_is_the_only_typed_invoke_and_control_plane_stays_typed();
   invalidate_graph_requests_and_results_are_closed_and_deterministic();
-  project_graph_invokes_and_results_are_closed_and_deterministic();
-  project_composition_package_parses_and_serializes_all_eight_contracts();
-  layer_timeline_package_parses_and_serializes_all_eight_contracts();
-  layer_source_matte_av_package_is_closed_and_typed();
-  native_media_package_parses_all_twenty_two_public_operations();
-  text_shape_marker_codec_preserves_frozen_native_contracts();
-  layer_compositing_package_parses_and_serializes_closed_contracts();
-  keyframe_authoring_package_parses_and_serializes_closed_contracts();
   framing_fragmentation_and_multiple_frames_work();
   strict_json_and_frame_limits_fail_closed();
   negative_contract_vectors_are_classified();

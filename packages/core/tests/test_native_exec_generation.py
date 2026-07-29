@@ -14,6 +14,8 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(CORE))
 
 from scripts.generate_native_exec import (  # noqa: E402
+    _inline_schema,
+    _native_program_invoke_params,
     load_migration_manifest,
     load_primitive_registry,
     validate_sources,
@@ -85,11 +87,18 @@ def test_catalog_uses_real_closed_contracts_and_typed_internal_handles():
 
     keyframes = primitives["property.keyframes.list"]
     assert keyframes["inputSchema"] == {
-        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListArguments"
+        "type": "object",
+        "additionalProperties": False,
+        "required": ["offset", "limit"],
+        "properties": {
+            "offset": {"$ref": "aegp-rpc.schema.json#/$defs/pageOffset"},
+            "limit": {"type": "integer", "minimum": 1, "maximum": 25},
+        },
     }
-    keyframe_arguments = aegp_defs["layerPropertyKeyframesListArguments"]
-    assert keyframe_arguments["required"] == ["propertyLocator", "offset", "limit"]
-    assert keyframe_arguments["additionalProperties"] is False
+    inlined = _inline_schema(keyframes["inputSchema"], aegp_defs)
+    assert "$ref" not in json.dumps(inlined)
+    generated = _native_program_invoke_params(load_primitive_registry(PRIMITIVES), aegp_defs)
+    assert aegp_defs["nativeProgramInvokeParams"] == generated
 
     assert primitives["composition.resolve"]["resultSchema"] == {
         "type": "object",

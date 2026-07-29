@@ -6,6 +6,7 @@
 #include <cctype>
 #include <cmath>
 #include <iomanip>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <stdexcept>
@@ -53,6 +54,11 @@ std::string required_string(const JsonObject& object, std::string_view name) {
   const std::string* result = value == nullptr ? nullptr : string_of(*value);
   if (result == nullptr || result->empty()) invalid("missing or invalid " + std::string(name));
   return *result;
+}
+
+bool idempotency_key_shape(std::string_view value) {
+  return value.size() >= 16 && value.size() <= 64 &&
+      std::regex_match(value.begin(), value.end(), std::regex("^[A-Za-z0-9][A-Za-z0-9._:-]*$"));
 }
 
 void append_json_string(std::string& output, std::string_view value) {
@@ -244,6 +250,47 @@ class Parser final {
           case 'n': result.push_back('\n'); break;
           case 'r': result.push_back('\r'); break;
           case 't': result.push_back('\t'); break;
+          case 'u': {
+            const auto hex = [&](char digit) -> std::uint32_t {
+              if (digit >= '0' && digit <= '9') return static_cast<std::uint32_t>(digit - '0');
+              if (digit >= 'a' && digit <= 'f') return static_cast<std::uint32_t>(digit - 'a' + 10);
+              if (digit >= 'A' && digit <= 'F') return static_cast<std::uint32_t>(digit - 'A' + 10);
+              invalid("invalid unicode escape");
+            };
+            const auto unit = [&]() -> std::uint32_t {
+              if (offset_ + 4 > text_.size()) invalid("incomplete unicode escape");
+              std::uint32_t code = 0;
+              for (int index = 0; index != 4; ++index) code = (code << 4U) | hex(text_[offset_++]);
+              return code;
+            };
+            std::uint32_t code = unit();
+            if (code >= 0xd800U && code <= 0xdbffU) {
+              if (offset_ + 2 > text_.size() || text_[offset_] != '\\' || text_[offset_ + 1] != 'u') {
+                invalid("unpaired unicode surrogate");
+              }
+              offset_ += 2;
+              const std::uint32_t low = unit();
+              if (low < 0xdc00U || low > 0xdfffU) invalid("unpaired unicode surrogate");
+              code = 0x10000U + ((code - 0xd800U) << 10U) + (low - 0xdc00U);
+            } else if (code >= 0xdc00U && code <= 0xdfffU) {
+              invalid("unpaired unicode surrogate");
+            }
+            if (code <= 0x7fU) result.push_back(static_cast<char>(code));
+            else if (code <= 0x7ffU) {
+              result.push_back(static_cast<char>(0xc0U | (code >> 6U)));
+              result.push_back(static_cast<char>(0x80U | (code & 0x3fU)));
+            } else if (code <= 0xffffU) {
+              result.push_back(static_cast<char>(0xe0U | (code >> 12U)));
+              result.push_back(static_cast<char>(0x80U | ((code >> 6U) & 0x3fU)));
+              result.push_back(static_cast<char>(0x80U | (code & 0x3fU)));
+            } else {
+              result.push_back(static_cast<char>(0xf0U | (code >> 18U)));
+              result.push_back(static_cast<char>(0x80U | ((code >> 12U) & 0x3fU)));
+              result.push_back(static_cast<char>(0x80U | ((code >> 6U) & 0x3fU)));
+              result.push_back(static_cast<char>(0x80U | (code & 0x3fU)));
+            }
+            break;
+          }
           default: invalid("unsupported string escape");
         }
       } else {
@@ -299,6 +346,110 @@ const NativePrimitiveDescriptor* lookup(
   return found == registry.end() ? nullptr : &*found;
 }
 
+const JsonNumber* number_of(const JsonValue& value) {
+  return std::get_if<JsonNumber>(&value.value);
+}
+
+bool validates_literal(const JsonValue& value, const JsonObject& schema) {
+  // Generated admission schemas inline every local root definition.  Rejecting a
+  // remaining ref is intentional: it would otherwise bypass pre-dispatch checks.
+  if (member(schema, "$ref") != nullptr) return false;
+  for (const std::string_view composition : {"allOf", "anyOf", "oneOf"}) {
+    const JsonValue* branch_value = member(schema, composition);
+    if (branch_value == nullptr) continue;
+    const auto* branches = array_of(*branch_value);
+    if (branches == nullptr || branches->empty()) return false;
+    std::size_t matches = 0;
+    for (const JsonValue& branch : *branches) {
+      const auto* branch_schema = object_of(branch);
+      if (branch_schema != nullptr && validates_literal(value, *branch_schema)) ++matches;
+    }
+    if ((composition == "allOf" && matches != branches->size()) ||
+        (composition == "anyOf" && matches == 0) ||
+        (composition == "oneOf" && matches != 1)) return false;
+  }
+  if (const JsonValue* constant = member(schema, "const")) return canonical_json(value) == canonical_json(*constant);
+  if (const JsonValue* enumeration = member(schema, "enum")) {
+    const auto* values = array_of(*enumeration);
+    return values != nullptr && std::any_of(values->begin(), values->end(), [&](const JsonValue& item) {
+      return canonical_json(value) == canonical_json(item);
+    });
+  }
+  const std::string* type = member(schema, "type") == nullptr ? nullptr : string_of(*member(schema, "type"));
+  const bool object_rules =
+      (type != nullptr && *type == "object") || member(schema, "properties") != nullptr;
+  if (object_rules) {
+    const auto* object = object_of(value);
+    if (object == nullptr) return false;
+    const auto* properties = member(schema, "properties") == nullptr ? nullptr : object_of(*member(schema, "properties"));
+    const auto* required = member(schema, "required") == nullptr ? nullptr : array_of(*member(schema, "required"));
+    if (properties == nullptr && required != nullptr) return false;
+    for (const auto& item : *object) {
+      const JsonValue* child = properties == nullptr ? nullptr : member(*properties, item.first);
+      if (child == nullptr) {
+        const JsonValue* closed = member(schema, "additionalProperties");
+        if (closed != nullptr && std::holds_alternative<bool>(closed->value) && !std::get<bool>(closed->value)) return false;
+        continue;
+      }
+      const auto* child_schema = object_of(*child);
+      if (child_schema == nullptr || !validates_literal(item.second, *child_schema)) return false;
+    }
+    if (required != nullptr) for (const JsonValue& required_name : *required) {
+      const auto* name = string_of(required_name);
+      if (name == nullptr || member(*object, *name) == nullptr) return false;
+    }
+    return true;
+  }
+  if (type == nullptr) return true;
+  if (*type == "array") {
+    const auto* array = array_of(value); if (array == nullptr) return false;
+    if (const auto* minimum = member(schema, "minItems"); minimum != nullptr) {
+      const auto* number = number_of(*minimum);
+      if (number == nullptr || array->size() < static_cast<std::size_t>(number->value)) return false;
+    }
+    if (const auto* maximum = member(schema, "maxItems"); maximum != nullptr) {
+      const auto* number = number_of(*maximum);
+      if (number == nullptr || array->size() > static_cast<std::size_t>(number->value)) return false;
+    }
+    const auto* items = member(schema, "items") == nullptr ? nullptr : object_of(*member(schema, "items"));
+    if (items == nullptr) return false;
+    for (const JsonValue& item : *array) if (!validates_literal(item, *items)) return false;
+    return true;
+  }
+  if (*type == "string") {
+    const auto* string = string_of(value); if (string == nullptr) return false;
+    if (const auto* minimum = member(schema, "minLength"); minimum != nullptr) {
+      const auto* number = number_of(*minimum);
+      if (number == nullptr || string->size() < static_cast<std::size_t>(number->value)) return false;
+    }
+    if (const auto* maximum = member(schema, "maxLength"); maximum != nullptr) {
+      const auto* number = number_of(*maximum);
+      if (number == nullptr || string->size() > static_cast<std::size_t>(number->value)) return false;
+    }
+    if (const auto* pattern = member(schema, "pattern"); pattern != nullptr) {
+      const auto* expression = string_of(*pattern);
+      if (expression == nullptr || !std::regex_match(*string, std::regex(*expression))) return false;
+    }
+    return true;
+  }
+  if (*type == "boolean") return std::holds_alternative<bool>(value.value);
+  if (*type == "number" || *type == "integer") {
+    const auto* number = number_of(value);
+    if (number == nullptr || !std::isfinite(number->value)) return false;
+    if (*type == "integer" && std::trunc(number->value) != number->value) return false;
+    if (const auto* minimum = member(schema, "minimum"); minimum != nullptr) {
+      const auto* bound = number_of(*minimum);
+      if (bound == nullptr || number->value < bound->value) return false;
+    }
+    if (const auto* maximum = member(schema, "maximum"); maximum != nullptr) {
+      const auto* bound = number_of(*maximum);
+      if (bound == nullptr || number->value > bound->value) return false;
+    }
+    return true;
+  }
+  return true;
+}
+
 }  // namespace
 
 JsonObject parse_json_object(std::string_view json) {
@@ -313,8 +464,14 @@ NativeProgram parse_native_program(const JsonObject& object) {
     invalid("program envelope is not closed");
   }
   NativeProgram result;
-  if (member(object, "operationKey") != nullptr) result.operation_key = required_string(object, "operationKey");
-  if (member(object, "undoGroup") != nullptr) result.undo_group = required_string(object, "undoGroup");
+  if (member(object, "operationKey") != nullptr) {
+    result.operation_key = required_string(object, "operationKey");
+    if (!idempotency_key_shape(result.operation_key)) invalid("operationKey does not match wire schema");
+  }
+  if (member(object, "undoGroup") != nullptr) {
+    result.undo_group = required_string(object, "undoGroup");
+    if (result.undo_group.size() > 256) invalid("undoGroup does not match wire schema");
+  }
   const JsonValue* operations_value = member(object, "operations");
   const auto* operations = operations_value == nullptr ? nullptr : array_of(*operations_value);
   if (operations == nullptr || operations->empty() || operations->size() > kMaxNativeProgramOperations) {
@@ -331,8 +488,14 @@ NativeProgram parse_native_program(const JsonObject& object) {
     NativeProgramOperation parsed;
     parsed.primitive_id = required_string(*operation, "op");
     parsed.arguments = *arguments;
-    if (member(*operation, "saveAs") != nullptr) parsed.save_as = required_string(*operation, "saveAs");
-    if (member(*operation, "returnAs") != nullptr) parsed.return_as = required_string(*operation, "returnAs");
+    if (member(*operation, "saveAs") != nullptr) {
+      parsed.save_as = required_string(*operation, "saveAs");
+      if (parsed.save_as->size() > 64) invalid("saveAs does not match wire schema");
+    }
+    if (member(*operation, "returnAs") != nullptr) {
+      parsed.return_as = required_string(*operation, "returnAs");
+      if (parsed.return_as->size() > 64) invalid("returnAs does not match wire schema");
+    }
     result.operations.push_back(std::move(parsed));
   }
   return result;
@@ -350,6 +513,12 @@ ProgramAdmission validate_native_program(
     if (descriptor == nullptr) invalid("unknown primitive " + operation.primitive_id);
     result.descriptors.push_back(descriptor);
     result.contains_write = result.contains_write || descriptor->mutability == PrimitiveMutability::kWrite;
+    const JsonObject literal_schema = parse_json_object(descriptor->input_schema_json);
+    const JsonValue* properties_value = member(literal_schema, "properties");
+    const JsonObject* literal_properties = properties_value == nullptr ? nullptr : object_of(*properties_value);
+    const JsonValue* required_value = member(literal_schema, "required");
+    const JsonValue::Array* literal_required = required_value == nullptr ? nullptr : array_of(*required_value);
+    if (literal_properties == nullptr || literal_required == nullptr) invalid("generated literal schema is invalid");
     std::set<std::string_view> declared_refs;
     for (const NativeReferenceArgument& reference : descriptor->reference_arguments) {
       declared_refs.insert(reference.name);
@@ -366,14 +535,30 @@ ProgramAdmission validate_native_program(
     }
     for (const auto& argument : operation.arguments) {
       if (declared_refs.contains(argument.first)) continue;
+      if (member(*literal_properties, argument.first) == nullptr) {
+        invalid("unexpected literal argument " + argument.first);
+      }
+      const auto* argument_schema = object_of(*member(*literal_properties, argument.first));
+      if (argument_schema == nullptr || !validates_literal(argument.second, *argument_schema)) {
+        invalid("invalid literal argument " + argument.first);
+      }
       if (contains_ref(argument.second)) invalid("reference used outside generated reference arguments");
+    }
+    for (const JsonValue& required : *literal_required) {
+      const std::string* name = string_of(required);
+      if (name == nullptr || member(operation.arguments, *name) == nullptr) {
+        invalid("missing required literal argument");
+      }
     }
     if (operation.save_as.has_value()) {
       if (!names.insert(*operation.save_as).second) invalid("duplicate saveAs " + *operation.save_as);
       result.named_value_kinds.emplace(*operation.save_as, descriptor->result_kind);
     }
-    if (operation.return_as.has_value() && !descriptor->exportable) {
-      invalid("resolver handles cannot be exported");
+    if (operation.return_as.has_value()) {
+      if (!descriptor->exportable) invalid("resolver handles cannot be exported");
+      if (!names.insert(*operation.return_as).second) {
+        invalid("duplicate named value " + *operation.return_as);
+      }
     }
   }
   if (result.contains_write && (program.operation_key.empty() || program.undo_group.empty())) {
