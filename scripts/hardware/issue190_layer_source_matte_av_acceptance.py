@@ -878,7 +878,10 @@ class Issue190Runner:
         require(
             stat.S_ISREG(info.st_mode)
             and not path.is_symlink()
-            and stat.S_IMODE(info.st_mode) == 0o600
+            and (
+                os.name == "nt"
+                or stat.S_IMODE(info.st_mode) == 0o600
+            )
             and 0 < info.st_size <= 64 * 1024,
             "Issue #190 ownership manifest is invalid",
         )
