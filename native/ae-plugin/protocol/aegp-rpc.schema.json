@@ -8150,7 +8150,7 @@
                               "type": "array"
                         },
                         "undoGroup": {
-                              "maxLength": 256,
+                              "maxLength": 128,
                               "minLength": 1,
                               "type": "string"
                         }

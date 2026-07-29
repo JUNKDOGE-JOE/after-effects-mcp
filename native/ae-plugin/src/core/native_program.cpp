@@ -470,7 +470,7 @@ NativeProgram parse_native_program(const JsonObject& object) {
   }
   if (member(object, "undoGroup") != nullptr) {
     result.undo_group = required_string(object, "undoGroup");
-    if (result.undo_group.size() > 256) invalid("undoGroup does not match wire schema");
+    if (result.undo_group.size() > 128) invalid("undoGroup does not match wire schema");
   }
   const JsonValue* operations_value = member(object, "operations");
   const auto* operations = operations_value == nullptr ? nullptr : array_of(*operations_value);

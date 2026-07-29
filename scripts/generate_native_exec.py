@@ -438,7 +438,7 @@ def _native_program_schema(registry: PrimitiveRegistry, root_definitions: dict[s
         }],
         "properties": {
             "operationKey": _inline_schema({"$ref": "#/$defs/idempotencyKey"}, root_definitions),
-            "undoGroup": {"type": "string", "minLength": 1, "maxLength": 256},
+            "undoGroup": {"type": "string", "minLength": 1, "maxLength": 128},
             "operations": {
                 "type": "array", "minItems": 1, "maxItems": 64,
                 "items": {"oneOf": [

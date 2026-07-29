@@ -2023,7 +2023,7 @@ NATIVE_EXEC_INPUT_SCHEMA = {'additionalProperties': False,
                                'maxItems': 64,
                                'minItems': 1,
                                'type': 'array'},
-                'undoGroup': {'maxLength': 256, 'minLength': 1, 'type': 'string'}},
+                'undoGroup': {'maxLength': 128, 'minLength': 1, 'type': 'string'}},
  'required': ['operations'],
  'type': 'object'}
 NATIVE_EXEC_REGISTRY_DIGEST = "ac1353a16a045105ea189038ee707bdcf35b5d146056d7c1757b2bdb8acfdbd7"

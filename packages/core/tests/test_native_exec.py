@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from typing import Any
 
 import pytest
@@ -40,6 +41,14 @@ def _composition_locator() -> dict[str, Any]:
         "projectId": _PROJECT,
         "generation": 1,
         "objectId": _OBJECT,
+    }
+
+
+def _layer_locator() -> dict[str, Any]:
+    return {
+        **_composition_locator(),
+        "kind": "layer",
+        "objectId": "55555555-5555-4555-8555-555555555555",
     }
 
 
@@ -145,6 +154,17 @@ def test_native_exec_read_write_envelopes_and_operation_bound_are_strict():
         S.AeNativeExecArgs.model_validate({"operations": maximum + maximum[:1]})
 
 
+def test_native_exec_undo_group_uses_the_common_terminal_bound():
+    accepted = _write_program()
+    accepted["undoGroup"] = "u" * 128
+    S.AeNativeExecArgs.model_validate(accepted)
+
+    rejected = _write_program()
+    rejected["undoGroup"] = "u" * 129
+    with pytest.raises(ValidationError):
+        S.AeNativeExecArgs.model_validate(rejected)
+
+
 def test_native_exec_references_are_backward_only_and_typed():
     S.AeNativeExecArgs.model_validate(_write_program())
 
@@ -163,6 +183,41 @@ def test_native_exec_references_are_backward_only_and_typed():
     wrong_kind["operations"][1]["args"]["composition"] = {"ref": "items"}
     with pytest.raises(ValidationError, match="expects CompositionHandle, got Json"):
         S.AeNativeExecArgs.model_validate(wrong_kind)
+
+
+def test_native_exec_optional_parent_property_allows_a_root_properties_list():
+    root_properties = {
+        "operations": [
+            {
+                "op": "composition.resolve",
+                "args": {"locator": _composition_locator()},
+                "saveAs": "composition",
+            },
+            {
+                "op": "layer.resolve",
+                "args": {
+                    "composition": {"ref": "composition"},
+                    "locator": _layer_locator(),
+                },
+                "saveAs": "layer",
+            },
+            {
+                "op": "layer.properties.list",
+                "args": {
+                    "layer": {"ref": "layer"},
+                    "offset": 0,
+                    "limit": 25,
+                },
+                "returnAs": "properties",
+            },
+        ]
+    }
+    S.AeNativeExecArgs.model_validate(root_properties)
+
+    missing_required_layer = deepcopy(root_properties)
+    del missing_required_layer["operations"][2]["args"]["layer"]
+    with pytest.raises(ValidationError):
+        S.AeNativeExecArgs.model_validate(missing_required_layer)
 
 
 def test_native_program_request_digest_is_canonical_and_argument_bound():
@@ -254,6 +309,79 @@ def _program_success(
     )
 
 
+def _program_failure_error(
+    request: N.NativeProgramRequest,
+    negotiation: N.NativeNegotiation,
+) -> N.NativeBackendError:
+    completed = [
+        {"index": 0, "op": "composition.resolve", "status": "completed"}
+    ]
+    outputs: dict[str, Any] = {}
+    return N.NativeBackendError.from_payload(
+        {
+            "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "message": "Native program completion became uncertain.",
+            "retryable": False,
+            "sideEffect": "may-have-occurred",
+            "recovery": {
+                "action": "inspect-state",
+                "hint": "Inspect After Effects state and audit evidence before retrying.",
+            },
+            "details": {
+                "capabilityId": "ae.native.exec",
+                "operationKey": "native-program-write-0001",
+                "disposition": "possibly-side-effecting",
+                "completedOperations": completed,
+                "failedOperation": {
+                    "index": 1,
+                    "op": "composition.time.set",
+                    "status": "failed",
+                },
+                "outputs": outputs,
+                "evidence": {
+                    "engine": "native-aegp",
+                    "hostInstanceId": negotiation.host_instance_id,
+                    "sessionId": negotiation.session_id,
+                    "requestId": request.request_id,
+                    "capabilityId": "ae.native.exec",
+                    "capabilityVersion": 1,
+                    "startedAtUnixMs": _DEADLINE - 100,
+                    "completedAtUnixMs": _DEADLINE - 50,
+                    "effect": "may-have-occurred",
+                    "requestDigest": _canonical_digest(
+                        {
+                            "wireVersion": negotiation.selected_wire_version,
+                            "kind": "request",
+                            "sessionId": negotiation.session_id,
+                            "requestId": request.request_id,
+                            "method": "invoke",
+                            "deadlineUnixMs": request.deadline_unix_ms,
+                            "params": {
+                                "capabilityId": request.capability_id,
+                                "capabilityVersion": request.capability_version,
+                                "arguments": request.arguments,
+                            },
+                        }
+                    ),
+                    "postcondition": {
+                        "verified": False,
+                        "kind": "native-program",
+                        "algorithm": "sha256-rfc8785-jcs-v1",
+                        "digest": _canonical_digest(
+                            {"operations": completed, "outputs": outputs}
+                        ),
+                    },
+                },
+                "undo": {
+                    "available": True,
+                    "verified": False,
+                    "groupLabel": "Native program write",
+                },
+            },
+        }
+    )
+
+
 class _ProgramBackend(N.NativeInvokeBackend):
     name = "program-test"
 
@@ -329,6 +457,78 @@ async def test_native_exec_rebinds_unverifiable_write_failure_to_real_operation_
 
 
 @pytest.mark.asyncio
+async def test_native_exec_accepts_a_request_bound_partial_failure():
+    backend = _ProgramBackend()
+    args = S.AeNativeExecArgs.model_validate(_write_program())
+    request = N.NativeProgramRequest.from_args(
+        request_id="mcp-native-program-failure",
+        args=args,
+        deadline_unix_ms=_DEADLINE,
+    )
+    backend.invoke_error = _program_failure_error(request, backend.negotiation)
+
+    with pytest.raises(N.NativeBackendError) as raised:
+        await N.invoke_native_program(
+            backend,
+            request_id=request.request_id,
+            args=args,
+            deadline_unix_ms=request.deadline_unix_ms,
+        )
+    assert raised.value is backend.invoke_error
+    assert raised.value.details is not None
+    assert raised.value.details["completedOperations"] == [
+        {"index": 0, "op": "composition.resolve", "status": "completed"}
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("path", "replacement"),
+    [
+        (("evidence", "requestId"), "mcp-native-program-other"),
+        (("evidence", "hostInstanceId"), "66666666-6666-4666-8666-666666666666"),
+        (("evidence", "sessionId"), "77777777-7777-4777-8777-777777777777"),
+        (("evidence", "requestDigest"), "d" * 64),
+        (("completedOperations", 0, "op"), "project.items.list"),
+        (("failedOperation", "op"), "project.items.list"),
+        (("evidence", "postcondition", "digest"), "e" * 64),
+        (("undo", "groupLabel"), "Another Undo group"),
+    ],
+)
+async def test_native_exec_rebinds_untrusted_partial_failure_evidence(
+    path,
+    replacement,
+):
+    backend = _ProgramBackend()
+    args = S.AeNativeExecArgs.model_validate(_write_program())
+    request = N.NativeProgramRequest.from_args(
+        request_id="mcp-native-program-failure",
+        args=args,
+        deadline_unix_ms=_DEADLINE,
+    )
+    error = _program_failure_error(request, backend.negotiation)
+    payload = error.payload.model_dump(mode="json", by_alias=True, exclude_none=True)
+    target = payload["details"]
+    for part in path[:-1]:
+        target = target[part]
+    target[path[-1]] = replacement
+    backend.invoke_error = N.NativeBackendError.from_payload(payload)
+
+    with pytest.raises(N.NativeBackendError) as raised:
+        await N.invoke_native_program(
+            backend,
+            request_id=request.request_id,
+            args=args,
+            deadline_unix_ms=request.deadline_unix_ms,
+        )
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.details == {
+        "capabilityId": "ae.native.exec",
+        "operationKey": "native-program-write-0001",
+    }
+
+
+@pytest.mark.asyncio
 async def test_native_exec_handler_returns_common_result_and_preserves_uncertainty(
     monkeypatch,
 ):
@@ -367,63 +567,18 @@ async def test_native_exec_handler_returns_common_result_and_preserves_uncertain
 
 
 def test_common_native_program_failure_preserves_partial_evidence():
-    completed = [
-        {"index": 0, "op": "composition.resolve", "status": "completed"}
-    ]
-    outputs: dict[str, Any] = {}
-    error = N.NativeBackendError.from_payload(
-        {
-            "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
-            "message": "Native program completion became uncertain.",
-            "retryable": False,
-            "sideEffect": "may-have-occurred",
-            "recovery": {
-                "action": "inspect-state",
-                "hint": "Inspect After Effects state and audit evidence before retrying.",
-            },
-            "details": {
-                "capabilityId": "ae.native.exec",
-                "operationKey": "native-program-write-0001",
-                "disposition": "possibly-side-effecting",
-                "completedOperations": completed,
-                "failedOperation": {
-                    "index": 1,
-                    "op": "composition.time.set",
-                    "status": "failed",
-                },
-                "outputs": outputs,
-                "evidence": {
-                    "engine": "native-aegp",
-                    "hostInstanceId": _HOST,
-                    "sessionId": _SESSION,
-                    "requestId": "mcp-native-program-failure",
-                    "capabilityId": "ae.native.exec",
-                    "capabilityVersion": 1,
-                    "startedAtUnixMs": _DEADLINE - 100,
-                    "completedAtUnixMs": _DEADLINE - 50,
-                    "effect": "may-have-occurred",
-                    "requestDigest": "c" * 64,
-                    "postcondition": {
-                        "verified": False,
-                        "kind": "native-program",
-                        "algorithm": "sha256-rfc8785-jcs-v1",
-                        "digest": _canonical_digest(
-                            {"operations": completed, "outputs": outputs}
-                        ),
-                    },
-                },
-                "undo": {
-                    "available": True,
-                    "verified": False,
-                    "groupLabel": "Native program write",
-                },
-            },
-        }
+    request = N.NativeProgramRequest.from_args(
+        request_id="mcp-native-program-failure",
+        args=S.AeNativeExecArgs.model_validate(_write_program()),
+        deadline_unix_ms=_DEADLINE,
     )
+    error = _program_failure_error(request, _negotiation())
     assert error.side_effect == "may-have-occurred"
     assert error.details is not None
     assert error.details["operationKey"] == "native-program-write-0001"
-    assert error.details["completedOperations"] == completed
+    assert error.details["completedOperations"] == [
+        {"index": 0, "op": "composition.resolve", "status": "completed"}
+    ]
     assert error.details["failedOperation"]["index"] == 1
 
 

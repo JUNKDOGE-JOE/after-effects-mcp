@@ -1586,6 +1586,12 @@ class AeNativeExecArgs(_StrictModel):
             primitive = _NATIVE_EXEC_PRIMITIVE_BY_ID[operation["op"]]
             arguments = operation["args"]
             for field, reference in primitive["reference_arguments"].items():
+                if field not in arguments:
+                    if reference["required"]:
+                        raise ValueError(
+                            f"operations.{index}.args.{field} is required"
+                        )
+                    continue
                 referenced_name = arguments[field]["ref"]
                 actual_kind = saved_kinds.get(referenced_name)
                 if actual_kind is None:

@@ -4972,6 +4972,7 @@ async def invoke_native_program(
         result = await backend.invoke(request, cancellation=cancellation)
     except NativeBackendError as exc:
         _validate_invoke_error_binding(exc, request)
+        _validate_native_program_failure_binding(exc, request, negotiation)
         raise
     if not isinstance(result, NativeProgramInvokeResult):
         raise _native_program_result_error(
@@ -5058,6 +5059,67 @@ def _validate_invoke_error_binding(
         "NATIVE_CONTRACT_MISMATCH",
         "Native failure was not bound to the requested capability.",
     ) from error
+
+
+def _validate_native_program_failure_binding(
+    error: NativeBackendError,
+    request: NativeProgramRequest,
+    negotiation: NativeNegotiation,
+) -> None:
+    details = error.payload.details
+    if not isinstance(details, NativeProgramFailureDetails):
+        return
+
+    requested_operations = request.arguments["operations"]
+    completed_prefix = [
+        (index, operation["op"], "completed")
+        for index, operation in enumerate(
+            requested_operations[: len(details.completed_operations)]
+        )
+    ]
+    actual_completed = [
+        (operation.index, operation.op, operation.status)
+        for operation in details.completed_operations
+    ]
+    failed_operation = details.failed_operation
+    failed_operation_matches = failed_operation is None
+    if (
+        failed_operation is not None
+        and len(details.completed_operations) < len(requested_operations)
+    ):
+        next_index = len(details.completed_operations)
+        failed_operation_matches = (
+            failed_operation.index == next_index
+            and failed_operation.op == requested_operations[next_index]["op"]
+            and failed_operation.status == "failed"
+        )
+
+    expected_postcondition = _native_program_postcondition_digest(
+        outputs=details.outputs,
+        operations=details.completed_operations,
+    )
+    undo_group = request.arguments.get("undoGroup")
+    valid = (
+        details.capability_id == request.capability_id
+        and details.operation_key == request.arguments.get("operationKey")
+        and details.evidence.request_id == request.request_id
+        and details.evidence.host_instance_id == negotiation.host_instance_id
+        and details.evidence.session_id == negotiation.session_id
+        and details.evidence.request_digest
+        == _invoke_request_digest(request, negotiation)
+        and actual_completed == completed_prefix
+        and failed_operation_matches
+        and details.evidence.postcondition.digest == expected_postcondition
+        and (
+            not details.undo.available
+            or details.undo.group_label == undo_group
+        )
+    )
+    if not valid:
+        raise _native_program_result_error(
+            request,
+            "Native program failure did not match its negotiated request.",
+        ) from error
 
 
 async def _invoke_native_read_request(

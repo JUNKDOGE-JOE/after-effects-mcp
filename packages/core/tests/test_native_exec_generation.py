@@ -101,6 +101,10 @@ def test_catalog_uses_real_closed_contracts_and_typed_internal_handles():
     assert "$ref" not in json.dumps(inlined)
     generated = _native_program_invoke_params(load_primitive_registry(PRIMITIVES), aegp_defs)
     assert aegp_defs["nativeProgramInvokeParams"] == generated
+    assert (
+        generated["properties"]["arguments"]["properties"]["undoGroup"]["maxLength"]
+        == 128
+    )
 
     assert primitives["composition.resolve"]["resultSchema"] == {
         "type": "object",

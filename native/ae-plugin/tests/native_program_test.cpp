@@ -99,6 +99,17 @@ void write_program_requires_operation_key_and_undo_group() {
       + operations + "}"); }, "write without operationKey");
 }
 
+void write_program_undo_group_matches_terminal_bound() {
+  const std::string operations = R"([{"op":"composition.resolve","args":{"locator":)"
+      + composition_locator() + R"(},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":1}}}])";
+  const std::string prefix = R"({"operationKey":"program-key-0001","undoGroup":")";
+  const std::string suffix = R"(","operations":)" + operations + "}";
+  (void)admit(prefix + std::string(128, 'u') + suffix);
+  rejects([&] {
+    (void)admit(prefix + std::string(129, 'u') + suffix);
+  }, "129-character undoGroup");
+}
+
 void unknown_primitive_duplicate_or_invalid_refs_fail_admission() {
   rejects([] { (void)admit(R"({"operations":[{"op":"missing.operation","args":{}}]})"); },
       "unknown primitive");
@@ -198,6 +209,7 @@ int main() {
     read_program_needs_no_write_key();
     read_program_rejects_write_metadata();
     write_program_requires_operation_key_and_undo_group();
+    write_program_undo_group_matches_terminal_bound();
     unknown_primitive_duplicate_or_invalid_refs_fail_admission();
     reference_kinds_and_exports_are_closed();
     program_is_bounded_and_digest_binds_arguments();
