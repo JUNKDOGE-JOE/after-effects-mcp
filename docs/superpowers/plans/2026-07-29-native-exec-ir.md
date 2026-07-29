@@ -786,6 +786,8 @@ git commit -m "feat(native): return common native program evidence"
 - Modify: `packages/core/tests/test_annotations.py`
 - Modify: `packages/bridge/ae_mcp_bridge/__init__.py`
 - Modify: `packages/bridge/tests/test_http_native_bridge.py`
+- Modify: `scripts/generate_native_exec.py`
+- Modify: `packages/core/tests/test_native_exec_generation.py`
 
 **Interfaces:**
 - Produces: `AeNativeExecArgs`
@@ -836,6 +838,10 @@ capability-specific wrappers. The concrete HTTP bridge must route
 `ae.native.exec` through the common program result model, treat the presence of
 `operationKey` as the write signal, and preserve that real key in uncertain
 write details; legacy invoke parsing remains unchanged.
+
+The migration-coverage validator must exclude the two final canonical execution
+surfaces, `ae.exec` and `ae.nativeExec`, from the operation-specific removal
+manifest. This amendment does not generate or install the Task 7 Skill.
 
 - [ ] **Step 5: Verify GREEN**
 
