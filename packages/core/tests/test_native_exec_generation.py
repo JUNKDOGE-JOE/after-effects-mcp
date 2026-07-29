@@ -22,7 +22,6 @@ from scripts.generate_native_exec import (  # noqa: E402
 )
 
 
-LEGACY_FULL = ROOT / "native/ae-plugin/protocol/fixtures/capability-registry-full.json"
 MIGRATION = ROOT / "native/ae-plugin/protocol/native-exec-migration.json"
 PRIMITIVES = ROOT / "native/ae-plugin/protocol/native-primitives.json"
 AEGP_SCHEMA = ROOT / "native/ae-plugin/protocol/aegp-rpc.schema.json"
@@ -33,6 +32,7 @@ PRESSURE_FIXTURE = (
     ROOT / "packages/core/tests/fixtures/native-exec-skill-pressure.json"
 )
 NATIVE_ROOT = ROOT / "native/ae-plugin"
+CEP_HOST_ROOT = ROOT / "plugin/host"
 
 
 def _current_native_carrier_sources() -> dict[Path, str]:
@@ -62,6 +62,10 @@ def _current_native_carrier_sources() -> dict[Path, str]:
         }:
             continue
         sources[relative] = path.read_text("utf-8")
+    for path in CEP_HOST_ROOT.rglob("*.js"):
+        if path.name.endswith(".test.js"):
+            continue
+        sources[path.relative_to(ROOT)] = path.read_text("utf-8")
     return sources
 
 
@@ -93,6 +97,7 @@ def test_legacy_native_carriers_are_absent_from_the_current_runtime():
         "InvokeParams": "operation-specific public invoke carrier",
         "kAdvertisedNativeCapabilities": "legacy advertised capability array",
         "text_shape_marker_capabilities.generated": "old TSM generated carrier",
+        "native-project-composition-contract": "old CEP native contract module",
     }
     for symbol, label in forbidden_symbols.items():
         offenders = sorted(
