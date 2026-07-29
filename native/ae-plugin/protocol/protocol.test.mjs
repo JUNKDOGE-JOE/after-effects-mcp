@@ -5,6 +5,12 @@ import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
+  CAPABILITY_DESCRIPTORS,
+  NATIVE_EXEC_REGISTRY_DIGEST,
+  PRIMITIVES,
+} from './native_exec.generated.mjs';
+
+import {
   AdmissionController,
   ERROR_POLICIES,
   FrameDecoder,
@@ -226,6 +232,22 @@ test('schema locks strict framing, bounded defaults, rate limits, and native pro
   assert.equal(schema.$defs.capabilitiesParams.properties.limit.default, 50);
   assert.equal(schema.$defs.capabilitiesParams.properties.cursor, undefined);
   assert.deepEqual(schema.$defs.capabilitiesResultBase.properties.nextCursor, { type: 'null' });
+});
+
+test('capabilities discovery accepts generated primitive IDs without an alias list', () => {
+  assert.equal(schemaAccepts(schema.$defs.capabilityId, 'composition.time.read'), true);
+  assert.equal(schemaAccepts(schema.$defs.capabilityId, 'composition.selectedLayers.list'), true);
+  assert.equal(schemaAccepts(schema.$defs.capabilityId, 'ae.layer.track-matte.set'), true);
+  assert.equal(PRIMITIVES.length, 23);
+  assert.equal(PRIMITIVES[6].id, 'composition.time.read');
+  assert.equal(CAPABILITY_DESCRIPTORS.full.length, PRIMITIVES.length);
+  for (const descriptor of CAPABILITY_DESCRIPTORS.summary) {
+    assert.equal(schemaAccepts(schema.$defs.nativePrimitiveDescriptor, descriptor), true);
+  }
+  for (const descriptor of CAPABILITY_DESCRIPTORS.full) {
+    assert.equal(schemaAccepts(schema.$defs.nativePrimitiveDescriptor, descriptor), true);
+  }
+  assert.match(NATIVE_EXEC_REGISTRY_DIGEST, /^[a-f0-9]{64}$/u);
 });
 
 test('repository CI executes this contract on Windows, Linux, and stacked PR bases', () => {

@@ -4,7 +4,6 @@
 #include "aemcp_native/mac_ipc_server.hpp"
 #include "aemcp_native/rpc_codec.hpp"
 
-#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -18,58 +17,6 @@ struct NativeRpcRuntimeInfo {
   std::string host_version;
   std::uint64_t host_build{0};
   std::string host_instance_id;
-  std::string capabilities_digest;
-  std::string project_summary_contract_digest;
-  std::string project_bit_depth_read_contract_digest;
-  std::string project_bit_depth_set_contract_digest;
-  std::string project_items_list_contract_digest;
-  std::string composition_layers_list_contract_digest;
-  std::string composition_time_read_contract_digest;
-  std::string composition_time_set_contract_digest;
-  std::string composition_create_contract_digest;
-  std::string composition_layer_create_contract_digest;
-  std::string layer_effect_apply_contract_digest;
-  std::string layer_properties_list_contract_digest;
-  std::string layer_property_keyframes_list_contract_digest;
-  std::string layer_property_set_contract_digest;
-  std::string composition_selected_layers_list_contract_digest;
-  std::string project_context_read_contract_digest;
-  std::string project_item_metadata_read_contract_digest;
-  std::string composition_settings_read_contract_digest;
-  std::string composition_work_area_set_contract_digest;
-  std::string project_item_name_set_contract_digest;
-  std::string project_item_comment_set_contract_digest;
-  std::string project_item_label_set_contract_digest;
-  std::string composition_duplicate_contract_digest;
-  std::string layer_details_read_contract_digest;
-  std::string layer_name_set_contract_digest;
-  std::string layer_range_set_contract_digest;
-  std::string layer_start_time_set_contract_digest;
-  std::string layer_stretch_set_contract_digest;
-  std::string layer_order_set_contract_digest;
-  std::string layer_parent_set_contract_digest;
-  std::string layer_duplicate_contract_digest;
-  std::string layer_compositing_read_contract_digest;
-  std::string layer_switch_set_contract_digest;
-  std::string layer_quality_set_contract_digest;
-  std::string layer_blending_mode_set_contract_digest;
-  std::string layer_property_keyframe_details_read_contract_digest;
-  std::string layer_property_keyframe_add_contract_digest;
-  std::string layer_property_keyframe_value_set_contract_digest;
-  std::string layer_property_keyframe_interpolation_set_contract_digest;
-  std::string layer_property_keyframe_temporal_ease_set_contract_digest;
-  std::string layer_property_keyframe_behavior_set_contract_digest;
-  std::string layer_property_keyframe_delete_contract_digest;
-  std::string native_media_read_contract_digest;
-  std::string native_media_write_contract_digest;
-  std::string layer_source_read_contract_digest;
-  std::string layer_track_matte_read_contract_digest;
-  std::string layer_track_matte_set_contract_digest;
-  std::string layer_track_matte_clear_contract_digest;
-  std::string layer_av_state_read_contract_digest;
-  std::string layer_audio_enabled_set_contract_digest;
-  std::string layer_video_enabled_set_contract_digest;
-  std::array<std::string, 6> composition_setting_contract_digests;
 };
 
 class NativeRpcObserver {

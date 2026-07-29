@@ -1,4 +1,5 @@
 #include "aemcp_native/rpc_codec.hpp"
+#include "aemcp_native/native_primitive_registry.generated.hpp"
 #include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <algorithm>
@@ -10,6 +11,7 @@
 #include <iostream>
 #include <iterator>
 #include <limits>
+#include <ranges>
 #include <span>
 #include <string>
 #include <string_view>
@@ -183,6 +185,7 @@ constexpr std::string_view kSession = "11111111-1111-4111-8111-111111111111";
 constexpr std::string_view kHost = "22222222-2222-4222-8222-222222222222";
 constexpr std::string_view kClient = "33333333-3333-4333-8333-333333333333";
 constexpr std::string_view kDigest = "778a01733fcf37510f56894a46ec5bd87c7429de2e06d2d5eafb4cdbbae88557";
+#if 0  // Legacy descriptor digest fixtures were owned by the removed carrier.
 constexpr std::string_view kContractDigest = "baecd602479045f71288b2a7e0df645d4a5313453a34b89ced07178867ccaf9a";
 constexpr std::string_view kProjectBitDepthReadContractDigest =
     "936b86f89c99418bb570b9671569951ee10177efa70e8f4b72303a01dba0db6e";
@@ -264,6 +267,7 @@ constexpr std::string_view kNativeMediaReadContractDigest =
     "4ec2dec1dbacec43fbd9dc3eeb1c69c6f8ade640be55a2568bc94ae839f7c282";
 constexpr std::string_view kNativeMediaWriteContractDigest =
     "a19ceacd68d1dd4b0cce3066d9ed2792cfc665d9a1d299474708e7a876f73bb5";
+#endif
 [[noreturn]] void fail(const std::string& message) {
   std::cerr << "FAIL: " << message << '\n';
   std::exit(1);
@@ -2943,6 +2947,7 @@ void response_helpers_are_bounded_and_typed() {
       && hello_body.find("\"clientNonce\":\"abcdefghijklmnopqrstuvwxyzABCDEF\"") != std::string::npos,
       "hello serializer omitted negotiated bindings");
 
+  #if 0  // Legacy capabilities discovery was replaced by primitive registry selection.
   CapabilitiesSuccess capabilities;
   capabilities.request_id = "capabilities-1";
   capabilities.session_id = std::string(kSession);
@@ -3342,6 +3347,7 @@ void response_helpers_are_bounded_and_typed() {
           != std::string::npos,
       "filtered capability response rejected the advertised full-registry digest");
 
+  #endif
   const std::string progress_body = body(encode_progress_event(ProgressEvent{
     "invoke-1", std::string(kSession), 1, ProgressPhase::kQueued, 0.25, "Queued safely."}));
   require(progress_body.find("\"fraction\":0.25") != std::string::npos,
@@ -4088,6 +4094,48 @@ void fixed_seed_mutation_fuzz_is_bounded() {
   require(accepted > 0 && rejected > 400, "fixed-seed fuzz did not exercise both paths");
 }
 
+void generated_primitive_registry_is_unique_and_capabilities_use_indices() {
+  const auto unique_ids = [](const aemcp::native::NativePrimitiveDescriptor& descriptor) {
+    return std::ranges::count(
+        aemcp::native::native_primitive_registry(), descriptor.id,
+        &aemcp::native::NativePrimitiveDescriptor::id) == 1;
+  };
+  require(aemcp::native::native_primitive_registry().size() == 23,
+      "primitive count drifted");
+  require(aemcp::native::find_native_primitive("composition.time.read") != nullptr,
+      "exact-time read missing");
+  require(aemcp::native::find_native_primitive("ae.layer.track-matte.set") == nullptr,
+      "JSX-equivalent legacy capability leaked into primitive registry");
+  require(std::ranges::all_of(aemcp::native::native_primitive_registry(), unique_ids),
+      "duplicate primitive ID");
+
+  CapabilitiesSuccess response;
+  response.request_id = "generated-primitive-discovery";
+  response.session_id = std::string(kSession);
+  response.detail = CapabilityDetail::kSummary;
+  response.selected_primitive_indices = {6, 7};
+  response.query_digest = std::string(kDigest);
+  const std::string summary = body(encode_capabilities_success(response));
+  require(summary.find("\"id\":\"composition.time.read\"") != std::string::npos
+          && summary.find("\"id\":\"composition.time.set\"") != std::string::npos,
+      "selected primitive summaries were not encoded in registry order");
+
+  response.detail = CapabilityDetail::kFull;
+  const std::string full = body(encode_capabilities_success(response));
+  require(full.find("\"inputSchema\"") != std::string::npos
+          && full.find("\"resultSchema\"") != std::string::npos,
+      "selected primitive full descriptors omitted schemas");
+
+  response.selected_primitive_indices.clear();
+  for (std::size_t index = 0; index < aemcp::native::kNativePrimitiveCount; ++index) {
+    response.selected_primitive_indices.push_back(index);
+  }
+  const std::string full_registry = body(encode_capabilities_success(response));
+  require(full_registry.find(std::string(aemcp::native::kNativeExecRegistryDigest))
+          != std::string::npos,
+      "full generated registry did not use its generated digest");
+}
+
 }  // namespace
 
 int main() {
@@ -4108,6 +4156,7 @@ int main() {
   negative_contract_vectors_are_classified();
   authorization_session_and_replay_gate_are_bounded();
   response_helpers_are_bounded_and_typed();
+  generated_primitive_registry_is_unique_and_capabilities_use_indices();
   fixed_seed_mutation_fuzz_is_bounded();
   std::cout << "rpc_codec_test: PASS\n";
   return 0;

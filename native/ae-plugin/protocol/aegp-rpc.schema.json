@@ -101,7 +101,7 @@
       "type": "string",
       "minLength": 3,
       "maxLength": 96,
-      "pattern": "^ae(?:\\.[a-z][a-z0-9_-]*)+$"
+      "pattern": "^[a-z][A-Za-z0-9_-]*(?:\\.[a-z][A-Za-z0-9_-]*)+$"
     },
     "platform": {
       "enum": [
@@ -12836,6 +12836,65 @@
         }
       ]
     },
+    "nativePrimitiveDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detail",
+        "id",
+        "version",
+        "schemaVersion",
+        "summary",
+        "risk",
+        "mutability",
+        "idempotency",
+        "cancellation",
+        "undo",
+        "sideEffectSummary",
+        "preconditions",
+        "compatibility",
+        "requiredSuite",
+        "valueKind"
+      ],
+      "properties": {
+        "detail": { "enum": ["summary", "full"] },
+        "id": { "$ref": "#/$defs/capabilityId" },
+        "version": { "const": 1 },
+        "schemaVersion": { "const": 1 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "risk": { "enum": ["read", "write"] },
+        "mutability": { "enum": ["read-only", "mutating"] },
+        "idempotency": { "enum": ["idempotent", "idempotency-key"] },
+        "cancellation": { "const": "before-dispatch" },
+        "undo": { "enum": ["not-applicable", "ae-undo-group"] },
+        "sideEffectSummary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "preconditions": {
+          "type": "array", "minItems": 1, "maxItems": 16,
+          "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+        },
+        "compatibility": { "$ref": "#/$defs/compatibility" },
+        "requiredSuite": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "valueKind": { "enum": ["Json", "CompositionHandle", "LayerHandle", "PropertyHandle"] },
+        "contractDigest": { "$ref": "#/$defs/sha256" },
+        "inputSchema": { "type": "object" },
+        "resultSchema": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "detail": { "const": "full" } } },
+          "then": { "required": ["contractDigest", "inputSchema", "resultSchema"] },
+          "else": {
+            "not": {
+              "anyOf": [
+                { "required": ["contractDigest"] },
+                { "required": ["inputSchema"] },
+                { "required": ["resultSchema"] }
+              ]
+            }
+          }
+        }
+      ]
+    },
     "capabilityResultItem": {
       "oneOf": [
         {
@@ -12843,6 +12902,9 @@
         },
         {
           "$ref": "#/$defs/capabilityFull"
+        },
+        {
+          "$ref": "#/$defs/nativePrimitiveDescriptor"
         }
       ]
     },

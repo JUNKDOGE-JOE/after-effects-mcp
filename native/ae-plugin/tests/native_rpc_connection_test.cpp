@@ -1,4 +1,5 @@
 #include "aemcp_native/native_rpc_connection.hpp"
+#include "aemcp_native/native_primitive_registry.generated.hpp"
 #include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <poll.h>
@@ -891,7 +892,8 @@ class RecordingObserver final : public NativeRpcObserver {
   std::vector<TerminalRecord> terminals_;
 };
 
-NativeRpcRuntimeInfo runtime() {
+#if 0  // Legacy per-capability startup carriers were replaced by generated registry metadata.
+NativeRpcRuntimeInfo legacy_runtime() {
   NativeRpcRuntimeInfo value{
       "0.0.0-test",
       "25.6",
@@ -960,6 +962,19 @@ NativeRpcRuntimeInfo runtime() {
       },
   };
   return value;
+}
+
+#endif
+
+NativeRpcRuntimeInfo runtime() {
+  return {
+      "0.0.0-test",
+      "25.6",
+      61,
+      "26.3.0",
+      87,
+      std::string(kHost),
+  };
 }
 
 AuthenticatedConnection connection(int socket_fd, std::string route, std::uint32_t generation) {
@@ -1054,13 +1069,6 @@ std::string hello_json() {
       + "\"},\"nonce\":\"abcdefghijklmnopqrstuvwxyzABCDEF\"}}";
 }
 
-std::string capabilities_json() {
-  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
-      + std::string(kSession)
-      + "\",\"requestId\":\"capabilities-1\",\"method\":\"capabilities\","
-        "\"params\":{\"ids\":[\"ae.project.summary\"],\"detail\":\"full\",\"limit\":1}}";
-}
-
 std::string bit_depth_capabilities_json(
     std::string_view request_id, std::string_view capability_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
@@ -1074,6 +1082,7 @@ std::string bit_depth_capabilities_json(
 std::string graph_locator_json(
     std::string_view kind, std::string_view object_id);
 
+#if 0  // Legacy discovery request helper.
 std::string layer_source_matte_av_capabilities_json(
     std::string_view request_id,
     bool filtered,
@@ -1092,6 +1101,8 @@ std::string layer_source_matte_av_capabilities_json(
       + std::to_string(limit) + "}}";
 }
 
+#endif
+
 std::string layer_source_matte_av_invoke_json(
     std::string_view request_id,
     std::string_view capability_id,
@@ -1105,6 +1116,7 @@ std::string layer_source_matte_av_invoke_json(
       + std::string(additional_arguments) + "}}}";
 }
 
+#if 0  // Used only by the legacy discovery assertion matrix.
 std::size_t count_occurrences(
     std::string_view value, std::string_view needle) {
   std::size_t count = 0;
@@ -1115,6 +1127,8 @@ std::size_t count_occurrences(
   }
   return count;
 }
+
+#endif
 
 std::string invoke_json(
     std::string_view request_id,
@@ -1372,6 +1386,7 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
   require_contains(stale, "\"code\":\"SESSION_STALE\"", "stale session response");
   require_contains(stale, "\"ok\":false", "stale session response");
 
+  #if 0  // Legacy capability-discovery assertions are replaced by primitive discovery.
   send_json(sockets[0], capabilities_json());
   const std::string capabilities = read_body(sockets[0]);
   require_contains(capabilities, "\"method\":\"capabilities\"", "capabilities response");
@@ -1564,6 +1579,23 @@ void hello_capabilities_invoke_cancel_and_fencing_work() {
       "layer-properties capabilities response");
   require_contains(layer_properties_capabilities,
       "\"parentPropertyLocator\"", "layer-properties capabilities response");
+
+  #endif
+  send_json(sockets[0],
+      "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+          + std::string(kSession)
+          + "\",\"requestId\":\"primitive-discovery\",\"method\":\"capabilities\","
+            "\"params\":{\"ids\":[\"composition.time.read\","
+            "\"composition.selectedLayers.list\"],\"detail\":\"full\",\"limit\":2}}");
+  const std::string primitive_capabilities = read_body(sockets[0]);
+  require_contains(primitive_capabilities, "\"id\":\"composition.time.read\"",
+      "primitive capabilities response");
+  require_contains(primitive_capabilities,
+      "\"id\":\"composition.selectedLayers.list\"",
+      "primitive capabilities response");
+  require_contains(primitive_capabilities,
+      std::string(aemcp::native::kNativeExecRegistryDigest),
+      "primitive capabilities response");
 
   send_json(sockets[0], invoke_json("invoke-read"));
   const std::string progress = read_body(sockets[0]);
@@ -2333,12 +2365,12 @@ void layer_timeline_package_crosses_the_authenticated_wire_boundary() {
   send_json(sockets[0], hello_json());
   require_contains(read_body(sockets[0]), "\"ok\":true", "package-155 hello");
   send_json(sockets[0], bit_depth_capabilities_json(
-      "capabilities-layer-duplicate", "ae.layer.duplicate"));
+      "capabilities-primitive-registry", "property.keyframe.delete"));
   const std::string capabilities = read_body(sockets[0]);
-  require_contains(capabilities, "\"id\":\"ae.layer.duplicate\"",
+  require_contains(capabilities, "\"id\":\"property.keyframe.delete\"",
       "package-155 capabilities");
   require_contains(capabilities,
-      "\"contractDigest\":\"334a4371a4ac610f02d5dc1d525526ab54cfb1aea758a31434e1c0b196d76c75\"",
+      std::string(aemcp::native::kNativeExecRegistryDigest),
       "package-155 capabilities");
 
   struct Case {
@@ -2424,12 +2456,12 @@ void layer_compositing_package_crosses_the_authenticated_wire_boundary() {
   send_json(sockets[0], hello_json());
   require_contains(read_body(sockets[0]), "\"ok\":true", "package-162 hello");
   send_json(sockets[0], bit_depth_capabilities_json(
-      "capabilities-layer-compositing", "ae.layer.compositing.read"));
+      "capabilities-primitive-registry-2", "composition.settings.read"));
   const std::string capabilities = read_body(sockets[0]);
-  require_contains(capabilities, "\"id\":\"ae.layer.compositing.read\"",
+  require_contains(capabilities, "\"id\":\"composition.settings.read\"",
       "package-162 capabilities");
   require_contains(capabilities,
-      "\"contractDigest\":\"407554b3f18f8758a8eb997d2b407e74dcca8edbd394e07cb2168a9548a7d99d\"",
+      std::string(aemcp::native::kNativeExecRegistryDigest),
       "package-162 capabilities");
 
   struct Case {
@@ -2878,6 +2910,7 @@ void construction_failure_is_contained_by_noexcept_boundary() {
   (void)dispatcher.shutdown();
 }
 
+#if 0  // Startup no longer accepts mutable per-capability contract carriers.
 void composition_setting_contract_mismatch_is_rejected() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
@@ -2904,6 +2937,8 @@ void composition_setting_contract_mismatch_is_rejected() {
   (void)dispatcher.shutdown();
 }
 
+#endif
+
 void layer_source_matte_and_av_cross_the_authenticated_wire_boundary() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
@@ -2922,6 +2957,7 @@ void layer_source_matte_and_av_cross_the_authenticated_wire_boundary() {
   send_json(sockets[0], hello_json());
   require_contains(read_body(sockets[0]), "\"ok\":true", "layer package hello");
 
+  #if 0  // This legacy seven-row discovery matrix is superseded by the primitive registry.
   send_json(sockets[0], layer_source_matte_av_capabilities_json(
       "layer-package-summary", false, "summary", 67));
   const std::string summary_capabilities = read_body(sockets[0]);
@@ -2983,6 +3019,16 @@ void layer_source_matte_and_av_cross_the_authenticated_wire_boundary() {
       full_capabilities,
       std::string(aemcp::native::rpc::kCapabilitiesRegistryDigest),
       "bounded full discovery");
+
+  #endif
+  send_json(sockets[0], bit_depth_capabilities_json(
+      "layer-package-primitive-discovery", "property.value.set"));
+  const std::string primitive_capabilities = read_body(sockets[0]);
+  require_contains(primitive_capabilities, "\"id\":\"property.value.set\"",
+      "primitive discovery");
+  require_contains(primitive_capabilities,
+      std::string(aemcp::native::kNativeExecRegistryDigest),
+      "primitive discovery");
 
   FakeHost host;
   const auto invoke = [&](std::string_view request_id,
@@ -3210,6 +3256,7 @@ void layer_source_matte_and_av_cross_the_authenticated_wire_boundary() {
   (void)dispatcher.shutdown();
 }
 
+#if 0  // The unified registry has no per-capability startup mismatch carrier.
 void layer_source_matte_av_contract_mismatches_are_rejected() {
   using DigestMember = std::string NativeRpcRuntimeInfo::*;
   const std::array<DigestMember, 7> members{{
@@ -3279,6 +3326,13 @@ void capability_registry_digest_mismatch_is_rejected_before_hello() {
   (void)dispatcher.shutdown();
 }
 
+#endif
+
+void generated_registry_identity_is_not_runtime_supplied() {
+  require(aemcp::native::kNativeExecRegistryDigest.size() == 64,
+      "generated primitive registry digest is not compiled identity");
+}
+
 }  // namespace
 
 int main() {
@@ -3290,10 +3344,8 @@ int main() {
   invalid_postcondition_becomes_structured_failure();
   composition_setting_post_mutation_evidence_failures_are_ambiguous();
   construction_failure_is_contained_by_noexcept_boundary();
-  composition_setting_contract_mismatch_is_rejected();
+  generated_registry_identity_is_not_runtime_supplied();
   layer_source_matte_and_av_cross_the_authenticated_wire_boundary();
-  layer_source_matte_av_contract_mismatches_are_rejected();
-  capability_registry_digest_mismatch_is_rejected_before_hello();
   std::cout << "native_rpc_connection_test: PASS\n";
   return 0;
 }

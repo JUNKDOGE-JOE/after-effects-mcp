@@ -1,4 +1,5 @@
 #include "aemcp_native/native_rpc_connection.hpp"
+#include "aemcp_native/native_primitive_registry.generated.hpp"
 #include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <poll.h>
@@ -27,26 +28,6 @@ using rpc::RpcErrorCode;
 using rpc::RpcMethod;
 
 constexpr std::chrono::milliseconds kSocketWriteTimeout{1500};
-
-constexpr std::array<std::string_view, 7> kLayerSourceMatteAvCapabilities{{
-    kLayerSourceReadCapability,
-    kLayerTrackMatteReadCapability,
-    kLayerTrackMatteSetCapability,
-    kLayerTrackMatteClearCapability,
-    kLayerAVStateReadCapability,
-    kLayerAudioEnabledSetCapability,
-    kLayerVideoEnabledSetCapability,
-}};
-
-constexpr std::array<std::string_view, 7> kLayerSourceMatteAvContractDigests{{
-    "877ba54bba16bf11432caf0d504b99c753c7843824fcb6a1fcea056d00d5bedb",
-    "d195337021d9d84ff8231d7d0f2b7a2ad9333356924c4e3a3d4c0354979b4571",
-    "979f0c273060da14e8763219d8a4193359c3d24fb067a5c18014887217f27c86",
-    "4591b1d2a8fc5f9f2cf88a780cfc34e0243ec5f5aed43e5323ef256329de1530",
-    "f4a05bfadc549c448e95cc18298a650ae96dfa2839dea457365d6bb9d0486464",
-    "508a96fe62c9f072a6dbe21c34bfb32f617f4c6c525be3a3a269034651b446fb",
-    "536c47c0419099b8c6e084592f36f070cc0a6ba4deafcb847c77d3bba991fcf3",
-}};
 
 struct ActiveEvidence {
   RpcMethod method{RpcMethod::kInvoke};
@@ -418,6 +399,7 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       runtime_(std::move(runtime)),
       observer_(observer),
       idle_signal_(idle_signal) {
+  #if 0  // Individual capability identity carriers were replaced by the registry.
   static_assert(
       std::tuple_size_v<decltype(runtime_.composition_setting_contract_digests)>
       == rpc::kCompositionSettingCapabilityCount);
@@ -498,6 +480,13 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
       || runtime_.native_media_write_contract_digest.size() != 64
       || !layer_source_matte_av_contracts_valid
       || !composition_setting_contracts_valid) {
+    throw std::invalid_argument("invalid native RPC runtime identity");
+  }
+  #endif
+  if (runtime_.plugin_version.empty() || runtime_.compiled_sdk_version.empty()
+      || runtime_.compiled_sdk_build == 0 || runtime_.host_version.empty()
+      || runtime_.host_build == 0 || runtime_.host_instance_id.empty()
+      || native_primitive_registry().size() != kNativePrimitiveCount) {
     throw std::invalid_argument("invalid native RPC runtime identity");
   }
 }
@@ -1345,7 +1334,7 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.host_instance_id,
                   connection.session_generation,
                   {},
-                  runtime_.capabilities_digest,
+                  std::string(kNativeExecRegistryDigest),
               }))) {
             connected = false;
             break;
@@ -1355,6 +1344,7 @@ void NativeRpcConnectionHandler::serve(
         }
 
         if (request.method == RpcMethod::kCapabilities) {
+          #if 0  // Legacy capability discovery is superseded by primitive discovery.
           const auto& query = std::get<rpc::CapabilitiesParams>(request.params);
           const bool include_summary = !query.ids.has_value() || std::find(
               query.ids->begin(), query.ids->end(), "ae.project.summary") != query.ids->end();
@@ -1650,6 +1640,42 @@ void NativeRpcConnectionHandler::serve(
                   runtime_.native_media_write_contract_digest,
                   include_text_shape_marker,
                   include_composition_settings_writes,
+              }))) {
+            connected = false;
+            break;
+          }
+          (void)front_door.complete_request(request.request_id);
+          observer_.on_rpc_event("capabilities", request.request_id, "ok");
+          continue;
+          #endif
+          const auto& query = std::get<rpc::CapabilitiesParams>(request.params);
+          std::vector<std::size_t> selected_indices;
+          const auto registry = native_primitive_registry();
+          for (std::size_t index = 0; index < registry.size(); ++index) {
+            if (!query.ids.has_value()
+                || std::find(query.ids->begin(), query.ids->end(), registry[index].id)
+                    != query.ids->end()) {
+              selected_indices.push_back(index);
+            }
+          }
+          if (selected_indices.size() > query.limit) {
+            if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
+                    request,
+                    connection.session_id,
+                    "INVALID_ARGUMENT",
+                    "capability limit is smaller than the selected primitive set")))) {
+              connected = false;
+              break;
+            }
+            (void)front_door.complete_request(request.request_id);
+            continue;
+          }
+          if (!write_frame(connection.socket_fd, rpc::encode_capabilities_success({
+                  request.request_id,
+                  connection.session_id,
+                  query.detail,
+                  std::move(selected_indices),
+                  rpc::digest_capabilities_query(connection.session_id, query),
               }))) {
             connected = false;
             break;

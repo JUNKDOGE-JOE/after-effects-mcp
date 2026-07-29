@@ -1,4 +1,5 @@
 #include "aemcp_native/rpc_codec.hpp"
+#include "aemcp_native/native_primitive_registry.generated.hpp"
 #include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
 
 #include <algorithm>
@@ -452,20 +453,23 @@ bool valid_sha256(std::string_view value) {
 }
 
 bool valid_capability_id(std::string_view value) {
-  if (value.size() < 3 || value.size() > 96 || !value.starts_with("ae.")) return false;
-  std::size_t start = 3;
+  if (value.size() < 3 || value.size() > 96) return false;
+  std::size_t start = 0;
+  std::size_t segments = 0;
   while (true) {
     if (start >= value.size() || value[start] < 'a' || value[start] > 'z') return false;
     std::size_t end = start + 1;
     while (end < value.size() && value[end] != '.') {
       const char character = value[end];
       if (!((character >= 'a' && character <= 'z')
+          || (character >= 'A' && character <= 'Z')
           || (character >= '0' && character <= '9') || character == '_' || character == '-')) {
         return false;
       }
       ++end;
     }
-    if (end == value.size()) return true;
+    ++segments;
+    if (end == value.size()) return segments >= 2;
     start = end + 1;
   }
 }
@@ -6440,6 +6444,7 @@ void validate_limits(const NegotiatedLimits& limits) {
   }
 }
 
+#if 0  // Legacy descriptor builders retained only in source history.
 std::string project_summary_descriptor(const CapabilitiesSuccess& response) {
   const std::string detail = response.detail == CapabilityDetail::kFull ? "full" : "summary";
   std::string descriptor = "{\"cancellation\":\"before-dispatch\","
@@ -7986,6 +7991,8 @@ std::string project_item_text_descriptor(
               : project_item_comment_descriptor(response);
 }
 
+#endif
+
 template <typename Response>
 std::vector<std::uint8_t> encode_native_value_success(
     const Response& response,
@@ -8152,7 +8159,8 @@ std::vector<std::uint8_t> encode_hello_success(const HelloSuccess& response) {
   return frame_output(std::move(json));
 }
 
-std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess& response) {
+#if 0  // Replaced by the generated primitive registry carrier below.
+std::vector<std::uint8_t> encode_legacy_capabilities_success(const CapabilitiesSuccess& response) {
   require_request_id(response.request_id);
   require_uuid(response.session_id, "session ID");
   require_digest(response.query_digest, "query digest");
@@ -8462,6 +8470,45 @@ std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess&
       + ",\"detail\":" + json_string(detail) + ",\"items\":" + items
       + ",\"nextCursor\":null,\"queryDigest\":" + json_string(response.query_digest)
       + "},\"sessionId\":" + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+#endif
+
+std::vector<std::uint8_t> encode_capabilities_success(const CapabilitiesSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_digest(response.query_digest, "query digest");
+  const auto registry = native_primitive_registry();
+  std::string items = "[";
+  std::size_t previous = 0;
+  bool first = true;
+  for (const std::size_t index : response.selected_primitive_indices) {
+    if (index >= registry.size() || (!first && index <= previous)) {
+      invalid_argument("selected primitive indices must be unique registry indices");
+    }
+    if (!first) items.push_back(',');
+    items += response.detail == CapabilityDetail::kFull
+        ? kNativePrimitiveFullJson[index] : kNativePrimitiveSummaryJson[index];
+    previous = index;
+    first = false;
+  }
+  items.push_back(']');
+  if (response.detail == CapabilityDetail::kFull
+      && response.selected_primitive_indices.size() == registry.size()) {
+    const std::string encoded_digest = sha256_hex(canonical_json(JsonParser(items).parse()));
+    if (encoded_digest != kNativeExecRegistryDigest) {
+      invalid_argument("native primitive registry digest does not match encoded full registry");
+    }
+  }
+  const std::string detail = response.detail == CapabilityDetail::kFull ? "full" : "summary";
+  std::string json = "{\"kind\":\"response\",\"method\":\"capabilities\",\"ok\":true,"
+      "\"replayed\":false,\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilitiesDigest\":"
+      + json_string(kNativeExecRegistryDigest) + ",\"detail\":" + json_string(detail)
+      + ",\"items\":" + items + ",\"nextCursor\":null,\"queryDigest\":"
+      + json_string(response.query_digest) + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
   return frame_output(std::move(json));
 }
 

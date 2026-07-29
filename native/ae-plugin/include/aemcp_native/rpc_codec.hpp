@@ -2,7 +2,6 @@
 
 #include "aemcp_native/host_dispatcher.hpp"
 
-#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -555,99 +554,8 @@ struct CapabilitiesSuccess {
   std::string request_id;
   std::string session_id;
   CapabilityDetail detail{CapabilityDetail::kSummary};
-  bool include_project_summary{true};
-  bool include_project_bit_depth_read{true};
-  bool include_project_bit_depth_set{true};
-  bool include_project_items_list{true};
-  bool include_composition_layers_list{true};
-  bool include_composition_time_read{true};
-  bool include_composition_time_set{true};
-  bool include_composition_create{true};
-  bool include_composition_layer_create{true};
-  bool include_layer_properties_list{true};
-  bool include_layer_property_keyframes_list{true};
-  bool include_layer_property_set{true};
+  std::vector<std::size_t> selected_primitive_indices;
   std::string query_digest;
-  std::string capabilities_digest;
-  // Required only for detail=full when the descriptor is included.
-  std::string project_summary_contract_digest;
-  std::string project_bit_depth_read_contract_digest;
-  std::string project_bit_depth_set_contract_digest;
-  std::string project_items_list_contract_digest;
-  std::string composition_layers_list_contract_digest;
-  std::string composition_time_read_contract_digest;
-  std::string composition_time_set_contract_digest;
-  std::string composition_create_contract_digest;
-  std::string composition_layer_create_contract_digest;
-  std::string layer_properties_list_contract_digest;
-  std::string layer_property_keyframes_list_contract_digest;
-  std::string layer_property_set_contract_digest;
-  bool include_composition_selected_layers_list{false};
-  std::string composition_selected_layers_list_contract_digest;
-  bool include_layer_effect_apply{true};
-  std::string layer_effect_apply_contract_digest;
-  bool include_project_context_read{false};
-  bool include_project_item_metadata_read{false};
-  bool include_composition_settings_read{false};
-  bool include_composition_work_area_set{false};
-  bool include_project_item_name_set{false};
-  bool include_project_item_comment_set{false};
-  bool include_project_item_label_set{false};
-  bool include_composition_duplicate{false};
-  bool include_layer_details_read{false};
-  bool include_layer_name_set{false};
-  bool include_layer_range_set{false};
-  bool include_layer_start_time_set{false};
-  bool include_layer_stretch_set{false};
-  bool include_layer_order_set{false};
-  bool include_layer_parent_set{false};
-  bool include_layer_duplicate{false};
-  std::array<bool, 7> include_layer_source_matte_av{};
-  bool include_layer_compositing_read{false};
-  bool include_layer_switch_set{false};
-  bool include_layer_quality_set{false};
-  bool include_layer_blending_mode_set{false};
-  bool include_layer_property_keyframe_details_read{false};
-  bool include_layer_property_keyframe_add{false};
-  bool include_layer_property_keyframe_value_set{false};
-  bool include_layer_property_keyframe_interpolation_set{false};
-  bool include_layer_property_keyframe_temporal_ease_set{false};
-  bool include_layer_property_keyframe_behavior_set{false};
-  bool include_layer_property_keyframe_delete{false};
-  std::string project_context_read_contract_digest;
-  std::string project_item_metadata_read_contract_digest;
-  std::string composition_settings_read_contract_digest;
-  std::string composition_work_area_set_contract_digest;
-  std::string project_item_name_set_contract_digest;
-  std::string project_item_comment_set_contract_digest;
-  std::string project_item_label_set_contract_digest;
-  std::string composition_duplicate_contract_digest;
-  std::string layer_details_read_contract_digest;
-  std::string layer_name_set_contract_digest;
-  std::string layer_range_set_contract_digest;
-  std::string layer_start_time_set_contract_digest;
-  std::string layer_stretch_set_contract_digest;
-  std::string layer_order_set_contract_digest;
-  std::string layer_parent_set_contract_digest;
-  std::string layer_duplicate_contract_digest;
-  std::array<std::string, 7> layer_source_matte_av_contract_digests;
-  std::string layer_compositing_read_contract_digest;
-  std::string layer_switch_set_contract_digest;
-  std::string layer_quality_set_contract_digest;
-  std::string layer_blending_mode_set_contract_digest;
-  std::string layer_property_keyframe_details_read_contract_digest;
-  std::string layer_property_keyframe_add_contract_digest;
-  std::string layer_property_keyframe_value_set_contract_digest;
-  std::string layer_property_keyframe_interpolation_set_contract_digest;
-  std::string layer_property_keyframe_temporal_ease_set_contract_digest;
-  std::string layer_property_keyframe_behavior_set_contract_digest;
-  std::string layer_property_keyframe_delete_contract_digest;
-  bool include_native_media_read{false};
-  bool include_native_media_write{false};
-  std::string native_media_read_contract_digest;
-  std::string native_media_write_contract_digest;
-  std::array<bool, 11> include_text_shape_marker{};
-  std::array<bool, 6> include_composition_settings{};
 };
 
 enum class ProgressPhase { kQueued, kDispatched, kRunning, kValidating };
