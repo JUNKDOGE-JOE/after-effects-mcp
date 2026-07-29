@@ -657,13 +657,13 @@ class FakeHost final : public HostApi {
     });
   }
 
-  [[nodiscard]] aemcp::native::HostActionResult begin_layer_undo_group(
+  [[nodiscard]] aemcp::native::HostActionResult begin_undo_group(
       std::string_view, TimePoint) override {
     ++layer_undo_start_calls;
     return aemcp::native::HostActionResult::success();
   }
 
-  [[nodiscard]] aemcp::native::HostActionResult end_layer_undo_group(
+  [[nodiscard]] aemcp::native::HostActionResult end_undo_group(
       TimePoint) override {
     ++layer_undo_end_calls;
     return aemcp::native::HostActionResult::success();

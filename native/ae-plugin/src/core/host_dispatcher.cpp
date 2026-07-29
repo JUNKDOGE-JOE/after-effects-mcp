@@ -950,6 +950,16 @@ Completion failure_for(
   completion.error_code = std::move(code);
   completion.message = std::move(message);
   completion.error_field = std::move(field);
+  if (request.capability_id == kNativeProgramCapability) {
+    completion.native_program_result = NativeProgramHostResult::failure(
+        completion.error_code,
+        completion.message,
+        completion.error_field,
+        {},
+        std::nullopt,
+        false,
+        NativeProgramDisposition::kNotStarted);
+  }
   return completion;
 }
 
@@ -1019,7 +1029,7 @@ std::pair<HostActionResult, HostActionResult> run_balanced_layer_mutation(
   }
   HostActionResult end_result;
   try {
-    end_result = host.end_layer_undo_group(deadline);
+    end_result = host.end_undo_group(deadline);
   } catch (...) {
     end_result = host_action_exception(
         "native layer Undo group close raised after mutation dispatch");
@@ -1323,13 +1333,13 @@ Completion dispatch_layer_source_matte_av(
       : request.capability_id == kLayerAudioEnabledSetCapability
       ? "ae-mcp: Set layer audio"
       : "ae-mcp: Set layer video";
-  HostActionResult begin = host.begin_layer_undo_group(
+  HostActionResult begin = host.begin_undo_group(
       undo_label, request.deadline);
   if (!begin.ok) return host_failure(begin);
   if (clock.now() >= request.deadline) {
     HostActionResult close;
     try {
-      close = host.end_layer_undo_group(request.deadline);
+      close = host.end_undo_group(request.deadline);
     } catch (...) {
       return possible(
           "native layer Undo close raised after the pre-mutation deadline elapsed");
@@ -2198,14 +2208,60 @@ HostLayerAVStateResult HostApi::read_layer_av_state(
       "NATIVE_UNSUPPORTED", "layer AV-state reads are unavailable");
 }
 
-HostActionResult HostApi::begin_layer_undo_group(std::string_view, TimePoint) {
-  return HostActionResult::failure(
-      "NATIVE_UNSUPPORTED", "layer Undo groups are unavailable");
+NativeProgramHostResult NativeProgramHostResult::success(
+    std::vector<NativeProgramOperationOutcome> operation_results,
+    JsonObject named_outputs) {
+  NativeProgramHostResult result;
+  result.ok = true;
+  result.operations = std::move(operation_results);
+  result.outputs = std::move(named_outputs);
+  result.completed_operation_indices.reserve(result.operations.size());
+  for (const NativeProgramOperationOutcome& operation : result.operations) {
+    result.completed_operation_indices.push_back(operation.index);
+  }
+  result.disposition = NativeProgramDisposition::kCompleted;
+  return result;
 }
 
-HostActionResult HostApi::end_layer_undo_group(TimePoint) {
+NativeProgramHostResult NativeProgramHostResult::failure(
+    std::string code,
+    std::string detail,
+    std::string field,
+    std::vector<std::size_t> completed_indices,
+    std::optional<std::size_t> failed_index,
+    bool began_write,
+    NativeProgramDisposition failure_disposition) {
+  NativeProgramHostResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  result.completed_operation_indices = std::move(completed_indices);
+  result.failed_operation_index = failed_index;
+  result.write_started = began_write;
+  result.disposition = failure_disposition;
+  return result;
+}
+
+NativeProgramHostResult HostApi::execute_native_program(
+    const NativeProgram&, std::string_view, std::string_view, TimePoint) {
+  return NativeProgramHostResult::failure(
+      "NATIVE_UNSUPPORTED",
+      "native program execution is unavailable",
+      {},
+      {},
+      std::nullopt,
+      false,
+      NativeProgramDisposition::kNotStarted);
+}
+
+HostActionResult HostApi::begin_undo_group(std::string_view, TimePoint) {
   return HostActionResult::failure(
-      "NATIVE_UNSUPPORTED", "layer Undo groups are unavailable");
+      "NATIVE_UNSUPPORTED", "Undo groups are unavailable");
+}
+
+HostActionResult HostApi::end_undo_group(TimePoint) {
+  return HostActionResult::failure(
+      "NATIVE_UNSUPPORTED", "Undo groups are unavailable");
 }
 
 HostActionResult HostApi::set_layer_track_matte(
@@ -2272,6 +2328,39 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
     return {EnqueueCode::kInvalidRequest, "INVALID_REQUEST"};
   }
   const bool project_summary = request.capability_id == kProjectSummaryCapability;
+  const bool native_program =
+      request.capability_id == kNativeProgramCapability;
+  std::optional<ProgramAdmission> native_program_admission;
+  if (native_program) {
+    if (!request.native_program.has_value()
+        || !request.idempotency_key.empty()
+        || !request.arguments_fingerprint_sha256.empty()) {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "INVALID_ARGUMENT",
+          "native program request did not use the program-level envelope",
+          "params.arguments"};
+    }
+    try {
+      native_program_admission = validate_native_program(
+          *request.native_program, native_primitive_registry());
+    } catch (const std::exception& error) {
+      return {
+          EnqueueCode::kInvalidRequest,
+          "INVALID_ARGUMENT",
+          error.what(),
+          "params.arguments"};
+    }
+    request.idempotency_key = request.native_program->operation_key;
+    request.arguments_fingerprint_sha256 =
+        native_program_admission->program_digest;
+  } else if (request.native_program.has_value()) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native program payload is not accepted by this capability",
+        "params.arguments"};
+  }
   const bool project_bit_depth_read =
       request.capability_id == kProjectBitDepthReadCapability;
   const bool project_bit_depth_set =
@@ -2366,7 +2455,9 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       is_text_shape_marker_capability(request.capability_id);
   const bool text_shape_marker_write =
       is_text_shape_marker_write_capability(request.capability_id);
-  const bool mutation = project_bit_depth_set || composition_time_set
+  const bool mutation =
+      (native_program && native_program_admission->contains_write)
+      || project_bit_depth_set || composition_time_set
       || composition_create
       || composition_layer_create
       || layer_effect_apply
@@ -2381,7 +2472,8 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || native_media_write || text_shape_marker_write;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
-  if (!project_summary && !project_bit_depth_read && !project_bit_depth_set
+  if (!native_program
+      && !project_summary && !project_bit_depth_read && !project_bit_depth_set
       && !project_items_list && !composition_layers_list
       && !composition_selected_layers_list && !composition_time_read
       && !composition_time_set && !composition_create && !composition_layer_create
@@ -2399,6 +2491,24 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !text_shape_marker
       && !project_graph_invalidate) {
     return {EnqueueCode::kUnsupportedCapability, "NATIVE_UNSUPPORTED"};
+  }
+  if (native_program && mutation
+      && (!valid_idempotency_key(request.idempotency_key)
+          || !valid_sha256(request.arguments_fingerprint_sha256))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "write program operationKey or program digest is invalid",
+        "params.arguments.operationKey"};
+  }
+  if (native_program
+      && (!valid_uuid(request.host_instance_id)
+          || !valid_uuid(request.session_id))) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "native program requires the current host and session context",
+        "params"};
   }
   if (project_graph_invalidate
       && (request.target_depth != 0 || !request.idempotency_key.empty()
@@ -3551,6 +3661,72 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.ok = true;
             completion.project_graph_invalidation_result = host_result.value;
           }
+        } else if (request.capability_id == kNativeProgramCapability) {
+          const ProgramAdmission admission = validate_native_program(
+              *request.native_program, native_primitive_registry());
+          NativeProgramHostResult host_result;
+          HostActionResult undo_begin = HostActionResult::success();
+          HostActionResult undo_end = HostActionResult::success();
+          if (admission.contains_write) {
+            undo_begin = host.begin_undo_group(
+                request.native_program->undo_group, request.deadline);
+          }
+          if (!undo_begin.ok) {
+            host_result = NativeProgramHostResult::failure(
+                undo_begin.error_code.empty()
+                    ? "CAPABILITY_FAILED" : undo_begin.error_code,
+                undo_begin.message.empty()
+                    ? "native program Undo group could not be opened"
+                    : undo_begin.message,
+                undo_begin.error_field,
+                {},
+                std::nullopt,
+                false,
+                NativeProgramDisposition::kNotStarted);
+          } else {
+            host_result = host.execute_native_program(
+                *request.native_program,
+                request.host_instance_id,
+                request.session_id,
+                request.deadline);
+            if (admission.contains_write) {
+              undo_end = host.end_undo_group(request.deadline);
+            }
+          }
+          if (!undo_end.ok) {
+            host_result.ok = false;
+            host_result.write_started = true;
+            host_result.disposition =
+                NativeProgramDisposition::kPossiblySideEffecting;
+            host_result.error_code = "POSSIBLY_SIDE_EFFECTING_FAILURE";
+            host_result.message = undo_end.message.empty()
+                ? "native program Undo group could not be closed"
+                : undo_end.message;
+            host_result.error_field = undo_end.error_field;
+          } else if (clock_.now() > request.deadline
+              && admission.contains_write) {
+            host_result.ok = false;
+            host_result.write_started = true;
+            host_result.disposition =
+                NativeProgramDisposition::kPossiblySideEffecting;
+            host_result.error_code = "POSSIBLY_SIDE_EFFECTING_FAILURE";
+            host_result.message =
+                "native program completed after its dispatcher deadline";
+          } else if (!host_result.ok && host_result.write_started) {
+            host_result.disposition =
+                NativeProgramDisposition::kPossiblySideEffecting;
+            host_result.error_code = "POSSIBLY_SIDE_EFFECTING_FAILURE";
+          }
+          completion.request_id = request.request_id;
+          completion.capability_id = request.capability_id;
+          completion.route_id = request.route_id;
+          completion.session_generation = request.session_generation;
+          completion.idempotency_key = request.idempotency_key;
+          completion.ok = host_result.ok;
+          completion.error_code = host_result.error_code;
+          completion.message = host_result.message;
+          completion.error_field = host_result.error_field;
+          completion.native_program_result = std::move(host_result);
         } else if (request.capability_id == kProjectSummaryCapability) {
           HostReadResult host_result = host.read_project_summary(
               std::min(request.deadline, idle_deadline));
@@ -5177,7 +5353,12 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 || layer_source_matte_av_write_capability(
                     request.capability_id)
                 || request.capability_id == kNativeMediaWriteCapability
-                || is_text_shape_marker_write_capability(request.capability_id))
+                || is_text_shape_marker_write_capability(request.capability_id)
+                || (request.capability_id == kNativeProgramCapability
+                    && request.native_program.has_value()
+                    && validate_native_program(
+                        *request.native_program,
+                        native_primitive_registry()).contains_write))
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
             "native host adapter raised an exception");
       }
@@ -5377,7 +5558,8 @@ void HostDispatcher::finish_request_locked(
 
 void HostDispatcher::finish_idempotency_locked(
     const Request& request, const Completion& completion) {
-  if ((request.capability_id != kProjectBitDepthSetCapability
+  if ((request.capability_id != kNativeProgramCapability
+          && request.capability_id != kProjectBitDepthSetCapability
           && request.capability_id != kCompositionTimeSetCapability
           && request.capability_id != kCompositionCreateCapability
           && request.capability_id != kCompositionLayerCreateCapability

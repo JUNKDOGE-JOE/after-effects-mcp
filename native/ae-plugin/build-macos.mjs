@@ -19,6 +19,11 @@ const REPO_ROOT = path.resolve(MODULE_ROOT, '../..');
 const PRODUCT_MANIFEST_PATH = 'plugin/host/package.json';
 const PRODUCT_VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 const PRODUCT_VERSION_TOKEN = Buffer.from('__AE_MCP_PRODUCT_VERSION__', 'ascii');
+const CLI_USAGE = `Usage: node native/ae-plugin/build-macos.mjs \\
+  [--sdk-archive <path>] [--sdk-root <path>] --output <absolute-path>
+
+AE_SDK_ARCHIVE and AE_SDK_ROOT may provide the corresponding SDK inputs.
+`;
 
 function buildError(code, message) {
   const error = new Error(message);
@@ -398,6 +403,8 @@ async function buildMacPluginInternal({
       'native/ae-plugin/include/aemcp_native/endpoint_registry_macos.hpp',
       'native/ae-plugin/include/aemcp_native/host_dispatcher.hpp',
       'native/ae-plugin/include/aemcp_native/mac_ipc_server.hpp',
+      'native/ae-plugin/include/aemcp_native/native_primitive_registry.generated.hpp',
+      'native/ae-plugin/include/aemcp_native/native_program.hpp',
       'native/ae-plugin/include/aemcp_native/native_rpc_connection.hpp',
       'native/ae-plugin/include/aemcp_native/peer_identity.hpp',
       'native/ae-plugin/include/aemcp_native/peer_identity_macos.hpp',
@@ -408,6 +415,7 @@ async function buildMacPluginInternal({
       'native/ae-plugin/include/aemcp_native/text_shape_marker_capabilities.generated.hpp',
       'native/ae-plugin/include/aemcp_native/transport_auth.hpp',
       'native/ae-plugin/src/core/host_dispatcher.cpp',
+      'native/ae-plugin/src/core/native_program.cpp',
       'native/ae-plugin/src/core/native_rpc_connection.cpp',
       'native/ae-plugin/src/core/rpc_codec.cpp',
       'native/ae-plugin/src/core/transport_auth.cpp',
@@ -415,6 +423,9 @@ async function buildMacPluginInternal({
       'native/ae-plugin/src/platform/macos/mac_ipc_server.cpp',
       'native/ae-plugin/src/platform/macos/peer_identity_macos.cpp',
       'native/ae-plugin/src/platform/macos/secure_random_macos.cpp',
+      'native/ae-plugin/src/aegp/native_primitive_bindings.generated.inc',
+      'native/ae-plugin/src/aegp/native_program_executor.cpp',
+      'native/ae-plugin/src/aegp/native_program_executor.hpp',
       'native/ae-plugin/src/aegp/plugin_entry.cpp',
       'native/ae-plugin/resources/Info.plist',
       'native/ae-plugin/resources/AeMcpNative_PiPL.r',
@@ -525,6 +536,7 @@ async function buildMacPluginInternal({
     ];
     const sourceFiles = [
       'native/ae-plugin/src/core/host_dispatcher.cpp',
+      'native/ae-plugin/src/core/native_program.cpp',
       'native/ae-plugin/src/core/native_rpc_connection.cpp',
       'native/ae-plugin/src/core/rpc_codec.cpp',
       'native/ae-plugin/src/core/transport_auth.cpp',
@@ -532,6 +544,7 @@ async function buildMacPluginInternal({
       'native/ae-plugin/src/platform/macos/mac_ipc_server.cpp',
       'native/ae-plugin/src/platform/macos/peer_identity_macos.cpp',
       'native/ae-plugin/src/platform/macos/secure_random_macos.cpp',
+      'native/ae-plugin/src/aegp/native_program_executor.cpp',
       'native/ae-plugin/src/aegp/plugin_entry.cpp',
     ];
     const objectFiles = [];
@@ -627,11 +640,16 @@ function publicError(error) {
 }
 
 if (path.resolve(process.argv[1] ?? '') === MODULE_PATH) {
-  try {
-    const result = await buildMacPlugin(parseCli(process.argv.slice(2)));
-    process.stdout.write(`${JSON.stringify({ ok: true, result })}\n`);
-  } catch (error) {
-    process.stderr.write(`${JSON.stringify(publicError(error))}\n`);
-    process.exitCode = 1;
+  const argv = process.argv.slice(2);
+  if (argv.length === 1 && ['--help', '-h'].includes(argv[0])) {
+    process.stdout.write(CLI_USAGE);
+  } else {
+    try {
+      const result = await buildMacPlugin(parseCli(argv));
+      process.stdout.write(`${JSON.stringify({ ok: true, result })}\n`);
+    } catch (error) {
+      process.stderr.write(`${JSON.stringify(publicError(error))}\n`);
+      process.exitCode = 1;
+    }
   }
 }

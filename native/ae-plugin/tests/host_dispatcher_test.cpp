@@ -1,6 +1,7 @@
 #include "aemcp_native/ae_path_numeric.hpp"
 #include "aemcp_native/effect_stack.hpp"
 #include "aemcp_native/host_dispatcher.hpp"
+#include "aemcp_native/native_program.hpp"
 #include "aemcp_native/project_epoch.hpp"
 #include "aemcp_native/selection_collection.hpp"
 
@@ -52,6 +53,9 @@ using aemcp::native::HostLayerResolveResult;
 using aemcp::native::HostLayerSourceResult;
 using aemcp::native::HostLayerTrackMatteResult;
 using aemcp::native::HostResolvedLayer;
+using aemcp::native::NativeProgram;
+using aemcp::native::NativeProgramDisposition;
+using aemcp::native::NativeProgramHostResult;
 using aemcp::native::LayerAudioEnabledSetRequest;
 using aemcp::native::LayerAVStateReadRequest;
 using aemcp::native::LayerAVStateValue;
@@ -92,6 +96,7 @@ using aemcp::native::kLayerTrackMatteSetCapability;
 using aemcp::native::kLayerVideoEnabledSetCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
+using aemcp::native::kNativeProgramCapability;
 using aemcp::native::kLayerPropertySetCapability;
 using aemcp::native::json_encoded_string_size;
 using aemcp::native::locate_unique_insertion;
@@ -3549,7 +3554,7 @@ class LayerSourceMatteAvHost final : public HostApi {
     });
   }
 
-  [[nodiscard]] HostActionResult begin_layer_undo_group(
+  [[nodiscard]] HostActionResult begin_undo_group(
       std::string_view label, TimePoint) override {
     require(!undo_open, "dispatcher opened a nested fake Undo group");
     require(!label.empty(), "dispatcher opened an unnamed fake Undo group");
@@ -3560,7 +3565,7 @@ class LayerSourceMatteAvHost final : public HostApi {
     return HostActionResult::success();
   }
 
-  [[nodiscard]] HostActionResult end_layer_undo_group(TimePoint) override {
+  [[nodiscard]] HostActionResult end_undo_group(TimePoint) override {
     require(undo_open, "dispatcher ended a fake Undo group that was not open");
     events.push_back("undo-end");
     ++undo_end_calls;
@@ -4380,6 +4385,302 @@ void layer_source_matte_av_post_dispatch_failures_remain_ambiguous() {
   }
 }
 
+NativeProgram admitted_native_program(std::string_view json) {
+  NativeProgram program =
+      aemcp::native::parse_native_program(aemcp::native::parse_json_object(json));
+  (void)aemcp::native::validate_native_program(
+      program, aemcp::native::native_primitive_registry());
+  return program;
+}
+
+Request native_program_request(
+    FakeClock& clock,
+    std::string request_id,
+    NativeProgram program,
+    std::chrono::milliseconds ttl = 100ms) {
+  Request request;
+  request.request_id = std::move(request_id);
+  request.capability_id = std::string(kNativeProgramCapability);
+  request.deadline = clock.now() + ttl;
+  request.route_id = "route-native-program";
+  request.session_generation = 11;
+  request.host_instance_id = "22222222-2222-4222-8222-222222222222";
+  request.session_id = "11111111-1111-4111-8111-111111111111";
+  request.native_program = std::move(program);
+  return request;
+}
+
+class NativeProgramHost final : public HostApi {
+ public:
+  [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
+    return HostReadResult::failure(
+        "UNEXPECTED_CALL", "project summary was not requested");
+  }
+
+  [[nodiscard]] NativeProgramHostResult execute_native_program(
+      const NativeProgram& program,
+      std::string_view host_instance_id,
+      std::string_view session_id,
+      TimePoint) override {
+    ++program_calls;
+    observed_operation_count = program.operations.size();
+    observed_host_instance_id = host_instance_id;
+    observed_session_id = session_id;
+    return next_result;
+  }
+
+  [[nodiscard]] HostActionResult begin_undo_group(
+      std::string_view label, TimePoint) override {
+    require(!undo_open && !label.empty(),
+        "native program opened an invalid or nested Undo group");
+    ++undo_begin_calls;
+    undo_open = true;
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult end_undo_group(TimePoint) override {
+    require(undo_open, "native program closed an unopened Undo group");
+    ++undo_end_calls;
+    undo_open = false;
+    return HostActionResult::success();
+  }
+
+  NativeProgramHostResult next_result = [] {
+    NativeProgramHostResult result;
+    result.ok = true;
+    result.disposition = NativeProgramDisposition::kCompleted;
+    return result;
+  }();
+  std::size_t observed_operation_count{0};
+  std::string observed_host_instance_id;
+  std::string observed_session_id;
+  int program_calls{0};
+  int undo_begin_calls{0};
+  int undo_end_calls{0};
+  bool undo_open{false};
+};
+
+void native_program_dispatch_submits_the_whole_program_once() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(2, 2, 16ms));
+  NativeProgramHost host;
+  NativeProgram program = admitted_native_program(
+      R"({"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1}},{"op":"project.items.list","args":{"offset":1,"limit":1}}]})");
+
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-read", std::move(program)))
+              .code == EnqueueCode::kAccepted,
+      "read native program was not admitted");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && host.program_calls == 1 && host.observed_operation_count == 2,
+      "dispatcher did not submit the complete native program exactly once");
+  require(host.observed_host_instance_id
+              == "22222222-2222-4222-8222-222222222222"
+          && host.observed_session_id
+              == "11111111-1111-4111-8111-111111111111",
+      "dispatcher did not bind native-program execution to request context");
+  require(host.undo_begin_calls == 0 && host.undo_end_calls == 0
+          && !host.undo_open,
+      "read-only native program created Undo history");
+}
+
+void native_write_program_uses_one_balanced_undo_group() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(2, 2, 16ms));
+  NativeProgramHost host;
+  NativeProgram program = admitted_native_program(
+      R"({"operationKey":"write-once-key-01","undoGroup":"Task 4 write","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}}]})");
+
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-write", std::move(program)))
+              .code == EnqueueCode::kAccepted,
+      "write native program was not admitted");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && batch.completions[0].ok,
+      "write native program did not complete");
+  require(host.program_calls == 1 && host.undo_begin_calls == 1
+          && host.undo_end_calls == 1 && !host.undo_open,
+      "write native program did not use exactly one balanced Undo group");
+}
+
+void native_program_failure_preserves_completed_writes_and_ambiguity() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(2, 2, 16ms));
+  NativeProgramHost host;
+  host.next_result.ok = false;
+  host.next_result.error_code = "CAPABILITY_FAILED";
+  host.next_result.message = "third operation failed";
+  host.next_result.completed_operation_indices = {0, 1};
+  host.next_result.failed_operation_index = 2;
+  host.next_result.write_started = true;
+  host.next_result.disposition =
+      NativeProgramDisposition::kPossiblySideEffecting;
+  NativeProgram program = admitted_native_program(
+      R"({"operationKey":"partial-write-key-01","undoGroup":"Task 4 partial write","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":2,"scale":24}}}]})");
+
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-partial", std::move(program)))
+              .code == EnqueueCode::kAccepted,
+      "partial write native program was not admitted");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && !batch.completions[0].ok,
+      "partial write native program unexpectedly succeeded");
+  const NativeProgramHostResult& result =
+      batch.completions[0].native_program_result;
+  require(result.disposition
+              == NativeProgramDisposition::kPossiblySideEffecting
+          && result.completed_operation_indices
+              == std::vector<std::size_t>({0, 1})
+          && result.failed_operation_index == std::optional<std::size_t>{2}
+          && result.write_started,
+      "partial native write lost completed indices or side-effect ambiguity");
+  require(host.undo_begin_calls == 1 && host.undo_end_calls == 1
+          && !host.undo_open,
+      "partial native write did not close its single program Undo group");
+}
+
+void native_program_timeout_before_host_entry_is_not_started() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(2, 2, 16ms));
+  NativeProgramHost host;
+  NativeProgram program = admitted_native_program(
+      R"({"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1}}]})");
+
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-timeout", std::move(program), 1ms))
+              .code == EnqueueCode::kAccepted,
+      "native program timeout probe was not admitted");
+  clock.advance(2ms);
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && !batch.completions[0].ok
+          && batch.completions[0].native_program_result.disposition
+              == NativeProgramDisposition::kNotStarted
+          && batch.completions[0].native_program_result
+              .completed_operation_indices.empty()
+          && host.program_calls == 0 && host.undo_begin_calls == 0
+          && host.undo_end_calls == 0,
+      "pre-entry native program timeout was not reported as not-started");
+}
+
+void native_program_replay_fence_binds_operation_key_and_digest() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(3, 3, 16ms));
+  NativeProgram first = admitted_native_program(
+      R"({"operationKey":"same-program-write-key","undoGroup":"Task 4 replay","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}}]})");
+  NativeProgram conflicting = admitted_native_program(
+      R"({"operationKey":"same-program-write-key","undoGroup":"Task 4 replay","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":2,"scale":24}}}]})");
+
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-fence-first", std::move(first)))
+              .code == EnqueueCode::kAccepted,
+      "first native write did not acquire its operationKey fence");
+  const auto conflict = dispatcher.enqueue(native_program_request(
+      clock, "native-program-fence-conflict", std::move(conflicting)));
+  require(conflict.code == EnqueueCode::kDuplicateRequest,
+      "same operationKey with a different program digest bypassed replay fencing");
+}
+
+void native_program_write_adapters_skip_inner_undo_groups() {
+  const std::filesystem::path source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "aegp" / "plugin_entry.cpp";
+  std::ifstream input(source_path, std::ios::binary);
+  require(input.good(),
+      "could not open plugin_entry.cpp native-program Undo source");
+  const std::string source{
+      std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  const auto method = [&source](
+      std::string_view begin, std::string_view end) -> std::string_view {
+    const std::size_t first = source.find(begin);
+    const std::size_t last = source.find(end, first);
+    require(first != std::string::npos && last != std::string::npos
+            && last > first,
+        "could not isolate a native-program write adapter");
+    return std::string_view(source).substr(first, last - first);
+  };
+  const std::string_view settings = method(
+      "HostCompositionSettingsWriteResult set_composition_setting(",
+      "HostProjectItemTextWriteResult set_project_item_name(");
+  const std::string_view time = method(
+      "HostCompositionTimeWriteResult set_composition_time(",
+      "HostCompositionCreateResult create_composition(");
+  const std::string_view keyframe = method(
+      "mutate_layer_property_keyframe(",
+      "HostLayerPropertyWriteResult set_layer_property(");
+  const std::string_view property = method(
+      "HostLayerPropertyWriteResult set_layer_property(",
+      "HostLayerDetailsResult read_layer_details(");
+
+  require(settings.find(
+              "const bool owns_undo = undoable && !undo_open_;")
+              != std::string_view::npos
+          && settings.find("if (owns_undo")
+              != std::string_view::npos
+          && settings.find(
+              "owns_undo ? utility_suite->AEGP_EndUndoGroup()")
+              != std::string_view::npos,
+      "composition setting adapters can nest an inner Undo group");
+  require(time.find("const bool owns_undo = !undo_open_;")
+              != std::string_view::npos
+          && time.find("if (owns_undo")
+              != std::string_view::npos
+          && time.find(
+              "owns_undo ? utility_suite->AEGP_EndUndoGroup()")
+              != std::string_view::npos,
+      "composition time adapter can nest an inner Undo group");
+  require(keyframe.find("const bool owns_undo = !undo_open_;")
+              != std::string_view::npos
+          && keyframe.find("if (owns_undo")
+              != std::string_view::npos
+          && keyframe.find(
+              "owns_undo ? utility_suite->AEGP_EndUndoGroup()")
+              != std::string_view::npos,
+      "keyframe adapters can nest an inner Undo group");
+  require(property.find("const bool owns_undo = !undo_open_;")
+              != std::string_view::npos
+          && property.find("if (owns_undo")
+              != std::string_view::npos
+          && property.find(
+              "owns_undo ? undo_group.finish() : A_Err_NONE")
+              != std::string_view::npos,
+      "property value adapter can nest an inner Undo group");
+}
+
+void native_program_bootstrap_uses_request_context_without_a_locator() {
+  const std::filesystem::path source_path =
+      std::filesystem::path(__FILE__).parent_path().parent_path()
+      / "src" / "aegp" / "native_program_executor.cpp";
+  std::ifstream input(source_path, std::ios::binary);
+  require(input.good(),
+      "could not open native_program_executor.cpp bootstrap source");
+  const std::string source{
+      std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+  const std::size_t first = source.find(
+      "AdapterResult execute_project_items_list(");
+  const std::size_t last = source.find(
+      "CompositionLayersQuery composition_layers_query(", first);
+  require(first != std::string::npos && last != std::string::npos
+          && last > first,
+      "could not isolate project.items.list native adapter");
+  const std::string_view adapter =
+      std::string_view(source).substr(first, last - first);
+  require(adapter.find(
+              "query.host_instance_id = frame.host_instance_id();")
+              != std::string_view::npos
+          && adapter.find("query.session_id = frame.session_id();")
+              != std::string_view::npos
+          && adapter.find(
+              "host.list_project_items(query, deadline)")
+              != std::string_view::npos,
+      "no-locator project.items.list does not pass request context to its typed query");
+}
+
 }  // namespace
 
 int main() {
@@ -4436,6 +4737,13 @@ int main() {
   layer_source_matte_av_deadline_after_undo_begin_closes_without_mutation();
   layer_source_matte_av_enum_domains_fail_closed();
   layer_source_matte_av_post_dispatch_failures_remain_ambiguous();
+  native_program_dispatch_submits_the_whole_program_once();
+  native_write_program_uses_one_balanced_undo_group();
+  native_program_failure_preserves_completed_writes_and_ambiguity();
+  native_program_timeout_before_host_entry_is_not_started();
+  native_program_replay_fence_binds_operation_key_and_digest();
+  native_program_write_adapters_skip_inner_undo_groups();
+  native_program_bootstrap_uses_request_context_without_a_locator();
   std::cout << "host_dispatcher_test: PASS\n";
   return 0;
 }

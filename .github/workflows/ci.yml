@@ -122,6 +122,7 @@ jobs:
         run: >-
           c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread
           -I native/ae-plugin/include
+          native/ae-plugin/src/core/native_program.cpp
           native/ae-plugin/src/core/host_dispatcher.cpp
           native/ae-plugin/tests/host_dispatcher_test.cpp
           -o /tmp/ae-mcp-host-dispatcher-test

@@ -10,6 +10,7 @@
 #include "aemcp_native/selection_collection.hpp"
 #include "aemcp_native/secure_random_macos.hpp"
 #include "aemcp_native/text_shape_marker_capabilities.generated.hpp"
+#include "native_program_executor.hpp"
 
 #include <CoreFoundation/CoreFoundation.h>
 
@@ -110,6 +111,10 @@ using aemcp::native::HostNativeMediaResult;
 using aemcp::native::MacEndpointRegistry;
 using aemcp::native::MacIpcServer;
 using aemcp::native::NativeEndpointDescriptor;
+using aemcp::native::NativeHandleResolveResult;
+using aemcp::native::NativeProgram;
+using aemcp::native::NativeProgramHostResult;
+using aemcp::native::NativeProgramPrimitiveHost;
 using aemcp::native::NativeIpcObserver;
 using aemcp::native::NativeRpcConnectionHandler;
 using aemcp::native::NativeRpcObserver;
@@ -1641,7 +1646,7 @@ constexpr std::size_t literal_size(const char (&)[Size]) noexcept {
       + aemcp::native::json_encoded_string_size(keyframe.out_interpolation);
 }
 
-class AegpHostApi final : public HostApi {
+class AegpHostApi final : public NativeProgramPrimitiveHost {
  public:
   AegpHostApi(
       SPBasicSuite* basic,
@@ -1654,9 +1659,115 @@ class AegpHostApi final : public HostApi {
         utility_suite_(utility_suite) {}
 
   ~AegpHostApi() override {
-    if (layer_undo_open_ && utility_suite_ != nullptr) {
+    if (undo_open_ && utility_suite_ != nullptr) {
       (void)utility_suite_->AEGP_EndUndoGroup();
     }
+  }
+
+  [[nodiscard]] NativeProgramHostResult execute_native_program(
+      const NativeProgram& program,
+      std::string_view host_instance_id,
+      std::string_view session_id,
+      TimePoint work_deadline) override {
+    return aemcp::native::execute_native_program(
+        *this, program, host_instance_id, session_id, work_deadline);
+  }
+
+  [[nodiscard]] NativeHandleResolveResult resolve_native_handle(
+      aemcp::native::HandleKind kind,
+      const ObjectLocator& locator,
+      const std::optional<ObjectLocator>& owner_locator,
+      TimePoint work_deadline) override {
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return NativeHandleResolveResult::failure(
+          "DEADLINE_EXCEEDED", "native handle resolution budget elapsed");
+    }
+    if (kind == aemcp::native::HandleKind::kLayer) {
+      if (!owner_locator.has_value()
+          || owner_locator->kind != "composition") {
+        return NativeHandleResolveResult::failure(
+            "INVALID_ARGUMENT",
+            "layer resolution requires a composition handle",
+            "params.arguments.composition");
+      }
+      const auto layer_address = graph_.resolve_layer(
+          locator, locator.host_instance_id, locator.session_id);
+      const auto composition_id = graph_.resolve_composition(
+          *owner_locator,
+          owner_locator->host_instance_id,
+          owner_locator->session_id);
+      if (!layer_address.has_value() || !composition_id.has_value()
+          || layer_address->composition_item_id != *composition_id) {
+        return NativeHandleResolveResult::failure(
+            "STALE_LOCATOR",
+            "layer locator does not belong to the resolved composition",
+            "params.arguments.locator");
+      }
+      HostLayerResolveResult resolved = resolve_layer(locator, work_deadline);
+      if (!resolved.ok) {
+        return NativeHandleResolveResult::failure(
+            resolved.error_code, resolved.message, resolved.error_field);
+      }
+      return NativeHandleResolveResult::success(
+          aemcp::native::ScopedLayerHandle{std::move(resolved.value)});
+    }
+    if (kind == aemcp::native::HandleKind::kProperty) {
+      if (!owner_locator.has_value() || owner_locator->kind != "layer"
+          || !graph_.resolve_stream(
+              locator,
+              *owner_locator,
+              locator.host_instance_id,
+              locator.session_id).has_value()) {
+        return NativeHandleResolveResult::failure(
+            "STALE_LOCATOR",
+            "property locator does not belong to the resolved layer",
+            "params.arguments.locator");
+      }
+      return NativeHandleResolveResult::success(
+          aemcp::native::ScopedPropertyHandle{
+              locator, *owner_locator, 0});
+    }
+    if (owner_locator.has_value()) {
+      return NativeHandleResolveResult::failure(
+          "INVALID_ARGUMENT",
+          "composition resolution does not accept an owner handle",
+          "params.arguments");
+    }
+    SuiteLease<AEGP_ProjSuite6> project_suite(
+        basic_, kAEGPProjSuite, kAEGPProjSuiteVersion6);
+    SuiteLease<AEGP_ItemSuite9> item_suite(
+        basic_, kAEGPItemSuite, kAEGPItemSuiteVersion9);
+    SuiteLease<AEGP_CompSuite12> comp_suite(
+        basic_, kAEGPCompSuite, kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_MemorySuite1> memory_suite(
+        basic_, kAEGPMemorySuite, kAEGPMemorySuiteVersion1);
+    if (project_suite.get() == nullptr || item_suite.get() == nullptr
+        || comp_suite.get() == nullptr || memory_suite.get() == nullptr) {
+      return NativeHandleResolveResult::failure(
+          "NATIVE_UNSUPPORTED",
+          "required composition resolver suites are unavailable");
+    }
+    const auto open = observe_open_project(
+        project_suite.get(), item_suite.get(), memory_suite.get());
+    const auto composition_id = graph_.resolve_composition(
+        locator, locator.host_instance_id, locator.session_id);
+    const auto item = open.has_value() && composition_id.has_value()
+        ? find_project_item(
+            item_suite.get(), open->project, open->root,
+            *composition_id, work_deadline)
+        : std::nullopt;
+    AEGP_CompH composition = nullptr;
+    if (!item.has_value()
+        || comp_suite->AEGP_GetCompFromItem(*item, &composition) != A_Err_NONE
+        || composition == nullptr) {
+      return NativeHandleResolveResult::failure(
+          "STALE_LOCATOR",
+          "composition locator does not identify an open composition",
+          "params.arguments.locator");
+    }
+    return NativeHandleResolveResult::success(
+        aemcp::native::ScopedCompositionHandle{
+            locator, reinterpret_cast<std::uintptr_t>(composition)});
   }
 
   [[nodiscard]] HostProjectGraphInvalidationResult invalidate_project_graph(
@@ -2628,6 +2739,7 @@ class AegpHostApi final : public HostApi {
     }
     const bool undoable =
         command.kind != CompositionSettingKind::kDisplayStartTime;
+    const bool owns_undo = undoable && !undo_open_;
     static constexpr char kLabels[][48] = {
         "ae-mcp: Set composition dimensions",
         "ae-mcp: Set composition duration",
@@ -2636,7 +2748,7 @@ class AegpHostApi final : public HostApi {
         "ae-mcp: Set composition background colour",
         "ae-mcp: Set composition display start time"};
     const std::size_t kind_index = static_cast<std::size_t>(command.kind);
-    if (undoable
+    if (owns_undo
         && utility_suite->AEGP_StartUndoGroup(kLabels[kind_index]) != A_Err_NONE) {
       return HostCompositionSettingsWriteResult::failure(
           "CAPABILITY_FAILED", "could not start the After Effects undo group");
@@ -2681,7 +2793,7 @@ class AegpHostApi final : public HostApi {
         break;
     }
     const A_Err end_error =
-        undoable ? utility_suite->AEGP_EndUndoGroup() : A_Err_NONE;
+        owns_undo ? utility_suite->AEGP_EndUndoGroup() : A_Err_NONE;
     auto after = composition_settings(
         item_suite.get(), comp_suite.get(), layer_suite.get(), memory_suite.get(),
         *item, comp, command.composition_locator);
@@ -3809,13 +3921,16 @@ class AegpHostApi final : public HostApi {
     desired.value = static_cast<A_long>(command.target_time.value);
     desired.scale = static_cast<A_u_long>(command.target_time.scale);
     static constexpr char kUndoLabel[] = "ae-mcp: Set composition current time";
-    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+    const bool owns_undo = !undo_open_;
+    if (owns_undo
+        && utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
       return HostCompositionTimeWriteResult::failure(
           "CAPABILITY_FAILED", "could not start the After Effects undo group");
     }
     const A_Err set_error = item_suite->AEGP_SetItemCurrentTime(
         composition_item, &desired);
-    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const A_Err end_error =
+        owns_undo ? utility_suite->AEGP_EndUndoGroup() : A_Err_NONE;
     A_Time after_sdk{};
     const A_Err readback_error = item_suite->AEGP_GetItemCurrentTime(
         composition_item, &after_sdk);
@@ -5954,7 +6069,9 @@ class AegpHostApi final : public HostApi {
           "DEADLINE_EXCEEDED", "keyframe mutation budget elapsed");
     }
     static constexpr char kUndoLabel[] = "ae-mcp: Edit property keyframe";
-    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+    const bool owns_undo = !undo_open_;
+    if (owns_undo
+        && utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
       return HostLayerPropertyKeyframeWriteResult::failure(
           "CAPABILITY_FAILED", "could not start the After Effects undo group");
     }
@@ -6004,7 +6121,8 @@ class AegpHostApi final : public HostApi {
       mutation_error = keyframe_suite->AEGP_DeleteKeyframe(
           resolved->stream.get(), *before_index);
     }
-    const A_Err end_error = utility_suite->AEGP_EndUndoGroup();
+    const A_Err end_error =
+        owns_undo ? utility_suite->AEGP_EndUndoGroup() : A_Err_NONE;
 
     A_long count_after = -1;
     if (keyframe_suite->AEGP_GetStreamNumKFs(
@@ -6316,12 +6434,14 @@ class AegpHostApi final : public HostApi {
     }
 
     static constexpr char kUndoLabel[] = "ae-mcp: Set layer property value";
-    if (utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
+    const bool owns_undo = !undo_open_;
+    if (owns_undo
+        && utility_suite->AEGP_StartUndoGroup(kUndoLabel) != A_Err_NONE) {
       return HostLayerPropertyWriteResult::failure(
           "CAPABILITY_FAILED", "could not start the After Effects undo group");
     }
     UndoGroupOwner undo_group(utility_suite.get());
-    undo_group.mark_started();
+    if (owns_undo) undo_group.mark_started();
 
     std::optional<aemcp::native::LayerPropertyValue> before_value;
     std::optional<aemcp::native::LayerPropertyValue> after_value;
@@ -6434,7 +6554,8 @@ class AegpHostApi final : public HostApi {
         after_value.reset();
       }
     }
-    const A_Err end_error = undo_group.finish();
+    const A_Err end_error =
+        owns_undo ? undo_group.finish() : A_Err_NONE;
     if (start_add_error != A_Err_NONE || add_error != A_Err_NONE
         || set_error != A_Err_NONE || end_add_error != A_Err_NONE
         || delete_error != A_Err_NONE || invariant_error != A_Err_NONE
@@ -10954,37 +11075,37 @@ class AegpHostApi final : public HostApi {
     });
   }
 
-  [[nodiscard]] HostActionResult begin_layer_undo_group(
+  [[nodiscard]] HostActionResult begin_undo_group(
       std::string_view label,
       TimePoint work_deadline) override {
     if (std::chrono::steady_clock::now() >= work_deadline) {
       return HostActionResult::failure(
           "DEADLINE_EXCEEDED", "layer Undo begin budget elapsed");
     }
-    if (utility_suite_ == nullptr || layer_undo_open_ || label.empty()) {
+    if (utility_suite_ == nullptr || undo_open_ || label.empty()) {
       return HostActionResult::failure(
-          "CAPABILITY_FAILED", "layer Undo group is unavailable");
+          "CAPABILITY_FAILED", "program Undo group is unavailable");
     }
     const std::string null_terminated_label(label);
     if (utility_suite_->AEGP_StartUndoGroup(
             null_terminated_label.c_str()) != A_Err_NONE) {
       return HostActionResult::failure(
-          "CAPABILITY_FAILED", "could not start the layer Undo group");
+          "CAPABILITY_FAILED", "could not start the program Undo group");
     }
-    layer_undo_open_ = true;
+    undo_open_ = true;
     return HostActionResult::success();
   }
 
-  [[nodiscard]] HostActionResult end_layer_undo_group(
+  [[nodiscard]] HostActionResult end_undo_group(
       TimePoint) override {
-    if (utility_suite_ == nullptr || !layer_undo_open_) {
+    if (utility_suite_ == nullptr || !undo_open_) {
       return HostActionResult::failure(
-          "CAPABILITY_FAILED", "layer Undo group is not open");
+          "CAPABILITY_FAILED", "program Undo group is not open");
     }
-    layer_undo_open_ = false;
+    undo_open_ = false;
     if (utility_suite_->AEGP_EndUndoGroup() != A_Err_NONE) {
       return HostActionResult::failure(
-          "CAPABILITY_FAILED", "could not end the layer Undo group");
+          "CAPABILITY_FAILED", "could not end the program Undo group");
     }
     return HostActionResult::success();
   }
@@ -12017,7 +12138,7 @@ class AegpHostApi final : public HostApi {
   AEGP_PluginID plugin_id_{0};
   ProjectGraphRegistry& graph_;
   const AEGP_UtilitySuite6* utility_suite_{nullptr};
-  bool layer_undo_open_{false};
+  bool undo_open_{false};
 };
 
 class AegpHostIdleSignal final : public aemcp::native::HostIdleSignal {

@@ -587,7 +587,7 @@ git commit -m "feat(native): admit bounded native programs"
 - Modify: `native/ae-plugin/tests/host_dispatcher_test.cpp`
 
 **Interfaces:**
-- Produces: `HostApi::execute_native_program(const NativeProgram&, TimePoint)`
+- Produces: `HostApi::execute_native_program(const NativeProgram&, host_instance_id, session_id, TimePoint)`
 - Produces: request-local `NativeHandleFrame`
 - Produces: `NativeProgramHostResult` with ordered operation outcomes and named exports.
 

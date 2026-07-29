@@ -1,5 +1,7 @@
 #pragma once
 
+#include "aemcp_native/native_program.hpp"
+
 #include <array>
 #include <chrono>
 #include <cstddef>
@@ -21,6 +23,7 @@
 
 namespace aemcp::native {
 
+inline constexpr std::string_view kNativeProgramCapability = "ae.native.exec";
 inline constexpr std::string_view kProjectSummaryCapability = "ae.project.summary";
 inline constexpr std::string_view kProjectBitDepthReadCapability =
     "ae.project.bit-depth.read";
@@ -1871,9 +1874,51 @@ struct HostProjectGraphInvalidationResult {
       std::string code, std::string detail);
 };
 
+enum class NativeProgramDisposition {
+  kNotStarted,
+  kCompleted,
+  kPossiblySideEffecting,
+};
+
+struct NativeProgramOperationOutcome {
+  std::size_t index{0};
+  std::string primitive_id;
+  JsonValue value;
+};
+
+struct NativeProgramHostResult {
+  bool ok{false};
+  std::vector<NativeProgramOperationOutcome> operations;
+  JsonObject outputs;
+  std::vector<std::size_t> completed_operation_indices;
+  std::optional<std::size_t> failed_operation_index;
+  bool write_started{false};
+  NativeProgramDisposition disposition{NativeProgramDisposition::kNotStarted};
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static NativeProgramHostResult success(
+      std::vector<NativeProgramOperationOutcome> operations,
+      JsonObject outputs);
+  [[nodiscard]] static NativeProgramHostResult failure(
+      std::string code,
+      std::string detail,
+      std::string field,
+      std::vector<std::size_t> completed_indices,
+      std::optional<std::size_t> failed_index,
+      bool write_started,
+      NativeProgramDisposition disposition);
+};
+
 class HostApi {
  public:
   virtual ~HostApi() = default;
+  [[nodiscard]] virtual NativeProgramHostResult execute_native_program(
+      const NativeProgram& program,
+      std::string_view host_instance_id,
+      std::string_view session_id,
+      TimePoint work_deadline);
   [[nodiscard]] virtual HostReadResult read_project_summary(TimePoint work_deadline) = 0;
   [[nodiscard]] virtual HostBitDepthReadResult read_project_bit_depth(
       TimePoint work_deadline);
@@ -1961,9 +2006,9 @@ class HostApi {
       const HostResolvedLayer& layer, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerAVStateResult read_layer_av_state(
       const HostResolvedLayer& layer, TimePoint work_deadline);
-  [[nodiscard]] virtual HostActionResult begin_layer_undo_group(
+  [[nodiscard]] virtual HostActionResult begin_undo_group(
       std::string_view label, TimePoint work_deadline);
-  [[nodiscard]] virtual HostActionResult end_layer_undo_group(
+  [[nodiscard]] virtual HostActionResult end_undo_group(
       TimePoint work_deadline);
   [[nodiscard]] virtual HostActionResult set_layer_track_matte(
       const HostResolvedLayer& layer,
@@ -2156,6 +2201,7 @@ struct Request {
   std::string layer_blending_mode;
   NativeMediaCommand native_media;
   LayerSourceMatteAvRequest layer_source_matte_av_request;
+  std::optional<NativeProgram> native_program;
 };
 
 enum class EnqueueCode {
@@ -2221,6 +2267,7 @@ struct Completion {
   std::shared_ptr<LayerTimelineResult> layer_timeline_result;
   std::shared_ptr<LayerCompositingResult> layer_compositing_result;
   LayerSourceMatteAvResult layer_source_matte_av_result;
+  NativeProgramHostResult native_program_result;
   ProjectGraphInvalidation project_graph_invalidation_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;
