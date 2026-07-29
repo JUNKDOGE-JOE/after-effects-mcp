@@ -3684,13 +3684,34 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 false,
                 NativeProgramDisposition::kNotStarted);
           } else {
-            host_result = host.execute_native_program(
-                *request.native_program,
-                request.host_instance_id,
-                request.session_id,
-                request.deadline);
+            try {
+              host_result = host.execute_native_program(
+                  *request.native_program,
+                  request.host_instance_id,
+                  request.session_id,
+                  request.deadline);
+            } catch (...) {
+              host_result = NativeProgramHostResult::failure(
+                  admission.contains_write
+                      ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
+                      : "CAPABILITY_FAILED",
+                  "native program host adapter raised an exception",
+                  {},
+                  {},
+                  std::nullopt,
+                  admission.contains_write,
+                  admission.contains_write
+                      ? NativeProgramDisposition::kPossiblySideEffecting
+                      : NativeProgramDisposition::kCompleted);
+            }
             if (admission.contains_write) {
-              undo_end = host.end_undo_group(request.deadline);
+              try {
+                undo_end = host.end_undo_group(request.deadline);
+              } catch (...) {
+                undo_end = HostActionResult::failure(
+                    "POSSIBLY_SIDE_EFFECTING_FAILURE",
+                    "native program Undo close raised an exception");
+              }
             }
           }
           if (!undo_end.ok) {
@@ -3703,15 +3724,20 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 ? "native program Undo group could not be closed"
                 : undo_end.message;
             host_result.error_field = undo_end.error_field;
-          } else if (clock_.now() > request.deadline
-              && admission.contains_write) {
+          } else if (clock_.now() > request.deadline) {
             host_result.ok = false;
-            host_result.write_started = true;
-            host_result.disposition =
-                NativeProgramDisposition::kPossiblySideEffecting;
-            host_result.error_code = "POSSIBLY_SIDE_EFFECTING_FAILURE";
-            host_result.message =
-                "native program completed after its dispatcher deadline";
+            if (admission.contains_write) {
+              host_result.write_started = true;
+              host_result.disposition =
+                  NativeProgramDisposition::kPossiblySideEffecting;
+              host_result.error_code = "POSSIBLY_SIDE_EFFECTING_FAILURE";
+              host_result.message =
+                  "native program completed after its dispatcher deadline";
+            } else {
+              host_result.error_code = "DEADLINE_EXCEEDED";
+              host_result.message =
+                  "native read program completed after its dispatcher deadline";
+            }
           } else if (!host_result.ok && host_result.write_started) {
             host_result.disposition =
                 NativeProgramDisposition::kPossiblySideEffecting;

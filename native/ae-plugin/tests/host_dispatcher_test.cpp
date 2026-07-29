@@ -4412,6 +4412,9 @@ Request native_program_request(
 
 class NativeProgramHost final : public HostApi {
  public:
+  explicit NativeProgramHost(FakeClock* clock = nullptr)
+      : clock(clock) {}
+
   [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
     return HostReadResult::failure(
         "UNEXPECTED_CALL", "project summary was not requested");
@@ -4426,6 +4429,10 @@ class NativeProgramHost final : public HostApi {
     observed_operation_count = program.operations.size();
     observed_host_instance_id = host_instance_id;
     observed_session_id = session_id;
+    if (clock != nullptr) clock->advance(execute_delay);
+    if (throw_on_execute) {
+      throw std::runtime_error("fake native program execute exception");
+    }
     return next_result;
   }
 
@@ -4441,7 +4448,14 @@ class NativeProgramHost final : public HostApi {
   [[nodiscard]] HostActionResult end_undo_group(TimePoint) override {
     require(undo_open, "native program closed an unopened Undo group");
     ++undo_end_calls;
+    if (throw_on_undo_close) {
+      throw std::runtime_error("fake native program Undo close exception");
+    }
     undo_open = false;
+    if (fail_undo_close) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "fake native program Undo close failure");
+    }
     return HostActionResult::success();
   }
 
@@ -4458,6 +4472,11 @@ class NativeProgramHost final : public HostApi {
   int undo_begin_calls{0};
   int undo_end_calls{0};
   bool undo_open{false};
+  FakeClock* clock{nullptr};
+  std::chrono::milliseconds execute_delay{0ms};
+  bool throw_on_execute{false};
+  bool fail_undo_close{false};
+  bool throw_on_undo_close{false};
 };
 
 void native_program_dispatch_submits_the_whole_program_once() {
@@ -4565,6 +4584,97 @@ void native_program_timeout_before_host_entry_is_not_started() {
           && host.program_calls == 0 && host.undo_begin_calls == 0
           && host.undo_end_calls == 0,
       "pre-entry native program timeout was not reported as not-started");
+}
+
+void native_write_program_attempts_undo_close_after_execute_exception() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(2, 2, 16ms));
+  NativeProgramHost host;
+  host.throw_on_execute = true;
+  NativeProgram program = admitted_native_program(
+      R"({"operationKey":"execute-throw-key-01","undoGroup":"Task 4 execute throw","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}}]})");
+
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-execute-throw", std::move(program)))
+              .code == EnqueueCode::kAccepted,
+      "throwing native write was not admitted");
+  const auto batch = dispatcher.drain(host);
+  require(host.program_calls == 1 && host.undo_begin_calls == 1
+          && host.undo_end_calls == 1 && !host.undo_open,
+      "throwing native write did not attempt and complete Undo close");
+  require(batch.completions.size() == 1 && !batch.completions[0].ok
+          && batch.completions[0].error_code
+              == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+          && batch.completions[0].native_program_result.disposition
+              == NativeProgramDisposition::kPossiblySideEffecting,
+      "throwing native write was not reported as possibly side-effecting");
+}
+
+void native_write_program_undo_close_failure_or_throw_remains_ambiguous() {
+  for (const bool throw_close : {false, true}) {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(2, 2, 16ms));
+    NativeProgramHost host;
+    host.throw_on_execute = true;
+    host.fail_undo_close = !throw_close;
+    host.throw_on_undo_close = throw_close;
+    NativeProgram program = admitted_native_program(
+        R"({"operationKey":"close-ambiguity-key-01","undoGroup":"Task 4 close ambiguity","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}}]})");
+
+    require(dispatcher.enqueue(native_program_request(
+                clock,
+                throw_close ? "native-program-close-throw"
+                            : "native-program-close-failure",
+                std::move(program)))
+                .code == EnqueueCode::kAccepted,
+        "Undo-close ambiguity probe was not admitted");
+    const auto batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1 && !batch.completions[0].ok
+            && batch.completions[0].error_code
+                == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+            && batch.completions[0].native_program_result.disposition
+                == NativeProgramDisposition::kPossiblySideEffecting
+            && host.undo_begin_calls == 1 && host.undo_end_calls == 1,
+        "Undo close failure or exception lost write ambiguity");
+  }
+}
+
+void native_read_program_crossing_host_deadline_fails_without_ambiguity() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(2, 2, 16ms));
+  NativeProgramHost host(&clock);
+  host.execute_delay = 2ms;
+  host.next_result.completed_operation_indices = {0};
+  host.next_result.operations.push_back({
+      0,
+      "project.items.list",
+      aemcp::native::JsonValue{nullptr},
+  });
+  NativeProgram program = admitted_native_program(
+      R"({"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1}}]})");
+
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-read-late", std::move(program), 1ms))
+              .code == EnqueueCode::kAccepted,
+      "late read native program was not admitted");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && !batch.completions[0].ok
+          && batch.completions[0].error_code == "DEADLINE_EXCEEDED",
+      "read native program completed successfully after its deadline");
+  const NativeProgramHostResult& result =
+      batch.completions[0].native_program_result;
+  require(!result.write_started
+          && result.disposition == NativeProgramDisposition::kCompleted
+          && result.completed_operation_indices
+              == std::vector<std::size_t>({0})
+          && result.operations.size() == 1
+          && result.operations[0].primitive_id == "project.items.list",
+      "late read lost completed outcome semantics or became side-effecting");
+  require(host.undo_begin_calls == 0 && host.undo_end_calls == 0,
+      "late read native program touched Undo");
 }
 
 void native_program_replay_fence_binds_operation_key_and_digest() {
@@ -4741,6 +4851,9 @@ int main() {
   native_write_program_uses_one_balanced_undo_group();
   native_program_failure_preserves_completed_writes_and_ambiguity();
   native_program_timeout_before_host_entry_is_not_started();
+  native_read_program_crossing_host_deadline_fails_without_ambiguity();
+  native_write_program_attempts_undo_close_after_execute_exception();
+  native_write_program_undo_close_failure_or_throw_remains_ambiguous();
   native_program_replay_fence_binds_operation_key_and_digest();
   native_program_write_adapters_skip_inner_undo_groups();
   native_program_bootstrap_uses_request_context_without_a_locator();
