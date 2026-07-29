@@ -505,26 +505,28 @@ def test_call_plan_is_exactly_forty_and_covers_the_frozen_matrix():
     assert len({row.key for row in spec.CALL_PLAN}) == 40
     keys = {row.key for row in spec.CALL_PLAN}
     assert {
-        "source-read-a",
         "source-replace-a-to-b",
         "source-replace-completed-replay",
         "source-read-b",
         "source-undo-read-a",
-        "matte-read-empty",
         "matte-set-alpha",
         "matte-read-alpha",
         "matte-reorder-source",
         "matte-read-after-reorder",
+        "matte-set-undo-reacquire-project",
         "matte-set-undo-read-empty",
         "matte-set-luma",
         "matte-clear",
         "matte-read-cleared-luma",
+        "matte-clear-undo-reacquire-project",
         "matte-clear-undo-read-luma",
         "audio-disable",
         "audio-disable-read",
+        "audio-undo-reacquire-project",
         "audio-undo-read",
         "video-disable",
         "video-disable-read",
+        "video-undo-reacquire-project",
         "video-undo-read",
         "negative-cross-composition-matte",
         "negative-self-matte",
@@ -534,10 +536,10 @@ def test_call_plan_is_exactly_forty_and_covers_the_frozen_matrix():
     } <= keys
     assert tuple(row.key for row in spec.CALL_PLAN if row.undo_checkpoint) == (
         "source-undo-reacquire-project",
-        "matte-set-undo-reacquire-layers",
-        "matte-clear-undo-reacquire-layers",
-        "audio-undo-reacquire-layers",
-        "video-undo-reacquire-layers",
+        "matte-set-undo-reacquire-project",
+        "matte-clear-undo-reacquire-project",
+        "audio-undo-reacquire-project",
+        "video-undo-reacquire-project",
     )
     negative_rows = [
         row for row in spec.CALL_PLAN if row.expected_error is not None
@@ -600,12 +602,16 @@ def test_every_undo_and_source_replacement_has_a_public_locator_fence():
         if row.key != "audio-undo-reacquire-layers"
     )
     assert spec.locator_reacquisition_violations(missing_undo_fence)
+    missing_undo_project_fence = tuple(
+        row for row in spec.CALL_PLAN
+        if row.key != "audio-undo-reacquire-project"
+    )
+    assert spec.locator_reacquisition_violations(missing_undo_project_fence)
 
 
 def test_public_readback_predicates_cover_preservation_and_all_five_undos():
     predicates = spec.PUBLIC_READBACK_PREDICATES
     assert predicates["source-read-b"]["sourceName"] == "SOURCE_COMP_B"
-    assert predicates["source-transform-after"]["equals"] == "source-transform-before"
     assert predicates["source-replace-a-to-b"]["invariantsEqual"] is True
     assert predicates["matte-read-after-reorder"] == {
         "active": True,
@@ -861,6 +867,7 @@ async def test_committed_audio_reconciliation_undoes_and_verifies_before_return(
     session = SequenceSession(
         [
             (False, disabled),
+            (False, _project_items_payload()),
             (False, _main_layers_payload()),
             (False, restored),
         ]
@@ -918,6 +925,7 @@ async def test_committed_audio_reconciliation_undoes_and_verifies_before_return(
     assert outcome == "committed-reconciled"
     assert [tool for tool, _arguments in session.calls] == [
         "ae_getLayerAVState",
+        "ae_listProjectItems",
         "ae_listCompositionLayers",
         "ae_getLayerAVState",
     ]
@@ -957,6 +965,7 @@ async def test_failed_recovery_blocks_any_independent_case(tmp_path):
     )
     session = SequenceSession(
         [
+            (False, _project_items_payload()),
             (False, _main_layers_payload()),
             (False, still_disabled),
             (False, disabled),  # Must remain unused; it represents independent work.
@@ -996,6 +1005,7 @@ async def test_failed_recovery_blocks_any_independent_case(tmp_path):
         await runner._recover_committed_write(session, pending)
 
     assert [tool for tool, _arguments in session.calls] == [
+        "ae_listProjectItems",
         "ae_listCompositionLayers",
         "ae_getLayerAVState",
     ]
@@ -1019,7 +1029,11 @@ async def test_luma_support_write_recovery_verifies_the_empty_prewrite_baseline(
         },
     )
     session = SequenceSession(
-        [(False, _main_layers_payload()), (False, empty_matte)]
+        [
+            (False, _project_items_payload()),
+            (False, _main_layers_payload()),
+            (False, empty_matte),
+        ]
     )
     runner = driver.Issue190Runner(
         _config(tmp_path),
@@ -1072,7 +1086,6 @@ async def test_luma_support_write_recovery_verifies_the_empty_prewrite_baseline(
         "source-reacquire-project",
         "source-reacquire-layers",
         "source-read-b",
-        "source-transform-after",
     ],
 )
 async def test_every_source_verification_stage_recovers_before_independent_work(

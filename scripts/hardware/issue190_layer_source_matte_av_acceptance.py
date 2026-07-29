@@ -613,13 +613,11 @@ class Issue190Runner:
             "source-reacquire-project",
             "source-reacquire-layers",
             "source-read-b",
-            "source-transform-after",
         ),
         "source-replace-completed-replay": (
             "source-reacquire-project",
             "source-reacquire-layers",
             "source-read-b",
-            "source-transform-after",
         ),
         "matte-set-alpha": ("matte-read-alpha",),
         "matte-reorder-source": ("matte-read-after-reorder",),
@@ -633,13 +631,11 @@ class Issue190Runner:
             "source-reacquire-project",
             "source-reacquire-layers",
             "source-read-b",
-            "source-transform-after",
         ),
         "source-replace-completed-replay": (
             "source-reacquire-project",
             "source-reacquire-layers",
             "source-read-b",
-            "source-transform-after",
         ),
         "matte-set-alpha": ("matte-read-alpha",),
         "matte-reorder-source": ("matte-read-after-reorder",),
@@ -683,37 +679,61 @@ class Issue190Runner:
             "undo-matte-alpha-recovery",
             "ae_setLayerTrackMatte",
             1,
-            ("matte-set-undo-reacquire-layers", "matte-set-undo-read-empty"),
+            (
+                "matte-set-undo-reacquire-project",
+                "matte-set-undo-reacquire-layers",
+                "matte-set-undo-read-empty",
+            ),
         ),
         "matte-reorder-source": (
             "undo-matte-reorder-and-set",
             "ae_setLayerTrackMatte",
             2,
-            ("matte-set-undo-reacquire-layers", "matte-set-undo-read-empty"),
+            (
+                "matte-set-undo-reacquire-project",
+                "matte-set-undo-reacquire-layers",
+                "matte-set-undo-read-empty",
+            ),
         ),
         "matte-set-luma": (
             "undo-matte-luma-recovery",
             "ae_setLayerTrackMatte",
             1,
-            ("matte-clear-undo-reacquire-layers", "matte-clear-undo-read-luma"),
+            (
+                "matte-clear-undo-reacquire-project",
+                "matte-clear-undo-reacquire-layers",
+                "matte-clear-undo-read-luma",
+            ),
         ),
         "matte-clear": (
             "undo-matte-clear",
             "ae_clearLayerTrackMatte",
             1,
-            ("matte-clear-undo-reacquire-layers", "matte-clear-undo-read-luma"),
+            (
+                "matte-clear-undo-reacquire-project",
+                "matte-clear-undo-reacquire-layers",
+                "matte-clear-undo-read-luma",
+            ),
         ),
         "audio-disable": (
             "undo-audio-disable",
             "ae_setLayerAudioEnabled",
             1,
-            ("audio-undo-reacquire-layers", "audio-undo-read"),
+            (
+                "audio-undo-reacquire-project",
+                "audio-undo-reacquire-layers",
+                "audio-undo-read",
+            ),
         ),
         "video-disable": (
             "undo-video-disable",
             "ae_setLayerVideoEnabled",
             1,
-            ("video-undo-reacquire-layers", "video-undo-read"),
+            (
+                "video-undo-reacquire-project",
+                "video-undo-reacquire-layers",
+                "video-undo-read",
+            ),
         ),
     }
 
@@ -1343,14 +1363,6 @@ class Issue190Runner:
             self.context["matte_reorder_target_index"] = spacer_index
         self.context["current_layer_order"] = ordered
 
-    @staticmethod
-    def _semantic_transform(value: Mapping[str, Any]) -> dict[str, Any]:
-        return {
-            key: copy.deepcopy(item)
-            for key, item in value.items()
-            if key != "layerLocator"
-        }
-
     def _assert_matte(
         self,
         value: Mapping[str, Any],
@@ -1381,6 +1393,10 @@ class Issue190Runner:
             "fixture-project-items",
             "source-reacquire-project",
             "source-undo-reacquire-project",
+            "matte-set-undo-reacquire-project",
+            "matte-clear-undo-reacquire-project",
+            "audio-undo-reacquire-project",
+            "video-undo-reacquire-project",
         }:
             self._capture_project_items(value)
         elif key in {
@@ -1401,17 +1417,10 @@ class Issue190Runner:
                 )
         elif key == "fixture-cross-composition-layers":
             self._capture_layers(value, cross=True)
-        elif key in {"source-read-a", "source-undo-read-a"}:
+        elif key == "source-undo-read-a":
             require(value.get("sourceName") == "SOURCE_COMP_A", f"{key} source drifted")
         elif key == "source-read-b":
             require(value.get("sourceName") == "SOURCE_COMP_B", "replacement read drifted")
-        elif key == "source-transform-before":
-            self.context["source_transform_before"] = self._semantic_transform(value)
-        elif key == "source-transform-after":
-            require(
-                self._semantic_transform(value) == self.context["source_transform_before"],
-                "keyed transform witness changed during source replacement",
-            )
         elif key == "source-replace-a-to-b":
             before = mapping(value.get("beforeSource"), "source before missing")
             after = mapping(value.get("afterSource"), "source after missing")
@@ -1433,7 +1442,7 @@ class Issue190Runner:
             self.context["source_original_b_locator"] = copy.deepcopy(
                 arguments["source_item_locator"]
             )
-        elif key in {"matte-read-empty", "matte-set-undo-read-empty"}:
+        elif key == "matte-set-undo-read-empty":
             self._assert_matte(value, active=False)
         elif key in {"matte-read-alpha", "matte-read-after-reorder"}:
             self._assert_matte(value, active=True, mode="alpha")

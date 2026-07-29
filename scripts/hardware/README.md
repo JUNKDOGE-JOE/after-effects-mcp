@@ -261,8 +261,9 @@ original operation key, response/audit identifiers, and only already-planned
 readback calls to classify it as committed-reconciled,
 not-occurred-reconciled, or unreconciled; it is never retried. A successful
 source replacement remains pending across its entire ordered verification
-group: project reacquisition, layer reacquisition, source readback, and keyed
-transform witness. Failure at any of those rows enters the same associated
+group: project reacquisition, layer reacquisition, and source readback; the
+write result independently binds the closed before/after preservation invariant.
+Failure at any of those rows enters the same associated
 harness Undo and frozen locator-reacquisition/baseline reads before any
 independent case can continue. A BEFORE-state reconciliation never relabels an
 unsatisfied frozen AFTER predicate as PASS: the read row records the observed

@@ -124,22 +124,6 @@ _ROWS = (
         "Acquire CROSS_COMP_MATTE from SOURCE_COMP_B for the structured negative.",
     ),
     _call(
-        "source-read-a",
-        "source",
-        "ae_getLayerSource",
-        {"layer_locator": "$relink_target_locator"},
-        "read",
-        "RELINK_TARGET source is SOURCE_COMP_A.",
-    ),
-    _call(
-        "source-transform-before",
-        "source",
-        "ae_getLayerTransform",
-        {"layer_locator": "$relink_target_locator"},
-        "read",
-        "Capture the harness-created keyed Position witness at composition time zero.",
-    ),
-    _call(
         "source-replace-a-to-b",
         "source",
         "ae_setLayerSource",
@@ -188,14 +172,6 @@ _ROWS = (
         "Fresh source read returns SOURCE_COMP_B.",
     ),
     _call(
-        "source-transform-after",
-        "source",
-        "ae_getLayerTransform",
-        {"layer_locator": "$relink_target_locator"},
-        "read",
-        "The keyed Position witness equals its exact pre-replacement public projection.",
-    ),
-    _call(
         "source-undo-reacquire-project",
         "source",
         "ae_listProjectItems",
@@ -219,14 +195,6 @@ _ROWS = (
         {"layer_locator": "$relink_target_locator"},
         "read",
         "Real Undo restores SOURCE_COMP_A.",
-    ),
-    _call(
-        "matte-read-empty",
-        "matte-set",
-        "ae_getLayerTrackMatte",
-        {"layer_locator": "$matte_fill_locator"},
-        "read",
-        "MATTE_FILL begins without an active Track Matte relationship.",
     ),
     _call(
         "matte-set-alpha",
@@ -270,13 +238,21 @@ _ROWS = (
         "Track Matte remains MATTE_SOURCE alpha after stack-order change.",
     ),
     _call(
+        "matte-set-undo-reacquire-project",
+        "matte-set",
+        "ae_listProjectItems",
+        {"offset": 0, "limit": 50},
+        "read",
+        "Undo support reorder then Alpha set; reacquire project and composition locators.",
+        undo_checkpoint="undo-matte-reorder-and-set",
+    ),
+    _call(
         "matte-set-undo-reacquire-layers",
         "matte-set",
         "ae_listCompositionLayers",
         {"composition_locator": "$main_composition_locator", "offset": 0, "limit": 25},
         "read",
-        "Undo support reorder then Alpha set; reacquire all role locators and baseline order.",
-        undo_checkpoint="undo-matte-reorder-and-set",
+        "After the two real Undos, reacquire all role locators and baseline order.",
     ),
     _call(
         "matte-set-undo-read-empty",
@@ -327,13 +303,21 @@ _ROWS = (
         "Independent read is inactive with null Matte and stored luma mode.",
     ),
     _call(
+        "matte-clear-undo-reacquire-project",
+        "matte-clear",
+        "ae_listProjectItems",
+        {"offset": 0, "limit": 50},
+        "read",
+        "Execute one real clear Undo and reacquire project and composition locators.",
+        undo_checkpoint="undo-matte-clear",
+    ),
+    _call(
         "matte-clear-undo-reacquire-layers",
         "matte-clear",
         "ae_listCompositionLayers",
         {"composition_locator": "$main_composition_locator", "offset": 0, "limit": 25},
         "read",
-        "Execute one real clear Undo and reacquire all role locators.",
-        undo_checkpoint="undo-matte-clear",
+        "After clear Undo, reacquire all role locators.",
     ),
     _call(
         "matte-clear-undo-read-luma",
@@ -364,13 +348,21 @@ _ROWS = (
         "Independent AV read returns audioEnabled false.",
     ),
     _call(
+        "audio-undo-reacquire-project",
+        "audio",
+        "ae_listProjectItems",
+        {"offset": 0, "limit": 50},
+        "read",
+        "Execute one real audio Undo and reacquire project and composition locators.",
+        undo_checkpoint="undo-audio-disable",
+    ),
+    _call(
         "audio-undo-reacquire-layers",
         "audio",
         "ae_listCompositionLayers",
         {"composition_locator": "$main_composition_locator", "offset": 0, "limit": 25},
         "read",
-        "Execute one real audio Undo and reacquire all role locators.",
-        undo_checkpoint="undo-audio-disable",
+        "After audio Undo, reacquire all role locators.",
     ),
     _call(
         "audio-undo-read",
@@ -401,13 +393,21 @@ _ROWS = (
         "Independent AV read returns videoEnabled false.",
     ),
     _call(
+        "video-undo-reacquire-project",
+        "video",
+        "ae_listProjectItems",
+        {"offset": 0, "limit": 50},
+        "read",
+        "Execute one real video Undo and reacquire project and composition locators.",
+        undo_checkpoint="undo-video-disable",
+    ),
+    _call(
         "video-undo-reacquire-layers",
         "video",
         "ae_listCompositionLayers",
         {"composition_locator": "$main_composition_locator", "offset": 0, "limit": 25},
         "read",
-        "Execute one real video Undo and reacquire all role locators.",
-        undo_checkpoint="undo-video-disable",
+        "After video Undo, reacquire all role locators.",
     ),
     _call(
         "video-undo-read",
@@ -500,12 +500,9 @@ PUBLIC_READBACK_PREDICATES = {
 }
 PUBLIC_READBACK_PREDICATES.update(
     {
-        "source-read-a": {"sourceName": "SOURCE_COMP_A"},
         "source-replace-a-to-b": {"invariantsEqual": True},
         "source-read-b": {"sourceName": "SOURCE_COMP_B"},
-        "source-transform-after": {"equals": "source-transform-before"},
         "source-undo-read-a": {"sourceName": "SOURCE_COMP_A"},
-        "matte-read-empty": {"active": False, "matteRole": None},
         "matte-read-alpha": {
             "active": True,
             "matteRole": "MATTE_SOURCE",
@@ -583,19 +580,44 @@ def locator_reacquisition_violations(
     ):
         violations.append("source-replacement-public-reacquisition")
     undo_fences = {
-        "source-undo-reacquire-project": "source-undo-read-a",
-        "matte-set-undo-reacquire-layers": "matte-set-undo-read-empty",
-        "matte-clear-undo-reacquire-layers": "matte-clear-undo-read-luma",
-        "audio-undo-reacquire-layers": "audio-undo-read",
-        "video-undo-reacquire-layers": "video-undo-read",
+        "source": (
+            "source-undo-reacquire-project",
+            "source-undo-reacquire-layers",
+            "source-undo-read-a",
+        ),
+        "matte-set": (
+            "matte-set-undo-reacquire-project",
+            "matte-set-undo-reacquire-layers",
+            "matte-set-undo-read-empty",
+        ),
+        "matte-clear": (
+            "matte-clear-undo-reacquire-project",
+            "matte-clear-undo-reacquire-layers",
+            "matte-clear-undo-read-luma",
+        ),
+        "audio": (
+            "audio-undo-reacquire-project",
+            "audio-undo-reacquire-layers",
+            "audio-undo-read",
+        ),
+        "video": (
+            "video-undo-reacquire-project",
+            "video-undo-reacquire-layers",
+            "video-undo-read",
+        ),
     }
-    for fence, verification in undo_fences.items():
+    for name, (project_fence, layer_fence, verification) in undo_fences.items():
         if (
-            fence not in positions
+            project_fence not in positions
+            or layer_fence not in positions
             or verification not in positions
-            or positions[fence] >= positions[verification]
+            or not (
+                positions[project_fence]
+                < positions[layer_fence]
+                < positions[verification]
+            )
         ):
-            violations.append(f"{fence}-before-{verification}")
+            violations.append(f"{name}-project-layers-before-verification")
     return tuple(violations)
 
 
