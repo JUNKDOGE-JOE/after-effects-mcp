@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import contextlib
 import dataclasses
+import hashlib
 import json
 import os
 import re
@@ -255,6 +256,16 @@ def _time(value: Any) -> dict[str, Any]:
     return exact
 
 
+def _program_digest(arguments: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        dict(arguments),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 class DevelopmentSmokeRunner:
     def __init__(
         self,
@@ -271,6 +282,7 @@ class DevelopmentSmokeRunner:
         self.ledger = DevelopmentCallLedger()
         self.host_instance_id: str | None = None
         self.session_id: str | None = None
+        self.capabilities_digest: str | None = None
         self.lifecycle = {
             "created": 0,
             "canonicalRetained": 0,
@@ -280,13 +292,20 @@ class DevelopmentSmokeRunner:
             "saveAsCopies": 0,
         }
 
-    def _validate_native_program(self, payload: Mapping[str, Any], *, write: bool) -> None:
+    def _validate_native_program(
+        self,
+        payload: Mapping[str, Any],
+        arguments: Mapping[str, Any],
+        *,
+        write: bool,
+    ) -> None:
         provenance = mapping(payload.get("provenance"), "provenance missing")
         audit = mapping(payload.get("audit"), "audit missing")
         evidence = mapping(payload.get("evidence"), "evidence missing")
         postcondition = mapping(evidence.get("postcondition"), "postcondition missing")
         outputs = mapping(payload.get("outputs"), "native program outputs missing")
         operations = payload.get("operations")
+        requested_operations = arguments.get("operations")
         require(
             payload.get("capabilityId") == "ae.native.exec"
             and provenance.get("engine") == "native-aegp"
@@ -313,10 +332,40 @@ class DevelopmentSmokeRunner:
             host == self.host_instance_id and session == self.session_id,
             "formal host/session changed during HDEV",
         )
+        capabilities_digest = provenance.get("capabilitiesDigest")
         require(
-            isinstance(provenance.get("capabilitiesDigest"), str)
-            and SHA256.fullmatch(provenance["capabilitiesDigest"]) is not None,
+            isinstance(capabilities_digest, str)
+            and SHA256.fullmatch(capabilities_digest) is not None,
             "capabilities digest missing",
+        )
+        if self.capabilities_digest is None:
+            self.capabilities_digest = capabilities_digest
+        require(
+            capabilities_digest == self.capabilities_digest,
+            "capabilities digest changed during HDEV",
+        )
+        require(isinstance(requested_operations, list), "native program arguments missing")
+        expected_operations = [
+            {"index": index, "op": operation["op"], "status": "completed"}
+            for index, operation in enumerate(requested_operations)
+            if isinstance(operation, Mapping) and isinstance(operation.get("op"), str)
+        ]
+        require(
+            len(expected_operations) == len(requested_operations)
+            and operations == expected_operations,
+            "native program operation summary drifted",
+        )
+        expected_key = arguments.get("operationKey")
+        expected_undo_group = arguments.get("undoGroup")
+        undo = mapping(payload.get("undo"), "native program Undo evidence missing")
+        require(
+            payload.get("operationKey") == expected_key
+            and (expected_key is not None or "operationKey" not in payload)
+            and audit.get("operationKey") == expected_key
+            and (expected_key is not None or "operationKey" not in audit)
+            and undo.get("groupLabel") == expected_undo_group
+            and (expected_undo_group is not None or "groupLabel" not in undo),
+            "native program operation key or Undo group drifted",
         )
         require(
             isinstance(audit.get("requestId"), str)
@@ -324,13 +373,15 @@ class DevelopmentSmokeRunner:
             and isinstance(operations, list)
             and bool(operations)
             and isinstance(outputs, dict)
+            and audit.get("programDigest") == _program_digest(arguments)
+            and audit.get("requestDigest") == evidence.get("requestDigest")
+            and audit.get("effect") == evidence.get("effect")
             and postcondition.get("verified") is True
             and postcondition.get("algorithm") == "sha256-rfc8785-jcs-v1"
             and postcondition.get("digest") == audit.get("postconditionDigest"),
             "audit/postcondition evidence drifted",
         )
         if write:
-            undo = mapping(payload.get("undo"), "write Undo evidence missing")
             require(
                 isinstance(payload.get("operationKey"), str)
                 and set(undo) >= {"available", "verified", "groupLabel"}
@@ -372,7 +423,7 @@ class DevelopmentSmokeRunner:
             )
         require(not is_error and code is None and payload.get("ok") is True, f"{tool} failed")
         if tool == "ae_nativeExec":
-            self._validate_native_program(payload, write=write)
+            self._validate_native_program(payload, arguments, write=write)
         return dict(payload)
 
     async def invalid_native_program(
@@ -505,7 +556,7 @@ class DevelopmentSmokeRunner:
             session, "baseline-native-state", "ae_nativeExec", {
                 "operations": [
                     {"op": "composition.resolve", "args": {"locator": locator}, "saveAs": "composition"},
-                    {"op": "composition.layers.list", "args": {"composition": {"ref": "composition"}, "offset": 0, "limit": 50}, "returnAs": "layers"},
+                    {"op": "composition.layers.list", "args": {"composition": {"ref": "composition"}, "offset": 0, "limit": 25}, "returnAs": "layers"},
                     {"op": "composition.time.read", "args": {"composition": {"ref": "composition"}}, "returnAs": "time"},
                 ],
             },

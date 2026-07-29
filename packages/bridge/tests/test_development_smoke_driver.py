@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import stat
@@ -16,6 +17,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 HARDWARE = ROOT / "scripts/hardware"
+sys.path.insert(0, str(ROOT / "packages/core"))
+
+from ae_mcp import schemas as S
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -66,6 +70,28 @@ def _time(value: int, scale: int) -> dict:
         "scale": scale,
         "secondsRational": str(Fraction(value, scale)),
     }
+
+
+def _program_digest(arguments: dict) -> str:
+    return hashlib.sha256(json.dumps(
+        arguments, ensure_ascii=False, separators=(",", ":"), sort_keys=True,
+    ).encode("utf-8")).hexdigest()
+
+
+def _bind_native_program(payload: dict, arguments: dict) -> None:
+    payload["audit"]["programDigest"] = _program_digest(arguments)
+    payload["operations"] = [
+        {"index": index, "op": operation["op"], "status": "completed"}
+        for index, operation in enumerate(arguments["operations"])
+    ]
+    if "operationKey" in arguments:
+        payload["operationKey"] = arguments["operationKey"]
+        payload["audit"]["operationKey"] = arguments["operationKey"]
+        payload["undo"]["groupLabel"] = arguments["undoGroup"]
+    else:
+        payload.pop("operationKey", None)
+        payload["audit"].pop("operationKey", None)
+        payload["undo"].pop("groupLabel", None)
 
 
 def _native_payload(
@@ -122,8 +148,6 @@ def _native_payload(
         },
         "audit": {
             "requestId": request_id,
-            **({"evidenceRequestId": request_id} if write else {}),
-            **({"idempotencyKey": "fixture-key", "replayed": False} if write else {}),
             "capabilityId": "ae.native.exec",
             "capabilityVersion": 1,
             "effect": "committed" if write else "none",
@@ -169,7 +193,7 @@ def _responses() -> list[tuple[bool, dict]]:
     layers = {
         "compositionLocator": _locator(),
         "compositionName": "HDEV Native EXEC Fixture",
-        "total": 1, "offset": 0, "limit": 50, "returned": 1,
+        "total": 1, "offset": 0, "limit": 25, "returned": 1,
         "hasMore": False, "nextOffset": None,
         "layers": [{
             "locator": _layer_locator(), "stackIndex": 1,
@@ -218,14 +242,20 @@ def _responses() -> list[tuple[bool, dict]]:
 
 
 class FakeSession:
-    def __init__(self, responses: list[tuple[bool, dict]]) -> None:
+    def __init__(self, responses: list[tuple[bool, dict]], mutate=None) -> None:
         self.responses = list(responses)
         self.calls: list[tuple[str, dict]] = []
         self.tool_names = frozenset(tool for _, tool in spec.CALLS)
+        self.mutate = mutate
 
     async def call(self, tool: str, arguments: dict):
         self.calls.append((tool, arguments))
-        return self.responses.pop(0)
+        is_error, payload = self.responses.pop(0)
+        if tool == "ae_nativeExec" and not is_error and payload.get("ok") is True:
+            _bind_native_program(payload, arguments)
+        if self.mutate is not None:
+            self.mutate(len(self.calls), tool, arguments, payload)
+        return is_error, payload
 
 
 def _config(tmp_path: Path) -> object:
@@ -298,6 +328,70 @@ async def test_hdev_runs_exec_and_native_exec_with_real_undo_and_one_archive(tmp
     }
     assert len(list((tmp_path / "recovery").glob("*.aep"))) == 1
     assert not config.fixture_path.exists()
+
+
+@pytest.mark.asyncio
+async def test_every_intended_native_program_validates_against_generated_schema(tmp_path):
+    session = FakeSession(_responses())
+    result = await driver.run_development_smoke(
+        _config(tmp_path),
+        session=session,
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+
+    assert result.exit_code == 0
+    intended = [
+        arguments for tool, arguments in session.calls
+        if tool == "ae_nativeExec" and arguments != {"operations": []}
+    ]
+    assert len(intended) == 6
+    assert [arguments for tool, arguments in session.calls
+            if tool == "ae_nativeExec" and arguments == {"operations": []}] == [
+        {"operations": []},
+    ]
+    for arguments in intended:
+        S.AeNativeExecArgs.model_validate(arguments)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("drift", [
+    "program-digest",
+    "operation-summary",
+    "operation-key",
+    "audit-operation-key",
+    "undo-group",
+    "request-digest",
+    "capabilities-digest",
+])
+async def test_terminal_drift_fails_instead_of_passing(tmp_path, drift):
+    def mutate(call_number, tool, _arguments, payload) -> None:
+        if tool != "ae_nativeExec":
+            return
+        if drift == "program-digest" and call_number == 3:
+            payload["audit"]["programDigest"] = "e" * 64
+        elif drift == "operation-summary" and call_number == 3:
+            payload["operations"][0]["op"] = "composition.time.read"
+        elif drift == "operation-key" and call_number == 5:
+            payload["operationKey"] = "hdev-native-time-write-drifted"
+        elif drift == "audit-operation-key" and call_number == 5:
+            payload["audit"]["operationKey"] = "hdev-native-time-write-drifted"
+        elif drift == "undo-group" and call_number == 5:
+            payload["undo"]["groupLabel"] = "Drifted undo group"
+        elif drift == "request-digest" and call_number == 3:
+            payload["audit"]["requestDigest"] = "e" * 64
+        elif drift == "capabilities-digest" and call_number == 4:
+            payload["provenance"]["capabilitiesDigest"] = "e" * 64
+
+    result = await driver.run_development_smoke(
+        _config(tmp_path),
+        session=FakeSession(_responses(), mutate=mutate),
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+
+    assert result.exit_code == 2
+    assert result.summary["passed"] is False
 
 
 @pytest.mark.asyncio
