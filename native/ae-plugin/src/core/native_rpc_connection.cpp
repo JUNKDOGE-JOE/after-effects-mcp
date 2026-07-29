@@ -136,7 +136,8 @@ rpc::ErrorResponse error_for(
     std::string code,
     std::string message,
     std::string capability_id = {},
-    std::string field = {}) {
+    std::string field = {},
+    std::string idempotency_key = {}) {
   RpcErrorCode mapped = rpc_error_code(code);
   // A repeated hello is a malformed handshake, not a session-scoped failure.
   // Keep the response inside the closed hello error union instead of letting
@@ -193,6 +194,10 @@ rpc::ErrorResponse error_for(
   if (!field.empty()) {
     if (!response.details.has_value()) response.details = rpc::ErrorDetails{};
     response.details->field = std::move(field);
+  }
+  if (mapped == RpcErrorCode::kPossiblySideEffectingFailure) {
+    if (!response.details.has_value()) response.details = rpc::ErrorDetails{};
+    response.details->idempotency_key = std::move(idempotency_key);
   }
   return response;
 }
@@ -438,7 +443,7 @@ NativeRpcConnectionHandler::NativeRpcConnectionHandler(
   if (runtime_.plugin_version.empty() || runtime_.compiled_sdk_version.empty()
       || runtime_.compiled_sdk_build == 0 || runtime_.host_version.empty()
       || runtime_.host_build == 0 || runtime_.host_instance_id.empty()
-      || runtime_.capabilities_digest.size() != 64
+      || runtime_.capabilities_digest != rpc::kCapabilitiesRegistryDigest
       || runtime_.project_summary_contract_digest.size() != 64
       || runtime_.project_bit_depth_read_contract_digest.size() != 64
       || runtime_.project_bit_depth_set_contract_digest.size() != 64
@@ -1274,7 +1279,8 @@ void NativeRpcConnectionHandler::serve(
                   ? "NATIVE_UNAVAILABLE" : completion.error_code,
               completion.message.empty() ? "native request failed" : completion.message,
               capability,
-              completion.error_field));
+              completion.error_field,
+              completion.idempotency_key));
         }
         if (!write_frame(connection.socket_fd, response)) {
           connected = false;

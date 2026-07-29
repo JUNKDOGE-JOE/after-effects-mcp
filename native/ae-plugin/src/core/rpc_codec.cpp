@@ -9549,6 +9549,20 @@ std::vector<std::uint8_t> encode_error_response(const ErrorResponse& response) {
         || !valid_capability_id(*response.details->capability_id))) {
     invalid_argument("capability failure needs capabilityId details");
   }
+  const bool possibly_side_effecting =
+      response.code == RpcErrorCode::kPossiblySideEffectingFailure;
+  if (possibly_side_effecting) {
+    if (!response.details.has_value()
+        || !response.details->idempotency_key.has_value()
+        || !valid_idempotency_key(*response.details->idempotency_key)) {
+      invalid_argument(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE needs a valid idempotencyKey");
+    }
+  } else if (response.details.has_value()
+      && response.details->idempotency_key.has_value()) {
+    invalid_argument(
+        "idempotencyKey details are only valid for POSSIBLY_SIDE_EFFECTING_FAILURE");
+  }
   std::string recovery_action = policy.recovery;
   if (response.recovery_action.has_value()) {
     const bool property_locator_precondition = response.details.has_value()
@@ -9585,6 +9599,13 @@ std::vector<std::uint8_t> encode_error_response(const ErrorResponse& response) {
     if (value.capability_id.has_value()) {
       if (!valid_capability_id(*value.capability_id)) invalid_argument("invalid detail capability ID");
       members.push_back("\"capabilityId\":" + json_string(*value.capability_id));
+    }
+    if (value.idempotency_key.has_value()) {
+      if (!valid_idempotency_key(*value.idempotency_key)) {
+        invalid_argument("invalid detail idempotency key");
+      }
+      members.push_back(
+          "\"idempotencyKey\":" + json_string(*value.idempotency_key));
     }
     if (value.supported_wire_minimum.has_value() || value.supported_wire_maximum.has_value()) {
       if (!value.supported_wire_minimum.has_value() || !value.supported_wire_maximum.has_value()

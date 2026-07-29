@@ -947,6 +947,7 @@ enum class RpcErrorCode {
 struct ErrorDetails {
   std::optional<std::string> field;
   std::optional<std::string> capability_id;
+  std::optional<std::string> idempotency_key;
   std::optional<std::uint16_t> supported_wire_minimum;
   std::optional<std::uint16_t> supported_wire_maximum;
   std::optional<std::uint64_t> current_generation;

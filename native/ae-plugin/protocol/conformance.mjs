@@ -1477,6 +1477,11 @@ export function validateErrorPolicy(error, schema) {
   if (error.code === 'QUEUE_FULL'
       && (!Number.isInteger(error.recovery.retryAfterMs) || error.recovery.retryAfterMs < 1)) return false;
   if (error.code !== 'QUEUE_FULL' && error.recovery.retryAfterMs !== undefined) return false;
+  if (error.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE') {
+    if (!isIdempotencyKey(error.details?.idempotencyKey)) return false;
+  } else if (error.details?.idempotencyKey !== undefined) {
+    return false;
+  }
   return true;
 }
 

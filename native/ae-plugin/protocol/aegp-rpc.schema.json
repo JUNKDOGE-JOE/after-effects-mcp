@@ -17920,6 +17920,9 @@
         "capabilityId": {
           "$ref": "#/$defs/capabilityId"
         },
+        "idempotencyKey": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
         "supportedWireVersions": {
           "$ref": "#/$defs/wireRange"
         },
@@ -18317,6 +18320,38 @@
                 "required": [
                   "capabilityId"
                 ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "POSSIBLY_SIDE_EFFECTING_FAILURE"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ],
+            "properties": {
+              "details": {
+                "required": [
+                  "idempotencyKey"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "details": {
+                "not": {
+                  "required": [
+                    "idempotencyKey"
+                  ]
+                }
               }
             }
           }

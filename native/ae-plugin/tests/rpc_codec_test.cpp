@@ -3478,8 +3478,29 @@ void response_helpers_are_bounded_and_typed() {
       && error_body.find("\"retryAfterMs\":250") != std::string::npos,
       "error serializer violated the bound policy tuple");
 
-  error.code = RpcErrorCode::kPreconditionFailed;
+  error.code = RpcErrorCode::kPossiblySideEffectingFailure;
   error.retry_after_ms.reset();
+  error.details = ErrorDetails{};
+  error.details->capability_id = "ae.layer.audio-enabled.set";
+  error.details->idempotency_key = "layer-audio-ambiguous-001";
+  const std::string ambiguous_error = body(encode_error_response(error));
+  require(ambiguous_error.find(
+              "\"idempotencyKey\":\"layer-audio-ambiguous-001\"")
+          != std::string::npos,
+      "ambiguous write error omitted its original idempotency key");
+
+  error.code = RpcErrorCode::kCapabilityFailed;
+  expect_argument_error([&] { (void)encode_error_response(error); },
+      "ordinary capability failure with a spurious idempotency key");
+  error.code = RpcErrorCode::kPossiblySideEffectingFailure;
+  error.details->idempotency_key.reset();
+  expect_argument_error([&] { (void)encode_error_response(error); },
+      "ambiguous write error without an idempotency key");
+  error.details->idempotency_key = "short";
+  expect_argument_error([&] { (void)encode_error_response(error); },
+      "ambiguous write error with an invalid idempotency key");
+
+  error.code = RpcErrorCode::kPreconditionFailed;
   error.recovery_action = "change-arguments";
   error.details = ErrorDetails{};
   error.details->capability_id = "ae.layer.property.keyframe.details.read";

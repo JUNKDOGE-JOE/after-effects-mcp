@@ -68,7 +68,8 @@
           "hint": "Read the affected object before deciding whether to retry."
         },
         "details": {
-          "capabilityId": "ae.project.set_current_time"
+          "capabilityId": "ae.project.set_current_time",
+          "idempotencyKey": "synthetic-current-time-ambiguous-0001"
         }
       }
     },

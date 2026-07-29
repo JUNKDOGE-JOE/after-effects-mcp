@@ -123,7 +123,11 @@ function errorVector(code) {
   }
   if (['NATIVE_UNSUPPORTED', 'PRECONDITION_FAILED', 'STALE_LOCATOR', 'CAPABILITY_FAILED',
     'POSSIBLY_SIDE_EFFECTING_FAILURE'].includes(code)) {
-    vector.details = { capabilityId: 'ae.project.summary' };
+    vector.details = {
+      capabilityId: 'ae.project.summary',
+      ...(code === 'POSSIBLY_SIDE_EFFECTING_FAILURE'
+        ? { idempotencyKey: 'synthetic-ambiguous-write-0001' } : {}),
+    };
   }
   return vector;
 }
@@ -1449,6 +1453,21 @@ test('every error code has one safe retry/side-effect/recovery tuple', () => {
   cancelled.recovery.retryAfterMs = 250;
   assert.equal(schemaAccepts(schema.$defs.rpcError, cancelled), false);
   assert.equal(validateErrorPolicy(cancelled, schema), false);
+
+  const ambiguousWithoutKey = errorVector('POSSIBLY_SIDE_EFFECTING_FAILURE');
+  delete ambiguousWithoutKey.details.idempotencyKey;
+  assert.equal(schemaAccepts(schema.$defs.rpcError, ambiguousWithoutKey), false);
+  assert.equal(validateErrorPolicy(ambiguousWithoutKey, schema), false);
+
+  const ambiguousWithInvalidKey = errorVector('POSSIBLY_SIDE_EFFECTING_FAILURE');
+  ambiguousWithInvalidKey.details.idempotencyKey = 'short';
+  assert.equal(schemaAccepts(schema.$defs.rpcError, ambiguousWithInvalidKey), false);
+  assert.equal(validateErrorPolicy(ambiguousWithInvalidKey, schema), false);
+
+  const ordinaryFailureWithKey = errorVector('CAPABILITY_FAILED');
+  ordinaryFailureWithKey.details.idempotencyKey = 'synthetic-spurious-key-0001';
+  assert.equal(schemaAccepts(schema.$defs.rpcError, ordinaryFailureWithKey), false);
+  assert.equal(validateErrorPolicy(ordinaryFailureWithKey, schema), false);
 });
 
 test('property-locator preconditions use bounded capability-specific recovery', () => {

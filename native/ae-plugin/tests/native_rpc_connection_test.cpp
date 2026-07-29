@@ -3117,6 +3117,12 @@ void layer_source_matte_and_av_cross_the_authenticated_wire_boundary() {
       ambiguous,
       "\"capabilityId\":\"ae.layer.audio-enabled.set\"",
       "ambiguous connection response");
+  constexpr std::string_view kAmbiguousKeyField =
+      "\"idempotencyKey\":\"layer-audio-ambiguous-001\"";
+  require(ambiguous.find(kAmbiguousKeyField) != std::string::npos
+          && ambiguous.find(kAmbiguousKeyField)
+              == ambiguous.rfind(kAmbiguousKeyField),
+      "ambiguous connection response did not return exactly the original idempotency key");
   const int mutation_calls_before_ambiguous_replay =
       host.layer_source_matte_av_mutation_calls;
 
@@ -3181,6 +3187,38 @@ void layer_source_matte_av_contract_mismatches_are_rejected() {
   }
 }
 
+void capability_registry_digest_mismatch_is_rejected_before_hello() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcRuntimeInfo invalid_runtime = runtime();
+  invalid_runtime.capabilities_digest = std::string(64, '0');
+  require(invalid_runtime.capabilities_digest
+          != aemcp::native::rpc::kCapabilitiesRegistryDigest,
+      "wrong-looking capability registry digest unexpectedly matched the compiled registry");
+  bool rejected = false;
+  try {
+    NativeRpcConnectionHandler handler(
+        dispatcher,
+        dispatcher_clock,
+        session_clock,
+        std::move(invalid_runtime),
+        observer,
+        idle_signal);
+  } catch (const std::invalid_argument&) {
+    rejected = true;
+  }
+  require(rejected,
+      "wrong but valid-looking capability registry digest reached hello startup");
+  require(dispatcher.running(),
+      "capability registry mismatch changed dispatcher lifecycle state");
+  require(idle_signal.calls() == 0,
+      "capability registry mismatch scheduled work that could advertise a false hello");
+  (void)dispatcher.shutdown();
+}
+
 }  // namespace
 
 int main() {
@@ -3195,6 +3233,7 @@ int main() {
   composition_setting_contract_mismatch_is_rejected();
   layer_source_matte_and_av_cross_the_authenticated_wire_boundary();
   layer_source_matte_av_contract_mismatches_are_rejected();
+  capability_registry_digest_mismatch_is_rejected_before_hello();
   std::cout << "native_rpc_connection_test: PASS\n";
   return 0;
 }
