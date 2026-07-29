@@ -177,9 +177,14 @@ Input:
 }
 ```
 
-Both layers must be AV-capable layers in the same composition and must be
-different objects. Their relative stack order is irrelevant. One operation
-sets both the Matte target and mode and creates one Undo step.
+Both layers must be Track-Matte-capable visual layers in the same composition
+and must be different objects. The native eligibility predicate accepts AEGP
+object types `AV`, `TEXT`, `VECTOR`, and `3D_MODEL`; it rejects `CAMERA`,
+`LIGHT`, and `NONE`. This is intentionally a Track Matte policy rather than a
+project-item-source policy: synthetic text and shape layers do not have an AV
+source item but are valid modern Track Matte participants. Their relative
+stack order is irrelevant. One operation sets both the Matte target and mode
+and creates one Undo step.
 
 ### `ae_clearLayerTrackMatte`
 
@@ -432,7 +437,9 @@ and contains one main composition with:
 - `RELINK_TARGET`, sourced from `SOURCE_COMP_A`;
 - an unused `SOURCE_COMP_B` project item for replacement;
 - `MATTE_FILL`;
-- `MATTE_SOURCE`;
+- `MATTE_SOURCE`, implemented as a deterministic text layer so the real-host
+  run proves that native Track Matte eligibility is not restricted to
+  `AEGP_ObjectType_AV`;
 - `MATTE_SPACER`, keeping the Matte source non-adjacent;
 - `VIDEO_SWITCH`, backed by a deterministic visual source;
 - `AUDIO_SWITCH`, backed by a generated short PCM WAV with no personal data.
@@ -494,7 +501,7 @@ controlled harness-only fixture reset and real Undo commands.
 | Source preservation | Existing public reads show timing, parent, switches, Matte relationship, and one representative keyed transform remain unchanged |
 | Source Undo | Real Undo, fresh locator acquisition, public read returns A |
 | Matte read | Baseline has no active relationship |
-| Matte set | Set non-adjacent `MATTE_SOURCE` as Alpha Matte; public read returns exact locator and mode |
+| Matte set | Set non-adjacent text-layer `MATTE_SOURCE` as Alpha Matte; public read returns exact locator and mode |
 | Matte reorder | Reorder Matte relative to `MATTE_SPACER`; public read still returns the same relationship |
 | Matte set Undo | Undo the set after restoring the interaction baseline; public read returns no relationship |
 | Matte clear | Set Luma Matte, clear it, verify inactive with stored Luma mode |
