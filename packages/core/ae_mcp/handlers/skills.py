@@ -103,7 +103,4 @@ async def _run_skill_use(args: schemas.AeSkillUseArgs, ctx: Any) -> Any:
 
 
 register("ae.skillList", schemas.AeSkillListArgs, _run_skill_list)
-register("ae.skillCreate", schemas.AeSkillCreateArgs, _run_skill_create)
-register("ae.skillEdit", schemas.AeSkillEditArgs, _run_skill_edit)
-register("ae.skillDelete", schemas.AeSkillDeleteArgs, _run_skill_delete)
 register("ae.skillUse", schemas.AeSkillUseArgs, _run_skill_use)

@@ -8,7 +8,6 @@ from typing import Any
 
 from ae_mcp import progress, schemas
 from ae_mcp.backends import discovery as _discovery
-from ae_mcp.handlers import register
 from ae_mcp.jsx_prelude import with_prelude
 from ae_mcp.jsx_result import parse_jsx_result as _try_json
 
@@ -52,6 +51,3 @@ async def _run_create_rig(args: schemas.AeCreateRigArgs, ctx: Any) -> Any:
     return await progress.run_with_timeout(
         ctx, _call(), timeout_sec=75.0, start_msg=f"ae.createRig {args.rig_type}..."
     )
-
-
-register("ae.createRig", schemas.AeCreateRigArgs, _run_create_rig)

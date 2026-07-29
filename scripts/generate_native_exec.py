@@ -266,26 +266,48 @@ def validate_sources(root: Path) -> None:
     legacy_ids = {row["id"] for row in _rows(legacy.get("items"), "legacy items")}
     if legacy_ids != set(migration.native_capabilities):
         raise ValueError("migration manifest must cover the legacy registry exactly")
-    from ae_mcp.handlers import HANDLERS, load_all
+    from ae_mcp import schemas
+    from ae_mcp.annotations import VERB_ANNOTATIONS
+    from ae_mcp.backends.base import ALL_VERBS
+    from ae_mcp.handlers import FINAL_PUBLIC_TOOLS, HANDLERS, load_all
 
     load_all()
-    excluded = {
-        # Final canonical execution surfaces are products of this migration,
-        # not legacy operation-specific tools that the removal manifest owns.
-        "ae.exec", "ae.nativeExec",
-        "ae.checkpoint", "ae.revert", "ae.snapshot",
-        "ae.previewFrame", "ae.validateExpressions", "ae.ping", "ae.status",
-        "ae.diagnose", "ae.skillList", "ae.skillUse", "ae.toolIndex",
-        "ae.toolSearch", "ae.toolInspect", "ae.toolUse",
-    }
-    operation_tools = set(HANDLERS) - excluded
     declared_tools = set(migration.public_tools)
-    if declared_tools != operation_tools:
-        missing = operation_tools - declared_tools
-        unexpected = declared_tools - operation_tools
+    removed_tools = {
+        tool_id
+        for tool_id, row in migration.public_tools.items()
+        if row.disposition.startswith("REMOVE_TO_")
+    }
+    if len(declared_tools) != 136 or declared_tools != removed_tools:
         raise ValueError(
-            "publicTools must enumerate operation-specific tools exactly: "
-            f"missing={sorted(missing)} unexpected={sorted(unexpected)}"
+            "migration publicTools must retain exactly 136 historical REMOVE rows"
+        )
+    leaked = removed_tools & set(HANDLERS)
+    if leaked:
+        raise ValueError(f"removed public tool registered again: {sorted(leaked)}")
+    expected_public = set(FINAL_PUBLIC_TOOLS)
+    public_surfaces = {
+        "handlers": set(HANDLERS),
+        "schemas": set(schemas.SCHEMAS),
+        "annotations": set(VERB_ANNOTATIONS),
+    }
+    for source, actual in public_surfaces.items():
+        if actual != expected_public:
+            raise ValueError(
+                f"{source} public surface drifted: "
+                f"missing={sorted(expected_public - actual)} "
+                f"unexpected={sorted(actual - expected_public)}"
+            )
+    expected_backend = expected_public - {
+        "ae.diagnose",
+        "ae.nativeExec",
+        "ae.status",
+    }
+    if set(ALL_VERBS) != expected_backend:
+        raise ValueError(
+            "legacy JSX backend surface drifted: "
+            f"missing={sorted(expected_backend - set(ALL_VERBS))} "
+            f"unexpected={sorted(set(ALL_VERBS) - expected_backend)}"
         )
 
 

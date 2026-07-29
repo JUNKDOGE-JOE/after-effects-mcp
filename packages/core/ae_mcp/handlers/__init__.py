@@ -12,6 +12,26 @@ from pydantic import BaseModel
 
 RunFn = Callable[[BaseModel, Any], Awaitable[Any]]
 HANDLERS: Dict[str, Tuple[Type[BaseModel], RunFn]] = {}
+FINAL_PUBLIC_TOOLS = frozenset(
+    {
+        "ae.checkpoint",
+        "ae.diagnose",
+        "ae.exec",
+        "ae.nativeExec",
+        "ae.ping",
+        "ae.previewFrame",
+        "ae.revert",
+        "ae.skillList",
+        "ae.skillUse",
+        "ae.snapshot",
+        "ae.status",
+        "ae.toolIndex",
+        "ae.toolInspect",
+        "ae.toolSearch",
+        "ae.toolUse",
+        "ae.validateExpressions",
+    }
+)
 
 
 def register(name: str, schema: Type[BaseModel], run_fn: RunFn) -> None:
@@ -20,13 +40,11 @@ def register(name: str, schema: Type[BaseModel], run_fn: RunFn) -> None:
 
 
 def load_all() -> None:
-    """Import core + typed modules so they register their handlers."""
-    # Imported for side effects (registration via @register or explicit register() calls).
+    """Import the two execution routes and retained control handlers."""
+    # Imported for side effects (registration via explicit register() calls).
     from ae_mcp.handlers import core  # noqa: F401
     from ae_mcp.handlers import native  # noqa: F401
-    from ae_mcp.handlers import text_shape_marker  # noqa: F401
     from ae_mcp.handlers import status  # noqa: F401
     from ae_mcp.handlers import typed  # noqa: F401
     from ae_mcp.handlers import skills  # noqa: F401
-    from ae_mcp.handlers import rig  # noqa: F401
     from ae_mcp.handlers import tools  # noqa: F401

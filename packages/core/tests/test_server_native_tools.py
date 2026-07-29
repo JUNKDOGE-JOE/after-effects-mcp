@@ -37,9 +37,26 @@ def test_native_exec_is_filtered_by_backend_type_and_exec_remains_jsx(
     monkeypatch.setattr(
         backend_discovery, "select_backend", lambda: _NativeBackend()
     )
+    monkeypatch.setattr(snapshot_discovery, "select_snapshotter", object)
     native_names = _filtered_tool_names()
-    assert "ae.exec" in native_names
-    assert "ae.nativeExec" in native_names
+    assert native_names == {
+        "ae.checkpoint",
+        "ae.diagnose",
+        "ae.exec",
+        "ae.nativeExec",
+        "ae.ping",
+        "ae.previewFrame",
+        "ae.revert",
+        "ae.skillList",
+        "ae.skillUse",
+        "ae.snapshot",
+        "ae.status",
+        "ae.toolIndex",
+        "ae.toolInspect",
+        "ae.toolSearch",
+        "ae.toolUse",
+        "ae.validateExpressions",
+    }
 
 
 @pytest.mark.asyncio

@@ -569,178 +569,6 @@ async def test_composition_time_set_public_tool_returns_transition_undo_and_audi
 
 
 @pytest.mark.asyncio
-async def test_composition_time_set_real_mcp_surface_is_strict_and_structured(monkeypatch):
-    from mcp.shared.memory import create_connected_server_and_client_session
-
-    from ae_mcp import server as server_module
-
-    schema_cls, _ = HANDLERS["ae.setCompositionTime"]
-    dispatches: list[schemas.AeSetCompositionTimeArgs] = []
-
-    async def _run(validated, _ctx):
-        dispatches.append(validated)
-        return {"ok": True, "value": {"changed": True}}
-
-    monkeypatch.setitem(HANDLERS, "ae.setCompositionTime", (schema_cls, _run))
-    monkeypatch.setattr(
-        server_module, "_filtered_tool_names", lambda: {"ae.setCompositionTime"}
-    )
-    monkeypatch.setattr(
-        server_module.approval_gate,
-        "enforce",
-        lambda *_args, **_kwargs: _none(),
-    )
-    server = server_module.build_server()
-    locator = _composition_time_set_execution().value.composition_locator.model_dump(
-        mode="json", by_alias=True
-    )
-
-    async with create_connected_server_and_client_session(server) as client:
-        listed = await client.list_tools()
-        assert [tool.name for tool in listed.tools] == ["ae_setCompositionTime"]
-        public_schema = listed.tools[0].inputSchema
-        assert set(public_schema["required"]) == {
-            "composition_locator", "target_time", "idempotency_key",
-        }
-        assert public_schema["additionalProperties"] is False
-
-        rejected = await client.call_tool(
-            "ae_setCompositionTime",
-            {
-                "composition_locator": locator,
-                "target_time": {"value": 1, "scale": 0},
-                "idempotency_key": "synthetic-comp-time-0001",
-            },
-        )
-        assert rejected.isError is True
-        payload = json.loads(rejected.content[0].text)
-        assert payload["error"]["code"] == "INVALID_ARGUMENT"
-        assert payload["error"]["sideEffect"] == "not-started"
-        assert payload["error"]["details"] == {
-            "field": "arguments.target_time.scale",
-            "capabilityId": "ae.composition.time.set",
-        }
-        assert dispatches == []
-
-        accepted = await client.call_tool(
-            "ae_setCompositionTime",
-            {
-                "composition_locator": locator,
-                "target_time": {"value": 1, "scale": 1},
-                "idempotency_key": "synthetic-comp-time-0001",
-            },
-        )
-        assert accepted.isError is False
-        assert len(dispatches) == 1
-
-
-@pytest.mark.asyncio
-async def test_composition_time_real_mcp_surface_is_strict_and_structured(monkeypatch):
-    from mcp.shared.memory import create_connected_server_and_client_session
-
-    from ae_mcp import server as server_module
-
-    load_all()
-    schema_cls, _ = HANDLERS["ae.getCompositionTime"]
-    dispatches: list[schemas.AeGetCompositionTimeArgs] = []
-
-    async def _run(validated, _ctx):
-        dispatches.append(validated)
-        return {
-            "ok": True,
-            "value": {
-                "compositionLocator": validated.composition_locator.model_dump(
-                    mode="json", by_alias=True
-                ),
-                "currentTime": {
-                    "value": 60,
-                    "scale": 24,
-                    "secondsRational": "5/2",
-                },
-            },
-        }
-
-    monkeypatch.setitem(
-        HANDLERS,
-        "ae.getCompositionTime",
-        (schema_cls, _run),
-    )
-    monkeypatch.setattr(
-        server_module,
-        "_filtered_tool_names",
-        lambda: {"ae.getCompositionTime"},
-    )
-    monkeypatch.setattr(
-        server_module.approval_gate,
-        "enforce",
-        lambda *_args, **_kwargs: _none(),
-    )
-    server = server_module.build_server()
-    valid_locator = _composition_time_execution().value.composition_locator.model_dump(
-        mode="json", by_alias=True
-    )
-
-    async with create_connected_server_and_client_session(server) as client:
-        listed = await client.list_tools()
-        assert [tool.name for tool in listed.tools] == ["ae_getCompositionTime"]
-        public_schema = listed.tools[0].inputSchema
-        assert public_schema["required"] == ["composition_locator"]
-        assert set(public_schema["properties"]) == {"composition_locator"}
-        assert public_schema["additionalProperties"] is False
-
-        invalid_cases = (
-            ({}, "arguments.composition_locator"),
-            (
-                {
-                    "composition_locator": {
-                        **valid_locator,
-                        "kind": "project",
-                    }
-                },
-                "arguments.composition_locator.kind",
-            ),
-            (
-                {
-                    "composition_locator": valid_locator,
-                    "comp_id": 1,
-                },
-                "arguments.comp_id",
-            ),
-        )
-        for arguments, expected_field in invalid_cases:
-            rejected = await client.call_tool("ae_getCompositionTime", arguments)
-            assert rejected.isError is True
-            payload = json.loads(rejected.content[0].text)
-            assert payload["ok"] is False
-            assert payload["error"]["code"] == "INVALID_ARGUMENT"
-            assert payload["error"]["sideEffect"] == "not-started"
-            assert payload["error"]["recovery"] == {
-                "action": "change-arguments",
-                "hint": (
-                    "Copy an unmodified composition_locator from "
-                    "ae_listProjectItems and retry."
-                ),
-            }
-            assert payload["error"]["details"] == {
-                "field": expected_field,
-                "capabilityId": "ae.composition.time.read",
-            }
-        assert dispatches == []
-
-        accepted = await client.call_tool(
-            "ae_getCompositionTime",
-            {"composition_locator": valid_locator},
-        )
-        assert accepted.isError is False
-        assert json.loads(accepted.content[0].text)["value"]["currentTime"] == {
-            "value": 60,
-            "scale": 24,
-            "secondsRational": "5/2",
-        }
-        assert len(dispatches) == 1
-
-
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("runner", "args"),
     [
@@ -844,35 +672,15 @@ async def test_native_public_tools_never_fall_back_to_legacy_exec(
     assert legacy.calls == []
 
 
-def test_native_tool_registration_is_explicit():
-    assert HANDLERS["ae.projectSummary"][0] is schemas.AeProjectSummaryArgs
-    assert HANDLERS["ae.listProjectItems"][0] is schemas.AeListProjectItemsArgs
-    assert (
-        HANDLERS["ae.listCompositionLayers"][0]
-        is schemas.AeListCompositionLayersArgs
-    )
-    assert (
-        HANDLERS["ae.listSelectedLayers"][0]
-        is schemas.AeListSelectedLayersArgs
-    )
-    assert HANDLERS["ae.getCompositionTime"][0] is schemas.AeGetCompositionTimeArgs
-    assert HANDLERS["ae.setCompositionTime"][0] is schemas.AeSetCompositionTimeArgs
-    assert HANDLERS["ae.getProjectBitDepth"][0] is schemas.AeGetProjectBitDepthArgs
-    assert HANDLERS["ae.setProjectBitDepth"][0] is schemas.AeSetProjectBitDepthArgs
-    assert (
-        HANDLERS["ae.setLayerPropertyValue"][0]
-        is schemas.AeSetLayerPropertyValueArgs
-    )
-    assert (
-        HANDLERS["ae.createComposition"][0]
-        is schemas.AeCreateCompositionArgs
-    )
-    assert (
-        HANDLERS["ae.createCompositionLayer"][0]
-        is schemas.AeCreateCompositionLayerArgs
-    )
-    assert HANDLERS["ae.applyLayerEffect"][0] is schemas.AeApplyLayerEffectArgs
-    assert HANDLERS["ae.projectSummary"][1] is not HANDLERS["ae.overview"][1]
+def test_native_tool_registration_exposes_only_native_exec():
+    assert HANDLERS["ae.nativeExec"][0] is schemas.AeNativeExecArgs
+    assert "ae.projectSummary" not in HANDLERS
+    assert "ae.getProjectBitDepth" not in HANDLERS
+    assert "ae.setProjectBitDepth" not in HANDLERS
+    assert "ae.setLayerPropertyValue" not in HANDLERS
+    assert "ae.createCompositionLayer" not in HANDLERS
+    assert "ae.applyLayerEffect" not in HANDLERS
+    assert "ae.listSelectedLayers" not in HANDLERS
 
 
 @pytest.mark.asyncio
@@ -929,7 +737,7 @@ class _NativeMock(MockBackend, N.NativeInvokeBackend):
         raise AssertionError("filtering must not invoke")
 
 
-def test_tool_filter_exposes_native_tools_only_for_native_adapter(monkeypatch):
+def test_tool_filter_exposes_native_exec_only_for_native_adapter(monkeypatch):
     from ae_mcp import server as server_module
     from ae_mcp.backends import discovery as backend_discovery
     from ae_mcp.snapshot import discovery as snapshot_discovery
@@ -937,20 +745,10 @@ def test_tool_filter_exposes_native_tools_only_for_native_adapter(monkeypatch):
     monkeypatch.setattr(snapshot_discovery, "select_snapshotter", lambda: None)
     monkeypatch.setattr(backend_discovery, "select_backend", lambda: MockBackend())
     names = server_module._filtered_tool_names()
-    assert "ae.projectSummary" not in names
-    assert "ae.getProjectBitDepth" not in names
-    assert "ae.setProjectBitDepth" not in names
-    assert "ae.setLayerPropertyValue" not in names
-    assert "ae.createCompositionLayer" not in names
-    assert "ae.applyLayerEffect" not in names
-    assert "ae.listSelectedLayers" not in names
+    assert "ae.exec" in names
+    assert "ae.nativeExec" not in names
 
     monkeypatch.setattr(backend_discovery, "select_backend", lambda: _NativeMock())
     names = server_module._filtered_tool_names()
-    assert "ae.projectSummary" in names
-    assert "ae.getProjectBitDepth" in names
-    assert "ae.setProjectBitDepth" in names
-    assert "ae.setLayerPropertyValue" in names
-    assert "ae.createCompositionLayer" in names
-    assert "ae.applyLayerEffect" in names
-    assert "ae.listSelectedLayers" in names
+    assert "ae.exec" in names
+    assert "ae.nativeExec" in names

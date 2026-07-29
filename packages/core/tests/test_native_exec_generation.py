@@ -50,27 +50,55 @@ def test_native_exec_migration_covers_legacy_registry_exactly():
     )
 
 
-def test_migration_lists_every_operation_specific_public_tool_only():
+def test_migration_is_closed_history_and_current_surface_is_exact():
+    from ae_mcp.annotations import VERB_ANNOTATIONS
+    from ae_mcp.backends.base import ALL_VERBS
+    from ae_mcp.handlers import FINAL_PUBLIC_TOOLS, HANDLERS, load_all
+    from ae_mcp import schemas
+
     migration = load_migration_manifest(MIGRATION)
+    load_all()
 
     assert migration.public_tools
+    assert len(migration.public_tools) == 136
     assert all(
         row.disposition
         in {
             "REMOVE_TO_AE_EXEC",
             "REMOVE_TO_AE_NATIVE_EXEC",
-            "KEEP_CONTROL_PLANE",
         }
         for row in migration.public_tools.values()
     )
     assert {"ae.exec", "ae.nativeExec"}.isdisjoint(migration.public_tools)
     assert "ae.applyEffect" in migration.public_tools
+    removed = set(migration.public_tools)
+    assert set(HANDLERS) == set(FINAL_PUBLIC_TOOLS)
+    assert set(schemas.SCHEMAS) == set(FINAL_PUBLIC_TOOLS)
+    assert set(VERB_ANNOTATIONS) == set(FINAL_PUBLIC_TOOLS)
+    assert removed.isdisjoint(HANDLERS)
+    assert set(ALL_VERBS) == set(FINAL_PUBLIC_TOOLS) - {
+        "ae.diagnose",
+        "ae.nativeExec",
+        "ae.status",
+    }
     validate_sources(ROOT)
     assert all(
         token not in tool_id
         for tool_id in migration.public_tools
         for token in ("preview", "validation", "status", "tool-library", "skill-library")
     )
+
+
+def test_source_validation_rejects_a_removed_tool_reregistered_publicly(
+    monkeypatch,
+):
+    from ae_mcp.handlers import HANDLERS, load_all
+
+    load_all()
+    monkeypatch.setitem(HANDLERS, "ae.applyEffect", HANDLERS["ae.exec"])
+
+    with pytest.raises(ValueError, match="removed public tool"):
+        validate_sources(ROOT)
 
 
 def test_native_migration_rejects_an_empty_primitive_replacement(tmp_path):

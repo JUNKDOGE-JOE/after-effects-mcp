@@ -25,35 +25,17 @@ def test_exec_is_destructive_and_reads_are_readonly():
     assert VERB_ANNOTATIONS["ae.nativeExec"].destructiveHint is True
     assert VERB_ANNOTATIONS["ae.nativeExec"].readOnlyHint is False
     assert VERB_ANNOTATIONS["ae.nativeExec"].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.overview"].readOnlyHint is True
-    assert VERB_ANNOTATIONS["ae.overview"].destructiveHint is False
-    assert VERB_ANNOTATIONS["ae.projectSummary"].readOnlyHint is True
-    assert VERB_ANNOTATIONS["ae.projectSummary"].destructiveHint is False
-    assert VERB_ANNOTATIONS["ae.projectSummary"].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.getProjectBitDepth"].readOnlyHint is True
-    assert VERB_ANNOTATIONS["ae.getProjectBitDepth"].destructiveHint is False
-    assert VERB_ANNOTATIONS["ae.setProjectBitDepth"].readOnlyHint is False
-    assert VERB_ANNOTATIONS["ae.setProjectBitDepth"].destructiveHint is False
-    assert VERB_ANNOTATIONS["ae.setProjectBitDepth"].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.setLayerPropertyValue"].readOnlyHint is False
-    assert VERB_ANNOTATIONS["ae.setLayerPropertyValue"].destructiveHint is False
-    assert VERB_ANNOTATIONS["ae.setLayerPropertyValue"].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.createComposition"].readOnlyHint is False
-    assert VERB_ANNOTATIONS["ae.createComposition"].destructiveHint is False
-    assert VERB_ANNOTATIONS["ae.createComposition"].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.createCompositionLayer"].readOnlyHint is False
-    assert VERB_ANNOTATIONS["ae.createCompositionLayer"].destructiveHint is False
-    assert VERB_ANNOTATIONS["ae.createCompositionLayer"].idempotentHint is True
-    assert VERB_ANNOTATIONS["ae.applyLayerEffect"].readOnlyHint is False
-    assert VERB_ANNOTATIONS["ae.applyLayerEffect"].destructiveHint is False
-    assert VERB_ANNOTATIONS["ae.applyLayerEffect"].idempotentHint is True
     for verb in (
-        "ae.listProjectItems",
-        "ae.listCompositionLayers",
-        "ae.listSelectedLayers",
-        "ae.getCompositionTime",
-        "ae.listLayerProperties",
-        "ae.listLayerPropertyKeyframes",
+        "ae.diagnose",
+        "ae.ping",
+        "ae.previewFrame",
+        "ae.skillList",
+        "ae.snapshot",
+        "ae.status",
+        "ae.toolIndex",
+        "ae.toolInspect",
+        "ae.toolSearch",
+        "ae.validateExpressions",
     ):
         assert VERB_ANNOTATIONS[verb].readOnlyHint is True
         assert VERB_ANNOTATIONS[verb].destructiveHint is False
@@ -107,8 +89,6 @@ def test_tool_library_annotations_express_worst_path_risk():
         assert VERB_ANNOTATIONS[verb].readOnlyHint is True
         assert VERB_ANNOTATIONS[verb].destructiveHint is False
     assert VERB_ANNOTATIONS["ae.toolUse"].destructiveHint is True
-    assert VERB_ANNOTATIONS["ae.toolDelete"].destructiveHint is True
-    assert VERB_ANNOTATIONS["ae.toolExport"].destructiveHint is True
 
 
 
@@ -123,5 +103,5 @@ async def test_list_tools_carries_annotations(monkeypatch):
     by_name = {t.name: t for t in tools}
     assert by_name["ae_exec"].annotations.destructiveHint is True
     assert by_name["ae_nativeExec"].annotations.destructiveHint is True
-    assert by_name["ae_overview"].annotations.readOnlyHint is True
+    assert by_name["ae_previewFrame"].annotations.readOnlyHint is True
     assert all(t.annotations is not None for t in tools)

@@ -12,7 +12,6 @@ from ae_mcp.backends import discovery as _discovery
 from ae_mcp.backends.native import NativeCancellationToken
 from ae_mcp.backends.maintained_text import execute_text_tool
 from ae_mcp.backends.native_text_shape_marker import invoke_tsm_native
-from ae_mcp.handlers import register
 from ae_mcp.handlers.native import (
     _backend,
     _native_read_response,
@@ -86,7 +85,6 @@ def _text_runner(public_name: str):
     run.__name__ = f"_run_{public_name.replace('.', '_')}"
     return run
 
-
 def _native_runner(public_name: str, capability_id: str):
     write = public_name not in {"ae.listShapeGroups", "ae.listMarkers"}
 
@@ -124,14 +122,3 @@ def _native_runner(public_name: str, capability_id: str):
 
     run.__name__ = f"_run_{public_name.replace('.', '_')}"
     return run
-
-
-for _public_name, (_capability_id, _schema) in NATIVE_TOOLS.items():
-    register(
-        _public_name,
-        _schema,
-        _native_runner(_public_name, _capability_id),
-    )
-
-for _public_name, _schema in TEXT_TOOLS.items():
-    register(_public_name, _schema, _text_runner(_public_name))

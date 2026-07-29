@@ -1,8 +1,10 @@
 """The MCP server advertises ae-mcp operating guidance at handshake."""
 from __future__ import annotations
 
+import json
 import logging
 import re
+from pathlib import Path
 
 import pytest
 
@@ -26,17 +28,16 @@ def test_base_instructions_name_only_the_two_execution_routes_and_default_skill(
 
 
 def test_base_instructions_do_not_teach_removed_operation_specific_tools():
-    from scripts.generate_native_exec import load_migration_manifest
-    from pathlib import Path
-
     root = Path(__file__).resolve().parents[3]
-    migration = load_migration_manifest(
-        root / "native/ae-plugin/protocol/native-exec-migration.json"
+    migration = json.loads(
+        (
+            root / "native/ae-plugin/protocol/native-exec-migration.json"
+        ).read_text(encoding="utf-8")
     )
     removed = {
-        tool_id.replace(".", "_")
-        for tool_id, row in migration.public_tools.items()
-        if row.disposition.startswith("REMOVE_TO_")
+        row["id"].replace(".", "_")
+        for row in migration["publicTools"]
+        if row["disposition"].startswith("REMOVE_TO_")
     }
     leaked = sorted(name for name in removed if name in SERVER_INSTRUCTIONS)
     assert leaked == []

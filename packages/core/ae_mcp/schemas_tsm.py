@@ -533,41 +533,6 @@ class AeDeleteMarkerArgs(TsmWriteArgs):
     marker_ref: AeMarkerRefInput
 
 
-PUBLIC_SCHEMAS = {
-    "ae.listInstalledFonts": AeListInstalledFontsArgs,
-    "ae.createTextLayer": AeCreateTextLayerArgs,
-    "ae.getTextDocument": AeGetTextDocumentArgs,
-    "ae.setTextContent": AeSetTextContentArgs,
-    "ae.setTextCharacterStyle": AeSetTextCharacterStyleArgs,
-    "ae.setTextParagraphStyle": AeSetTextParagraphStyleArgs,
-    "ae.createShapeLayer": AeCreateShapeLayerArgs,
-    "ae.listShapeGroups": AeListShapeGroupsArgs,
-    "ae.createShapeGroup": AeCreateShapeGroupArgs,
-    "ae.setShapePath": AeSetShapePathArgs,
-    "ae.setShapeFillStyle": AeSetShapeFillStyleArgs,
-    "ae.setShapeStrokeStyle": AeSetShapeStrokeStyleArgs,
-    "ae.reorderShapeGroup": AeReorderShapeGroupArgs,
-    "ae.listMarkers": AeListMarkersArgs,
-    "ae.createMarker": AeCreateMarkerArgs,
-    "ae.setMarker": AeSetMarkerArgs,
-    "ae.deleteMarker": AeDeleteMarkerArgs,
-}
-
-for _verb, _model in PUBLIC_SCHEMAS.items():
-    _exposed = _verb.replace(".", "_")
-    _model.__doc__ = (
-        f"{_exposed} — frozen typed Text/Shape/Marker package request. "
-        "Accepts structured data only; caller code and implementation paths are forbidden."
-    )
-
-# Support either import order without duplicating the repository's established
-# locator and mask-path primitives. Normal server startup imports schemas first;
-# direct adapter/tests may import this module first.
-from ae_mcp import schemas as _base_schemas
-
-if hasattr(_base_schemas, "SCHEMAS"):
-    _base_schemas.SCHEMAS.update(PUBLIC_SCHEMAS)
-    if len(_base_schemas.SCHEMAS) != 111:
-        raise RuntimeError(
-            f"expected 111 verbs after TSM registration, got {len(_base_schemas.SCHEMAS)}"
-        )
+# Retained only as private value-model definitions for legacy native carrier
+# code until Task 9 removes those carriers. No TSM tool schema is public.
+PUBLIC_SCHEMAS: dict[str, type[_StrictModel]] = {}

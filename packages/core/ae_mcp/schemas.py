@@ -2684,118 +2684,26 @@ class AeDiagnoseArgs(_StrictModel):
 # Registry of verb -> schema (handlers.core / handlers.typed reference this)
 # ---------------------------------------------------------------------------
 
-import sys as _sys
-
-_tsm_module = _sys.modules.get("ae_mcp.schemas_tsm")
-if _tsm_module is not None and not hasattr(_tsm_module, "PUBLIC_SCHEMAS"):
-    # schemas_tsm imports the established locator/path primitives above. When
-    # it is imported first, let this module finish its base registry; the TSM
-    # module extends SCHEMAS immediately after defining its closed models.
-    _TSM_PUBLIC_SCHEMAS = {}
-else:
-    from ae_mcp.schemas_tsm import PUBLIC_SCHEMAS as _TSM_PUBLIC_SCHEMAS
-
-
 SCHEMAS = {
-    "ae.init": AeInitArgs,
-    "ae.overview": AeOverviewArgs,
-    "ae.projectSummary": AeProjectSummaryArgs,
-    "ae.getProjectBitDepth": AeGetProjectBitDepthArgs,
-    "ae.setProjectBitDepth": AeSetProjectBitDepthArgs,
-    "ae.listProjectItems": AeListProjectItemsArgs,
-    "ae.listCompositionLayers": AeListCompositionLayersArgs,
-    "ae.listSelectedLayers": AeListSelectedLayersArgs,
-    "ae.getCompositionTime": AeGetCompositionTimeArgs,
-    "ae.setCompositionTime": AeSetCompositionTimeArgs,
-    "ae.createComposition": AeCreateCompositionArgs,
-    "ae.createCompositionLayer": AeCreateCompositionLayerArgs,
-    "ae.applyLayerEffect": AeApplyLayerEffectArgs,
-    "ae.listInstalledEffects": AeListInstalledEffectsArgs,
-    "ae.listLayerEffects": AeListLayerEffectsArgs,
-    "ae.getLayerEffectDetails": AeGetLayerEffectDetailsArgs,
-    "ae.setLayerEffectEnabled": AeSetLayerEffectEnabledArgs,
-    "ae.reorderLayerEffect": AeReorderLayerEffectArgs,
-    "ae.duplicateLayerEffect": AeDuplicateLayerEffectArgs,
-    "ae.deleteLayerEffect": AeDeleteLayerEffectArgs,
-    "ae.listLayerMasks": AeListLayerMasksArgs,
-    "ae.getLayerMaskDetails": AeGetLayerMaskDetailsArgs,
-    "ae.getLayerMaskPath": AeGetLayerMaskPathArgs,
-    "ae.createLayerMask": AeCreateLayerMaskArgs,
-    "ae.setLayerMaskProperties": AeSetLayerMaskPropertiesArgs,
-    "ae.setLayerMaskPath": AeSetLayerMaskPathArgs,
-    "ae.duplicateLayerMask": AeDuplicateLayerMaskArgs,
-    "ae.deleteLayerMask": AeDeleteLayerMaskArgs,
-    "ae.getFootageDetails": AeGetFootageDetailsArgs,
-    "ae.importFootage": AeImportFootageArgs,
-    "ae.replaceFootage": AeReplaceFootageArgs,
-    "ae.getFootageInterpretation": AeGetFootageInterpretationArgs,
-    "ae.setFootageInterpretation": AeSetFootageInterpretationArgs,
-    "ae.setFootageProxy": AeSetFootageProxyArgs,
-    "ae.setItemUseProxy": AeSetItemUseProxyArgs,
-    "ae.listLayerProperties": AeListLayerPropertiesArgs,
-    "ae.listLayerPropertyKeyframes": AeListLayerPropertyKeyframesArgs,
-    "ae.setLayerPropertyValue": AeSetLayerPropertyValueArgs,
-    "ae.getLayerTransform": AeGetLayerTransformArgs,
-    "ae.setLayerAnchorPoint": AeSetLayerAnchorPointArgs,
-    "ae.setLayerPosition": AeSetLayerPositionArgs,
-    "ae.setLayerScale": AeSetLayerScaleArgs,
-    "ae.setLayerRotation": AeSetLayerRotationArgs,
-    "ae.setLayerOpacity": AeSetLayerOpacityArgs,
-    "ae.setLayerOrientation": AeSetLayerOrientationArgs,
-    "ae.getLayerPropertyKeyframeDetails": AeGetLayerPropertyKeyframeDetailsArgs,
-    "ae.addLayerPropertyKeyframe": AeAddLayerPropertyKeyframeArgs,
-    "ae.setLayerPropertyKeyframeValue": AeSetLayerPropertyKeyframeValueArgs,
-    "ae.setLayerPropertyKeyframeInterpolation": AeSetLayerPropertyKeyframeInterpolationArgs,
-    "ae.setLayerPropertyKeyframeTemporalEase": AeSetLayerPropertyKeyframeTemporalEaseArgs,
-    "ae.setLayerPropertyKeyframeBehavior": AeSetLayerPropertyKeyframeBehaviorArgs,
-    "ae.deleteLayerPropertyKeyframe": AeDeleteLayerPropertyKeyframeArgs,
-    "ae.layers": AeLayersArgs,
-    "ae.readProps": AeReadPropsArgs,
     "ae.exec": AeExecArgs,
     "ae.nativeExec": AeNativeExecArgs,
     "ae.checkpoint": AeCheckpointArgs,
     "ae.revert": AeRevertArgs,
     "ae.snapshot": AeSnapshotArgs,
     "ae.previewFrame": AePreviewFrameArgs,
-    "ae.applyEffect": AeApplyEffectArgs,
     "ae.ping": AePingArgs,
     "ae.status": AeStatusArgs,
     "ae.diagnose": AeDiagnoseArgs,
-    "ae.createLayer": AeCreateLayerArgs,
-    "ae.setProperty": AeSetPropertyArgs,
-    "ae.moveLayer": AeMoveLayerArgs,
-    "ae.selectLayers": AeSelectLayersArgs,
-    "ae.setTime": AeSetTimeArgs,
-    "ae.getTime": AeGetTimeArgs,
-    "ae.getProperties": AeGetPropertiesArgs,
-    "ae.scanPropertyTree": AeScanPropertyTreeArgs,
-    "ae.inspectPropertyCapabilities": AeInspectPropertyCapabilitiesArgs,
-    "ae.getExpressions": AeGetExpressionsArgs,
     "ae.validateExpressions": AeValidateExpressionsArgs,
-    "ae.getKeyframes": AeGetKeyframesArgs,
-    "ae.searchProject": AeSearchProjectArgs,
     "ae.skillList": AeSkillListArgs,
-    "ae.skillCreate": AeSkillCreateArgs,
-    "ae.skillEdit": AeSkillEditArgs,
-    "ae.skillDelete": AeSkillDeleteArgs,
     "ae.skillUse": AeSkillUseArgs,
     "ae.toolIndex": AeToolIndexArgs,
     "ae.toolSearch": AeToolSearchArgs,
     "ae.toolInspect": AeToolInspectArgs,
     "ae.toolUse": AeToolUseArgs,
-    "ae.toolCreate": AeToolCreateArgs,
-    "ae.toolEdit": AeToolEditArgs,
-    "ae.toolDelete": AeToolDeleteArgs,
-    "ae.toolArchive": AeToolArchiveArgs,
-    "ae.toolDuplicate": AeToolDuplicateArgs,
-    "ae.toolPromoteFromHistory": AeToolPromoteFromHistoryArgs,
-    "ae.toolImport": AeToolImportArgs,
-    "ae.toolExport": AeToolExportArgs,
-    "ae.createRig": AeCreateRigArgs,
-    **_TSM_PUBLIC_SCHEMAS,
 }
 
-assert len(SCHEMAS) in {95, 112}, f"expected base or full registry, got {len(SCHEMAS)}"
+assert len(SCHEMAS) == 16, f"expected final public registry, got {len(SCHEMAS)}"
 
 
 # Internal capability ID -> strict input schema. Public verb registration is

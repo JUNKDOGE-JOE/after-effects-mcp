@@ -132,7 +132,6 @@ async def _run_init(args: schemas.AeInitArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.init", schemas.AeInitArgs, _run_init)
 
 
 # ---------------------------------------------------------------------------
@@ -153,7 +152,6 @@ async def _run_overview(args: schemas.AeOverviewArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.overview", schemas.AeOverviewArgs, _run_overview)
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +178,6 @@ async def _run_layers(args: schemas.AeLayersArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.layers", schemas.AeLayersArgs, _run_layers)
 
 
 # ---------------------------------------------------------------------------
@@ -198,7 +195,6 @@ async def _run_read_props(args: schemas.AeReadPropsArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.readProps", schemas.AeReadPropsArgs, _run_read_props)
 
 
 # ---------------------------------------------------------------------------
@@ -836,7 +832,6 @@ async def _run_apply_effect(args: schemas.AeApplyEffectArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.applyEffect", schemas.AeApplyEffectArgs, _run_apply_effect)
 
 
 # ---------------------------------------------------------------------------
