@@ -2,24 +2,25 @@
 
 from __future__ import annotations
 
-SCENARIO_ID = "core-native-write-undo@1"
-CALL_HARD_LIMIT = 7
+SCENARIO_ID = "native-exec-ir@1"
+CALL_HARD_LIMIT = 9
 CALLS = (
-    ("readiness", "ae_projectSummary"),
-    ("composition-create", "ae_createComposition"),
-    ("baseline-settings", "ae_getCompositionSettings"),
-    ("background-set", "ae_setCompositionBackgroundColor"),
-    ("changed-settings", "ae_getCompositionSettings"),
-    ("undo-reacquire", "ae_listProjectItems"),
-    ("undo-settings", "ae_getCompositionSettings"),
+    ("readiness", "ae_status"),
+    ("fixture-create", "ae_exec"),
+    ("locator-discovery", "ae_nativeExec"),
+    ("baseline-native-state", "ae_nativeExec"),
+    ("native-write", "ae_nativeExec"),
+    ("changed-native-read", "ae_nativeExec"),
+    ("undo-discovery", "ae_nativeExec"),
+    ("undo-native-read", "ae_nativeExec"),
+    ("invalid-native-program", "ae_nativeExec"),
 )
 
-# AEGP_CreateComp exposes no background-colour input. Its deterministic new-comp
-# background is opaque black; the first typed settings read is the independent
-# proof before the bounded setter changes it.
-BASELINE_COLOR = {"red": 0, "green": 0, "blue": 0, "alpha": 255}
-CHANGED_COLOR = {"red": 64, "green": 96, "blue": 128, "alpha": 255}
+FIXTURE_COMPOSITION_NAME = "HDEV Native EXEC Fixture"
+FIXTURE_LAYER_NAME = "HDEV Native EXEC Layer"
+BASELINE_TIME = {"value": 0, "scale": 1}
+CHANGED_TIME = {"value": 5, "scale": 24}
 
 assert len(CALLS) == CALL_HARD_LIMIT
 assert len({key for key, _ in CALLS}) == CALL_HARD_LIMIT
-assert len({tool for _, tool in CALLS}) == 5
+assert {tool for _, tool in CALLS} == {"ae_status", "ae_exec", "ae_nativeExec"}
