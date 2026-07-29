@@ -3377,8 +3377,9 @@ void idle_budget_and_shutdown_are_bounded() {
 
 class LayerSourceMatteAvHost final : public HostApi {
  public:
-  explicit LayerSourceMatteAvHost(std::thread::id expected_thread)
-      : expected_thread_(expected_thread) {}
+  LayerSourceMatteAvHost(
+      FakeClock& clock, std::thread::id expected_thread)
+      : clock_(clock), expected_thread_(expected_thread) {}
 
   [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
     return HostReadResult::failure("UNEXPECTED_CALL", "project summary was not requested");
@@ -3390,6 +3391,7 @@ class LayerSourceMatteAvHost final : public HostApi {
         "layer resolver ran off the dispatcher owner thread");
     events.push_back("resolve:" + locator.object_id);
     ++resolve_calls;
+    if (throw_on_resolve) throw std::runtime_error("fake resolver exception");
     if (stale_object_id == locator.object_id) {
       return HostLayerResolveResult::failure(
           "STALE_LOCATOR", "fake layer locator is stale",
@@ -3413,10 +3415,13 @@ class LayerSourceMatteAvHost final : public HostApi {
     check_target(layer);
     events.push_back("read-source");
     ++source_read_calls;
+    if (throw_on_before_read && mutation_calls == 0) {
+      throw std::runtime_error("fake source before-read exception");
+    }
     return HostLayerSourceResult::success({
         target_locator,
         source_locator,
-        LayerSourceType::kFootage,
+        source_type,
         std::string("SYNTHETIC_FOOTAGE"),
     });
   }
@@ -3426,6 +3431,9 @@ class LayerSourceMatteAvHost final : public HostApi {
     check_target(layer);
     events.push_back("read-matte");
     ++matte_read_calls;
+    if (throw_on_before_read && mutation_calls == 0) {
+      throw std::runtime_error("fake Track Matte before-read exception");
+    }
     if (fail_post_mutation_read && mutation_calls > 0) {
       return HostLayerTrackMatteResult::failure(
           "CAPABILITY_FAILED", "fake post-mutation Track Matte read failed");
@@ -3443,6 +3451,9 @@ class LayerSourceMatteAvHost final : public HostApi {
     check_target(layer);
     events.push_back("read-av");
     ++av_read_calls;
+    if (throw_on_before_read && mutation_calls == 0) {
+      throw std::runtime_error("fake AV before-read exception");
+    }
     if (fail_post_mutation_read && mutation_calls > 0) {
       return HostLayerAVStateResult::failure(
           "CAPABILITY_FAILED", "fake post-mutation AV read failed");
@@ -3450,7 +3461,8 @@ class LayerSourceMatteAvHost final : public HostApi {
     return HostLayerAVStateResult::success({
         target_locator,
         has_audio,
-        audio_enabled,
+        incorrect_postcondition && mutation_calls > 0
+            ? !audio_enabled : audio_enabled,
         has_video,
         video_enabled,
     });
@@ -3463,6 +3475,7 @@ class LayerSourceMatteAvHost final : public HostApi {
     events.push_back("undo-start");
     ++undo_start_calls;
     undo_open = true;
+    clock_.advance(begin_delay);
     return HostActionResult::success();
   }
 
@@ -3471,6 +3484,13 @@ class LayerSourceMatteAvHost final : public HostApi {
     events.push_back("undo-end");
     ++undo_end_calls;
     undo_open = false;
+    if (throw_on_undo_close) {
+      throw std::runtime_error("fake Undo-close exception");
+    }
+    if (fail_undo_close) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "fake Undo close failed");
+    }
     return HostActionResult::success();
   }
 
@@ -3485,6 +3505,12 @@ class LayerSourceMatteAvHost final : public HostApi {
     require(undo_open, "Track Matte mutation ran outside its Undo group");
     events.push_back("mutate-matte-set");
     ++mutation_calls;
+    clock_.advance(mutation_delay);
+    if (throw_on_mutation) throw std::runtime_error("fake mutation exception");
+    if (fail_mutation) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "fake mutation failed");
+    }
     matte_active = true;
     matte_mode = mode;
     return HostActionResult::success();
@@ -3496,6 +3522,12 @@ class LayerSourceMatteAvHost final : public HostApi {
     require(undo_open, "Track Matte clear ran outside its Undo group");
     events.push_back("mutate-matte-clear");
     ++mutation_calls;
+    clock_.advance(mutation_delay);
+    if (throw_on_mutation) throw std::runtime_error("fake mutation exception");
+    if (fail_mutation) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "fake mutation failed");
+    }
     matte_active = false;
     return HostActionResult::success();
   }
@@ -3506,6 +3538,12 @@ class LayerSourceMatteAvHost final : public HostApi {
     require(undo_open, "audio mutation ran outside its Undo group");
     events.push_back("mutate-audio");
     ++mutation_calls;
+    clock_.advance(mutation_delay);
+    if (throw_on_mutation) throw std::runtime_error("fake mutation exception");
+    if (fail_mutation) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "fake mutation failed");
+    }
     audio_enabled = enabled;
     return HostActionResult::success();
   }
@@ -3516,6 +3554,12 @@ class LayerSourceMatteAvHost final : public HostApi {
     require(undo_open, "video mutation ran outside its Undo group");
     events.push_back("mutate-video");
     ++mutation_calls;
+    clock_.advance(mutation_delay);
+    if (throw_on_mutation) throw std::runtime_error("fake mutation exception");
+    if (fail_mutation) {
+      return HostActionResult::failure(
+          "CAPABILITY_FAILED", "fake mutation failed");
+    }
     video_enabled = enabled;
     return HostActionResult::success();
   }
@@ -3531,6 +3575,15 @@ class LayerSourceMatteAvHost final : public HostApi {
     undo_end_calls = 0;
     undo_open = false;
     fail_post_mutation_read = false;
+    throw_on_resolve = false;
+    throw_on_before_read = false;
+    fail_mutation = false;
+    throw_on_mutation = false;
+    fail_undo_close = false;
+    throw_on_undo_close = false;
+    incorrect_postcondition = false;
+    begin_delay = 0ms;
+    mutation_delay = 0ms;
     stale_object_id.clear();
   }
 
@@ -3546,6 +3599,7 @@ class LayerSourceMatteAvHost final : public HostApi {
   std::uintptr_t matte_composition_owner{101};
   bool target_av_capable{true};
   bool matte_av_capable{true};
+  LayerSourceType source_type{LayerSourceType::kFootage};
   bool matte_active{false};
   LayerTrackMatteMode matte_mode{LayerTrackMatteMode::kNone};
   bool has_audio{true};
@@ -3553,6 +3607,15 @@ class LayerSourceMatteAvHost final : public HostApi {
   bool has_video{true};
   bool video_enabled{true};
   bool fail_post_mutation_read{false};
+  bool throw_on_resolve{false};
+  bool throw_on_before_read{false};
+  bool fail_mutation{false};
+  bool throw_on_mutation{false};
+  bool fail_undo_close{false};
+  bool throw_on_undo_close{false};
+  bool incorrect_postcondition{false};
+  std::chrono::milliseconds begin_delay{0};
+  std::chrono::milliseconds mutation_delay{0};
   std::string stale_object_id;
   int resolve_calls{0};
   int source_read_calls{0};
@@ -3572,6 +3635,7 @@ class LayerSourceMatteAvHost final : public HostApi {
         "dispatcher passed a resolved layer that was not the requested target");
   }
 
+  FakeClock& clock_;
   std::thread::id expected_thread_;
 };
 
@@ -3598,11 +3662,27 @@ Request layer_source_matte_av_request(
   return request;
 }
 
+Request audio_write_request_with_key(
+    FakeClock& clock,
+    std::string request_id,
+    const ObjectLocator& layer_locator,
+    std::string key) {
+  Request request = layer_source_matte_av_request(
+      clock,
+      std::move(request_id),
+      kLayerAudioEnabledSetCapability,
+      LayerAudioEnabledSetRequest{layer_locator, true},
+      true);
+  request.idempotency_key = std::move(key);
+  request.arguments_fingerprint_sha256 = std::string(64, 'b');
+  return request;
+}
+
 void layer_source_matte_av_reads_dispatch_typed_state() {
   FakeClock clock;
   HostDispatcher dispatcher(
       std::this_thread::get_id(), clock, config(3, 3, 16ms));
-  LayerSourceMatteAvHost host(std::this_thread::get_id());
+  LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
   host.matte_active = true;
   host.matte_mode = LayerTrackMatteMode::kLuma;
 
@@ -3659,7 +3739,7 @@ void layer_source_matte_av_writes_use_one_balanced_undo_and_after_read() {
   FakeClock clock;
   HostDispatcher dispatcher(
       std::this_thread::get_id(), clock, config(4, 4, 16ms));
-  LayerSourceMatteAvHost host(std::this_thread::get_id());
+  LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
 
   const auto run = [&](Request request,
                        std::vector<std::string> expected_events) {
@@ -3774,7 +3854,7 @@ void layer_source_matte_av_preconditions_reject_before_undo_or_mutation() {
   FakeClock clock;
   HostDispatcher dispatcher(
       std::this_thread::get_id(), clock, config(12, 12, 16ms));
-  LayerSourceMatteAvHost host(std::this_thread::get_id());
+  LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
 
   ObjectLocator wrong_kind = host.target_locator;
   wrong_kind.kind = "item";
@@ -3905,7 +3985,7 @@ void layer_source_matte_av_post_dispatch_failure_is_possibly_side_effecting() {
   FakeClock clock;
   HostDispatcher dispatcher(
       std::this_thread::get_id(), clock, config(1, 1, 16ms));
-  LayerSourceMatteAvHost host(std::this_thread::get_id());
+  LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
   host.fail_post_mutation_read = true;
 
   require(dispatcher.enqueue(layer_source_matte_av_request(
@@ -3921,6 +4001,302 @@ void layer_source_matte_av_post_dispatch_failure_is_possibly_side_effecting() {
           && host.undo_start_calls == 1 && host.undo_end_calls == 1
           && !host.undo_open,
       "failed after-read was not classified with balanced Undo and one mutation");
+}
+
+void layer_source_matte_av_pre_mutation_exceptions_are_safe_and_retryable() {
+  {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(2, 2, 16ms));
+    LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
+    const std::string key = "resolver-exception-intent-001";
+    host.throw_on_resolve = true;
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock, "resolver-exception-first", host.target_locator, key))
+                .code == EnqueueCode::kAccepted,
+        "resolver exception probe was not admitted");
+    const auto failed = dispatcher.drain(host).completions[0];
+    require(!failed.ok && failed.error_code == "CAPABILITY_FAILED"
+            && host.resolve_calls == 1 && host.av_read_calls == 0
+            && host.undo_start_calls == 0 && host.undo_end_calls == 0
+            && host.mutation_calls == 0,
+        "pre-mutation resolver exception was classified as side-effecting");
+
+    host.reset_observations();
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock, "resolver-exception-retry", host.target_locator, key))
+                .code == EnqueueCode::kAccepted,
+        "safe resolver exception retained an ambiguity fence");
+    require(dispatcher.drain(host).completions[0].ok
+            && host.mutation_calls == 1,
+        "same-key retry after safe resolver exception did not execute once");
+  }
+
+  {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(2, 2, 16ms));
+    LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
+    const std::string key = "before-read-exception-intent-001";
+    host.throw_on_before_read = true;
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock, "before-read-exception-first", host.target_locator, key))
+                .code == EnqueueCode::kAccepted,
+        "before-read exception probe was not admitted");
+    const auto failed = dispatcher.drain(host).completions[0];
+    require(!failed.ok && failed.error_code == "CAPABILITY_FAILED"
+            && host.resolve_calls == 1 && host.av_read_calls == 1
+            && host.undo_start_calls == 0 && host.undo_end_calls == 0
+            && host.mutation_calls == 0,
+        "pre-mutation before-read exception was classified as side-effecting");
+
+    host.reset_observations();
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock, "before-read-exception-retry", host.target_locator, key))
+                .code == EnqueueCode::kAccepted,
+        "safe before-read exception retained an ambiguity fence");
+    require(dispatcher.drain(host).completions[0].ok
+            && host.mutation_calls == 1,
+        "same-key retry after safe before-read exception did not execute once");
+  }
+}
+
+void layer_source_matte_av_deadline_after_undo_begin_closes_without_mutation() {
+  {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(2, 2, 16ms));
+    LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
+    const std::string key = "begin-deadline-safe-intent-001";
+    host.begin_delay = 101ms;
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock, "begin-deadline-safe", host.target_locator, key))
+                .code == EnqueueCode::kAccepted,
+        "Undo-begin deadline probe was not admitted");
+    const auto failed = dispatcher.drain(host).completions[0];
+    require(!failed.ok && failed.error_code == "DEADLINE_EXCEEDED"
+            && failed.late_result_discarded
+            && host.mutation_calls == 0
+            && host.undo_start_calls == 1 && host.undo_end_calls == 1
+            && !host.undo_open
+            && host.events == std::vector<std::string>{
+                "resolve:" + host.target_locator.object_id,
+                "read-av", "undo-start", "undo-end"},
+        "deadline after Undo begin did not close safely before mutation");
+
+    host.reset_observations();
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock, "begin-deadline-safe-retry", host.target_locator, key))
+                .code == EnqueueCode::kAccepted,
+        "safe pre-mutation deadline retained an ambiguity fence");
+    require(dispatcher.drain(host).completions[0].ok
+            && host.mutation_calls == 1,
+        "same-key retry after safely closed deadline did not execute once");
+  }
+
+  for (const bool throw_close : {false, true}) {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(2, 2, 16ms));
+    LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
+    const std::string key = throw_close
+        ? "begin-deadline-close-throw-001"
+        : "begin-deadline-close-fail-0001";
+    host.begin_delay = 101ms;
+    host.fail_undo_close = !throw_close;
+    host.throw_on_undo_close = throw_close;
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock,
+                throw_close ? "begin-deadline-close-throw"
+                            : "begin-deadline-close-fail",
+                host.target_locator,
+                key))
+                .code == EnqueueCode::kAccepted,
+        "deadline plus Undo-close failure probe was not admitted");
+    const auto failed = dispatcher.drain(host).completions[0];
+    require(!failed.ok
+            && failed.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+            && host.mutation_calls == 0
+            && host.undo_start_calls == 1 && host.undo_end_calls == 1
+            && host.events == std::vector<std::string>{
+                "resolve:" + host.target_locator.object_id,
+                "read-av", "undo-start", "undo-end"},
+        "uncertain Undo close after deadline was classified as safely retryable");
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock,
+                throw_close ? "begin-deadline-close-throw-retry"
+                            : "begin-deadline-close-fail-retry",
+                host.target_locator,
+                key))
+                .code == EnqueueCode::kDuplicateRequest
+            && host.mutation_calls == 0,
+        "uncertain pre-mutation Undo close permitted a blind redispatch");
+  }
+}
+
+void layer_source_matte_av_enum_domains_fail_closed() {
+  {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(1, 1, 16ms));
+    LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
+    const auto invalid_mode = static_cast<LayerTrackMatteMode>(99);
+    const auto admitted = dispatcher.enqueue(layer_source_matte_av_request(
+        clock,
+        "unknown-request-matte-mode",
+        kLayerTrackMatteSetCapability,
+        LayerTrackMatteSetRequest{
+            host.target_locator, host.matte_locator, invalid_mode},
+        true));
+    require(admitted.code == EnqueueCode::kInvalidRequest
+            && host.resolve_calls == 0 && host.undo_start_calls == 0
+            && host.mutation_calls == 0,
+        "unknown request Track Matte enum reached host dispatch");
+  }
+
+  {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(1, 1, 16ms));
+    LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
+    host.source_type = static_cast<LayerSourceType>(99);
+    require(dispatcher.enqueue(layer_source_matte_av_request(
+                clock,
+                "unknown-host-source-type",
+                kLayerSourceReadCapability,
+                LayerSourceReadRequest{host.target_locator}))
+                .code == EnqueueCode::kAccepted,
+        "unknown host source enum probe was not admitted");
+    const auto completion = dispatcher.drain(host).completions[0];
+    require(!completion.ok && completion.error_code == "CAPABILITY_FAILED"
+            && std::holds_alternative<std::monostate>(
+                completion.layer_source_matte_av_result)
+            && host.source_read_calls == 1 && host.undo_start_calls == 0,
+        "unknown host source enum produced a typed completion");
+  }
+
+  {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(1, 1, 16ms));
+    LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
+    host.matte_active = true;
+    host.matte_mode = static_cast<LayerTrackMatteMode>(99);
+    require(dispatcher.enqueue(layer_source_matte_av_request(
+                clock,
+                "unknown-host-matte-mode",
+                kLayerTrackMatteReadCapability,
+                LayerTrackMatteReadRequest{host.target_locator}))
+                .code == EnqueueCode::kAccepted,
+        "unknown host Matte enum read probe was not admitted");
+    const auto completion = dispatcher.drain(host).completions[0];
+    require(!completion.ok && completion.error_code == "CAPABILITY_FAILED"
+            && std::holds_alternative<std::monostate>(
+                completion.layer_source_matte_av_result)
+            && host.matte_read_calls == 1 && host.undo_start_calls == 0,
+        "unknown host active Matte enum produced a typed completion");
+  }
+
+  {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(2, 2, 16ms));
+    LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
+    const std::string key = "unknown-before-matte-mode-001";
+    host.matte_active = true;
+    host.matte_mode = static_cast<LayerTrackMatteMode>(99);
+    Request request = layer_source_matte_av_request(
+        clock,
+        "unknown-before-matte-mode",
+        kLayerTrackMatteSetCapability,
+        LayerTrackMatteSetRequest{
+            host.target_locator, host.matte_locator, LayerTrackMatteMode::kAlpha},
+        true);
+    request.idempotency_key = key;
+    request.arguments_fingerprint_sha256 = std::string(64, 'c');
+    require(dispatcher.enqueue(std::move(request)).code == EnqueueCode::kAccepted,
+        "unknown before-state Matte enum probe was not admitted");
+    const auto completion = dispatcher.drain(host).completions[0];
+    require(!completion.ok && completion.error_code == "CAPABILITY_FAILED"
+            && host.matte_read_calls == 1 && host.undo_start_calls == 0
+            && host.mutation_calls == 0,
+        "unknown before-state Matte enum reached Undo or mutation");
+  }
+}
+
+void layer_source_matte_av_post_dispatch_failures_remain_ambiguous() {
+  enum class FailurePoint {
+    kMutationFailure,
+    kMutationThrow,
+    kUndoCloseFailure,
+    kUndoCloseThrow,
+    kMutationDeadline,
+    kIncorrectPostcondition,
+    kPostReadFailure,
+  };
+  const std::array<FailurePoint, 7> cases{
+      FailurePoint::kMutationFailure,
+      FailurePoint::kMutationThrow,
+      FailurePoint::kUndoCloseFailure,
+      FailurePoint::kUndoCloseThrow,
+      FailurePoint::kMutationDeadline,
+      FailurePoint::kIncorrectPostcondition,
+      FailurePoint::kPostReadFailure,
+  };
+  std::size_t sequence = 0;
+  for (const FailurePoint point : cases) {
+    FakeClock clock;
+    HostDispatcher dispatcher(
+        std::this_thread::get_id(), clock, config(2, 2, 16ms));
+    LayerSourceMatteAvHost host(clock, std::this_thread::get_id());
+    switch (point) {
+      case FailurePoint::kMutationFailure:
+        host.fail_mutation = true;
+        break;
+      case FailurePoint::kMutationThrow:
+        host.throw_on_mutation = true;
+        break;
+      case FailurePoint::kUndoCloseFailure:
+        host.fail_undo_close = true;
+        break;
+      case FailurePoint::kUndoCloseThrow:
+        host.throw_on_undo_close = true;
+        break;
+      case FailurePoint::kMutationDeadline:
+        host.mutation_delay = 101ms;
+        break;
+      case FailurePoint::kIncorrectPostcondition:
+        host.incorrect_postcondition = true;
+        break;
+      case FailurePoint::kPostReadFailure:
+        host.fail_post_mutation_read = true;
+        break;
+    }
+    const std::string suffix = std::to_string(++sequence);
+    const std::string key = "ambiguous-layer-write-key-" + suffix;
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock, "ambiguous-layer-write-" + suffix,
+                host.target_locator, key))
+                .code == EnqueueCode::kAccepted,
+        "post-dispatch ambiguity probe was not admitted");
+    const auto completion = dispatcher.drain(host).completions[0];
+    require(!completion.ok
+            && completion.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+            && host.mutation_calls == 1
+            && host.undo_start_calls == 1 && host.undo_end_calls == 1
+            && !host.undo_open
+            && host.events == std::vector<std::string>{
+                "resolve:" + host.target_locator.object_id,
+                "read-av", "undo-start", "mutate-audio",
+                "undo-end", "read-av"},
+        "post-dispatch failure lost ambiguity, mutation count, or Undo order");
+    require(dispatcher.enqueue(audio_write_request_with_key(
+                clock, "ambiguous-layer-retry-" + suffix,
+                host.target_locator, key))
+                .code == EnqueueCode::kDuplicateRequest
+            && host.mutation_calls == 1,
+        "ambiguous layer write permitted a blind redispatch");
+  }
 }
 
 }  // namespace
@@ -3974,6 +4350,10 @@ int main() {
   layer_source_matte_av_writes_use_one_balanced_undo_and_after_read();
   layer_source_matte_av_preconditions_reject_before_undo_or_mutation();
   layer_source_matte_av_post_dispatch_failure_is_possibly_side_effecting();
+  layer_source_matte_av_pre_mutation_exceptions_are_safe_and_retryable();
+  layer_source_matte_av_deadline_after_undo_begin_closes_without_mutation();
+  layer_source_matte_av_enum_domains_fail_closed();
+  layer_source_matte_av_post_dispatch_failures_remain_ambiguous();
   std::cout << "host_dispatcher_test: PASS\n";
   return 0;
 }

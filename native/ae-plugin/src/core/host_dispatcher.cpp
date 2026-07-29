@@ -562,6 +562,28 @@ bool layer_source_matte_av_write_capability(std::string_view capability_id) {
       || capability_id == kLayerVideoEnabledSetCapability;
 }
 
+bool valid_layer_source_type(LayerSourceType value) {
+  switch (value) {
+    case LayerSourceType::kNone:
+    case LayerSourceType::kFootage:
+    case LayerSourceType::kComposition:
+      return true;
+  }
+  return false;
+}
+
+bool valid_track_matte_mode(LayerTrackMatteMode value) {
+  switch (value) {
+    case LayerTrackMatteMode::kNone:
+    case LayerTrackMatteMode::kAlpha:
+    case LayerTrackMatteMode::kInvertedAlpha:
+    case LayerTrackMatteMode::kLuma:
+    case LayerTrackMatteMode::kInvertedLuma:
+      return true;
+  }
+  return false;
+}
+
 bool valid_layer_source_matte_av_request(const Request& request) {
   const bool write =
       layer_source_matte_av_write_capability(request.capability_id);
@@ -620,6 +642,7 @@ bool valid_layer_source_matte_av_request(const Request& request) {
         && same_locator_context(
             payload->layer_locator, payload->matte_layer_locator)
         && payload->layer_locator != payload->matte_layer_locator
+        && valid_track_matte_mode(payload->mode)
         && payload->mode != LayerTrackMatteMode::kNone;
   }
   if (request.capability_id == kLayerTrackMatteClearCapability) {
@@ -938,7 +961,10 @@ bool valid_resolved_layer(
 
 bool valid_layer_source_value(
     const LayerSourceValue& value, const ObjectLocator& requested) {
-  if (value.layer_locator != requested) return false;
+  if (value.layer_locator != requested
+      || !valid_layer_source_type(value.source_type)) {
+    return false;
+  }
   if (value.source_type == LayerSourceType::kNone) {
     return !value.source_item_locator.has_value()
         && !value.source_name.has_value();
@@ -957,6 +983,7 @@ bool valid_layer_source_value(
 bool valid_layer_track_matte_value(
     const LayerTrackMatteValue& value, const ObjectLocator& requested) {
   if (value.layer_locator != requested
+      || !valid_track_matte_mode(value.mode)
       || value.active != value.matte_layer_locator.has_value()
       || (value.active && value.mode == LayerTrackMatteMode::kNone)) {
     return false;
@@ -1014,7 +1041,14 @@ Completion dispatch_layer_source_matte_av(
   };
   const auto resolve = [&](const ObjectLocator& locator)
       -> std::variant<Completion, HostResolvedLayer> {
-    HostLayerResolveResult result = host.resolve_layer(locator, read_deadline);
+    HostLayerResolveResult result;
+    try {
+      result = host.resolve_layer(locator, read_deadline);
+    } catch (...) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native layer resolver raised before the mutation boundary");
+    }
     if (clock.now() > request.deadline) {
       Completion late = failure_for(
           request, "DEADLINE_EXCEEDED",
@@ -1089,8 +1123,14 @@ Completion dispatch_layer_source_matte_av(
       std::get<HostResolvedLayer>(std::move(resolved_target));
 
   if (request.capability_id == kLayerSourceReadCapability) {
-    HostLayerSourceResult result =
-        host.read_layer_source(target, read_deadline);
+    HostLayerSourceResult result;
+    try {
+      result = host.read_layer_source(target, read_deadline);
+    } catch (...) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native layer source read raised before completion");
+    }
     if (clock.now() > request.deadline) {
       Completion late = failure_for(
           request, "DEADLINE_EXCEEDED",
@@ -1108,8 +1148,14 @@ Completion dispatch_layer_source_matte_av(
   }
 
   if (request.capability_id == kLayerTrackMatteReadCapability) {
-    HostLayerTrackMatteResult result =
-        host.read_layer_track_matte(target, read_deadline);
+    HostLayerTrackMatteResult result;
+    try {
+      result = host.read_layer_track_matte(target, read_deadline);
+    } catch (...) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native Track Matte read raised before completion");
+    }
     if (clock.now() > request.deadline) {
       Completion late = failure_for(
           request, "DEADLINE_EXCEEDED",
@@ -1127,8 +1173,14 @@ Completion dispatch_layer_source_matte_av(
   }
 
   if (request.capability_id == kLayerAVStateReadCapability) {
-    HostLayerAVStateResult result =
-        host.read_layer_av_state(target, read_deadline);
+    HostLayerAVStateResult result;
+    try {
+      result = host.read_layer_av_state(target, read_deadline);
+    } catch (...) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native AV-state read raised before completion");
+    }
     if (clock.now() > request.deadline) {
       Completion late = failure_for(
           request, "DEADLINE_EXCEEDED",
@@ -1180,8 +1232,14 @@ Completion dispatch_layer_source_matte_av(
   std::optional<LayerAVStateValue> before_av;
   if (matte_set != nullptr
       || request.capability_id == kLayerTrackMatteClearCapability) {
-    HostLayerTrackMatteResult result =
-        host.read_layer_track_matte(target, read_deadline);
+    HostLayerTrackMatteResult result;
+    try {
+      result = host.read_layer_track_matte(target, read_deadline);
+    } catch (...) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native Track Matte before-read raised before the mutation boundary");
+    }
     if (clock.now() > request.deadline) {
       Completion late = failure_for(
           request, "DEADLINE_EXCEEDED",
@@ -1211,8 +1269,14 @@ Completion dispatch_layer_source_matte_av(
           "layer has no active Track Matte relationship");
     }
   } else {
-    HostLayerAVStateResult result =
-        host.read_layer_av_state(target, read_deadline);
+    HostLayerAVStateResult result;
+    try {
+      result = host.read_layer_av_state(target, read_deadline);
+    } catch (...) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native AV before-read raised before the mutation boundary");
+    }
     if (clock.now() > request.deadline) {
       Completion late = failure_for(
           request, "DEADLINE_EXCEEDED",
@@ -1262,6 +1326,24 @@ Completion dispatch_layer_source_matte_av(
   HostActionResult begin = host.begin_layer_undo_group(
       undo_label, request.deadline);
   if (!begin.ok) return host_failure(begin);
+  if (clock.now() >= request.deadline) {
+    HostActionResult close;
+    try {
+      close = host.end_layer_undo_group(request.deadline);
+    } catch (...) {
+      return possible(
+          "native layer Undo close raised after the pre-mutation deadline elapsed");
+    }
+    if (!close.ok) {
+      return possible(
+          "native layer Undo close failed after the pre-mutation deadline elapsed");
+    }
+    Completion late = failure_for(
+        request, "DEADLINE_EXCEEDED",
+        "native layer request expired after Undo begin and before mutation");
+    late.late_result_discarded = true;
+    return late;
+  }
 
   std::pair<HostActionResult, HostActionResult> action;
   if (matte_set != nullptr) {
