@@ -26,6 +26,12 @@ LEGACY_FULL = ROOT / "native/ae-plugin/protocol/fixtures/capability-registry-ful
 MIGRATION = ROOT / "native/ae-plugin/protocol/native-exec-migration.json"
 PRIMITIVES = ROOT / "native/ae-plugin/protocol/native-primitives.json"
 AEGP_SCHEMA = ROOT / "native/ae-plugin/protocol/aegp-rpc.schema.json"
+EXECUTION_GUIDE = (
+    ROOT / "packages/core/ae_mcp/skills_bundled/ae-execution-guide.json"
+)
+PRESSURE_FIXTURE = (
+    ROOT / "packages/core/tests/fixtures/native-exec-skill-pressure.json"
+)
 
 
 def test_native_exec_migration_covers_legacy_registry_exactly():
@@ -164,3 +170,54 @@ def test_native_primitive_catalog_is_explicitly_ordered_and_valid():
     ]
     assert len(registry.rows) == 23
     validate_sources(ROOT)
+
+
+def test_native_exec_skill_pressure_fixture_records_the_observed_red_baseline():
+    fixture = json.loads(PRESSURE_FIXTURE.read_text())
+    scenarios = {row["id"]: row for row in fixture["scenarios"]}
+    assert fixture["schemaVersion"] == 1
+    assert scenarios["disable-layer-and-verify"]["baseline"] == {
+        "route": "legacy operation-specific typed tool",
+        "choice": "ae_setLayerVisibility with typed pre/post reads",
+        "rationale": "The current instructions say to prefer typed verbs.",
+        "confidence": 0.98,
+        "passed": False,
+    }
+    assert scenarios["read-exact-composition-rational-time"]["baseline"] == {
+        "route": "legacy operation-specific native tools",
+        "choice": "ae_listProjectItems followed by ae_getCompositionTime",
+        "rationale": "The current surface presents the typed native graph route directly.",
+        "confidence": 0.98,
+        "passed": False,
+    }
+    timed_out = scenarios["timed-out-native-write"]["baseline"]
+    assert timed_out["passed"] is True
+    assert "Refuse a blind retry" in timed_out["choice"]
+    assert "no public operationKey audit or outcome lookup" in timed_out["rationale"]
+    assert {
+        scenario_id: (row["postSkill"]["route"], row["postSkill"]["confidence"])
+        for scenario_id, row in scenarios.items()
+    } == {
+        "disable-layer-and-verify": ("ae_exec", 0.99),
+        "read-exact-composition-rational-time": ("ae_nativeExec", 0.99),
+        "timed-out-native-write": ("read-only ae_nativeExec reconciliation", 0.98),
+    }
+    assert all(row["postSkill"]["passed"] for row in scenarios.values())
+    assert "simple layer toggle" in scenarios[
+        "disable-layer-and-verify"
+    ]["postSkill"]["loophole"]
+    assert "fresh server-issued composition locator" in scenarios[
+        "read-exact-composition-rational-time"
+    ]["postSkill"]["loophole"]
+    assert "original operations, undoGroup, and program digest" in scenarios[
+        "timed-out-native-write"
+    ]["postSkill"]["loophole"]
+
+
+def test_execution_guide_is_a_generated_projection():
+    assert EXECUTION_GUIDE.is_file()
+    before = EXECUTION_GUIDE.read_text(encoding="utf-8")
+    from scripts.generate_native_exec import generate_all
+
+    generate_all(ROOT, check=True)
+    assert EXECUTION_GUIDE.read_text(encoding="utf-8") == before

@@ -704,6 +704,185 @@ def _generate_python(registry: PrimitiveRegistry, root_definitions: dict[str, An
     ])
 
 
+def _require_primitive(registry: PrimitiveRegistry, primitive_id: str) -> PrimitiveRow:
+    for row in registry.rows:
+        if row.id == primitive_id:
+            return row
+    raise ValueError(f"default execution guide requires primitive {primitive_id}")
+
+
+def _generate_execution_guide(registry: PrimitiveRegistry) -> str:
+    """Render stable route guidance plus the generated primitive reference."""
+    composition_resolve = _require_primitive(registry, "composition.resolve")
+    time_read = _require_primitive(registry, "composition.time.read")
+    time_set = _require_primitive(registry, "composition.time.set")
+    locator = {
+        "kind": "composition",
+        "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "projectId": "33333333-3333-4333-8333-333333333333",
+        "generation": 1,
+        "objectId": "44444444-4444-4444-8444-444444444444",
+    }
+    jsx_example = {
+        "code": (
+            "var comp = AEMCP.activeComp();\n"
+            "var layer = comp ? comp.layer(1) : null;\n"
+            "var result;\n"
+            "if (!layer) { result = {ok:false,error:\"layer not found\"}; }\n"
+            "else { layer.enabled = false; "
+            "result = {ok:true,enabled:layer.enabled}; }\n"
+            "JSON.stringify(result);"
+        ),
+        "undo_group_name": "Disable layer",
+    }
+    native_read_example = {
+        "operations": [
+            {
+                "op": composition_resolve.id,
+                "args": {"locator": locator},
+                "saveAs": "composition",
+            },
+            {
+                "op": time_read.id,
+                "args": {"composition": {"ref": "composition"}},
+                "returnAs": "time",
+            },
+        ]
+    }
+    native_write_example = {
+        "operationKey": "native-time-write-0001",
+        "undoGroup": "Set exact composition time",
+        "operations": [
+            {
+                "op": composition_resolve.id,
+                "args": {"locator": locator},
+                "saveAs": "composition",
+            },
+            {
+                "op": time_set.id,
+                "args": {
+                    "composition": {"ref": "composition"},
+                    "targetTime": {"value": 5, "scale": 24},
+                },
+                "returnAs": "time",
+            },
+        ],
+    }
+    reference = "\n".join(
+        "- `{}` — {}; suite `{}`; result {}; {}.".format(
+            row.id,
+            row.mutability,
+            row.required_suite,
+            _primitive_value_kind(row).removeprefix("k"),
+            "exportable" if row.exportable else "request-local only",
+        )
+        for row in registry.rows
+    )
+    template = """\
+# AE Execution Guide
+
+## Route choice
+
+Use `ae_exec` whenever the maintained AE scripting object model can perform the operation. Do not look for a typed convenience verb. Use `ae_nativeExec` only when the generated reference supplies an AEGP-only primitive with the semantics you need.
+
+## Program composition
+
+A native program is one bounded linear `operations` array. Name request-local handles with `saveAs`, refer only backward with `{{"ref":"name"}}`, and export JSON-safe values with `returnAs`. Read-only programs omit `operationKey` and `undoGroup`; writes require both. Never invent locators: when none is fresh, first run a separate read-only `ae_nativeExec` discovery program such as `project.items.list`, then copy its returned locator verbatim into the target program.
+
+Exact rational-time read (`AeNativeExecArgs`):
+<!-- AE_NATIVE_EXEC_EXAMPLE -->
+```json
+{native_read}
+```
+
+Exact rational-time write (`AeNativeExecArgs`):
+<!-- AE_NATIVE_EXEC_EXAMPLE -->
+```json
+{native_write}
+```
+
+## Readback
+
+Read the current AE state before a write and run a fresh read after it. Re-resolve locators after graph-changing writes or Undo. Treat the typed terminal, returned state, postcondition, and audit evidence as one result.
+
+## Undo
+
+One native write program opens one real AE Undo group, but the program is not atomic and never silently rolls back. `undo.available=true` does not mean Undo was executed or verified. After an explicit Undo, read the state again. For JSX writes, supply `undo_group_name`.
+
+## Uncertain native write
+
+A timeout or disconnect after dispatch may have changed AE. Freeze the full original request and run a new read-only `ae_nativeExec` reconciliation program. Only after conclusive no-effect reconciliation may you submit a canonical-identical replay with the same `operationKey`, `undoGroup`, operations, and program digest. Otherwise stop. Never invent an outcome or audit lookup.
+
+## Visual verification
+
+State readback proves data, not appearance. Use `ae_previewFrame` after visual changes; sample at least two times for motion and one frame for a static change. After writing expressions, run `ae_validateExpressions` before preview.
+
+## ExtendScript essentials
+
+AE uses ECMAScript 3: use `var`, `function`, and traditional loops. End reads with `JSON.stringify(...)`; guard fallible lookups so JSX returns structured errors instead of throwing. Prefer `matchName` paths, use effect-property indices when localized names fail, and reacquire property references after `addProperty`.
+
+Disable and read back a layer (`AeExecArgs`):
+<!-- AE_EXEC_EXAMPLE -->
+```json
+{jsx}
+```
+
+## Native primitive reference
+
+<!-- GENERATED NATIVE REFERENCE -->
+{reference}
+""".format(
+        native_read=json.dumps(native_read_example, ensure_ascii=False, indent=2),
+        native_write=json.dumps(native_write_example, ensure_ascii=False, indent=2),
+        jsx=json.dumps(jsx_example, ensure_ascii=False, indent=2),
+        reference=reference,
+    )
+    skill = {
+        "name": "ae-execution-guide",
+        "description": (
+            "Use when choosing an AE execution route, composing a native AEGP "
+            "program, or verifying writes, Undo, uncertain results, and visual output."
+        ),
+        "template_type": "prompt",
+        "args_schema": {},
+        "template": template,
+    }
+    return json.dumps(skill, ensure_ascii=False, indent=2) + "\n"
+
+
+def _generate_bundled_manifest(root: Path, guide_text: str) -> str:
+    path = root / "packages/core/ae_mcp/skills_bundled/manifest.json"
+    manifest = _json_object(path)
+    artifacts = _rows(manifest.get("artifacts"), "bundled skill artifacts")
+    by_path = {
+        _required_string(row, "path", "bundled skill artifacts"): dict(row)
+        for row in artifacts
+    }
+    by_path["ae-execution-guide.json"] = {
+        "path": "ae-execution-guide.json",
+        "sha256": hashlib.sha256(guide_text.encode("utf-8")).hexdigest(),
+    }
+    manifest["artifacts"] = [by_path[name] for name in sorted(by_path)]
+    return json.dumps(manifest, ensure_ascii=False, indent=2) + "\n"
+
+
+def generate_execution_guide(
+    root: Path, registry: PrimitiveRegistry, *, check: bool
+) -> None:
+    guide_text = _generate_execution_guide(registry)
+    _write(
+        root / "packages/core/ae_mcp/skills_bundled/ae-execution-guide.json",
+        guide_text,
+        check=check,
+    )
+    _write(
+        root / "packages/core/ae_mcp/skills_bundled/manifest.json",
+        _generate_bundled_manifest(root, guide_text),
+        check=check,
+    )
+
+
 def generate_projections(
     root: Path, registry: PrimitiveRegistry, root_definitions: dict[str, Any], *, check: bool
 ) -> None:
@@ -735,6 +914,7 @@ def generate_all(root: Path, *, check: bool) -> None:
         check=check,
     )
     generate_projections(root, registry, rpc_definitions, check=check)
+    generate_execution_guide(root, registry, check=check)
 
 
 def main() -> int:

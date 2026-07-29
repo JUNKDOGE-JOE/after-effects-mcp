@@ -10,58 +10,36 @@ from ae_mcp.instructions import SERVER_INSTRUCTIONS, build_server_instructions, 
 from ae_mcp.server import build_server
 
 
-def test_instructions_nonempty_and_substantial():
+def test_instructions_nonempty_and_short():
     assert isinstance(SERVER_INSTRUCTIONS, str)
-    assert len(SERVER_INSTRUCTIONS) > 400
+    assert 100 < len(SERVER_INSTRUCTIONS) < 1_200
 
 
-def test_instructions_cover_key_discipline():
-    text = SERVER_INSTRUCTIONS
-    # Workflow guidance plus the verbs an agent must know about. The
-    # instructions name verbs by their EXPOSED (underscore) form because
-    # strict clients can only call advertised names.
-    assert "ae_init" in text
-    assert "ae_validateExpressions" in text
-    assert "ae_previewFrame" in text
-    # ES3 discipline + the runtime helpers we ship.
-    assert "ECMAScript 3" in text
-    assert "AEMCP.propByMatchPath" in text
-    # Never-throw safety invariant.
-    assert "NEVER let JSX throw" in text
+def test_base_instructions_name_only_the_two_execution_routes_and_default_skill():
+    execution_names = set(re.findall(r"\bae_(?:exec|nativeExec)\b", SERVER_INSTRUCTIONS))
+    assert execution_names == {"ae_exec", "ae_nativeExec"}
+    assert "builtin:skill:ae-execution-guide" in SERVER_INSTRUCTIONS
+    assert "every AE execution route choice" in SERVER_INSTRUCTIONS
+    assert "including simple edits" in SERVER_INSTRUCTIONS
+    assert "maintained AE scripting object model" in SERVER_INSTRUCTIONS
+    assert "curated AEGP" in SERVER_INSTRUCTIONS
 
 
-def test_instructions_explain_the_verified_native_graph_route_without_fallback():
-    assert "ae_listProjectItems" in SERVER_INSTRUCTIONS
-    assert "ae_listCompositionLayers" in SERVER_INSTRUCTIONS
-    assert "ae_listSelectedLayers" in SERVER_INSTRUCTIONS
-    assert "ae_getCompositionTime" in SERVER_INSTRUCTIONS
-    assert "ae_listLayerProperties" in SERVER_INSTRUCTIONS
-    assert "ae_listLayerPropertyKeyframes" in SERVER_INSTRUCTIONS
-    assert "ae_setLayerPropertyValue" in SERVER_INSTRUCTIONS
-    assert "ae_getLayerPropertyKeyframeDetails" in SERVER_INSTRUCTIONS
-    assert "ae_createComposition" in SERVER_INSTRUCTIONS
-    assert "ae_createCompositionLayer" in SERVER_INSTRUCTIONS
-    assert "ae_applyLayerEffect" in SERVER_INSTRUCTIONS
-    assert "composition locator" in SERVER_INSTRUCTIONS
-    assert "never fall back to JSX" in SERVER_INSTRUCTIONS
+def test_base_instructions_do_not_teach_removed_operation_specific_tools():
+    from scripts.generate_native_exec import load_migration_manifest
+    from pathlib import Path
 
-
-def test_instructions_cover_panel_runtime_and_file_hygiene():
-    text = SERVER_INSTRUCTIONS
-    assert "Do not switch to OS screenshots" in text
-    assert "report the MCP failure" in text
-    assert "project workspace" in text
-    assert "ae_mcp_previews" in text
-
-
-def test_instructions_require_progressive_tool_library_discovery():
-    text = SERVER_INSTRUCTIONS
-    index = text.index("ae_toolIndex")
-    search = text.index("ae_toolSearch")
-    inspect = text.index("ae_toolInspect")
-    use = text.index("ae_toolUse")
-    assert index < search < inspect < use
-    assert "candidate content is inspect-only" in text.lower()
+    root = Path(__file__).resolve().parents[3]
+    migration = load_migration_manifest(
+        root / "native/ae-plugin/protocol/native-exec-migration.json"
+    )
+    removed = {
+        tool_id.replace(".", "_")
+        for tool_id, row in migration.public_tools.items()
+        if row.disposition.startswith("REMOVE_TO_")
+    }
+    leaked = sorted(name for name in removed if name in SERVER_INSTRUCTIONS)
+    assert leaked == []
 
 
 def test_instructions_use_underscore_verb_names_not_dotted():
