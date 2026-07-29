@@ -781,6 +781,7 @@ git commit -m "feat(native): return common native program evidence"
 - Modify: `packages/core/ae_mcp/annotations.py`
 - Modify: `packages/core/ae_mcp/server.py`
 - Create: `packages/core/tests/test_native_exec.py`
+- Create: `packages/core/tests/test_server_native_tools.py`
 - Modify: `packages/core/tests/test_schemas.py`
 - Modify: `packages/core/tests/test_annotations.py`
 
