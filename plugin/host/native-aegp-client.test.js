@@ -12,6 +12,7 @@ const { EventEmitter } = require('node:events');
 const ACTIVE_PROGRAM_CLIENT_TESTS = [
     'CEP client automatically consumes the compatibility challenge and decision',
     'CEP client sends one native program and validates the common terminal',
+    'CEP client accepts a write success only with its real operation key',
     'CEP client preserves native program operation keys and rejects open terminals',
     'CEP client keeps a disconnected native program write side-effect uncertain',
     'CEP client has no operation-specific invoke alias or fallback',
@@ -526,6 +527,9 @@ function installProtocol(server, options) {
                     };
                     result = {
                         capabilityId: 'ae.native.exec',
+                        ...(mutating
+                            ? { operationKey: request.params.arguments.operationKey }
+                            : {}),
                         outputs,
                         operations,
                         evidence: {
@@ -875,6 +879,7 @@ test('CEP client sends one native program and validates the common terminal', {
         status: 'completed',
     }]);
     assert.deepEqual(result.undo, { available: false, verified: false });
+    assert.equal(Object.hasOwn(result, 'operationKey'), false);
     assert.equal(result.replayed, false);
     const invokes = protocol.requests.filter(function (request) {
         return request.method === 'invoke';
@@ -891,6 +896,37 @@ test('CEP client sends one native program and validates the common terminal', {
                 returnAs: 'result',
             }],
         },
+    });
+});
+
+test('CEP client accepts a write success only with its real operation key', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client } = await readyNativeProgramClient(t);
+    const result = await client.invoke({
+        requestId: 'native-program-write-success',
+        capabilityId: 'ae.native.exec',
+        capabilityVersion: 1,
+        arguments: {
+            operationKey: 'native-program-write-success-key',
+            undoGroup: 'Task 5 write',
+            operations: [{
+                op: 'composition.time.set',
+                args: {
+                    composition: { ref: 'composition' },
+                    time: { value: 12, scale: 24 },
+                },
+                returnAs: 'result',
+            }],
+        },
+        deadlineUnixMs: 1900000005000,
+    });
+
+    assert.equal(result.operationKey, 'native-program-write-success-key');
+    assert.deepEqual(result.undo, {
+        available: true,
+        verified: false,
+        groupLabel: 'Task 5 write',
     });
 });
 

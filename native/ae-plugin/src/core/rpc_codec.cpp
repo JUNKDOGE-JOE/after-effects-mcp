@@ -8238,6 +8238,9 @@ std::vector<std::uint8_t> encode_native_program_success(
       || response.postcondition_digest
           != digest_native_program_postcondition(
               response.outputs, response.operations)
+      || response.undo_available != !response.operation_key.empty()
+      || (!response.operation_key.empty()
+          && !valid_idempotency_key(response.operation_key))
       || (response.undo_group.has_value() != response.undo_available)) {
     invalid_argument("invalid or unvalidated native program evidence");
   }
@@ -8253,7 +8256,11 @@ std::vector<std::uint8_t> encode_native_program_success(
       "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,\"replayed\":"
       + std::string(response.replayed ? "true" : "false")
       + ",\"requestId\":" + json_string(response.request_id)
-      + ",\"result\":{\"capabilityId\":\"ae.native.exec\",\"evidence\":{"
+      + ",\"result\":{\"capabilityId\":\"ae.native.exec\""
+      + (response.operation_key.empty()
+          ? std::string{}
+          : ",\"operationKey\":" + json_string(response.operation_key))
+      + ",\"evidence\":{"
         "\"capabilityId\":\"ae.native.exec\",\"capabilityVersion\":1,"
         "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
       + ",\"effect\":" + json_string(effect)

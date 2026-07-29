@@ -19944,6 +19944,9 @@
         "capabilityId": {
           "const": "ae.native.exec"
         },
+        "operationKey": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
         "outputs": {
           "type": "object",
           "maxProperties": 64,
@@ -20003,6 +20006,9 @@
             }
           },
           "then": {
+            "required": [
+              "operationKey"
+            ],
             "properties": {
               "undo": {
                 "properties": {
@@ -20014,6 +20020,11 @@
             }
           },
           "else": {
+            "not": {
+              "required": [
+                "operationKey"
+              ]
+            },
             "properties": {
               "evidence": {
                 "properties": {

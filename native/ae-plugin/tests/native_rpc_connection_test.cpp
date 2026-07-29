@@ -3486,6 +3486,8 @@ void native_program_connection_returns_one_common_terminal_and_replays() {
       read_terminal,
       "\"undo\":{\"available\":false,\"verified\":false}",
       "native read program terminal");
+  require(read_terminal.find("\"operationKey\":") == std::string::npos,
+      "native read program terminal invented an operation key");
 
   constexpr std::string_view kOperationKey = "task-five-write-operation";
   send_json(
@@ -3507,6 +3509,10 @@ void native_program_connection_returns_one_common_terminal_and_replays() {
       write_terminal,
       "\"undo\":{\"available\":true,\"groupLabel\":\"Task 5 native write\","
       "\"verified\":false}",
+      "native write program terminal");
+  require_contains(
+      write_terminal,
+      "\"operationKey\":\"task-five-write-operation\"",
       "native write program terminal");
   require_contains(
       write_terminal, "\"replayed\":false", "native write program terminal");

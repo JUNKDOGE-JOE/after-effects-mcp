@@ -588,6 +588,7 @@ struct NativeProgramSuccess {
   std::string request_id;
   std::string session_id;
   std::string host_instance_id;
+  std::string operation_key;
   JsonObject outputs;
   std::vector<NativeProgramOperationSummary> operations;
   std::uint64_t started_at_unix_ms{0};

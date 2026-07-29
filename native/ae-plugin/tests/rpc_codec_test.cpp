@@ -4246,11 +4246,26 @@ void native_program_terminal_envelopes_are_common_and_handle_free() {
           && encoded.find("\"undo\":{\"available\":false,\"verified\":false}")
               != std::string::npos,
       "native program success lost its one common result envelope");
+  require(encoded.find("\"operationKey\":") == std::string::npos,
+      "native program read success invented an operation key");
   require(
       encoded.find("CompositionHandle") == std::string::npos
           && encoded.find("LayerHandle") == std::string::npos
           && encoded.find("PropertyHandle") == std::string::npos,
       "native program success leaked a request-local handle");
+
+  NativeProgramSuccess write_success = success;
+  write_success.request_id = "native-program-write-result";
+  write_success.operation_key = "native-program-write-key";
+  write_success.undo_available = true;
+  write_success.undo_group = "Task 5 write";
+  const std::string encoded_write =
+      body(encode_native_program_success(write_success));
+  require(
+      encoded_write.find(
+          "\"operationKey\":\"native-program-write-key\"")
+              != std::string::npos,
+      "native program write success lost its operation key");
 
   NativeProgramFailure failure;
   failure.request_id = "native-program-partial-failure";

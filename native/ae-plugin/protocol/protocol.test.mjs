@@ -85,10 +85,11 @@ test('native program terminal schema has one common success and failure shape', 
   const undo = { available: true, verified: false, groupLabel: 'Task 5 write' };
   const result = {
     capabilityId: 'ae.native.exec',
+    operationKey: 'native-program-write-key',
     outputs: { currentTime: { value: 12, scale: 24 } },
     operations: [
       { index: 0, op: 'composition.resolve', status: 'completed' },
-      { index: 1, op: 'composition.time.read', status: 'completed' },
+      { index: 1, op: 'composition.time.set', status: 'completed' },
     ],
     evidence,
     undo,
@@ -105,6 +106,20 @@ test('native program terminal schema has one common success and failure shape', 
   };
   assert.equal(schemaAccepts(schema.$defs.nativeProgramInvokeResult, result, schema), true);
   assert.equal(schemaAccepts(schema.$defs.response, success, schema), true);
+  const missingWriteKey = structuredClone(result);
+  delete missingWriteKey.operationKey;
+  assert.equal(
+    schemaAccepts(schema.$defs.nativeProgramInvokeResult, missingWriteKey, schema),
+    false,
+  );
+  const readResult = structuredClone(missingWriteKey);
+  readResult.evidence.effect = 'none';
+  readResult.undo = { available: false, verified: false };
+  assert.equal(schemaAccepts(schema.$defs.nativeProgramInvokeResult, readResult, schema), true);
+  assert.equal(schemaAccepts(schema.$defs.nativeProgramInvokeResult, {
+    ...readResult,
+    operationKey: 'invented-read-operation-key',
+  }, schema), false);
   assert.equal(schemaAccepts(schema.$defs.nativeProgramInvokeResult, {
     ...result,
     handle: { kind: 'CompositionHandle', raw: 1 },

@@ -956,6 +956,7 @@ void NativeRpcConnectionHandler::serve(
                 completion.request_id,
                 connection.session_id,
                 runtime_.host_instance_id,
+                evidence->second.operation_key,
                 result.outputs,
                 native_program_completed,
                 started_at,

@@ -2353,8 +2353,11 @@ function createNativeAegpClient(options) {
         const resultValid = exactKeys(result, [
             'capabilityId', 'outputs', 'operations', 'evidence', 'undo',
             'replayed',
-        ])
+        ], ['operationKey'])
             && result.capabilityId === 'ae.native.exec'
+            && (mutating
+                ? result.operationKey === call.arguments.operationKey
+                : result.operationKey === undefined)
             && typeof result.replayed === 'boolean'
             && operationsValid && outputsValid && undoValid && evidenceValid
             && result.evidence.postcondition.digest
