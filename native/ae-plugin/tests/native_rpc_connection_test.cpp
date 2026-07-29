@@ -49,6 +49,9 @@ using aemcp::native::HostProjectItemsResult;
 using aemcp::native::NativeRpcConnectionHandler;
 using aemcp::native::NativeRpcObserver;
 using aemcp::native::NativeRpcRuntimeInfo;
+using aemcp::native::NativeProgram;
+using aemcp::native::NativeProgramDisposition;
+using aemcp::native::NativeProgramHostResult;
 using aemcp::native::ProjectBitDepthChanged;
 using aemcp::native::ProjectSummary;
 using aemcp::native::Request;
@@ -110,6 +113,78 @@ class RecordingIdleSignal final : public HostIdleSignal {
 
 class FakeHost final : public HostApi {
  public:
+  [[nodiscard]] NativeProgramHostResult execute_native_program(
+      const NativeProgram& program,
+      std::string_view,
+      std::string_view,
+      TimePoint) override {
+    ++native_program_calls;
+    if (native_program_disconnect_fd >= 0) {
+      (void)::shutdown(native_program_disconnect_fd, SHUT_RDWR);
+      (void)::close(native_program_disconnect_fd);
+      native_program_disconnect_fd = -1;
+      std::this_thread::sleep_for(40ms);
+    }
+    if (native_program_uncertain) {
+      return NativeProgramHostResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "fake native program write became uncertain",
+          {},
+          {0},
+          1,
+          true,
+          NativeProgramDisposition::kPossiblySideEffecting,
+          {{
+              0,
+              program.operations[0].primitive_id,
+              aemcp::native::JsonValue{nullptr},
+          }},
+          {});
+    }
+    if (native_program_safe_failure) {
+      return NativeProgramHostResult::failure(
+          "PRECONDITION_FAILED",
+          "fake write adapter rejected before mutation",
+          {},
+          {0},
+          1,
+          false,
+          NativeProgramDisposition::kCompleted,
+          {{
+              0,
+              program.operations[0].primitive_id,
+              aemcp::native::JsonValue{nullptr},
+          }},
+          {});
+    }
+    std::vector<aemcp::native::NativeProgramOperationOutcome> operations;
+    operations.reserve(program.operations.size());
+    for (std::size_t index = 0; index < program.operations.size(); ++index) {
+      operations.push_back({
+          index,
+          program.operations[index].primitive_id,
+          aemcp::native::JsonValue{nullptr},
+      });
+    }
+    aemcp::native::JsonObject outputs;
+    if (!program.operations.empty()
+        && program.operations.back().return_as.has_value()) {
+      outputs.emplace_back(
+          *program.operations.back().return_as,
+          aemcp::native::JsonValue{aemcp::native::JsonObject{{
+              "value",
+              aemcp::native::JsonValue{aemcp::native::JsonNumber{12}},
+          }, {
+              "scale",
+              aemcp::native::JsonValue{aemcp::native::JsonNumber{24}},
+          }}});
+    }
+    NativeProgramHostResult result = NativeProgramHostResult::success(
+        std::move(operations), std::move(outputs));
+    result.write_started = !program.operation_key.empty();
+    return result;
+  }
+
   [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
     ++read_calls;
     return HostReadResult::success(summary);
@@ -660,12 +735,14 @@ class FakeHost final : public HostApi {
   [[nodiscard]] aemcp::native::HostActionResult begin_undo_group(
       std::string_view, TimePoint) override {
     ++layer_undo_start_calls;
+    ++native_program_undo_begin_calls;
     return aemcp::native::HostActionResult::success();
   }
 
   [[nodiscard]] aemcp::native::HostActionResult end_undo_group(
       TimePoint) override {
     ++layer_undo_end_calls;
+    ++native_program_undo_end_calls;
     return aemcp::native::HostActionResult::success();
   }
 
@@ -802,6 +879,12 @@ class FakeHost final : public HostApi {
   int layer_undo_start_calls{0};
   int layer_undo_end_calls{0};
   int invalid_av_postcondition_after_mutation{0};
+  int native_program_calls{0};
+  int native_program_undo_begin_calls{0};
+  int native_program_undo_end_calls{0};
+  int native_program_disconnect_fd{-1};
+  bool native_program_uncertain{false};
+  bool native_program_safe_failure{false};
   bool layer_track_matte_active{false};
   bool layer_has_audio{true};
   bool layer_has_video{true};
@@ -1069,6 +1152,38 @@ std::string hello_json() {
       + "\"},\"nonce\":\"abcdefghijklmnopqrstuvwxyzABCDEF\"}}";
 }
 
+std::string graph_locator_json(
+    std::string_view kind, std::string_view object_id);
+
+std::string native_program_json(
+    std::string_view request_id,
+    std::string_view operation_key = {},
+    std::int64_t target_value = 1) {
+  std::string arguments;
+  if (operation_key.empty()) {
+    arguments =
+        "{\"operations\":[{\"op\":\"project.items.list\","
+        "\"args\":{\"offset\":0,\"limit\":1},\"returnAs\":\"items\"}]}";
+  } else {
+    arguments =
+        "{\"operationKey\":\"" + std::string(operation_key)
+        + "\",\"undoGroup\":\"Task 5 native write\",\"operations\":["
+          "{\"op\":\"composition.resolve\",\"args\":{\"locator\":"
+        + graph_locator_json(
+            "composition", "66666666-6666-4666-8666-666666666666")
+        + "},\"saveAs\":\"composition\"},"
+          "{\"op\":\"composition.time.set\",\"args\":{\"composition\":"
+          "{\"ref\":\"composition\"},\"targetTime\":{\"value\":"
+        + std::to_string(target_value)
+        + ",\"scale\":24}},\"returnAs\":\"changed\"}]}";
+  }
+  return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
+      + std::string(kSession) + "\",\"requestId\":\"" + std::string(request_id)
+      + "\",\"method\":\"invoke\",\"deadlineUnixMs\":1900000005000,"
+        "\"params\":{\"capabilityId\":\"ae.native.exec\","
+        "\"capabilityVersion\":1,\"arguments\":" + arguments + "}}";
+}
+
 std::string bit_depth_capabilities_json(
     std::string_view request_id, std::string_view capability_id) {
   return "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
@@ -1078,9 +1193,6 @@ std::string bit_depth_capabilities_json(
       + std::string(capability_id) + "\"],\"detail\":\"full\","
         "\"limit\":1}}";
 }
-
-std::string graph_locator_json(
-    std::string_view kind, std::string_view object_id);
 
 #if 0  // Legacy discovery request helper.
 std::string layer_source_matte_av_capabilities_json(
@@ -3333,7 +3445,7 @@ void generated_registry_identity_is_not_runtime_supplied() {
       "generated primitive registry digest is not compiled identity");
 }
 
-void admitted_native_program_is_not_dispatched_before_task_four() {
+void native_program_connection_returns_one_common_terminal_and_replays() {
   FakeDispatcherClock dispatcher_clock;
   FakeSessionClock session_clock;
   HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
@@ -3348,19 +3460,196 @@ void admitted_native_program_is_not_dispatched_before_task_four() {
   std::thread worker([&] { handler.serve(authenticated); });
   send_json(sockets[0], hello_json());
   (void)read_body(sockets[0]);
-  const std::string program = "{\"wireVersion\":1,\"kind\":\"request\",\"sessionId\":\""
-      + std::string(kSession) + "\",\"requestId\":\"native-program\",\"method\":\"invoke\","
-        "\"deadlineUnixMs\":1900000005000,\"params\":{\"capabilityId\":\"ae.native.exec\","
-        "\"capabilityVersion\":1,\"arguments\":{\"operations\":[{\"op\":\"composition.resolve\","
-        "\"args\":{\"locator\":"
-      + graph_locator_json("composition", "66666666-6666-4666-8666-666666666666")
-      + "},\"saveAs\":\"composition\"}]}}}";
-  send_json(sockets[0], program);
-  const std::string response = read_body(sockets[0]);
-  require_contains(response, "\"code\":\"NATIVE_UNAVAILABLE\"", "native program transition response");
-  require_contains(response, "executor is not yet wired", "native program transition response");
-  require(idle_signal.calls() == 0, "admitted program scheduled legacy dispatch work");
+
+  FakeHost host;
+  send_json(sockets[0], native_program_json("native-program-read"));
+  const std::string read_progress = read_body(sockets[0]);
+  require_contains(
+      read_progress, "\"event\":\"progress\"", "native read program progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "queued native read program");
+  const auto read_batch = dispatcher.drain(host);
+  require(read_batch.completions.size() == 1
+          && read_batch.completions[0].ok && host.native_program_calls == 1,
+      "native read program did not dispatch exactly once");
+  const std::string read_terminal = read_body(sockets[0]);
+  require_contains(
+      read_terminal, "\"capabilityId\":\"ae.native.exec\"",
+      "native read program terminal");
+  require_contains(
+      read_terminal,
+      "\"operations\":[{\"index\":0,\"op\":\"project.items.list\","
+      "\"status\":\"completed\"}]",
+      "native read program terminal");
+  require_contains(
+      read_terminal, "\"outputs\":{\"items\":", "native read program terminal");
+  require_contains(
+      read_terminal,
+      "\"undo\":{\"available\":false,\"verified\":false}",
+      "native read program terminal");
+
+  constexpr std::string_view kOperationKey = "task-five-write-operation";
+  send_json(
+      sockets[0],
+      native_program_json("native-program-write", kOperationKey));
+  require_contains(
+      read_body(sockets[0]), "\"event\":\"progress\"",
+      "native write program progress");
+  wait_until([&] { return dispatcher.queued() == 1; }, "queued native write program");
+  const auto write_batch = dispatcher.drain(host);
+  require(write_batch.completions.size() == 1
+          && write_batch.completions[0].ok
+          && host.native_program_calls == 2
+          && host.native_program_undo_begin_calls == 1
+          && host.native_program_undo_end_calls == 1,
+      "native write program did not use one dispatch and one Undo group");
+  const std::string write_terminal = read_body(sockets[0]);
+  require_contains(
+      write_terminal,
+      "\"undo\":{\"available\":true,\"groupLabel\":\"Task 5 native write\","
+      "\"verified\":false}",
+      "native write program terminal");
+  require_contains(
+      write_terminal, "\"replayed\":false", "native write program terminal");
+
+  send_json(
+      sockets[0],
+      native_program_json("native-program-write-replay", kOperationKey));
+  require_contains(
+      read_body(sockets[0]), "\"event\":\"progress\"",
+      "native program replay progress");
+  const std::string replay = read_body(sockets[0]);
+  require_contains(replay, "\"replayed\":true", "native program replay");
+  require_contains(
+      replay, "\"outputs\":{\"changed\":", "native program replay");
+  require(host.native_program_calls == 2,
+      "same operationKey and digest redispatched the native program");
+
+  send_json(
+      sockets[0],
+      native_program_json("native-program-write-conflict", kOperationKey, 2));
+  const std::string conflict = read_body(sockets[0]);
+  require_contains(
+      conflict, "\"code\":\"DUPLICATE_REQUEST\"", "native program conflict");
+  require_contains(
+      conflict, "different arguments", "native program conflict");
+  require(host.native_program_calls == 2,
+      "same operationKey with a different digest dispatched");
+
+  host.native_program_safe_failure = true;
+  send_json(
+      sockets[0],
+      native_program_json(
+          "native-program-safe-write-failure",
+          "task-five-safe-write-key"));
+  require_contains(
+      read_body(sockets[0]), "\"event\":\"progress\"",
+      "native safe write failure progress");
+  wait_until(
+      [&] { return dispatcher.queued() == 1; },
+      "queued native safe write failure");
+  const auto safe_batch = dispatcher.drain(host);
+  require(safe_batch.completions.size() == 1
+          && !safe_batch.completions[0].ok
+          && !safe_batch.completions[0].native_program_result.write_started
+          && safe_batch.completions[0].native_program_result.undo_available,
+      "safe write failure lost its balanced Undo fact");
+  const std::string safe_failure = read_body(sockets[0]);
+  require_contains(
+      safe_failure, "\"code\":\"PRECONDITION_FAILED\"",
+      "native safe write failure");
+  require_contains(
+      safe_failure, "\"sideEffect\":\"completed\"",
+      "native safe write failure");
+  require_contains(
+      safe_failure,
+      "\"operationKey\":\"task-five-safe-write-key\"",
+      "native safe write failure");
+  require_contains(
+      safe_failure,
+      "\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\","
+      "\"digest\":",
+      "native safe write failure");
+  require_contains(
+      safe_failure, "\"kind\":\"native-program\",\"verified\":false",
+      "native safe write failure");
+  require_contains(
+      safe_failure,
+      "\"undo\":{\"available\":true,\"groupLabel\":\"Task 5 native write\","
+      "\"verified\":false}",
+      "native safe write failure");
+
   finish_connection(sockets[0], sockets[1], worker);
+  (void)dispatcher.shutdown();
+}
+
+void native_program_disconnect_after_write_dispatch_replays_uncertainty() {
+  FakeDispatcherClock dispatcher_clock;
+  FakeSessionClock session_clock;
+  HostDispatcher dispatcher(std::this_thread::get_id(), dispatcher_clock);
+  RecordingObserver observer;
+  RecordingIdleSignal idle_signal;
+  NativeRpcConnectionHandler handler(
+      dispatcher, dispatcher_clock, session_clock, runtime(), observer, idle_signal);
+  FakeHost host;
+  host.native_program_uncertain = true;
+
+  std::array<int, 2> first{};
+  require(::socketpair(AF_UNIX, SOCK_STREAM, 0, first.data()) == 0,
+      "native-program disconnect socketpair failed");
+  const AuthenticatedConnection authenticated =
+      connection(first[1], "native-program-disconnect-route", 9);
+  std::thread first_worker([&] { handler.serve(authenticated); });
+  send_json(first[0], hello_json());
+  (void)read_body(first[0]);
+  constexpr std::string_view kOperationKey = "task-five-disconnect-write";
+  send_json(
+      first[0],
+      native_program_json("native-program-disconnect", kOperationKey));
+  require_contains(
+      read_body(first[0]), "\"event\":\"progress\"",
+      "disconnecting native write progress");
+  wait_until([&] { return dispatcher.queued() == 1; },
+      "queued disconnecting native write");
+  host.native_program_disconnect_fd = first[0];
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1
+          && !batch.completions[0].ok
+          && batch.completions[0].error_code
+              == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+          && host.native_program_calls == 1,
+      "disconnected native write lost its uncertain terminal");
+  first_worker.join();
+  (void)::close(first[1]);
+
+  std::array<int, 2> second{};
+  require(::socketpair(AF_UNIX, SOCK_STREAM, 0, second.data()) == 0,
+      "native-program replay socketpair failed");
+  const AuthenticatedConnection replay_connection =
+      connection(second[1], "native-program-replay-route", 10);
+  std::thread second_worker([&] { handler.serve(replay_connection); });
+  send_json(second[0], hello_json());
+  (void)read_body(second[0]);
+  send_json(
+      second[0],
+      native_program_json("native-program-disconnect-replay", kOperationKey));
+  require_contains(
+      read_body(second[0]), "\"event\":\"progress\"",
+      "uncertain native program replay progress");
+  const std::string replay = read_body(second[0]);
+  require_contains(
+      replay, "\"replayed\":true", "uncertain native program replay");
+  require_contains(
+      replay,
+      "\"code\":\"POSSIBLY_SIDE_EFFECTING_FAILURE\"",
+      "uncertain native program replay");
+  require_contains(
+      replay,
+      "\"disposition\":\"possibly-side-effecting\"",
+      "uncertain native program replay");
+  require(host.native_program_calls == 1,
+      "uncertain native program replay redispatched after disconnect");
+
+  finish_connection(second[0], second[1], second_worker);
   (void)dispatcher.shutdown();
 }
 
@@ -3368,7 +3657,8 @@ void admitted_native_program_is_not_dispatched_before_task_four() {
 
 int main() {
   generated_registry_identity_is_not_runtime_supplied();
-  admitted_native_program_is_not_dispatched_before_task_four();
+  native_program_connection_returns_one_common_terminal_and_replays();
+  native_program_disconnect_after_write_dispatch_replays_uncertainty();
   std::cout << "native_rpc_connection_test: PASS\n";
   return 0;
 }

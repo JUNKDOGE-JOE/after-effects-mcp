@@ -19780,6 +19780,405 @@
         }
       }
     },
+    "nativeProgramOperationSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "op",
+        "status"
+      ],
+      "properties": {
+        "index": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "op": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96,
+          "pattern": "^[a-z][a-z0-9_-]*(?:\\.[a-z][a-z0-9_-]*)+$"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "failed"
+          ]
+        }
+      }
+    },
+    "nativeProgramPostconditionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified",
+        "kind",
+        "algorithm",
+        "digest"
+      ],
+      "properties": {
+        "verified": {
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "native-program"
+        },
+        "algorithm": {
+          "const": "sha256-rfc8785-jcs-v1"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "nativeProgramEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "hostInstanceId",
+        "sessionId",
+        "requestId",
+        "capabilityId",
+        "capabilityVersion",
+        "startedAtUnixMs",
+        "completedAtUnixMs",
+        "effect",
+        "postcondition",
+        "requestDigest"
+      ],
+      "properties": {
+        "engine": {
+          "const": "native-aegp"
+        },
+        "hostInstanceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "capabilityId": {
+          "const": "ae.native.exec"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "startedAtUnixMs": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "completedAtUnixMs": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "effect": {
+          "enum": [
+            "none",
+            "committed",
+            "may-have-occurred"
+          ]
+        },
+        "postcondition": {
+          "$ref": "#/$defs/nativeProgramPostconditionEvidence"
+        },
+        "requestDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "nativeProgramUndoEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "verified"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "verified": {
+          "const": false
+        },
+        "groupLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "available": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "groupLabel"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "groupLabel"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nativeProgramInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "outputs",
+        "operations",
+        "evidence",
+        "undo"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.native.exec"
+        },
+        "outputs": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": true
+        },
+        "operations": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/nativeProgramOperationSummary"
+              },
+              {
+                "properties": {
+                  "status": {
+                    "const": "completed"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/nativeProgramEvidence"
+        },
+        "undo": {
+          "$ref": "#/$defs/nativeProgramUndoEvidence"
+        }
+      },
+      "allOf": [
+        {
+          "properties": {
+            "evidence": {
+              "properties": {
+                "postcondition": {
+                  "properties": {
+                    "verified": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "evidence": {
+                "properties": {
+                  "effect": {
+                    "const": "committed"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "undo": {
+                "properties": {
+                  "available": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "evidence": {
+                "properties": {
+                  "effect": {
+                    "const": "none"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "nativeProgramFailureDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "disposition",
+        "completedOperations",
+        "outputs",
+        "evidence",
+        "undo"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.native.exec"
+        },
+        "operationKey": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "disposition": {
+          "enum": [
+            "not-started",
+            "completed",
+            "possibly-side-effecting"
+          ]
+        },
+        "completedOperations": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/nativeProgramOperationSummary"
+              },
+              {
+                "properties": {
+                  "status": {
+                    "const": "completed"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "failedOperation": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nativeProgramOperationSummary"
+            },
+            {
+              "properties": {
+                "status": {
+                  "const": "failed"
+                }
+              }
+            }
+          ]
+        },
+        "outputs": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": true
+        },
+        "evidence": {
+          "$ref": "#/$defs/nativeProgramEvidence"
+        },
+        "undo": {
+          "$ref": "#/$defs/nativeProgramUndoEvidence"
+        }
+      },
+      "allOf": [
+        {
+          "properties": {
+            "evidence": {
+              "properties": {
+                "postcondition": {
+                  "properties": {
+                    "verified": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "possibly-side-effecting"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "operationKey"
+            ],
+            "properties": {
+              "evidence": {
+                "properties": {
+                  "effect": {
+                    "const": "may-have-occurred"
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "evidence": {
+                "properties": {
+                  "effect": {
+                    "const": "none"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "not-started"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "failedOperation"
+              ]
+            },
+            "properties": {
+              "completedOperations": {
+                "maxItems": 0
+              },
+              "outputs": {
+                "maxProperties": 0
+              },
+              "undo": {
+                "properties": {
+                  "available": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
     "nativeMediaReadInvokeResult": {
       "type": "object",
       "additionalProperties": false,
@@ -19846,6 +20245,9 @@
     },
     "invokeResult": {
       "oneOf": [
+        {
+          "$ref": "#/$defs/nativeProgramInvokeResult"
+        },
         {
           "$ref": "#/$defs/projectSummaryInvokeResult"
         },
@@ -20358,6 +20760,58 @@
           }
         },
         {
+          "required": [
+            "details"
+          ],
+          "properties": {
+            "code": {
+              "enum": [
+                "NATIVE_UNAVAILABLE",
+                "NATIVE_UNSUPPORTED",
+                "INVALID_REQUEST",
+                "INVALID_ARGUMENT",
+                "TRACK_MATTE_COMPOSITION_MISMATCH",
+                "LAYER_HAS_NO_AUDIO",
+                "LAYER_HAS_NO_VIDEO",
+                "PRECONDITION_FAILED",
+                "STALE_LOCATOR",
+                "DEADLINE_EXCEEDED",
+                "CANCELLED",
+                "AE_SHUTTING_DOWN",
+                "SESSION_STALE",
+                "CAPABILITY_FAILED"
+              ]
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "completed"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "inspect-state"
+                }
+              }
+            },
+            "details": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/nativeProgramFailureDetails"
+                },
+                {
+                  "properties": {
+                    "disposition": {
+                      "const": "completed"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
           "properties": {
             "code": {
               "const": "CAPABILITY_FAILED"
@@ -20432,7 +20886,14 @@
           "$ref": "#/$defs/recovery"
         },
         "details": {
-          "$ref": "#/$defs/errorDetails"
+          "oneOf": [
+            {
+              "$ref": "#/$defs/errorDetails"
+            },
+            {
+              "$ref": "#/$defs/nativeProgramFailureDetails"
+            }
+          ]
         }
       },
       "allOf": [
@@ -20530,8 +20991,33 @@
             ],
             "properties": {
               "details": {
-                "required": [
-                  "idempotencyKey"
+                "oneOf": [
+                  {
+                    "allOf": [
+                      {
+                        "$ref": "#/$defs/errorDetails"
+                      },
+                      {
+                        "required": [
+                          "idempotencyKey"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "$ref": "#/$defs/nativeProgramFailureDetails"
+                      },
+                      {
+                        "properties": {
+                          "disposition": {
+                            "const": "possibly-side-effecting"
+                          }
+                        }
+                      }
+                    ]
+                  }
                 ]
               }
             }
@@ -20820,7 +21306,7 @@
           "const": false
         },
         "replayed": {
-          "const": false
+          "type": "boolean"
         },
         "error": {
           "$ref": "#/$defs/rpcError"
@@ -20840,6 +21326,9 @@
             ]
           },
           "properties": {
+            "replayed": {
+              "const": false
+            },
             "method": {
               "const": "hello"
             },
@@ -20886,8 +21375,51 @@
                   }
                 }
               }
+            },
+            "replayed": {
+              "type": "boolean"
             }
-          }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "error": {
+                    "required": [
+                      "details"
+                    ],
+                    "properties": {
+                      "details": {
+                        "properties": {
+                          "capabilityId": {
+                            "const": "ae.native.exec"
+                          },
+                          "disposition": {
+                            "enum": [
+                              "not-started",
+                              "completed",
+                              "possibly-side-effecting"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "capabilityId",
+                          "disposition"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "replayed": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          ]
         }
       ]
     },

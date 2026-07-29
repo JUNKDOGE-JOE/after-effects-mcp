@@ -1893,6 +1893,7 @@ struct NativeProgramHostResult {
   std::vector<std::size_t> completed_operation_indices;
   std::optional<std::size_t> failed_operation_index;
   bool write_started{false};
+  bool undo_available{false};
   NativeProgramDisposition disposition{NativeProgramDisposition::kNotStarted};
   std::string error_code;
   std::string message;
@@ -1908,7 +1909,9 @@ struct NativeProgramHostResult {
       std::vector<std::size_t> completed_indices,
       std::optional<std::size_t> failed_index,
       bool write_started,
-      NativeProgramDisposition disposition);
+      NativeProgramDisposition disposition,
+      std::vector<NativeProgramOperationOutcome> operations = {},
+      JsonObject outputs = {});
 };
 
 class HostApi {

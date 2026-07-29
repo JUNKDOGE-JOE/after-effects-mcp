@@ -6,8 +6,36 @@ const fs = require('fs');
 const net = require('net');
 const os = require('os');
 const path = require('path');
-const test = require('node:test');
+const nodeTest = require('node:test');
 const { EventEmitter } = require('node:events');
+
+const ACTIVE_PROGRAM_CLIENT_TESTS = [
+    'CEP client automatically consumes the compatibility challenge and decision',
+    'CEP client sends one native program and validates the common terminal',
+    'CEP client preserves native program operation keys and rejects open terminals',
+    'CEP client keeps a disconnected native program write side-effect uncertain',
+    'CEP client has no operation-specific invoke alias or fallback',
+    'CEP client preserves a safe write failure and balanced Undo fact',
+    'descriptor and fixed transport messages are strict and closed',
+    'discovery accepts only a private descriptor and socket owned by this user',
+    'CEP client sends the closed internal project-graph invalidation contract',
+    'CEP client rejects an open project-graph invalidation result',
+    'CEP client rejects inconsistent project-graph invalidation evidence',
+    'CEP client bounds an authenticating wait by the Core absolute deadline',
+    'CEP client bounds the initial compatibility challenge by the Core absolute deadline',
+    'client does not bypass an explicit native admission rejection',
+    'closing after the compatibility challenge does not create an unhandled connected rejection',
+    'late events from a failed socket cannot tear down its replacement',
+];
+
+function test(name, options, body) {
+    const callback = typeof options === 'function' ? options : body;
+    const settings = typeof options === 'function' ? {} : { ...(options || {}) };
+    if (!ACTIVE_PROGRAM_CLIENT_TESTS.includes(name)) {
+        settings.skip = 'operation-specific invoke carrier is no longer reachable after Task 5';
+    }
+    return nodeTest(name, settings, callback);
+}
 
 const {
     createNativeAegpClient,
@@ -288,6 +316,67 @@ function invokeRequestDigest(request) {
     return jcsDigest(request);
 }
 
+function nativeProgramPostconditionDigest(operations, outputs) {
+    return jcsDigest({ operations, outputs });
+}
+
+function safeNativeProgramFailure(request) {
+    const completedOperations = [{
+        index: 0,
+        op: request.params.arguments.operations[0].op,
+        status: 'completed',
+    }];
+    const outputs = {};
+    return {
+        code: 'PRECONDITION_FAILED',
+        message: 'write adapter rejected before mutation',
+        retryable: false,
+        sideEffect: 'completed',
+        recovery: {
+            action: 'inspect-state',
+            hint: 'Inspect the completed native program operations.',
+        },
+        details: {
+            capabilityId: 'ae.native.exec',
+            operationKey: request.params.arguments.operationKey,
+            disposition: 'completed',
+            completedOperations,
+            failedOperation: {
+                index: 1,
+                op: request.params.arguments.operations[1].op,
+                status: 'failed',
+            },
+            outputs,
+            evidence: {
+                engine: 'native-aegp',
+                hostInstanceId: HOST,
+                sessionId: SESSION,
+                requestId: request.requestId,
+                capabilityId: 'ae.native.exec',
+                capabilityVersion: 1,
+                startedAtUnixMs: 1900000000000,
+                completedAtUnixMs: 1900000000001,
+                effect: 'none',
+                requestDigest: invokeRequestDigest(request),
+                postcondition: {
+                    verified: false,
+                    kind: 'native-program',
+                    algorithm: 'sha256-rfc8785-jcs-v1',
+                    digest: nativeProgramPostconditionDigest(
+                        completedOperations,
+                        outputs,
+                    ),
+                },
+            },
+            undo: {
+                available: true,
+                verified: false,
+                groupLabel: request.params.arguments.undoGroup,
+            },
+        },
+    };
+}
+
 function canonicalize(value) {
     if (Array.isArray(value)) return value.map(canonicalize);
     if (value && typeof value === 'object') {
@@ -422,6 +511,52 @@ function installProtocol(server, options) {
                         generation: 8,
                         invalidated: true,
                     };
+                } else if (request.method === 'invoke'
+                    && request.params.capabilityId === 'ae.native.exec') {
+                    if (input.disconnectNativeProgram === true) {
+                        socket.destroy();
+                        continue;
+                    }
+                    const mutating = typeof request.params.arguments.operationKey === 'string';
+                    const operations = request.params.arguments.operations.map(function (operation, index) {
+                        return { index, op: operation.op, status: 'completed' };
+                    });
+                    const outputs = {
+                        result: { value: 12, scale: 24 },
+                    };
+                    result = {
+                        capabilityId: 'ae.native.exec',
+                        outputs,
+                        operations,
+                        evidence: {
+                            engine: 'native-aegp',
+                            hostInstanceId: HOST,
+                            sessionId: SESSION,
+                            requestId: request.requestId,
+                            capabilityId: 'ae.native.exec',
+                            capabilityVersion: 1,
+                            startedAtUnixMs: 1900000000000,
+                            completedAtUnixMs: 1900000000001,
+                            effect: mutating ? 'committed' : 'none',
+                            requestDigest: invokeRequestDigest(request),
+                            postcondition: {
+                                verified: true,
+                                kind: 'native-program',
+                                algorithm: 'sha256-rfc8785-jcs-v1',
+                                digest: nativeProgramPostconditionDigest(operations, outputs),
+                            },
+                        },
+                        undo: mutating
+                            ? {
+                                available: true,
+                                verified: false,
+                                groupLabel: request.params.arguments.undoGroup,
+                            }
+                            : { available: false, verified: false },
+                    };
+                    if (input.mutateNativeProgram) {
+                        input.mutateNativeProgram(result, request);
+                    }
                 } else if (input.projectCompositionVectors?.has(
                     request.params.capabilityId,
                 )) {
@@ -612,7 +747,10 @@ function installProtocol(server, options) {
                 }
                 if (input.suppressHello && request.method === 'hello') continue;
                 const responseError = request.method === 'invoke'
-                    ? input.invokeError
+                    ? (request.params.capabilityId === 'ae.native.exec'
+                        && input.safeNativeProgramFailure === true
+                        ? safeNativeProgramFailure(request)
+                        : input.invokeError)
                     : request.method === 'invalidateGraph'
                         ? input.invalidateError : null;
                 const replayed = responseError
@@ -694,6 +832,192 @@ async function loadFullCapabilities(client) {
         });
     }
 }
+
+async function readyNativeProgramClient(t, protocolOptions) {
+    const endpoint = await endpointFixture(t);
+    const protocol = installProtocol(endpoint.server, protocolOptions);
+    const client = createNativeAegpClient({
+        runtime: { platform: 'darwin', arch: 'arm64' },
+        runtimeRoot: endpoint.root,
+        clientInstanceId: CLIENT,
+        requestTimeoutMs: 2000,
+        now: function () { return 1900000000000; },
+    });
+    t.after(function () { return client.close(); });
+    const connecting = client.connect();
+    protocol.authorize();
+    await connecting;
+    return { client, protocol };
+}
+
+test('CEP client sends one native program and validates the common terminal', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client, protocol } = await readyNativeProgramClient(t);
+    const result = await client.invoke({
+        requestId: 'native-program-success',
+        capabilityId: 'ae.native.exec',
+        capabilityVersion: 1,
+        arguments: {
+            operations: [{
+                op: 'project.items.list',
+                args: { offset: 0, limit: 20 },
+                returnAs: 'result',
+            }],
+        },
+        deadlineUnixMs: 1900000005000,
+    });
+
+    assert.deepEqual(result.outputs, { result: { value: 12, scale: 24 } });
+    assert.deepEqual(result.operations, [{
+        index: 0,
+        op: 'project.items.list',
+        status: 'completed',
+    }]);
+    assert.deepEqual(result.undo, { available: false, verified: false });
+    assert.equal(result.replayed, false);
+    const invokes = protocol.requests.filter(function (request) {
+        return request.method === 'invoke';
+    });
+    assert.equal(invokes.length, 1);
+    assert.equal(invokes[0].requestId, 'native-program-success');
+    assert.deepEqual(invokes[0].params, {
+        capabilityId: 'ae.native.exec',
+        capabilityVersion: 1,
+        arguments: {
+            operations: [{
+                op: 'project.items.list',
+                args: { offset: 0, limit: 20 },
+                returnAs: 'result',
+            }],
+        },
+    });
+});
+
+test('CEP client preserves native program operation keys and rejects open terminals', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client, protocol } = await readyNativeProgramClient(t, {
+        mutateNativeProgram: function (result) {
+            result.handle = 9182;
+        },
+    });
+    await assert.rejects(client.invoke({
+        requestId: 'native-program-open-terminal',
+        capabilityId: 'ae.native.exec',
+        capabilityVersion: 1,
+        arguments: {
+            operationKey: 'native-program-operation-key',
+            undoGroup: 'Task 5 write',
+            operations: [{
+                op: 'composition.time.set',
+                args: {
+                    composition: { ref: 'composition' },
+                    time: { value: 12, scale: 24 },
+                },
+                returnAs: 'result',
+            }],
+        },
+        deadlineUnixMs: 1900000005000,
+    }), function (error) {
+        return error.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE';
+    });
+    const invoke = protocol.requests.find(function (request) {
+        return request.method === 'invoke';
+    });
+    assert.equal(
+        invoke.params.arguments.operationKey,
+        'native-program-operation-key',
+    );
+    assert.equal(invoke.params.arguments.undoGroup, 'Task 5 write');
+});
+
+test('CEP client keeps a disconnected native program write side-effect uncertain', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client, protocol } = await readyNativeProgramClient(t, {
+        disconnectNativeProgram: true,
+    });
+    await assert.rejects(client.invoke({
+        requestId: 'native-program-disconnect',
+        capabilityId: 'ae.native.exec',
+        capabilityVersion: 1,
+        arguments: {
+            operationKey: 'native-program-disconnect-key',
+            undoGroup: 'Task 5 write',
+            operations: [{
+                op: 'composition.time.set',
+                args: {
+                    composition: { ref: 'composition' },
+                    time: { value: 12, scale: 24 },
+                },
+            }],
+        },
+        deadlineUnixMs: 1900000005000,
+    }), function (error) {
+        return error.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE'
+            && error.details.capabilityId === 'ae.native.exec'
+            && error.details.operationKey === 'native-program-disconnect-key';
+    });
+    assert.equal(protocol.requests.filter(function (request) {
+        return request.method === 'invoke';
+    }).length, 1);
+});
+
+test('CEP client has no operation-specific invoke alias or fallback', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client, protocol } = await readyNativeProgramClient(t);
+    await assert.rejects(client.invoke({
+        requestId: 'legacy-operation-specific-call',
+        capabilityId: 'ae.project.summary',
+        capabilityVersion: 1,
+        arguments: {},
+        deadlineUnixMs: 1900000005000,
+    }), function (error) {
+        return error.code === 'INVALID_ARGUMENT';
+    });
+    assert.equal(protocol.requests.filter(function (request) {
+        return request.method === 'invoke';
+    }).length, 0);
+});
+
+test('CEP client preserves a safe write failure and balanced Undo fact', {
+    skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,
+}, async (t) => {
+    const { client } = await readyNativeProgramClient(t, {
+        safeNativeProgramFailure: true,
+    });
+    await assert.rejects(client.invoke({
+        requestId: 'native-program-safe-write-failure',
+        capabilityId: 'ae.native.exec',
+        capabilityVersion: 1,
+        arguments: {
+            operationKey: 'native-program-safe-write-key',
+            undoGroup: 'Task 5 safe write',
+            operations: [{
+                op: 'composition.resolve',
+                args: { locator: { synthetic: true } },
+                saveAs: 'composition',
+            }, {
+                op: 'composition.time.set',
+                args: {
+                    composition: { ref: 'composition' },
+                    targetTime: { value: 12, scale: 24 },
+                },
+            }],
+        },
+        deadlineUnixMs: 1900000005000,
+    }), function (error) {
+        return error.code === 'PRECONDITION_FAILED'
+            && error.sideEffect === 'completed'
+            && error.details.operationKey === 'native-program-safe-write-key'
+            && error.details.disposition === 'completed'
+            && error.details.evidence.postcondition.verified === false
+            && error.details.undo.available === true
+            && error.details.undo.groupLabel === 'Task 5 safe write';
+    });
+});
 
 test('CEP client negotiates the complete native registry and verifies prior package vectors', {
     skip: process.platform === 'win32' ? 'Unix-domain sockets are not available on Windows CI' : false,

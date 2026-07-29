@@ -61,6 +61,9 @@ using aemcp::native::rpc::CompositionCreateSuccess;
 using aemcp::native::rpc::CompositionLayerCreateSuccess;
 using aemcp::native::rpc::LayerEffectApplySuccess;
 using aemcp::native::rpc::NativeMediaSuccess;
+using aemcp::native::rpc::NativeProgramFailure;
+using aemcp::native::rpc::NativeProgramOperationSummary;
+using aemcp::native::rpc::NativeProgramSuccess;
 using aemcp::native::rpc::LayerPropertiesSuccess;
 using aemcp::native::rpc::LayerPropertyKeyframesSuccess;
 using aemcp::native::rpc::LayerPropertySetSuccess;
@@ -131,6 +134,7 @@ using aemcp::native::rpc::composition_duplicate_persistent_diagnostic_fields;
 using aemcp::native::rpc::digest_composition_layer_create_postcondition;
 using aemcp::native::rpc::digest_layer_effect_apply_postcondition;
 using aemcp::native::rpc::digest_native_media_postcondition;
+using aemcp::native::rpc::digest_native_program_postcondition;
 using aemcp::native::rpc::canonicalize_native_media_value;
 using aemcp::native::rpc::digest_layer_properties_postcondition;
 using aemcp::native::rpc::digest_layer_property_keyframes_postcondition;
@@ -177,6 +181,8 @@ using aemcp::native::rpc::encode_composition_create_success;
 using aemcp::native::rpc::encode_composition_layer_create_success;
 using aemcp::native::rpc::encode_layer_effect_apply_success;
 using aemcp::native::rpc::encode_native_media_success;
+using aemcp::native::rpc::encode_native_program_failure;
+using aemcp::native::rpc::encode_native_program_success;
 using aemcp::native::rpc::encode_layer_properties_success;
 using aemcp::native::rpc::encode_layer_property_keyframes_success;
 using aemcp::native::rpc::encode_layer_property_set_success;
@@ -4193,6 +4199,139 @@ void generated_primitive_registry_is_unique_and_capabilities_use_indices() {
       "full generated registry did not use its generated digest");
 }
 
+void native_program_terminal_envelopes_are_common_and_handle_free() {
+  const std::vector<NativeProgramOperationSummary> completed{
+      {0, "composition.resolve", "completed"},
+      {1, "composition.time.read", "completed"},
+  };
+  const aemcp::native::JsonObject outputs{{
+      "currentTime",
+      aemcp::native::JsonValue{aemcp::native::JsonObject{
+          {"scale", aemcp::native::JsonValue{
+              aemcp::native::JsonNumber{24}}},
+          {"value", aemcp::native::JsonValue{
+              aemcp::native::JsonNumber{12}}},
+      }},
+  }};
+  const std::string postcondition =
+      digest_native_program_postcondition(outputs, completed);
+  require(
+      postcondition
+          == "f01eaf91524a0168a143a412114d3dcd75e3d0793d641baeff08ed7b7248b3f3",
+      "native program postcondition did not canonicalize outputs and operations");
+
+  NativeProgramSuccess success;
+  success.request_id = "native-program-read-result";
+  success.session_id = std::string(kSession);
+  success.host_instance_id = std::string(kHost);
+  success.outputs = outputs;
+  success.operations = completed;
+  success.started_at_unix_ms = 1'900'000'000'000ULL;
+  success.completed_at_unix_ms = 1'900'000'000'025ULL;
+  success.request_digest = std::string(kDigest);
+  success.postcondition_digest = postcondition;
+  const std::string encoded = body(encode_native_program_success(success));
+  require(
+      encoded.find(
+          "\"capabilityId\":\"ae.native.exec\",\"evidence\":{")
+              != std::string::npos
+          && encoded.find(
+              "\"operations\":[{\"index\":0,\"op\":\"composition.resolve\","
+              "\"status\":\"completed\"},{\"index\":1,"
+              "\"op\":\"composition.time.read\",\"status\":\"completed\"}]")
+              != std::string::npos
+          && encoded.find(
+              "\"outputs\":{\"currentTime\":{\"scale\":24,\"value\":12}}")
+              != std::string::npos
+          && encoded.find("\"undo\":{\"available\":false,\"verified\":false}")
+              != std::string::npos,
+      "native program success lost its one common result envelope");
+  require(
+      encoded.find("CompositionHandle") == std::string::npos
+          && encoded.find("LayerHandle") == std::string::npos
+          && encoded.find("PropertyHandle") == std::string::npos,
+      "native program success leaked a request-local handle");
+
+  NativeProgramFailure failure;
+  failure.request_id = "native-program-partial-failure";
+  failure.session_id = std::string(kSession);
+  failure.host_instance_id = std::string(kHost);
+  failure.code = RpcErrorCode::kCapabilityFailed;
+  failure.message = "read operation failed";
+  failure.disposition = aemcp::native::NativeProgramDisposition::kCompleted;
+  failure.completed_operations = {completed.front()};
+  failure.failed_operation =
+      NativeProgramOperationSummary{1, "composition.time.read", "failed"};
+  failure.outputs = {};
+  failure.started_at_unix_ms = 1'900'000'000'000ULL;
+  failure.completed_at_unix_ms = 1'900'000'000'025ULL;
+  failure.request_digest = std::string(kDigest);
+  failure.postcondition_digest =
+      digest_native_program_postcondition({}, failure.completed_operations);
+  const std::string failed = body(encode_native_program_failure(failure));
+  require(
+      failed.find("\"sideEffect\":\"completed\"") != std::string::npos
+          && failed.find("\"disposition\":\"completed\"") != std::string::npos
+          && failed.find(
+              "\"failedOperation\":{\"index\":1,"
+              "\"op\":\"composition.time.read\",\"status\":\"failed\"}")
+              != std::string::npos
+          && failed.find(
+              "\"completedOperations\":[{\"index\":0,"
+              "\"op\":\"composition.resolve\",\"status\":\"completed\"}]")
+              != std::string::npos,
+      "native program failure lost its completed partial outcome");
+  failure.undo_available = true;
+  failure.undo_group = "Task 5 safe write";
+  const std::string safe_write_failure =
+      body(encode_native_program_failure(failure));
+  require(
+      safe_write_failure.find(
+          "\"undo\":{\"available\":true,\"groupLabel\":"
+          "\"Task 5 safe write\",\"verified\":false}")
+              != std::string::npos,
+      "balanced Undo availability was lost for a safe pre-mutation failure");
+
+  failure.code = RpcErrorCode::kPossiblySideEffectingFailure;
+  failure.disposition =
+      aemcp::native::NativeProgramDisposition::kPossiblySideEffecting;
+  failure.operation_key = "native-program-write-key";
+  failure.write_started = true;
+  failure.undo_available = false;
+  failure.undo_group.reset();
+  const std::string uncertain_without_undo =
+      body(encode_native_program_failure(failure));
+  require(
+      uncertain_without_undo.find(
+          "\"undo\":{\"available\":false,\"verified\":false}")
+              != std::string::npos,
+      "native program failure inferred Undo availability from write dispatch");
+  failure.undo_available = true;
+  failure.undo_group = "Task 5 write";
+  const std::string uncertain = body(encode_native_program_failure(failure));
+  require(
+      uncertain.find("\"sideEffect\":\"may-have-occurred\"")
+              != std::string::npos
+          && uncertain.find("\"disposition\":\"possibly-side-effecting\"")
+              != std::string::npos
+          && uncertain.find(
+              "\"operationKey\":\"native-program-write-key\"")
+              != std::string::npos
+          && uncertain.find(
+              "\"undo\":{\"available\":true,\"groupLabel\":\"Task 5 write\","
+              "\"verified\":false}")
+              != std::string::npos,
+      "native program uncertain failure lost operation or Undo evidence");
+  require(
+      uncertain.find("\"groupId\"") == std::string::npos
+          && uncertain.find("\"postcondition\":{"
+              "\"algorithm\":\"sha256-rfc8785-jcs-v1\",\"digest\":")
+              != std::string::npos
+          && uncertain.find("\"kind\":\"native-program\",\"verified\":false")
+              != std::string::npos,
+      "native program failure invented an ID or overclaimed reconciliation");
+}
+
 }  // namespace
 
 int main() {
@@ -4203,6 +4342,7 @@ int main() {
   negative_contract_vectors_are_classified();
   authorization_session_and_replay_gate_are_bounded();
   response_helpers_are_bounded_and_typed();
+  native_program_terminal_envelopes_are_common_and_handle_free();
   generated_primitive_registry_is_unique_and_capabilities_use_indices();
   fixed_seed_mutation_fuzz_is_bounded();
   std::cout << "rpc_codec_test: PASS\n";

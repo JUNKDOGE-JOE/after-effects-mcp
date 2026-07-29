@@ -578,6 +578,27 @@ struct ProgressEvent {
   std::string message;
 };
 
+struct NativeProgramOperationSummary {
+  std::size_t index{0};
+  std::string primitive_id;
+  std::string status;
+};
+
+struct NativeProgramSuccess {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  JsonObject outputs;
+  std::vector<NativeProgramOperationSummary> operations;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  bool undo_available{false};
+  std::optional<std::string> undo_group;
+  bool replayed{false};
+};
+
 struct ProjectSummarySuccess {
   std::string request_id;
   std::string session_id;
@@ -864,6 +885,27 @@ enum class RpcErrorCode {
   kPossiblySideEffectingFailure,
 };
 
+struct NativeProgramFailure {
+  std::string request_id;
+  std::string session_id;
+  std::string host_instance_id;
+  RpcErrorCode code{RpcErrorCode::kCapabilityFailed};
+  std::string message;
+  NativeProgramDisposition disposition{NativeProgramDisposition::kNotStarted};
+  std::vector<NativeProgramOperationSummary> completed_operations;
+  std::optional<NativeProgramOperationSummary> failed_operation;
+  JsonObject outputs;
+  std::uint64_t started_at_unix_ms{0};
+  std::uint64_t completed_at_unix_ms{0};
+  std::string request_digest;
+  std::string postcondition_digest;
+  std::string operation_key;
+  std::optional<std::string> undo_group;
+  bool write_started{false};
+  bool undo_available{false};
+  bool replayed{false};
+};
+
 struct ErrorDetails {
   std::optional<std::string> field;
   std::optional<std::string> capability_id;
@@ -889,6 +931,13 @@ struct ErrorResponse {
 [[nodiscard]] std::vector<std::uint8_t> encode_capabilities_success(
     const CapabilitiesSuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_progress_event(const ProgressEvent& event);
+[[nodiscard]] std::string digest_native_program_postcondition(
+    const JsonObject& outputs,
+    const std::vector<NativeProgramOperationSummary>& completed_operations);
+[[nodiscard]] std::vector<std::uint8_t> encode_native_program_success(
+    const NativeProgramSuccess& response);
+[[nodiscard]] std::vector<std::uint8_t> encode_native_program_failure(
+    const NativeProgramFailure& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_summary_success(
     const ProjectSummarySuccess& response);
 [[nodiscard]] std::vector<std::uint8_t> encode_project_bit_depth_read_success(

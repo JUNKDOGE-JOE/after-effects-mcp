@@ -682,6 +682,12 @@ git commit -m "feat(native): execute request-local AEGP programs"
 ### Task 5: Wire common program results, replay, and evidence
 
 **Files:**
+- Modify: `native/ae-plugin/protocol/aegp-rpc.schema.json`
+- Modify: `native/ae-plugin/protocol/protocol.test.mjs`
+- Modify: `native/ae-plugin/include/aemcp_native/host_dispatcher.hpp`
+- Modify: `native/ae-plugin/src/core/host_dispatcher.cpp`
+- Modify: `native/ae-plugin/src/aegp/native_program_executor.cpp`
+- Modify: `native/ae-plugin/src/aegp/plugin_entry.cpp`
 - Modify: `native/ae-plugin/include/aemcp_native/native_rpc_connection.hpp`
 - Modify: `native/ae-plugin/src/core/native_rpc_connection.cpp`
 - Modify: `native/ae-plugin/include/aemcp_native/rpc_codec.hpp`

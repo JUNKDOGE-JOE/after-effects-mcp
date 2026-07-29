@@ -2230,8 +2230,12 @@ NativeProgramHostResult NativeProgramHostResult::failure(
     std::vector<std::size_t> completed_indices,
     std::optional<std::size_t> failed_index,
     bool began_write,
-    NativeProgramDisposition failure_disposition) {
+    NativeProgramDisposition failure_disposition,
+    std::vector<NativeProgramOperationOutcome> operation_results,
+    JsonObject named_outputs) {
   NativeProgramHostResult result;
+  result.operations = std::move(operation_results);
+  result.outputs = std::move(named_outputs);
   result.error_code = std::move(code);
   result.message = std::move(detail);
   result.error_field = std::move(field);
@@ -3444,16 +3448,19 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
     if (existing != idempotency_ledger_.end()) {
       const bool same_arguments = existing->second.arguments_fingerprint_sha256
           == request.arguments_fingerprint_sha256;
-      if ((composition_create || composition_layer_create || layer_effect_apply
+      if ((native_program || composition_create || composition_layer_create
+              || layer_effect_apply
               || composition_duplicate || layer_duplicate)
           && same_arguments
-          && existing->second.state == IdempotencyState::kSucceeded
+          && (existing->second.state == IdempotencyState::kSucceeded
+              || (native_program
+                  && existing->second.state == IdempotencyState::kAmbiguous))
           && existing->second.replay_completion.has_value()) {
         if (outbound_.size() + active_requests_.size() >= config_.max_outbound_depth) {
           return {EnqueueCode::kQueueFull, "QUEUE_FULL"};
         }
         Completion replay = *existing->second.replay_completion;
-        if (rebind_creation_replay_session(replay, request)) {
+        if (native_program || rebind_creation_replay_session(replay, request)) {
           replay.request_id = request.request_id;
           replay.route_id = request.route_id;
           replay.session_generation = request.session_generation;
@@ -3716,6 +3723,7 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
           }
           if (!undo_end.ok) {
             host_result.ok = false;
+            host_result.undo_available = false;
             host_result.write_started = true;
             host_result.disposition =
                 NativeProgramDisposition::kPossiblySideEffecting;
@@ -3724,7 +3732,11 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 ? "native program Undo group could not be closed"
                 : undo_end.message;
             host_result.error_field = undo_end.error_field;
-          } else if (clock_.now() > request.deadline) {
+          } else {
+            host_result.undo_available =
+                admission.contains_write && undo_begin.ok;
+          }
+          if (undo_end.ok && clock_.now() > request.deadline) {
             host_result.ok = false;
             if (admission.contains_write) {
               host_result.write_started = true;
@@ -5613,7 +5625,8 @@ void HostDispatcher::finish_idempotency_locked(
   if (entry == idempotency_ledger_.end()) return;
   if (completion.ok) {
     entry->second.state = IdempotencyState::kSucceeded;
-    if (request.capability_id == kCompositionCreateCapability
+    if (request.capability_id == kNativeProgramCapability
+        || request.capability_id == kCompositionCreateCapability
         || request.capability_id == kCompositionLayerCreateCapability
         || request.capability_id == kLayerEffectApplyCapability
         || request.capability_id == kCompositionDuplicateCapability
@@ -5624,6 +5637,14 @@ void HostDispatcher::finish_idempotency_locked(
   }
   if (completion.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE") {
     entry->second.state = IdempotencyState::kAmbiguous;
+    if (request.capability_id == kNativeProgramCapability) {
+      entry->second.replay_completion = completion;
+    }
+    return;
+  }
+  if (request.capability_id == kNativeProgramCapability) {
+    entry->second.state = IdempotencyState::kSucceeded;
+    entry->second.replay_completion = completion;
     return;
   }
   // Safe pre-mutation failures and cancellation release the reservation so a

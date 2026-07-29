@@ -12181,6 +12181,18 @@ void log_completion(
                     ? "true" : "false")
              << ",\"generation\":"
              << completion.project_graph_invalidation_result.generation;
+    } else if (completion.capability_id == kNativeProgramCapability) {
+      const NativeProgramHostResult& value =
+          completion.native_program_result;
+      output << ",\"result\":{\"completedOperationCount\":"
+             << value.completed_operation_indices.size()
+             << ",\"outputCount\":" << value.outputs.size()
+             << ",\"writeStarted\":"
+             << (value.write_started ? "true" : "false")
+             << ",\"undoAvailable\":"
+             << (value.undo_available ? "true" : "false")
+             << ",\"replayed\":"
+             << (completion.replayed ? "true" : "false");
     } else if (completion.capability_id == kProjectBitDepthSetCapability) {
       output << ",\"result\":{\"changed\":"
              << (completion.bit_depth_change_result.changed ? "true" : "false")
@@ -12432,7 +12444,34 @@ void log_completion(
     output << ",\"error\":{\"code\":\"" << json_escape(completion.error_code)
            << "\",\"message\":\"" << json_escape(completion.message)
            << "\",\"lateResultDiscarded\":"
-           << (completion.late_result_discarded ? "true" : "false") << "}";
+           << (completion.late_result_discarded ? "true" : "false");
+    if (completion.capability_id == kNativeProgramCapability) {
+      const NativeProgramHostResult& value =
+          completion.native_program_result;
+      const char* disposition = "not-started";
+      if (value.disposition == NativeProgramDisposition::kCompleted) {
+        disposition = "completed";
+      } else if (value.disposition
+          == NativeProgramDisposition::kPossiblySideEffecting) {
+        disposition = "possibly-side-effecting";
+      }
+      output << ",\"nativeProgram\":{\"completedOperationCount\":"
+             << value.completed_operation_indices.size()
+             << ",\"outputCount\":" << value.outputs.size()
+             << ",\"disposition\":\"" << disposition
+             << "\",\"writeStarted\":"
+             << (value.write_started ? "true" : "false")
+             << ",\"undoAvailable\":"
+             << (value.undo_available ? "true" : "false")
+             << ",\"replayed\":"
+             << (completion.replayed ? "true" : "false");
+      if (value.failed_operation_index.has_value()) {
+        output << ",\"failedOperationIndex\":"
+               << *value.failed_operation_index;
+      }
+      output << "}";
+    }
+    output << "}";
   }
   output << "}";
   state.log.append(output.str());

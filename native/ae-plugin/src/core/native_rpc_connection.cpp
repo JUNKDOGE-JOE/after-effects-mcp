@@ -33,6 +33,11 @@ struct ActiveEvidence {
   RpcMethod method{RpcMethod::kInvoke};
   std::string request_digest;
   std::uint64_t started_at_unix_ms{0};
+  bool native_program{false};
+  bool native_program_contains_write{false};
+  std::string operation_key;
+  std::string undo_group;
+  std::vector<std::string> native_program_operations;
 };
 
 bool write_frame(int socket_fd, const std::vector<std::uint8_t>& frame) {
@@ -521,9 +526,73 @@ void NativeRpcConnectionHandler::serve(
         const std::uint64_t started_at = evidence->second.started_at_unix_ms;
         const bool graph_invalidation =
             completion.capability_id == kProjectGraphInvalidateControl;
+        const bool native_program =
+            completion.capability_id == kNativeProgramCapability;
+        std::vector<rpc::NativeProgramOperationSummary>
+            native_program_completed;
+        std::optional<rpc::NativeProgramOperationSummary>
+            native_program_failed;
         std::string postcondition_digest;
         bool evidence_valid = valid_timing_evidence(evidence->second, completed_at);
-        if (completion.ok && evidence_valid) {
+        if (native_program && evidence_valid) {
+          try {
+            const NativeProgramHostResult& result =
+                completion.native_program_result;
+            if (!evidence->second.native_program
+                || result.operations.size()
+                    != result.completed_operation_indices.size()) {
+              evidence_valid = false;
+            } else {
+              native_program_completed.reserve(result.operations.size());
+              for (std::size_t index = 0;
+                   index < result.operations.size(); ++index) {
+                const NativeProgramOperationOutcome& operation =
+                    result.operations[index];
+                if (operation.index
+                        >= evidence->second.native_program_operations.size()
+                    || operation.index
+                        != result.completed_operation_indices[index]
+                    || operation.primitive_id
+                        != evidence->second.native_program_operations[
+                            operation.index]) {
+                  evidence_valid = false;
+                  break;
+                }
+                native_program_completed.push_back({
+                    operation.index,
+                    operation.primitive_id,
+                    "completed",
+                });
+              }
+            }
+            if (evidence_valid && result.failed_operation_index.has_value()) {
+              const std::size_t failed = *result.failed_operation_index;
+              if (failed >= evidence->second.native_program_operations.size()) {
+                evidence_valid = false;
+              } else {
+                native_program_failed = rpc::NativeProgramOperationSummary{
+                    failed,
+                    evidence->second.native_program_operations[failed],
+                    "failed",
+                };
+              }
+            }
+            if (evidence_valid && completion.ok
+                && (result.disposition != NativeProgramDisposition::kCompleted
+                    || native_program_completed.size()
+                        != evidence->second.native_program_operations.size()
+                    || native_program_failed.has_value())) {
+              evidence_valid = false;
+            }
+            if (evidence_valid) {
+              postcondition_digest = rpc::digest_native_program_postcondition(
+                  result.outputs, native_program_completed);
+            }
+          } catch (...) {
+            evidence_valid = false;
+          }
+        }
+        if (completion.ok && evidence_valid && !native_program) {
           try {
             if (graph_invalidation) {
               evidence_valid = completion.project_graph_invalidation_result.invalidated
@@ -832,10 +901,36 @@ void NativeRpcConnectionHandler::serve(
         }
         if (!evidence_valid) {
           completion.ok = false;
-          completion.error_code = post_dispatch_evidence_failure_code(
-              completion.capability_id, graph_invalidation);
+          completion.error_code = native_program
+              && evidence->second.native_program_contains_write
+              ? "POSSIBLY_SIDE_EFFECTING_FAILURE"
+              : post_dispatch_evidence_failure_code(
+                  completion.capability_id, graph_invalidation);
           completion.message = "native result evidence failed validation";
-          postcondition_digest.clear();
+          if (native_program) {
+            NativeProgramHostResult& result =
+                completion.native_program_result;
+            result.ok = false;
+            result.operations.clear();
+            result.outputs.clear();
+            result.completed_operation_indices.clear();
+            result.failed_operation_index.reset();
+            result.write_started =
+                evidence->second.native_program_contains_write;
+            result.undo_available = false;
+            result.disposition =
+                evidence->second.native_program_contains_write
+                ? NativeProgramDisposition::kPossiblySideEffecting
+                : NativeProgramDisposition::kCompleted;
+            result.error_code = completion.error_code;
+            result.message = completion.message;
+            native_program_completed.clear();
+            native_program_failed.reset();
+            postcondition_digest =
+                rpc::digest_native_program_postcondition({}, {});
+          } else {
+            postcondition_digest.clear();
+          }
           if (completion.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE") {
             dispatcher_.mark_idempotency_ambiguous(completion.idempotency_key);
           }
@@ -854,7 +949,26 @@ void NativeRpcConnectionHandler::serve(
         }
         std::vector<std::uint8_t> response;
         if (completion.ok) {
-          if (graph_invalidation) {
+          if (native_program) {
+            const NativeProgramHostResult& result =
+                completion.native_program_result;
+            response = rpc::encode_native_program_success({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                result.outputs,
+                native_program_completed,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                result.undo_available,
+                result.undo_available
+                    ? std::optional<std::string>{evidence->second.undo_group}
+                    : std::nullopt,
+                completion.replayed,
+            });
+          } else if (graph_invalidation) {
             response = rpc::encode_project_graph_invalidate_success({
                 completion.request_id,
                 connection.session_id,
@@ -1267,20 +1381,48 @@ void NativeRpcConnectionHandler::serve(
             });
           }
         } else {
-          ParsedRequest synthetic;
-          synthetic.method = evidence->second.method;
-          synthetic.request_id = completion.request_id;
-          const std::string capability = graph_invalidation
-              ? std::string{} : completion.capability_id;
-          response = rpc::encode_error_response(error_for(
-              synthetic,
-              connection.session_id,
-              graph_invalidation && completion.error_code == "CAPABILITY_FAILED"
-                  ? "NATIVE_UNAVAILABLE" : completion.error_code,
-              completion.message.empty() ? "native request failed" : completion.message,
-              capability,
-              completion.error_field,
-              completion.idempotency_key));
+          if (native_program) {
+            const NativeProgramHostResult& result =
+                completion.native_program_result;
+            response = rpc::encode_native_program_failure({
+                completion.request_id,
+                connection.session_id,
+                runtime_.host_instance_id,
+                rpc_error_code(completion.error_code),
+                completion.message.empty()
+                    ? "native program failed" : completion.message,
+                result.disposition,
+                native_program_completed,
+                native_program_failed,
+                result.outputs,
+                started_at,
+                completed_at,
+                request_digest,
+                postcondition_digest,
+                evidence->second.operation_key,
+                result.undo_available
+                    ? std::optional<std::string>{evidence->second.undo_group}
+                    : std::nullopt,
+                result.write_started,
+                result.undo_available,
+                completion.replayed,
+            });
+          } else {
+            ParsedRequest synthetic;
+            synthetic.method = evidence->second.method;
+            synthetic.request_id = completion.request_id;
+            const std::string capability = graph_invalidation
+                ? std::string{} : completion.capability_id;
+            response = rpc::encode_error_response(error_for(
+                synthetic,
+                connection.session_id,
+                graph_invalidation && completion.error_code == "CAPABILITY_FAILED"
+                    ? "NATIVE_UNAVAILABLE" : completion.error_code,
+                completion.message.empty() ? "native request failed" : completion.message,
+                capability,
+                completion.error_field,
+                completion.idempotency_key));
+          }
         }
         if (!write_frame(connection.socket_fd, response)) {
           connected = false;
@@ -1719,21 +1861,6 @@ void NativeRpcConnectionHandler::serve(
         const std::uint64_t effective_deadline = *ingress.effective_deadline_unix_ms;
         const std::uint64_t ttl = effective_deadline > now_unix
             ? effective_deadline - now_unix : 0;
-        if (request.method == RpcMethod::kInvoke
-            && std::holds_alternative<rpc::NativeProgramParams>(request.params)) {
-          if (!write_frame(connection.socket_fd, rpc::encode_error_response(error_for(
-                  request,
-                  connection.session_id,
-                  "NATIVE_UNAVAILABLE",
-                  "native program admitted; executor is not yet wired",
-                  "ae.native.exec")))) {
-            connected = false;
-            break;
-          }
-          (void)front_door.complete_request(request.request_id);
-          observer_.on_rpc_event("invoke", request.request_id, "native-program-not-yet-wired");
-          continue;
-        }
         Request dispatch_request;
         if (request.method == RpcMethod::kInvalidateGraph) {
           dispatch_request = {
@@ -1743,6 +1870,17 @@ void NativeRpcConnectionHandler::serve(
               connection.peer.connection_id,
               connection.session_generation,
           };
+        } else if (const auto* native_program =
+                std::get_if<rpc::NativeProgramParams>(&request.params)) {
+          dispatch_request.request_id = request.request_id;
+          dispatch_request.capability_id = std::string(kNativeProgramCapability);
+          dispatch_request.deadline =
+              dispatcher_clock_.now() + std::chrono::milliseconds(ttl);
+          dispatch_request.route_id = connection.peer.connection_id;
+          dispatch_request.session_generation = connection.session_generation;
+          dispatch_request.host_instance_id = runtime_.host_instance_id;
+          dispatch_request.session_id = connection.session_id;
+          dispatch_request.native_program = native_program->program;
         } else {
           const auto& invoke = std::get<rpc::InvokeParams>(request.params);
           dispatch_request = {
@@ -1865,11 +2003,28 @@ void NativeRpcConnectionHandler::serve(
           (void)front_door.complete_request(request.request_id);
           continue;
         }
-        active.emplace(request.request_id, ActiveEvidence{
-            request.method,
-            request.request_fingerprint_sha256,
-            now_unix,
-        });
+        ActiveEvidence active_evidence;
+        active_evidence.method = request.method;
+        active_evidence.request_digest =
+            request.request_fingerprint_sha256;
+        active_evidence.started_at_unix_ms = now_unix;
+        if (const auto* native_program =
+                std::get_if<rpc::NativeProgramParams>(&request.params)) {
+          active_evidence.native_program = true;
+          active_evidence.native_program_contains_write =
+              native_program->admission.contains_write;
+          active_evidence.operation_key =
+              native_program->program.operation_key;
+          active_evidence.undo_group = native_program->program.undo_group;
+          active_evidence.native_program_operations.reserve(
+              native_program->program.operations.size());
+          for (const NativeProgramOperation& operation :
+              native_program->program.operations) {
+            active_evidence.native_program_operations.push_back(
+                operation.primitive_id);
+          }
+        }
+        active.emplace(request.request_id, std::move(active_evidence));
         if (!write_frame(connection.socket_fd, rpc::encode_progress_event({
                 request.request_id,
                 connection.session_id,

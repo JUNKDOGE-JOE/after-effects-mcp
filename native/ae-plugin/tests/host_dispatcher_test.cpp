@@ -4518,7 +4518,8 @@ void native_write_program_uses_one_balanced_undo_group() {
               .code == EnqueueCode::kAccepted,
       "write native program was not admitted");
   const auto batch = dispatcher.drain(host);
-  require(batch.completions.size() == 1 && batch.completions[0].ok,
+  require(batch.completions.size() == 1 && batch.completions[0].ok
+          && batch.completions[0].native_program_result.undo_available,
       "write native program did not complete");
   require(host.program_calls == 1 && host.undo_begin_calls == 1
           && host.undo_end_calls == 1 && !host.undo_open,
@@ -4534,11 +4535,26 @@ void native_program_failure_preserves_completed_writes_and_ambiguity() {
   host.next_result.error_code = "CAPABILITY_FAILED";
   host.next_result.message = "third operation failed";
   host.next_result.completed_operation_indices = {0, 1};
+  host.next_result.operations = {
+      {0, "composition.resolve", aemcp::native::JsonValue{nullptr}},
+      {1, "composition.time.set", aemcp::native::JsonValue{
+          aemcp::native::JsonObject{{
+              "changed", aemcp::native::JsonValue{true},
+          }}}},
+  };
+  host.next_result.outputs = {{
+      "firstWrite",
+      aemcp::native::JsonValue{aemcp::native::JsonObject{{
+          "changed", aemcp::native::JsonValue{true},
+      }}},
+  }};
   host.next_result.failed_operation_index = 2;
   host.next_result.write_started = true;
   host.next_result.disposition =
       NativeProgramDisposition::kPossiblySideEffecting;
   NativeProgram program = admitted_native_program(
+      R"({"operationKey":"partial-write-key-01","undoGroup":"Task 4 partial write","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":2,"scale":24}}}]})");
+  NativeProgram replay_program = admitted_native_program(
       R"({"operationKey":"partial-write-key-01","undoGroup":"Task 4 partial write","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":2,"scale":24}}}]})");
 
   require(dispatcher.enqueue(native_program_request(
@@ -4555,11 +4571,90 @@ void native_program_failure_preserves_completed_writes_and_ambiguity() {
           && result.completed_operation_indices
               == std::vector<std::size_t>({0, 1})
           && result.failed_operation_index == std::optional<std::size_t>{2}
-          && result.write_started,
-      "partial native write lost completed indices or side-effect ambiguity");
+          && result.write_started && result.undo_available
+          && result.operations.size() == 2
+          && result.operations[1].primitive_id == "composition.time.set"
+          && result.outputs.size() == 1
+          && result.outputs[0].first == "firstWrite",
+      "partial native write lost completed outcomes, outputs, or side-effect ambiguity");
   require(host.undo_begin_calls == 1 && host.undo_end_calls == 1
           && !host.undo_open,
       "partial native write did not close its single program Undo group");
+  (void)dispatcher.take_outbound();
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-partial-replay", std::move(replay_program)))
+              .code == EnqueueCode::kAccepted,
+      "same-key ambiguous native program did not replay its recorded terminal");
+  const auto replayed = dispatcher.take_outbound();
+  require(replayed.size() == 1 && !replayed[0].ok && replayed[0].replayed
+          && replayed[0].error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+          && replayed[0].native_program_result.outputs.size() == 1
+          && host.program_calls == 1,
+      "ambiguous native program replay redispatched or lost partial evidence");
+}
+
+void native_program_failure_factory_keeps_trustworthy_partial_values() {
+  std::vector<aemcp::native::NativeProgramOperationOutcome> operations{
+      {0, "project.items.list", aemcp::native::JsonValue{
+          aemcp::native::JsonObject{{
+              "total", aemcp::native::JsonValue{
+                  aemcp::native::JsonNumber{1}},
+          }}}},
+  };
+  aemcp::native::JsonObject outputs{{
+      "items",
+      aemcp::native::JsonValue{aemcp::native::JsonObject{{
+          "total", aemcp::native::JsonValue{
+              aemcp::native::JsonNumber{1}},
+      }}},
+  }};
+  NativeProgramHostResult result = NativeProgramHostResult::failure(
+      "CAPABILITY_FAILED",
+      "second read failed",
+      {},
+      {0},
+      1,
+      false,
+      NativeProgramDisposition::kCompleted,
+      operations,
+      outputs);
+  require(result.operations.size() == 1
+          && result.operations[0].primitive_id == "project.items.list"
+          && result.outputs.size() == 1 && result.outputs[0].first == "items",
+      "native program failure factory discarded trustworthy partial values");
+}
+
+void native_program_safe_write_failure_retains_only_balanced_undo_fact() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(2, 2, 16ms));
+  NativeProgramHost host;
+  host.next_result = NativeProgramHostResult::failure(
+      "PRECONDITION_FAILED",
+      "write adapter rejected before mutation",
+      {},
+      {0},
+      1,
+      false,
+      NativeProgramDisposition::kCompleted,
+      {{0, "composition.resolve", aemcp::native::JsonValue{nullptr}}},
+      {});
+  NativeProgram program = admitted_native_program(
+      R"({"operationKey":"safe-write-failure-key","undoGroup":"Task 5 safe write","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}}]})");
+
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-safe-write-failure", std::move(program)))
+              .code == EnqueueCode::kAccepted,
+      "safe write failure program was not admitted");
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 1 && !batch.completions[0].ok,
+      "safe write failure unexpectedly succeeded");
+  const NativeProgramHostResult& result =
+      batch.completions[0].native_program_result;
+  require(!result.write_started && result.undo_available
+          && result.disposition == NativeProgramDisposition::kCompleted
+          && host.undo_begin_calls == 1 && host.undo_end_calls == 1,
+      "safe pre-mutation failure lost balanced Undo availability");
 }
 
 void native_program_timeout_before_host_entry_is_not_started() {
@@ -4636,6 +4731,7 @@ void native_write_program_undo_close_failure_or_throw_remains_ambiguous() {
                 == "POSSIBLY_SIDE_EFFECTING_FAILURE"
             && batch.completions[0].native_program_result.disposition
                 == NativeProgramDisposition::kPossiblySideEffecting
+            && !batch.completions[0].native_program_result.undo_available
             && host.undo_begin_calls == 1 && host.undo_end_calls == 1,
         "Undo close failure or exception lost write ambiguity");
   }
@@ -4685,11 +4781,41 @@ void native_program_replay_fence_binds_operation_key_and_digest() {
       R"({"operationKey":"same-program-write-key","undoGroup":"Task 4 replay","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}}]})");
   NativeProgram conflicting = admitted_native_program(
       R"({"operationKey":"same-program-write-key","undoGroup":"Task 4 replay","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":2,"scale":24}}}]})");
+  NativeProgram replay = admitted_native_program(
+      R"({"operationKey":"same-program-write-key","undoGroup":"Task 4 replay","operations":[{"op":"composition.resolve","args":{"locator":{"kind":"composition","hostInstanceId":"22222222-2222-4222-8222-222222222222","sessionId":"11111111-1111-4111-8111-111111111111","projectId":"33333333-3333-4333-8333-333333333333","generation":1,"objectId":"44444444-4444-4444-8444-444444444444"}},"saveAs":"composition"},{"op":"composition.time.set","args":{"composition":{"ref":"composition"},"targetTime":{"value":1,"scale":24}}}]})");
 
+  NativeProgramHost host;
+  host.next_result.operations = {
+      {0, "composition.resolve", aemcp::native::JsonValue{nullptr}},
+      {1, "composition.time.set", aemcp::native::JsonValue{
+          aemcp::native::JsonObject{{
+              "changed", aemcp::native::JsonValue{true},
+          }}}},
+  };
+  host.next_result.outputs = {{
+      "changed",
+      aemcp::native::JsonValue{true},
+  }};
   require(dispatcher.enqueue(native_program_request(
               clock, "native-program-fence-first", std::move(first)))
               .code == EnqueueCode::kAccepted,
       "first native write did not acquire its operationKey fence");
+  const auto first_batch = dispatcher.drain(host);
+  require(first_batch.completions.size() == 1
+          && first_batch.completions[0].ok && host.program_calls == 1,
+      "first native write did not reach a recordable terminal outcome");
+  (void)dispatcher.take_outbound();
+
+  require(dispatcher.enqueue(native_program_request(
+              clock, "native-program-fence-replay", std::move(replay)))
+              .code == EnqueueCode::kAccepted,
+      "same operationKey and program digest did not replay terminal outcome");
+  const auto replayed = dispatcher.take_outbound();
+  require(replayed.size() == 1 && replayed[0].ok && replayed[0].replayed
+          && replayed[0].native_program_result.outputs.size() == 1
+          && host.program_calls == 1,
+      "same-key native program replay redispatched or lost the terminal result");
+
   const auto conflict = dispatcher.enqueue(native_program_request(
       clock, "native-program-fence-conflict", std::move(conflicting)));
   require(conflict.code == EnqueueCode::kDuplicateRequest,
@@ -4850,6 +4976,8 @@ int main() {
   native_program_dispatch_submits_the_whole_program_once();
   native_write_program_uses_one_balanced_undo_group();
   native_program_failure_preserves_completed_writes_and_ambiguity();
+  native_program_failure_factory_keeps_trustworthy_partial_values();
+  native_program_safe_write_failure_retains_only_balanced_undo_fact();
   native_program_timeout_before_host_entry_is_not_started();
   native_read_program_crossing_host_deadline_fails_without_ambiguity();
   native_write_program_attempts_undo_close_after_execute_exception();

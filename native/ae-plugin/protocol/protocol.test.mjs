@@ -63,6 +63,103 @@ test('native program schema rejects extra envelope and operation fields', () => 
   assert.equal(schemaAccepts(schema.$defs.request, extraOperation, schema), false);
 });
 
+test('native program terminal schema has one common success and failure shape', () => {
+  const evidence = {
+    engine: 'native-aegp',
+    hostInstanceId: locator.hostInstanceId,
+    sessionId,
+    requestId: 'native-program-terminal',
+    capabilityId: 'ae.native.exec',
+    capabilityVersion: 1,
+    startedAtUnixMs: 1900000000000,
+    completedAtUnixMs: 1900000000025,
+    effect: 'committed',
+    requestDigest: 'a'.repeat(64),
+    postcondition: {
+      verified: true,
+      kind: 'native-program',
+      algorithm: 'sha256-rfc8785-jcs-v1',
+      digest: 'b'.repeat(64),
+    },
+  };
+  const undo = { available: true, verified: false, groupLabel: 'Task 5 write' };
+  const result = {
+    capabilityId: 'ae.native.exec',
+    outputs: { currentTime: { value: 12, scale: 24 } },
+    operations: [
+      { index: 0, op: 'composition.resolve', status: 'completed' },
+      { index: 1, op: 'composition.time.read', status: 'completed' },
+    ],
+    evidence,
+    undo,
+  };
+  const success = {
+    wireVersion: 1,
+    kind: 'response',
+    sessionId,
+    requestId: evidence.requestId,
+    method: 'invoke',
+    ok: true,
+    replayed: false,
+    result,
+  };
+  assert.equal(schemaAccepts(schema.$defs.nativeProgramInvokeResult, result, schema), true);
+  assert.equal(schemaAccepts(schema.$defs.response, success, schema), true);
+  assert.equal(schemaAccepts(schema.$defs.nativeProgramInvokeResult, {
+    ...result,
+    handle: { kind: 'CompositionHandle', raw: 1 },
+  }, schema), false);
+
+  const details = {
+    capabilityId: 'ae.native.exec',
+    operationKey: 'native-program-write-key',
+    disposition: 'possibly-side-effecting',
+    completedOperations: [
+      { index: 0, op: 'composition.resolve', status: 'completed' },
+    ],
+    failedOperation: { index: 1, op: 'composition.time.set', status: 'failed' },
+    outputs: {},
+    evidence: {
+      ...evidence,
+      effect: 'may-have-occurred',
+      postcondition: { ...evidence.postcondition, verified: false },
+    },
+    undo,
+  };
+  const failure = {
+    wireVersion: 1,
+    kind: 'response',
+    sessionId,
+    requestId: evidence.requestId,
+    method: 'invoke',
+    ok: false,
+    replayed: false,
+    error: {
+      code: 'POSSIBLY_SIDE_EFFECTING_FAILURE',
+      message: 'write outcome requires reconciliation',
+      retryable: false,
+      sideEffect: 'may-have-occurred',
+      recovery: {
+        action: 'inspect-state',
+        hint: 'Inspect After Effects state before retrying.',
+      },
+      details,
+    },
+  };
+  assert.equal(schemaAccepts(schema.$defs.nativeProgramFailureDetails, details, schema), true);
+  assert.equal(schemaAccepts(schema.$defs.response, failure, schema), true);
+  const safeWriteFailure = structuredClone(failure);
+  safeWriteFailure.error.code = 'PRECONDITION_FAILED';
+  safeWriteFailure.error.sideEffect = 'completed';
+  safeWriteFailure.error.details.disposition = 'completed';
+  safeWriteFailure.error.details.evidence.effect = 'none';
+  assert.equal(schemaAccepts(schema.$defs.response, safeWriteFailure, schema), true);
+  assert.equal(schemaAccepts(schema.$defs.nativeProgramFailureDetails, {
+    ...details,
+    undo: { ...undo, groupId: 'invented-undo-id' },
+  }, schema), false);
+});
+
 test('framing and independent control-plane schemas remain closed', () => {
   const hello = { wireVersion: 1, kind: 'request', requestId: 'hello-1', method: 'hello',
     params: { supportedWireVersions: { minimum: 1, maximum: 1 },

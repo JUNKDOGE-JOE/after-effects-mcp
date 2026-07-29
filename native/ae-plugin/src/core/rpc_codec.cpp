@@ -6454,6 +6454,87 @@ std::string canonical_json(const JsonValue& value) {
   return output;
 }
 
+std::string canonical_native_json(const aemcp::native::JsonValue& value) {
+  if (std::holds_alternative<std::nullptr_t>(value.value)) return "null";
+  if (const auto* boolean = std::get_if<bool>(&value.value)) {
+    return *boolean ? "true" : "false";
+  }
+  if (const auto* number =
+          std::get_if<aemcp::native::JsonNumber>(&value.value)) {
+    return double_json(number->value);
+  }
+  if (const auto* string = std::get_if<std::string>(&value.value)) {
+    return json_string(*string);
+  }
+  if (const auto* array =
+          std::get_if<aemcp::native::JsonValue::Array>(&value.value)) {
+    std::string output{"["};
+    for (std::size_t index = 0; index < array->size(); ++index) {
+      if (index != 0) output.push_back(',');
+      output += canonical_native_json((*array)[index]);
+    }
+    return output + ']';
+  }
+  const auto& object = std::get<aemcp::native::JsonObject>(value.value);
+  std::vector<const std::pair<std::string, aemcp::native::JsonValue>*> sorted;
+  sorted.reserve(object.size());
+  std::unordered_set<std::string> names;
+  for (const auto& member : object) {
+    if (!names.insert(member.first).second) {
+      invalid_argument("native program result contains duplicate object keys");
+    }
+    sorted.push_back(&member);
+  }
+  std::sort(sorted.begin(), sorted.end(), [](const auto* left, const auto* right) {
+    return left->first < right->first;
+  });
+  std::string output{"{"};
+  for (std::size_t index = 0; index < sorted.size(); ++index) {
+    if (index != 0) output.push_back(',');
+    output += json_string(sorted[index]->first);
+    output.push_back(':');
+    output += canonical_native_json(sorted[index]->second);
+  }
+  return output + '}';
+}
+
+bool valid_native_program_summary(
+    const NativeProgramOperationSummary& operation,
+    std::string_view expected_status) {
+  return operation.index <= kMaxSafeInteger
+      && operation.status == expected_status
+      && std::find_if(
+          native_primitive_registry().begin(),
+          native_primitive_registry().end(),
+          [&](const NativePrimitiveDescriptor& descriptor) {
+            return descriptor.id == operation.primitive_id;
+          }) != native_primitive_registry().end();
+}
+
+std::string native_program_operations_json(
+    const std::vector<NativeProgramOperationSummary>& operations,
+    std::string_view expected_status) {
+  std::string json{"["};
+  std::size_t previous = 0;
+  for (std::size_t index = 0; index < operations.size(); ++index) {
+    const NativeProgramOperationSummary& operation = operations[index];
+    if (!valid_native_program_summary(operation, expected_status)
+        || (index != 0 && operation.index <= previous)) {
+      invalid_argument("invalid native program operation summary");
+    }
+    previous = operation.index;
+    if (index != 0) json.push_back(',');
+    json += "{\"index\":" + std::to_string(operation.index)
+        + ",\"op\":" + json_string(operation.primitive_id)
+        + ",\"status\":" + json_string(operation.status) + '}';
+  }
+  return json + ']';
+}
+
+std::string native_program_outputs_json(const JsonObject& outputs) {
+  return canonical_native_json(aemcp::native::JsonValue{outputs});
+}
+
 void validate_limits(const NegotiatedLimits& limits) {
   if (limits.max_frame_bytes < 4'096 || limits.max_frame_bytes > kMaxFrameBytes
       || limits.max_in_flight < 1 || limits.max_in_flight > 64
@@ -8130,6 +8211,164 @@ ErrorPolicy error_policy(RpcErrorCode code) {
 }
 
 }  // namespace
+
+std::string digest_native_program_postcondition(
+    const JsonObject& outputs,
+    const std::vector<NativeProgramOperationSummary>& completed_operations) {
+  return sha256_hex(
+      "{\"operations\":"
+      + native_program_operations_json(completed_operations, "completed")
+      + ",\"outputs\":" + native_program_outputs_json(outputs) + '}');
+}
+
+std::vector<std::uint8_t> encode_native_program_success(
+    const NativeProgramSuccess& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  const std::string operations =
+      native_program_operations_json(response.operations, "completed");
+  const std::string outputs = native_program_outputs_json(response.outputs);
+  if (response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.postcondition_digest
+          != digest_native_program_postcondition(
+              response.outputs, response.operations)
+      || (response.undo_group.has_value() != response.undo_available)) {
+    invalid_argument("invalid or unvalidated native program evidence");
+  }
+  if (response.undo_group.has_value()) {
+    require_output_string(*response.undo_group, 1, 128, "Undo group");
+  }
+  const std::string undo = response.undo_available
+      ? "{\"available\":true,\"groupLabel\":" + json_string(*response.undo_group)
+          + ",\"verified\":false}"
+      : "{\"available\":false,\"verified\":false}";
+  const std::string effect = response.undo_available ? "committed" : "none";
+  std::string json =
+      "{\"kind\":\"response\",\"method\":\"invoke\",\"ok\":true,\"replayed\":"
+      + std::string(response.replayed ? "true" : "false")
+      + ",\"requestId\":" + json_string(response.request_id)
+      + ",\"result\":{\"capabilityId\":\"ae.native.exec\",\"evidence\":{"
+        "\"capabilityId\":\"ae.native.exec\",\"capabilityVersion\":1,"
+        "\"completedAtUnixMs\":" + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":" + json_string(effect)
+      + ",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\","
+        "\"digest\":" + json_string(response.postcondition_digest)
+      + ",\"kind\":\"native-program\",\"verified\":true},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + "},\"operations\":" + operations + ",\"outputs\":" + outputs
+      + ",\"undo\":" + undo + "},\"sessionId\":"
+      + json_string(response.session_id) + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
+
+std::vector<std::uint8_t> encode_native_program_failure(
+    const NativeProgramFailure& response) {
+  require_request_id(response.request_id);
+  require_uuid(response.session_id, "session ID");
+  require_uuid(response.host_instance_id, "host instance ID");
+  require_digest(response.request_digest, "request digest");
+  require_digest(response.postcondition_digest, "postcondition digest");
+  require_output_string(response.message, 1, 512, "error message");
+  const ErrorPolicy policy = error_policy(response.code);
+  const std::string completed = native_program_operations_json(
+      response.completed_operations, "completed");
+  const std::string outputs = native_program_outputs_json(response.outputs);
+  const bool uncertain =
+      response.disposition == NativeProgramDisposition::kPossiblySideEffecting;
+  const bool completed_disposition =
+      response.disposition == NativeProgramDisposition::kCompleted;
+  if (response.started_at_unix_ms < 1
+      || response.started_at_unix_ms > kMaxSafeInteger
+      || response.completed_at_unix_ms < response.started_at_unix_ms
+      || response.completed_at_unix_ms > kMaxSafeInteger
+      || response.postcondition_digest
+          != digest_native_program_postcondition(
+              response.outputs, response.completed_operations)
+      || uncertain
+          != (response.code == RpcErrorCode::kPossiblySideEffectingFailure)
+      || response.write_started != uncertain
+      || (uncertain && !valid_idempotency_key(response.operation_key))
+      || (!response.operation_key.empty()
+          && !valid_idempotency_key(response.operation_key))
+      || (response.undo_group.has_value() != response.undo_available)
+      || (response.disposition == NativeProgramDisposition::kNotStarted
+          && (!response.completed_operations.empty()
+              || response.failed_operation.has_value()
+              || !response.outputs.empty()))) {
+    invalid_argument("invalid native program failure evidence");
+  }
+  if (response.failed_operation.has_value()
+      && !valid_native_program_summary(*response.failed_operation, "failed")) {
+    invalid_argument("invalid native program failed operation");
+  }
+  if (response.undo_group.has_value()) {
+    require_output_string(*response.undo_group, 1, 128, "Undo group");
+  }
+  const std::string disposition = uncertain
+      ? "possibly-side-effecting"
+      : completed_disposition ? "completed" : "not-started";
+  const std::string side_effect = uncertain
+      ? "may-have-occurred" : completed_disposition ? "completed" : "not-started";
+  const std::string effect = uncertain ? "may-have-occurred" : "none";
+  const std::string undo = response.undo_available
+      ? "{\"available\":true,\"groupLabel\":" + json_string(*response.undo_group)
+          + ",\"verified\":false}"
+      : "{\"available\":false,\"verified\":false}";
+  std::string details =
+      "{\"capabilityId\":\"ae.native.exec\",\"completedOperations\":"
+      + completed + ",\"disposition\":" + json_string(disposition);
+  if (response.failed_operation.has_value()) {
+    details += ",\"failedOperation\":"
+        + native_program_operations_json(
+            {*response.failed_operation}, "failed").substr(1);
+    details.pop_back();
+  }
+  if (!response.operation_key.empty()) {
+    details += ",\"operationKey\":" + json_string(response.operation_key);
+  }
+  details += ",\"outputs\":" + outputs
+      + ",\"evidence\":{\"capabilityId\":\"ae.native.exec\","
+        "\"capabilityVersion\":1,\"completedAtUnixMs\":"
+      + std::to_string(response.completed_at_unix_ms)
+      + ",\"effect\":" + json_string(effect)
+      + ",\"engine\":\"native-aegp\",\"hostInstanceId\":"
+      + json_string(response.host_instance_id)
+      + ",\"postcondition\":{\"algorithm\":\"sha256-rfc8785-jcs-v1\","
+        "\"digest\":" + json_string(response.postcondition_digest)
+      + ",\"kind\":\"native-program\",\"verified\":false},\"requestDigest\":"
+      + json_string(response.request_digest) + ",\"requestId\":"
+      + json_string(response.request_id) + ",\"sessionId\":"
+      + json_string(response.session_id) + ",\"startedAtUnixMs\":"
+      + std::to_string(response.started_at_unix_ms)
+      + "},\"undo\":" + undo + '}';
+  std::string json =
+      "{\"error\":{\"code\":" + json_string(policy.code)
+      + ",\"details\":" + details + ",\"message\":"
+      + json_string(response.message)
+      + ",\"recovery\":{\"action\":\"inspect-state\",\"hint\":"
+      + json_string(
+          uncertain
+              ? "Inspect After Effects state and audit evidence before retrying."
+              : "Inspect the completed native program operations and correct the failure.")
+      + "},\"retryable\":false,\"sideEffect\":" + json_string(side_effect)
+      + "},\"kind\":\"response\",\"method\":\"invoke\",\"ok\":false,"
+        "\"replayed\":" + std::string(response.replayed ? "true" : "false")
+      + ",\"requestId\":" + json_string(response.request_id)
+      + ",\"sessionId\":" + json_string(response.session_id)
+      + ",\"wireVersion\":1}";
+  return frame_output(std::move(json));
+}
 
 std::vector<std::uint8_t> encode_hello_success(const HelloSuccess& response) {
   require_request_id(response.request_id);

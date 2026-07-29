@@ -1123,7 +1123,9 @@ NativeProgramHostResult execute_native_program(
           completed_write,
           completed_write
               ? NativeProgramDisposition::kPossiblySideEffecting
-              : NativeProgramDisposition::kCompleted);
+              : NativeProgramDisposition::kCompleted,
+          std::move(outcomes),
+          std::move(outputs));
     }
     const NativePrimitiveDescriptor* descriptor = admission.descriptors[index];
     const std::ptrdiff_t binding_index =
@@ -1142,7 +1144,9 @@ NativeProgramHostResult execute_native_program(
           completed_write,
           completed_write
               ? NativeProgramDisposition::kPossiblySideEffecting
-              : NativeProgramDisposition::kCompleted);
+              : NativeProgramDisposition::kCompleted,
+          std::move(outcomes),
+          std::move(outputs));
     }
     AdapterResult result;
     try {
@@ -1163,7 +1167,9 @@ NativeProgramHostResult execute_native_program(
           possibly_side_effecting,
           possibly_side_effecting
               ? NativeProgramDisposition::kPossiblySideEffecting
-              : NativeProgramDisposition::kCompleted);
+              : NativeProgramDisposition::kCompleted,
+          std::move(outcomes),
+          std::move(outputs));
     }
     if (!result.ok) {
       const bool possibly_side_effecting =
@@ -1180,7 +1186,9 @@ NativeProgramHostResult execute_native_program(
           possibly_side_effecting,
           possibly_side_effecting
               ? NativeProgramDisposition::kPossiblySideEffecting
-              : NativeProgramDisposition::kCompleted);
+              : NativeProgramDisposition::kCompleted,
+          std::move(outcomes),
+          std::move(outputs));
     }
 
     JsonValue public_value{nullptr};

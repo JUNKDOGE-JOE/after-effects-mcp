@@ -85,7 +85,7 @@ function nativeContractMismatch(message, cause) {
     );
 }
 
-function nativeMutationUncertain(message, capabilityId, cause) {
+function nativeMutationUncertain(message, capabilityId, cause, operationKey) {
     return nativeError(
         'POSSIBLY_SIDE_EFFECTING_FAILURE',
         message,
@@ -97,7 +97,10 @@ function nativeMutationUncertain(message, capabilityId, cause) {
                 action: 'inspect-state',
                 hint: 'Inspect After Effects state and the Undo stack before retrying.',
             },
-            details: { capabilityId },
+            details: {
+                capabilityId,
+                ...(operationKey === undefined ? {} : { operationKey }),
+            },
         },
     );
 }
@@ -107,6 +110,11 @@ function exactKeys(value, required, optional) {
     const allowed = new Set(required.concat(optional || []));
     return required.every(function (key) { return Object.hasOwn(value, key); })
         && Object.keys(value).every(function (key) { return allowed.has(key); });
+}
+
+function validIdempotencyKey(value) {
+    return typeof value === 'string' && value.length >= 16 && value.length <= 64
+        && TOKEN_PATTERN.test(value);
 }
 
 function unicodeScalarLength(value) {
@@ -1292,7 +1300,9 @@ function layerPropertyValuesEqual(left, right) {
 // the exact request it sent instead of trusting a digest-shaped string.
 function invokeRequestDigest(request) {
     let argumentsValue = {};
-    if (projectCompositionContracts.getContract(request.params.capabilityId)) {
+    if (request.params.capabilityId === 'ae.native.exec') {
+        argumentsValue = canonicalizeForDigest(request.params.arguments);
+    } else if (projectCompositionContracts.getContract(request.params.capabilityId)) {
         // The package-specific validator has already proved a recursively
         // closed argument shape before send() can reach this digest boundary.
         // Sort every nested member here because the public request may arrive
@@ -1428,6 +1438,106 @@ function invokeRequestDigest(request) {
     });
 }
 
+function validNativeProgramArguments(value) {
+    if (!exactKeys(value, ['operations'], ['operationKey', 'undoGroup'])
+        || !Array.isArray(value.operations)
+        || value.operations.length < 1 || value.operations.length > 64
+        || (Object.hasOwn(value, 'operationKey')
+            !== Object.hasOwn(value, 'undoGroup'))
+        || (Object.hasOwn(value, 'operationKey')
+            && (!validIdempotencyKey(value.operationKey)
+                || typeof value.undoGroup !== 'string'
+                || value.undoGroup.length < 1 || value.undoGroup.length > 128))) {
+        return false;
+    }
+    const names = new Set();
+    return value.operations.every(function (operation) {
+        if (!exactKeys(operation, ['op', 'args'], ['saveAs', 'returnAs'])
+            || typeof operation.op !== 'string'
+            || !/^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/.test(operation.op)
+            || !operation.args || typeof operation.args !== 'object'
+            || Array.isArray(operation.args)) {
+            return false;
+        }
+        for (const key of ['saveAs', 'returnAs']) {
+            if (!Object.hasOwn(operation, key)) continue;
+            if (typeof operation[key] !== 'string'
+                || !/^[A-Za-z][A-Za-z0-9_]{0,63}$/.test(operation[key])
+                || names.has(operation[key])) {
+                return false;
+            }
+            names.add(operation[key]);
+        }
+        return true;
+    });
+}
+
+function validNativeProgramOperationSummaries(operations, requested, status) {
+    if (!Array.isArray(operations) || operations.length > 64) return false;
+    let previous = -1;
+    return operations.every(function (operation) {
+        const valid = exactKeys(operation, ['index', 'op', 'status'])
+            && Number.isSafeInteger(operation.index) && operation.index >= 0
+            && operation.index > previous
+            && operation.index < requested.length
+            && operation.op === requested[operation.index].op
+            && operation.status === status;
+        previous = operation.index;
+        return valid;
+    });
+}
+
+function validNativeProgramUndo(undo, expectedLabel) {
+    if (!exactKeys(undo, ['available', 'verified'], ['groupLabel'])
+        || typeof undo.available !== 'boolean' || undo.verified !== false) {
+        return false;
+    }
+    return undo.available
+        ? typeof undo.groupLabel === 'string'
+            && undo.groupLabel.length >= 1 && undo.groupLabel.length <= 128
+            && undo.groupLabel === expectedLabel
+        : !Object.hasOwn(undo, 'groupLabel');
+}
+
+function validNativeProgramEvidence(
+    evidence,
+    pending,
+    requestId,
+    sessionId,
+    hostInstanceId,
+    effect,
+    verified,
+) {
+    return exactKeys(evidence, [
+        'engine', 'hostInstanceId', 'sessionId', 'requestId', 'capabilityId',
+        'capabilityVersion', 'startedAtUnixMs', 'completedAtUnixMs', 'effect',
+        'postcondition', 'requestDigest',
+    ])
+        && evidence.engine === 'native-aegp'
+        && evidence.hostInstanceId === hostInstanceId
+        && evidence.sessionId === sessionId
+        && evidence.requestId === requestId
+        && evidence.capabilityId === 'ae.native.exec'
+        && evidence.capabilityVersion === 1
+        && Number.isSafeInteger(evidence.startedAtUnixMs)
+        && evidence.startedAtUnixMs > 0
+        && Number.isSafeInteger(evidence.completedAtUnixMs)
+        && evidence.completedAtUnixMs >= evidence.startedAtUnixMs
+        && evidence.effect === effect
+        && evidence.requestDigest === pending.requestDigest
+        && exactKeys(evidence.postcondition, [
+            'verified', 'kind', 'algorithm', 'digest',
+        ])
+        && evidence.postcondition.verified === verified
+        && evidence.postcondition.kind === 'native-program'
+        && evidence.postcondition.algorithm === 'sha256-rfc8785-jcs-v1'
+        && SHA256_PATTERN.test(evidence.postcondition.digest);
+}
+
+function nativeProgramPostconditionDigest(outputs, operations) {
+    return sha256Canonical(canonicalizeForDigest({ operations, outputs }));
+}
+
 function createNativeAegpClient(options) {
     const input = options || {};
     const runtime = input.runtime;
@@ -1476,7 +1586,12 @@ function createNativeAegpClient(options) {
 
     function pendingTransportFailure(pending, error, message) {
         return pending && pending.mutating
-            ? nativeMutationUncertain(message, pending.capabilityId, error)
+            ? nativeMutationUncertain(
+                message,
+                pending.capabilityId,
+                error,
+                pending.operationKey,
+            )
             : error;
     }
 
@@ -1540,6 +1655,73 @@ function createNativeAegpClient(options) {
                 'Native AEGP returned an unverifiable mutation error after dispatch.',
             );
         }
+        if (pending?.capabilityId === 'ae.native.exec') {
+            const details = error.details;
+            const disposition = details?.disposition;
+            const sideEffect = disposition === 'possibly-side-effecting'
+                ? 'may-have-occurred'
+                : disposition === 'completed' ? 'completed' : 'not-started';
+            const effect = disposition === 'possibly-side-effecting'
+                ? 'may-have-occurred' : 'none';
+            const completed = details?.completedOperations;
+            const failureValid = exactKeys(details, [
+                'capabilityId', 'disposition', 'completedOperations',
+                'outputs', 'evidence', 'undo',
+            ], ['operationKey', 'failedOperation'])
+                && details.capabilityId === 'ae.native.exec'
+                && ['not-started', 'completed', 'possibly-side-effecting']
+                    .includes(disposition)
+                && error.sideEffect === sideEffect
+                && validNativeProgramOperationSummaries(
+                    completed,
+                    pending.operations,
+                    'completed',
+                )
+                && details.outputs && typeof details.outputs === 'object'
+                && !Array.isArray(details.outputs)
+                && Object.keys(details.outputs).length <= 64
+                && (details.failedOperation === undefined
+                    || validNativeProgramOperationSummaries(
+                        [details.failedOperation],
+                        pending.operations,
+                        'failed',
+                    ))
+                && (pending.operationKey === undefined
+                    ? details.operationKey === undefined
+                    : details.operationKey === pending.operationKey)
+                && validNativeProgramEvidence(
+                    details.evidence,
+                    pending,
+                    response.requestId,
+                    sessionId,
+                    endpoint.hostInstanceId,
+                    effect,
+                    false,
+                )
+                && details.evidence.postcondition.digest
+                    === nativeProgramPostconditionDigest(
+                        details.outputs,
+                        completed,
+                    )
+                && validNativeProgramUndo(details.undo, pending.undoGroup)
+                && (disposition !== 'not-started'
+                    || (completed.length === 0
+                        && Object.keys(details.outputs).length === 0
+                        && details.failedOperation === undefined
+                        && details.undo.available === false))
+                && (disposition !== 'possibly-side-effecting'
+                    || (error.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE'
+                        && details.operationKey === pending.operationKey));
+            if (!failureValid) {
+                return pendingTransportFailure(
+                    pending,
+                    nativeContractMismatch(
+                        'native AEGP returned a malformed native program failure',
+                    ),
+                    'Native AEGP returned an unverifiable program failure after dispatch.',
+                );
+            }
+        }
         return nativeError(error.code, error.message, error.retryable, undefined, error);
     }
 
@@ -1553,7 +1735,8 @@ function createNativeAegpClient(options) {
         }
         if (response.kind === 'event') return;
         const pending = pendingRequests.get(response.requestId);
-        const replayValid = pending?.method === 'invoke' && response.ok === true
+        const replayValid = pending?.method === 'invoke'
+            && (response.ok === true || pending.capabilityId === 'ae.native.exec')
             ? typeof response.replayed === 'boolean'
             : response.replayed === false;
         if (!pending || response.wireVersion !== 1 || response.kind !== 'response'
@@ -1618,7 +1801,9 @@ function createNativeAegpClient(options) {
         if (deadlineUnixMs !== undefined) request.deadlineUnixMs = deadlineUnixMs;
         const requestDigest = method === 'invoke' ? invokeRequestDigest(request) : null;
         const mutating = method === 'invoke'
-            && (params.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY
+            && ((params.capabilityId === 'ae.native.exec'
+                && typeof params.arguments?.operationKey === 'string')
+                || params.capabilityId === PROJECT_BIT_DEPTH_SET_CAPABILITY
                 || params.capabilityId === COMPOSITION_TIME_SET_CAPABILITY
                 || params.capabilityId === COMPOSITION_CREATE_CAPABILITY
                 || params.capabilityId === COMPOSITION_LAYER_CREATE_CAPABILITY
@@ -1634,6 +1819,8 @@ function createNativeAegpClient(options) {
                     ? nativeMutationUncertain(
                         'Native mutation response timed out after dispatch.',
                         params.capabilityId,
+                        undefined,
+                        params.arguments?.operationKey,
                     )
                     : nativeError('DEADLINE_EXCEEDED', 'native AEGP request timed out', true));
             }, Math.min(requestTimeoutMs, remainingMs));
@@ -1643,6 +1830,12 @@ function createNativeAegpClient(options) {
                 capabilityId: method === 'invoke' ? params.capabilityId : null,
                 capabilityVersion: method === 'invoke' ? params.capabilityVersion : null,
                 mutating,
+                operationKey: method === 'invoke'
+                    ? params.arguments?.operationKey : undefined,
+                undoGroup: method === 'invoke'
+                    ? params.arguments?.undoGroup : undefined,
+                operations: method === 'invoke'
+                    ? params.arguments?.operations : undefined,
                 resolve,
                 reject,
                 timer,
@@ -1668,6 +1861,7 @@ function createNativeAegpClient(options) {
                         'Native mutation transport write failed after dispatch may have begun.',
                         params.capabilityId,
                         cause,
+                        params.arguments?.operationKey,
                     )
                     : nativeError('NATIVE_UNAVAILABLE', 'native AEGP request write failed', true, cause));
             }
@@ -2095,6 +2289,98 @@ function createNativeAegpClient(options) {
     }
 
     async function invoke(options) {
+        const call = options || {};
+        if (!exactKeys(call, [
+            'requestId', 'capabilityId', 'capabilityVersion', 'arguments',
+            'deadlineUnixMs',
+        ]) || !TOKEN_PATTERN.test(call.requestId || '')
+            || call.capabilityId !== 'ae.native.exec'
+            || call.capabilityVersion !== 1
+            || !validNativeProgramArguments(call.arguments)
+            || !Number.isSafeInteger(call.deadlineUnixMs)
+            || call.deadlineUnixMs <= 0) {
+            throw nativeError(
+                'INVALID_ARGUMENT',
+                'native invoke request must be one closed ae.native.exec program',
+                false,
+            );
+        }
+        if (state !== 'connected') await waitUntilConnected(call.deadlineUnixMs);
+        const result = await send('invoke', {
+            capabilityId: 'ae.native.exec',
+            capabilityVersion: 1,
+            arguments: call.arguments,
+        }, {
+            requestId: call.requestId,
+            deadlineUnixMs: call.deadlineUnixMs,
+        });
+        const mutating = Object.hasOwn(call.arguments, 'operationKey');
+        const operationsValid = validNativeProgramOperationSummaries(
+            result?.operations,
+            call.arguments.operations,
+            'completed',
+        ) && result.operations.length === call.arguments.operations.length;
+        const outputsValid = result?.outputs
+            && typeof result.outputs === 'object' && !Array.isArray(result.outputs)
+            && Object.keys(result.outputs).length <= 64;
+        const undoValid = validNativeProgramUndo(
+            result?.undo,
+            call.arguments.undoGroup,
+        ) && result.undo.available === mutating;
+        const evidenceValid = validNativeProgramEvidence(
+            result?.evidence,
+            {
+                requestDigest: invokeRequestDigest({
+                    wireVersion: 1,
+                    kind: 'request',
+                    sessionId,
+                    requestId: call.requestId,
+                    method: 'invoke',
+                    params: {
+                        capabilityId: 'ae.native.exec',
+                        capabilityVersion: 1,
+                        arguments: call.arguments,
+                    },
+                    deadlineUnixMs: call.deadlineUnixMs,
+                }),
+            },
+            call.requestId,
+            sessionId,
+            endpoint.hostInstanceId,
+            mutating ? 'committed' : 'none',
+            true,
+        );
+        const resultValid = exactKeys(result, [
+            'capabilityId', 'outputs', 'operations', 'evidence', 'undo',
+            'replayed',
+        ])
+            && result.capabilityId === 'ae.native.exec'
+            && typeof result.replayed === 'boolean'
+            && operationsValid && outputsValid && undoValid && evidenceValid
+            && result.evidence.postcondition.digest
+                === nativeProgramPostconditionDigest(
+                    result.outputs,
+                    result.operations,
+                );
+        if (!resultValid) {
+            if (mutating) {
+                throw nativeMutationUncertain(
+                    'Native program result lacked a closed verified terminal.',
+                    'ae.native.exec',
+                    undefined,
+                    call.arguments.operationKey,
+                );
+            }
+            throw nativeContractMismatch(
+                'native program result lacked a closed verified terminal',
+            );
+        }
+        return result;
+    }
+
+    // Retained only as inert migration code until Task 9 removes legacy
+    // operation-specific carriers. It is deliberately not exported or called.
+    async function legacyOperationSpecificInvoke(options) {
         const call = options || {};
         const packageContract = projectCompositionContracts.getContract(call.capabilityId);
         const packageCall = packageContract !== null
@@ -2712,16 +2998,6 @@ function createNativeAegpClient(options) {
         return result;
     }
 
-    async function projectSummary() {
-        return invoke({
-            requestId: 'invoke-' + String(nextRequest++) + '-' + randomBytes(4).toString('hex'),
-            capabilityId: 'ae.project.summary',
-            capabilityVersion: 1,
-            arguments: {},
-            deadlineUnixMs: now() + Math.min(requestTimeoutMs, 5000),
-        });
-    }
-
     async function close() {
         if (state === 'closed') return;
         state = 'closed';
@@ -2736,7 +3012,6 @@ function createNativeAegpClient(options) {
         capabilities,
         invoke,
         invalidateProjectGraph,
-        projectSummary,
         close,
         status: function () {
             return Object.freeze({
