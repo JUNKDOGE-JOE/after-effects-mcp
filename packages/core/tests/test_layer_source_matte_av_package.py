@@ -742,7 +742,6 @@ def test_maintained_source_public_tool_exposes_exact_handler_mapping():
 
 @pytest.mark.asyncio
 async def test_tools_list_exposes_only_the_frozen_underscore_layer_source_matte_av_names(
-    monkeypatch,
 ):
     """Discovery must agree with the public schemas, handlers, and annotations."""
     expected = {
@@ -766,20 +765,27 @@ async def test_tools_list_exposes_only_the_frozen_underscore_layer_source_matte_
     }
 
     load_all()
-    monkeypatch.setattr(
-        server_module, "_filtered_tool_names", lambda: set(expected.values())
-    )
-    listed = await server_module.build_server()._ae_list_tools()
-
-    assert {tool.name for tool in listed} == set(expected)
-    assert set(SMA.CAPABILITY_CONTRACTS) == expected_capabilities
-    assert "ae.layer.source.set" not in SMA.CAPABILITY_CONTRACTS
     handler_names = {
         public_verb: handler_name
         for public_verb, _handler_verb, handler_name, *_rest in NATIVE_PUBLIC_TOOLS
     }
     handler_names[MAINTAINED_SOURCE_PUBLIC_TOOL[0]] = MAINTAINED_SOURCE_PUBLIC_TOOL[2]
-    for tool in listed:
+    package_handlers = {
+        getattr(native_handlers, handler_name) for handler_name in handler_names.values()
+    }
+    registered_package_names = {
+        expose_tool_name(canonical)
+        for canonical, (_schema_cls, handler) in HANDLERS.items()
+        if handler in package_handlers
+    }
+    listed = await server_module.build_server()._ae_list_tools()
+    package_tools = [tool for tool in listed if tool.name in registered_package_names]
+
+    assert registered_package_names == set(expected)
+    assert {tool.name for tool in package_tools} == set(expected)
+    assert set(SMA.CAPABILITY_CONTRACTS) == expected_capabilities
+    assert "ae.layer.source.set" not in SMA.CAPABILITY_CONTRACTS
+    for tool in package_tools:
         canonical = expected[tool.name]
         schema_cls, handler = HANDLERS[canonical]
         assert tool.name == expose_tool_name(canonical)
