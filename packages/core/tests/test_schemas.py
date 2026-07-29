@@ -9,9 +9,9 @@ from ae_mcp import schemas as S
 
 
 def test_registry_has_all_verbs():
-    assert len(S.SCHEMAS) == 111, f"expected 111 verbs, got {len(S.SCHEMAS)}"
+    assert len(S.SCHEMAS) == 112, f"expected 112 verbs, got {len(S.SCHEMAS)}"
     assert set(S.SCHEMAS) == {
-        "ae.init", "ae.overview", "ae.projectSummary",
+        "ae.init", "ae.overview", "ae.projectSummary", "ae.nativeExec",
         "ae.getProjectBitDepth", "ae.setProjectBitDepth",
         "ae.listProjectItems", "ae.listCompositionLayers", "ae.listSelectedLayers",
         "ae.getCompositionTime", "ae.setCompositionTime",

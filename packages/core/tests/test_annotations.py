@@ -22,6 +22,9 @@ def test_exec_is_destructive_and_reads_are_readonly():
     load_all()
     assert VERB_ANNOTATIONS["ae.exec"].destructiveHint is True
     assert VERB_ANNOTATIONS["ae.exec"].readOnlyHint is False
+    assert VERB_ANNOTATIONS["ae.nativeExec"].destructiveHint is True
+    assert VERB_ANNOTATIONS["ae.nativeExec"].readOnlyHint is False
+    assert VERB_ANNOTATIONS["ae.nativeExec"].idempotentHint is True
     assert VERB_ANNOTATIONS["ae.overview"].readOnlyHint is True
     assert VERB_ANNOTATIONS["ae.overview"].destructiveHint is False
     assert VERB_ANNOTATIONS["ae.projectSummary"].readOnlyHint is True
@@ -119,5 +122,6 @@ async def test_list_tools_carries_annotations(monkeypatch):
     tools = await server._ae_list_tools()
     by_name = {t.name: t for t in tools}
     assert by_name["ae_exec"].annotations.destructiveHint is True
+    assert by_name["ae_nativeExec"].annotations.destructiveHint is True
     assert by_name["ae_overview"].annotations.readOnlyHint is True
     assert all(t.annotations is not None for t in tools)

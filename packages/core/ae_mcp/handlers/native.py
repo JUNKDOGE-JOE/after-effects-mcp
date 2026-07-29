@@ -14,6 +14,8 @@ from ae_mcp.backends.native import (
     NativeCancellationToken,
     NativeInvokeBackend,
     NativeRecovery,
+    NativeProgramExecution,
+    invoke_native_program,
     invoke_composition_layers_list,
     invoke_selected_composition_layers_list,
     invoke_composition_time_read,
@@ -138,6 +140,7 @@ _LAYER_TRANSFORM_TIMEOUT_MS = 20_000
 _KEYFRAME_DETAILS_READ_TIMEOUT_MS = 10_000
 _KEYFRAME_WRITE_TIMEOUT_MS = 10_000
 _NATIVE_MEDIA_TIMEOUT_MS = 20_000
+_NATIVE_EXEC_TIMEOUT_MS = 30_000
 
 
 def _backend() -> NativeInvokeBackend:
@@ -207,6 +210,76 @@ def _native_read_response(execution: Any) -> dict[str, Any]:
             exclude_none=True,
         ),
     }
+
+
+def _native_program_response(execution: NativeProgramExecution) -> dict[str, Any]:
+    result = execution.result
+    negotiation = execution.negotiation
+    response = {
+        "ok": True,
+        **result.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+        ),
+    }
+    response["provenance"] = {
+        "engine": result.evidence.engine,
+        "selectedWireVersion": negotiation.selected_wire_version,
+        "pluginVersion": negotiation.plugin_version,
+        "compiledSdkVersion": negotiation.compiled_sdk_version,
+        "sourceCommit": negotiation.source_commit,
+        "hostInstanceId": negotiation.host_instance_id,
+        "sessionId": negotiation.session_id,
+        "sessionGeneration": negotiation.session_generation,
+        "capabilitiesDigest": negotiation.capabilities_digest,
+    }
+    response["audit"] = {
+        "requestId": execution.request.request_id,
+        "capabilityId": result.capability_id,
+        "operationKey": result.operation_key,
+        "programDigest": execution.request.program_digest,
+        "requestDigest": result.evidence.request_digest,
+        "postconditionAlgorithm": result.evidence.postcondition.algorithm,
+        "postconditionDigest": result.evidence.postcondition.digest,
+        "effect": result.evidence.effect,
+        "undoAvailable": result.undo.available,
+        "undoVerified": result.undo.verified,
+        "replayed": result.replayed,
+        "startedAtUnixMs": result.evidence.started_at_unix_ms,
+        "completedAtUnixMs": result.evidence.completed_at_unix_ms,
+    }
+    if result.operation_key is None:
+        del response["audit"]["operationKey"]
+    return response
+
+
+async def _run_native_exec(
+    args: schemas.AeNativeExecArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _NATIVE_EXEC_TIMEOUT_MS
+
+    async def _call() -> NativeProgramExecution:
+        return await invoke_native_program(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            args=args,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.nativeExec bounded native AEGP program...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_program_response(execution)
 
 
 def _layer_transform_read_response(result: LayerTransformRead) -> dict[str, Any]:
@@ -2691,6 +2764,11 @@ register(
     "ae.projectSummary",
     schemas.AeProjectSummaryArgs,
     _run_project_summary,
+)
+register(
+    "ae.nativeExec",
+    schemas.AeNativeExecArgs,
+    _run_native_exec,
 )
 register(
     "ae.listProjectItems",

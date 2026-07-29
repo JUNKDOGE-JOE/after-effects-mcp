@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from ae_mcp.backends.native import (
     NativeBackendError,
     NativeCancellationToken,
     NativeInvokeRequest,
+    NativeProgramInvokeResult,
+    NativeProgramRequest,
 )
 from ae_mcp.backends.native_keyframe_authoring import (
     KEYFRAME_ADD_CAPABILITY_ID,
@@ -94,6 +97,251 @@ def _invoke_result() -> dict:
         **_fixture("invoke-project-summary.json")["response"]["result"],
         "replayed": False,
     }
+
+
+def _program_request(*, write: bool) -> NativeProgramRequest:
+    arguments = {
+        "operations": [
+            {
+                "op": "project.items.list",
+                "args": {"offset": 0, "limit": 1},
+                "returnAs": "items",
+            }
+        ]
+    }
+    if write:
+        arguments = {
+            "operationKey": "native-program-write-bridge-0001",
+            "undoGroup": "Native program bridge write",
+            "operations": [
+                {
+                    "op": "composition.resolve",
+                    "args": {
+                        "locator": {
+                            "kind": "composition",
+                            "hostInstanceId": _HOST,
+                            "sessionId": _SESSION,
+                            "projectId": "33333333-3333-4333-8333-333333333333",
+                            "generation": 1,
+                            "objectId": "44444444-4444-4444-8444-444444444444",
+                        }
+                    },
+                    "saveAs": "composition",
+                },
+                {
+                    "op": "composition.time.set",
+                    "args": {
+                        "composition": {"ref": "composition"},
+                        "targetTime": {"value": 1, "scale": 24},
+                    },
+                    "returnAs": "time",
+                }
+            ],
+        }
+    return NativeProgramRequest(
+        request_id="bridge-native-program-write" if write else "bridge-native-program-read",
+        arguments=arguments,
+        deadline_unix_ms=_DEADLINE,
+    )
+
+
+def _program_result(request: NativeProgramRequest) -> dict:
+    write = "operationKey" in request.arguments
+    operations = [
+        {
+            "index": index,
+            "op": operation["op"],
+            "status": "completed",
+        }
+        for index, operation in enumerate(request.arguments["operations"])
+    ]
+    outputs = {"time": {"value": 1, "scale": 24}} if write else {
+        "items": {"items": [], "nextOffset": None}
+    }
+    digest = hashlib.sha256(
+        json.dumps(
+            {"operations": operations, "outputs": outputs},
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "capabilityId": "ae.native.exec",
+        **({"operationKey": request.arguments["operationKey"]} if write else {}),
+        "outputs": outputs,
+        "operations": operations,
+        "evidence": {
+            "engine": "native-aegp",
+            "hostInstanceId": _HOST,
+            "sessionId": _SESSION,
+            "requestId": request.request_id,
+            "capabilityId": "ae.native.exec",
+            "capabilityVersion": 1,
+            "startedAtUnixMs": _DEADLINE - 100,
+            "completedAtUnixMs": _DEADLINE - 50,
+            "effect": "committed" if write else "none",
+            "requestDigest": "b" * 64,
+            "postcondition": {
+                "verified": True,
+                "kind": "native-program",
+                "algorithm": "sha256-rfc8785-jcs-v1",
+                "digest": digest,
+            },
+        },
+        "undo": (
+            {
+                "available": True,
+                "verified": False,
+                "groupLabel": request.arguments["undoGroup"],
+            }
+            if write
+            else {"available": False, "verified": False}
+        ),
+        "replayed": False,
+    }
+
+
+@pytest.mark.parametrize("write", [False, True])
+@pytest.mark.asyncio
+async def test_native_program_success_uses_common_result_projection(
+    token_file,
+    write,
+):
+    request = _program_request(write=write)
+    raw = _program_result(request)
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(
+            return_value=Response(200, json={"ok": True, "result": raw})
+        )
+        result = await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert isinstance(result, NativeProgramInvokeResult)
+    assert result.capability_id == "ae.native.exec"
+    assert result.operation_key == (
+        request.arguments.get("operationKey") if write else None
+    )
+    assert result.undo.available is write
+
+
+@pytest.mark.asyncio
+async def test_native_program_write_invalid_terminal_preserves_operation_key(
+    token_file,
+):
+    request = _program_request(write=True)
+    raw = _program_result(request)
+    del raw["undo"]["groupLabel"]
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(
+            return_value=Response(200, json={"ok": True, "result": raw})
+        )
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.details == {
+        "capabilityId": "ae.native.exec",
+        "operationKey": request.arguments["operationKey"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_native_program_write_transport_loss_preserves_operation_key(
+    token_file,
+):
+    request = _program_request(write=True)
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(side_effect=ReadTimeout("lost response"))
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.details == {
+        "capabilityId": "ae.native.exec",
+        "operationKey": request.arguments["operationKey"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_native_program_wire_failure_preserves_common_partial_evidence(
+    token_file,
+):
+    request = _program_request(write=True)
+    completed = [
+        {
+            "index": 0,
+            "op": "composition.resolve",
+            "status": "completed",
+        }
+    ]
+    outputs: dict = {}
+    error = {
+        "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
+        "message": "Native program completion became uncertain.",
+        "retryable": False,
+        "sideEffect": "may-have-occurred",
+        "recovery": {
+            "action": "inspect-state",
+            "hint": "Inspect After Effects state and audit evidence before retrying.",
+        },
+        "details": {
+            "capabilityId": "ae.native.exec",
+            "operationKey": request.arguments["operationKey"],
+            "disposition": "possibly-side-effecting",
+            "completedOperations": completed,
+            "failedOperation": {
+                "index": 1,
+                "op": "composition.time.set",
+                "status": "failed",
+            },
+            "outputs": outputs,
+            "evidence": {
+                "engine": "native-aegp",
+                "hostInstanceId": _HOST,
+                "sessionId": _SESSION,
+                "requestId": request.request_id,
+                "capabilityId": "ae.native.exec",
+                "capabilityVersion": 1,
+                "startedAtUnixMs": _DEADLINE - 100,
+                "completedAtUnixMs": _DEADLINE - 50,
+                "effect": "may-have-occurred",
+                "requestDigest": "b" * 64,
+                "postcondition": {
+                    "verified": False,
+                    "kind": "native-program",
+                    "algorithm": "sha256-rfc8785-jcs-v1",
+                    "digest": hashlib.sha256(
+                        json.dumps(
+                            {"operations": completed, "outputs": outputs},
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                            sort_keys=True,
+                        ).encode("utf-8")
+                    ).hexdigest(),
+                },
+            },
+            "undo": {
+                "available": True,
+                "verified": False,
+                "groupLabel": request.arguments["undoGroup"],
+            },
+        },
+    }
+
+    async with respx.mock(base_url="http://127.0.0.1:11488") as mock:
+        mock.post("/native/invoke").mock(
+            return_value=Response(500, json={"ok": False, "error": error})
+        )
+        with pytest.raises(NativeBackendError) as raised:
+            await HttpBridge("http://127.0.0.1:11488").invoke(request)
+
+    assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert raised.value.details is not None
+    assert raised.value.details["operationKey"] == request.arguments["operationKey"]
+    assert raised.value.details["completedOperations"] == completed
 
 
 @pytest.mark.asyncio

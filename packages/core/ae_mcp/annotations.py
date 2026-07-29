@@ -139,6 +139,9 @@ VERB_ANNOTATIONS: dict[str, ToolAnnotations] = {
     "ae.layers": _ann(True, False, True),
     "ae.readProps": _ann(False, True, False),
     "ae.exec": _ann(False, True, False),
+    # Bounded programs may include native writes. A stable operationKey binds
+    # every mutating program to one terminal result and prevents redispatch.
+    "ae.nativeExec": _ann(False, True, True),
     "ae.checkpoint": _ann(False, False, False),
     "ae.revert": _ann(False, True, False),
     "ae.snapshot": _ann(True, False, True),

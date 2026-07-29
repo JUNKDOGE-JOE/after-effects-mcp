@@ -57,7 +57,9 @@ def test_migration_lists_every_operation_specific_public_tool_only():
         }
         for row in migration.public_tools.values()
     )
-    assert "ae.exec" not in migration.public_tools
+    assert {"ae.exec", "ae.nativeExec"}.isdisjoint(migration.public_tools)
+    assert "ae.applyEffect" in migration.public_tools
+    validate_sources(ROOT)
     assert all(
         token not in tool_id
         for tool_id in migration.public_tools

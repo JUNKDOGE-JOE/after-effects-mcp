@@ -7,11 +7,13 @@ LLM reads them in the tool-picker.
 
 from __future__ import annotations
 
+from copy import deepcopy
 import math
 from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from typing import Annotated, Any, Dict, List, Literal, Optional, Tuple, Union
 
+from jsonschema import Draft202012Validator
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -19,6 +21,11 @@ from pydantic import (
     constr,
     field_validator,
     model_validator,
+)
+
+from ae_mcp.native_exec_generated import (
+    NATIVE_EXEC_INPUT_SCHEMA,
+    PRIMITIVES as NATIVE_EXEC_PRIMITIVES,
 )
 
 
@@ -1525,6 +1532,101 @@ class AeExecArgs(_StrictModel):
     )
 
 
+NativeProgramOperation = Dict[str, Any]
+_NATIVE_EXEC_VALIDATOR = Draft202012Validator(NATIVE_EXEC_INPUT_SCHEMA)
+_NATIVE_EXEC_PRIMITIVE_BY_ID = {
+    row["id"]: row for row in NATIVE_EXEC_PRIMITIVES
+}
+
+
+class AeNativeExecArgs(_StrictModel):
+    """ae.nativeExec — execute one bounded linear program of curated AEGP primitives.
+
+    Use ae.exec for operations supported by the maintained AE scripting object
+    model. Native programs allow at most 64 ordered operations and may reference
+    only earlier request-local values. Programs containing writes require one
+    stable operationKey and one real AE undoGroup.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        strict=True,
+    )
+
+    operation_key: Optional[str] = Field(default=None, alias="operationKey")
+    undo_group: Optional[str] = Field(default=None, alias="undoGroup")
+    operations: List[NativeProgramOperation] = Field(
+        min_length=1,
+        max_length=64,
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _generated_contract(cls, value: Any) -> Any:
+        errors = sorted(
+            _NATIVE_EXEC_VALIDATOR.iter_errors(value),
+            key=lambda error: list(error.absolute_path),
+        )
+        if errors:
+            error = errors[0]
+            field = ".".join(str(part) for part in error.absolute_path)
+            location = f" at {field}" if field else ""
+            raise ValueError(
+                f"native program does not match the generated schema{location}: "
+                f"{error.message}"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _ordered_reference_frame(self) -> "AeNativeExecArgs":
+        saved_kinds: dict[str, str] = {}
+        public_names: set[str] = set()
+        for index, operation in enumerate(self.operations):
+            primitive = _NATIVE_EXEC_PRIMITIVE_BY_ID[operation["op"]]
+            arguments = operation["args"]
+            for field, reference in primitive["reference_arguments"].items():
+                referenced_name = arguments[field]["ref"]
+                actual_kind = saved_kinds.get(referenced_name)
+                if actual_kind is None:
+                    raise ValueError(
+                        f"operations.{index}.args.{field} must reference an "
+                        "earlier saved value"
+                    )
+                expected_kind = reference["kind"]
+                if actual_kind != expected_kind:
+                    raise ValueError(
+                        f"operations.{index}.args.{field} expects "
+                        f"{expected_kind}, got {actual_kind}"
+                    )
+
+            save_as = operation.get("saveAs")
+            return_as = operation.get("returnAs")
+            for field, name in (("saveAs", save_as), ("returnAs", return_as)):
+                if name is None:
+                    continue
+                if name in public_names:
+                    raise ValueError(
+                        f"operations.{index}.{field} duplicates named value {name}"
+                    )
+                public_names.add(name)
+            if return_as is not None and primitive["exportable"] is not True:
+                raise ValueError(
+                    f"operations.{index}.returnAs cannot export "
+                    f"{primitive['result_kind']}"
+                )
+            if save_as is not None:
+                saved_kinds[save_as] = primitive["result_kind"]
+        return self
+
+    @classmethod
+    def __get_pydantic_json_schema__(cls, _core_schema, _handler):
+        schema = deepcopy(NATIVE_EXEC_INPUT_SCHEMA)
+        schema["title"] = cls.__name__
+        schema["description"] = (cls.__doc__ or "").strip()
+        return schema
+
+
 CheckpointAction = Literal["create", "list"]
 
 
@@ -2644,6 +2746,7 @@ SCHEMAS = {
     "ae.layers": AeLayersArgs,
     "ae.readProps": AeReadPropsArgs,
     "ae.exec": AeExecArgs,
+    "ae.nativeExec": AeNativeExecArgs,
     "ae.checkpoint": AeCheckpointArgs,
     "ae.revert": AeRevertArgs,
     "ae.snapshot": AeSnapshotArgs,
@@ -2686,7 +2789,7 @@ SCHEMAS = {
     **_TSM_PUBLIC_SCHEMAS,
 }
 
-assert len(SCHEMAS) in {94, 111}, f"expected base or full registry, got {len(SCHEMAS)}"
+assert len(SCHEMAS) in {95, 112}, f"expected base or full registry, got {len(SCHEMAS)}"
 
 
 # Internal capability ID -> strict input schema. Public verb registration is

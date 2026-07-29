@@ -270,7 +270,10 @@ def validate_sources(root: Path) -> None:
 
     load_all()
     excluded = {
-        "ae.exec", "ae.checkpoint", "ae.revert", "ae.snapshot",
+        # Final canonical execution surfaces are products of this migration,
+        # not legacy operation-specific tools that the removal manifest owns.
+        "ae.exec", "ae.nativeExec",
+        "ae.checkpoint", "ae.revert", "ae.snapshot",
         "ae.previewFrame", "ae.validateExpressions", "ae.ping", "ae.status",
         "ae.diagnose", "ae.skillList", "ae.skillUse", "ae.toolIndex",
         "ae.toolSearch", "ae.toolInspect", "ae.toolUse",
