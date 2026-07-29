@@ -67,6 +67,7 @@ function commandBytes(tool, args, redactions = []) {
     return execFileSync(tool, args, {
       env: { ...process.env, LC_ALL: 'C', LANG: 'C' },
       stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 16 * 1024 * 1024,
     });
   } catch (error) {
     let detail = `${error?.stderr ?? ''}`.slice(-4000);
