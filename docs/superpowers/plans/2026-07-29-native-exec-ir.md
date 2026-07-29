@@ -1065,6 +1065,15 @@ git add packages/core/ae_mcp/server.py \
 git commit -m "refactor(core): replace typed tools with two exec routes"
 ```
 
+**Execution record (2026-07-30):** Task 8 completed in commits
+`1a4e229..75249cb`. The exact-surface removal also touched
+`packages/core/ae_mcp/backends/maintained_layer_source.py` to make its two
+still-consumed locator inputs genuinely private, retired obsolete
+operation-specific tests, and removed the no-longer-public TSM schema test.
+The final public tool and public `BaseModel` surfaces both equal the approved
+final 16. Two concentrated/scoped review rounds ended CLEAN. The unchanged
+direct-invoke golden mismatch remains owned by Task 9.
+
 ---
 
 ### Task 9: Delete legacy native protocol and dispatcher carriers
