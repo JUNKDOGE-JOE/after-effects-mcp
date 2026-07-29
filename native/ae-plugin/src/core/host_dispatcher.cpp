@@ -545,6 +545,103 @@ bool same_locator_context(const ObjectLocator& left, const ObjectLocator& right)
       && left.generation == right.generation;
 }
 
+bool layer_source_matte_av_capability(std::string_view capability_id) {
+  return capability_id == kLayerSourceReadCapability
+      || capability_id == kLayerTrackMatteReadCapability
+      || capability_id == kLayerTrackMatteSetCapability
+      || capability_id == kLayerTrackMatteClearCapability
+      || capability_id == kLayerAVStateReadCapability
+      || capability_id == kLayerAudioEnabledSetCapability
+      || capability_id == kLayerVideoEnabledSetCapability;
+}
+
+bool layer_source_matte_av_write_capability(std::string_view capability_id) {
+  return capability_id == kLayerTrackMatteSetCapability
+      || capability_id == kLayerTrackMatteClearCapability
+      || capability_id == kLayerAudioEnabledSetCapability
+      || capability_id == kLayerVideoEnabledSetCapability;
+}
+
+bool valid_layer_source_matte_av_request(const Request& request) {
+  const bool write =
+      layer_source_matte_av_write_capability(request.capability_id);
+  if (!valid_uuid(request.host_instance_id) || !valid_uuid(request.session_id)
+      || (write
+          ? (!valid_idempotency_key(request.idempotency_key)
+            || !valid_sha256(request.arguments_fingerprint_sha256))
+          : (!request.idempotency_key.empty()
+            || !request.arguments_fingerprint_sha256.empty()))
+      || request.target_depth != 0 || request.offset != 0 || request.limit != 0
+      || request.project_locator.has_value()
+      || request.composition_locator.has_value()
+      || request.layer_locator.has_value()
+      || request.parent_property_locator.has_value()
+      || request.property_locator.has_value()
+      || !std::holds_alternative<std::monostate>(request.property_value)
+      || has_nondefault_time(request.target_time)
+      || !request.layer_create_kind.empty() || !request.layer_create_name.empty()
+      || request.layer_create_color.has_value()
+      || request.layer_create_width.has_value()
+      || request.layer_create_height.has_value()
+      || request.layer_create_duration.has_value()
+      || has_composition_create_arguments(request)
+      || !request.layer_effect_match_name.empty()
+      || request.item_locator.has_value()
+      || has_nondefault_time(request.work_area_start)
+      || has_nondefault_time(request.work_area_duration)
+      || !request.item_text.empty() || request.item_label_id != 0
+      || !request.duplicate_new_name.empty()
+      || has_layer_timeline_arguments(request)
+      || has_keyframe_arguments(request)
+      || has_layer_compositing_arguments(request)
+      || has_native_media_arguments(request)) {
+    return false;
+  }
+  const auto valid_layer = [&](const ObjectLocator& locator) {
+    return valid_locator(locator) && locator.kind == "layer"
+        && locator.host_instance_id == request.host_instance_id
+        && locator.session_id == request.session_id;
+  };
+  if (request.capability_id == kLayerSourceReadCapability) {
+    const auto* payload =
+        std::get_if<LayerSourceReadRequest>(&request.layer_source_matte_av_request);
+    return payload != nullptr && valid_layer(payload->layer_locator);
+  }
+  if (request.capability_id == kLayerTrackMatteReadCapability) {
+    const auto* payload = std::get_if<LayerTrackMatteReadRequest>(
+        &request.layer_source_matte_av_request);
+    return payload != nullptr && valid_layer(payload->layer_locator);
+  }
+  if (request.capability_id == kLayerTrackMatteSetCapability) {
+    const auto* payload = std::get_if<LayerTrackMatteSetRequest>(
+        &request.layer_source_matte_av_request);
+    return payload != nullptr && valid_layer(payload->layer_locator)
+        && valid_layer(payload->matte_layer_locator)
+        && same_locator_context(
+            payload->layer_locator, payload->matte_layer_locator)
+        && payload->layer_locator != payload->matte_layer_locator
+        && payload->mode != LayerTrackMatteMode::kNone;
+  }
+  if (request.capability_id == kLayerTrackMatteClearCapability) {
+    const auto* payload = std::get_if<LayerTrackMatteClearRequest>(
+        &request.layer_source_matte_av_request);
+    return payload != nullptr && valid_layer(payload->layer_locator);
+  }
+  if (request.capability_id == kLayerAVStateReadCapability) {
+    const auto* payload = std::get_if<LayerAVStateReadRequest>(
+        &request.layer_source_matte_av_request);
+    return payload != nullptr && valid_layer(payload->layer_locator);
+  }
+  if (request.capability_id == kLayerAudioEnabledSetCapability) {
+    const auto* payload = std::get_if<LayerAudioEnabledSetRequest>(
+        &request.layer_source_matte_av_request);
+    return payload != nullptr && valid_layer(payload->layer_locator);
+  }
+  const auto* payload = std::get_if<LayerVideoEnabledSetRequest>(
+      &request.layer_source_matte_av_request);
+  return payload != nullptr && valid_layer(payload->layer_locator);
+}
+
 bool valid_project_item_entry(const ProjectItemEntry& value) {
   return valid_item_locator(value.locator)
       && valid_bounded_text(value.name, 4096, true)
@@ -831,6 +928,440 @@ Completion failure_for(
   completion.message = std::move(message);
   completion.error_field = std::move(field);
   return completion;
+}
+
+bool valid_resolved_layer(
+    const HostResolvedLayer& layer, const ObjectLocator& requested) {
+  return layer.locator == requested && layer.host_layer != 0
+      && layer.composition_owner != 0;
+}
+
+bool valid_layer_source_value(
+    const LayerSourceValue& value, const ObjectLocator& requested) {
+  if (value.layer_locator != requested) return false;
+  if (value.source_type == LayerSourceType::kNone) {
+    return !value.source_item_locator.has_value()
+        && !value.source_name.has_value();
+  }
+  const std::string_view expected_kind =
+      value.source_type == LayerSourceType::kComposition
+      ? "composition" : "item";
+  return value.source_item_locator.has_value()
+      && valid_locator(*value.source_item_locator)
+      && value.source_item_locator->kind == expected_kind
+      && same_locator_context(value.layer_locator, *value.source_item_locator)
+      && value.source_name.has_value()
+      && valid_bounded_text(*value.source_name, 4096, true);
+}
+
+bool valid_layer_track_matte_value(
+    const LayerTrackMatteValue& value, const ObjectLocator& requested) {
+  if (value.layer_locator != requested
+      || value.active != value.matte_layer_locator.has_value()
+      || (value.active && value.mode == LayerTrackMatteMode::kNone)) {
+    return false;
+  }
+  return !value.matte_layer_locator.has_value()
+      || (valid_locator(*value.matte_layer_locator)
+        && value.matte_layer_locator->kind == "layer"
+        && *value.matte_layer_locator != requested
+        && same_locator_context(requested, *value.matte_layer_locator));
+}
+
+bool valid_layer_av_state_value(
+    const LayerAVStateValue& value, const ObjectLocator& requested) {
+  return value.layer_locator == requested;
+}
+
+HostActionResult host_action_exception(std::string detail) {
+  return HostActionResult::failure(
+      "POSSIBLY_SIDE_EFFECTING_FAILURE", std::move(detail));
+}
+
+template <typename Mutation>
+std::pair<HostActionResult, HostActionResult> run_balanced_layer_mutation(
+    HostApi& host,
+    TimePoint deadline,
+    Mutation&& mutation) {
+  HostActionResult mutation_result;
+  try {
+    mutation_result = mutation();
+  } catch (...) {
+    mutation_result = host_action_exception(
+        "native layer mutation raised after its Undo group opened");
+  }
+  HostActionResult end_result;
+  try {
+    end_result = host.end_layer_undo_group(deadline);
+  } catch (...) {
+    end_result = host_action_exception(
+        "native layer Undo group close raised after mutation dispatch");
+  }
+  return {std::move(mutation_result), std::move(end_result)};
+}
+
+Completion dispatch_layer_source_matte_av(
+    const Request& request,
+    HostApi& host,
+    Clock& clock,
+    TimePoint read_deadline) {
+  const auto host_failure = [&](const auto& result) {
+    return failure_for(
+        request,
+        result.error_code.empty() ? "CAPABILITY_FAILED" : result.error_code,
+        result.message.empty() ? "native layer capability failed" : result.message,
+        result.error_field);
+  };
+  const auto resolve = [&](const ObjectLocator& locator)
+      -> std::variant<Completion, HostResolvedLayer> {
+    HostLayerResolveResult result = host.resolve_layer(locator, read_deadline);
+    if (clock.now() > request.deadline) {
+      Completion late = failure_for(
+          request, "DEADLINE_EXCEEDED",
+          "native layer resolution completed after its deadline");
+      late.late_result_discarded = true;
+      return late;
+    }
+    if (!result.ok) return host_failure(result);
+    if (!valid_resolved_layer(result.value, locator)) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native layer resolution was not bound to its requested locator");
+    }
+    return std::move(result.value);
+  };
+  const auto success = [&](LayerSourceMatteAvResult value) {
+    Completion completion;
+    completion.request_id = request.request_id;
+    completion.capability_id = request.capability_id;
+    completion.route_id = request.route_id;
+    completion.session_generation = request.session_generation;
+    completion.idempotency_key = request.idempotency_key;
+    completion.ok = true;
+    completion.layer_source_matte_av_result = std::move(value);
+    return completion;
+  };
+  const auto possible = [&](std::string message) {
+    return failure_for(
+        request, "POSSIBLY_SIDE_EFFECTING_FAILURE", std::move(message));
+  };
+
+  const ObjectLocator* target_locator = nullptr;
+  if (const auto* payload =
+          std::get_if<LayerSourceReadRequest>(
+              &request.layer_source_matte_av_request)) {
+    target_locator = &payload->layer_locator;
+  } else if (const auto* payload =
+                 std::get_if<LayerTrackMatteReadRequest>(
+                     &request.layer_source_matte_av_request)) {
+    target_locator = &payload->layer_locator;
+  } else if (const auto* payload =
+                 std::get_if<LayerTrackMatteSetRequest>(
+                     &request.layer_source_matte_av_request)) {
+    target_locator = &payload->layer_locator;
+  } else if (const auto* payload =
+                 std::get_if<LayerTrackMatteClearRequest>(
+                     &request.layer_source_matte_av_request)) {
+    target_locator = &payload->layer_locator;
+  } else if (const auto* payload =
+                 std::get_if<LayerAVStateReadRequest>(
+                     &request.layer_source_matte_av_request)) {
+    target_locator = &payload->layer_locator;
+  } else if (const auto* payload =
+                 std::get_if<LayerAudioEnabledSetRequest>(
+                     &request.layer_source_matte_av_request)) {
+    target_locator = &payload->layer_locator;
+  } else if (const auto* payload =
+                 std::get_if<LayerVideoEnabledSetRequest>(
+                     &request.layer_source_matte_av_request)) {
+    target_locator = &payload->layer_locator;
+  }
+  if (target_locator == nullptr) {
+    return failure_for(
+        request, "CAPABILITY_FAILED",
+        "native layer request lost its closed payload");
+  }
+  auto resolved_target = resolve(*target_locator);
+  if (const auto* failed = std::get_if<Completion>(&resolved_target)) {
+    return *failed;
+  }
+  const HostResolvedLayer target =
+      std::get<HostResolvedLayer>(std::move(resolved_target));
+
+  if (request.capability_id == kLayerSourceReadCapability) {
+    HostLayerSourceResult result =
+        host.read_layer_source(target, read_deadline);
+    if (clock.now() > request.deadline) {
+      Completion late = failure_for(
+          request, "DEADLINE_EXCEEDED",
+          "native layer source read completed after its deadline");
+      late.late_result_discarded = true;
+      return late;
+    }
+    if (!result.ok) return host_failure(result);
+    if (!valid_layer_source_value(result.value, *target_locator)) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native layer source result was not bound to its requested layer");
+    }
+    return success(std::move(result.value));
+  }
+
+  if (request.capability_id == kLayerTrackMatteReadCapability) {
+    HostLayerTrackMatteResult result =
+        host.read_layer_track_matte(target, read_deadline);
+    if (clock.now() > request.deadline) {
+      Completion late = failure_for(
+          request, "DEADLINE_EXCEEDED",
+          "native Track Matte read completed after its deadline");
+      late.late_result_discarded = true;
+      return late;
+    }
+    if (!result.ok) return host_failure(result);
+    if (!valid_layer_track_matte_value(result.value, *target_locator)) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native Track Matte result was not bound to its requested layer");
+    }
+    return success(std::move(result.value));
+  }
+
+  if (request.capability_id == kLayerAVStateReadCapability) {
+    HostLayerAVStateResult result =
+        host.read_layer_av_state(target, read_deadline);
+    if (clock.now() > request.deadline) {
+      Completion late = failure_for(
+          request, "DEADLINE_EXCEEDED",
+          "native AV-state read completed after its deadline");
+      late.late_result_discarded = true;
+      return late;
+    }
+    if (!result.ok) return host_failure(result);
+    if (!valid_layer_av_state_value(result.value, *target_locator)) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native AV-state result was not bound to its requested layer");
+    }
+    return success(std::move(result.value));
+  }
+
+  std::optional<HostResolvedLayer> matte;
+  const auto* matte_set = std::get_if<LayerTrackMatteSetRequest>(
+      &request.layer_source_matte_av_request);
+  if (matte_set != nullptr) {
+    auto resolved_matte = resolve(matte_set->matte_layer_locator);
+    if (const auto* failed = std::get_if<Completion>(&resolved_matte)) {
+      return *failed;
+    }
+    matte = std::get<HostResolvedLayer>(std::move(resolved_matte));
+    if (target.host_layer == matte->host_layer) {
+      return failure_for(
+          request, "TRACK_MATTE_SELF_REFERENCE",
+          "target and Matte resolved to the same host layer",
+          "params.arguments.matteLayerLocator");
+    }
+    if (target.composition_owner != matte->composition_owner) {
+      return failure_for(
+          request, "TRACK_MATTE_COMPOSITION_MISMATCH",
+          "target and Matte are owned by different compositions",
+          "params.arguments.matteLayerLocator");
+    }
+    if (!target.av_capable || !matte->av_capable) {
+      return failure_for(
+          request, "TRACK_MATTE_LAYER_NOT_AV",
+          "target and Matte must both be AV-capable layers",
+          !target.av_capable
+              ? "params.arguments.layerLocator"
+              : "params.arguments.matteLayerLocator");
+    }
+  }
+
+  std::optional<LayerTrackMatteValue> before_matte;
+  std::optional<LayerAVStateValue> before_av;
+  if (matte_set != nullptr
+      || request.capability_id == kLayerTrackMatteClearCapability) {
+    HostLayerTrackMatteResult result =
+        host.read_layer_track_matte(target, read_deadline);
+    if (clock.now() > request.deadline) {
+      Completion late = failure_for(
+          request, "DEADLINE_EXCEEDED",
+          "native Track Matte precondition read completed after its deadline");
+      late.late_result_discarded = true;
+      return late;
+    }
+    if (!result.ok) return host_failure(result);
+    if (!valid_layer_track_matte_value(result.value, *target_locator)) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native Track Matte before-state was incoherent");
+    }
+    before_matte = std::move(result.value);
+    if (matte_set != nullptr
+        && before_matte->active
+        && before_matte->matte_layer_locator
+            == std::optional<ObjectLocator>{matte_set->matte_layer_locator}
+        && before_matte->mode == matte_set->mode) {
+      return failure_for(
+          request, "VALUE_UNCHANGED",
+          "requested Track Matte relationship is already active");
+    }
+    if (matte_set == nullptr && !before_matte->active) {
+      return failure_for(
+          request, "TRACK_MATTE_NOT_ACTIVE",
+          "layer has no active Track Matte relationship");
+    }
+  } else {
+    HostLayerAVStateResult result =
+        host.read_layer_av_state(target, read_deadline);
+    if (clock.now() > request.deadline) {
+      Completion late = failure_for(
+          request, "DEADLINE_EXCEEDED",
+          "native AV-state precondition read completed after its deadline");
+      late.late_result_discarded = true;
+      return late;
+    }
+    if (!result.ok) return host_failure(result);
+    if (!valid_layer_av_state_value(result.value, *target_locator)) {
+      return failure_for(
+          request, "CAPABILITY_FAILED",
+          "native AV before-state was incoherent");
+    }
+    before_av = std::move(result.value);
+    const bool audio =
+        request.capability_id == kLayerAudioEnabledSetCapability;
+    const bool enabled = audio
+        ? std::get<LayerAudioEnabledSetRequest>(
+              request.layer_source_matte_av_request).enabled
+        : std::get<LayerVideoEnabledSetRequest>(
+              request.layer_source_matte_av_request).enabled;
+    if (enabled && audio && !before_av->has_audio) {
+      return failure_for(
+          request, "LAYER_HAS_NO_AUDIO",
+          "the selected source has no audio capability");
+    }
+    if (enabled && !audio && !before_av->has_video) {
+      return failure_for(
+          request, "LAYER_HAS_NO_VIDEO",
+          "the selected source has no video capability");
+    }
+    if ((audio ? before_av->audio_enabled : before_av->video_enabled)
+        == enabled) {
+      return failure_for(
+          request, "VALUE_UNCHANGED",
+          "requested AV switch value is already active");
+    }
+  }
+
+  const std::string_view undo_label =
+      matte_set != nullptr ? "ae-mcp: Set layer Track Matte"
+      : request.capability_id == kLayerTrackMatteClearCapability
+      ? "ae-mcp: Clear layer Track Matte"
+      : request.capability_id == kLayerAudioEnabledSetCapability
+      ? "ae-mcp: Set layer audio"
+      : "ae-mcp: Set layer video";
+  HostActionResult begin = host.begin_layer_undo_group(
+      undo_label, request.deadline);
+  if (!begin.ok) return host_failure(begin);
+
+  std::pair<HostActionResult, HostActionResult> action;
+  if (matte_set != nullptr) {
+    action = run_balanced_layer_mutation(
+        host, request.deadline, [&] {
+          return host.set_layer_track_matte(
+              target, *matte, matte_set->mode, request.deadline);
+        });
+  } else if (request.capability_id == kLayerTrackMatteClearCapability) {
+    action = run_balanced_layer_mutation(
+        host, request.deadline, [&] {
+          return host.clear_layer_track_matte(target, request.deadline);
+        });
+  } else if (request.capability_id == kLayerAudioEnabledSetCapability) {
+    const bool enabled = std::get<LayerAudioEnabledSetRequest>(
+        request.layer_source_matte_av_request).enabled;
+    action = run_balanced_layer_mutation(
+        host, request.deadline, [&] {
+          return host.set_layer_audio_enabled(
+              target, enabled, request.deadline);
+        });
+  } else {
+    const bool enabled = std::get<LayerVideoEnabledSetRequest>(
+        request.layer_source_matte_av_request).enabled;
+    action = run_balanced_layer_mutation(
+        host, request.deadline, [&] {
+          return host.set_layer_video_enabled(
+              target, enabled, request.deadline);
+        });
+  }
+
+  if (before_matte.has_value()) {
+    HostLayerTrackMatteResult after =
+        host.read_layer_track_matte(target, request.deadline);
+    if (clock.now() > request.deadline || !action.first.ok
+        || !action.second.ok || !after.ok
+        || !valid_layer_track_matte_value(after.value, *target_locator)) {
+      return possible(
+          "native Track Matte mutation, Undo close, or independent readback did not verify");
+    }
+    if (matte_set != nullptr) {
+      if (!after.value.active
+          || after.value.matte_layer_locator
+              != std::optional<ObjectLocator>{matte_set->matte_layer_locator}
+          || after.value.mode != matte_set->mode) {
+        return possible(
+            "native Track Matte set did not match its requested projection");
+      }
+      return success(LayerTrackMatteSetValue{
+          true,
+          *target_locator,
+          before_matte->matte_layer_locator,
+          before_matte->mode,
+          *after.value.matte_layer_locator,
+          after.value.mode,
+      });
+    }
+    if (after.value.active || after.value.matte_layer_locator.has_value()
+        || after.value.mode != before_matte->mode
+        || !before_matte->matte_layer_locator.has_value()) {
+      return possible(
+          "native Track Matte clear did not preserve its stored mode");
+    }
+    return success(LayerTrackMatteClearValue{
+        true,
+        *target_locator,
+        *before_matte->matte_layer_locator,
+        before_matte->mode,
+        std::nullopt,
+        after.value.mode,
+    });
+  }
+
+  HostLayerAVStateResult after =
+      host.read_layer_av_state(target, request.deadline);
+  if (clock.now() > request.deadline || !action.first.ok
+      || !action.second.ok || !after.ok
+      || !valid_layer_av_state_value(after.value, *target_locator)) {
+    return possible(
+        "native AV mutation, Undo close, or independent readback did not verify");
+  }
+  const bool audio =
+      request.capability_id == kLayerAudioEnabledSetCapability;
+  const bool enabled = audio
+      ? std::get<LayerAudioEnabledSetRequest>(
+            request.layer_source_matte_av_request).enabled
+      : std::get<LayerVideoEnabledSetRequest>(
+            request.layer_source_matte_av_request).enabled;
+  const bool exact_projection = audio
+      ? after.value.audio_enabled == enabled
+          && after.value.video_enabled == before_av->video_enabled
+      : after.value.video_enabled == enabled
+          && after.value.audio_enabled == before_av->audio_enabled;
+  if (!exact_projection || after.value.has_audio != before_av->has_audio
+      || after.value.has_video != before_av->has_video) {
+    return possible(
+        "native AV write changed unowned state or missed its requested projection");
+  }
+  return success(LayerAVSwitchSetValue{
+      true, *target_locator, *before_av, std::move(after.value)});
 }
 
 void hash_combine(std::size_t& seed, std::size_t value) noexcept {
@@ -1303,8 +1834,27 @@ AEMCP_DEFINE_HOST_RESULT(HostLayerCompositingReadResult, LayerCompositingState)
 AEMCP_DEFINE_HOST_RESULT(HostLayerSwitchWriteResult, LayerSwitchChanged)
 AEMCP_DEFINE_HOST_RESULT(HostLayerQualityWriteResult, LayerQualityChanged)
 AEMCP_DEFINE_HOST_RESULT(HostLayerBlendingModeWriteResult, LayerBlendingModeChanged)
+AEMCP_DEFINE_HOST_RESULT(HostLayerResolveResult, HostResolvedLayer)
+AEMCP_DEFINE_HOST_RESULT(HostLayerSourceResult, LayerSourceValue)
+AEMCP_DEFINE_HOST_RESULT(HostLayerTrackMatteResult, LayerTrackMatteValue)
+AEMCP_DEFINE_HOST_RESULT(HostLayerAVStateResult, LayerAVStateValue)
 
 #undef AEMCP_DEFINE_HOST_RESULT
+
+HostActionResult HostActionResult::success() {
+  HostActionResult result;
+  result.ok = true;
+  return result;
+}
+
+HostActionResult HostActionResult::failure(
+    std::string code, std::string detail, std::string field) {
+  HostActionResult result;
+  result.error_code = std::move(code);
+  result.message = std::move(detail);
+  result.error_field = std::move(field);
+  return result;
+}
 
 HostProjectGraphInvalidationResult HostProjectGraphInvalidationResult::success(
     ProjectGraphInvalidation value) {
@@ -1543,6 +2093,66 @@ HostLayerBlendingModeWriteResult HostApi::set_layer_blending_mode(
       "NATIVE_UNSUPPORTED", "layer blending-mode writes are unavailable");
 }
 
+HostLayerResolveResult HostApi::resolve_layer(const ObjectLocator&, TimePoint) {
+  return HostLayerResolveResult::failure(
+      "NATIVE_UNSUPPORTED", "layer resolution is unavailable");
+}
+
+HostLayerSourceResult HostApi::read_layer_source(
+    const HostResolvedLayer&, TimePoint) {
+  return HostLayerSourceResult::failure(
+      "NATIVE_UNSUPPORTED", "layer source reads are unavailable");
+}
+
+HostLayerTrackMatteResult HostApi::read_layer_track_matte(
+    const HostResolvedLayer&, TimePoint) {
+  return HostLayerTrackMatteResult::failure(
+      "NATIVE_UNSUPPORTED", "layer Track Matte reads are unavailable");
+}
+
+HostLayerAVStateResult HostApi::read_layer_av_state(
+    const HostResolvedLayer&, TimePoint) {
+  return HostLayerAVStateResult::failure(
+      "NATIVE_UNSUPPORTED", "layer AV-state reads are unavailable");
+}
+
+HostActionResult HostApi::begin_layer_undo_group(std::string_view, TimePoint) {
+  return HostActionResult::failure(
+      "NATIVE_UNSUPPORTED", "layer Undo groups are unavailable");
+}
+
+HostActionResult HostApi::end_layer_undo_group(TimePoint) {
+  return HostActionResult::failure(
+      "NATIVE_UNSUPPORTED", "layer Undo groups are unavailable");
+}
+
+HostActionResult HostApi::set_layer_track_matte(
+    const HostResolvedLayer&,
+    const HostResolvedLayer&,
+    LayerTrackMatteMode,
+    TimePoint) {
+  return HostActionResult::failure(
+      "NATIVE_UNSUPPORTED", "layer Track Matte writes are unavailable");
+}
+
+HostActionResult HostApi::clear_layer_track_matte(
+    const HostResolvedLayer&, TimePoint) {
+  return HostActionResult::failure(
+      "NATIVE_UNSUPPORTED", "layer Track Matte clears are unavailable");
+}
+
+HostActionResult HostApi::set_layer_audio_enabled(
+    const HostResolvedLayer&, bool, TimePoint) {
+  return HostActionResult::failure(
+      "NATIVE_UNSUPPORTED", "layer audio writes are unavailable");
+}
+
+HostActionResult HostApi::set_layer_video_enabled(
+    const HostResolvedLayer&, bool, TimePoint) {
+  return HostActionResult::failure(
+      "NATIVE_UNSUPPORTED", "layer video writes are unavailable");
+}
+
 HostProjectGraphInvalidationResult HostApi::invalidate_project_graph(TimePoint) {
   return HostProjectGraphInvalidationResult::failure(
       "NATIVE_UNSUPPORTED", "project graph invalidation is unavailable");
@@ -1662,6 +2272,10 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       request.capability_id == kLayerBlendingModeSetCapability;
   const bool layer_compositing = layer_compositing_read || layer_switch_set
       || layer_quality_set || layer_blending_mode_set;
+  const bool layer_source_matte_av =
+      layer_source_matte_av_capability(request.capability_id);
+  const bool layer_source_matte_av_write =
+      layer_source_matte_av_write_capability(request.capability_id);
   const bool native_media_read =
       request.capability_id == kNativeMediaReadCapability;
   const bool native_media_write =
@@ -1681,6 +2295,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       || layer_range_set || layer_start_time_set || layer_stretch_set
       || layer_order_set || layer_parent_set || layer_duplicate
       || layer_switch_set || layer_quality_set || layer_blending_mode_set
+      || layer_source_matte_av_write
       || native_media_write || text_shape_marker_write;
   const bool project_graph_invalidate =
       request.capability_id == kProjectGraphInvalidateControl;
@@ -1697,6 +2312,7 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
       && !project_item_name_set && !project_item_comment_set
       && !project_item_label_set && !composition_duplicate
       && !layer_timeline && !layer_compositing
+      && !layer_source_matte_av
       && !native_media_read && !native_media_write
       && !text_shape_marker
       && !project_graph_invalidate) {
@@ -1735,6 +2351,23 @@ EnqueueResult HostDispatcher::enqueue(Request request) {
         "INVALID_ARGUMENT",
         "project graph invalidation parameters are not closed",
         "params"};
+  }
+  if (layer_source_matte_av
+      && !valid_layer_source_matte_av_request(request)) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "layer source, Track Matte, or AV arguments failed closed validation",
+        "params.arguments"};
+  }
+  if (!layer_source_matte_av
+      && !std::holds_alternative<std::monostate>(
+          request.layer_source_matte_av_request)) {
+    return {
+        EnqueueCode::kInvalidRequest,
+        "INVALID_ARGUMENT",
+        "layer source, Track Matte, and AV arguments are not accepted here",
+        "params.arguments"};
   }
   if ((project_summary || project_bit_depth_read)
       && (request.target_depth != 0 || !request.idempotency_key.empty()
@@ -2855,6 +3488,12 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
             completion.ok = true;
             completion.result = std::move(host_result.value);
           }
+        } else if (layer_source_matte_av_capability(request.capability_id)) {
+          completion = dispatch_layer_source_matte_av(
+              request,
+              host,
+              clock_,
+              std::min(request.deadline, idle_deadline));
         } else if (request.capability_id == kProjectBitDepthReadCapability) {
           HostBitDepthReadResult host_result = host.read_project_bit_depth(
               std::min(request.deadline, idle_deadline));
@@ -4453,6 +5092,8 @@ DrainBatch HostDispatcher::drain(HostApi& host) {
                 || request.capability_id == kLayerOrderSetCapability
                 || request.capability_id == kLayerParentSetCapability
                 || request.capability_id == kLayerDuplicateCapability
+                || layer_source_matte_av_write_capability(
+                    request.capability_id)
                 || request.capability_id == kNativeMediaWriteCapability
                 || is_text_shape_marker_write_capability(request.capability_id))
                 ? "POSSIBLY_SIDE_EFFECTING_FAILURE" : "CAPABILITY_FAILED",
@@ -4672,6 +5313,7 @@ void HostDispatcher::finish_idempotency_locked(
           && request.capability_id != kLayerOrderSetCapability
           && request.capability_id != kLayerParentSetCapability
           && request.capability_id != kLayerDuplicateCapability
+          && !layer_source_matte_av_write_capability(request.capability_id)
           && request.capability_id != kNativeMediaWriteCapability
           && !is_text_shape_marker_write_capability(request.capability_id))
       || request.idempotency_key.empty()) {

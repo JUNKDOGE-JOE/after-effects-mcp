@@ -46,6 +46,27 @@ using aemcp::native::HostLayerPropertyKeyframesResult;
 using aemcp::native::HostLayerPropertyWriteResult;
 using aemcp::native::HostProjectItemsResult;
 using aemcp::native::HostReadResult;
+using aemcp::native::HostActionResult;
+using aemcp::native::HostLayerAVStateResult;
+using aemcp::native::HostLayerResolveResult;
+using aemcp::native::HostLayerSourceResult;
+using aemcp::native::HostLayerTrackMatteResult;
+using aemcp::native::HostResolvedLayer;
+using aemcp::native::LayerAudioEnabledSetRequest;
+using aemcp::native::LayerAVStateReadRequest;
+using aemcp::native::LayerAVStateValue;
+using aemcp::native::LayerAVSwitchSetValue;
+using aemcp::native::LayerSourceReadRequest;
+using aemcp::native::LayerSourceType;
+using aemcp::native::LayerSourceValue;
+using aemcp::native::LayerTrackMatteClearRequest;
+using aemcp::native::LayerTrackMatteClearValue;
+using aemcp::native::LayerTrackMatteMode;
+using aemcp::native::LayerTrackMatteReadRequest;
+using aemcp::native::LayerTrackMatteSetRequest;
+using aemcp::native::LayerTrackMatteSetValue;
+using aemcp::native::LayerTrackMatteValue;
+using aemcp::native::LayerVideoEnabledSetRequest;
 using aemcp::native::ObjectLocator;
 using aemcp::native::ProjectEpochTracker;
 using aemcp::native::ProjectObservation;
@@ -61,7 +82,14 @@ using aemcp::native::kCompositionTimeSetCapability;
 using aemcp::native::kCompositionCreateCapability;
 using aemcp::native::kCompositionLayerCreateCapability;
 using aemcp::native::kLayerEffectApplyCapability;
+using aemcp::native::kLayerAudioEnabledSetCapability;
+using aemcp::native::kLayerAVStateReadCapability;
 using aemcp::native::kLayerPropertyKeyframesListCapability;
+using aemcp::native::kLayerSourceReadCapability;
+using aemcp::native::kLayerTrackMatteClearCapability;
+using aemcp::native::kLayerTrackMatteReadCapability;
+using aemcp::native::kLayerTrackMatteSetCapability;
+using aemcp::native::kLayerVideoEnabledSetCapability;
 using aemcp::native::kProjectItemsListCapability;
 using aemcp::native::kProjectSummaryCapability;
 using aemcp::native::kLayerPropertySetCapability;
@@ -3347,6 +3375,554 @@ void idle_budget_and_shutdown_are_bounded() {
   require(dispatcher.shutdown().empty(), "shutdown was not idempotent");
 }
 
+class LayerSourceMatteAvHost final : public HostApi {
+ public:
+  explicit LayerSourceMatteAvHost(std::thread::id expected_thread)
+      : expected_thread_(expected_thread) {}
+
+  [[nodiscard]] HostReadResult read_project_summary(TimePoint) override {
+    return HostReadResult::failure("UNEXPECTED_CALL", "project summary was not requested");
+  }
+
+  [[nodiscard]] HostLayerResolveResult resolve_layer(
+      const ObjectLocator& locator, TimePoint) override {
+    require(std::this_thread::get_id() == expected_thread_,
+        "layer resolver ran off the dispatcher owner thread");
+    events.push_back("resolve:" + locator.object_id);
+    ++resolve_calls;
+    if (stale_object_id == locator.object_id) {
+      return HostLayerResolveResult::failure(
+          "STALE_LOCATOR", "fake layer locator is stale",
+          "params.arguments.layerLocator");
+    }
+    if (locator == target_locator) {
+      return HostLayerResolveResult::success(
+          {locator, target_token, target_composition_owner, target_av_capable});
+    }
+    if (locator == matte_locator) {
+      return HostLayerResolveResult::success(
+          {locator, matte_token, matte_composition_owner, matte_av_capable});
+    }
+    return HostLayerResolveResult::failure(
+        "STALE_LOCATOR", "fake layer locator is unknown",
+        "params.arguments.layerLocator");
+  }
+
+  [[nodiscard]] HostLayerSourceResult read_layer_source(
+      const HostResolvedLayer& layer, TimePoint) override {
+    check_target(layer);
+    events.push_back("read-source");
+    ++source_read_calls;
+    return HostLayerSourceResult::success({
+        target_locator,
+        source_locator,
+        LayerSourceType::kFootage,
+        std::string("SYNTHETIC_FOOTAGE"),
+    });
+  }
+
+  [[nodiscard]] HostLayerTrackMatteResult read_layer_track_matte(
+      const HostResolvedLayer& layer, TimePoint) override {
+    check_target(layer);
+    events.push_back("read-matte");
+    ++matte_read_calls;
+    if (fail_post_mutation_read && mutation_calls > 0) {
+      return HostLayerTrackMatteResult::failure(
+          "CAPABILITY_FAILED", "fake post-mutation Track Matte read failed");
+    }
+    return HostLayerTrackMatteResult::success({
+        target_locator,
+        matte_active,
+        matte_active ? std::optional<ObjectLocator>{matte_locator} : std::nullopt,
+        matte_mode,
+    });
+  }
+
+  [[nodiscard]] HostLayerAVStateResult read_layer_av_state(
+      const HostResolvedLayer& layer, TimePoint) override {
+    check_target(layer);
+    events.push_back("read-av");
+    ++av_read_calls;
+    if (fail_post_mutation_read && mutation_calls > 0) {
+      return HostLayerAVStateResult::failure(
+          "CAPABILITY_FAILED", "fake post-mutation AV read failed");
+    }
+    return HostLayerAVStateResult::success({
+        target_locator,
+        has_audio,
+        audio_enabled,
+        has_video,
+        video_enabled,
+    });
+  }
+
+  [[nodiscard]] HostActionResult begin_layer_undo_group(
+      std::string_view label, TimePoint) override {
+    require(!undo_open, "dispatcher opened a nested fake Undo group");
+    require(!label.empty(), "dispatcher opened an unnamed fake Undo group");
+    events.push_back("undo-start");
+    ++undo_start_calls;
+    undo_open = true;
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult end_layer_undo_group(TimePoint) override {
+    require(undo_open, "dispatcher ended a fake Undo group that was not open");
+    events.push_back("undo-end");
+    ++undo_end_calls;
+    undo_open = false;
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult set_layer_track_matte(
+      const HostResolvedLayer& layer,
+      const HostResolvedLayer& matte,
+      LayerTrackMatteMode mode,
+      TimePoint) override {
+    check_target(layer);
+    require(matte.host_layer == matte_token,
+        "dispatcher passed the wrong resolved Matte token");
+    require(undo_open, "Track Matte mutation ran outside its Undo group");
+    events.push_back("mutate-matte-set");
+    ++mutation_calls;
+    matte_active = true;
+    matte_mode = mode;
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult clear_layer_track_matte(
+      const HostResolvedLayer& layer, TimePoint) override {
+    check_target(layer);
+    require(undo_open, "Track Matte clear ran outside its Undo group");
+    events.push_back("mutate-matte-clear");
+    ++mutation_calls;
+    matte_active = false;
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult set_layer_audio_enabled(
+      const HostResolvedLayer& layer, bool enabled, TimePoint) override {
+    check_target(layer);
+    require(undo_open, "audio mutation ran outside its Undo group");
+    events.push_back("mutate-audio");
+    ++mutation_calls;
+    audio_enabled = enabled;
+    return HostActionResult::success();
+  }
+
+  [[nodiscard]] HostActionResult set_layer_video_enabled(
+      const HostResolvedLayer& layer, bool enabled, TimePoint) override {
+    check_target(layer);
+    require(undo_open, "video mutation ran outside its Undo group");
+    events.push_back("mutate-video");
+    ++mutation_calls;
+    video_enabled = enabled;
+    return HostActionResult::success();
+  }
+
+  void reset_observations() {
+    events.clear();
+    resolve_calls = 0;
+    source_read_calls = 0;
+    matte_read_calls = 0;
+    av_read_calls = 0;
+    mutation_calls = 0;
+    undo_start_calls = 0;
+    undo_end_calls = 0;
+    undo_open = false;
+    fail_post_mutation_read = false;
+    stale_object_id.clear();
+  }
+
+  ObjectLocator target_locator = FakeHost::locator(
+      "layer", "88888888-8888-4888-8888-888888888888");
+  ObjectLocator matte_locator = FakeHost::locator(
+      "layer", "99999999-9999-4999-8999-999999999999");
+  ObjectLocator source_locator = FakeHost::locator(
+      "item", "77777777-7777-4777-8777-777777777777");
+  std::uintptr_t target_token{11};
+  std::uintptr_t matte_token{22};
+  std::uintptr_t target_composition_owner{101};
+  std::uintptr_t matte_composition_owner{101};
+  bool target_av_capable{true};
+  bool matte_av_capable{true};
+  bool matte_active{false};
+  LayerTrackMatteMode matte_mode{LayerTrackMatteMode::kNone};
+  bool has_audio{true};
+  bool audio_enabled{false};
+  bool has_video{true};
+  bool video_enabled{true};
+  bool fail_post_mutation_read{false};
+  std::string stale_object_id;
+  int resolve_calls{0};
+  int source_read_calls{0};
+  int matte_read_calls{0};
+  int av_read_calls{0};
+  int mutation_calls{0};
+  int undo_start_calls{0};
+  int undo_end_calls{0};
+  bool undo_open{false};
+  std::vector<std::string> events;
+
+ private:
+  void check_target(const HostResolvedLayer& layer) const {
+    require(layer.host_layer == target_token
+            && layer.composition_owner == target_composition_owner
+            && layer.locator == target_locator,
+        "dispatcher passed a resolved layer that was not the requested target");
+  }
+
+  std::thread::id expected_thread_;
+};
+
+template <typename Payload>
+Request layer_source_matte_av_request(
+    FakeClock& clock,
+    std::string request_id,
+    std::string_view capability_id,
+    Payload payload,
+    bool write = false) {
+  Request request;
+  request.request_id = std::move(request_id);
+  request.capability_id = std::string(capability_id);
+  request.deadline = clock.now() + 100ms;
+  request.route_id = "route-layer-source-matte-av";
+  request.session_generation = 7;
+  request.host_instance_id = "22222222-2222-4222-8222-222222222222";
+  request.session_id = "11111111-1111-4111-8111-111111111111";
+  if (write) {
+    request.idempotency_key = request.request_id + "-intent-key";
+    request.arguments_fingerprint_sha256 = std::string(64, 'a');
+  }
+  request.layer_source_matte_av_request = std::move(payload);
+  return request;
+}
+
+void layer_source_matte_av_reads_dispatch_typed_state() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(3, 3, 16ms));
+  LayerSourceMatteAvHost host(std::this_thread::get_id());
+  host.matte_active = true;
+  host.matte_mode = LayerTrackMatteMode::kLuma;
+
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "layer-source-read",
+              kLayerSourceReadCapability,
+              LayerSourceReadRequest{host.target_locator}))
+              .code == EnqueueCode::kAccepted,
+      "layer source read was not admitted");
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "layer-matte-read",
+              kLayerTrackMatteReadCapability,
+              LayerTrackMatteReadRequest{host.target_locator}))
+              .code == EnqueueCode::kAccepted,
+      "Track Matte read was not admitted");
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "layer-av-read",
+              kLayerAVStateReadCapability,
+              LayerAVStateReadRequest{host.target_locator}))
+              .code == EnqueueCode::kAccepted,
+      "layer AV-state read was not admitted");
+
+  const auto batch = dispatcher.drain(host);
+  require(batch.completions.size() == 3,
+      "dispatcher did not complete the three native reads");
+  const auto* source = std::get_if<LayerSourceValue>(
+      &batch.completions[0].layer_source_matte_av_result);
+  const auto* matte = std::get_if<LayerTrackMatteValue>(
+      &batch.completions[1].layer_source_matte_av_result);
+  const auto* av = std::get_if<LayerAVStateValue>(
+      &batch.completions[2].layer_source_matte_av_result);
+  require(batch.completions[0].ok && source != nullptr
+          && source->layer_locator == host.target_locator
+          && source->source_item_locator == host.source_locator
+          && source->source_type == LayerSourceType::kFootage
+          && source->source_name == std::optional<std::string>{"SYNTHETIC_FOOTAGE"},
+      "layer source read did not preserve the typed host state");
+  require(batch.completions[1].ok && matte != nullptr
+          && matte->active && matte->matte_layer_locator == host.matte_locator
+          && matte->mode == LayerTrackMatteMode::kLuma,
+      "Track Matte read did not preserve the typed host state");
+  require(batch.completions[2].ok && av != nullptr
+          && av->has_audio && !av->audio_enabled
+          && av->has_video && av->video_enabled,
+      "AV-state read did not preserve the complete typed host state");
+  require(host.resolve_calls == 3 && host.source_read_calls == 1
+          && host.matte_read_calls == 1 && host.av_read_calls == 1
+          && host.mutation_calls == 0 && host.undo_start_calls == 0
+          && host.undo_end_calls == 0,
+      "native reads performed extra host work or opened Undo");
+}
+
+void layer_source_matte_av_writes_use_one_balanced_undo_and_after_read() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(4, 4, 16ms));
+  LayerSourceMatteAvHost host(std::this_thread::get_id());
+
+  const auto run = [&](Request request,
+                       std::vector<std::string> expected_events) {
+    host.reset_observations();
+    require(dispatcher.enqueue(std::move(request)).code == EnqueueCode::kAccepted,
+        "native layer write was not admitted");
+    const auto batch = dispatcher.drain(host);
+    require(batch.completions.size() == 1 && batch.completions[0].ok,
+        "native layer write did not complete successfully");
+    require(host.mutation_calls == 1 && host.undo_start_calls == 1
+            && host.undo_end_calls == 1 && !host.undo_open
+            && host.events == expected_events,
+        "native layer write did not use one ordered, balanced Undo mutation");
+    return batch.completions[0];
+  };
+
+  auto set = run(
+      layer_source_matte_av_request(
+          clock, "matte-set-write", kLayerTrackMatteSetCapability,
+          LayerTrackMatteSetRequest{
+              host.target_locator, host.matte_locator, LayerTrackMatteMode::kLuma},
+          true),
+      {
+          "resolve:" + host.target_locator.object_id,
+          "resolve:" + host.matte_locator.object_id,
+          "read-matte",
+          "undo-start",
+          "mutate-matte-set",
+          "undo-end",
+          "read-matte",
+      });
+  const auto* set_value =
+      std::get_if<LayerTrackMatteSetValue>(&set.layer_source_matte_av_result);
+  require(set_value != nullptr && set_value->changed
+          && !set_value->before_matte_layer_locator.has_value()
+          && set_value->before_mode == LayerTrackMatteMode::kNone
+          && set_value->after_matte_layer_locator == host.matte_locator
+          && set_value->after_mode == LayerTrackMatteMode::kLuma
+          && host.matte_read_calls == 2,
+      "Track Matte set did not return independently read before/after state");
+
+  auto clear = run(
+      layer_source_matte_av_request(
+          clock, "matte-clear-write", kLayerTrackMatteClearCapability,
+          LayerTrackMatteClearRequest{host.target_locator}, true),
+      {
+          "resolve:" + host.target_locator.object_id,
+          "read-matte",
+          "undo-start",
+          "mutate-matte-clear",
+          "undo-end",
+          "read-matte",
+      });
+  const auto* clear_value =
+      std::get_if<LayerTrackMatteClearValue>(&clear.layer_source_matte_av_result);
+  require(clear_value != nullptr && clear_value->changed
+          && clear_value->before_matte_layer_locator == host.matte_locator
+          && clear_value->before_mode == LayerTrackMatteMode::kLuma
+          && !clear_value->after_matte_layer_locator.has_value()
+          && clear_value->after_mode == LayerTrackMatteMode::kLuma
+          && host.matte_read_calls == 2,
+      "Track Matte clear did not preserve its stored mode through after-read");
+
+  auto audio = run(
+      layer_source_matte_av_request(
+          clock, "audio-enabled-write", kLayerAudioEnabledSetCapability,
+          LayerAudioEnabledSetRequest{host.target_locator, true}, true),
+      {
+          "resolve:" + host.target_locator.object_id,
+          "read-av",
+          "undo-start",
+          "mutate-audio",
+          "undo-end",
+          "read-av",
+      });
+  const auto* audio_value =
+      std::get_if<LayerAVSwitchSetValue>(&audio.layer_source_matte_av_result);
+  require(audio_value != nullptr && audio_value->changed
+          && !audio_value->before.audio_enabled
+          && audio_value->after.audio_enabled
+          && audio_value->before.video_enabled == audio_value->after.video_enabled
+          && audio_value->before.has_audio == audio_value->after.has_audio
+          && audio_value->before.has_video == audio_value->after.has_video
+          && host.av_read_calls == 2,
+      "audio write did not verify its exact projection and preserved AV state");
+
+  auto video = run(
+      layer_source_matte_av_request(
+          clock, "video-enabled-write", kLayerVideoEnabledSetCapability,
+          LayerVideoEnabledSetRequest{host.target_locator, false}, true),
+      {
+          "resolve:" + host.target_locator.object_id,
+          "read-av",
+          "undo-start",
+          "mutate-video",
+          "undo-end",
+          "read-av",
+      });
+  const auto* video_value =
+      std::get_if<LayerAVSwitchSetValue>(&video.layer_source_matte_av_result);
+  require(video_value != nullptr && video_value->changed
+          && video_value->before.video_enabled
+          && !video_value->after.video_enabled
+          && video_value->before.audio_enabled == video_value->after.audio_enabled
+          && video_value->before.has_audio == video_value->after.has_audio
+          && video_value->before.has_video == video_value->after.has_video
+          && host.av_read_calls == 2,
+      "video write did not verify its exact projection and preserved AV state");
+}
+
+void layer_source_matte_av_preconditions_reject_before_undo_or_mutation() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(12, 12, 16ms));
+  LayerSourceMatteAvHost host(std::this_thread::get_id());
+
+  ObjectLocator wrong_kind = host.target_locator;
+  wrong_kind.kind = "item";
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "wrong-kind-layer", kLayerSourceReadCapability,
+              LayerSourceReadRequest{wrong_kind}))
+              .code == EnqueueCode::kInvalidRequest,
+      "wrong-kind layer locator reached the host resolver");
+  require(host.resolve_calls == 0, "wrong-kind locator dispatched host work");
+
+  host.stale_object_id = host.target_locator.object_id;
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "stale-layer", kLayerAVStateReadCapability,
+              LayerAVStateReadRequest{host.target_locator}))
+              .code == EnqueueCode::kAccepted,
+      "structurally current stale-locator probe was not admitted");
+  auto completion = dispatcher.drain(host).completions[0];
+  require(!completion.ok && completion.error_code == "STALE_LOCATOR"
+          && host.mutation_calls == 0 && host.undo_start_calls == 0
+          && host.undo_end_calls == 0,
+      "stale locator did not fail before mutation and Undo");
+  host.reset_observations();
+
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "self-matte", kLayerTrackMatteSetCapability,
+              LayerTrackMatteSetRequest{
+                  host.target_locator, host.target_locator,
+                  LayerTrackMatteMode::kAlpha},
+              true))
+              .code == EnqueueCode::kInvalidRequest,
+      "self Track Matte request reached layer resolution");
+  require(host.resolve_calls == 0 && host.undo_start_calls == 0,
+      "self Track Matte request dispatched host work");
+
+  host.matte_composition_owner = 202;
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "cross-composition-matte", kLayerTrackMatteSetCapability,
+              LayerTrackMatteSetRequest{
+                  host.target_locator, host.matte_locator,
+                  LayerTrackMatteMode::kAlpha},
+              true))
+              .code == EnqueueCode::kAccepted,
+      "same-project cross-composition probe was not admitted");
+  completion = dispatcher.drain(host).completions[0];
+  require(!completion.ok
+          && completion.error_code == "TRACK_MATTE_COMPOSITION_MISMATCH"
+          && host.resolve_calls == 2 && host.matte_read_calls == 0
+          && host.mutation_calls == 0 && host.undo_start_calls == 0
+          && host.undo_end_calls == 0,
+      "same-project different composition owners crossed the Undo boundary");
+  host.reset_observations();
+  host.matte_composition_owner = host.target_composition_owner;
+
+  host.matte_av_capable = false;
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "non-av-matte", kLayerTrackMatteSetCapability,
+              LayerTrackMatteSetRequest{
+                  host.target_locator, host.matte_locator,
+                  LayerTrackMatteMode::kAlpha},
+              true))
+              .code == EnqueueCode::kAccepted,
+      "non-AV Track Matte probe was not admitted");
+  completion = dispatcher.drain(host).completions[0];
+  require(!completion.ok && completion.error_code == "TRACK_MATTE_LAYER_NOT_AV"
+          && host.mutation_calls == 0 && host.undo_start_calls == 0,
+      "non-AV Track Matte layer reached Undo or mutation");
+  host.reset_observations();
+  host.matte_av_capable = true;
+
+  host.matte_active = false;
+  host.matte_mode = LayerTrackMatteMode::kLuma;
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "clear-no-matte", kLayerTrackMatteClearCapability,
+              LayerTrackMatteClearRequest{host.target_locator}, true))
+              .code == EnqueueCode::kAccepted,
+      "no-active-Matte clear probe was not admitted");
+  completion = dispatcher.drain(host).completions[0];
+  require(!completion.ok && completion.error_code == "TRACK_MATTE_NOT_ACTIVE"
+          && host.matte_read_calls == 1 && host.mutation_calls == 0
+          && host.undo_start_calls == 0 && host.undo_end_calls == 0,
+      "clear without an active Matte crossed the Undo boundary");
+  host.reset_observations();
+
+  host.has_audio = false;
+  host.audio_enabled = false;
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "enable-missing-audio", kLayerAudioEnabledSetCapability,
+              LayerAudioEnabledSetRequest{host.target_locator, true}, true))
+              .code == EnqueueCode::kAccepted,
+      "missing-audio enable probe was not admitted");
+  completion = dispatcher.drain(host).completions[0];
+  require(!completion.ok && completion.error_code == "LAYER_HAS_NO_AUDIO"
+          && host.av_read_calls == 1 && host.mutation_calls == 0
+          && host.undo_start_calls == 0,
+      "missing-audio enable crossed the Undo boundary");
+  host.reset_observations();
+  host.has_audio = true;
+
+  host.has_video = false;
+  host.video_enabled = false;
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "enable-missing-video", kLayerVideoEnabledSetCapability,
+              LayerVideoEnabledSetRequest{host.target_locator, true}, true))
+              .code == EnqueueCode::kAccepted,
+      "missing-video enable probe was not admitted");
+  completion = dispatcher.drain(host).completions[0];
+  require(!completion.ok && completion.error_code == "LAYER_HAS_NO_VIDEO"
+          && host.av_read_calls == 1 && host.mutation_calls == 0
+          && host.undo_start_calls == 0,
+      "missing-video enable crossed the Undo boundary");
+  host.reset_observations();
+  host.has_video = true;
+
+  host.audio_enabled = true;
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "audio-unchanged", kLayerAudioEnabledSetCapability,
+              LayerAudioEnabledSetRequest{host.target_locator, true}, true))
+              .code == EnqueueCode::kAccepted,
+      "unchanged-audio probe was not admitted");
+  completion = dispatcher.drain(host).completions[0];
+  require(!completion.ok && completion.error_code == "VALUE_UNCHANGED"
+          && host.av_read_calls == 1 && host.mutation_calls == 0
+          && host.undo_start_calls == 0 && host.undo_end_calls == 0,
+      "unchanged audio value crossed the Undo boundary");
+}
+
+void layer_source_matte_av_post_dispatch_failure_is_possibly_side_effecting() {
+  FakeClock clock;
+  HostDispatcher dispatcher(
+      std::this_thread::get_id(), clock, config(1, 1, 16ms));
+  LayerSourceMatteAvHost host(std::this_thread::get_id());
+  host.fail_post_mutation_read = true;
+
+  require(dispatcher.enqueue(layer_source_matte_av_request(
+              clock, "audio-post-read-failure",
+              kLayerAudioEnabledSetCapability,
+              LayerAudioEnabledSetRequest{host.target_locator, true}, true))
+              .code == EnqueueCode::kAccepted,
+      "post-dispatch failure probe was not admitted");
+  const auto completion = dispatcher.drain(host).completions[0];
+  require(!completion.ok
+          && completion.error_code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+          && host.av_read_calls == 2 && host.mutation_calls == 1
+          && host.undo_start_calls == 1 && host.undo_end_calls == 1
+          && !host.undo_open,
+      "failed after-read was not classified with balanced Undo and one mutation");
+}
+
 }  // namespace
 
 int main() {
@@ -3394,6 +3970,10 @@ int main() {
   route_revocation_fences_generations_and_detaches_results();
   saturated_route_fences_fail_closed_without_losing_running_evidence();
   idle_budget_and_shutdown_are_bounded();
+  layer_source_matte_av_reads_dispatch_typed_state();
+  layer_source_matte_av_writes_use_one_balanced_undo_and_after_read();
+  layer_source_matte_av_preconditions_reject_before_undo_or_mutation();
+  layer_source_matte_av_post_dispatch_failure_is_possibly_side_effecting();
   std::cout << "host_dispatcher_test: PASS\n";
   return 0;
 }
