@@ -22,10 +22,8 @@ from pydantic import (
 )
 
 from ae_mcp.backends.native import (
-    CapabilityDetail,
     NativeBackendError,
     NativeCancellationToken,
-    NativeCapabilities,
     NativeCapabilityDescriptor,
     NativeExecutionEvidence,
     NativeInvokeBackend,
@@ -42,8 +40,7 @@ from ae_mcp.backends.native import (
     SignedInt32,
     UnsignedInt32,
     _NativeModel,
-    _capabilities_query_digest,
-    _capabilities_registry_digest,
+    _discover_native_capability,
     _ensure_active,
     _invoke_native_read_request,
     _invoke_request_digest,
@@ -1449,42 +1446,14 @@ async def _invoke_package_write_request(
     _ensure_active(deadline_unix_ms, cancellation)
     negotiation = await backend.negotiate(deadline_unix_ms=deadline_unix_ms, cancellation=cancellation)
     _ensure_active(deadline_unix_ms, cancellation)
-    capability_ids: tuple[str, ...] | None = None
-    capability_detail: CapabilityDetail = "full"
-    capability_limit = 100
-    capabilities = await backend.capabilities(
-        ids=capability_ids,
-        detail=capability_detail,
-        limit=capability_limit,
+    descriptor = await _discover_native_capability(
+        backend,
+        negotiation=negotiation,
+        capability_id=contract.capability_id,
+        capability_version=CAPABILITY_VERSION,
         deadline_unix_ms=deadline_unix_ms,
         cancellation=cancellation,
     )
-    expected_query_digest = _capabilities_query_digest(
-        session_id=negotiation.session_id,
-        ids=capability_ids,
-        detail=capability_detail,
-        limit=capability_limit,
-    )
-    try:
-        registry_digest = _capabilities_registry_digest(capabilities.items)
-    except (TypeError, ValueError, UnicodeError) as exc:
-        raise _structured_error("NATIVE_CONTRACT_MISMATCH", "Native capability registry could not be verified.") from exc
-    if (
-        capabilities.session_id != negotiation.session_id
-        or capabilities.detail != capability_detail
-        or capabilities.next_cursor is not None
-        or capabilities.query_digest != expected_query_digest
-        or capabilities.capabilities_digest != registry_digest
-        or capabilities.capabilities_digest != negotiation.capabilities_digest
-    ):
-        raise _structured_error("NATIVE_CONTRACT_MISMATCH", "Native capabilities were not bound to the negotiated session.")
-    matches = [
-        item for item in capabilities.items
-        if item.capability_id == contract.capability_id and item.capability_version == CAPABILITY_VERSION
-    ]
-    descriptor = matches[0] if len(matches) == 1 else None
-    if descriptor is None:
-        raise _structured_error("NATIVE_UNSUPPORTED", f"Native host did not advertise {contract.capability_id}@1.")
     _validate_descriptor(descriptor, host_platform=negotiation.host_platform, contract=contract)
     if locator.host_instance_id != negotiation.host_instance_id or locator.session_id != negotiation.session_id:
         raise _structured_error(

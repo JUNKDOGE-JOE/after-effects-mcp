@@ -96,8 +96,10 @@ def layers_value() -> dict[str, Any]:
 
 def test_core_navigation_schemas_and_digests_equal_protocol_descriptors():
     capabilities = json.loads(
-        (PROTOCOL_FIXTURES / "capabilities.json").read_text(encoding="utf-8")
-    )["response"]["result"]["items"]
+        (PROTOCOL_FIXTURES / "capability-registry-full.json").read_text(
+            encoding="utf-8"
+        )
+    )["items"]
     project = next(
         item for item in capabilities if item["id"] == N.PROJECT_ITEMS_LIST_CAPABILITY_ID
     )
@@ -195,22 +197,30 @@ class ProjectGraphBackend(N.NativeInvokeBackend):
             capabilities_digest=digest,
         )
         self.requests: list[N.NativeInvokeRequest] = []
+        self.capability_queries: list[tuple[tuple[str, ...], str, int]] = []
+        self.capabilities_digest_override: str | None = None
         self.tamper_postcondition = False
 
     async def negotiate(self, **_kwargs):
         return self.negotiation
 
     async def capabilities(self, *, ids, detail, limit, **_kwargs):
-        assert ids is None and detail == "full" and limit == 100
+        assert ids is not None and len(ids) == 1
+        assert detail == "full" and limit == 1
+        self.capability_queries.append((ids, detail, limit))
+        items = tuple(item for item in self.items if item.capability_id in ids)
         return N.NativeCapabilities(
             session_id=SESSION,
             detail="full",
-            items=self.items,
+            items=items,
             next_cursor=None,
             query_digest=N._capabilities_query_digest(
-                session_id=SESSION, ids=None, detail="full", limit=100
+                session_id=SESSION, ids=ids, detail="full", limit=1
             ),
-            capabilities_digest=self.negotiation.capabilities_digest,
+            capabilities_digest=(
+                self.capabilities_digest_override
+                or self.negotiation.capabilities_digest
+            ),
         )
 
     async def invoke(self, request, *, cancellation=None):
@@ -271,6 +281,9 @@ async def test_project_items_list_binds_bounded_arguments_and_verified_page():
     assert execution.value.total == 2
     assert execution.value.items[1].locator.kind == "composition"
     assert backend.requests[0].arguments == {"offset": 0, "limit": 25}
+    assert backend.capability_queries == [
+        ((N.PROJECT_ITEMS_LIST_CAPABILITY_ID,), "full", 1)
+    ]
     assert execution.audit_fields()["effect"] == "none"
 
 
@@ -346,6 +359,24 @@ async def test_project_graph_read_rejects_unbound_postcondition_as_contract_mism
         )
     assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
     assert raised.value.side_effect == "not-started"
+
+
+@pytest.mark.asyncio
+async def test_scoped_discovery_rejects_a_registry_digest_outside_the_negotiation():
+    backend = ProjectGraphBackend()
+    backend.capabilities_digest_override = "f" * 64
+    with pytest.raises(N.NativeBackendError) as raised:
+        await N.invoke_project_items_list(
+            backend,
+            request_id="project-items-wrong-registry",
+            project_locator=None,
+            offset=0,
+            limit=25,
+            deadline_unix_ms=int(time.time() * 1000) + 5_000,
+        )
+    assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
+    assert raised.value.side_effect == "not-started"
+    assert backend.requests == []
 
 
 @pytest.mark.asyncio

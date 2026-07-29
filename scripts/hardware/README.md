@@ -194,6 +194,105 @@ wire/capability/RPC digest, strict product-version mismatch, failed native load,
 `POSSIBLY_SIDE_EFFECTING_FAILURE`, corrupted fixture baseline, or AE crash.
 Never retry an uncertain write.
 
+### Issue #190 layer source, Track Matte, and AV HDEV
+
+`issue190_layer_source_matte_av_acceptance.py` is the package-specific,
+current-checkout HDEV for the eight Issue #190 public tools. Run it only after
+the read-only development doctor confirms the canonical component pointers,
+install receipts, compatible component/protocol versions, file sizes, and
+modification times. Reuse unchanged CEP and dependency state; do not turn this
+ordinary development run into a full runtime hash walk or reinstall unchanged
+components. The `selected-components` and `reused-components` arguments must
+describe the components actually synchronized for this checkout.
+
+From the exact checkout being tested:
+
+```bash
+PYTHONDONTWRITEBYTECODE=1 .venv/bin/python -B -I \
+  scripts/hardware/issue190_layer_source_matte_av_acceptance.py \
+  --scenario issue190-layer-source-matte-av@1 \
+  --selected-components core,native \
+  --reused-components cep \
+  --checkout "$PWD" \
+  --evidence-dir "$HOME/Library/Application Support/AfterEffectsMCP/evidence/hdev-issue190" \
+  --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
+```
+
+The driver derives a fresh run-ID `.aep` beneath the canonical
+`$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active` root; the
+CLI does not accept an external fixture or recovery path. Before touching AE it
+creates an exclusive `O_EXCL` ownership manifest that binds the run ID,
+`ephemeral-validation` lifecycle, active/recovery/evidence roots, and cleanup
+condition. It refuses an existing target, symlink, path escape, or mismatched
+manifest.
+
+Run the fixture-create and guarded-close checkpoint scripts through
+`ae_readProps`. They are harness lifecycle operations and must not be wrapped
+in an additional `ae_exec` Undo group, which would contaminate the five real
+GUI Undo checkpoints.
+
+The fixed harness-only ExtendScript closes only an empty untitled project. It
+blocks every other saved or nonempty untitled project before close/save and
+may reuse only the exact runner-owned fixture with the matching embedded owner
+marker and manifest. It never overwrites an existing unowned path. Its exact
+named roles are `SOURCE_COMP_A`,
+`SOURCE_COMP_B`, `RELINK_TARGET`, `MATTE_FILL`, `MATTE_SOURCE`,
+`MATTE_SPACER`, `VIDEO_SWITCH`, and `AUDIO_SWITCH`; the anonymous 250 ms PCM
+WAV is generated beneath the approved fixture area. `MATTE_SOURCE` is a
+deterministic text layer. Product reads and writes
+use public MCP only. The controlling workflow performs the five real-Undo
+checkpoints by sending exact `Cmd+Z` shortcuts to the formal AE window; Undo is
+never invoked from inside JSX. Every Undo is followed by public project,
+composition/layer locator reacquisition and exact readback.
+After success or failure, the driver saves in place only when ownership still
+matches, closes formal AE when it is running, and moves the `.aep`, manifest,
+and WAV to a per-run recovery directory with zero active and zero unclassified
+fixtures. A reconciled/restored or pre-dispatch failure is short-lived
+recovery. An unreconciled write or post-dispatch crash is a classified evidence
+snapshot with reason, cleanup condition, and `baselineRestored=false`; if AE is
+already gone, the driver archives the disk fixture without claiming that Undo
+or baseline restoration occurred. It never resets/deletes an unreconciled
+fixture or accumulates Save As copies. Base HDEV, checkpoint, and process
+inspection exceptions enter this same finalizer. If normal guarded close fails,
+or the exact formal AE process remains present after normal Quit, the runner
+stops and reports without archiving or emitting a falsely complete lifecycle
+summary. Forced termination is not permitted.
+
+The frozen ledger dispatches exactly 40 public MCP calls and aborts before call
+41. It covers source replacement/preservation/replay/Undo, non-adjacent Track
+Matte set and reorder stability, Luma clear with stored-mode preservation,
+audio/video disable and Undo, and all five structured negative cases. A
+write stays pending until its frozen public readback passes. A
+`POSSIBLY_SIDE_EFFECTING_FAILURE` or post-dispatch transport loss reuses the
+original operation key, response/audit identifiers, and only already-planned
+readback calls to classify it as committed-reconciled,
+not-occurred-reconciled, or unreconciled; it is never retried. A successful
+source replacement remains pending across its entire ordered verification
+group: project reacquisition, layer reacquisition, and source readback; the
+write result independently binds the closed before/after preservation invariant.
+Failure at any of those rows enters the same associated
+harness Undo and frozen locator-reacquisition/baseline reads before any
+independent case can continue. A BEFORE-state reconciliation never relabels an
+unsatisfied frozen AFTER predicate as PASS: the read row records the observed
+state as FAIL while the write separately records
+`not-occurred-reconciled`.
+
+All five negative probes are mutating public tools with fresh stable operation
+keys. Their expected structured `sideEffect=not-started` result is the only
+safe negative PASS. Possible side effect, post-dispatch transport loss, or
+unexpected success stops immediately as unreconciled and preserves a
+classified evidence snapshot; because no frozen negative-state read exists,
+the driver never invents reconciliation or retries the probe.
+An unreconciled write stops immediately and preserves the fixture. Its defect
+ledger records every case as `PASS`, `FAIL`,
+`BLOCKED`, or `INDETERMINATE`, including the failing layer, side-effect state,
+reconciliation, dependency impact, and evidence IDs.
+
+This command is development-only. Every event and summary permanently records
+`validationProfile=development`, `candidateRun=false`, and
+`candidateEvidence=false`. Its output is not candidate, packaged-release, or
+release-acceptance evidence and must never be promoted or relabeled as such.
+
 ## Native editing milestone #167
 
 `issue167_native_media_acceptance.py` drives the frozen 22-tool Effect Stack,

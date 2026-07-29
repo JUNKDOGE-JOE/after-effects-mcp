@@ -37,7 +37,7 @@ def _locator(*, session_id: str = SESSION) -> dict[str, Any]:
 
 
 def _descriptor() -> N.NativeCapabilityDescriptor:
-    raw = _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"]["items"]
+    raw = _json(FIXTURE_ROOT / "capability-registry-full.json")["items"]
     return N.NativeCapabilityDescriptor.model_validate(
         next(item for item in raw if item["id"] == N.COMPOSITION_TIME_SET_CAPABILITY_ID)
     )
@@ -75,14 +75,19 @@ class CompositionTimeSetBackend(N.NativeInvokeBackend):
         return self.negotiation
 
     async def capabilities(self, *, ids, detail, limit, **_kwargs):
-        assert ids is None and detail == "full" and limit == 100
+        assert detail == "full"
+        items = (
+            self.items
+            if ids is None
+            else tuple(item for item in self.items if item.capability_id in ids)
+        )
         return N.NativeCapabilities(
             session_id=SESSION,
             detail="full",
-            items=self.items,
+            items=items,
             next_cursor=None,
             query_digest=N._capabilities_query_digest(
-                session_id=SESSION, ids=None, detail="full", limit=100
+                session_id=SESSION, ids=ids, detail="full", limit=limit
             ),
             capabilities_digest=self.negotiation.capabilities_digest,
         )

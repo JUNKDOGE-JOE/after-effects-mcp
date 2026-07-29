@@ -185,12 +185,12 @@ def test_native_protocol_registry_advertises_all_11_frozen_contracts():
     fixture = json.loads(
         (
             ROOT
-            / "native/ae-plugin/protocol/fixtures/capabilities.json"
+            / "native/ae-plugin/protocol/fixtures/capability-registry-full.json"
         ).read_text()
     )
     items = {
         item["id"]: item
-        for item in fixture["response"]["result"]["items"]
+        for item in fixture["items"]
     }
     assert set(native_tsm.CAPABILITY_CONTRACTS) <= set(items)
     for capability_id, contract in native_tsm.CAPABILITY_CONTRACTS.items():

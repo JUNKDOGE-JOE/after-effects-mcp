@@ -25,7 +25,7 @@ def _fixture(name: str) -> dict[str, Any]:
 def _summary_execution() -> N.ProjectSummaryExecution:
     hello = _fixture("hello.json")["response"]["result"]
     raw_result = _fixture("invoke-project-summary.json")["response"]["result"]
-    raw_items = _fixture("capabilities.json")["response"]["result"]["items"]
+    raw_items = _fixture("capability-registry-full.json")["items"]
     descriptor = N.NativeCapabilityDescriptor.model_validate(
         next(item for item in raw_items if item["id"] == "ae.project.summary")
     )
@@ -194,7 +194,7 @@ def _project_graph_execution(*, layers: bool):
         else N.PROJECT_ITEMS_LIST_CAPABILITY_ID
     )
     hello = _fixture("hello.json")["response"]["result"]
-    raw_items = _fixture("capabilities.json")["response"]["result"]["items"]
+    raw_items = _fixture("capability-registry-full.json")["items"]
     descriptor = N.NativeCapabilityDescriptor.model_validate(
         next(item for item in raw_items if item["id"] == capability_id)
     )
@@ -306,7 +306,7 @@ def _composition_time_execution() -> N.CompositionTimeReadExecution:
 
 def _composition_time_set_execution() -> N.CompositionTimeSetExecution:
     summary = _summary_execution()
-    descriptors = _fixture("capabilities.json")["response"]["result"]["items"]
+    descriptors = _fixture("capability-registry-full.json")["items"]
     descriptor = N.NativeCapabilityDescriptor.model_validate(
         next(item for item in descriptors if item["id"] == "ae.composition.time.set")
     )

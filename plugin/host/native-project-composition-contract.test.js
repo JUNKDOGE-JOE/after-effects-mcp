@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const { pathToFileURL } = require('node:url');
 
 const packageContracts = require('./native-project-composition-contract');
 
@@ -20,6 +21,58 @@ const SOURCE = '66666666-6666-4666-8666-666666666666';
 const CREATED = '77777777-7777-4777-8777-777777777777';
 const REFRESHED_PROJECT = '88888888-8888-4888-8888-888888888888';
 const FRESH_SOURCE = '99999999-9999-4999-8999-999999999998';
+const ISSUE190_CAPABILITIES = new Set([
+    'ae.layer.source.read',
+    'ae.layer.track-matte.read',
+    'ae.layer.track-matte.set',
+    'ae.layer.track-matte.clear',
+    'ae.layer.av-state.read',
+    'ae.layer.audio-enabled.set',
+    'ae.layer.video-enabled.set',
+]);
+
+test('#190 layer source, Track Matte, and AV descriptors cross the CEP contract gate', async () => {
+    const protocolRoot = path.join(__dirname, '../../native/ae-plugin/protocol');
+    const conformance = await import(pathToFileURL(path.join(
+        protocolRoot, 'conformance.mjs',
+    )).href);
+    const schema = JSON.parse(fs.readFileSync(path.join(
+        protocolRoot, 'aegp-rpc.schema.json',
+    ), 'utf8'));
+    const descriptors = conformance.layerSourceMatteAvDescriptors(schema);
+    assert.equal(descriptors.length, 7);
+
+    for (const descriptor of descriptors) {
+        const contract = packageContracts.getContract(descriptor.id);
+        assert.ok(contract, descriptor.id + ' must be admitted by CEP');
+        assert.equal(contract.digest, descriptor.contractDigest, descriptor.id + ' digest');
+        assert.equal(contract.mutating, descriptor.risk === 'write', descriptor.id + ' risk');
+        const example = descriptor.examples[0];
+        assert.equal(
+            contract.validArguments(example.arguments), true, descriptor.id + ' arguments',
+        );
+        assert.equal(
+            contract.validValue(example.expected.value, example.arguments, HOST, SESSION),
+            true,
+            descriptor.id + ' value',
+        );
+        assert.equal(
+            contract.validArguments({ ...example.arguments, unexpected: true }),
+            false,
+            descriptor.id + ' open arguments',
+        );
+        assert.equal(
+            contract.validValue(
+                { ...example.expected.value, unexpected: true },
+                example.arguments,
+                HOST,
+                SESSION,
+            ),
+            false,
+            descriptor.id + ' open value',
+        );
+    }
+});
 
 function locator(kind, objectId, generation, projectId = PROJECT) {
     return {
@@ -364,7 +417,8 @@ test('all twenty-six frozen package contracts accept their closed valid shapes',
             return !capabilityId.startsWith('ae.layer.property.keyframe.')
                 && !capabilityId.startsWith('ae.native.media.')
                 && !capabilityId.startsWith('ae.shape.')
-                && !capabilityId.startsWith('ae.marker.');
+                && !capabilityId.startsWith('ae.marker.')
+                && !ISSUE190_CAPABILITIES.has(capabilityId);
         }).sort(),
         Object.keys(vectors).sort(),
     );
@@ -392,8 +446,8 @@ test('all twenty-six frozen package contracts accept their closed valid shapes',
 
 test('eleven Text/Shape/Marker contracts admit generated vectors and nested locators', () => {
     const registry = JSON.parse(fs.readFileSync(path.join(
-        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
-    ), 'utf8')).response.result.items;
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json',
+    ), 'utf8')).items;
     const descriptors = registry.filter(function (item) {
         return item.id.startsWith('ae.shape.') || item.id.startsWith('ae.marker.');
     });
@@ -487,8 +541,8 @@ test('eleven Text/Shape/Marker contracts admit generated vectors and nested loca
 test('marker set admits a non-empty sparse patch and rejects unsafe patch shapes', () => {
     const contract = packageContracts.getContract('ae.marker.set');
     const descriptor = JSON.parse(fs.readFileSync(path.join(
-        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
-    ), 'utf8')).response.result.items.find(function (item) {
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json',
+    ), 'utf8')).items.find(function (item) {
         return item.id === 'ae.marker.set';
     });
     const argumentsValue = structuredClone(descriptor.examples[0].arguments);
@@ -840,8 +894,8 @@ test('seven #157 contracts bind checked-in registry metadata and closed typed va
         '../../native/ae-plugin/protocol/fixtures/keyframe-authoring-matrix.json',
     ), 'utf8'));
     const capabilities = JSON.parse(fs.readFileSync(path.join(
-        __dirname, '../../native/ae-plugin/protocol/fixtures/capabilities.json',
-    ), 'utf8')).response.result.items;
+        __dirname, '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json',
+    ), 'utf8')).items;
     const vectors = keyframeCases();
     assert.deepEqual(Object.keys(vectors), matrix.cases.map(function (item) {
         return item.capabilityId;

@@ -25,6 +25,9 @@ export const ERROR_POLICIES = Object.freeze({
   WIRE_VERSION_MISMATCH: [false, 'not-started', 'reconnect'],
   INVALID_REQUEST: [false, 'not-started', 'none'],
   INVALID_ARGUMENT: [false, 'not-started', 'change-arguments'],
+  TRACK_MATTE_COMPOSITION_MISMATCH: [false, 'not-started', 'change-arguments'],
+  LAYER_HAS_NO_AUDIO: [false, 'not-started', 'change-arguments'],
+  LAYER_HAS_NO_VIDEO: [false, 'not-started', 'change-arguments'],
   DUPLICATE_REQUEST: [false, 'not-started', 'inspect-state'],
   PRECONDITION_FAILED: [false, 'not-started', 'open-project'],
   STALE_LOCATOR: [true, 'not-started', 'refresh-locator'],
@@ -244,6 +247,20 @@ export const INVOKE_REGISTRY = Object.freeze([
     inputContractId: 'aemcp.contract.ae.layer.duplicate.input.v1',
     resultContractId: 'aemcp.contract.ae.layer.duplicate.result.v1',
   }),
+  ...[
+    'ae.layer.source.read',
+    'ae.layer.track-matte.read',
+    'ae.layer.track-matte.set',
+    'ae.layer.track-matte.clear',
+    'ae.layer.av-state.read',
+    'ae.layer.audio-enabled.set',
+    'ae.layer.video-enabled.set',
+  ].map((id) => Object.freeze({
+    id,
+    version: 1,
+    inputContractId: `aemcp.contract.${id}.input.v1`,
+    resultContractId: `aemcp.contract.${id}.result.v1`,
+  })),
   Object.freeze({
     id: 'ae.layer.compositing.read', version: 1,
     inputContractId: 'aemcp.contract.ae.layer.compositing.read.input.v1',
@@ -1257,6 +1274,47 @@ export function classifyRequest(message) {
           || !isIdempotencyKey(args.idempotencyKey)) {
         return { ok: false, errorCode: 'INVALID_ARGUMENT' };
       }
+    } else if (params.capabilityId === 'ae.layer.source.read'
+        || params.capabilityId === 'ae.layer.track-matte.read'
+        || params.capabilityId === 'ae.layer.av-state.read') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set(['layerLocator']), ['layerLocator'])
+          || !isLocatorShape(args.layerLocator, ['layer'])) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.track-matte.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set([
+        'layerLocator', 'matteLayerLocator', 'mode', 'idempotencyKey',
+      ]), ['layerLocator', 'matteLayerLocator', 'mode', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isLocatorShape(args.matteLayerLocator, ['layer'])
+          || !sameLocatorContext(args.layerLocator, args.matteLayerLocator)
+          || args.layerLocator.objectId === args.matteLayerLocator.objectId
+          || !['alpha', 'inverted-alpha', 'luma', 'inverted-luma'].includes(args.mode)
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.track-matte.clear') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set([
+        'layerLocator', 'idempotencyKey',
+      ]), ['layerLocator', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
+    } else if (params.capabilityId === 'ae.layer.audio-enabled.set'
+        || params.capabilityId === 'ae.layer.video-enabled.set') {
+      const args = params.arguments;
+      if (!exactKeys(args, new Set([
+        'layerLocator', 'enabled', 'idempotencyKey',
+      ]), ['layerLocator', 'enabled', 'idempotencyKey'])
+          || !isLocatorShape(args.layerLocator, ['layer'])
+          || typeof args.enabled !== 'boolean'
+          || !isIdempotencyKey(args.idempotencyKey)) {
+        return { ok: false, errorCode: 'INVALID_ARGUMENT' };
+      }
     } else if (params.capabilityId === 'ae.layer.compositing.read') {
       const args = params.arguments;
       if (!exactKeys(args, new Set(['layerLocator']), ['layerLocator'])
@@ -1422,6 +1480,11 @@ export function validateErrorPolicy(error, schema) {
   if (error.code === 'QUEUE_FULL'
       && (!Number.isInteger(error.recovery.retryAfterMs) || error.recovery.retryAfterMs < 1)) return false;
   if (error.code !== 'QUEUE_FULL' && error.recovery.retryAfterMs !== undefined) return false;
+  if (error.code === 'POSSIBLY_SIDE_EFFECTING_FAILURE') {
+    if (!isIdempotencyKey(error.details?.idempotencyKey)) return false;
+  } else if (error.details?.idempotencyKey !== undefined) {
+    return false;
+  }
   return true;
 }
 
@@ -3410,6 +3473,143 @@ export function nativeMediaDescriptors(schema) {
   });
 }
 
+const LAYER_SOURCE_MATTE_AV_SPECS = Object.freeze([
+  { id: 'ae.layer.source.read', schema: 'layerSourceRead',
+    summary: "Read one layer's current project-item source.",
+    sideEffectSummary: 'Reads layer source state without changing After Effects state.',
+    preconditions: ['layerLocator must identify a current native layer.'],
+    requirementId: 'aemcp.requirement.native.layer-source-read', mutating: false },
+  { id: 'ae.layer.track-matte.read', schema: 'layerTrackMatteRead',
+    summary: "Read one layer's modern Track Matte relationship.",
+    sideEffectSummary: 'Reads Track Matte state without changing After Effects state.',
+    preconditions: ['layerLocator must identify a current native layer.'],
+    requirementId: 'aemcp.requirement.native.layer-track-matte-read', mutating: false },
+  { id: 'ae.layer.track-matte.set', schema: 'layerTrackMatteSet',
+    summary: 'Set one arbitrary same-composition Track Matte.',
+    sideEffectSummary: 'Changes one Track Matte relationship and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must identify a current native layer.',
+      'matteLayerLocator must identify a distinct current layer in the same composition.'],
+    requirementId: 'aemcp.requirement.native.layer-track-matte-set', mutating: true },
+  { id: 'ae.layer.track-matte.clear', schema: 'layerTrackMatteClear',
+    summary: "Clear one layer's Track Matte while preserving its stored mode.",
+    sideEffectSummary: 'Removes one Track Matte relationship and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must identify a current native layer.',
+      'The layer must have an active Track Matte relationship.'],
+    requirementId: 'aemcp.requirement.native.layer-track-matte-clear', mutating: true },
+  { id: 'ae.layer.av-state.read', schema: 'layerAvStateRead',
+    summary: 'Read source media capabilities and layer AV switches.',
+    sideEffectSummary: 'Reads AV state without changing After Effects state.',
+    preconditions: ['layerLocator must identify a current native layer.'],
+    requirementId: 'aemcp.requirement.native.layer-av-state-read', mutating: false },
+  { id: 'ae.layer.audio-enabled.set', schema: 'layerAudioEnabledSet',
+    summary: "Set one layer's audio-enabled switch.",
+    sideEffectSummary: 'Changes one layer audio switch and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must identify a current native layer.',
+      'The current source must have audio and the requested value must differ.'],
+    requirementId: 'aemcp.requirement.native.layer-audio-enabled-set', mutating: true },
+  { id: 'ae.layer.video-enabled.set', schema: 'layerVideoEnabledSet',
+    summary: "Set one layer's video-enabled switch.",
+    sideEffectSummary: 'Changes one layer video switch and creates one After Effects Undo step.',
+    preconditions: ['layerLocator must identify a current native layer.',
+      'The current source must have video and the requested value must differ.'],
+    requirementId: 'aemcp.requirement.native.layer-video-enabled-set', mutating: true },
+]);
+
+export function layerSourceMatteAvDescriptors(schema) {
+  const layer = syntheticDescriptorLocator(
+    'layer', '88888888-8888-4888-8888-888888888888',
+  );
+  const matte = syntheticDescriptorLocator(
+    'layer', '99999999-9999-4999-8999-999999999999',
+  );
+  const source = syntheticDescriptorLocator(
+    'item', '77777777-7777-4777-8777-777777777777',
+  );
+  const avBefore = {
+    layerLocator: layer, hasAudio: true, audioEnabled: false,
+    hasVideo: true, videoEnabled: true,
+  };
+  const examples = {
+    'ae.layer.source.read': {
+      arguments: { layerLocator: layer },
+      value: { layerLocator: layer, sourceItemLocator: source,
+        sourceType: 'footage', sourceName: 'SYNTHETIC_FOOTAGE' },
+    },
+    'ae.layer.track-matte.read': {
+      arguments: { layerLocator: layer },
+      value: { layerLocator: layer, active: true, matteLayerLocator: matte, mode: 'alpha' },
+    },
+    'ae.layer.track-matte.set': {
+      arguments: { layerLocator: layer, matteLayerLocator: matte, mode: 'luma',
+        idempotencyKey: 'synthetic-matte-set-0001' },
+      value: { changed: true, layerLocator: layer, beforeMatteLayerLocator: null,
+        beforeMode: 'none', afterMatteLayerLocator: matte, afterMode: 'luma' },
+    },
+    'ae.layer.track-matte.clear': {
+      arguments: { layerLocator: layer, idempotencyKey: 'synthetic-matte-clear-0001' },
+      value: { changed: true, layerLocator: layer, beforeMatteLayerLocator: matte,
+        beforeMode: 'inverted-alpha', afterMatteLayerLocator: null,
+        afterMode: 'inverted-alpha' },
+    },
+    'ae.layer.av-state.read': {
+      arguments: { layerLocator: layer }, value: avBefore,
+    },
+    'ae.layer.audio-enabled.set': {
+      arguments: { layerLocator: layer, enabled: true,
+        idempotencyKey: 'synthetic-audio-set-0001' },
+      value: { changed: true, layerLocator: layer, before: avBefore,
+        after: { ...avBefore, audioEnabled: true } },
+    },
+    'ae.layer.video-enabled.set': {
+      arguments: { layerLocator: layer, enabled: false,
+        idempotencyKey: 'synthetic-video-set-0001' },
+      value: { changed: true, layerLocator: layer,
+        before: { ...avBefore, audioEnabled: true },
+        after: { ...avBefore, audioEnabled: true, videoEnabled: false } },
+    },
+  };
+  return LAYER_SOURCE_MATTE_AV_SPECS.map((spec) => {
+    const registration = INVOKE_REGISTRY.find(({ id }) => id === spec.id);
+    const inputSchema = structuredClone(
+      schema.$defs[`${spec.schema}InputSchemaContract`].const,
+    );
+    const resultSchema = structuredClone(
+      schema.$defs[`${spec.schema}ResultSchemaContract`].const,
+    );
+    const example = examples[spec.id];
+    return {
+      detail: 'full', id: spec.id, version: 1, schemaVersion: 1,
+      summary: spec.summary, risk: spec.mutating ? 'write' : 'read',
+      mutability: spec.mutating ? 'mutating' : 'read-only',
+      idempotency: spec.mutating ? 'idempotency-key' : 'idempotent',
+      cancellation: 'before-dispatch',
+      undo: spec.mutating ? 'ae-undo-group' : 'not-applicable',
+      sideEffectSummary: spec.sideEffectSummary,
+      preconditions: [...spec.preconditions],
+      compatibility: {
+        status: 'unverified', intendedPlatforms: ['macos-arm64', 'windows-x64'],
+      },
+      inputContractId: registration.inputContractId,
+      resultContractId: registration.resultContractId,
+      contractDigest: sha256Jcs({ inputSchema, resultSchema }),
+      inputSchema, resultSchema,
+      requirements: [{ id: spec.requirementId, contractVersion: 1 }],
+      examples: [
+        { id: `aemcp-example-${spec.id.slice(3).replaceAll('.', '-')}-positive`,
+          kind: 'positive',
+          summary: 'Synthetic success demonstrates the typed result contract.',
+          arguments: structuredClone(example.arguments),
+          expected: { outcome: 'succeeded', value: structuredClone(example.value) } },
+        { id: `aemcp-example-${spec.id.slice(3).replaceAll('.', '-')}-stale`,
+          kind: 'negative',
+          summary: 'A stale locator is rejected before host access.',
+          arguments: structuredClone(example.arguments),
+          expected: { errorCode: 'STALE_LOCATOR', recoveryAction: 'refresh-locator' } },
+      ],
+    };
+  });
+}
+
 export function nativeCapabilityRegistry(schema) {
   return [
     projectSummaryDescriptor(schema),
@@ -3428,6 +3628,7 @@ export function nativeCapabilityRegistry(schema) {
     layerPropertySetDescriptor(schema),
     ...projectCompositionDescriptors(schema),
     ...layerTimelineDescriptors(schema),
+    ...layerSourceMatteAvDescriptors(schema),
     ...layerCompositingDescriptors(schema),
     ...keyframeAuthoringDescriptors(schema),
     ...nativeMediaDescriptors(schema),
@@ -3883,6 +4084,72 @@ function validateLayerTimelineResult(request, result, helloContext, schema) {
     && parentValid(value.afterParentLocator)
     && jsonDeepEqual(value.afterParentLocator, args.parentLayerLocator)
     && !jsonDeepEqual(value.beforeParentLocator, value.afterParentLocator);
+}
+
+function validateLayerSourceMatteAvResult(request, result, helloContext, schema) {
+  const id = request.params.capabilityId;
+  if (!LAYER_SOURCE_MATTE_AV_SPECS.some((spec) => spec.id === id)) return true;
+  const args = request.params.arguments;
+  const value = result.value;
+  const kind = id.slice(3).replaceAll('.', '-');
+  if (result.evidence.postcondition.kind !== kind
+      || !jsonDeepEqual(value.layerLocator, args.layerLocator)
+      || value.layerLocator.hostInstanceId !== helloContext.response.result.host.instanceId
+      || value.layerLocator.sessionId !== request.sessionId
+      || !validateLocator(value.layerLocator, locatorContext(value.layerLocator), schema)) {
+    return false;
+  }
+  const context = locatorContext(value.layerLocator);
+  const validBoundLayer = (locator) => isLocatorShape(locator, ['layer'])
+    && locator.objectId !== value.layerLocator.objectId
+    && validateLocator(locator, context, schema);
+  const validAv = (state) => jsonDeepEqual(state.layerLocator, value.layerLocator)
+    && ['hasAudio', 'audioEnabled', 'hasVideo', 'videoEnabled']
+      .every((field) => typeof state[field] === 'boolean');
+  if (id === 'ae.layer.source.read') {
+    if (value.sourceType === 'none') {
+      return value.sourceItemLocator === null && value.sourceName === null;
+    }
+    const expectedKind = value.sourceType === 'composition' ? 'composition' : 'item';
+    return ['footage', 'composition'].includes(value.sourceType)
+      && isLocatorShape(value.sourceItemLocator, [expectedKind])
+      && validateLocator(value.sourceItemLocator, context, schema)
+      && typeof value.sourceName === 'string'
+      && isBoundedScalarString(value.sourceName, 0, 1024);
+  }
+  if (id === 'ae.layer.track-matte.read') {
+    return value.active === (value.matteLayerLocator !== null)
+      && (value.matteLayerLocator === null || validBoundLayer(value.matteLayerLocator))
+      && (!value.active || value.mode !== 'none');
+  }
+  if (id === 'ae.layer.track-matte.set') {
+    const beforeValid = value.beforeMatteLayerLocator === null
+      || (validBoundLayer(value.beforeMatteLayerLocator) && value.beforeMode !== 'none');
+    return value.changed === true && beforeValid
+      && validBoundLayer(value.afterMatteLayerLocator)
+      && jsonDeepEqual(value.afterMatteLayerLocator, args.matteLayerLocator)
+      && value.afterMode === args.mode
+      && (!jsonDeepEqual(value.beforeMatteLayerLocator, value.afterMatteLayerLocator)
+        || value.beforeMode !== value.afterMode);
+  }
+  if (id === 'ae.layer.track-matte.clear') {
+    return value.changed === true && validBoundLayer(value.beforeMatteLayerLocator)
+      && value.beforeMode !== 'none' && value.afterMatteLayerLocator === null
+      && value.afterMode === value.beforeMode;
+  }
+  if (id === 'ae.layer.av-state.read') return validAv(value);
+  if (value.changed !== true || !validAv(value.before) || !validAv(value.after)) return false;
+  const audio = id === 'ae.layer.audio-enabled.set';
+  const availableField = audio ? 'hasAudio' : 'hasVideo';
+  const changedField = audio ? 'audioEnabled' : 'videoEnabled';
+  const preserved = audio
+    ? ['hasAudio', 'hasVideo', 'videoEnabled']
+    : ['hasAudio', 'audioEnabled', 'hasVideo'];
+  return value.before[availableField] === true
+    && value.after[availableField] === true
+    && value.after[changedField] === args.enabled
+    && value.before[changedField] !== value.after[changedField]
+    && preserved.every((field) => value.before[field] === value.after[field]);
 }
 
 function validateLayerCompositingResult(request, result, helloContext, schema) {
@@ -4623,7 +4890,7 @@ export function validateTranscript(context, request, messages) {
         && (descriptor.undo !== 'ae-undo-group'
           || (evidence.undo?.available === true
             && typeof evidence.undo?.verified === 'boolean'
-            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set', 'ae.composition.work-area.set', 'ae.project.item.name.set', 'ae.project.item.comment.set', 'ae.project.item.label.set', 'ae.composition.duplicate', 'ae.layer.name.set', 'ae.layer.range.set', 'ae.layer.start-time.set', 'ae.layer.stretch.set', 'ae.layer.order.set', 'ae.layer.parent.set', 'ae.layer.duplicate', 'ae.layer.switch.set', 'ae.layer.quality.set', 'ae.layer.blending-mode.set', 'ae.layer.property.keyframe.add', 'ae.layer.property.keyframe.value.set', 'ae.layer.property.keyframe.interpolation.set', 'ae.layer.property.keyframe.temporal-ease.set', 'ae.layer.property.keyframe.behavior.set', 'ae.layer.property.keyframe.delete']
+            && (!['ae.project.bit-depth.set', 'ae.composition.time.set', 'ae.composition.create', 'ae.composition.layer.create', 'ae.layer.effect.apply', 'ae.layer.property.set', 'ae.composition.work-area.set', 'ae.project.item.name.set', 'ae.project.item.comment.set', 'ae.project.item.label.set', 'ae.composition.duplicate', 'ae.layer.name.set', 'ae.layer.range.set', 'ae.layer.start-time.set', 'ae.layer.stretch.set', 'ae.layer.order.set', 'ae.layer.parent.set', 'ae.layer.duplicate', 'ae.layer.track-matte.set', 'ae.layer.track-matte.clear', 'ae.layer.audio-enabled.set', 'ae.layer.video-enabled.set', 'ae.layer.switch.set', 'ae.layer.quality.set', 'ae.layer.blending-mode.set', 'ae.layer.property.keyframe.add', 'ae.layer.property.keyframe.value.set', 'ae.layer.property.keyframe.interpolation.set', 'ae.layer.property.keyframe.temporal-ease.set', 'ae.layer.property.keyframe.behavior.set', 'ae.layer.property.keyframe.delete']
               .includes(request.params.capabilityId)
               || request.params.capabilityVersion !== 1
               || evidence.undo.verified === false)))))
@@ -4641,6 +4908,7 @@ export function validateTranscript(context, request, messages) {
     && validateKeyframeAuthoringResult(request, result, helloContext, schema)
     && validateProjectCompositionResult(request, result, helloContext, schema)
     && validateLayerTimelineResult(request, result, helloContext, schema)
+    && validateLayerSourceMatteAvResult(request, result, helloContext, schema)
     && validateLayerCompositingResult(request, result, helloContext, schema)
     && evidence.postcondition.verified === true
     && evidence.requestDigest === requestDigest

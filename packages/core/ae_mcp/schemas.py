@@ -615,6 +615,98 @@ class AeProjectItemLocator(_AeLocatorInput):
     kind: Literal["item", "composition"]
 
 
+def _same_locator_context(left: _AeLocatorInput, right: _AeLocatorInput) -> bool:
+    """Return whether two locators belong to the same native graph context."""
+
+    return (
+        left.host_instance_id,
+        left.session_id,
+        left.project_id,
+        left.generation,
+    ) == (
+        right.host_instance_id,
+        right.session_id,
+        right.project_id,
+        right.generation,
+    )
+
+
+class AeGetLayerSourceArgs(_StrictModel):
+    """ae.getLayerSource — read the current project-item source for one layer."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ..., description="Fresh layer locator returned by ae_listCompositionLayers.",
+    )
+
+
+class AeSetLayerSourceArgs(_AeLayerWriteArgs):
+    """ae.setLayerSource — replace one AV layer's source without expression repair."""
+
+    source_item_locator: AeProjectItemLocator = Field(
+        ...,
+        description="Fresh item or composition locator from a native project read.",
+    )
+
+    @model_validator(mode="after")
+    def _matching_source_context(self) -> "AeSetLayerSourceArgs":
+        if not _same_locator_context(self.layer_locator, self.source_item_locator):
+            raise ValueError("source_item_locator must match layer_locator context")
+        return self
+
+
+class AeGetLayerTrackMatteArgs(_StrictModel):
+    """ae.getLayerTrackMatte — read one layer's modern Track Matte relationship."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ..., description="Fresh layer locator returned by ae_listCompositionLayers.",
+    )
+
+
+class AeSetLayerTrackMatteArgs(_AeLayerWriteArgs):
+    """ae.setLayerTrackMatte — set one arbitrary same-context layer as the Matte."""
+
+    matte_layer_locator: AeLayerLocator = Field(
+        ..., description="Fresh layer locator for a different layer in the same composition.",
+    )
+    mode: Literal["alpha", "inverted-alpha", "luma", "inverted-luma"] = Field(
+        ..., description="Exact modern Track Matte mode; none is only valid after clear.",
+    )
+
+    @model_validator(mode="after")
+    def _valid_matte(self) -> "AeSetLayerTrackMatteArgs":
+        if not _same_locator_context(self.layer_locator, self.matte_layer_locator):
+            raise ValueError("matte_layer_locator must match layer_locator context")
+        if self.layer_locator.object_id == self.matte_layer_locator.object_id:
+            raise ValueError("a layer cannot be its own track matte")
+        return self
+
+
+class AeClearLayerTrackMatteArgs(_AeLayerWriteArgs):
+    """ae.clearLayerTrackMatte — remove the relationship while preserving AE's mode."""
+
+
+class AeGetLayerAVStateArgs(_StrictModel):
+    """ae.getLayerAVState — read source media capabilities and layer AV switches."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    layer_locator: AeLayerLocator = Field(
+        ..., description="Fresh layer locator returned by ae_listCompositionLayers.",
+    )
+
+
+class AeSetLayerAudioEnabledArgs(_AeLayerBooleanSwitchArgs):
+    """ae.setLayerAudioEnabled — set one layer's audio switch."""
+
+
+class AeSetLayerVideoEnabledArgs(_AeLayerBooleanSwitchArgs):
+    """ae.setLayerVideoEnabled — set one layer's video switch."""
+
+
 class AeGetProjectContextArgs(_StrictModel):
     """ae.getProjectContext — read current project, selection, and composition context.
 
@@ -2595,3 +2687,17 @@ SCHEMAS = {
 }
 
 assert len(SCHEMAS) in {94, 111}, f"expected base or full registry, got {len(SCHEMAS)}"
+
+
+# Internal capability ID -> strict input schema. Public verb registration is
+# intentionally deferred to the package's handler task.
+HANDLER_SCHEMAS = {
+    "ae.layer.source.read": AeGetLayerSourceArgs,
+    "ae.layer.source.set": AeSetLayerSourceArgs,
+    "ae.layer.track-matte.read": AeGetLayerTrackMatteArgs,
+    "ae.layer.track-matte.set": AeSetLayerTrackMatteArgs,
+    "ae.layer.track-matte.clear": AeClearLayerTrackMatteArgs,
+    "ae.layer.av-state.read": AeGetLayerAVStateArgs,
+    "ae.layer.audio-enabled.set": AeSetLayerAudioEnabledArgs,
+    "ae.layer.video-enabled.set": AeSetLayerVideoEnabledArgs,
+}

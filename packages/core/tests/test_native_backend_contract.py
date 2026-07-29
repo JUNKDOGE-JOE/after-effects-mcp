@@ -52,7 +52,7 @@ def _jcs_digest(value: Any) -> str:
 
 
 def _descriptor() -> NativeCapabilityDescriptor:
-    items = _fixture("capabilities.json")["response"]["result"]["items"]
+    items = _fixture("capability-registry-full.json")["items"]
     raw = next(item for item in items if item["id"] == "ae.project.summary")
     # The model deliberately accepts protocol aliases (id/version and camel
     # case) so transport adapters need no lossy hand-written field mapping.
@@ -63,10 +63,10 @@ def _capabilities(
     descriptor: NativeCapabilityDescriptor | None = None,
 ) -> NativeCapabilities:
     response = _fixture("capabilities.json")["response"]
-    result = response["result"]
+    registry = _fixture("capability-registry-full.json")
     items = tuple(
         NativeCapabilityDescriptor.model_validate(item)
-        for item in result["items"]
+        for item in registry["items"]
     )
     if descriptor is not None:
         items = tuple(
@@ -75,9 +75,9 @@ def _capabilities(
         )
     return NativeCapabilities(
         session_id=response["sessionId"],
-        detail=result["detail"],
+        detail="full",
         items=items,
-        next_cursor=result["nextCursor"],
+        next_cursor=None,
         query_digest=_jcs_digest(
             {
                 "sessionId": response["sessionId"],
@@ -86,7 +86,7 @@ def _capabilities(
                 "limit": 100,
             }
         ),
-        capabilities_digest=result["capabilitiesDigest"],
+        capabilities_digest=registry["capabilitiesDigest"],
     )
 
 
@@ -283,7 +283,10 @@ def test_fixture_models_preserve_descriptor_result_and_error_policy():
     assert error.retryable is False
     assert error.side_effect == "may-have-occurred"
     assert error.recovery.action == "inspect-state"
-    assert error.details == {"capabilityId": "ae.project.set_current_time"}
+    assert error.details == {
+        "capabilityId": "ae.project.set_current_time",
+        "idempotencyKey": "synthetic-current-time-ambiguous-0001",
+    }
 
 
 def test_http_native_invoke_result_requires_explicit_replay_status():
@@ -294,7 +297,7 @@ def test_http_native_invoke_result_requires_explicit_replay_status():
 
 
 def test_native_descriptor_cannot_be_relabelled_as_jsx():
-    raw = _fixture("capabilities.json")["response"]["result"]["items"][0]
+    raw = _fixture("capability-registry-full.json")["items"][0]
     raw["engine"] = "maintained-jsx"
 
     with pytest.raises(ValidationError):
@@ -443,7 +446,7 @@ async def test_project_summary_binding_is_explicit_native_and_deadline_bound():
 
 @pytest.mark.asyncio
 async def test_project_summary_rejects_untrusted_descriptor_before_dispatch():
-    raw = _fixture("capabilities.json")["response"]["result"]["items"][0]
+    raw = _fixture("capability-registry-full.json")["items"][0]
     raw["contractDigest"] = "f" * 64
     backend = FixtureNativeBackend(
         descriptor=NativeCapabilityDescriptor.model_validate(raw)
@@ -502,7 +505,7 @@ async def test_project_summary_rejects_unbound_registry_digest():
 
 @pytest.mark.asyncio
 async def test_project_summary_rejects_schema_tampering_before_dispatch():
-    raw = _fixture("capabilities.json")["response"]["result"]["items"][0]
+    raw = _fixture("capability-registry-full.json")["items"][0]
     raw["resultSchema"]["properties"]["itemCount"]["maximum"] = 10
     backend = FixtureNativeBackend(
         descriptor=NativeCapabilityDescriptor.model_validate(raw)
@@ -522,7 +525,7 @@ async def test_project_summary_rejects_schema_tampering_before_dispatch():
 
 @pytest.mark.asyncio
 async def test_project_summary_rejects_incompatible_host_before_dispatch():
-    raw = _fixture("capabilities.json")["response"]["result"]["items"][0]
+    raw = _fixture("capability-registry-full.json")["items"][0]
     raw["compatibility"]["intendedPlatforms"] = ["windows-x64"]
     backend = FixtureNativeBackend(
         descriptor=NativeCapabilityDescriptor.model_validate(raw)

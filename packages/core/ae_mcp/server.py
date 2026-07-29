@@ -140,6 +140,14 @@ def _filtered_tool_names() -> set:
             "ae.listSelectedLayers",
             "ae.getLayerDetails",
             "ae.getLayerCompositingState",
+            "ae.getLayerSource",
+            "ae.setLayerSource",
+            "ae.getLayerTrackMatte",
+            "ae.setLayerTrackMatte",
+            "ae.clearLayerTrackMatte",
+            "ae.getLayerAVState",
+            "ae.setLayerAudioEnabled",
+            "ae.setLayerVideoEnabled",
             "ae.setLayerVisibility",
             "ae.setLayerSolo",
             "ae.setLayerLocked",
@@ -225,6 +233,14 @@ def _filtered_tool_names() -> set:
             "ae.listSelectedLayers",
             "ae.getLayerDetails",
             "ae.getLayerCompositingState",
+            "ae.getLayerSource",
+            "ae.setLayerSource",
+            "ae.getLayerTrackMatte",
+            "ae.setLayerTrackMatte",
+            "ae.clearLayerTrackMatte",
+            "ae.getLayerAVState",
+            "ae.setLayerAudioEnabled",
+            "ae.setLayerVideoEnabled",
             "ae.setLayerVisibility",
             "ae.setLayerSolo",
             "ae.setLayerLocked",
@@ -955,6 +971,38 @@ _PROJECT_COMPOSITION_VALIDATION = {
     "ae.getLayerCompositingState": (
         "ae.layer.compositing.read",
         "Copy layer_locator unchanged from ae_listCompositionLayers.",
+    ),
+    "ae.getLayerSource": (
+        "ae.layer.source.read",
+        "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers.",
+    ),
+    "ae.setLayerSource": (
+        "ae.layer.source.set",
+        "Use fresh layer_locator and fresh source_item_locator values from the current native graph, plus a stable idempotency_key. This write invalidates the full native project graph; rediscover every project, composition, item, and layer locator before the next native graph call.",
+    ),
+    "ae.getLayerTrackMatte": (
+        "ae.layer.track-matte.read",
+        "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers.",
+    ),
+    "ae.setLayerTrackMatte": (
+        "ae.layer.track-matte.set",
+        "Use fresh layer_locator and matte_layer_locator values from one composition, one explicit mode, and a stable idempotency_key.",
+    ),
+    "ae.clearLayerTrackMatte": (
+        "ae.layer.track-matte.clear",
+        "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers and a stable idempotency_key.",
+    ),
+    "ae.getLayerAVState": (
+        "ae.layer.av-state.read",
+        "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers.",
+    ),
+    "ae.setLayerAudioEnabled": (
+        "ae.layer.audio-enabled.set",
+        "Use a fresh layer_locator, explicit enabled boolean, and a stable idempotency_key.",
+    ),
+    "ae.setLayerVideoEnabled": (
+        "ae.layer.video-enabled.set",
+        "Use a fresh layer_locator, explicit enabled boolean, and a stable idempotency_key.",
     ),
     "ae.setLayerVisibility": (
         "ae.layer.switch.set",

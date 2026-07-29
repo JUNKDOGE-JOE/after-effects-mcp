@@ -702,6 +702,145 @@ function validLayerDuplicateValue(value, argumentsValue, hostInstanceId, session
     return true;
 }
 
+const LAYER_SOURCE_TYPES = Object.freeze(['none', 'footage', 'composition']);
+const LAYER_SETTABLE_TRACK_MATTE_MODES = Object.freeze([
+    'alpha', 'inverted-alpha', 'luma', 'inverted-luma',
+]);
+
+function validLayerSourceValue(value, argumentsValue, hostInstanceId, sessionId) {
+    if (!exactKeys(value, [
+        'layerLocator', 'sourceItemLocator', 'sourceType', 'sourceName',
+    ]) || !validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        || !LAYER_SOURCE_TYPES.includes(value.sourceType)) return false;
+    if (value.sourceType === 'none') {
+        return value.sourceItemLocator === null && value.sourceName === null;
+    }
+    const sourceKind = value.sourceType === 'composition' ? 'composition' : 'item';
+    return validLocator(value.sourceItemLocator, [sourceKind])
+        && sameContext(value.layerLocator, value.sourceItemLocator)
+        && validString(value.sourceName, 0, 1024);
+}
+
+function validNullableMatteLocator(value, layerLocator) {
+    return value === null
+        || (validLocator(value, ['layer'])
+            && sameContext(value, layerLocator)
+            && value.objectId !== layerLocator.objectId);
+}
+
+function validLayerTrackMatteValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'layerLocator', 'active', 'matteLayerLocator', 'mode',
+    ])
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && typeof value.active === 'boolean'
+        && validNullableMatteLocator(value.matteLayerLocator, value.layerLocator)
+        && LAYER_TRACK_MATTES.includes(value.mode)
+        && value.active === (value.matteLayerLocator !== null)
+        && (!value.active || value.mode !== 'none');
+}
+
+function validLayerTrackMatteSetArguments(value) {
+    return exactKeys(value, [
+        'layerLocator', 'matteLayerLocator', 'mode', 'idempotencyKey',
+    ])
+        && validLocator(value.layerLocator, ['layer'])
+        && validLocator(value.matteLayerLocator, ['layer'])
+        && sameContext(value.layerLocator, value.matteLayerLocator)
+        && value.layerLocator.objectId !== value.matteLayerLocator.objectId
+        && LAYER_SETTABLE_TRACK_MATTE_MODES.includes(value.mode)
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validLayerTrackMatteSetValue(
+    value, argumentsValue, hostInstanceId, sessionId,
+) {
+    return exactKeys(value, [
+        'changed', 'layerLocator', 'beforeMatteLayerLocator', 'beforeMode',
+        'afterMatteLayerLocator', 'afterMode',
+    ])
+        && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && validNullableMatteLocator(value.beforeMatteLayerLocator, value.layerLocator)
+        && LAYER_TRACK_MATTES.includes(value.beforeMode)
+        && validLocator(value.afterMatteLayerLocator, ['layer'])
+        && sameContext(value.layerLocator, value.afterMatteLayerLocator)
+        && value.afterMatteLayerLocator.objectId !== value.layerLocator.objectId
+        && sameLocator(value.afterMatteLayerLocator, argumentsValue.matteLayerLocator)
+        && value.afterMode === argumentsValue.mode
+        && (!sameNullableLocator(
+            value.beforeMatteLayerLocator, value.afterMatteLayerLocator,
+        ) || value.beforeMode !== value.afterMode);
+}
+
+function validLayerTrackMatteClearArguments(value) {
+    return exactKeys(value, ['layerLocator', 'idempotencyKey'])
+        && validLocator(value.layerLocator, ['layer'])
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validLayerTrackMatteClearValue(
+    value, argumentsValue, hostInstanceId, sessionId,
+) {
+    return exactKeys(value, [
+        'changed', 'layerLocator', 'beforeMatteLayerLocator', 'beforeMode',
+        'afterMatteLayerLocator', 'afterMode',
+    ])
+        && value.changed === true
+        && validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        && validLocator(value.beforeMatteLayerLocator, ['layer'])
+        && sameContext(value.layerLocator, value.beforeMatteLayerLocator)
+        && value.beforeMatteLayerLocator.objectId !== value.layerLocator.objectId
+        && LAYER_SETTABLE_TRACK_MATTE_MODES.includes(value.beforeMode)
+        && value.afterMatteLayerLocator === null
+        && value.afterMode === value.beforeMode;
+}
+
+function validLayerAVState(value, layerLocator, hostInstanceId, sessionId) {
+    return exactKeys(value, [
+        'layerLocator', 'hasAudio', 'audioEnabled', 'hasVideo', 'videoEnabled',
+    ])
+        && validLocator(value.layerLocator, ['layer'])
+        && sameLocator(value.layerLocator, layerLocator)
+        && boundToSession(value.layerLocator, hostInstanceId, sessionId)
+        && ['hasAudio', 'audioEnabled', 'hasVideo', 'videoEnabled'].every(function (key) {
+            return typeof value[key] === 'boolean';
+        });
+}
+
+function validLayerAVStateValue(value, argumentsValue, hostInstanceId, sessionId) {
+    return validLayerAVState(
+        value, argumentsValue.layerLocator, hostInstanceId, sessionId,
+    );
+}
+
+function validLayerAVSwitchArguments(value) {
+    return exactKeys(value, ['layerLocator', 'enabled', 'idempotencyKey'])
+        && validLocator(value.layerLocator, ['layer'])
+        && typeof value.enabled === 'boolean'
+        && validIdempotencyKey(value.idempotencyKey);
+}
+
+function validLayerAVSwitchValue(
+    selectedField, changedField, value, argumentsValue, hostInstanceId, sessionId,
+) {
+    if (!exactKeys(value, ['changed', 'layerLocator', 'before', 'after'])
+        || value.changed !== true
+        || !validLayerWriteLocator(value, argumentsValue, hostInstanceId, sessionId)
+        || !validLayerAVState(
+            value.before, value.layerLocator, hostInstanceId, sessionId,
+        )
+        || !validLayerAVState(
+            value.after, value.layerLocator, hostInstanceId, sessionId,
+        )
+        || value.before[selectedField] !== true || value.after[selectedField] !== true
+        || value.before[changedField] === value.after[changedField]
+        || value.after[changedField] !== argumentsValue.enabled) return false;
+    return ['hasAudio', 'audioEnabled', 'hasVideo', 'videoEnabled']
+        .filter(function (field) { return field !== changedField; })
+        .every(function (field) { return value.before[field] === value.after[field]; });
+}
+
 const KEYFRAME_VALUE_TYPES = Object.freeze([
     'one-d', 'two-d', 'two-d-spatial', 'three-d', 'three-d-spatial', 'color',
 ]);
@@ -1903,6 +2042,79 @@ const CONTRACTS = Object.freeze({
         postconditionKind: 'layer-details-read',
         validArguments: validLayerLocatorArguments,
         validValue: validLayerDetailsValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.source.read': Object.freeze({
+        digest: '877ba54bba16bf11432caf0d504b99c753c7843824fcb6a1fcea056d00d5bedb',
+        mutating: false,
+        postconditionKind: 'layer-source-read',
+        validArguments: validLayerLocatorArguments,
+        validValue: validLayerSourceValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.track-matte.read': Object.freeze({
+        digest: 'd195337021d9d84ff8231d7d0f2b7a2ad9333356924c4e3a3d4c0354979b4571',
+        mutating: false,
+        postconditionKind: 'layer-track-matte-read',
+        validArguments: validLayerLocatorArguments,
+        validValue: validLayerTrackMatteValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.track-matte.set': Object.freeze({
+        digest: '979f0c273060da14e8763219d8a4193359c3d24fb067a5c18014887217f27c86',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-track-matte-set',
+        validArguments: validLayerTrackMatteSetArguments,
+        validValue: validLayerTrackMatteSetValue,
+        locatorFields: Object.freeze([
+            ['layerLocator', 'ae_listCompositionLayers'],
+            ['matteLayerLocator', 'ae_listCompositionLayers'],
+        ]),
+    }),
+    'ae.layer.track-matte.clear': Object.freeze({
+        digest: '4591b1d2a8fc5f9f2cf88a780cfc34e0243ec5f5aed43e5323ef256329de1530',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-track-matte-clear',
+        validArguments: validLayerTrackMatteClearArguments,
+        validValue: validLayerTrackMatteClearValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.av-state.read': Object.freeze({
+        digest: 'f4a05bfadc549c448e95cc18298a650ae96dfa2839dea457365d6bb9d0486464',
+        mutating: false,
+        postconditionKind: 'layer-av-state-read',
+        validArguments: validLayerLocatorArguments,
+        validValue: validLayerAVStateValue,
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.audio-enabled.set': Object.freeze({
+        digest: '508a96fe62c9f072a6dbe21c34bfb32f617f4c6c525be3a3a269034651b446fb',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-audio-enabled-set',
+        validArguments: validLayerAVSwitchArguments,
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validLayerAVSwitchValue(
+                'hasAudio', 'audioEnabled', value, argumentsValue,
+                hostInstanceId, sessionId,
+            );
+        },
+        locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
+    }),
+    'ae.layer.video-enabled.set': Object.freeze({
+        digest: '536c47c0419099b8c6e084592f36f070cc0a6ba4deafcb847c77d3bba991fcf3',
+        mutating: true,
+        allowReplay: false,
+        postconditionKind: 'layer-video-enabled-set',
+        validArguments: validLayerAVSwitchArguments,
+        validValue: function (value, argumentsValue, hostInstanceId, sessionId) {
+            return validLayerAVSwitchValue(
+                'hasVideo', 'videoEnabled', value, argumentsValue,
+                hostInstanceId, sessionId,
+            );
+        },
         locatorFields: Object.freeze([['layerLocator', 'ae_listCompositionLayers']]),
     }),
     'ae.layer.compositing.read': Object.freeze({

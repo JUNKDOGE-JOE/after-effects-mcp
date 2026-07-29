@@ -4,7 +4,7 @@
     "runtimeEvidence": false,
     "compatibilityEvidence": false
   },
-  "expectedRegistryDigest": "2421e07b2ece78beb943c9121203b4d4aecef39d3df9434000cbe792bfe32517",
+  "expectedRegistryDigest": "07946484629c79f518fdf5912d3edf790bf9741db4bf2fe5b21ab80623c1a3a4",
   "cases": [
     {
       "capabilityId": "ae.layer.property.keyframe.details.read",

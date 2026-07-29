@@ -114,6 +114,20 @@ inline constexpr std::string_view kLayerQualitySetCapability =
     "ae.layer.quality.set";
 inline constexpr std::string_view kLayerBlendingModeSetCapability =
     "ae.layer.blending-mode.set";
+inline constexpr std::string_view kLayerSourceReadCapability =
+    "ae.layer.source.read";
+inline constexpr std::string_view kLayerTrackMatteReadCapability =
+    "ae.layer.track-matte.read";
+inline constexpr std::string_view kLayerTrackMatteSetCapability =
+    "ae.layer.track-matte.set";
+inline constexpr std::string_view kLayerTrackMatteClearCapability =
+    "ae.layer.track-matte.clear";
+inline constexpr std::string_view kLayerAVStateReadCapability =
+    "ae.layer.av-state.read";
+inline constexpr std::string_view kLayerAudioEnabledSetCapability =
+    "ae.layer.audio-enabled.set";
+inline constexpr std::string_view kLayerVideoEnabledSetCapability =
+    "ae.layer.video-enabled.set";
 inline constexpr std::string_view kNativeMediaReadCapability =
     "ae.native.media.read";
 inline constexpr std::string_view kNativeMediaWriteCapability =
@@ -337,6 +351,136 @@ struct ObjectLocator {
   std::string object_id;
 
   [[nodiscard]] bool operator==(const ObjectLocator&) const = default;
+};
+
+enum class LayerSourceType { kNone, kFootage, kComposition };
+enum class LayerTrackMatteMode {
+  kNone,
+  kAlpha,
+  kInvertedAlpha,
+  kLuma,
+  kInvertedLuma,
+};
+
+struct LayerSourceReadRequest {
+  ObjectLocator layer_locator;
+};
+
+struct LayerTrackMatteReadRequest {
+  ObjectLocator layer_locator;
+};
+
+struct LayerTrackMatteSetRequest {
+  ObjectLocator layer_locator;
+  ObjectLocator matte_layer_locator;
+  LayerTrackMatteMode mode{LayerTrackMatteMode::kNone};
+};
+
+struct LayerTrackMatteClearRequest {
+  ObjectLocator layer_locator;
+};
+
+struct LayerAVStateReadRequest {
+  ObjectLocator layer_locator;
+};
+
+struct LayerAudioEnabledSetRequest {
+  ObjectLocator layer_locator;
+  bool enabled{false};
+};
+
+struct LayerVideoEnabledSetRequest {
+  ObjectLocator layer_locator;
+  bool enabled{false};
+};
+
+using LayerSourceMatteAvRequest = std::variant<
+    std::monostate,
+    LayerSourceReadRequest,
+    LayerTrackMatteReadRequest,
+    LayerTrackMatteSetRequest,
+    LayerTrackMatteClearRequest,
+    LayerAVStateReadRequest,
+    LayerAudioEnabledSetRequest,
+    LayerVideoEnabledSetRequest>;
+
+struct LayerSourceValue {
+  ObjectLocator layer_locator;
+  std::optional<ObjectLocator> source_item_locator;
+  LayerSourceType source_type{LayerSourceType::kNone};
+  std::optional<std::string> source_name;
+
+  [[nodiscard]] bool operator==(const LayerSourceValue&) const = default;
+};
+
+struct LayerTrackMatteValue {
+  ObjectLocator layer_locator;
+  bool active{false};
+  std::optional<ObjectLocator> matte_layer_locator;
+  LayerTrackMatteMode mode{LayerTrackMatteMode::kNone};
+
+  [[nodiscard]] bool operator==(const LayerTrackMatteValue&) const = default;
+};
+
+struct LayerTrackMatteSetValue {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  std::optional<ObjectLocator> before_matte_layer_locator;
+  LayerTrackMatteMode before_mode{LayerTrackMatteMode::kNone};
+  ObjectLocator after_matte_layer_locator;
+  LayerTrackMatteMode after_mode{LayerTrackMatteMode::kAlpha};
+
+  [[nodiscard]] bool operator==(const LayerTrackMatteSetValue&) const = default;
+};
+
+struct LayerTrackMatteClearValue {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  ObjectLocator before_matte_layer_locator;
+  LayerTrackMatteMode before_mode{LayerTrackMatteMode::kAlpha};
+  std::optional<ObjectLocator> after_matte_layer_locator;
+  LayerTrackMatteMode after_mode{LayerTrackMatteMode::kAlpha};
+
+  [[nodiscard]] bool operator==(const LayerTrackMatteClearValue&) const = default;
+};
+
+struct LayerAVStateValue {
+  ObjectLocator layer_locator;
+  bool has_audio{false};
+  bool audio_enabled{false};
+  bool has_video{false};
+  bool video_enabled{false};
+
+  [[nodiscard]] bool operator==(const LayerAVStateValue&) const = default;
+};
+
+struct LayerAVSwitchSetValue {
+  bool changed{true};
+  ObjectLocator layer_locator;
+  LayerAVStateValue before;
+  LayerAVStateValue after;
+
+  [[nodiscard]] bool operator==(const LayerAVSwitchSetValue&) const = default;
+};
+
+using LayerSourceMatteAvResult = std::variant<
+    std::monostate,
+    LayerSourceValue,
+    LayerTrackMatteValue,
+    LayerTrackMatteSetValue,
+    LayerTrackMatteClearValue,
+    LayerAVStateValue,
+    LayerAVSwitchSetValue>;
+
+// Host-only resolution evidence. Neither token is part of the locator wire
+// shape or any completion. composition_owner is the invariant that lets the
+// dispatcher reject two current same-project layers owned by different
+// compositions before opening an Undo group.
+struct HostResolvedLayer {
+  ObjectLocator locator;
+  std::uintptr_t host_layer{0};
+  std::uintptr_t composition_owner{0};
+  bool track_matte_capable{false};
 };
 
 struct ProjectItemEntry {
@@ -1655,6 +1799,66 @@ struct HostLayerBlendingModeWriteResult {
       std::string code, std::string detail, std::string field = {});
 };
 
+struct HostActionResult {
+  bool ok{false};
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostActionResult success();
+  [[nodiscard]] static HostActionResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerResolveResult {
+  bool ok{false};
+  HostResolvedLayer value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerResolveResult success(HostResolvedLayer value);
+  [[nodiscard]] static HostLayerResolveResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerSourceResult {
+  bool ok{false};
+  LayerSourceValue value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerSourceResult success(LayerSourceValue value);
+  [[nodiscard]] static HostLayerSourceResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerTrackMatteResult {
+  bool ok{false};
+  LayerTrackMatteValue value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerTrackMatteResult success(
+      LayerTrackMatteValue value);
+  [[nodiscard]] static HostLayerTrackMatteResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
+struct HostLayerAVStateResult {
+  bool ok{false};
+  LayerAVStateValue value;
+  std::string error_code;
+  std::string message;
+  std::string error_field;
+
+  [[nodiscard]] static HostLayerAVStateResult success(LayerAVStateValue value);
+  [[nodiscard]] static HostLayerAVStateResult failure(
+      std::string code, std::string detail, std::string field = {});
+};
+
 struct HostProjectGraphInvalidationResult {
   bool ok{false};
   ProjectGraphInvalidation value;
@@ -1749,6 +1953,29 @@ class HostApi {
       const LayerQualitySetCommand& command, TimePoint work_deadline);
   [[nodiscard]] virtual HostLayerBlendingModeWriteResult set_layer_blending_mode(
       const LayerBlendingModeSetCommand& command, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerResolveResult resolve_layer(
+      const ObjectLocator& locator, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerSourceResult read_layer_source(
+      const HostResolvedLayer& layer, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerTrackMatteResult read_layer_track_matte(
+      const HostResolvedLayer& layer, TimePoint work_deadline);
+  [[nodiscard]] virtual HostLayerAVStateResult read_layer_av_state(
+      const HostResolvedLayer& layer, TimePoint work_deadline);
+  [[nodiscard]] virtual HostActionResult begin_layer_undo_group(
+      std::string_view label, TimePoint work_deadline);
+  [[nodiscard]] virtual HostActionResult end_layer_undo_group(
+      TimePoint work_deadline);
+  [[nodiscard]] virtual HostActionResult set_layer_track_matte(
+      const HostResolvedLayer& layer,
+      const HostResolvedLayer& matte,
+      LayerTrackMatteMode mode,
+      TimePoint work_deadline);
+  [[nodiscard]] virtual HostActionResult clear_layer_track_matte(
+      const HostResolvedLayer& layer, TimePoint work_deadline);
+  [[nodiscard]] virtual HostActionResult set_layer_audio_enabled(
+      const HostResolvedLayer& layer, bool enabled, TimePoint work_deadline);
+  [[nodiscard]] virtual HostActionResult set_layer_video_enabled(
+      const HostResolvedLayer& layer, bool enabled, TimePoint work_deadline);
   [[nodiscard]] virtual HostProjectGraphInvalidationResult invalidate_project_graph(
       TimePoint work_deadline);
 };
@@ -1928,6 +2155,7 @@ struct Request {
   std::string layer_quality;
   std::string layer_blending_mode;
   NativeMediaCommand native_media;
+  LayerSourceMatteAvRequest layer_source_matte_av_request;
 };
 
 enum class EnqueueCode {
@@ -1992,6 +2220,7 @@ struct Completion {
   CompositionDuplicated composition_duplicate_result;
   std::shared_ptr<LayerTimelineResult> layer_timeline_result;
   std::shared_ptr<LayerCompositingResult> layer_compositing_result;
+  LayerSourceMatteAvResult layer_source_matte_av_result;
   ProjectGraphInvalidation project_graph_invalidation_result;
   // Internal fence correlation only; never serialized or logged.
   std::string idempotency_key;

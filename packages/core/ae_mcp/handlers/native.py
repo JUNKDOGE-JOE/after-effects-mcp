@@ -29,6 +29,9 @@ from ae_mcp.backends.native import (
     invoke_project_items_list,
     invoke_project_summary,
 )
+from ae_mcp.backends.maintained_layer_source import (
+    execute_layer_source_replace,
+)
 from ae_mcp.backends.native_project_composition import (
     COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID,
     COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID,
@@ -63,6 +66,15 @@ from ae_mcp.backends.native_layer_compositing import (
     invoke_layer_compositing_read,
     invoke_layer_quality_set,
     invoke_layer_switch_set,
+)
+from ae_mcp.backends.native_layer_source_matte_av import (
+    invoke_layer_audio_enabled_set,
+    invoke_layer_av_state_read,
+    invoke_layer_source_read,
+    invoke_layer_track_matte_clear,
+    invoke_layer_track_matte_read,
+    invoke_layer_track_matte_set,
+    invoke_layer_video_enabled_set,
 )
 from ae_mcp.backends.native_layer_transform import (
     LayerTransformRead,
@@ -111,6 +123,8 @@ _PROJECT_ITEM_COMMENT_SET_TIMEOUT_MS = 10_000
 _PROJECT_ITEM_LABEL_SET_TIMEOUT_MS = 10_000
 _COMPOSITION_DUPLICATE_TIMEOUT_MS = 10_000
 _LAYER_DETAILS_READ_TIMEOUT_MS = 10_000
+_LAYER_SOURCE_MATTE_AV_READ_TIMEOUT_MS = 10_000
+_LAYER_SOURCE_MATTE_AV_WRITE_TIMEOUT_MS = 10_000
 _LAYER_NAME_SET_TIMEOUT_MS = 10_000
 _LAYER_RANGE_SET_TIMEOUT_MS = 10_000
 _LAYER_START_TIME_SET_TIMEOUT_MS = 10_000
@@ -1609,6 +1623,193 @@ async def _run_get_layer_compositing_state(
     return _native_read_response(execution)
 
 
+async def _run_get_layer_source(
+    args: schemas.AeGetLayerSourceArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_SOURCE_MATTE_AV_READ_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_source_read(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx, _call(), start_msg="ae.getLayerSource native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_set_layer_source(
+    args: schemas.AeSetLayerSourceArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    async def _call() -> dict[str, Any]:
+        selected = _discovery.select_backend()
+        if not isinstance(selected, NativeInvokeBackend):
+            _backend()
+            raise AssertionError("unreachable native backend selection")
+        return await execute_layer_source_replace(
+            selected,
+            selected,
+            args=args,
+        )
+
+    return await progress.run_with_timeout(
+        ctx,
+        _call(),
+        timeout_sec=40.0,
+        start_msg=(
+            "ae.setLayerSource maintained JSX write; all native graph "
+            "locators will be invalidated and reacquired..."
+        ),
+    )
+
+
+async def _run_get_layer_track_matte(
+    args: schemas.AeGetLayerTrackMatteArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_SOURCE_MATTE_AV_READ_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_track_matte_read(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx, _call(), start_msg="ae.getLayerTrackMatte native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_get_layer_av_state(
+    args: schemas.AeGetLayerAVStateArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_SOURCE_MATTE_AV_READ_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_av_state_read(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx, _call(), start_msg="ae.getLayerAVState native AEGP read...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_read_response(execution)
+
+
+async def _run_set_layer_track_matte(
+    args: schemas.AeSetLayerTrackMatteArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_SOURCE_MATTE_AV_WRITE_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_track_matte_set(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            matte_layer_locator=args.matte_layer_locator.model_dump(mode="json", by_alias=True),
+            mode=args.mode, idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call, cancellation=cancellation, ctx=ctx,
+        start_msg="ae.setLayerTrackMatte native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_clear_layer_track_matte(
+    args: schemas.AeClearLayerTrackMatteArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_SOURCE_MATTE_AV_WRITE_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_track_matte_clear(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call, cancellation=cancellation, ctx=ctx,
+        start_msg="ae.clearLayerTrackMatte native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_audio_enabled(
+    args: schemas.AeSetLayerAudioEnabledArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_SOURCE_MATTE_AV_WRITE_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_audio_enabled_set(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            enabled=args.enabled, idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call, cancellation=cancellation, ctx=ctx,
+        start_msg="ae.setLayerAudioEnabled native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
+async def _run_set_layer_video_enabled(
+    args: schemas.AeSetLayerVideoEnabledArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _LAYER_SOURCE_MATTE_AV_WRITE_TIMEOUT_MS
+
+    async def _call():
+        return await invoke_layer_video_enabled_set(
+            _backend(), request_id=f"mcp-{uuid.uuid4().hex}",
+            layer_locator=args.layer_locator.model_dump(mode="json", by_alias=True),
+            enabled=args.enabled, idempotency_key=args.idempotency_key,
+            deadline_unix_ms=deadline_unix_ms, cancellation=cancellation,
+        )
+
+    execution = await _await_project_package_write(
+        _call, cancellation=cancellation, ctx=ctx,
+        start_msg="ae.setLayerVideoEnabled native AEGP write; wait for verified readback...",
+    )
+    return _project_package_write_response(execution)
+
+
 async def _run_get_layer_transform(
     args: schemas.AeGetLayerTransformArgs,
     ctx: Any,
@@ -2427,6 +2628,14 @@ register(
     _run_get_layer_details,
 )
 register("ae.getLayerCompositingState", schemas.AeGetLayerCompositingStateArgs, _run_get_layer_compositing_state)
+register("ae.getLayerSource", schemas.AeGetLayerSourceArgs, _run_get_layer_source)
+register("ae.setLayerSource", schemas.AeSetLayerSourceArgs, _run_set_layer_source)
+register("ae.getLayerTrackMatte", schemas.AeGetLayerTrackMatteArgs, _run_get_layer_track_matte)
+register("ae.setLayerTrackMatte", schemas.AeSetLayerTrackMatteArgs, _run_set_layer_track_matte)
+register("ae.clearLayerTrackMatte", schemas.AeClearLayerTrackMatteArgs, _run_clear_layer_track_matte)
+register("ae.getLayerAVState", schemas.AeGetLayerAVStateArgs, _run_get_layer_av_state)
+register("ae.setLayerAudioEnabled", schemas.AeSetLayerAudioEnabledArgs, _run_set_layer_audio_enabled)
+register("ae.setLayerVideoEnabled", schemas.AeSetLayerVideoEnabledArgs, _run_set_layer_video_enabled)
 register("ae.setLayerVisibility", schemas.AeSetLayerVisibilityArgs, _run_set_layer_visibility)
 register("ae.setLayerSolo", schemas.AeSetLayerSoloArgs, _run_set_layer_solo)
 register("ae.setLayerLocked", schemas.AeSetLayerLockedArgs, _run_set_layer_locked)
@@ -2623,6 +2832,10 @@ __all__ = [
     "_run_get_composition_settings",
     "_run_get_layer_details",
     "_run_get_layer_compositing_state",
+    "_run_get_layer_source",
+    "_run_set_layer_source",
+    "_run_get_layer_track_matte",
+    "_run_get_layer_av_state",
     "_run_get_layer_transform",
     "_run_get_project_context",
     "_run_get_project_item_metadata",
@@ -2650,6 +2863,10 @@ __all__ = [
     "_run_set_layer_start_time",
     "_run_set_layer_stretch",
     "_run_set_layer_visibility",
+    "_run_set_layer_track_matte",
+    "_run_clear_layer_track_matte",
+    "_run_set_layer_audio_enabled",
+    "_run_set_layer_video_enabled",
     "_run_set_layer_solo",
     "_run_set_layer_locked",
     "_run_set_layer_shy",

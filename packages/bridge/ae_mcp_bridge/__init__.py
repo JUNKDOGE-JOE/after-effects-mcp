@@ -36,6 +36,12 @@ from ae_mcp.backends.native_keyframe_authoring import (
     KEYFRAME_TEMPORAL_EASE_SET_CAPABILITY_ID,
     KEYFRAME_VALUE_SET_CAPABILITY_ID,
 )
+from ae_mcp.backends.native_layer_source_matte_av import (
+    LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+    LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+    LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+    LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
+)
 from ae_mcp.backends.native_project_composition import (
     COMPOSITION_DUPLICATE_CAPABILITY_ID,
     COMPOSITION_WORK_AREA_SET_CAPABILITY_ID,
@@ -212,6 +218,17 @@ class HttpBridge(Backend, NativeInvokeBackend):
             recovery_hint = (
                 "Read the exact-time keyframe details with fresh locators and "
                 "inspect the Undo stack before retrying."
+            )
+        elif capability_id in {
+            LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+            LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+            LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+            LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
+        }:
+            recovery_hint = (
+                "Re-list composition layers, then read the current source, Track "
+                "Matte, and AV state with fresh locators and inspect the Undo "
+                "stack before retrying."
             )
         else:
             recovery_hint = "Inspect the project bit depth and Undo stack before retrying."
@@ -561,6 +578,10 @@ class HttpBridge(Backend, NativeInvokeBackend):
             KEYFRAME_INTERPOLATION_SET_CAPABILITY_ID,
             KEYFRAME_TEMPORAL_EASE_SET_CAPABILITY_ID,
             KEYFRAME_VALUE_SET_CAPABILITY_ID,
+            LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+            LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+            LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+            LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
         }
         try:
             raw = await self._native_post(
