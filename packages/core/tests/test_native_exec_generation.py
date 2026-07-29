@@ -32,15 +32,42 @@ EXECUTION_GUIDE = (
 PRESSURE_FIXTURE = (
     ROOT / "packages/core/tests/fixtures/native-exec-skill-pressure.json"
 )
+NATIVE_ROOT = ROOT / "native/ae-plugin"
+
+
+def _current_native_carrier_sources() -> dict[Path, str]:
+    """Return text inputs that define the current native runtime/protocol.
+
+    The migration manifest is intentionally closed historical evidence.  Task 9
+    forbids those legacy IDs everywhere else in the current native product
+    surface, including portable tests and protocol fixtures.
+    """
+
+    sources: dict[Path, str] = {}
+    for path in NATIVE_ROOT.rglob("*"):
+        if not path.is_file():
+            continue
+        relative = path.relative_to(ROOT)
+        if relative == Path(
+            "native/ae-plugin/protocol/native-exec-migration.json"
+        ):
+            continue
+        if path.suffix not in {
+            ".cpp",
+            ".hpp",
+            ".inc",
+            ".json",
+            ".mjs",
+            ".md",
+        }:
+            continue
+        sources[relative] = path.read_text("utf-8")
+    return sources
 
 
 def test_native_exec_migration_covers_legacy_registry_exactly():
-    legacy = {
-        item["id"]
-        for item in json.loads(LEGACY_FULL.read_text())["items"]
-    }
-
     migration = load_migration_manifest(MIGRATION)
+    legacy = set(migration.native_capabilities)
 
     assert len(legacy) == 67
     assert set(migration.native_capabilities) == legacy
@@ -48,6 +75,61 @@ def test_native_exec_migration_covers_legacy_registry_exactly():
         row.disposition in {"JSX_EQUIVALENT", "NATIVE_PRIMITIVE"}
         for row in migration.native_capabilities.values()
     )
+
+
+def test_legacy_native_carriers_are_absent_from_the_current_runtime():
+    migration = load_migration_manifest(MIGRATION)
+    sources = _current_native_carrier_sources()
+    joined = "\n".join(sources.values())
+
+    leaked_ids = sorted(
+        capability_id
+        for capability_id in migration.native_capabilities
+        if capability_id in joined
+    )
+    assert leaked_ids == []
+
+    forbidden_symbols = {
+        "InvokeParams": "operation-specific public invoke carrier",
+        "kAdvertisedNativeCapabilities": "legacy advertised capability array",
+        "text_shape_marker_capabilities.generated": "old TSM generated carrier",
+    }
+    for symbol, label in forbidden_symbols.items():
+        offenders = sorted(
+            str(path) for path, source in sources.items() if symbol in source
+        )
+        assert offenders == [], f"{label}: {offenders}"
+
+    member_offenders: list[str] = []
+    for path, source in sources.items():
+        if (
+            "include_project_" in source
+            or "include_layer_" in source
+            or "_contract_digest" in source
+        ):
+            member_offenders.append(str(path))
+    assert sorted(member_offenders) == []
+
+    codec_header = sources[
+        Path("native/ae-plugin/include/aemcp_native/rpc_codec.hpp")
+    ]
+    allowed_encoders = {
+        "encode_hello_success",
+        "encode_capabilities_success",
+        "encode_progress_event",
+        "encode_native_program_success",
+        "encode_native_program_failure",
+        "encode_cancel_success",
+        "encode_project_graph_invalidate_success",
+        "encode_error_response",
+    }
+    declared_encoders = {
+        name
+        for name in __import__("re").findall(
+            r"\b(encode_[a-z0-9_]+)\s*\(", codec_header
+        )
+    }
+    assert declared_encoders == allowed_encoders
 
 
 def test_migration_is_closed_history_and_current_surface_is_exact():
