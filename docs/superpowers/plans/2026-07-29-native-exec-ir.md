@@ -991,6 +991,8 @@ git commit -m "feat(core): ship the default AE execution guide"
 - Modify: `README.zh-CN.md`
 - Modify: `docs/REFERENCE.md`
 - Modify: `docs/WORKFLOW.md`
+- Modify: `scripts/generate_native_exec.py`
+- Modify: `packages/core/tests/test_native_exec_generation.py`
 
 **Interfaces:**
 - Final public execution surface: `ae.exec` and `ae.nativeExec`.
