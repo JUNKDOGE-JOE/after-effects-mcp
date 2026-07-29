@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 from copy import deepcopy
@@ -10,6 +11,7 @@ import pytest
 
 from ae_mcp import schemas
 from ae_mcp.backends import maintained_layer_source as S
+from ae_mcp.handlers import native as native_handlers
 
 
 HOST = "11111111-1111-4111-8111-111111111111"
@@ -151,6 +153,53 @@ class ExecBackend:
         if isinstance(self.result, BaseException):
             raise self.result
         return self.result if isinstance(self.result, str) else json.dumps(self.result)
+
+
+class NativeExecBackend(S.NativeInvokeBackend):
+    def __init__(self, result: Any):
+        self.result = result
+        self.calls: list[dict[str, Any]] = []
+
+    async def invoke(self, request, *, cancellation=None):
+        raise AssertionError("native invoke is replaced by focused test seams")
+
+    async def negotiate(self, *, deadline_unix_ms, cancellation=None):
+        raise AssertionError("native negotiate is replaced by focused test seams")
+
+    async def capabilities(
+        self, *, ids, detail, limit, deadline_unix_ms, cancellation=None
+    ):
+        raise AssertionError("native capabilities are replaced by focused test seams")
+
+    async def exec(self, **kwargs: Any) -> Any:
+        self.calls.append(kwargs)
+        if isinstance(self.result, BaseException):
+            raise self.result
+        return self.result if isinstance(self.result, str) else json.dumps(self.result)
+
+
+def template_rejection(
+    *,
+    code: str = "STALE_LOCATOR",
+    side_effect: str = "not-started",
+) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "error": {
+            "code": code,
+            "message": "A bounded template guard changed.",
+            "retryable": False,
+            "sideEffect": side_effect,
+            "recovery": {
+                "action": (
+                    "reconcile-state"
+                    if side_effect == "possible"
+                    else "refresh-locators"
+                ),
+                "hint": "Refresh state using the fixed recovery path.",
+            },
+        },
+    }
 
 
 def test_fixed_template_is_closed_json_escaped_es3_and_digest_bound():
@@ -555,15 +604,7 @@ async def test_template_guard_rejection_is_audited_and_never_redispatched(
         return resolved()
 
     monkeypatch.setattr(S, "resolve_source_replacement", resolve_address)
-    backend = ExecBackend({
-        "ok": False,
-        "error": {
-            "code": "STALE_LOCATOR",
-            "message": "guard changed",
-            "retryable": False,
-            "sideEffect": "not-started",
-        },
-    })
+    backend = ExecBackend(template_rejection())
     first = await S.execute_layer_source_replace(
         backend, object(), args=args(),
     )
@@ -580,6 +621,229 @@ async def test_template_guard_rejection_is_audited_and_never_redispatched(
     assert [record["outcome"] for record in records] == [
         "dispatch-intent", "rejected",
     ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value["error"].pop("recovery"),
+        lambda value: value["error"].update({"unexpected": True}),
+        lambda value: value["error"].update({"retryable": "false"}),
+        lambda value: value["error"].update({"retryable": 0}),
+        lambda value: value.update({"ok": 0}),
+        lambda value: value["error"].update({"message": ""}),
+        lambda value: value["error"]["recovery"].update({"hint": "x" * 1025}),
+        lambda value: value["error"].update({
+            "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            "sideEffect": "not-started",
+        }),
+        lambda value: value["error"]["recovery"].update({
+            "action": "reconcile-state",
+        }),
+    ],
+    ids=[
+        "missing-field",
+        "extra-field",
+        "wrong-string-type",
+        "wrong-bool-integer-type",
+        "wrong-ok-integer-type",
+        "empty-string",
+        "overlong-string",
+        "invalid-code-side-effect-pairing",
+        "invalid-recovery-pairing",
+    ],
+)
+async def test_malformed_template_rejection_is_indeterminate_and_never_redispatched(
+    monkeypatch, tmp_path, mutate,
+):
+    S.clear_replay_cache_for_tests()
+    monkeypatch.setenv("AE_MCP_LAYER_SOURCE_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "f" * 40)
+
+    async def resolve_address(*_args, **_kwargs):
+        return resolved()
+
+    malformed = template_rejection()
+    mutate(malformed)
+    monkeypatch.setattr(S, "resolve_source_replacement", resolve_address)
+    backend = ExecBackend(malformed)
+    first = await S.execute_layer_source_replace(
+        backend, object(), args=args(),
+    )
+    assert first["error"]["code"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert first["error"]["sideEffect"] == "possible"
+    replay = await S.execute_layer_source_replace(
+        backend, object(), args=args(),
+    )
+    assert replay == {**deepcopy(first), "replayed": True}
+    assert len(backend.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_public_timeout_after_exec_returns_cached_indeterminate_without_redispatch(
+    monkeypatch, tmp_path,
+):
+    S.clear_replay_cache_for_tests()
+    monkeypatch.setenv("AE_MCP_LAYER_SOURCE_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "1" * 40)
+    backend = NativeExecBackend(jsx_success())
+    reacquire_started = asyncio.Event()
+
+    async def resolve_address(*_args, **_kwargs):
+        return resolved()
+
+    async def block_after_dispatch(*_args, **_kwargs):
+        reacquire_started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    async def quick_timeout(ctx, coro, **_kwargs):
+        try:
+            return await asyncio.wait_for(coro, timeout=0.01)
+        except asyncio.TimeoutError:
+            return {"ok": False, "error": "generic outer timeout"}
+
+    monkeypatch.setattr(S, "resolve_source_replacement", resolve_address)
+    monkeypatch.setattr(S, "reacquire_source_state", block_after_dispatch)
+    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
+    monkeypatch.setattr(native_handlers.progress, "run_with_timeout", quick_timeout)
+    public_args = args()
+    first = await native_handlers._run_set_layer_source(public_args, None)
+    assert reacquire_started.is_set()
+    assert first["error"]["code"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert first["error"]["details"]["idempotencyKey"] == KEY
+    assert "audit" not in first
+    operation_id = first["error"]["details"]["operationId"]
+    assert operation_id.startswith("layer-source-")
+    assert KEY in S._REPLAY
+    replay = await native_handlers._run_set_layer_source(public_args, None)
+    assert replay["replayed"] is True
+    assert replay["error"]["details"]["operationId"] == operation_id
+    assert len(backend.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_public_timeout_before_dispatch_remains_safe_and_uncached(
+    monkeypatch,
+):
+    S.clear_replay_cache_for_tests()
+    backend = NativeExecBackend(jsx_success())
+    resolve_started = asyncio.Event()
+
+    async def block_before_dispatch(*_args, **_kwargs):
+        resolve_started.set()
+        await asyncio.Event().wait()
+        raise AssertionError("unreachable")
+
+    async def quick_timeout(ctx, coro, **_kwargs):
+        try:
+            return await asyncio.wait_for(coro, timeout=0.01)
+        except asyncio.TimeoutError:
+            return {"ok": False, "error": "generic outer timeout"}
+
+    monkeypatch.setattr(S, "resolve_source_replacement", block_before_dispatch)
+    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
+    monkeypatch.setattr(native_handlers.progress, "run_with_timeout", quick_timeout)
+    response = await native_handlers._run_set_layer_source(args(), None)
+    assert resolve_started.is_set()
+    assert response == {"ok": False, "error": "generic outer timeout"}
+    assert backend.calls == []
+    assert KEY not in S._REPLAY
+
+
+@pytest.mark.asyncio
+async def test_terminal_audit_failure_after_verified_success_is_cached_indeterminate(
+    monkeypatch,
+):
+    S.clear_replay_cache_for_tests()
+    monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "2" * 40)
+    backend = ExecBackend(jsx_success())
+    audit_calls = 0
+
+    async def resolve_address(*_args, **_kwargs):
+        return resolved()
+
+    async def reacquire(*_args, **_kwargs):
+        return fresh_state()
+
+    def fail_terminal_audit(_record):
+        nonlocal audit_calls
+        audit_calls += 1
+        if audit_calls > 1:
+            raise OSError("terminal audit unavailable")
+
+    monkeypatch.setattr(S, "resolve_source_replacement", resolve_address)
+    monkeypatch.setattr(S, "reacquire_source_state", reacquire)
+    monkeypatch.setattr(S, "_append_audit", fail_terminal_audit)
+    first = await S.execute_layer_source_replace(
+        backend, object(), args=args(),
+    )
+    assert first["error"]["code"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    assert "audit" not in first
+    assert first["error"]["details"]["idempotencyKey"] == KEY
+    replay = await S.execute_layer_source_replace(
+        backend, object(), args=args(),
+    )
+    assert replay == {**deepcopy(first), "replayed": True}
+    assert len(backend.calls) == 1
+    assert KEY in S._REPLAY
+
+
+@pytest.mark.asyncio
+async def test_terminal_audit_failure_on_indeterminate_is_still_cached(
+    monkeypatch,
+):
+    S.clear_replay_cache_for_tests()
+    monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "3" * 40)
+    backend = ExecBackend(TimeoutError("transport timed out"))
+    audit_calls = 0
+
+    async def resolve_address(*_args, **_kwargs):
+        return resolved()
+
+    def fail_terminal_audit(_record):
+        nonlocal audit_calls
+        audit_calls += 1
+        if audit_calls > 1:
+            raise OSError("terminal audit unavailable")
+
+    monkeypatch.setattr(S, "resolve_source_replacement", resolve_address)
+    monkeypatch.setattr(S, "_append_audit", fail_terminal_audit)
+    first = await S.execute_layer_source_replace(
+        backend, object(), args=args(),
+    )
+    assert first["error"]["code"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+    replay = await S.execute_layer_source_replace(
+        backend, object(), args=args(),
+    )
+    assert replay == {**deepcopy(first), "replayed": True}
+    assert len(backend.calls) == 1
+    assert KEY in S._REPLAY
+
+
+@pytest.mark.asyncio
+async def test_dispatch_intent_audit_failure_stays_predispatch(
+    monkeypatch,
+):
+    S.clear_replay_cache_for_tests()
+    monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "4" * 40)
+    backend = ExecBackend(jsx_success())
+
+    async def resolve_address(*_args, **_kwargs):
+        return resolved()
+
+    def fail_audit(_record):
+        raise OSError("dispatch intent audit unavailable")
+
+    monkeypatch.setattr(S, "resolve_source_replacement", resolve_address)
+    monkeypatch.setattr(S, "_append_audit", fail_audit)
+    with pytest.raises(OSError, match="dispatch intent audit unavailable"):
+        await S.execute_layer_source_replace(
+            backend, object(), args=args(),
+        )
+    assert backend.calls == []
+    assert KEY not in S._REPLAY
 
 
 @pytest.mark.asyncio

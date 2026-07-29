@@ -10,9 +10,9 @@ import time
 import uuid
 from collections import OrderedDict
 from pathlib import Path
-from typing import Any, Literal, Mapping
+from typing import Annotated, Any, Literal, Mapping
 
-from pydantic import StrictStr, model_validator
+from pydantic import Field, StrictBool, StrictStr, model_validator
 
 from ae_mcp.backends.maintained_text import (
     _core_version,
@@ -126,6 +126,49 @@ class ReacquiredSourceState(_NativeModel):
         )
         if self.after_source_item_locator.kind != expected_kind:
             raise ValueError("reacquired source type and locator kind disagree")
+        return self
+
+
+class FixedTemplateRecovery(_NativeModel):
+    action: Annotated[StrictStr, Field(min_length=1, max_length=64)]
+    hint: Annotated[StrictStr, Field(min_length=1, max_length=1024)]
+
+
+class FixedTemplateError(_NativeModel):
+    code: Literal[
+        "STALE_LOCATOR",
+        "LAYER_SOURCE_NOT_REPLACEABLE",
+        "SOURCE_ITEM_NOT_AV",
+        "VALUE_UNCHANGED",
+        "POSSIBLY_SIDE_EFFECTING_FAILURE",
+    ]
+    message: Annotated[StrictStr, Field(min_length=1, max_length=1024)]
+    retryable: StrictBool
+    side_effect: Literal["not-started", "possible"]
+    recovery: FixedTemplateRecovery
+
+    @model_validator(mode="after")
+    def _fixed_pairing(self) -> "FixedTemplateError":
+        possible = self.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
+        expected_side_effect = "possible" if possible else "not-started"
+        expected_action = "reconcile-state" if possible else "refresh-locators"
+        if (
+            self.retryable is not False
+            or self.side_effect != expected_side_effect
+            or self.recovery.action != expected_action
+        ):
+            raise ValueError("fixed template error code and recovery pairing changed")
+        return self
+
+
+class FixedTemplateRejection(_NativeModel):
+    ok: StrictBool
+    error: FixedTemplateError
+
+    @model_validator(mode="after")
+    def _fixed_false(self) -> "FixedTemplateRejection":
+        if self.ok is not False:
+            raise ValueError("fixed template rejection must carry ok false")
         return self
 
 
@@ -618,6 +661,42 @@ def _validate_jsx_value(
     return dict(before_source), dict(before_invariant), dict(after_invariant)
 
 
+async def _terminalize_indeterminate(
+    *,
+    operation_id: str,
+    idempotency_key: str,
+    request_digest: str,
+    audit_base: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Cache the possible-write outcome before best-effort terminal audit."""
+
+    response = _indeterminate(
+        operation_id=operation_id,
+        idempotency_key=idempotency_key,
+    )
+    async with _REPLAY_LOCK:
+        _record_replay(
+            idempotency_key,
+            request_digest,
+            "indeterminate",
+            response,
+        )
+    completed = int(time.time() * 1000)
+    try:
+        _append_audit(
+            {
+                **audit_base,
+                "outcome": "indeterminate",
+                "completedAtUnixMs": completed,
+            }
+        )
+    except Exception:
+        # The stable in-memory reconciliation fence is still authoritative for
+        # this host process. Never claim that a terminal audit record persisted.
+        pass
+    return response
+
+
 async def _execute_serialized(
     exec_backend: Any,
     native_backend: NativeInvokeBackend,
@@ -695,14 +774,10 @@ async def _execute_serialized(
             native_project_graph_effect="invalidate",
         )
         parsed = parse_jsx_result(raw)
-        if not isinstance(parsed, Mapping) or parsed.get("ok") is not True:
-            if (
-                isinstance(parsed, Mapping)
-                and parsed.get("ok") is False
-                and isinstance(parsed.get("error"), Mapping)
-                and parsed["error"].get("sideEffect") == "not-started"
-            ):
-                response = dict(parsed)
+        if isinstance(parsed, Mapping) and parsed.get("ok") is False:
+            rejection = FixedTemplateRejection.model_validate(parsed)
+            if rejection.error.side_effect == "not-started":
+                response = rejection.model_dump(mode="json", by_alias=True)
                 response["replayed"] = False
                 completed = int(time.time() * 1000)
                 _append_audit(
@@ -720,6 +795,8 @@ async def _execute_serialized(
                         response,
                     )
                 return response
+            raise ValueError("maintained template reported a possible write")
+        if not isinstance(parsed, Mapping) or parsed.get("ok") is not True:
             raise ValueError("maintained template returned an untrusted result")
         _before_source, before_invariant, after_invariant = _validate_jsx_value(
             parsed.get("value"), address
@@ -730,27 +807,20 @@ async def _execute_serialized(
             deadline_unix_ms=deadline_unix_ms,
             cancellation=cancellation,
         )
-    except Exception:
-        response = _indeterminate(
+    except asyncio.CancelledError:
+        return await _terminalize_indeterminate(
             operation_id=operation_id,
             idempotency_key=idempotency_key,
+            request_digest=request_digest,
+            audit_base=audit_base,
         )
-        completed = int(time.time() * 1000)
-        _append_audit(
-            {
-                **audit_base,
-                "outcome": "indeterminate",
-                "completedAtUnixMs": completed,
-            }
+    except Exception:
+        return await _terminalize_indeterminate(
+            operation_id=operation_id,
+            idempotency_key=idempotency_key,
+            request_digest=request_digest,
+            audit_base=audit_base,
         )
-        async with _REPLAY_LOCK:
-            _record_replay(
-                idempotency_key,
-                request_digest,
-                "indeterminate",
-                response,
-            )
-        return response
 
     wire_value = {
         "changed": True,
@@ -849,20 +919,35 @@ async def _execute_serialized(
             },
         },
     }
-    _append_audit(
-        {
-            **audit_base,
-            "outcome": "completed",
-            "postconditionDigest": postcondition_digest,
-            "completedAtUnixMs": completed,
-        }
-    )
-    async with _REPLAY_LOCK:
-        _record_replay(
-            idempotency_key,
-            request_digest,
-            "completed",
-            response,
+    try:
+        _append_audit(
+            {
+                **audit_base,
+                "outcome": "completed",
+                "postconditionDigest": postcondition_digest,
+                "completedAtUnixMs": completed,
+            }
+        )
+        async with _REPLAY_LOCK:
+            _record_replay(
+                idempotency_key,
+                request_digest,
+                "completed",
+                response,
+            )
+    except asyncio.CancelledError:
+        return await _terminalize_indeterminate(
+            operation_id=operation_id,
+            idempotency_key=idempotency_key,
+            request_digest=request_digest,
+            audit_base=audit_base,
+        )
+    except Exception:
+        return await _terminalize_indeterminate(
+            operation_id=operation_id,
+            idempotency_key=idempotency_key,
+            request_digest=request_digest,
+            audit_base=audit_base,
         )
     return response
 
