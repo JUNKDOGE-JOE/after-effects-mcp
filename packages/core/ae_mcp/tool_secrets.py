@@ -177,11 +177,12 @@ _JSON_SCHEMA_TYPES = frozenset(
     {"array", "boolean", "integer", "null", "number", "object", "string"}
 )
 
-# Operational request de-duplication identifiers are not credentials. Keep
-# scanning their values for concrete secret formats (JWTs, sk-* tokens, private
-# keys, and so on), but do not reject a Tool Library recipe merely because the
-# public native write contract names this field ``idempotency_key``.
-_NON_CREDENTIAL_KEY_NAMES = frozenset({"idempotencykey"})
+# Same-user native locator/session identity and request de-duplication fields
+# are not credentials. Keep scanning their values for concrete secret formats
+# (JWTs, sk-* tokens, private keys, and so on).
+_NON_CREDENTIAL_KEY_NAMES = frozenset(
+    {"idempotencykey", "operationkey", "sessionid"}
+)
 
 
 def _sensitive_name(value: str) -> bool:

@@ -472,11 +472,19 @@ def test_real_bundled_manifest_verifies_every_virtual_artifact(tmp_path):
     )
     bundled = [artifact for artifact in adapter.list() if artifact.source.type == "bundled"]
     assert bundled
+    assert builtin_artifact_id("ae-execution-guide") in {
+        artifact.id for artifact in bundled
+    }
     assert all(artifact.verified for artifact in bundled)
     assert all(
         artifact.verification and artifact.verification.method == "signed-manifest"
         for artifact in bundled
     )
+    guide = adapter.get(builtin_artifact_id("ae-execution-guide"))
+    assert guide.source.type == "bundled"
+    assert guide.verified is True
+    assert guide.verification
+    assert guide.verification.method == "signed-manifest"
 
 
 def test_bundled_manifest_mismatch_fails_closed(tmp_path):
