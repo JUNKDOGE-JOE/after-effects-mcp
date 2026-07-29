@@ -29,6 +29,9 @@ from ae_mcp.backends.native import (
     invoke_project_items_list,
     invoke_project_summary,
 )
+from ae_mcp.backends.maintained_layer_source import (
+    execute_layer_source_replace,
+)
 from ae_mcp.backends.native_project_composition import (
     COMPOSITION_BACKGROUND_COLOR_SET_CAPABILITY_ID,
     COMPOSITION_DIMENSIONS_SET_CAPABILITY_ID,
@@ -1644,6 +1647,32 @@ async def _run_get_layer_source(
     return _native_read_response(execution)
 
 
+async def _run_set_layer_source(
+    args: schemas.AeSetLayerSourceArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    async def _call() -> dict[str, Any]:
+        selected = _discovery.select_backend()
+        if not isinstance(selected, NativeInvokeBackend):
+            _backend()
+            raise AssertionError("unreachable native backend selection")
+        return await execute_layer_source_replace(
+            selected,
+            selected,
+            args=args,
+        )
+
+    return await progress.run_with_timeout(
+        ctx,
+        _call(),
+        timeout_sec=40.0,
+        start_msg=(
+            "ae.setLayerSource maintained JSX write; all native graph "
+            "locators will be invalidated and reacquired..."
+        ),
+    )
+
+
 async def _run_get_layer_track_matte(
     args: schemas.AeGetLayerTrackMatteArgs,
     ctx: Any,
@@ -2600,6 +2629,7 @@ register(
 )
 register("ae.getLayerCompositingState", schemas.AeGetLayerCompositingStateArgs, _run_get_layer_compositing_state)
 register("ae.getLayerSource", schemas.AeGetLayerSourceArgs, _run_get_layer_source)
+register("ae.setLayerSource", schemas.AeSetLayerSourceArgs, _run_set_layer_source)
 register("ae.getLayerTrackMatte", schemas.AeGetLayerTrackMatteArgs, _run_get_layer_track_matte)
 register("ae.setLayerTrackMatte", schemas.AeSetLayerTrackMatteArgs, _run_set_layer_track_matte)
 register("ae.clearLayerTrackMatte", schemas.AeClearLayerTrackMatteArgs, _run_clear_layer_track_matte)
@@ -2803,6 +2833,7 @@ __all__ = [
     "_run_get_layer_details",
     "_run_get_layer_compositing_state",
     "_run_get_layer_source",
+    "_run_set_layer_source",
     "_run_get_layer_track_matte",
     "_run_get_layer_av_state",
     "_run_get_layer_transform",

@@ -960,6 +960,10 @@ _PROJECT_COMPOSITION_VALIDATION = {
         "ae.layer.source.read",
         "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers.",
     ),
+    "ae.setLayerSource": (
+        "ae.layer.source.set",
+        "Use fresh layer_locator and fresh source_item_locator values from the current native graph, plus a stable idempotency_key. This write invalidates the full native project graph; rediscover every project, composition, item, and layer locator before the next native graph call.",
+    ),
     "ae.getLayerTrackMatte": (
         "ae.layer.track-matte.read",
         "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers.",

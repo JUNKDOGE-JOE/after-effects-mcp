@@ -708,6 +708,13 @@ NATIVE_PUBLIC_TOOLS = (
     ),
 )
 
+MAINTAINED_SOURCE_PUBLIC_TOOL = (
+    "ae.setLayerSource",
+    "ae.layer.source.set",
+    "_run_set_layer_source",
+    schemas.AeSetLayerSourceArgs,
+)
+
 
 def test_native_public_tools_expose_exact_underscore_handler_and_capability_mappings():
     """A misspelled public verb, handler, or capability must fail this boundary."""
@@ -719,6 +726,49 @@ def test_native_public_tools_expose_exact_underscore_handler_and_capability_mapp
         assert capability_id == handler_verb
         assert registered_schema is schema_cls
         assert registered_handler is getattr(native_handlers, handler_name)
+
+
+def test_maintained_source_public_tool_exposes_exact_handler_mapping():
+    load_all()
+    public_verb, handler_verb, handler_name, schema_cls = (
+        MAINTAINED_SOURCE_PUBLIC_TOOL
+    )
+    registered_schema, registered_handler = HANDLERS[public_verb]
+    assert expose_tool_name(public_verb) == "ae_setLayerSource"
+    assert handler_verb not in SMA.CAPABILITY_CONTRACTS
+    assert registered_schema is schema_cls
+    assert registered_handler is getattr(native_handlers, handler_name)
+
+
+@pytest.mark.asyncio
+async def test_maintained_source_handler_binds_one_selected_backend_and_public_args(
+    monkeypatch,
+):
+    backend = PackageBackend()
+    captured = {}
+
+    async def execute(exec_backend, native_backend, *, args):
+        captured.update({
+            "exec_backend": exec_backend,
+            "native_backend": native_backend,
+            "args": args,
+        })
+        return {"ok": True, "value": {"changed": True}}
+
+    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
+    monkeypatch.setattr(
+        native_handlers, "execute_layer_source_replace", execute
+    )
+    public_args = schemas.AeSetLayerSourceArgs.model_validate(
+        _valid_inputs()[schemas.AeSetLayerSourceArgs]
+    )
+    response = await native_handlers._run_set_layer_source(public_args, None)
+    assert response == {"ok": True, "value": {"changed": True}}
+    assert captured == {
+        "exec_backend": backend,
+        "native_backend": backend,
+        "args": public_args,
+    }
 
 
 @pytest.mark.asyncio
@@ -782,6 +832,17 @@ def test_native_source_matte_av_validation_is_bounded_to_the_seven_native_capabi
     )
     assert error["sideEffect"] == "not-started"
     assert error["details"]["capabilityId"] == SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID
+
+
+def test_maintained_source_validation_requires_fresh_locators_and_graph_rediscovery():
+    capability_id, hint = server_module._PROJECT_COMPOSITION_VALIDATION[
+        "ae.setLayerSource"
+    ]
+    assert capability_id == "ae.layer.source.set"
+    assert "fresh layer_locator" in hint
+    assert "fresh source_item_locator" in hint
+    assert "invalidates the full native project graph" in hint
+    assert "rediscover" in hint
 
 
 @pytest.mark.asyncio
