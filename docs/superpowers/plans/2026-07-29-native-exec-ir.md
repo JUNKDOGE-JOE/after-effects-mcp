@@ -1098,7 +1098,7 @@ direct-invoke golden mismatch remains owned by Task 9.
 - Removes: legacy per-capability wire parsing, result encoding, descriptor
   functions, dispatch branches, digest/include carriers, and advertised arrays.
 
-- [ ] **Step 1: Write failing carrier-absence tests**
+- [x] **Step 1: Write failing carrier-absence tests**
 
 Add source-contract assertions rejecting:
 
@@ -1112,12 +1112,12 @@ Add source-contract assertions rejecting:
 Allow old IDs only in migration evidence and historical docs under
 `docs/superpowers/specs|plans`.
 
-- [ ] **Step 2: Verify RED**
+- [x] **Step 2: Verify RED**
 
 Run the source-contract test and portable native tests. Expected: old carriers
 are found.
 
-- [ ] **Step 3: Remove dead native variants and branches**
+- [x] **Step 3: Remove dead native variants and branches**
 
 Delete only code with no primitive executor consumer. When a primitive reuses
 an old typed host value or SDK helper, move that type/helper under the
@@ -1127,13 +1127,13 @@ native-program runtime instead of deleting and reimplementing it.
 `native_rpc_connection.cpp` must retain one program dispatch branch.
 `host_dispatcher.cpp` must retain one program request branch.
 
-- [ ] **Step 4: Regenerate protocol fixtures**
+- [x] **Step 4: Regenerate protocol fixtures**
 
 The capabilities registry advertises only `ae.native.exec`; its full schema
 contains the generated primitive union and its summary points models to the
 default skill. Recompute one registry digest.
 
-- [ ] **Step 5: Verify GREEN**
+- [x] **Step 5: Verify GREEN**
 
 Run:
 
@@ -1144,7 +1144,7 @@ node --test native/ae-plugin/protocol/protocol.test.mjs
 
 Then run all three portable C++ native tests from CI.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -u native/ae-plugin
@@ -1153,6 +1153,18 @@ git add native/ae-plugin/protocol/fixtures/capabilities.json \
   native/ae-plugin/protocol/fixtures/hello.json
 git commit -m "refactor(native): remove legacy capability carriers"
 ```
+
+**Execution record (2026-07-29):** Task 9 completed in commits
+`cdb68c9..31667d5`. The current product path required two bounded amendments
+to the original native-only file list: remove the live operation-specific CEP
+invoke carrier, and retire Core/Bridge tests whose only subject was a removed
+public tool or direct-invoke fixture. Discovery now advertises one
+`ae.native.exec` descriptor with 23 generated primitive contracts. Native and
+controlled CEP production sources contain none of the 67 retired capability
+IDs. Full Core/Bridge, focused CEP, generated protocol, and all four portable
+native binaries pass. Two concentrated/directed review rounds ended CLEAN.
+Unreachable private Core backend dead code is explicitly follow-up; HDEV,
+T5/T6, runner, process, pairing, and security work did not enter this task.
 
 ---
 
