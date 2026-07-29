@@ -19,6 +19,7 @@ import time
 from collections import Counter
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from datetime import timedelta
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Protocol
 
@@ -249,11 +250,13 @@ def _time(value: Any) -> dict[str, Any]:
         and exact["scale"] > 0,
         "exact time is not closed",
     )
-    rational = f"{exact['value']}/{exact['scale']}"
-    if exact["value"] == 0:
-        rational = "0"
+    rational = str(Fraction(exact["value"], exact["scale"]))
     require(exact["secondsRational"] == rational, "exact time rational drifted")
     return exact
+
+
+def _times_equal(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
+    return left["value"] * right["scale"] == right["value"] * left["scale"]
 
 
 def _program_digest(arguments: Mapping[str, Any]) -> str:
@@ -570,7 +573,7 @@ class DevelopmentSmokeRunner:
             "native layer read did not observe the fixture layer",
         )
         baseline = _time(mapping(baseline_outputs.get("time"), "baseline time missing").get("currentTime"))
-        require(baseline == {**BASELINE_TIME, "secondsRational": "0"}, "native baseline time drifted")
+        require(_times_equal(baseline, BASELINE_TIME), "native baseline time drifted")
 
         changed_payload = await self.public_call(
             session, "native-write", "ae_nativeExec", {
@@ -588,8 +591,8 @@ class DevelopmentSmokeRunner:
         )
         require(
             changed_value.get("changed") is True
-            and _time(changed_value.get("beforeTime")) == baseline
-            and _time(changed_value.get("afterTime")) == {**CHANGED_TIME, "secondsRational": "5/24"},
+            and _times_equal(_time(changed_value.get("beforeTime")), baseline)
+            and _times_equal(_time(changed_value.get("afterTime")), CHANGED_TIME),
             "native write time evidence drifted",
         )
         undo = mapping(changed_payload.get("undo"), "write Undo evidence missing")
@@ -606,8 +609,10 @@ class DevelopmentSmokeRunner:
             },
         )
         require(
-            _time(mapping(mapping(changed_read_payload.get("outputs"), "changed read outputs missing").get("time"), "changed time missing").get("currentTime"))
-            == {**CHANGED_TIME, "secondsRational": "5/24"},
+            _times_equal(
+                _time(mapping(mapping(changed_read_payload.get("outputs"), "changed read outputs missing").get("time"), "changed time missing").get("currentTime")),
+                CHANGED_TIME,
+            ),
             "independent changed native readback drifted",
         )
         await self.checkpoint("undo-native-time", {
@@ -655,7 +660,7 @@ class DevelopmentSmokeRunner:
             "restored time missing",
         ).get("currentTime"))
         require(
-            restored == baseline,
+            _times_equal(restored, baseline),
             "real Undo did not restore exact native time",
         )
         await self.invalid_native_program(session, "invalid-native-program", {"operations": []})

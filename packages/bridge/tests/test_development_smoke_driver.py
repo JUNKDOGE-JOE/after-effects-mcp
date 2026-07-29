@@ -78,6 +78,28 @@ def _program_digest(arguments: dict) -> str:
     ).encode("utf-8")).hexdigest()
 
 
+def test_exact_time_rejects_noncanonical_rational_and_open_shape():
+    with pytest.raises(
+        driver.DevelopmentSmokeFailure,
+        match="exact time rational drifted",
+    ):
+        driver._time({
+            "value": 5120,
+            "scale": 24576,
+            "secondsRational": "5120/24576",
+        })
+    with pytest.raises(
+        driver.DevelopmentSmokeFailure,
+        match="exact time is not closed",
+    ):
+        driver._time({
+            "value": 5120,
+            "scale": 24576,
+            "secondsRational": "5/24",
+            "seconds": 5 / 24,
+        })
+
+
 def _bind_native_program(payload: dict, arguments: dict) -> None:
     payload["audit"]["programDigest"] = _program_digest(arguments)
     payload["operations"] = [
@@ -166,9 +188,9 @@ def _native_payload(
 
 
 def _responses() -> list[tuple[bool, dict]]:
-    baseline = _time(0, 1)
-    changed = _time(5, 24)
-    restored = _time(0, 1)
+    baseline = _time(0, 24576)
+    changed = _time(5120, 24576)
+    restored = _time(0, 24576)
     discovery = {
         "projectLocator": {
             **_locator(), "kind": "project", "objectId": PROJECT,
@@ -352,6 +374,23 @@ async def test_every_intended_native_program_validates_against_generated_schema(
     ]
     for arguments in intended:
         S.AeNativeExecArgs.model_validate(arguments)
+
+
+@pytest.mark.asyncio
+async def test_non_equivalent_native_time_still_fails(tmp_path):
+    def mutate(call_number, tool, _arguments, payload) -> None:
+        if call_number == 6 and tool == "ae_nativeExec":
+            payload["outputs"]["time"]["currentTime"] = _time(5119, 24576)
+
+    result = await driver.run_development_smoke(
+        _config(tmp_path),
+        session=FakeSession(_responses(), mutate=mutate),
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+
+    assert result.exit_code == 2
+    assert result.summary["passed"] is False
 
 
 @pytest.mark.asyncio
