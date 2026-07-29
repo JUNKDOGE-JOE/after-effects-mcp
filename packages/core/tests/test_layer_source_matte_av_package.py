@@ -9,9 +9,13 @@ import pytest
 from pydantic import BaseModel, ValidationError
 
 from ae_mcp import schemas
+from ae_mcp import server as server_module
 from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.backends import native as N
 from ae_mcp.backends import native_layer_source_matte_av as SMA
+from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp.handlers import native as native_handlers
+from ae_mcp.server import expose_tool_name
 
 
 HOST = "22222222-2222-4222-8222-222222222222"
@@ -320,7 +324,10 @@ class PackageBackend(N.NativeInvokeBackend):
     def __init__(self) -> None:
         self.items = tuple(_native_descriptor(contract) for contract in SMA.CAPABILITY_CONTRACTS.values())
         self.requests: list[N.NativeInvokeRequest] = []
+        self.cancellations: list[N.NativeCancellationToken | None] = []
         self.tamper_postcondition: str | None = None
+        self.tamper_result_capability: str | None = None
+        self.tamper_evidence_session: str | None = None
         self.raw_values: dict[str, dict[str, Any]] = {}
         self.negotiation = N.NativeNegotiation(
             selected_wire_version=1, plugin_version="0.9.2", compiled_sdk_version="25.6.61",
@@ -379,8 +386,8 @@ class PackageBackend(N.NativeInvokeBackend):
         raise AssertionError(capability)
 
     async def invoke(self, request, *, cancellation=None):
-        del cancellation
         self.requests.append(request)
+        self.cancellations.append(cancellation)
         raw_value = self.raw_values.get(request.capability_id)
         if raw_value is None:
             raw_value = self._value(request)
@@ -393,12 +400,15 @@ class PackageBackend(N.NativeInvokeBackend):
         if self.tamper_postcondition == request.capability_id:
             digest = "f" * 64
         is_write = contract.risk == "write"
+        result_capability = self.tamper_result_capability or request.capability_id
         return N.NativeInvokeResult(
-            capability_id=request.capability_id, capability_version=request.capability_version,
+            capability_id=result_capability,
+            capability_version=request.capability_version,
             engine="native-aegp", outcome="succeeded", replayed=False, value=raw_value,
             evidence=N.NativeExecutionEvidence(
-                engine="native-aegp", host_instance_id=HOST, session_id=SESSION,
-                request_id=request.request_id, capability_id=request.capability_id,
+                engine="native-aegp", host_instance_id=HOST,
+                session_id=self.tamper_evidence_session or SESSION,
+                request_id=request.request_id, capability_id=result_capability,
                 capability_version=request.capability_version,
                 started_at_unix_ms=request.deadline_unix_ms - 100,
                 completed_at_unix_ms=request.deadline_unix_ms - 1,
@@ -655,3 +665,153 @@ async def test_valid_but_request_mismatched_av_projection_remains_possibly_side_
     assert len(backend.requests) == 1
     assert raised.value.code == "POSSIBLY_SIDE_EFFECTING_FAILURE"
     assert raised.value.side_effect == "may-have-occurred"
+
+
+NATIVE_PUBLIC_TOOLS = (
+    (
+        "ae.getLayerSource", "ae.layer.source.read", "_run_get_layer_source",
+        schemas.AeGetLayerSourceArgs, SMA.LAYER_SOURCE_READ_CAPABILITY_ID,
+        {"layerLocator": _layer()},
+    ),
+    (
+        "ae.getLayerTrackMatte", "ae.layer.track-matte.read", "_run_get_layer_track_matte",
+        schemas.AeGetLayerTrackMatteArgs, SMA.LAYER_TRACK_MATTE_READ_CAPABILITY_ID,
+        {"layerLocator": _layer()},
+    ),
+    (
+        "ae.setLayerTrackMatte", "ae.layer.track-matte.set", "_run_set_layer_track_matte",
+        schemas.AeSetLayerTrackMatteArgs, SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+        {
+            "layerLocator": _layer(), "matteLayerLocator": _layer(object_id=MATTE_LAYER),
+            "mode": "alpha", "idempotencyKey": "matte-intent-0001",
+        },
+    ),
+    (
+        "ae.clearLayerTrackMatte", "ae.layer.track-matte.clear", "_run_clear_layer_track_matte",
+        schemas.AeClearLayerTrackMatteArgs, SMA.LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+        {"layerLocator": _layer(), "idempotencyKey": "clear-matte-0001"},
+    ),
+    (
+        "ae.getLayerAVState", "ae.layer.av-state.read", "_run_get_layer_av_state",
+        schemas.AeGetLayerAVStateArgs, SMA.LAYER_AV_STATE_READ_CAPABILITY_ID,
+        {"layerLocator": _layer()},
+    ),
+    (
+        "ae.setLayerAudioEnabled", "ae.layer.audio-enabled.set", "_run_set_layer_audio_enabled",
+        schemas.AeSetLayerAudioEnabledArgs, SMA.LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+        {"layerLocator": _layer(), "enabled": True, "idempotencyKey": "audio-intent-0001"},
+    ),
+    (
+        "ae.setLayerVideoEnabled", "ae.layer.video-enabled.set", "_run_set_layer_video_enabled",
+        schemas.AeSetLayerVideoEnabledArgs, SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
+        {"layerLocator": _layer(), "enabled": True, "idempotencyKey": "video-intent-0001"},
+    ),
+)
+
+
+def test_native_public_tools_expose_exact_underscore_handler_and_capability_mappings():
+    """A misspelled public verb, handler, or capability must fail this boundary."""
+    load_all()
+    for public_verb, handler_verb, handler_name, schema_cls, capability_id, _arguments in NATIVE_PUBLIC_TOOLS:
+        registered_schema, registered_handler = HANDLERS[public_verb]
+        assert expose_tool_name(public_verb) == public_verb.replace(".", "_")
+        assert handler_verb in SMA.CAPABILITY_CONTRACTS
+        assert capability_id == handler_verb
+        assert registered_schema is schema_cls
+        assert registered_handler is getattr(native_handlers, handler_name)
+
+
+@pytest.mark.asyncio
+async def test_native_public_handlers_bind_exact_wire_arguments_deadlines_and_cancellation(monkeypatch):
+    """Dropping or renaming a public argument must not silently change native dispatch."""
+    backend = PackageBackend()
+    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
+    monkeypatch.setattr(native_handlers.time, "time", lambda: 100.0)
+
+    for _public_verb, _handler_verb, handler_name, schema_cls, capability_id, expected_arguments in NATIVE_PUBLIC_TOOLS:
+        handler = getattr(native_handlers, handler_name)
+        payload = _valid_inputs()[schema_cls]
+        if capability_id == SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID:
+            payload = {**payload, "enabled": True}
+        arguments = schema_cls.model_validate(payload)
+        result = await handler(arguments, None)
+        request = backend.requests[-1]
+        assert result["ok"] is True
+        assert result["implementation"]["capabilityId"] == capability_id
+        assert request.capability_id == capability_id
+        assert request.arguments == expected_arguments
+        assert request.deadline_unix_ms == 110_000
+        assert isinstance(backend.cancellations[-1], N.NativeCancellationToken)
+        if capability_id in {
+            SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+            SMA.LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+            SMA.LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+            SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
+        }:
+            assert result["evidence"]["undo"] == {"available": True, "verified": False}
+
+
+def test_native_source_matte_av_validation_is_bounded_to_the_seven_native_capabilities():
+    """Invalid requests must identify the native capability and request fresh locators before dispatch."""
+    expected = {
+        "ae.getLayerSource": SMA.LAYER_SOURCE_READ_CAPABILITY_ID,
+        "ae.getLayerTrackMatte": SMA.LAYER_TRACK_MATTE_READ_CAPABILITY_ID,
+        "ae.setLayerTrackMatte": SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID,
+        "ae.clearLayerTrackMatte": SMA.LAYER_TRACK_MATTE_CLEAR_CAPABILITY_ID,
+        "ae.getLayerAVState": SMA.LAYER_AV_STATE_READ_CAPABILITY_ID,
+        "ae.setLayerAudioEnabled": SMA.LAYER_AUDIO_ENABLED_SET_CAPABILITY_ID,
+        "ae.setLayerVideoEnabled": SMA.LAYER_VIDEO_ENABLED_SET_CAPABILITY_ID,
+    }
+    for public_verb, capability_id in expected.items():
+        mapped_capability_id, hint = server_module._PROJECT_COMPOSITION_VALIDATION[public_verb]
+        assert mapped_capability_id == capability_id
+        assert "fresh layer_locator" in hint
+
+    with pytest.raises(ValidationError) as raised:
+        schemas.AeSetLayerTrackMatteArgs.model_validate({
+            "layer_locator": _layer(),
+            "matte_layer_locator": _layer(
+                object_id=MATTE_LAYER,
+                session_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            ),
+            "mode": "alpha",
+            "idempotency_key": "invalid-matte-context-0001",
+        })
+    error = server_module._project_composition_validation_error(
+        "ae.setLayerTrackMatte", raised.value,
+    )
+    assert error["sideEffect"] == "not-started"
+    assert error["details"]["capabilityId"] == SMA.LAYER_TRACK_MATTE_SET_CAPABILITY_ID
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("tamper", ["capability", "session"])
+async def test_native_read_rejects_wrong_capability_or_stale_session_after_dispatch(tamper: str):
+    """A successful-looking response from another capability or session is not trusted."""
+    backend = PackageBackend()
+    if tamper == "capability":
+        backend.tamper_result_capability = SMA.LAYER_AV_STATE_READ_CAPABILITY_ID
+    else:
+        backend.tamper_evidence_session = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    with pytest.raises(N.NativeBackendError) as raised:
+        await SMA.invoke_layer_source_read(
+            backend, request_id=f"wrong-{tamper}-1", layer_locator=_layer(),
+            deadline_unix_ms=_deadline(),
+        )
+    assert raised.value.code == "NATIVE_CONTRACT_MISMATCH"
+    assert len(backend.requests) == 1
+
+
+@pytest.mark.asyncio
+async def test_stale_source_locator_fails_before_dispatch():
+    """A stale locator is rejected before a native read can start."""
+    backend = PackageBackend()
+    with pytest.raises(N.NativeBackendError) as raised:
+        await SMA.invoke_layer_source_read(
+            backend, request_id="stale-source-1",
+            layer_locator=_layer(session_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+            deadline_unix_ms=_deadline(),
+        )
+    assert raised.value.code == "STALE_LOCATOR"
+    assert raised.value.side_effect == "not-started"
+    assert backend.requests == []

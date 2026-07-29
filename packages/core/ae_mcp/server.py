@@ -956,6 +956,34 @@ _PROJECT_COMPOSITION_VALIDATION = {
         "ae.layer.compositing.read",
         "Copy layer_locator unchanged from ae_listCompositionLayers.",
     ),
+    "ae.getLayerSource": (
+        "ae.layer.source.read",
+        "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers.",
+    ),
+    "ae.getLayerTrackMatte": (
+        "ae.layer.track-matte.read",
+        "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers.",
+    ),
+    "ae.setLayerTrackMatte": (
+        "ae.layer.track-matte.set",
+        "Use fresh layer_locator and matte_layer_locator values from one composition, one explicit mode, and a stable idempotency_key.",
+    ),
+    "ae.clearLayerTrackMatte": (
+        "ae.layer.track-matte.clear",
+        "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers and a stable idempotency_key.",
+    ),
+    "ae.getLayerAVState": (
+        "ae.layer.av-state.read",
+        "Use a fresh layer_locator copied unchanged from ae_listCompositionLayers.",
+    ),
+    "ae.setLayerAudioEnabled": (
+        "ae.layer.audio-enabled.set",
+        "Use a fresh layer_locator, explicit enabled boolean, and a stable idempotency_key.",
+    ),
+    "ae.setLayerVideoEnabled": (
+        "ae.layer.video-enabled.set",
+        "Use a fresh layer_locator, explicit enabled boolean, and a stable idempotency_key.",
+    ),
     "ae.setLayerVisibility": (
         "ae.layer.switch.set",
         "Use a fresh layer_locator, explicit enabled boolean, and stable idempotency_key.",
