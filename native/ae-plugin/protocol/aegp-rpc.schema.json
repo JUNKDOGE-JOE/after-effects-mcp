@@ -34141,7 +34141,7 @@
             }
           }
         },
-        "x-invariant": "active-iff-matteLayerLocator-non-null;active-mode-not-none;matte-distinct-and-same-composition"
+        "x-invariant": "active-iff-matteLayerLocator-non-null;active-mode-not-none;matte-distinct-and-same-project-context"
       }
     },
     "layerTrackMatteReadInvokeResult": {
@@ -34618,7 +34618,7 @@
             }
           }
         },
-        "x-invariant": "after-matte-and-mode-equal-request;before-differs;all-matte-locators-distinct-and-same-composition"
+        "x-invariant": "after-matte-and-mode-equal-request;before-differs;all-matte-locators-distinct-and-same-project-context"
       }
     },
     "layerTrackMatteSetInvokeResult": {
@@ -34984,7 +34984,7 @@
             }
           }
         },
-        "x-invariant": "after-matte-null;afterMode-equals-beforeMode;before-matte-distinct-and-same-composition"
+        "x-invariant": "after-matte-null;afterMode-equals-beforeMode;before-matte-distinct-and-same-project-context"
       }
     },
     "layerTrackMatteClearInvokeResult": {
@@ -35465,7 +35465,7 @@
               }
             },
             "hasAudio": {
-              "type": "boolean"
+              "const": true
             },
             "audioEnabled": {
               "type": "boolean"
@@ -35528,7 +35528,7 @@
               }
             },
             "hasAudio": {
-              "type": "boolean"
+              "const": true
             },
             "audioEnabled": {
               "type": "boolean"
@@ -35542,7 +35542,7 @@
           }
         }
       },
-      "x-invariant": "after-audioEnabled-equals-request;all-other-av-state-fields-preserved"
+      "x-invariant": "selected-hasAudio-true-before-and-after;after-audioEnabled-equals-request;all-other-av-state-fields-preserved"
     },
     "layerAudioEnabledSetInvokeParams": {
       "type": "object",
@@ -35707,7 +35707,7 @@
                 "$ref": "#/$defs/layerLocator"
               },
               "hasAudio": {
-                "type": "boolean"
+                "const": true
               },
               "audioEnabled": {
                 "type": "boolean"
@@ -35721,7 +35721,7 @@
             }
           }
         },
-        "x-invariant": "after-audioEnabled-equals-request;all-other-av-state-fields-preserved"
+        "x-invariant": "selected-hasAudio-true-before-and-after;after-audioEnabled-equals-request;all-other-av-state-fields-preserved"
       }
     },
     "layerAudioEnabledSetInvokeResult": {
@@ -35921,7 +35921,7 @@
               "type": "boolean"
             },
             "hasVideo": {
-              "type": "boolean"
+              "const": true
             },
             "videoEnabled": {
               "type": "boolean"
@@ -35984,7 +35984,7 @@
               "type": "boolean"
             },
             "hasVideo": {
-              "type": "boolean"
+              "const": true
             },
             "videoEnabled": {
               "type": "boolean"
@@ -35992,7 +35992,7 @@
           }
         }
       },
-      "x-invariant": "after-videoEnabled-equals-request;all-other-av-state-fields-preserved"
+      "x-invariant": "selected-hasVideo-true-before-and-after;after-videoEnabled-equals-request;all-other-av-state-fields-preserved"
     },
     "layerVideoEnabledSetInvokeParams": {
       "type": "object",
@@ -36163,7 +36163,7 @@
                 "type": "boolean"
               },
               "hasVideo": {
-                "type": "boolean"
+                "const": true
               },
               "videoEnabled": {
                 "type": "boolean"
@@ -36171,7 +36171,7 @@
             }
           }
         },
-        "x-invariant": "after-videoEnabled-equals-request;all-other-av-state-fields-preserved"
+        "x-invariant": "selected-hasVideo-true-before-and-after;after-videoEnabled-equals-request;all-other-av-state-fields-preserved"
       }
     },
     "layerVideoEnabledSetInvokeResult": {

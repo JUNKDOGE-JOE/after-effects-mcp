@@ -935,14 +935,66 @@ test('capability discovery uses real canonical digests and keeps compatibility u
   const exchange = golden('capabilities.json');
   const capabilities = exchange.response;
   const descriptor = capabilities.result.items[0];
-  assert.deepEqual(capabilities.result.items, nativeCapabilityRegistry(schema));
-  assert.equal(descriptor.contractDigest, projectSummaryContractDigest(schema));
-  assert.deepEqual(descriptor, projectSummaryDescriptor(schema));
-  assert.equal(capabilities.result.capabilitiesDigest, capabilityDigest(nativeCapabilityRegistry(schema)));
+  const registry = nativeCapabilityRegistry(schema);
+  const summarize = (item) => ({
+    ...Object.fromEntries(Object.entries(item).filter(([key]) => ![
+      'inputContractId', 'resultContractId', 'contractDigest', 'inputSchema', 'resultSchema',
+      'requirements', 'examples',
+    ].includes(key))),
+    detail: 'summary',
+  });
+  assert.equal(exchange.request.params.detail, 'summary');
+  assert.equal(capabilities.result.detail, 'summary');
+  assert.deepEqual(capabilities.result.items, registry.map(summarize));
+  assert.equal(registry[0].contractDigest, projectSummaryContractDigest(schema));
+  assert.deepEqual(descriptor, summarize(projectSummaryDescriptor(schema)));
+  assert.equal(capabilities.result.capabilitiesDigest, capabilityDigest(registry));
   assert.equal(capabilities.result.queryDigest, capabilityQueryDigest(exchange.request));
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, capabilities, schema), true);
   assert.equal(validateCapabilityDescriptor(descriptor, schema), true);
   assert.equal(descriptor.compatibility.status, 'unverified');
+
+  const selectedIds = [
+    'ae.layer.source.read',
+    'ae.layer.track-matte.read',
+    'ae.layer.track-matte.set',
+    'ae.layer.track-matte.clear',
+    'ae.layer.av-state.read',
+    'ae.layer.audio-enabled.set',
+    'ae.layer.video-enabled.set',
+  ];
+  const selectedRequest = structuredClone(exchange.request);
+  selectedRequest.requestId = 'capabilities-layer-source-matte-av-full';
+  selectedRequest.params = { detail: 'full', ids: selectedIds, limit: selectedIds.length };
+  const selectedResponse = structuredClone(capabilities);
+  selectedResponse.requestId = selectedRequest.requestId;
+  selectedResponse.result = {
+    ...selectedResponse.result,
+    detail: 'full',
+    items: registry.filter(({ id }) => selectedIds.includes(id)),
+    queryDigest: capabilityQueryDigest(selectedRequest),
+  };
+  assert.equal(validateCapabilitiesExchange(
+    hello, selectedRequest, selectedResponse, schema,
+  ), true);
+  assert.doesNotThrow(() => encodeFrame(selectedResponse));
+
+  const impossibleFullRequest = structuredClone(exchange.request);
+  impossibleFullRequest.requestId = 'capabilities-all-full-impossible';
+  impossibleFullRequest.params = { detail: 'full', limit: 100 };
+  const impossibleFullResponse = structuredClone(capabilities);
+  impossibleFullResponse.requestId = impossibleFullRequest.requestId;
+  impossibleFullResponse.result = {
+    ...impossibleFullResponse.result,
+    detail: 'full',
+    items: registry,
+    queryDigest: capabilityQueryDigest(impossibleFullRequest),
+  };
+  assert.ok(
+    Buffer.byteLength(JSON.stringify(impossibleFullResponse), 'utf8') > LIMITS.maxFrameBytes,
+  );
+  assert.throws(() => encodeFrame(impossibleFullResponse), { code: 'INVALID_REQUEST' });
+
   assert.equal(validateCapabilitiesExchange(hello, exchange.request, {
     ...capabilities,
     result: { ...capabilities.result, capabilitiesDigest: '0'.repeat(64) },
@@ -961,8 +1013,8 @@ test('capability discovery uses real canonical digests and keeps compatibility u
   }), { ok: false, errorCode: 'INVALID_ARGUMENT' });
   assert.equal(validateCapabilityDescriptor({ ...descriptor, mutability: 'mutating' }, schema), false);
   assert.equal(validateCapabilityDescriptor({
-    ...descriptor,
-    examples: descriptor.examples.filter((example) => example.kind === 'positive'),
+    ...registry[0],
+    examples: registry[0].examples.filter((example) => example.kind === 'positive'),
   }, schema), false);
   assert.equal(validateCapabilityDescriptor({
     ...descriptor,
@@ -2122,14 +2174,14 @@ test('layer source, Track Matte, and AV vectors are closed, typed, and transitio
   const selfMatte = structuredClone(set.request);
   selfMatte.params.arguments.matteLayerLocator =
     structuredClone(selfMatte.params.arguments.layerLocator);
-  const crossComposition = structuredClone(set.request);
-  crossComposition.params.arguments.matteLayerLocator.projectId =
+  const crossProjectContext = structuredClone(set.request);
+  crossProjectContext.params.arguments.matteLayerLocator.projectId =
     '55555555-5555-4555-8555-555555555555';
   const noneMode = structuredClone(set.request);
   noneMode.params.arguments.mode = 'none';
   const missingSetKey = structuredClone(set.request);
   delete missingSetKey.params.arguments.idempotencyKey;
-  for (const malformed of [selfMatte, crossComposition]) {
+  for (const malformed of [selfMatte, crossProjectContext]) {
     assert.equal(schemaAccepts(schema.$defs.request, malformed), true,
       'JSON Schema cannot compare opaque locator identities or contexts');
     assert.deepEqual(classifyRequest(malformed), {
@@ -2206,13 +2258,36 @@ test('layer source, Track Matte, and AV vectors are closed, typed, and transitio
     !changedVideo.result.value.before.videoEnabled;
   changedVideo.result.evidence.postcondition.digest =
     postconditionDigest(changedVideo.result);
+  const noAudio = structuredClone(audio.response);
+  noAudio.result.value.before.hasAudio = false;
+  noAudio.result.value.after.hasAudio = false;
+  noAudio.result.evidence.postcondition.digest = postconditionDigest(noAudio.result);
   const audioDescriptor = registry.find(({ id }) => id === 'ae.layer.audio-enabled.set');
-  for (const malformed of [unchangedAudio, changedVideo]) {
+  for (const malformed of [unchangedAudio, changedVideo, noAudio]) {
     assert.equal(validateTranscript(
       contextFor(audio, audioDescriptor),
       audio.request,
       [...audio.events, malformed],
     ), false);
+  }
+
+  const video = golden('invoke-layer-video-enabled-set.json');
+  const noVideo = structuredClone(video.response);
+  noVideo.result.value.before.hasVideo = false;
+  noVideo.result.value.after.hasVideo = false;
+  noVideo.result.evidence.postcondition.digest = postconditionDigest(noVideo.result);
+  const videoDescriptor = registry.find(({ id }) => id === 'ae.layer.video-enabled.set');
+  for (const malformed of [noVideo]) {
+    assert.equal(validateTranscript(
+      contextFor(video, videoDescriptor),
+      video.request,
+      [...video.events, malformed],
+    ), false);
+  }
+
+  for (const descriptor of registry.filter(({ id }) => id.includes('track-matte'))) {
+    assert.doesNotMatch(descriptor.resultSchema['x-invariant'], /same-composition/u);
+    assert.match(descriptor.resultSchema['x-invariant'], /same-project-context/u);
   }
 
   const wrongSwitchCapability = structuredClone(audio.response);

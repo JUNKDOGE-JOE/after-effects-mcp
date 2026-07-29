@@ -4132,11 +4132,14 @@ function validateLayerSourceMatteAvResult(request, result, helloContext, schema)
   if (id === 'ae.layer.av-state.read') return validAv(value);
   if (value.changed !== true || !validAv(value.before) || !validAv(value.after)) return false;
   const audio = id === 'ae.layer.audio-enabled.set';
+  const availableField = audio ? 'hasAudio' : 'hasVideo';
   const changedField = audio ? 'audioEnabled' : 'videoEnabled';
   const preserved = audio
     ? ['hasAudio', 'hasVideo', 'videoEnabled']
     : ['hasAudio', 'audioEnabled', 'hasVideo'];
-  return value.after[changedField] === args.enabled
+  return value.before[availableField] === true
+    && value.after[availableField] === true
+    && value.after[changedField] === args.enabled
     && value.before[changedField] !== value.after[changedField]
     && preserved.every((field) => value.before[field] === value.after[field]);
 }
