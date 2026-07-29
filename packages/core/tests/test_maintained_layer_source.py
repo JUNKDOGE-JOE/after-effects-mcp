@@ -483,6 +483,8 @@ async def test_execution_invalidates_graph_verifies_projection_audits_and_replay
         backend, object(), args=args(),
     )
     assert response["ok"] is True
+    assert response["replayed"] is False
+    assert response["audit"]["replayed"] is False
     assert response["implementation"]["engine"] == "maintained-jsx"
     assert response["implementation"]["callerCodeAccepted"] is False
     assert response["provenance"]["sourceCommit"] == "a" * 40
@@ -504,7 +506,23 @@ async def test_execution_invalidates_graph_verifies_projection_audits_and_replay
     replay = await S.execute_layer_source_replace(
         backend, object(), args=args(),
     )
+    expected_replay = deepcopy(response)
+    expected_replay["replayed"] = True
+    expected_replay["audit"]["replayed"] = True
+    assert replay == expected_replay
     assert replay["replayed"] is True
+    assert replay["audit"]["replayed"] is True
+    assert replay["audit"]["operationId"] == response["audit"]["operationId"]
+    assert replay["audit"]["idempotencyKey"] == KEY
+    assert replay["audit"]["requestDigest"] == response["audit"]["requestDigest"]
+    assert (
+        replay["audit"]["postconditionDigest"]
+        == response["audit"]["postconditionDigest"]
+    )
+    assert response["replayed"] is False
+    assert response["audit"]["replayed"] is False
+    assert S._REPLAY[KEY][2]["replayed"] is False
+    assert S._REPLAY[KEY][2]["audit"]["replayed"] is False
     assert len(backend.calls) == 1
     records = [
         json.loads(line)
@@ -516,6 +534,43 @@ async def test_execution_invalidates_graph_verifies_projection_audits_and_replay
     assert all("arguments" not in record for record in records)
     assert all("path" not in json.dumps(record).lower() for record in records)
     assert all("media" not in json.dumps(record).lower() for record in records)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("invalid_audit", [None, "not-an-audit-mapping"])
+async def test_completed_replay_fails_closed_without_valid_cached_audit(
+    monkeypatch, tmp_path, invalid_audit,
+):
+    S.clear_replay_cache_for_tests()
+    monkeypatch.setenv("AE_MCP_LAYER_SOURCE_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
+    monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "a" * 40)
+
+    async def resolve_address(*_args, **_kwargs):
+        return resolved()
+
+    async def reacquire(*_args, **_kwargs):
+        return fresh_state()
+
+    monkeypatch.setattr(S, "resolve_source_replacement", resolve_address)
+    monkeypatch.setattr(S, "reacquire_source_state", reacquire)
+    backend = ExecBackend(jsx_success())
+    assert (await S.execute_layer_source_replace(
+        backend, object(), args=args(),
+    ))["ok"]
+    cached = S._REPLAY[KEY][2]
+    if invalid_audit is None:
+        cached.pop("audit")
+    else:
+        cached["audit"] = invalid_audit
+
+    with pytest.raises(
+        RuntimeError,
+        match="completed maintained source replay omitted valid audit evidence",
+    ):
+        await S.execute_layer_source_replace(
+            backend, object(), args=args(),
+        )
+    assert len(backend.calls) == 1
 
 
 @pytest.mark.asyncio

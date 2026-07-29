@@ -711,10 +711,17 @@ async def _execute_serialized(
     async with _REPLAY_LOCK:
         replay = _REPLAY.get(idempotency_key)
         if replay is not None:
-            prior_digest, _status, prior_response = replay
+            prior_digest, status, prior_response = replay
             if prior_digest != request_digest:
                 return _duplicate_request(idempotency_key)
             response = json.loads(json.dumps(prior_response))
+            if status == "completed":
+                audit = response.get("audit")
+                if not isinstance(audit, dict) or audit.get("replayed") is not False:
+                    raise RuntimeError(
+                        "completed maintained source replay omitted valid audit evidence"
+                    )
+                audit["replayed"] = True
             response["replayed"] = True
             return response
 
