@@ -31,7 +31,7 @@ Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都只是对应 AI 通道�
 | 诊断 | `ae_ping`、`ae_status`、`ae_diagnose` |
 
 `ae_toolUse` staged actions: `render`, `prepare`, `grant`, `execute`, `start`,
-`status`, `cancel`, and `history`.
+`status`, `cancel`, `history`, and `save`.
 
 `ae_toolUse` action 参数：
 
@@ -45,6 +45,7 @@ Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都只是对应 AI 通道�
 | `status` | `action`, `execution_id` | 无 | 读取状态 |
 | `cancel` | `action`, `execution_id` | 无 | 请求取消 |
 | `history` | `action`, `artifact_id` | `limit` | 读取历史 |
+| `save` | `action`, `save` | 无 | 明确创建 JSX artifact 或按精确版本晋升 candidate |
 
 取消结果为 `cancelled-before-dispatch`、`not-cancellable-after-dispatch`、
 `owned-by-another-core` 或 `already-terminal`。这些结果仅在 execution record 或 reservation 仍被保留时成立。
@@ -77,6 +78,57 @@ builtin:skill:ae-execution-guide
   "timeout_sec": 30
 }
 ```
+
+`ae_exec` 只执行本次请求，不创建或更新 Tool Library artifact。若用户要求模型
+保存 JSX，模型必须另外调用 `ae_toolUse`、设置 `action="save"`；用户请求可创建
+`status="saved"` 或 `status="candidate"`。若模型自行判断 JSX 以后可能有用，
+也必须另发一次调用，并且只能用 `intent="model-curated"` 创建不可执行的
+`candidate`，不能在每次执行后自动保存。
+
+创建请求使用完整 draft，不能混入已有 artifact identity：
+
+```json
+{
+  "action": "save",
+  "save": {
+    "mode": "create",
+    "intent": "user-requested",
+    "status": "saved",
+    "artifact": {
+      "name": "Reusable JSX",
+      "description": "What the script does",
+      "kind": "jsx",
+      "category": "workflow",
+      "tags": [],
+      "compatibility": {},
+      "declared_risk": "write",
+      "content": "JSON.stringify({ok:true});",
+      "args_schema": {}
+    }
+  }
+}
+```
+
+晋升请求不接受 replacement draft，并要求用户明确请求以及精确的
+revision/content-hash compare-and-swap：
+
+```json
+{
+  "action": "save",
+  "save": {
+    "mode": "promote",
+    "intent": "user-requested",
+    "status": "saved",
+    "artifact_id": "chat-tool-call:candidate-id",
+    "expected_revision": 1,
+    "expected_content_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+}
+```
+
+Candidate 默认不出现在 saved/pinned discovery 中，也不能通过 `ae_toolUse`
+render 或 execute。它会一直保留，直到面板明确删除，或用户要求以上述精确
+CAS 晋升；没有自动过期或清理。已有 candidates 保持不变。
 
 读操作应以 `JSON.stringify(...)` 结尾。写操作应提供可识别的 Undo label，
 随后使用独立读取验证状态。需要画面判断时再调用 `ae_previewFrame`；写入表达式
@@ -172,7 +224,7 @@ or either execution route.
 | Diagnostics | `ae_ping`, `ae_status`, `ae_diagnose` |
 
 `ae_toolUse` staged actions are `render`, `prepare`, `grant`, `execute`, `start`,
-`status`, `cancel`, and `history`.
+`status`, `cancel`, `history`, and `save`.
 
 `ae_toolUse` action fields:
 
@@ -186,6 +238,7 @@ or either execution route.
 | `status` | `action`, `execution_id` | none | read status |
 | `cancel` | `action`, `execution_id` | none | request cancellation |
 | `history` | `action`, `artifact_id` | `limit` | read history |
+| `save` | `action`, `save` | none | explicitly create a JSX artifact or promote a candidate with exact version data |
 
 Cancellation reports `cancelled-before-dispatch`,
 `not-cancellable-after-dispatch`, `owned-by-another-core`, or
@@ -213,6 +266,60 @@ workflow plus the generated primitive reference.
   "timeout_sec": 30
 }
 ```
+
+`ae_exec` is request-only: it does not create or update a Tool Library
+artifact. When the user asks the model to save JSX, the model makes a separate
+`ae_toolUse` call with `action="save"` and may create either `status="saved"`
+or `status="candidate"`. When the model independently judges that JSX may be
+useful later, it also makes a separate call and may only create a
+non-executable candidate with `intent="model-curated"`; it must not save after
+every execution.
+
+Create requires a complete draft and forbids existing artifact identity:
+
+```json
+{
+  "action": "save",
+  "save": {
+    "mode": "create",
+    "intent": "user-requested",
+    "status": "saved",
+    "artifact": {
+      "name": "Reusable JSX",
+      "description": "What the script does",
+      "kind": "jsx",
+      "category": "workflow",
+      "tags": [],
+      "compatibility": {},
+      "declared_risk": "write",
+      "content": "JSON.stringify({ok:true});",
+      "args_schema": {}
+    }
+  }
+}
+```
+
+Promotion forbids a replacement draft and requires a user request plus exact
+revision/content-hash compare-and-swap fields:
+
+```json
+{
+  "action": "save",
+  "save": {
+    "mode": "promote",
+    "intent": "user-requested",
+    "status": "saved",
+    "artifact_id": "chat-tool-call:candidate-id",
+    "expected_revision": 1,
+    "expected_content_hash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  }
+}
+```
+
+Candidates are excluded from default saved/pinned discovery and cannot be
+rendered or executed through `ae_toolUse`. They remain until explicit panel
+deletion or user-requested promotion with that exact CAS; there is no automatic
+expiration or cleanup. Existing candidates are unchanged.
 
 End reads with `JSON.stringify(...)`. Give writes a recognizable Undo label
 and verify them with an independent read. Use `ae_previewFrame` when visual

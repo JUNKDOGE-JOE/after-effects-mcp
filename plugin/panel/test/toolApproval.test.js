@@ -119,7 +119,7 @@ test('approvalResult rejects unauthorized session decisions', () => {
 test('dynamic staged calls are delegated to core authorization', () => {
   for (const name of ['ae.toolUse', 'ae_toolUse', 'mcp__ae__ae_toolUse']) {
     assert.equal(normalizeMcpToolName(name), 'ae.toolUse');
-    for (const action of ['render', 'prepare', 'grant', 'execute']) {
+    for (const action of ['render', 'prepare', 'grant', 'execute', 'save']) {
       assert.equal(isCoreAuthorizedDynamicCall(name, { action }), true);
     }
   }

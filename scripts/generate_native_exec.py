@@ -1205,11 +1205,11 @@ def _generate_execution_guide(registry: PrimitiveRegistry) -> str:
 
 ## Route choice
 
-Use `ae_exec` whenever the maintained AE scripting object model can perform the operation. Do not look for a typed convenience verb. Use `ae_nativeExec` only when the generated reference supplies an AEGP-only primitive with the semantics you need.
+Use `ae_exec` when maintained AE scripting can do the job; do not seek a typed convenience verb. Use `ae_nativeExec` only for listed AEGP-only primitives.
 
 ## Program composition
 
-A native program is one bounded linear `operations` array. Name request-local handles with `saveAs`, refer only backward with `{{"ref":"name"}}`, and export JSON-safe values with `returnAs`. Read-only programs omit `operationKey` and `undoGroup`; writes require both. Never invent locators: when none is fresh, first run a separate read-only `ae_nativeExec` discovery program such as `project.items.list`, then copy its returned locator verbatim into the target program.
+`operations` is a bounded linear array. Use `saveAs` for request-local handles, backward `{{"ref":"name"}}` references, and `returnAs` for JSON-safe values. Reads omit `operationKey` and `undoGroup`; writes require both. Never invent locators: when none is fresh, run a separate read-only `ae_nativeExec` discovery program such as `project.items.list`, then copy its returned locator verbatim into the target program.
 
 Exact rational-time read (`AeNativeExecArgs`):
 <!-- AE_NATIVE_EXEC_EXAMPLE -->
@@ -1222,6 +1222,10 @@ Exact rational-time write (`AeNativeExecArgs`):
 ```json
 {native_write}
 ```
+
+## JSX persistence
+
+`ae_exec` is ephemeral. Persistence needs a separate `ae_toolUse` call with `action="save"`. A user-requested save chooses `status="saved"` or `status="candidate"`; model-judged reuse sets `intent="model-curated"` and candidate only. Never auto-save. Candidates are excluded from default discovery and cannot be rendered or executed. User-requested exact `expected_revision`/`expected_content_hash` promotion or explicit panel deletion ends retention; no automatic expiration or cleanup.
 
 ## Readback
 

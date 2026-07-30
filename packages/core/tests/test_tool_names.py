@@ -413,6 +413,7 @@ async def test_tool_use_reference_tracks_public_schema_and_action_requirements(
         "status": {"action", "execution_id"},
         "cancel": {"action", "execution_id"},
         "history": {"action", "artifact_id"},
+        "save": {"action", "save"},
     }
     optional = {
         "render": {"args", "operation"},
@@ -423,6 +424,7 @@ async def test_tool_use_reference_tracks_public_schema_and_action_requirements(
         "status": set(),
         "cancel": set(),
         "history": {"limit"},
+        "save": set(),
     }
     assert set(public_schema["properties"]["action"]["enum"]) == set(required)
 
@@ -488,6 +490,25 @@ async def test_tool_use_reference_tracks_public_schema_and_action_requirements(
         "status": {"action": "status", "execution_id": "execution-doc"},
         "cancel": {"action": "cancel", "execution_id": "execution-doc"},
         "history": {"action": "history", "artifact_id": "user:1"},
+        "save": {
+            "action": "save",
+            "save": {
+                "mode": "create",
+                "intent": "user-requested",
+                "status": "saved",
+                "artifact": {
+                    "name": "Reusable JSX",
+                    "description": "Disables the selected layer",
+                    "kind": "jsx",
+                    "category": "workflow",
+                    "tags": [],
+                    "compatibility": {},
+                    "declared_risk": "write",
+                    "content": "JSON.stringify({ok:true});",
+                    "args_schema": {},
+                },
+            },
+        },
     }
     schema_cls, _ = HANDLERS["ae.toolUse"]
     for action, payload in valid.items():
