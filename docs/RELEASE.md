@@ -21,6 +21,8 @@ artifact-manifest-v0.9.2.json
 
 ### 2. 外部前置条件
 
+macOS foundation workflow 与两项 RC verifier 实现现已存在。approval 与 product-acceptance selector 仍有意保持 `blocked`；在另行评审的真实签名证据和 AE/Windows 硬件证据提供之前，credentialed RC 无法通过。
+
 触发签名 RC 前必须逐项确认：
 
 - revised “条件式 A→B” signed-helper architecture 已取得明确批准，并完成其 Phase 0 签名/可行性证据；未批准时不得实现或声称 helper、Tool Library、provider route 已闭环。
@@ -135,6 +137,8 @@ artifact-manifest-v0.9.2.json
 Both platforms come from one candidate SHA. Any platform failure, source change, dependency/signing change, or artifact mismatch permanently rejects that candidate. A fix requires a new SHA, build run, artifact set, and dual attestations.
 
 ### 2. External Prerequisites
+
+The macOS foundation workflow and both RC verifier implementations are present. The approval and product-acceptance selectors intentionally remain `blocked`; a credentialed RC cannot pass until separately reviewed real signature and AE/Windows hardware evidence is supplied.
 
 Before a signed RC is triggered, verify all of the following:
 

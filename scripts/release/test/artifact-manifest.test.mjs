@@ -102,14 +102,18 @@ async function writeEvidence(root, candidateSha, artifacts) {
           manifestSha256: '5'.repeat(64),
         },
         files: [
-          {
-            path: `platform/${platform}/bin/ae-mcp${platform === 'windows-x64' ? '.exe' : ''}`,
-            sha256: '9'.repeat(64), size: 1,
-            mode: platform === 'macos-arm64' ? '0755' : '0644', type: 'file',
-          },
+          ...(platform === 'windows-x64' ? [{
+            path: `platform/${platform}/bin/ae-mcp.exe`,
+            sha256: '9'.repeat(64), size: 1, mode: '0644', type: 'file',
+          }] : []),
           {
             path: `platform/${platform}/bin/ae-mcp-platform-helper${platform === 'windows-x64' ? '.exe' : ''}`,
             sha256: 'a'.repeat(64), size: 1,
+            mode: platform === 'macos-arm64' ? '0755' : '0644', type: 'file',
+          },
+          {
+            path: `platform/${platform}/lib/ae-mcp-platform-helper-transport.node`,
+            sha256: 'b'.repeat(64), size: 1,
             mode: platform === 'macos-arm64' ? '0755' : '0644', type: 'file',
           },
           {
@@ -167,10 +171,13 @@ async function writeEvidence(root, candidateSha, artifacts) {
       }),
     );
     const nativePaths = [
-      `platform/${platform}/bin/ae-mcp${platform === 'windows-x64' ? '.exe' : ''}`,
+      ...(platform === 'windows-x64'
+        ? [`platform/${platform}/bin/ae-mcp.exe`]
+        : []),
       `platform/${platform}/bin/ae-mcp-platform-helper${platform === 'windows-x64' ? '.exe' : ''}`,
+      `platform/${platform}/lib/ae-mcp-platform-helper-transport.node`,
     ].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
-    await writeFile(files.nativeSignatureEvidence, canonicalStringify({
+    await writeFile(files.nativeSignatureEvidence, canonicalJson({
       schemaVersion: 1,
       platform,
       candidateSha,
@@ -180,7 +187,9 @@ async function writeEvidence(root, candidateSha, artifacts) {
       discoveredNativeCount: nativePaths.length,
       files: nativePaths.map((itemPath, index) => ({
         path: itemPath,
-        sha256: itemPath.includes('platform-helper') ? 'a'.repeat(64) : '9'.repeat(64),
+        sha256: itemPath.endsWith('.node')
+          ? 'b'.repeat(64)
+          : itemPath.includes('platform-helper') ? 'a'.repeat(64) : '9'.repeat(64),
         signatureKind: platform === 'macos-arm64' ? 'codesign' : 'authenticode',
         signerFingerprint: platform === 'macos-arm64' ? '6'.repeat(64) : 'f'.repeat(40),
         verified: true,
@@ -257,6 +266,19 @@ test('manifest is canonical and binds exact artifact bytes', async (t) => {
   assert.equal(MAX_EVIDENCE_JSON_BYTES, 8 * 1024 * 1024);
   assert.ok(manifest.evidence.every((record) => record.signedBundleManifest));
   assert.ok(manifest.evidence.every((record) => record.nativeSignatureEvidence));
+  const macNativeSignatureEvidence = manifest.evidence.find(
+    ({ platform }) => platform === 'macos-arm64',
+  ).nativeSignatureEvidence;
+  assert.doesNotMatch(
+    JSON.stringify(macNativeSignatureEvidence.files),
+    /platform\/macos-arm64\/bin\/ae-mcp"/,
+  );
+  assert.ok(macNativeSignatureEvidence.files.some(
+    (item) => item.path.endsWith('/bin/ae-mcp-platform-helper'),
+  ));
+  assert.ok(macNativeSignatureEvidence.files.some(
+    (item) => item.path.endsWith('/lib/ae-mcp-platform-helper-transport.node'),
+  ));
   assert.equal(manifest.productAcceptanceEvidence.candidateSha, fixture.candidateSha);
   assert.match(manifest.artifacts[0].sha256, /^[a-f0-9]{64}$/);
   assert.equal(
