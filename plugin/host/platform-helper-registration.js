@@ -210,6 +210,10 @@ function materializePrivatePlist(payload, input) {
     return destination;
 }
 
+function launchctlServiceMissing(error) {
+    return Boolean(error) && Number(error.code) === 113;
+}
+
 function launchctlRunner(input) {
     return function launchctl(args, options) {
         const allowMissing = Boolean(options && options.allowMissing);
@@ -219,7 +223,7 @@ function launchctlRunner(input) {
                 if (settled) return;
                 settled = true;
                 if (error) {
-                    if (allowMissing) {
+                    if (allowMissing && launchctlServiceMissing(error)) {
                         resolve(Object.freeze({ found: false, stdout: '' }));
                         return;
                     }
@@ -274,7 +278,8 @@ function prepareMacosHelperRegistration(options) {
     if (!Number.isSafeInteger(userIdentifier) || userIdentifier < 0) {
         throw new TypeError('current user identifier is invalid');
     }
-    const payload = verifyMacosPayload(path.resolve(input.addonPath), dependencies);
+    const addonPath = path.resolve(input.addonPath);
+    const payload = verifyMacosPayload(addonPath, dependencies);
     const launchctl = launchctlRunner(dependencies);
     const domain = `gui/${userIdentifier}`;
     const service = `${domain}/${HELPER_ID}`;
@@ -304,9 +309,37 @@ function prepareMacosHelperRegistration(options) {
         return registrationPromise;
     }
 
+    async function repairRegistered() {
+        const currentPayload = verifyMacosPayload(addonPath, dependencies);
+        const current = await launchctl(['print', service], { allowMissing: true });
+        if (current.found) {
+            try {
+                requireExactProgram(current.stdout, currentPayload.helperPath);
+                return Object.freeze({
+                    action: 'already-current',
+                    helperPath: currentPayload.helperPath,
+                });
+            } catch (error) {
+                if (!error || error.code !== 'PLATFORM_HELPER_REPAIR_REQUIRED') {
+                    throw error;
+                }
+            }
+            await launchctl(['bootout', service], { allowMissing: true });
+        }
+        const plistPath = materializePrivatePlist(currentPayload, dependencies);
+        await launchctl(['bootstrap', domain, plistPath]);
+        const registered = await launchctl(['print', service]);
+        requireExactProgram(registered.stdout, currentPayload.helperPath);
+        return Object.freeze({
+            action: 'repaired',
+            helperPath: currentPayload.helperPath,
+        });
+    }
+
     return Object.freeze({
         helperPath: payload.helperPath,
         ensureRegistered,
+        repairRegistered,
     });
 }
 
