@@ -124,7 +124,7 @@ function untrustedFile(message, cause) {
 }
 
 function canonicalEvidenceJson(field, value) {
-  return ['nativeSignatureEvidence', 'productAcceptanceEvidence', 'signingReport'].includes(field)
+  return ['productAcceptanceEvidence', 'signingReport'].includes(field)
     ? canonicalStringify(value)
     : canonicalJson(value);
 }
@@ -225,8 +225,15 @@ function assertNativeSignatureEvidence(record, platform, candidateSha, artifacts
   const finalFiles = new Map(record.signedBundleManifest.files.map((item) => [item.path, item]));
   const expectedKind = platform === 'macos-arm64' ? 'codesign' : 'authenticode';
   const requiredSuffixes = platform === 'macos-arm64'
-    ? ['/bin/ae-mcp', '/bin/ae-mcp-platform-helper']
-    : ['/bin/ae-mcp.exe', '/bin/ae-mcp-platform-helper.exe'];
+    ? [
+      '/bin/ae-mcp-platform-helper',
+      '/lib/ae-mcp-platform-helper-transport.node',
+    ]
+    : [
+      '/bin/ae-mcp-platform-helper.exe',
+      '/lib/ae-mcp-platform-helper-transport.node',
+      '/bin/ae-mcp.exe',
+    ];
   let previous = '';
   const seen = new Set();
   for (const item of value.files) {
@@ -244,7 +251,7 @@ function assertNativeSignatureEvidence(record, platform, candidateSha, artifacts
     previous = item.path;
   }
   if (requiredSuffixes.some((suffix) => ![...seen].some((item) => item.endsWith(suffix)))) {
-    throw new Error('final helper or launcher signature coverage is missing');
+    throw new Error('final product native signature coverage is missing');
   }
   const expectedArtifacts = expectedSigningOutputs(artifacts, platform)
     .map(({ name, sha256 }) => ({ name, sha256 }));

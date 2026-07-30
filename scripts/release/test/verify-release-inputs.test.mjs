@@ -785,14 +785,18 @@ test('unsigned local rehearsal binds both platform bytes and rejects tamper or l
         manifestSha256: '5'.repeat(64),
       },
       files: [
-        {
-          path: `platform/${platform}/bin/ae-mcp${platform === 'windows-x64' ? '.exe' : ''}`,
-          sha256: '9'.repeat(64), size: 1,
-          mode: platform === 'macos-arm64' ? '0755' : '0644', type: 'file',
-        },
+        ...(platform === 'windows-x64' ? [{
+          path: `platform/${platform}/bin/ae-mcp.exe`,
+          sha256: '9'.repeat(64), size: 1, mode: '0644', type: 'file',
+        }] : []),
         {
           path: `platform/${platform}/bin/ae-mcp-platform-helper${platform === 'windows-x64' ? '.exe' : ''}`,
           sha256: 'a'.repeat(64), size: 1,
+          mode: platform === 'macos-arm64' ? '0755' : '0644', type: 'file',
+        },
+        {
+          path: `platform/${platform}/lib/ae-mcp-platform-helper-transport.node`,
+          sha256: 'b'.repeat(64), size: 1,
           mode: platform === 'macos-arm64' ? '0755' : '0644', type: 'file',
         },
         {
@@ -843,10 +847,13 @@ test('unsigned local rehearsal binds both platform bytes and rejects tamper or l
     }));
     const nativeSignatureEvidencePath = join(root, `${platform}-native-signatures.json`);
     const nativePaths = [
-      `platform/${platform}/bin/ae-mcp${platform === 'windows-x64' ? '.exe' : ''}`,
+      ...(platform === 'windows-x64'
+        ? [`platform/${platform}/bin/ae-mcp.exe`]
+        : []),
       `platform/${platform}/bin/ae-mcp-platform-helper${platform === 'windows-x64' ? '.exe' : ''}`,
+      `platform/${platform}/lib/ae-mcp-platform-helper-transport.node`,
     ].sort((left, right) => Buffer.compare(Buffer.from(left), Buffer.from(right)));
-    await writeFile(nativeSignatureEvidencePath, canonicalStringify({
+    await writeFile(nativeSignatureEvidencePath, canonicalJson({
       schemaVersion: 1,
       platform,
       candidateSha,
@@ -856,7 +863,9 @@ test('unsigned local rehearsal binds both platform bytes and rejects tamper or l
       discoveredNativeCount: nativePaths.length,
       files: nativePaths.map((itemPath) => ({
         path: itemPath,
-        sha256: itemPath.includes('platform-helper') ? 'a'.repeat(64) : '9'.repeat(64),
+        sha256: itemPath.endsWith('.node')
+          ? 'b'.repeat(64)
+          : itemPath.includes('platform-helper') ? 'a'.repeat(64) : '9'.repeat(64),
         signatureKind: platform === 'macos-arm64' ? 'codesign' : 'authenticode',
         signerFingerprint: platform === 'macos-arm64' ? '6'.repeat(64) : 'f'.repeat(40),
         verified: true,
