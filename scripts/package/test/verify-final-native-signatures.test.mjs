@@ -453,3 +453,107 @@ test('CLI reports the bounded final-signature failure prefix', async () => {
     },
   );
 });
+
+test('Windows adapter binds the requested file through an explicit PowerShell parameter', async () => {
+  const module = await import('../verify-final-native-signatures.mjs');
+  assert.equal(typeof module.inspectWindowsSignature, 'function');
+  const requestedFile = 'C:\\RC files\\ae-mcp-platform-helper.exe';
+  let temporaryScriptPath;
+
+  const result = await module.inspectWindowsSignature({
+    filePath: requestedFile,
+    requireProductIdentity: true,
+    expectedFingerprint: 'A'.repeat(40),
+  }, {
+    executeFile: async (command, args, options) => {
+      assert.equal(command, 'powershell.exe');
+      assert.equal(options.timeout, 30_000);
+      const fileSwitch = args.indexOf('-File');
+      const pathParameter = args.indexOf('-FilePath');
+      assert.ok(fileSwitch >= 0);
+      assert.ok(pathParameter > fileSwitch);
+      assert.equal(args[pathParameter + 1], requestedFile);
+      assert.equal(args.filter((item) => item === requestedFile).length, 1);
+      temporaryScriptPath = args[fileSwitch + 1];
+      const script = await readFile(temporaryScriptPath, 'utf8');
+      assert.match(script, /^param\(/u);
+      assert.match(
+        script,
+        /Get-AuthenticodeSignature -LiteralPath \$FilePath/u,
+      );
+      return {
+        stdout: JSON.stringify({
+          Status: 'Valid',
+          SignerCertificate: { Thumbprint: 'A'.repeat(40) },
+        }),
+      };
+    },
+  });
+
+  assert.deepEqual(result, {
+    verified: true,
+    signerFingerprint: 'A'.repeat(40),
+  });
+  await assert.rejects(readFile(temporaryScriptPath), { code: 'ENOENT' });
+});
+
+test('third-party native with a required suffix cannot replace missing product coverage', async (t) => {
+  const h = await makeFinalSignatureHarness(t, 'macos-arm64');
+  const helperRoot = join(h.outDir, 'platform', 'macos-arm64');
+  const helperManifestPath = join(helperRoot, 'helper-manifest.json');
+  const helperManifest = JSON.parse(await readFile(helperManifestPath, 'utf8'));
+  helperManifest.files = helperManifest.files.filter(
+    ({ path }) => path !== 'lib/ae-mcp-platform-helper-transport.node',
+  );
+  await writeFile(helperManifestPath, `${JSON.stringify(helperManifest, null, 2)}\n`);
+  await rm(join(helperRoot, 'lib', 'ae-mcp-platform-helper-transport.node'));
+  await writeFixtureFile(
+    join(h.outDir, 'runtime', 'macos-arm64'),
+    'third-party/lib/ae-mcp-platform-helper-transport.node',
+    machoArm64Bytes(),
+    0o755,
+  );
+  await rewriteStageManifests(h, { helper: true });
+
+  await assert.rejects(
+    withProtectedFingerprint('macos-arm64', () => verifyFinalNativeSignatures({
+      platform: 'macos-arm64',
+      candidateSha: h.input.sourceCommitSha,
+      signedRoot: h.outDir,
+      zxpPath: h.zxpPath,
+      dmgPath: h.dmgPath,
+    }, { inspectSignature: validInspector('macos-arm64') })),
+    /product native signature coverage is missing/u,
+  );
+});
+
+test('writer rejects the signed root and its descendants before hashing', async (t) => {
+  const h = await makeFinalSignatureHarness(t, 'windows-x64');
+  let inspections = 0;
+
+  for (const outPath of [
+    h.outDir,
+    join(h.outDir, 'evidence', 'native-signatures.json'),
+  ]) {
+    await assert.rejects(
+      withProtectedFingerprint('windows-x64', () => writeFinalNativeSignatureEvidence({
+        platform: 'windows-x64',
+        candidateSha: h.input.sourceCommitSha,
+        signedRoot: h.outDir,
+        zxpPath: h.zxpPath,
+        outPath,
+      }, {
+        inspectSignature: async (input) => {
+          inspections += 1;
+          return validInspector('windows-x64')(input);
+        },
+      })),
+      /output path must be outside the signed root/u,
+    );
+  }
+  assert.equal(inspections, 0);
+  await assert.rejects(
+    readFile(join(h.outDir, 'evidence', 'native-signatures.json')),
+    { code: 'ENOENT' },
+  );
+});

@@ -131,36 +131,59 @@ async function inspectMacSignature({
   }
 }
 
-async function inspectWindowsSignature({
+export async function inspectWindowsSignature({
   filePath,
   requireProductIdentity,
   expectedFingerprint,
-}) {
-  const command = [
-    '$signature = Get-AuthenticodeSignature -LiteralPath $args[0];',
-    '[PSCustomObject]@{',
-    'Status = [string]$signature.Status;',
-    'SignerCertificate = if ($null -eq $signature.SignerCertificate) { $null }',
-    'else { [PSCustomObject]@{',
-    'Thumbprint = [string]$signature.SignerCertificate.Thumbprint',
-    '} }',
-    '} | ConvertTo-Json -Compress',
-  ].join(' ');
-  const { stdout } = await execFileAsync(
-    'powershell.exe',
-    ['-NoLogo', '-NoProfile', '-NonInteractive', '-Command', command, filePath],
-    COMMAND_OPTIONS,
+}, dependencies = {}) {
+  const temporary = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'ae-mcp-authenticode-'),
   );
-  const inspected = JSON.parse(stdout);
-  const signerFingerprint = inspected?.SignerCertificate?.Thumbprint;
-  if (inspected?.Status !== 'Valid' || !/^[A-F0-9]{40}$/.test(signerFingerprint ?? '')) {
-    throw new Error(`Authenticode signature is invalid: ${filePath}`);
+  try {
+    const scriptPath = path.join(temporary, 'inspect-authenticode.ps1');
+    await fs.promises.writeFile(scriptPath, [
+      'param(',
+      '  [Parameter(Mandatory = $true)]',
+      '  [string]$FilePath',
+      ')',
+      '$signature = Get-AuthenticodeSignature -LiteralPath $FilePath',
+      '[PSCustomObject]@{',
+      '  Status = [string]$signature.Status',
+      '  SignerCertificate = if ($null -eq $signature.SignerCertificate) { $null } else {',
+      '    [PSCustomObject]@{',
+      '      Thumbprint = [string]$signature.SignerCertificate.Thumbprint',
+      '    }',
+      '  }',
+      '} | ConvertTo-Json -Compress',
+      '',
+    ].join('\n'), { flag: 'wx', mode: 0o600 });
+    const executeFile = dependencies.executeFile ?? execFileAsync;
+    const { stdout } = await executeFile(
+      'powershell.exe',
+      [
+        '-NoLogo',
+        '-NoProfile',
+        '-NonInteractive',
+        '-File',
+        scriptPath,
+        '-FilePath',
+        filePath,
+      ],
+      COMMAND_OPTIONS,
+    );
+    const inspected = JSON.parse(stdout);
+    const signerFingerprint = inspected?.SignerCertificate?.Thumbprint;
+    if (inspected?.Status !== 'Valid' || !/^[A-F0-9]{40}$/.test(signerFingerprint ?? '')) {
+      throw new Error(`Authenticode signature is invalid: ${filePath}`);
+    }
+    if (requireProductIdentity
+        && signerFingerprint.toUpperCase() !== expectedFingerprint.toUpperCase()) {
+      throw new Error(`product signer fingerprint mismatch: ${filePath}`);
+    }
+    return { verified: true, signerFingerprint };
+  } finally {
+    await fs.promises.rm(temporary, { recursive: true, force: true });
   }
-  if (requireProductIdentity
-      && signerFingerprint.toUpperCase() !== expectedFingerprint.toUpperCase()) {
-    throw new Error(`product signer fingerprint mismatch: ${filePath}`);
-  }
-  return { verified: true, signerFingerprint };
 }
 
 async function defaultInspectSignature(input) {
@@ -218,6 +241,7 @@ export async function verifyFinalNativeSignatures(input, dependencies = {}) {
   const expectedFingerprint = protectedFingerprint(platform);
   const inspectSignature = dependencies.inspectSignature ?? defaultInspectSignature;
   const files = [];
+  const productVerifiedPaths = new Set();
   for (const record of manifest.files) {
     if (record.type !== 'file') continue;
     const filePath = resolveManifestFile(signedRoot, record.path);
@@ -238,6 +262,7 @@ export async function verifyFinalNativeSignatures(input, dependencies = {}) {
         && inspected.signerFingerprint.toLowerCase() !== expectedFingerprint.toLowerCase()) {
       throw new Error(`product signer fingerprint mismatch: ${record.path}`);
     }
+    if (requireProductIdentity) productVerifiedPaths.add(record.path);
     files.push({
       path: record.path,
       sha256: record.sha256,
@@ -248,18 +273,18 @@ export async function verifyFinalNativeSignatures(input, dependencies = {}) {
   }
   files.sort((left, right) => compareUtf8(left.path, right.path));
 
-  const requiredProductSuffixes = platform === 'macos-arm64'
+  const requiredProductPaths = platform === 'macos-arm64'
     ? [
-      '/bin/ae-mcp-platform-helper',
-      '/lib/ae-mcp-platform-helper-transport.node',
+      'platform/macos-arm64/bin/ae-mcp-platform-helper',
+      'platform/macos-arm64/lib/ae-mcp-platform-helper-transport.node',
     ]
     : [
-      '/bin/ae-mcp-platform-helper.exe',
-      '/lib/ae-mcp-platform-helper-transport.node',
-      '/bin/ae-mcp.exe',
+      'platform/windows-x64/bin/ae-mcp-platform-helper.exe',
+      'platform/windows-x64/lib/ae-mcp-platform-helper-transport.node',
+      'platform/windows-x64/bin/ae-mcp.exe',
     ];
-  if (requiredProductSuffixes.some((suffix) => (
-    !files.some(({ path: relative }) => relative.endsWith(suffix))
+  if (requiredProductPaths.some((requiredPath) => (
+    !owned.has(requiredPath) || !productVerifiedPaths.has(requiredPath)
   ))) {
     throw new Error('final product native signature coverage is missing');
   }
@@ -288,6 +313,14 @@ export async function verifyFinalNativeSignatures(input, dependencies = {}) {
 export async function writeFinalNativeSignatureEvidence(input, dependencies = {}) {
   const resolvedOut = path.resolve(String(input?.outPath ?? ''));
   if (input?.outPath !== resolvedOut) throw new Error('output path must be absolute');
+  const resolvedSignedRoot = path.resolve(String(input?.signedRoot ?? ''));
+  const relativeOutput = path.relative(resolvedSignedRoot, resolvedOut);
+  if (relativeOutput === ''
+      || (!path.isAbsolute(relativeOutput)
+        && relativeOutput !== '..'
+        && !relativeOutput.startsWith(`..${path.sep}`))) {
+    throw new Error('output path must be outside the signed root');
+  }
   try {
     await fs.promises.lstat(resolvedOut);
     throw new Error(`output already exists: ${resolvedOut}`);
