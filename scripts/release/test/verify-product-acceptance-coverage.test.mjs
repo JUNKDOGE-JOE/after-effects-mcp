@@ -210,7 +210,7 @@ test('selector entry candidate SHA and result must match the requested PASS cand
   }));
 });
 
-test('selector entries require non-empty owner and reviewer identities', async (t) => {
+test('selector entries require non-blank owner and reviewer identities', async (t) => {
   const owner = await makeFixture(t, {
     mutateSelector: (selector) => { selector.evidence[0].owner = ''; },
   });
@@ -225,6 +225,22 @@ test('selector entries require non-empty owner and reviewer identities', async (
   await expectRejected(() => verifyProductAcceptanceCoverage({
     candidateSha: CANDIDATE_SHA,
     coveragePath: reviewer.coveragePath,
+  }));
+
+  const whitespaceOwner = await makeFixture(t, {
+    mutateSelector: (selector) => { selector.evidence[0].owner = '   '; },
+  });
+  await expectRejected(() => verifyProductAcceptanceCoverage({
+    candidateSha: CANDIDATE_SHA,
+    coveragePath: whitespaceOwner.coveragePath,
+  }));
+
+  const whitespaceReviewer = await makeFixture(t, {
+    mutateSelector: (selector) => { selector.evidence[0].reviewedBy = '\t'; },
+  });
+  await expectRejected(() => verifyProductAcceptanceCoverage({
+    candidateSha: CANDIDATE_SHA,
+    coveragePath: whitespaceReviewer.coveragePath,
   }));
 });
 

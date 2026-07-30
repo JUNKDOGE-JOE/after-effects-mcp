@@ -106,8 +106,8 @@ function validateSelector(selector, candidateSha) {
         || entry.result !== 'PASS'
         || typeof entry.evidencePath !== 'string'
         || !EVIDENCE_SHA256.test(entry.evidenceSha256 ?? '')
-        || typeof entry.owner !== 'string' || entry.owner.length === 0
-        || typeof entry.reviewedBy !== 'string' || entry.reviewedBy.length === 0) {
+        || typeof entry.owner !== 'string' || entry.owner.trim().length === 0
+        || typeof entry.reviewedBy !== 'string' || entry.reviewedBy.trim().length === 0) {
       throw coverageError('product acceptance selector entry is invalid');
     }
     try {
