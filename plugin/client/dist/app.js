@@ -39954,12 +39954,22 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/claudeAuth.js
-  function resolveSidecarPath({ extRoot, fsImpl, platform } = {}) {
+  function incompatibleSidecarSelection(message) {
+    const error = new Error(message);
+    error.code = "RUNTIME_SIDECAR_SELECTION_INCOMPATIBLE";
+    return error;
+  }
+  function resolveSidecarPath({
+    extRoot,
+    fsImpl,
+    platform,
+    runtimeSelection
+  } = {}) {
     const adapter = platform || createPlatformAdapter();
     const root = normalizeCepSystemPath(extRoot || adapter.paths.configRoot, adapter);
     const developmentMarker = adapter.paths.join([root, ".debug"]);
     const developmentSidecar = adapter.paths.join([root, "sidecar", "agent-sidecar.mjs"]);
-    const runtimeSidecar = adapter.paths.join([
+    const extensionRuntimeSidecar = adapter.paths.join([
       root,
       "runtime",
       adapter.id,
@@ -39968,9 +39978,64 @@ data: ${JSON.stringify(payload)}
       "agent-sidecar.mjs"
     ]);
     const fs = fsImpl || adapter.fs;
-    if (!fs || typeof fs.existsSync !== "function") throw new Error("platform filesystem is unavailable");
-    if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) return developmentSidecar;
-    return runtimeSidecar;
+    if (!fs || typeof fs.existsSync !== "function") {
+      throw new Error("platform filesystem is unavailable");
+    }
+    if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) {
+      return developmentSidecar;
+    }
+    if (adapter.id !== "macos-arm64") return extensionRuntimeSidecar;
+    if (!runtimeSelection) return null;
+    const receipt = runtimeSelection.componentReceipt;
+    const canonicalPath = receipt == null ? void 0 : receipt.canonicalPath;
+    if ((receipt == null ? void 0 : receipt.component) !== "core-runtime" || (receipt == null ? void 0 : receipt.platform) !== adapter.id || typeof canonicalPath !== "string" || !adapter.paths.isAbsolute(canonicalPath) || !adapter.paths.contains(adapter.paths.runtimeRoot, canonicalPath)) {
+      throw incompatibleSidecarSelection(
+        "The selected runtime does not own a compatible Claude sidecar payload"
+      );
+    }
+    return adapter.paths.join([
+      canonicalPath,
+      "node",
+      "sidecar",
+      "agent-sidecar.mjs"
+    ]);
+  }
+  function resolveSidecarSelection({
+    runtimeActivation,
+    extRoot,
+    fsImpl,
+    platform
+  } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    if (adapter.id === "macos-arm64" && (runtimeActivation == null ? void 0 : runtimeActivation.state) === "error" && runtimeActivation.error) {
+      return { state: "error", path: null, error: runtimeActivation.error };
+    }
+    try {
+      const path = resolveSidecarPath({
+        extRoot,
+        fsImpl,
+        platform: adapter,
+        runtimeSelection: (runtimeActivation == null ? void 0 : runtimeActivation.state) === "ready" ? runtimeActivation.result : null
+      });
+      return path ? { state: "ready", path, error: null } : { state: "pending", path: null, error: null };
+    } catch (error) {
+      return { state: "error", path: null, error };
+    }
+  }
+  async function resolveNodeForSidecarSelection({
+    resolveNode,
+    runtimeSelection,
+    platform
+  } = {}) {
+    var _a, _b, _c;
+    const resolved = await resolveNode({ platform });
+    const sidecarCanonicalPath = (_a = runtimeSelection == null ? void 0 : runtimeSelection.componentReceipt) == null ? void 0 : _a.canonicalPath;
+    if (sidecarCanonicalPath && ((_c = (_b = resolved == null ? void 0 : resolved.runtime) == null ? void 0 : _b.componentReceipt) == null ? void 0 : _c.canonicalPath) !== sidecarCanonicalPath) {
+      const error = new Error("Selected Sidecar and Node runtime receipts do not match");
+      error.code = "RUNTIME_SIDECAR_NODE_SELECTION_MISMATCH";
+      throw error;
+    }
+    return resolved;
   }
   async function probeClaudeLogin({
     platform,
@@ -39980,6 +40045,13 @@ data: ${JSON.stringify(payload)}
     env,
     timeoutMs = 3e4
   } = {}) {
+    if (!sidecarPath) {
+      return {
+        loggedIn: false,
+        nodeOk: false,
+        detail: "verified runtime sidecar is not ready"
+      };
+    }
     const adapter = platform || (spawnImpl ? {
       completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
       spawn: (executable, args, options) => spawnImpl(executable.path, [...executable.argsPrefix || [], ...args], options)
@@ -49955,10 +50027,19 @@ ${baseUrl}`),
     const runtimeReady = runtimeActivation.state === "ready";
     const mcpCommand = runtimeManager ? platform.paths.launcher : "ae-mcp";
     const resolvePanelNode = import_react46.default.useCallback(
-      ({ platform: requestedPlatform } = {}) => runtimeManager ? runtimeManager.resolveNode() : resolveSystemNode({ platform: requestedPlatform || platform }),
-      [platform, runtimeManager]
+      ({ platform: requestedPlatform } = {}) => runtimeManager ? resolveNodeForSidecarSelection({
+        resolveNode: () => runtimeManager.resolveNode(),
+        runtimeSelection: runtimeActivation.result,
+        platform: requestedPlatform || platform
+      }) : resolveSystemNode({ platform: requestedPlatform || platform }),
+      [platform, runtimeActivation.result, runtimeManager]
     );
-    const sidecarPath = import_react46.default.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
+    const sidecarSelection = import_react46.default.useMemo(() => resolveSidecarSelection({
+      extRoot,
+      platform,
+      runtimeActivation
+    }), [extRoot, platform, runtimeActivation]);
+    const sidecarPath = sidecarSelection.path;
     const getMcpSpec = import_react46.default.useCallback(async () => {
       try {
         const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
@@ -50394,6 +50475,19 @@ ${baseUrl}`),
     const runClaudeProbe = import_react46.default.useCallback(() => {
       let alive = true;
       setProbe(null);
+      if (sidecarSelection.state !== "ready") {
+        if (sidecarSelection.state === "error") {
+          const error = sidecarSelection.error;
+          setProbe({
+            loggedIn: false,
+            nodeOk: false,
+            detail: (error == null ? void 0 : error.message) || String(error)
+          });
+        }
+        return () => {
+          alive = false;
+        };
+      }
       probeClaudeLogin({
         platform,
         resolveNode: resolvePanelNode,
@@ -50406,7 +50500,7 @@ ${baseUrl}`),
       return () => {
         alive = false;
       };
-    }, [platform, resolvePanelNode, sidecarPath]);
+    }, [platform, resolvePanelNode, sidecarPath, sidecarSelection]);
     import_react46.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
