@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
+import path from 'node:path';
 import { probeClaudeLogin, resolveSidecarPath } from '../src/cep/claudeAuth.js';
 
 function makeProc() {
@@ -37,6 +38,55 @@ function windowsPlatform() {
   return { id: 'windows-x64', paths: windowsPaths() };
 }
 
+function macPaths() {
+  const runtimeRoot = '/Users/test/.ae-mcp/runtime';
+  return {
+    runtimeRoot,
+    join: (parts) => path.posix.join(...parts),
+    resolve: (parts) => path.posix.resolve(...parts),
+    isAbsolute: (value) => path.posix.isAbsolute(value),
+    contains: (root, candidate) => {
+      const normalizedRoot = path.posix.resolve(root);
+      const normalizedCandidate = path.posix.resolve(candidate);
+      return normalizedCandidate === normalizedRoot
+        || normalizedCandidate.startsWith(normalizedRoot + '/');
+    },
+  };
+}
+
+function macPlatform() {
+  return { id: 'macos-arm64', paths: macPaths() };
+}
+
+function selectedRuntime(canonicalPath, action = 'ready') {
+  return {
+    ok: true,
+    action,
+    launcher: '/Users/test/.ae-mcp/bin/ae-mcp',
+    relative: 'generations/g-0123456789abcdef',
+    version: '0.9.3',
+    sourceCommitSha: 'a'.repeat(40),
+    componentReceipt: {
+      schemaVersion: 1,
+      component: 'core-runtime',
+      platform: 'macos-arm64',
+      version: '0.9.3',
+      sourceRevision: 'a'.repeat(40),
+      sourceRevisionRole: 'advisory',
+      canonicalPath,
+      installReceiptPath: '/Users/test/.ae-mcp/runtime/generations/g-0123456789abcdef/install-record.json',
+      generation: 'generations/g-0123456789abcdef',
+      layerId: 'b'.repeat(64),
+      signals: {},
+      stableLauncher: {
+        canonicalPath: '/Users/test/.ae-mcp/bin/ae-mcp',
+        installReceiptPath: '/Users/test/.ae-mcp/runtime/stable-launcher-record.json',
+        signal: {},
+      },
+    },
+  };
+}
+
 test('resolveSidecarPath returns the local sidecar only for a .debug development extension', () => {
   const hits = new Set(['C:\\ext\\.debug', 'C:\\ext\\sidecar\\agent-sidecar.mjs']);
   const result = resolveSidecarPath({
@@ -46,6 +96,59 @@ test('resolveSidecarPath returns the local sidecar only for a .debug development
   });
 
   assert.equal(result, 'C:\\ext\\sidecar\\agent-sidecar.mjs');
+});
+
+test('resolveSidecarPath waits for a verified macOS production runtime selection', () => {
+  const result = resolveSidecarPath({
+    extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
+    platform: macPlatform(),
+    fsImpl: { existsSync: () => false },
+  });
+
+  assert.equal(result, null);
+});
+
+test('resolveSidecarPath uses the selected macOS generation for ready retained and fallback results', () => {
+  const cases = [
+    ['ready', '/Users/test/.ae-mcp/runtime/layers/a/i-ready/macos-arm64',
+      '/Users/test/.ae-mcp/runtime/layers/a/i-ready/macos-arm64/node/sidecar/agent-sidecar.mjs'],
+    ['retained', '/Users/test/.ae-mcp/runtime/layers/b/i-retained/macos-arm64',
+      '/Users/test/.ae-mcp/runtime/layers/b/i-retained/macos-arm64/node/sidecar/agent-sidecar.mjs'],
+    ['fallback', '/Users/test/.ae-mcp/runtime/layers/c/i-fallback/macos-arm64',
+      '/Users/test/.ae-mcp/runtime/layers/c/i-fallback/macos-arm64/node/sidecar/agent-sidecar.mjs'],
+  ];
+
+  for (const [action, canonicalPath, expected] of cases) {
+    const result = resolveSidecarPath({
+      extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
+      platform: macPlatform(),
+      runtimeSelection: selectedRuntime(canonicalPath, action),
+      fsImpl: { existsSync: () => false },
+    });
+    assert.equal(result, expected);
+  }
+});
+
+test('resolveSidecarPath rejects incompatible macOS runtime receipts without an extension fallback', () => {
+  const base = selectedRuntime('/Users/test/.ae-mcp/runtime/layers/a/i-valid/macos-arm64');
+  const cases = [
+    { ...base, componentReceipt: { ...base.componentReceipt, component: 'platform-helper' } },
+    { ...base, componentReceipt: { ...base.componentReceipt, platform: 'windows-x64' } },
+    { ...base, componentReceipt: { ...base.componentReceipt, canonicalPath: 'relative/runtime' } },
+    { ...base, componentReceipt: { ...base.componentReceipt, canonicalPath: '/Applications/Adobe/CEP/extensions/ae-mcp/runtime/macos-arm64' } },
+  ];
+
+  for (const runtimeSelection of cases) {
+    assert.throws(
+      () => resolveSidecarPath({
+        extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
+        platform: macPlatform(),
+        runtimeSelection,
+        fsImpl: { existsSync: () => false },
+      }),
+      (error) => error?.code === 'RUNTIME_SIDECAR_SELECTION_INCOMPATIBLE',
+    );
+  }
 });
 
 test('resolveSidecarPath returns the bundled runtime sidecar in production', () => {

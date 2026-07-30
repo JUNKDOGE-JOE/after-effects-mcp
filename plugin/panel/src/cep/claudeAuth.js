@@ -4,21 +4,49 @@ import { createPlatformAdapter } from './platform/index.js';
 import { resolveSystemNode } from './claudeAgentBackend.js';
 import { normalizeCepSystemPath } from './platform/paths.js';
 
-export function resolveSidecarPath({ extRoot, fsImpl, platform } = {}) {
+function incompatibleSidecarSelection(message) {
+  const error = new Error(message);
+  error.code = 'RUNTIME_SIDECAR_SELECTION_INCOMPATIBLE';
+  return error;
+}
+
+export function resolveSidecarPath({
+  extRoot,
+  fsImpl,
+  platform,
+  runtimeSelection,
+} = {}) {
   const adapter = platform || createPlatformAdapter();
   const root = normalizeCepSystemPath(extRoot || adapter.paths.configRoot, adapter);
   const developmentMarker = adapter.paths.join([root, '.debug']);
   const developmentSidecar = adapter.paths.join([root, 'sidecar', 'agent-sidecar.mjs']);
-  const runtimeSidecar = adapter.paths.join([
+  const extensionRuntimeSidecar = adapter.paths.join([
     root, 'runtime', adapter.id, 'node', 'sidecar', 'agent-sidecar.mjs',
   ]);
   const fs = fsImpl || adapter.fs;
-  if (!fs || typeof fs.existsSync !== 'function') throw new Error('platform filesystem is unavailable');
-  if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) return developmentSidecar;
-  // Returning the deterministic production candidate keeps App construction
-  // non-throwing; the login probe reports a missing/incomplete payload with the
-  // exact path.  This immutable extension path never consults runtime/current.
-  return runtimeSidecar;
+  if (!fs || typeof fs.existsSync !== 'function') {
+    throw new Error('platform filesystem is unavailable');
+  }
+  if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) {
+    return developmentSidecar;
+  }
+  if (adapter.id !== 'macos-arm64') return extensionRuntimeSidecar;
+  if (!runtimeSelection) return null;
+
+  const receipt = runtimeSelection.componentReceipt;
+  const canonicalPath = receipt?.canonicalPath;
+  if (receipt?.component !== 'core-runtime'
+      || receipt?.platform !== adapter.id
+      || typeof canonicalPath !== 'string'
+      || !adapter.paths.isAbsolute(canonicalPath)
+      || !adapter.paths.contains(adapter.paths.runtimeRoot, canonicalPath)) {
+    throw incompatibleSidecarSelection(
+      'The selected runtime does not own a compatible Claude sidecar payload',
+    );
+  }
+  return adapter.paths.join([
+    canonicalPath, 'node', 'sidecar', 'agent-sidecar.mjs',
+  ]);
 }
 
 export async function probeClaudeLogin({
