@@ -655,6 +655,12 @@ macosRuntimeTest('a launcher contract change cannot publish a mixed launcher/run
   const installed = await one.ensureReady();
   const pointerBefore = await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8');
   const launcherBefore = await fs.promises.readFile(h.platform.paths.launcher);
+  const malformed = path.join(
+    h.platform.paths.runtimeRoot,
+    'generations',
+    'g-0000000000000000',
+  );
+  await fs.promises.mkdir(malformed, { recursive: true });
   const before = await managedDirectoryCounts(h.platform.paths.runtimeRoot);
 
   await assert.rejects(
@@ -662,6 +668,7 @@ macosRuntimeTest('a launcher contract change cannot publish a mixed launcher/run
     { code: 'RUNTIME_LAUNCHER_MIGRATION_REQUIRED' },
   );
   assert.deepEqual(await managedDirectoryCounts(h.platform.paths.runtimeRoot), before);
+  assert.equal((await fs.promises.lstat(malformed)).isDirectory(), true);
 
   assert.equal(await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8'), pointerBefore);
   assert.deepEqual(await fs.promises.readFile(h.platform.paths.launcher), launcherBefore);
@@ -670,6 +677,7 @@ macosRuntimeTest('a launcher contract change cannot publish a mixed launcher/run
     { code: 'RUNTIME_LAUNCHER_MIGRATION_REQUIRED' },
   );
   assert.deepEqual(await managedDirectoryCounts(h.platform.paths.runtimeRoot), before);
+  assert.equal((await fs.promises.lstat(malformed)).isDirectory(), true);
   const launched = await execFileAsync(installed.launcher, ['--unchanged'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });

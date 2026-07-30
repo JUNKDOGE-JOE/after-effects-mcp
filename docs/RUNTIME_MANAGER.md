@@ -23,7 +23,7 @@ RuntimeManager 保护普通安装流程的正确性，不是断电续跑或抵�
   runtime/generations/g-<id>/
     install-record.json
     ae-mcp-launcher                    launcher bound to this generation / 与该版本绑定的入口
-    macos-arm64 -> ../../layers/<manifest-sha>/i-<id>/macos-arm64
+    runtime -> ../../layers/<manifest-sha>/i-<id>/macos-arm64
   runtime/layers/<manifest-sha>/i-<id>/
     layer-record.json
     macos-arm64/                       verified packaged runtime / 已校验包内运行时

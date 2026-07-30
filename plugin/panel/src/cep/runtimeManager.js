@@ -989,6 +989,17 @@ export function createRuntimeManager({
         previousRelative: previous?.relative || null,
         inProgressRelative: null,
       });
+      const selectedLayer = selected.record.layer;
+      if (
+        selected.lifecycle.layers.created === 1
+        && current?.record?.layer?.relative !== selectedLayer.relative
+        && previous?.record?.layer?.relative !== selectedLayer.relative
+      ) {
+        await promises.rm(
+          paths.join([root, 'layers', selectedLayer.id, selectedLayer.instanceId]),
+          { recursive: true, force: true },
+        );
+      }
       throw error;
     }
   }
