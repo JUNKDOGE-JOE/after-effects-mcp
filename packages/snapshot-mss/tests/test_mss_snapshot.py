@@ -6,10 +6,24 @@ import pytest
 
 from ae_mcp_snapshot_mss import MssSnapshotter
 from ae_mcp_snapshot_mss._hwnd_rect import _select_largest_ae_window, _is_ae_window
+from ae_mcp.snapshot.discovery import select_snapshotter
 
 
-def test_supports_platform_always_true():
-    assert MssSnapshotter().supports_platform() is True
+@pytest.mark.parametrize(
+    ("platform", "expected"),
+    [("win32", True), ("darwin", False), ("linux", False)],
+)
+def test_supports_platform_only_when_window_capture_is_implemented(platform, expected):
+    with patch.object(sys, "platform", platform):
+        assert MssSnapshotter().supports_platform() is expected
+
+
+def test_darwin_discovery_does_not_select_mss():
+    with patch.object(sys, "platform", "darwin"), patch(
+        "ae_mcp.snapshot.discovery._scan_entry_points",
+        return_value={"mss": MssSnapshotter},
+    ):
+        assert select_snapshotter() is None
 
 
 def test_name_is_mss():
@@ -114,5 +128,4 @@ def test_select_returns_none_when_no_ae_window():
          "rect": (0, 0, 800, 600)},   # AE but not visible
     ]
     assert _select_largest_ae_window(windows) is None
-
 

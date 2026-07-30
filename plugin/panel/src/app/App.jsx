@@ -40,7 +40,7 @@ import { migrateProviderStoreV2ToV3 } from '../cep/providerSchemaMigration';
 import { createSecretMigrationRunner } from '../cep/platform/secret-migration';
 import { deleteProviderProfile, drainPendingProviderSecretDeletes, importProviderDraft, saveProviderDraft } from './providerProfileFlow';
 import { runProviderManagerProbe } from './providerProbeFlow.js';
-import { assertProviderStateCredentialFree, providerInitFailure } from './providerInitState';
+import { assertProviderStateCredentialFree, providerInitFailure, providerRepairFailure } from './providerInitState';
 import { ProviderManagerSection } from '../components/settings/ProviderManagerSection';
 import { probeProviderModels } from '../cep/modelProbe';
 import { detectCcSwitch, readCcSwitchProviderDrafts } from '../cep/ccSwitch';
@@ -397,6 +397,8 @@ function Shell({ cs }) {
   const zcodeStoredKeyRef = React.useRef('');
   const [zcodeCredentialEpoch, setZcodeCredentialEpoch] = React.useState(0);
   const [providerInit, setProviderInit] = React.useState({ state: 'checking', error: '' });
+  const [providerRepairing, setProviderRepairing] = React.useState(false);
+  const [providerInitEpoch, setProviderInitEpoch] = React.useState(0);
   const [providers, setProviders] = React.useState([]);
   const [claudeProviderId, setClaudeProviderId] = React.useState(() => readPref('ae_mcp_claude_provider', ''));
   const [codexProviderId, setCodexProviderId] = React.useState(() => readPref('ae_mcp_codex_provider', ''));
@@ -1315,6 +1317,27 @@ function Shell({ cs }) {
     setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${m}`]);
   }, []);
 
+  const repairPlatformHelper = React.useCallback(async () => {
+    if (providerRepairing) return;
+    setProviderRepairing(true);
+    try {
+      const controller = ctrl.current;
+      if (!controller || typeof controller.repairPlatformHelper !== 'function') {
+        throw providerRuntimeUnavailableError();
+      }
+      await controller.repairPlatformHelper();
+      pushLog('Platform Helper repaired; rechecking protected provider state');
+      setProviderInitEpoch((current) => current + 1);
+    } catch (error) {
+      setProviderInit(providerRepairFailure(error));
+      pushLog('Platform Helper repair failed: ' + (
+        typeof error?.code === 'string' ? error.code : 'HELPER_UNAVAILABLE'
+      ));
+    } finally {
+      setProviderRepairing(false);
+    }
+  }, [providerRepairing, pushLog]);
+
   const exportLogs = React.useCallback(() => {
     try {
       const exactSecrets = providerSecretService.getRedactionValues();
@@ -1446,7 +1469,7 @@ function Shell({ cs }) {
       }
     })();
     return () => { alive = false; };
-  }, [status.state, providerStore, providerSecretService, getHost, legacyKeyStore, platform, pushLog, zcodeCredentialManager]);
+  }, [status.state, providerStore, providerSecretService, getHost, legacyKeyStore, platform, pushLog, providerInitEpoch, zcodeCredentialManager]);
 
   // Keep connection info fresh while the drawer is open.
   React.useEffect(() => {
@@ -1685,6 +1708,8 @@ function Shell({ cs }) {
             providers={providers}
             providerManager={providerManager}
             providerInit={providerInit}
+            providerRepairing={providerRepairing}
+            onRepairPlatformHelper={repairPlatformHelper}
             claudeProviderId={claudeProviderId}
             onClaudeProviderChange={(id) => { setClaudeProviderId(id); writePref('ae_mcp_claude_provider', id); }}
             codexProviderId={codexProviderId}

@@ -251,6 +251,7 @@ export function createHostController({
   const adapter = platform || createPlatformAdapter();
   let host = null;
   let helperClient = null;
+  let helperBindingContext = null;
   let platformRoots = null;
   let beforeUnloadInstalled = false;
   let lifecycleGeneration = 0;
@@ -266,7 +267,12 @@ export function createHostController({
     try { if (hostInstance && typeof hostInstance.stop === 'function') hostInstance.stop(); } catch { /* best effort */ }
   }
 
-  function bindPlatformHelperFacade({ cepRequire, extRoot, hostInstance }) {
+  function bindPlatformHelperFacade({
+    cepRequire,
+    extRoot,
+    hostInstance,
+    repairRegistration = false,
+  }) {
     let transport = null;
     let nextClient = null;
     let bindingError = null;
@@ -286,6 +292,7 @@ export function createHostController({
       transport = transportFactory({
         platformId: adapter.id,
         runtime: helperRuntime(adapter.id),
+        repairRegistration,
       });
       if (!transport || typeof transport.request !== 'function' || typeof transport.close !== 'function') {
         throw helperUnavailableError();
@@ -327,6 +334,7 @@ export function createHostController({
     const priorClient = helperClient;
     host = null;
     helperClient = null;
+    helperBindingContext = null;
     platformRoots = null;
     if (priorHost || priorClient) disposeLifecycle(priorClient, priorHost);
     try {
@@ -352,6 +360,7 @@ export function createHostController({
       nextHost.setCSInterface(cs);
       if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
       host = nextHost;
+      helperBindingContext = { cepRequire, extRoot, hostInstance: nextHost };
       bindPlatformHelperFacade({ cepRequire, extRoot, hostInstance: nextHost });
       // Release the port when this JS context goes away (panel close or a
       // devtools reload) — otherwise the orphaned listener keeps the port and
@@ -364,6 +373,7 @@ export function createHostController({
           const closingClient = helperClient;
           const closingHost = host;
           helperClient = null;
+          helperBindingContext = null;
           host = null;
           platformRoots = null;
           disposeLifecycle(closingClient, closingHost, { closeClient: false });
@@ -380,6 +390,7 @@ export function createHostController({
       const failedClient = helperClient;
       host = null;
       helperClient = null;
+      helperBindingContext = null;
       platformRoots = null;
       disposeLifecycle(failedClient, failedHost);
       if (generation === lifecycleGeneration) onStatus('error', port, e.message);
@@ -397,5 +408,32 @@ export function createHostController({
       }, platformRoots);
     }
   }
-  return { start, restart, getHost: () => host };
+  async function repairPlatformHelper() {
+    const context = helperBindingContext;
+    const currentHost = host;
+    if (adapter.id !== 'macos-arm64'
+        || !context
+        || !currentHost
+        || context.hostInstance !== currentHost) {
+      throw helperUnavailableError();
+    }
+
+    const priorClient = helperClient;
+    helperClient = null;
+    closeHelperClient(priorClient);
+    bindPlatformHelperFacade({
+      ...context,
+      repairRegistration: true,
+    });
+
+    if (host !== currentHost) {
+      throw helperUnavailableError();
+    }
+    try {
+      return await currentHost.capabilities();
+    } catch (error) {
+      throw sanitizeHelperError(error);
+    }
+  }
+  return { start, restart, repairPlatformHelper, getHost: () => host };
 }

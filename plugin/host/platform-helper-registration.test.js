@@ -260,6 +260,208 @@ test('macOS registration rejects an already-loaded different helper', async (t) 
     });
 });
 
+test('macOS explicit repair replaces a stale registration and verifies the current helper', async (t) => {
+    const fixture = writeMacosFixture(t);
+    const calls = [];
+    const service = 'gui/501/com.junkdoge.ae-mcp.platform-helper';
+    let printCalls = 0;
+    const registration = registrationFor(fixture, function (file, args, options, callback) {
+        calls.push([file, [...args]]);
+        if (args[0] === 'print') {
+            printCalls += 1;
+            const helperPath = printCalls === 1
+                ? '/tmp/stale-helper'
+                : fixture.helperPath;
+            queueMicrotask(() => callback(
+                null,
+                `${service} = {\n\tprogram = ${helperPath}\n}\n`,
+                '',
+            ));
+            return;
+        }
+        queueMicrotask(() => callback(null, '', ''));
+    });
+
+    assert.deepEqual(await registration.repairRegistered(), {
+        action: 'repaired',
+        helperPath: fixture.helperPath,
+    });
+    assert.deepEqual(calls.map(([, args]) => args[0]), [
+        'print',
+        'bootout',
+        'bootstrap',
+        'print',
+    ]);
+    assert.deepEqual(calls[1][1], ['bootout', service]);
+});
+
+test('macOS explicit repair reuses an already-current registration', async (t) => {
+    const fixture = writeMacosFixture(t);
+    const calls = [];
+    const service = 'gui/501/com.junkdoge.ae-mcp.platform-helper';
+    const registration = registrationFor(fixture, function (file, args, options, callback) {
+        calls.push([file, [...args]]);
+        queueMicrotask(() => callback(
+            null,
+            `${service} = {\n\tprogram = ${fixture.helperPath}\n}\n`,
+            '',
+        ));
+    });
+
+    assert.deepEqual(await registration.repairRegistered(), {
+        action: 'already-current',
+        helperPath: fixture.helperPath,
+    });
+    assert.deepEqual(calls.map(([, args]) => args[0]), ['print']);
+});
+
+test('macOS explicit repair bootstraps when the service is already absent', async (t) => {
+    const fixture = writeMacosFixture(t);
+    const calls = [];
+    const service = 'gui/501/com.junkdoge.ae-mcp.platform-helper';
+    let printCalls = 0;
+    const registration = registrationFor(fixture, function (file, args, options, callback) {
+        calls.push([file, [...args]]);
+        if (args[0] === 'print') {
+            printCalls += 1;
+            if (printCalls === 1) {
+                queueMicrotask(() => callback(
+                    Object.assign(new Error('service absent'), { code: 113 }),
+                    '',
+                    '',
+                ));
+                return;
+            }
+            queueMicrotask(() => callback(
+                null,
+                `${service} = {\n\tprogram = ${fixture.helperPath}\n}\n`,
+                '',
+            ));
+            return;
+        }
+        queueMicrotask(() => callback(null, '', ''));
+    });
+
+    assert.deepEqual(await registration.repairRegistered(), {
+        action: 'repaired',
+        helperPath: fixture.helperPath,
+    });
+    assert.deepEqual(calls.map(([, args]) => args[0]), [
+        'print',
+        'bootstrap',
+        'print',
+    ]);
+});
+
+test('macOS explicit repair reverifies the payload before launchd mutation', async (t) => {
+    const fixture = writeMacosFixture(t);
+    let launchctlCalls = 0;
+    const registration = registrationFor(fixture, function () {
+        launchctlCalls += 1;
+    });
+    fs.appendFileSync(fixture.helperPath, 'tampered');
+
+    await assert.rejects(registration.repairRegistered(), {
+        code: 'PLATFORM_HELPER_REPAIR_REQUIRED',
+        retryable: false,
+    });
+    assert.equal(launchctlCalls, 0);
+});
+
+test('macOS explicit repair stops on a non-missing bootout failure', async (t) => {
+    const fixture = writeMacosFixture(t);
+    const calls = [];
+    const service = 'gui/501/com.junkdoge.ae-mcp.platform-helper';
+    const registration = registrationFor(fixture, function (file, args, options, callback) {
+        calls.push([file, [...args]]);
+        if (args[0] === 'print') {
+            queueMicrotask(() => callback(
+                null,
+                `${service} = {\n\tprogram = /tmp/stale-helper\n}\n`,
+                '',
+            ));
+            return;
+        }
+        if (args[0] === 'bootout') {
+            queueMicrotask(() => callback(
+                Object.assign(new Error('bootout failed'), { code: 5 }),
+                '',
+                '',
+            ));
+            return;
+        }
+        queueMicrotask(() => callback(null, '', ''));
+    });
+
+    await assert.rejects(registration.repairRegistered(), {
+        code: 'HELPER_START_FAILED',
+        retryable: true,
+    });
+    assert.deepEqual(calls.map(([, args]) => args[0]), ['print', 'bootout']);
+});
+
+test('macOS explicit repair continues when bootout observes a missing service', async (t) => {
+    const fixture = writeMacosFixture(t);
+    const calls = [];
+    const service = 'gui/501/com.junkdoge.ae-mcp.platform-helper';
+    let printCalls = 0;
+    const registration = registrationFor(fixture, function (file, args, options, callback) {
+        calls.push([file, [...args]]);
+        if (args[0] === 'print') {
+            printCalls += 1;
+            const helperPath = printCalls === 1
+                ? '/tmp/stale-helper'
+                : fixture.helperPath;
+            queueMicrotask(() => callback(
+                null,
+                `${service} = {\n\tprogram = ${helperPath}\n}\n`,
+                '',
+            ));
+            return;
+        }
+        if (args[0] === 'bootout') {
+            queueMicrotask(() => callback(
+                Object.assign(new Error('service disappeared'), { code: 113 }),
+                '',
+                '',
+            ));
+            return;
+        }
+        queueMicrotask(() => callback(null, '', ''));
+    });
+
+    assert.deepEqual(await registration.repairRegistered(), {
+        action: 'repaired',
+        helperPath: fixture.helperPath,
+    });
+    assert.deepEqual(calls.map(([, args]) => args[0]), [
+        'print',
+        'bootout',
+        'bootstrap',
+        'print',
+    ]);
+});
+
+test('macOS normal registration never boots out a stale service', async (t) => {
+    const fixture = writeMacosFixture(t);
+    const calls = [];
+    const service = 'gui/501/com.junkdoge.ae-mcp.platform-helper';
+    const registration = registrationFor(fixture, function (file, args, options, callback) {
+        calls.push([file, [...args]]);
+        queueMicrotask(() => callback(
+            null,
+            `${service} = {\n\tprogram = /tmp/stale-helper\n}\n`,
+            '',
+        ));
+    });
+
+    await assert.rejects(registration.ensureRegistered(), {
+        code: 'PLATFORM_HELPER_REPAIR_REQUIRED',
+        retryable: false,
+    });
+    assert.deepEqual(calls.map(([, args]) => args[0]), ['print']);
+});
+
 test('macOS registration sanitizes bootstrap failures without fallback', async (t) => {
     const fixture = writeMacosFixture(t);
     let calls = 0;

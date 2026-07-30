@@ -32,6 +32,27 @@ export function providerInitFailure(error) {
   return { state: 'unavailable', error: failure };
 }
 
+export function platformHelperRepairView(providerInit, repairing, hasAction) {
+  if (!hasAction
+      || providerInit?.state !== 'unavailable'
+      || providerInit?.error !== 'PLATFORM_HELPER_REPAIR_REQUIRED') {
+    return null;
+  }
+  return {
+    disabled: repairing === true,
+    label: repairing === true ? 'repairing' : 'repair',
+  };
+}
+
+export function providerRepairFailure(error) {
+  const classified = providerInitFailure(error);
+  return {
+    state: 'unavailable',
+    error: 'PLATFORM_HELPER_REPAIR_REQUIRED',
+    detail: classified.error,
+  };
+}
+
 export function assertProviderStateCredentialFree(providerState, exactSecrets = []) {
   if (!containsExactSecret(providerState?.providers, exactSecrets)) return providerState;
   const error = new Error('Stored Provider data contains protected credential material.');

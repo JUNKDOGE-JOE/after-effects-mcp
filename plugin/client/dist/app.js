@@ -21659,6 +21659,378 @@
     throw new PlatformCapabilityError("UNSUPPORTED_PLATFORM", deps.platform + "-" + deps.arch + " is not supported");
   }
 
+  // src/lib/exactSecretRedaction.js
+  function sensitiveValues(profile) {
+    var _a;
+    const values = [];
+    if (typeof ((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.value) === "string" && profile.auth.value) {
+      values.push(profile.auth.value);
+      const scheme = profile.auth.value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
+      if (scheme == null ? void 0 : scheme[1]) values.push(scheme[1]);
+    }
+    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
+      if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
+    }
+    return Array.from(new Set(values)).sort((a, b) => b.length - a.length);
+  }
+  function normalizedSecrets(values) {
+    const variants = [];
+    for (const value of values || []) {
+      if (typeof value !== "string" || !value) continue;
+      variants.push(value);
+      try {
+        const encoded = JSON.stringify(value);
+        if ((encoded == null ? void 0 : encoded.startsWith('"')) && encoded.endsWith('"')) variants.push(encoded.slice(1, -1));
+      } catch {
+      }
+    }
+    return Array.from(new Set(variants.filter(Boolean))).sort((a, b) => b.length - a.length);
+  }
+  var MAX_DECODE_CHARS = 1024 * 1024;
+  var MAX_DECODE_LAYERS = 3;
+  var MAX_STRUCTURE_CHARS = 16 * 1024 * 1024;
+  function decodePercentRuns(value) {
+    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+      try {
+        return decodeURIComponent(run);
+      } catch {
+        return run;
+      }
+    });
+  }
+  function decodeUnicodeEscapes(value) {
+    return String(value).replace(/\\u([0-9a-f]{4})/gi, (_match, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
+  }
+  function decodedTextLayers(value) {
+    let current = String(value);
+    const layers = [current];
+    for (let layer = 0; layer < MAX_DECODE_LAYERS; layer += 1) {
+      if (!current.includes("%") && !/\\u[0-9a-f]{4}/i.test(current)) break;
+      if (current.length > MAX_DECODE_CHARS) return null;
+      const decoded = decodeUnicodeEscapes(decodePercentRuns(current));
+      if (decoded === current) break;
+      layers.push(decoded);
+      current = decoded;
+    }
+    return layers;
+  }
+  function textContainsSecret(value, secrets) {
+    const layers = decodedTextLayers(value);
+    if (layers === null) return true;
+    return layers.some((layer) => secrets.some((secret) => layer.includes(secret)));
+  }
+  function containsExactSecret(value, values = []) {
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return false;
+    const visiting = /* @__PURE__ */ new WeakSet();
+    const valueParts = [];
+    const keyParts = [];
+    const keyValueParts = [];
+    const leafKeyValueParts = [];
+    let structureChars = 0;
+    const containsText = (candidate) => textContainsSecret(candidate, secrets);
+    const appendPart = (parts, candidate) => {
+      const text = String(candidate);
+      structureChars += text.length;
+      if (structureChars > MAX_STRUCTURE_CHARS) return true;
+      parts.push(text);
+      return false;
+    };
+    const visit = (candidate) => {
+      if (typeof candidate === "function") return true;
+      if (typeof candidate !== "object" || candidate === null) {
+        try {
+          if (appendPart(valueParts, candidate)) return true;
+          if (appendPart(keyValueParts, candidate)) return true;
+          return containsText(candidate);
+        } catch {
+          return true;
+        }
+      }
+      if (visiting.has(candidate)) return true;
+      let keys;
+      try {
+        keys = Reflect.ownKeys(candidate);
+      } catch {
+        return true;
+      }
+      visiting.add(candidate);
+      try {
+        for (const key of keys) {
+          try {
+            const item = Reflect.get(candidate, key);
+            if (appendPart(keyParts, key)) return true;
+            if (appendPart(keyValueParts, key)) return true;
+            if (containsText(key)) return true;
+            if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
+              if (appendPart(leafKeyValueParts, key)) return true;
+              if (appendPart(leafKeyValueParts, item)) return true;
+            }
+            if (visit(item)) return true;
+          } catch {
+            return true;
+          }
+        }
+        return false;
+      } finally {
+        visiting.delete(candidate);
+      }
+    };
+    if (visit(value)) return true;
+    return [valueParts, keyParts, keyValueParts, leafKeyValueParts].some((parts) => containsText(parts.join("")));
+  }
+  function containsExactSecretAcrossBoundary(seedValues, payload, values = []) {
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return false;
+    const valueParts = [];
+    const keyParts = [];
+    const keyValueParts = [];
+    const leafKeyValueParts = [];
+    const visiting = /* @__PURE__ */ new WeakSet();
+    let chars = 0;
+    const append = (parts, value) => {
+      const text = String(value);
+      chars += text.length;
+      if (chars > MAX_STRUCTURE_CHARS) return false;
+      parts.push(text);
+      return true;
+    };
+    const visit = (value) => {
+      if (typeof value === "function") return false;
+      if (typeof value !== "object" || value === null) {
+        return append(valueParts, value) && append(keyValueParts, value);
+      }
+      if (visiting.has(value)) return false;
+      let keys;
+      try {
+        keys = Reflect.ownKeys(value);
+      } catch {
+        return false;
+      }
+      visiting.add(value);
+      try {
+        for (const key of keys) {
+          let item;
+          try {
+            item = Reflect.get(value, key);
+          } catch {
+            return false;
+          }
+          if (!append(keyParts, key) || !append(keyValueParts, key)) return false;
+          if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
+            if (!append(valueParts, item) || !append(keyValueParts, item) || !append(leafKeyValueParts, key) || !append(leafKeyValueParts, item)) return false;
+          } else if (!visit(item)) {
+            return false;
+          }
+        }
+        return true;
+      } finally {
+        visiting.delete(value);
+      }
+    };
+    if (!visit(payload)) return true;
+    const candidates = [
+      ...leafKeyValueParts,
+      valueParts.join(""),
+      keyParts.join(""),
+      keyValueParts.join(""),
+      leafKeyValueParts.join("")
+    ];
+    let seeds;
+    try {
+      seeds = Array.from(seedValues || [], (value) => String(value));
+    } catch {
+      return true;
+    }
+    for (const seed of seeds) {
+      for (const candidate of candidates) {
+        if (textContainsSecret(seed + candidate, secrets) || textContainsSecret(candidate + seed, secrets)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  function redactText(value, values = []) {
+    let text = String(value == null ? "" : value);
+    const secrets = normalizedSecrets(values);
+    if (!secrets.length) return text;
+    const marker = secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
+    const decodedLayers = decodedTextLayers(text);
+    if (decodedLayers === null) return marker;
+    if (decodedLayers.slice(1).some((layer) => secrets.some((secret) => layer.includes(secret)))) {
+      return marker;
+    }
+    const maximumPasses = Math.max(1, secrets.length * 4 + 8);
+    for (let pass = 0; pass < maximumPasses; pass += 1) {
+      let changed = false;
+      for (const secret of secrets) {
+        if (!text.includes(secret)) continue;
+        text = text.split(secret).join(marker);
+        changed = true;
+      }
+      if (!changed) return text;
+    }
+    return secrets.some((secret) => text.includes(secret)) ? "" : text;
+  }
+  function redactValueParts(value, values) {
+    if (typeof value === "string") return redactText(value, values);
+    if (value === null || ["number", "boolean", "bigint"].includes(typeof value)) {
+      const text = String(value);
+      const redacted = redactText(text, values);
+      return redacted === text ? value : redacted;
+    }
+    if (Array.isArray(value)) return value.map((item) => redactValueParts(item, values));
+    if (!value || typeof value !== "object") return value;
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      redactText(key, values),
+      redactValueParts(item, values)
+    ]));
+  }
+  function redactValue(value, values = []) {
+    const redacted = redactValueParts(value, values);
+    if (!containsExactSecret(redacted, values)) return redacted;
+    const secrets = normalizedSecrets(values);
+    return secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
+  }
+  function createDeltaRedactor(values, emitText) {
+    const secrets = normalizedSecrets(values);
+    let buffer = "";
+    const keep = secrets.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
+    return {
+      feed(delta) {
+        if (!secrets.length) {
+          emitText(String(delta || ""));
+          return;
+        }
+        buffer = redactText(buffer + String(delta || ""), secrets);
+        if (buffer.length > keep) {
+          emitText(buffer.slice(0, buffer.length - keep));
+          buffer = buffer.slice(buffer.length - keep);
+        }
+      },
+      flush() {
+        if (buffer) emitText(redactText(buffer, secrets));
+        buffer = "";
+      },
+      discard() {
+        buffer = "";
+      }
+    };
+  }
+  function createByteRedactor(values, emitBytes) {
+    const secrets = normalizedSecrets(values).map((value) => Buffer.from(value, "utf8")).filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
+    const displayMarker = Buffer.from("[redacted]", "utf8");
+    const marker = secrets.some((secret) => displayMarker.includes(secret)) ? Buffer.alloc(0) : displayMarker;
+    const maximum = secrets.reduce((length, secret) => Math.max(length, secret.length), 0);
+    let pending = Buffer.alloc(0);
+    function emit(value) {
+      if (value.length > 0) emitBytes(value);
+    }
+    function drain(flush) {
+      if (!secrets.length) {
+        emit(pending);
+        pending = Buffer.alloc(0);
+        return;
+      }
+      while (pending.length > 0) {
+        const boundary = flush ? pending.length : Math.max(0, pending.length - maximum + 1);
+        if (!flush && boundary === 0) return;
+        let matchIndex = -1;
+        let matchSecret = null;
+        for (const secret of secrets) {
+          const index = pending.indexOf(secret);
+          if (index < 0 || !flush && index >= boundary) continue;
+          if (matchIndex < 0 || index < matchIndex || index === matchIndex && secret.length > matchSecret.length) {
+            matchIndex = index;
+            matchSecret = secret;
+          }
+        }
+        if (matchIndex < 0) {
+          emit(pending.subarray(0, boundary));
+          pending = pending.subarray(boundary);
+          if (!flush) return;
+          continue;
+        }
+        emit(pending.subarray(0, matchIndex));
+        emit(marker);
+        pending = pending.subarray(matchIndex + matchSecret.length);
+      }
+    }
+    return {
+      feed(chunk) {
+        const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk || "");
+        if (!value.length) return;
+        pending = pending.length ? Buffer.concat([pending, value]) : Buffer.from(value);
+        drain(false);
+      },
+      flush() {
+        drain(true);
+      },
+      discard() {
+        pending = Buffer.alloc(0);
+      }
+    };
+  }
+  function safeErrorMessage(error, values = []) {
+    return redactText(error && error.message ? error.message : "Agent loop failed.", values);
+  }
+
+  // src/app/providerInitState.js
+  var HELPER_FAILURE_CODES = /* @__PURE__ */ new Set([
+    "HELPER_UNAUTHORIZED",
+    "PROTOCOL_VERSION_UNSUPPORTED",
+    "SECRET_STORE_UNAVAILABLE",
+    "PLATFORM_HELPER_REPAIR_REQUIRED",
+    "INVALID_REQUEST",
+    "MESSAGE_TOO_LARGE"
+  ]);
+  var MIGRATION_FAILURE_CODES = /* @__PURE__ */ new Set([
+    "PROVIDER_STORE_CONFLICT",
+    "INVALID_PROVIDER_MIGRATION",
+    "INVALID_MIGRATION_JOURNAL"
+  ]);
+  var SECRET_MISMATCH_CODES = /* @__PURE__ */ new Set([
+    "SECRET_CONFLICT",
+    "SECRET_NOT_FOUND",
+    "INVALID_REFERENCE"
+  ]);
+  function providerInitFailure(error) {
+    const code = typeof (error == null ? void 0 : error.code) === "string" ? error.code : "";
+    let failure2 = "PROVIDER_INITIALIZATION_FAILED";
+    if (code === "HELPER_UNAVAILABLE" || code === "HELPER_START_FAILED") {
+      failure2 = "PLATFORM_HELPER_START_FAILED";
+    } else if (HELPER_FAILURE_CODES.has(code)) failure2 = "PLATFORM_HELPER_REPAIR_REQUIRED";
+    else if (code === "PROVIDER_STORE_INVALID" || code === "PROVIDER_STORE_CREDENTIAL_CONTAMINATION") failure2 = "PROVIDER_STORE_CORRUPT";
+    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure2 = "PROVIDER_STORE_UNAVAILABLE";
+    else if (MIGRATION_FAILURE_CODES.has(code)) failure2 = "PROVIDER_MIGRATION_CONFLICT";
+    else if (SECRET_MISMATCH_CODES.has(code)) failure2 = "PROVIDER_SECRET_MISMATCH";
+    return { state: "unavailable", error: failure2 };
+  }
+  function platformHelperRepairView(providerInit, repairing, hasAction) {
+    if (!hasAction || (providerInit == null ? void 0 : providerInit.state) !== "unavailable" || (providerInit == null ? void 0 : providerInit.error) !== "PLATFORM_HELPER_REPAIR_REQUIRED") {
+      return null;
+    }
+    return {
+      disabled: repairing === true,
+      label: repairing === true ? "repairing" : "repair"
+    };
+  }
+  function providerRepairFailure(error) {
+    const classified = providerInitFailure(error);
+    return {
+      state: "unavailable",
+      error: "PLATFORM_HELPER_REPAIR_REQUIRED",
+      detail: classified.error
+    };
+  }
+  function assertProviderStateCredentialFree(providerState, exactSecrets = []) {
+    if (!containsExactSecret(providerState == null ? void 0 : providerState.providers, exactSecrets)) return providerState;
+    const error = new Error("Stored Provider data contains protected credential material.");
+    error.code = "PROVIDER_STORE_CREDENTIAL_CONTAMINATION";
+    throw error;
+  }
+
   // src/screens/SettingsScreen.jsx
   var import_jsx_runtime17 = __toESM(require_jsx_runtime(), 1);
   var REPO_URL = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
@@ -21698,6 +22070,8 @@
       claude3pNote: "\u540C\u4E00\u4E2A Provider \u53EF\u540C\u65F6\u7528\u4E8E Claude \u548C Codex\uFF1B\u534F\u8BAE\u4E0E\u517C\u5BB9\u8F6C\u6362\u6309\u5F53\u524D\u6A21\u578B\u81EA\u52A8\u9009\u62E9\u3002",
       providerHelperStartFailed: "Provider \u51ED\u636E\u529F\u80FD\u5DF2\u5B89\u5168\u505C\u7528\u3002\u5E73\u53F0 Helper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u4F46\u672C\u6B21\u672A\u80FD\u542F\u52A8\u6216\u8FDE\u63A5\uFF1B\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\uFF0C\u4ECD\u5931\u8D25\u65F6\u91CD\u542F AE\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587\u51ED\u636E\u3002",
       providerHelperRepair: "Provider \u51ED\u636E\u529F\u80FD\u5DF2\u5B89\u5168\u505C\u7528\u3002\u5E73\u53F0 Helper \u5DF2\u542F\u52A8\u4F46\u672A\u901A\u8FC7\u63E1\u624B\u3001\u7248\u672C\u6216\u6388\u6743\u68C0\u67E5\uFF1B\u8BF7\u91CD\u542F AE\uFF0C\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587\u51ED\u636E\u3002",
+      repairHelper: "\u4FEE\u590D Helper",
+      repairingHelper: "\u6B63\u5728\u4FEE\u590D Helper\u2026",
       providerStoreCorrupt: "Provider \u914D\u7F6E\u6587\u4EF6\u635F\u574F\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5148\u4ECE\u5907\u4EFD\u6062\u590D providers.json\uFF0C\u518D\u70B9\u300C\u91CD\u65B0\u68C0\u6D4B\u300D\u3002",
       providerStoreUnavailable: "Provider \u914D\u7F6E\u6587\u4EF6\u4E0D\u53EF\u7528\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u68C0\u67E5 ~/.ae-mcp \u7684\u78C1\u76D8\u7A7A\u95F4\u4E0E\u8BFB\u5199\u6743\u9650\u3002",
       providerMigrationConflict: "Provider \u8FC1\u79FB\u671F\u95F4\u914D\u7F6E\u53D1\u751F\u51B2\u7A81\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u5173\u95ED\u5176\u4ED6\u9762\u677F\u5B9E\u4F8B\u540E\u91CD\u65B0\u542F\u52A8 AE \u518D\u68C0\u6D4B\u3002",
@@ -21761,6 +22135,8 @@
       claude3pNote: "The same Provider can serve Claude and Codex; protocol routing and compatibility conversion are selected per model.",
       providerHelperStartFailed: "Provider credentials are safely disabled. Platform Helper starts with AE but could not start or connect in this session. Reopen the panel, then restart AE if it still fails. Plaintext fallback is disabled.",
       providerHelperRepair: "Provider credentials are safely disabled. Platform Helper started but failed its handshake, version, or authorization check. Restart AE, then repair the current install if it still fails. Plaintext fallback is disabled.",
+      repairHelper: "Repair Helper",
+      repairingHelper: "Repairing Helper\u2026",
       providerStoreCorrupt: "The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.",
       providerStoreUnavailable: "The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.",
       providerMigrationConflict: "The provider configuration changed during migration; the current list was retained. Close other panel instances, restart AE, then re-check.",
@@ -21954,6 +22330,8 @@
     codexCliConfig = null,
     providerManager = null,
     providerInit = { state: "checking", error: "" },
+    onRepairPlatformHelper,
+    providerRepairing = false,
     logLevel = "info",
     onLogLevel,
     onExportLogs,
@@ -21969,6 +22347,11 @@
       PROVIDER_SECRET_MISMATCH: t.providerSecretMismatch,
       PROVIDER_INITIALIZATION_FAILED: t.providerInitializationFailed
     }[providerInit.error] || t.providerInitializationFailed;
+    const helperRepair = platformHelperRepairView(
+      providerInit,
+      providerRepairing,
+      typeof onRepairPlatformHelper === "function"
+    );
     const zcodeModelLocked = zcodeDefaultModelLocked({ backend, models: modelOptions });
     const [customModelDraft, setCustomModelDraft] = import_react19.default.useState(customModel);
     const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
@@ -22050,7 +22433,17 @@
         ),
         providerInit.state === "unavailable" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { role: "alert", style: { padding: "7px 8px", border: "1px solid var(--error-border)", borderRadius: "var(--radius-md)", background: "var(--error-bg)", color: "var(--error)", font: "400 10px/1.5 var(--font-ui)" }, children: [
           providerInitMessage,
-          providerInit.error ? ` (${providerInit.error})` : ""
+          providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : "",
+          helperRepair ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { marginTop: 6 }, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+            Button,
+            {
+              variant: "secondary",
+              size: "sm",
+              disabled: helperRepair.disabled,
+              onClick: onRepairPlatformHelper,
+              children: helperRepair.label === "repairing" ? t.repairingHelper : t.repairHelper
+            }
+          ) }) : null
         ] }) : null,
         providerManager,
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: zcodeManagedModelLabel(lang, backend === "zcode" ? model : "") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
@@ -26822,7 +27215,7 @@
     const ipv4 = mapped ? mapped[1] : host;
     return /^127(?:\.\d{1,3}){3}$/.test(ipv4);
   }
-  function decodePercentRuns(value) {
+  function decodePercentRuns2(value) {
     return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
       try {
         return decodeURIComponent(run);
@@ -26841,7 +27234,7 @@
         const candidate = segments[index + 1];
         if (CREDENTIAL_PATH_LABELS.has(label) && !/^v\d+(?:\.\d+)*$/i.test(candidate)) return true;
       }
-      const decoded = decodePercentRuns(current);
+      const decoded = decodePercentRuns2(current);
       if (decoded === current) break;
       current = decoded;
     }
@@ -27965,323 +28358,6 @@
       return { action: "accept", content: { decision: "session" } };
     }
     return { action: "decline", content: {} };
-  }
-
-  // src/lib/exactSecretRedaction.js
-  function sensitiveValues(profile) {
-    var _a;
-    const values = [];
-    if (typeof ((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.value) === "string" && profile.auth.value) {
-      values.push(profile.auth.value);
-      const scheme = profile.auth.value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
-      if (scheme == null ? void 0 : scheme[1]) values.push(scheme[1]);
-    }
-    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
-      if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
-    }
-    return Array.from(new Set(values)).sort((a, b) => b.length - a.length);
-  }
-  function normalizedSecrets(values) {
-    const variants = [];
-    for (const value of values || []) {
-      if (typeof value !== "string" || !value) continue;
-      variants.push(value);
-      try {
-        const encoded = JSON.stringify(value);
-        if ((encoded == null ? void 0 : encoded.startsWith('"')) && encoded.endsWith('"')) variants.push(encoded.slice(1, -1));
-      } catch {
-      }
-    }
-    return Array.from(new Set(variants.filter(Boolean))).sort((a, b) => b.length - a.length);
-  }
-  var MAX_DECODE_CHARS = 1024 * 1024;
-  var MAX_DECODE_LAYERS = 3;
-  var MAX_STRUCTURE_CHARS = 16 * 1024 * 1024;
-  function decodePercentRuns2(value) {
-    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
-      try {
-        return decodeURIComponent(run);
-      } catch {
-        return run;
-      }
-    });
-  }
-  function decodeUnicodeEscapes(value) {
-    return String(value).replace(/\\u([0-9a-f]{4})/gi, (_match, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
-  }
-  function decodedTextLayers(value) {
-    let current = String(value);
-    const layers = [current];
-    for (let layer = 0; layer < MAX_DECODE_LAYERS; layer += 1) {
-      if (!current.includes("%") && !/\\u[0-9a-f]{4}/i.test(current)) break;
-      if (current.length > MAX_DECODE_CHARS) return null;
-      const decoded = decodeUnicodeEscapes(decodePercentRuns2(current));
-      if (decoded === current) break;
-      layers.push(decoded);
-      current = decoded;
-    }
-    return layers;
-  }
-  function textContainsSecret(value, secrets) {
-    const layers = decodedTextLayers(value);
-    if (layers === null) return true;
-    return layers.some((layer) => secrets.some((secret) => layer.includes(secret)));
-  }
-  function containsExactSecret(value, values = []) {
-    const secrets = normalizedSecrets(values);
-    if (!secrets.length) return false;
-    const visiting = /* @__PURE__ */ new WeakSet();
-    const valueParts = [];
-    const keyParts = [];
-    const keyValueParts = [];
-    const leafKeyValueParts = [];
-    let structureChars = 0;
-    const containsText = (candidate) => textContainsSecret(candidate, secrets);
-    const appendPart = (parts, candidate) => {
-      const text = String(candidate);
-      structureChars += text.length;
-      if (structureChars > MAX_STRUCTURE_CHARS) return true;
-      parts.push(text);
-      return false;
-    };
-    const visit = (candidate) => {
-      if (typeof candidate === "function") return true;
-      if (typeof candidate !== "object" || candidate === null) {
-        try {
-          if (appendPart(valueParts, candidate)) return true;
-          if (appendPart(keyValueParts, candidate)) return true;
-          return containsText(candidate);
-        } catch {
-          return true;
-        }
-      }
-      if (visiting.has(candidate)) return true;
-      let keys;
-      try {
-        keys = Reflect.ownKeys(candidate);
-      } catch {
-        return true;
-      }
-      visiting.add(candidate);
-      try {
-        for (const key of keys) {
-          try {
-            const item = Reflect.get(candidate, key);
-            if (appendPart(keyParts, key)) return true;
-            if (appendPart(keyValueParts, key)) return true;
-            if (containsText(key)) return true;
-            if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
-              if (appendPart(leafKeyValueParts, key)) return true;
-              if (appendPart(leafKeyValueParts, item)) return true;
-            }
-            if (visit(item)) return true;
-          } catch {
-            return true;
-          }
-        }
-        return false;
-      } finally {
-        visiting.delete(candidate);
-      }
-    };
-    if (visit(value)) return true;
-    return [valueParts, keyParts, keyValueParts, leafKeyValueParts].some((parts) => containsText(parts.join("")));
-  }
-  function containsExactSecretAcrossBoundary(seedValues, payload, values = []) {
-    const secrets = normalizedSecrets(values);
-    if (!secrets.length) return false;
-    const valueParts = [];
-    const keyParts = [];
-    const keyValueParts = [];
-    const leafKeyValueParts = [];
-    const visiting = /* @__PURE__ */ new WeakSet();
-    let chars = 0;
-    const append = (parts, value) => {
-      const text = String(value);
-      chars += text.length;
-      if (chars > MAX_STRUCTURE_CHARS) return false;
-      parts.push(text);
-      return true;
-    };
-    const visit = (value) => {
-      if (typeof value === "function") return false;
-      if (typeof value !== "object" || value === null) {
-        return append(valueParts, value) && append(keyValueParts, value);
-      }
-      if (visiting.has(value)) return false;
-      let keys;
-      try {
-        keys = Reflect.ownKeys(value);
-      } catch {
-        return false;
-      }
-      visiting.add(value);
-      try {
-        for (const key of keys) {
-          let item;
-          try {
-            item = Reflect.get(value, key);
-          } catch {
-            return false;
-          }
-          if (!append(keyParts, key) || !append(keyValueParts, key)) return false;
-          if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
-            if (!append(valueParts, item) || !append(keyValueParts, item) || !append(leafKeyValueParts, key) || !append(leafKeyValueParts, item)) return false;
-          } else if (!visit(item)) {
-            return false;
-          }
-        }
-        return true;
-      } finally {
-        visiting.delete(value);
-      }
-    };
-    if (!visit(payload)) return true;
-    const candidates = [
-      ...leafKeyValueParts,
-      valueParts.join(""),
-      keyParts.join(""),
-      keyValueParts.join(""),
-      leafKeyValueParts.join("")
-    ];
-    let seeds;
-    try {
-      seeds = Array.from(seedValues || [], (value) => String(value));
-    } catch {
-      return true;
-    }
-    for (const seed of seeds) {
-      for (const candidate of candidates) {
-        if (textContainsSecret(seed + candidate, secrets) || textContainsSecret(candidate + seed, secrets)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-  function redactText(value, values = []) {
-    let text = String(value == null ? "" : value);
-    const secrets = normalizedSecrets(values);
-    if (!secrets.length) return text;
-    const marker = secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
-    const decodedLayers = decodedTextLayers(text);
-    if (decodedLayers === null) return marker;
-    if (decodedLayers.slice(1).some((layer) => secrets.some((secret) => layer.includes(secret)))) {
-      return marker;
-    }
-    const maximumPasses = Math.max(1, secrets.length * 4 + 8);
-    for (let pass = 0; pass < maximumPasses; pass += 1) {
-      let changed = false;
-      for (const secret of secrets) {
-        if (!text.includes(secret)) continue;
-        text = text.split(secret).join(marker);
-        changed = true;
-      }
-      if (!changed) return text;
-    }
-    return secrets.some((secret) => text.includes(secret)) ? "" : text;
-  }
-  function redactValueParts(value, values) {
-    if (typeof value === "string") return redactText(value, values);
-    if (value === null || ["number", "boolean", "bigint"].includes(typeof value)) {
-      const text = String(value);
-      const redacted = redactText(text, values);
-      return redacted === text ? value : redacted;
-    }
-    if (Array.isArray(value)) return value.map((item) => redactValueParts(item, values));
-    if (!value || typeof value !== "object") return value;
-    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
-      redactText(key, values),
-      redactValueParts(item, values)
-    ]));
-  }
-  function redactValue(value, values = []) {
-    const redacted = redactValueParts(value, values);
-    if (!containsExactSecret(redacted, values)) return redacted;
-    const secrets = normalizedSecrets(values);
-    return secrets.some((secret) => "[redacted]".includes(secret)) ? "" : "[redacted]";
-  }
-  function createDeltaRedactor(values, emitText) {
-    const secrets = normalizedSecrets(values);
-    let buffer = "";
-    const keep = secrets.reduce((maximum, value) => Math.max(maximum, value.length - 1), 0);
-    return {
-      feed(delta) {
-        if (!secrets.length) {
-          emitText(String(delta || ""));
-          return;
-        }
-        buffer = redactText(buffer + String(delta || ""), secrets);
-        if (buffer.length > keep) {
-          emitText(buffer.slice(0, buffer.length - keep));
-          buffer = buffer.slice(buffer.length - keep);
-        }
-      },
-      flush() {
-        if (buffer) emitText(redactText(buffer, secrets));
-        buffer = "";
-      },
-      discard() {
-        buffer = "";
-      }
-    };
-  }
-  function createByteRedactor(values, emitBytes) {
-    const secrets = normalizedSecrets(values).map((value) => Buffer.from(value, "utf8")).filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
-    const displayMarker = Buffer.from("[redacted]", "utf8");
-    const marker = secrets.some((secret) => displayMarker.includes(secret)) ? Buffer.alloc(0) : displayMarker;
-    const maximum = secrets.reduce((length, secret) => Math.max(length, secret.length), 0);
-    let pending = Buffer.alloc(0);
-    function emit(value) {
-      if (value.length > 0) emitBytes(value);
-    }
-    function drain(flush) {
-      if (!secrets.length) {
-        emit(pending);
-        pending = Buffer.alloc(0);
-        return;
-      }
-      while (pending.length > 0) {
-        const boundary = flush ? pending.length : Math.max(0, pending.length - maximum + 1);
-        if (!flush && boundary === 0) return;
-        let matchIndex = -1;
-        let matchSecret = null;
-        for (const secret of secrets) {
-          const index = pending.indexOf(secret);
-          if (index < 0 || !flush && index >= boundary) continue;
-          if (matchIndex < 0 || index < matchIndex || index === matchIndex && secret.length > matchSecret.length) {
-            matchIndex = index;
-            matchSecret = secret;
-          }
-        }
-        if (matchIndex < 0) {
-          emit(pending.subarray(0, boundary));
-          pending = pending.subarray(boundary);
-          if (!flush) return;
-          continue;
-        }
-        emit(pending.subarray(0, matchIndex));
-        emit(marker);
-        pending = pending.subarray(matchIndex + matchSecret.length);
-      }
-    }
-    return {
-      feed(chunk) {
-        const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk || "");
-        if (!value.length) return;
-        pending = pending.length ? Buffer.concat([pending, value]) : Buffer.from(value);
-        drain(false);
-      },
-      flush() {
-        drain(true);
-      },
-      discard() {
-        pending = Buffer.alloc(0);
-      }
-    };
-  }
-  function safeErrorMessage(error, values = []) {
-    return redactText(error && error.message ? error.message : "Agent loop failed.", values);
   }
 
   // src/lib/agentLoop.js
@@ -46806,44 +46882,6 @@ data: ${JSON.stringify(payload)}
     };
   }
 
-  // src/app/providerInitState.js
-  var HELPER_FAILURE_CODES = /* @__PURE__ */ new Set([
-    "HELPER_UNAUTHORIZED",
-    "PROTOCOL_VERSION_UNSUPPORTED",
-    "SECRET_STORE_UNAVAILABLE",
-    "PLATFORM_HELPER_REPAIR_REQUIRED",
-    "INVALID_REQUEST",
-    "MESSAGE_TOO_LARGE"
-  ]);
-  var MIGRATION_FAILURE_CODES = /* @__PURE__ */ new Set([
-    "PROVIDER_STORE_CONFLICT",
-    "INVALID_PROVIDER_MIGRATION",
-    "INVALID_MIGRATION_JOURNAL"
-  ]);
-  var SECRET_MISMATCH_CODES = /* @__PURE__ */ new Set([
-    "SECRET_CONFLICT",
-    "SECRET_NOT_FOUND",
-    "INVALID_REFERENCE"
-  ]);
-  function providerInitFailure(error) {
-    const code = typeof (error == null ? void 0 : error.code) === "string" ? error.code : "";
-    let failure2 = "PROVIDER_INITIALIZATION_FAILED";
-    if (code === "HELPER_UNAVAILABLE" || code === "HELPER_START_FAILED") {
-      failure2 = "PLATFORM_HELPER_START_FAILED";
-    } else if (HELPER_FAILURE_CODES.has(code)) failure2 = "PLATFORM_HELPER_REPAIR_REQUIRED";
-    else if (code === "PROVIDER_STORE_INVALID" || code === "PROVIDER_STORE_CREDENTIAL_CONTAMINATION") failure2 = "PROVIDER_STORE_CORRUPT";
-    else if (code === "PROVIDER_STORE_UNAVAILABLE") failure2 = "PROVIDER_STORE_UNAVAILABLE";
-    else if (MIGRATION_FAILURE_CODES.has(code)) failure2 = "PROVIDER_MIGRATION_CONFLICT";
-    else if (SECRET_MISMATCH_CODES.has(code)) failure2 = "PROVIDER_SECRET_MISMATCH";
-    return { state: "unavailable", error: failure2 };
-  }
-  function assertProviderStateCredentialFree(providerState, exactSecrets = []) {
-    if (!containsExactSecret(providerState == null ? void 0 : providerState.providers, exactSecrets)) return providerState;
-    const error = new Error("Stored Provider data contains protected credential material.");
-    error.code = "PROVIDER_STORE_CREDENTIAL_CONTAMINATION";
-    throw error;
-  }
-
   // src/components/settings/ProviderManagerSection.jsx
   var import_react43 = __toESM(require_react(), 1);
 
@@ -48836,6 +48874,7 @@ data: ${JSON.stringify(payload)}
     const adapter = platform || createPlatformAdapter();
     let host = null;
     let helperClient = null;
+    let helperBindingContext = null;
     let platformRoots = null;
     let beforeUnloadInstalled = false;
     let lifecycleGeneration = 0;
@@ -48855,7 +48894,12 @@ data: ${JSON.stringify(payload)}
       } catch {
       }
     }
-    function bindPlatformHelperFacade({ cepRequire: cepRequire5, extRoot, hostInstance }) {
+    function bindPlatformHelperFacade({
+      cepRequire: cepRequire5,
+      extRoot,
+      hostInstance,
+      repairRegistration = false
+    }) {
       let transport = null;
       let nextClient = null;
       let bindingError = null;
@@ -48874,7 +48918,8 @@ data: ${JSON.stringify(payload)}
         })();
         transport = transportFactory({
           platformId: adapter.id,
-          runtime: helperRuntime(adapter.id)
+          runtime: helperRuntime(adapter.id),
+          repairRegistration
         });
         if (!transport || typeof transport.request !== "function" || typeof transport.close !== "function") {
           throw helperUnavailableError();
@@ -48915,6 +48960,7 @@ data: ${JSON.stringify(payload)}
       const priorClient = helperClient;
       host = null;
       helperClient = null;
+      helperBindingContext = null;
       platformRoots = null;
       if (priorHost || priorClient) disposeLifecycle(priorClient, priorHost);
       try {
@@ -48940,6 +48986,7 @@ data: ${JSON.stringify(payload)}
         nextHost.setCSInterface(cs2);
         if (nextHost.setPlatformRoots) nextHost.setPlatformRoots(roots);
         host = nextHost;
+        helperBindingContext = { cepRequire: cepRequire5, extRoot, hostInstance: nextHost };
         bindPlatformHelperFacade({ cepRequire: cepRequire5, extRoot, hostInstance: nextHost });
         if (!beforeUnloadInstalled) {
           const installBeforeUnload = addBeforeUnload || ((handler) => window.addEventListener("beforeunload", handler));
@@ -48948,6 +48995,7 @@ data: ${JSON.stringify(payload)}
             const closingClient = helperClient;
             const closingHost = host;
             helperClient = null;
+            helperBindingContext = null;
             host = null;
             platformRoots = null;
             disposeLifecycle(closingClient, closingHost, { closeClient: false });
@@ -48964,6 +49012,7 @@ data: ${JSON.stringify(payload)}
         const failedClient = helperClient;
         host = null;
         helperClient = null;
+        helperBindingContext = null;
         platformRoots = null;
         disposeLifecycle(failedClient, failedHost);
         if (generation === lifecycleGeneration) onStatus("error", port, e.message);
@@ -48981,7 +49030,29 @@ data: ${JSON.stringify(payload)}
         }, platformRoots);
       }
     }
-    return { start, restart, getHost: () => host };
+    async function repairPlatformHelper() {
+      const context = helperBindingContext;
+      const currentHost = host;
+      if (adapter.id !== "macos-arm64" || !context || !currentHost || context.hostInstance !== currentHost) {
+        throw helperUnavailableError();
+      }
+      const priorClient = helperClient;
+      helperClient = null;
+      closeHelperClient(priorClient);
+      bindPlatformHelperFacade({
+        ...context,
+        repairRegistration: true
+      });
+      if (host !== currentHost) {
+        throw helperUnavailableError();
+      }
+      try {
+        return await currentHost.capabilities();
+      } catch (error) {
+        throw sanitizeHelperError(error);
+      }
+    }
+    return { start, restart, repairPlatformHelper, getHost: () => host };
   }
 
   // src/lib/expertGuidance.js
@@ -49771,6 +49842,8 @@ data: ${JSON.stringify(payload)}
     const zcodeStoredKeyRef = import_react46.default.useRef("");
     const [zcodeCredentialEpoch, setZcodeCredentialEpoch] = import_react46.default.useState(0);
     const [providerInit, setProviderInit] = import_react46.default.useState({ state: "checking", error: "" });
+    const [providerRepairing, setProviderRepairing] = import_react46.default.useState(false);
+    const [providerInitEpoch, setProviderInitEpoch] = import_react46.default.useState(0);
     const [providers, setProviders] = import_react46.default.useState([]);
     const [claudeProviderId, setClaudeProviderId] = import_react46.default.useState(() => readPref("ae_mcp_claude_provider", ""));
     const [codexProviderId, setCodexProviderId] = import_react46.default.useState(() => readPref("ae_mcp_codex_provider", ""));
@@ -50654,6 +50727,24 @@ ${baseUrl}`),
       if (!keepLogLine(logLevelRef.current, m)) return;
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
+    const repairPlatformHelper = import_react46.default.useCallback(async () => {
+      if (providerRepairing) return;
+      setProviderRepairing(true);
+      try {
+        const controller = ctrl.current;
+        if (!controller || typeof controller.repairPlatformHelper !== "function") {
+          throw providerRuntimeUnavailableError();
+        }
+        await controller.repairPlatformHelper();
+        pushLog("Platform Helper repaired; rechecking protected provider state");
+        setProviderInitEpoch((current) => current + 1);
+      } catch (error) {
+        setProviderInit(providerRepairFailure(error));
+        pushLog("Platform Helper repair failed: " + (typeof (error == null ? void 0 : error.code) === "string" ? error.code : "HELPER_UNAVAILABLE"));
+      } finally {
+        setProviderRepairing(false);
+      }
+    }, [providerRepairing, pushLog]);
     const exportLogs = import_react46.default.useCallback(() => {
       try {
         const exactSecrets = providerSecretService.getRedactionValues();
@@ -50790,7 +50881,7 @@ ${baseUrl}`),
       return () => {
         alive = false;
       };
-    }, [status.state, providerStore, providerSecretService, getHost, legacyKeyStore, platform, pushLog, zcodeCredentialManager]);
+    }, [status.state, providerStore, providerSecretService, getHost, legacyKeyStore, platform, pushLog, providerInitEpoch, zcodeCredentialManager]);
     import_react46.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
@@ -51021,6 +51112,8 @@ ${baseUrl}`),
             providers,
             providerManager,
             providerInit,
+            providerRepairing,
+            onRepairPlatformHelper: repairPlatformHelper,
             claudeProviderId,
             onClaudeProviderChange: (id) => {
               setClaudeProviderId(id);

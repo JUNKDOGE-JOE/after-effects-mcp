@@ -568,6 +568,170 @@ test('real host controller exposes in-process Foundation helper pass-through met
   ]);
 });
 
+test('host controller repair replaces the stale helper binding and handshakes the replacement', async () => {
+  const repairModes = [];
+  let firstClientCloses = 0;
+  const transports = [1, 2].map((id) => ({ id, request() {}, close() {} }));
+  const replacementCapabilities = {
+    protocolVersion: 1,
+    helperVersion: 'test-helper',
+    authenticatedCaller: true,
+    secretBackend: 'keychain',
+    methods: ['secret.get', 'secret.set', 'secret.delete'],
+  };
+  const clients = [
+    {
+      async capabilities() {
+        const error = new Error('stale helper registration');
+        error.code = 'PLATFORM_HELPER_REPAIR_REQUIRED';
+        throw error;
+      },
+      async secretGet() {}, async secretSet() {}, async secretDelete() {},
+      close() { firstClientCloses += 1; },
+    },
+    {
+      async capabilities() { return replacementCapabilities; },
+      async secretGet() {}, async secretSet() {}, async secretDelete() {},
+      close() {},
+    },
+  ];
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(_port, callback) { callback(null); }, stop() {},
+  };
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    createPlatformHelperTransportImpl(options) {
+      repairModes.push(options.repairRegistration);
+      return transports[repairModes.length - 1];
+    },
+    createPlatformHelperClientImpl({ transport }) {
+      return clients[transport.id - 1];
+    },
+    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
+  });
+
+  controller.start(11488);
+  await assert.rejects(
+    controller.getHost().capabilities(),
+    { code: 'PLATFORM_HELPER_REPAIR_REQUIRED' },
+  );
+  assert.equal(typeof controller.repairPlatformHelper, 'function');
+  assert.equal(
+    (await controller.repairPlatformHelper()).authenticatedCaller,
+    true,
+  );
+  assert.deepEqual(repairModes, [false, true]);
+  assert.equal((await controller.getHost().capabilities()).helperVersion, 'test-helper');
+  assert.equal(firstClientCloses, 1);
+});
+
+test('host controller repair preserves a sanitized replacement failure', async () => {
+  const transports = [1, 2].map((id) => ({ id, request() {}, close() {} }));
+  const clients = [
+    {
+      async capabilities() { return { authenticatedCaller: true }; },
+      async secretGet() {}, async secretSet() {}, async secretDelete() {}, close() {},
+    },
+    {
+      async capabilities() {
+        const error = new Error(
+          'launchctl failed for /Users/private/Library/Application Support/AE MCP/helper',
+        );
+        error.code = 'HELPER_START_FAILED';
+        throw error;
+      },
+      async secretGet() {}, async secretSet() {}, async secretDelete() {}, close() {},
+    },
+  ];
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(_port, callback) { callback(null); }, stop() {},
+  };
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'macos-arm64', extensionRoot: '/Applications/AE MCP',
+    express: function bundledExpress() {},
+  });
+  let transportIndex = 0;
+  const controller = createHostController({
+    cs: { getSystemPath: () => '/Applications/AE MCP' },
+    extensionRoot: '/Applications/AE MCP',
+    platform: macHostAdapter(runtime.fs, '/Applications/AE MCP/runtime'),
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    createPlatformHelperTransportImpl() {
+      return transports[transportIndex++];
+    },
+    createPlatformHelperClientImpl({ transport }) {
+      return clients[transport.id - 1];
+    },
+    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
+  });
+
+  controller.start(11488);
+  await assert.rejects(
+    controller.repairPlatformHelper(),
+    (error) => {
+      assert.equal(error.code, 'HELPER_START_FAILED');
+      assert.equal(error.message.includes('/Users/private'), false);
+      assert.equal(error.message.includes('launchctl failed'), false);
+      return true;
+    },
+  );
+});
+
+test('Windows host controller does not offer macOS helper replacement', async () => {
+  const repairModes = [];
+  const host = {
+    setRuntimeDependencies() {}, setCSInterface() {},
+    start(_port, callback) { callback(null); }, stop() {},
+  };
+  const runtime = fakeHostDependencyRuntime({
+    platformId: 'windows-x64', extensionRoot: 'C:\\Program Files\\AE MCP',
+    express: function bundledExpress() {},
+  });
+  const platform = createWindowsAdapter({
+    platform: 'win32',
+    arch: 'x64',
+    home: 'C:\\Users\\a',
+    temp: 'C:\\Temp',
+    env: {},
+    fs: runtime.fs,
+    spawnImpl() { throw new Error('not expected'); },
+    now: () => 0,
+  });
+  const controller = createHostController({
+    cs: { getSystemPath: () => 'file:///C:/Program%20Files/AE%20MCP' },
+    extensionRoot: 'C:\\Program Files\\AE MCP',
+    platform,
+    requireImpl: (request) => request === 'module' ? runtime.moduleApi : (request === 'path' ? path : host),
+    createPlatformHelperTransportImpl(options) {
+      repairModes.push(options.repairRegistration);
+      return { request() {}, close() {} };
+    },
+    createPlatformHelperClientImpl() {
+      return {
+        async capabilities() {}, async secretGet() {}, async secretSet() {},
+        async secretDelete() {}, close() {},
+      };
+    },
+    onStatus: () => {}, onLog: () => {}, addBeforeUnload: () => {},
+  });
+
+  controller.start(11488);
+  await assert.rejects(
+    controller.repairPlatformHelper(),
+    { code: 'HELPER_UNAVAILABLE' },
+  );
+  assert.deepEqual(repairModes, [false]);
+});
+
 test('host controller loads the bundled helper client and transport modules by exact extension paths', async () => {
   const loaded = [];
   const transport = { request() {}, close() {} };

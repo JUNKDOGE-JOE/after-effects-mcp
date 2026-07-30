@@ -27,7 +27,7 @@ Embedded panel chat or external MCP client
   -> After Effects
 ```
 
-`ae_previewFrame` renders real comp pixels through `CompItem.saveFrameToPng`, with viewer snapshot only as a fallback. `packages/snapshot-mss` provides the cross-platform `mss` screenshot backend for `ae_snapshot` screen capture.
+`ae_previewFrame` remains the AE-internal `CompItem.saveFrameToPng` path for rendering real comp pixels, with viewer snapshot only as a fallback. `packages/snapshot-mss` provides Windows `ae_snapshot` screen capture through the `mss` backend.
 
 The MCP core is backend-agnostic: external clients can talk to AE through the stdio server, while the CEP panel can also host built-in agent chat. The existing panel layer handles backend setup, approvals, diagnostics, and activity history. The published v0.9.2 Windows asset predates bundled-runtime activation; current v0.9.3 macOS development includes a panel RuntimeManager that verifies, installs, atomically activates, repairs, rolls back, and uninstalls the packaged runtime without using an online package manager. Claude, Codex, and ZCode are built-in panel backends; OpenCode and other tools can still connect as external MCP clients.
 

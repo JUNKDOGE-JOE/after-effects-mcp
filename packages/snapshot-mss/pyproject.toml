@@ -1,7 +1,7 @@
 [project]
 name = "ae-mcp-snapshot-mss"
 version = "0.9.2"
-description = "Cross-platform mss-based screen capture for ae-mcp"
+description = "Windows mss-based After Effects window capture for ae-mcp"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }

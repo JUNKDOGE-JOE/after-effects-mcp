@@ -1,6 +1,7 @@
-"""mss-backed cross-platform ae.snapshot implementation."""
+"""Windows AE-window ae.snapshot implementation backed by mss."""
 from __future__ import annotations
 
+import sys
 import time
 from pathlib import Path
 from typing import Optional
@@ -16,8 +17,7 @@ class MssSnapshotter(Snapshotter):
     name = "mss"
 
     def supports_platform(self) -> bool:
-        # mss runs on Windows, macOS, Linux
-        return True
+        return sys.platform == "win32"
 
     async def capture(
         self,

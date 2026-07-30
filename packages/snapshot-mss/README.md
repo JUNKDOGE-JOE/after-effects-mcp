@@ -2,9 +2,9 @@
 
 ## 中文
 
-`ae-mcp-snapshot-mss` 是 ae-mcp 的跨平台截图 backend，基于 [mss](https://python-mss.readthedocs.io/) 和 Pillow。它通过 Python entry point 注册 snapshotter `mss`，供 `ae.snapshot` 和 preview 相关流程使用。
+`ae-mcp-snapshot-mss` 是 ae-mcp 的 Windows 截图 backend。它基于 [mss](https://python-mss.readthedocs.io/) 和 Pillow，通过 Python entry point 注册 snapshotter `mss`，供 `ae.snapshot` 和 preview 相关流程使用。
 
-当前实现按屏幕区域截图；Windows 下可通过 HWND 转换到窗口矩形。它不是 AE Render Queue，也不负责 CEP 面板或 MCP server。
+当前实现通过 HWND 将 After Effects 窗口转换为屏幕矩形后截图。它不是 AE Render Queue，也不负责 CEP 面板或 MCP server。
 
 ### 安装
 
@@ -22,9 +22,9 @@ MIT。
 
 ## English
 
-`ae-mcp-snapshot-mss` is the cross-platform screenshot backend for ae-mcp, built on [mss](https://python-mss.readthedocs.io/) and Pillow. It registers the `mss` snapshotter through a Python entry point for `ae.snapshot` and preview-related flows.
+`ae-mcp-snapshot-mss` is the Windows screenshot backend for ae-mcp. Built on [mss](https://python-mss.readthedocs.io/) and Pillow, it registers the `mss` snapshotter through a Python entry point for `ae.snapshot` and preview-related flows.
 
-The current implementation captures by screen rectangle; on Windows, HWND can be translated to a window rectangle. It is not AE Render Queue, and it does not provide the CEP panel or MCP server.
+The implementation translates the After Effects window HWND to a screen rectangle before capturing. It is not AE Render Queue, and it does not provide the CEP panel or MCP server.
 
 ### Install
 

@@ -32,6 +32,7 @@ function macOptions(overrides) {
             return {
                 helperPath: '/verified/ae-mcp-platform-helper',
                 ensureRegistered: async function () {},
+                repairRegistered: async function () {},
             };
         },
         ...overrides,
@@ -184,6 +185,35 @@ test('macOS uses the verified stdio broker and never loads the addon', async () 
     await transport.close();
 });
 
+test('macOS repair transport replaces registration before opening the broker', async () => {
+    const events = [];
+    const transport = createPlatformHelperTransport(macOptions({
+        repairRegistration: true,
+        prepareMacosHelperRegistration: function () {
+            return {
+                helperPath: '/verified/platform/helper',
+                ensureRegistered: async function () {
+                    events.push('ensure');
+                },
+                repairRegistered: async function () {
+                    events.push('repair');
+                },
+            };
+        },
+        createMacosBrokerTransport: function () {
+            events.push('broker');
+            return {
+                request: async function () { return 'ready'; },
+                close: async function () {},
+            };
+        },
+    }));
+
+    assert.equal(await transport.request('request'), 'ready');
+    assert.deepEqual(events, ['repair', 'broker']);
+    await transport.close();
+});
+
 test('macOS registration completes before the stdio broker starts or sends a request', async () => {
     const events = [];
     let releaseRegistration;
@@ -200,6 +230,7 @@ test('macOS registration completes before the stdio broker starts or sends a req
                     await registrationGate;
                     events.push('register:done');
                 },
+                repairRegistered: async function () {},
             };
         },
         loadAddon: function () {
@@ -245,6 +276,7 @@ test('concurrent macOS requests share one registration and one native transport'
                     registrations += 1;
                     await nextTurn();
                 },
+                repairRegistered: async function () {},
             };
         },
         createMacosBrokerTransport: function () {
@@ -275,6 +307,7 @@ test('macOS registration lifecycle errors remain bounded and block native XPC', 
                     ensureRegistered: async function () {
                         throw Object.assign(new Error('sensitive local detail'), fixture);
                     },
+                    repairRegistered: async function () {},
                 };
             },
             createMacosBrokerTransport: function () {
@@ -389,7 +422,7 @@ test('process launch is isolated to the verified platform Helper JS boundaries',
     assert.match(registrationSource, /require\('child_process'\)\.execFile/);
     assert.doesNotMatch(
         registrationSource,
-        /shell:\s*true|\bexec\s*\(|\bspawn\s*\(|\bbootout\b|\bkill\b|stdio:\s*'inherit'/i,
+        /shell:\s*true|\bexec\s*\(|\bspawn\s*\(|\bkill\b|stdio:\s*'inherit'/i,
     );
     const stdioSource = fs.readFileSync(
         path.join(__dirname, 'platform-helper-stdio-transport.js'),
