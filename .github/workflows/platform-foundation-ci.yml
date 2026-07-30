@@ -1,0 +1,179 @@
+name: macOS native foundation
+
+on:
+  push:
+    branches: [main]
+  pull_request: {}
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: macos-foundation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-arm64:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "14.0"
+      AE_MCP_RUNTIME_LICENSE_APPROVAL: ${{ github.workspace }}/packaging/runtime-license-approvals.json
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Select exact bootstrap Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Select exact bootstrap uv and Python
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: 0.11.7
+          python-version: 3.13.13
+          enable-cache: false
+
+      - name: Assert native arm64 runner and locked bootstrap tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(uname -m)" == 'arm64' ]]
+          [[ "$(node --version)" == 'v24.17.0' ]]
+          [[ "$(uv --version)" == 'uv 0.11.7 '* ]]
+          [[ "$(python --version)" == 'Python 3.13.13' ]]
+
+      - name: Run focused foundation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          swift test --package-path native/platform-helper/macos
+          node --test native/platform-helper/protocol/protocol.test.mjs
+          node --test native/platform-helper/macos/Tests/*.test.mjs
+          node --test \
+            plugin/host/platform-helper-registration.test.js \
+            plugin/host/platform-helper-transport.test.js \
+            plugin/panel/test/runtimeManager.test.js
+          node --test scripts/package/test/verify-final-native-signatures.test.mjs
+          node --test scripts/release/test/verify-product-acceptance-coverage.test.mjs
+
+      - name: Download locked Node headers
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          import { downloadLockedAsset } from './scripts/package/lib/locked-download.mjs';
+
+          const runtimeLock = JSON.parse(
+            await fs.promises.readFile('packaging/runtime-lock.json', 'utf8'),
+          );
+          const archivePath = path.resolve(
+            process.env.RUNNER_TEMP,
+            'node-v24.17.0-headers.tar.gz',
+          );
+          await downloadLockedAsset({
+            ...runtimeLock.node.headers,
+            destination: archivePath,
+          });
+          await fs.promises.appendFile(
+            process.env.GITHUB_ENV,
+            `AE_MCP_NODE_HEADERS_ARCHIVE=${archivePath}\n`,
+          );
+          NODE
+
+      - name: Build locked runtime and helper once
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/package/build-portable-runtime.mjs \
+            --platform macos-arm64 \
+            --out build/runtime/macos-arm64
+          node scripts/package/build-platform-helper.mjs \
+            --platform macos-arm64 \
+            --out build/helper/macos-arm64
+          AE_MCP_MACOS_ADDON_PATH="$GITHUB_WORKSPACE/build/helper/macos-arm64/lib/ae-mcp-platform-helper-transport.node" \
+            node --test native/platform-helper/macos/Tests/platform-helper-addon-live.test.mjs
+
+      - name: Stage and verify one unsigned bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          export AE_MCP_SOURCE_COMMIT_SHA="$(git rev-parse HEAD)"
+          node scripts/package/stage-platform-bundle.mjs \
+            --platform macos-arm64 \
+            --profile release-audit \
+            --version 0.9.2 \
+            --out build/stage/macos-arm64
+          node scripts/package/verify-platform-bundle.mjs \
+            --root build/stage/macos-arm64 \
+            --platform macos-arm64 \
+            --profile release-audit \
+            --version 0.9.2
+
+      - name: Write bounded foundation receipt
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { execFile } from 'node:child_process';
+          import { promisify } from 'node:util';
+          import {
+            sha256Directory,
+            sha256File,
+          } from './scripts/package/lib/files.mjs';
+          import { writeCanonicalJson } from './scripts/package/lib/manifest.mjs';
+
+          const execFileAsync = promisify(execFile);
+          const commandOutput = async (command, args) => (
+            await execFileAsync(command, args, { encoding: 'utf8' })
+          ).stdout.trim();
+          const sourceCommitSha = await commandOutput('git', ['rev-parse', 'HEAD']);
+          const swift = await commandOutput('swift', ['--version']);
+          const xcode = await commandOutput('xcodebuild', ['-version']);
+          const runtimeManifestSha256 = await sha256File(
+            'build/runtime/macos-arm64/runtime-manifest.json',
+          );
+          const stagedBundleManifestSha256 = await sha256File(
+            'build/stage/macos-arm64/bundle-manifest.json',
+          );
+          const stagedRootSha256 = await sha256Directory(
+            'build/stage/macos-arm64',
+          );
+          await writeCanonicalJson(
+            'build/evidence/platform-foundation-receipt.json',
+            {
+              schemaVersion: 1,
+              sourceCommitSha,
+              runner: {
+                os: process.platform,
+                architecture: process.arch,
+              },
+              toolchain: {
+                node: process.version,
+                swift,
+                xcode,
+              },
+              runtimeManifestSha256,
+              stagedBundleManifestSha256,
+              stagedRootSha256,
+              afterEffectsEvidence: {
+                produced: false,
+                reason: 'credential-free-foundation-ci',
+              },
+            },
+          );
+          NODE
+
+      - name: Upload bounded foundation receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: macos-foundation-receipt-${{ github.sha }}
+          path: build/evidence/platform-foundation-receipt.json
+          if-no-files-found: error
+          retention-days: 14

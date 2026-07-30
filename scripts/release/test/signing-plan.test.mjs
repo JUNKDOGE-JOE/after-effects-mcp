@@ -1089,19 +1089,27 @@ test('fast CI runs the release contract suite without adding a native release ma
   assert.doesNotMatch(workflow, /macos-15|macos-14-compat|windows-2025/);
 });
 
-test('foundation CI retains the required minimum-macOS job once its gated task lands', async (t) => {
-  let workflow;
-  try {
-    workflow = await readFile('.github/workflows/platform-foundation-ci.yml', 'utf8');
-  } catch (error) {
-    if (error?.code !== 'ENOENT') throw error;
-    t.todo('platform foundation Task 16 remains blocked on the separately approved helper work');
-    return;
+test('foundation CI is one credential-free Apple Silicon job', async () => {
+  const workflow = await readFile(
+    '.github/workflows/platform-foundation-ci.yml',
+    'utf8',
+  );
+  assert.match(workflow, /runs-on:\s*macos-15/);
+  assert.match(workflow, /\[\[ "\$\(uname -m\)" == 'arm64' \]\]/);
+  assert.match(workflow, /swift test[\s\S]*native\/platform-helper\/macos/);
+  assert.match(workflow, /build-platform-helper\.mjs[\s\S]*macos-arm64/);
+  assert.match(workflow, /stage-platform-bundle\.mjs[\s\S]*macos-arm64/);
+  assert.match(workflow, /verify-platform-bundle\.mjs[\s\S]*macos-arm64/);
+  assert.match(workflow, /platform-foundation-receipt\.json/);
+  assert.doesNotMatch(workflow, /macos-14-compat|windows-2025|schedule:/);
+  assert.doesNotMatch(
+    workflow,
+    /AE_MCP_APPLE_CERT_P12_BASE64|notarytool|package-macos-dmg|build-rc/,
+  );
+  assert.doesNotMatch(workflow, /native-coverage-gate\.mjs/);
+  for (const match of workflow.matchAll(/uses:\s*([^\s]+)/g)) {
+    assert.match(match[1], /@[0-9a-f]{40}$/, `mutable action reference: ${match[1]}`);
   }
-
-  assert.match(workflow, /macos-14-compat:/);
-  assert.match(workflow, /runs-on: macos-14|runs-on: \[self-hosted, macOS, ARM64, ae-mcp-macos-14\]/);
-  assert.doesNotMatch(workflow, /macos-14-compat:[\s\S]*?continue-on-error:\s*true/);
 });
 
 test('foundation notarization explicitly consumes the temporary keychain path once fixed', async (t) => {
