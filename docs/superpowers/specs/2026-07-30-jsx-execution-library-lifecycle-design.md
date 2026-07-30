@@ -16,15 +16,21 @@ ae_exec
   -> return the execution result
   -> do not create or update a Tool Library artifact
 
-explicit user action in the Tools panel
+user explicitly asks the model to save, or saves in the Tools panel
   -> create a saved JSX artifact
   -> assign stable identity, revision, and content hash
   -> expose it through the existing Tool Library discovery and execution flow
+
+model judges that generated JSX may be useful again
+  -> explicitly create a non-executable candidate artifact
+  -> keep it outside default Tool Library discovery
+  -> retain it until the user promotes or deletes it
 ```
 
 The successful terminal result of `ae_exec` is not a persistence event. The
 product does not materialize a `.jsx` file for that call, retain the source in a
-hidden candidate, or infer that the user wants a reusable tool.
+hidden candidate, or infer persistence in the server. Persistence requires a
+separate deliberate model tool call or an explicit Tools panel action.
 
 The current Issue #82 archive and retention design is superseded by this
 document. In particular, this package does not create an ephemeral archive,
@@ -57,6 +63,9 @@ end-to-end product path on the current source revision.
 
 - A successful `ae_exec` call leaves Tool Library storage and store revision
   unchanged.
+- A user can ask the model to save JSX as a reusable Tool Library artifact.
+- A model can deliberately retain JSX as a candidate when it judges that the
+  content may be useful again.
 - A user can explicitly create, edit, archive, delete, duplicate, import,
   export, or promote Tool Library content from the existing Tools panel.
 - A user-created JSX artifact enters the library as `saved`, with the existing
@@ -73,10 +82,11 @@ end-to-end product path on the current source revision.
 - Crash recovery, restart recovery, cleanup concurrency, file locking, or a
   generic lifecycle framework for execution-level JSX.
 - Asking the user to classify every `ae_exec` call.
-- Inferring reusable intent from natural language or from repeated execution.
+- Server-side persistence inferred from a successful or repeated execution.
+- Automatically promoting a model-curated candidate to `saved`.
+- Expiring or deleting candidates automatically.
 - Adding a `save_as_tool` argument to `ae_exec`.
-- Adding a new public `ae_toolCreate`, `ae_toolSave`, or other model-facing
-  mutation tool.
+- Adding a new public tool name such as `ae_toolCreate` or `ae_toolSave`.
 - Changing AEGP/JSX route selection or `ae_nativeExec`.
 - Changing AE dispatch, checkpoint, Undo, timeout, or uncertain-write
   semantics.
@@ -106,12 +116,14 @@ checkpoint, Undo, timeout, or approval behavior.
 
 ### User-level reusable JSX
 
-Reusable JSX begins only when the user performs an explicit Tools panel
-mutation. A newly created artifact uses the existing Tool Library model:
+Reusable JSX begins when the user explicitly asks the model to save it or
+performs an explicit Tools panel mutation. A newly created artifact uses the
+existing Tool Library model:
 
 - `kind = "jsx"`;
-- `source.type = "user"`;
-- `source.ref = "manual"`;
+- `source.type = "user"` for a new user-requested artifact;
+- `source.ref = "manual"` for panel creation or a model-request reference for
+  model creation;
 - `status = "saved"`;
 - stable `user:<uuid>` identity;
 - revision managed by the canonical store;
@@ -124,11 +136,34 @@ is represented by whether a Tool Library artifact exists:
 ```text
 no artifact -> execution-level JSX
 saved user JSX artifact -> reusable user-level JSX
+candidate chat-tool-call artifact -> model-curated temporary JSX
 bundled/product source -> maintained product-owned JSX
 ```
 
 This keeps the distinction observable without adding a parallel classification
-schema.
+schema. Promoting a candidate changes its status to `saved` while preserving
+its original `chat-tool-call` source provenance.
+
+### Model-curated candidate JSX
+
+The model may decide that generated JSX is likely to be useful again even when
+the user has not requested permanent retention. The model can then make a
+separate Tool Library save call with `status = "candidate"`.
+
+A model-curated candidate:
+
+- uses the existing `chat-tool-call` source type and records model-curated
+  intent in provenance;
+- has stable identity, revision, and content hash;
+- is excluded from default saved-and-pinned discovery;
+- is visible only when candidate status is explicitly requested;
+- cannot be rendered or executed through `ae_toolUse`;
+- has no expiration time, retention deadline, or automatic cleanup; and
+- remains until the user deletes it through the panel or requests promotion to
+  `saved`.
+
+The model must not create a candidate after every successful execution. The
+candidate is an explicit model decision and therefore a separate tool call.
 
 ### Maintained JSX
 
@@ -148,9 +183,68 @@ The public Tool Library surface remains:
 The public `ae_exec` schema remains unchanged. No lifecycle or persistence
 fields are added.
 
+`ae_toolUse` gains one `save` action. This extends the existing Tool Library
+surface without adding another public tool name.
+
+Create shape:
+
+```json
+{
+  "action": "save",
+  "save": {
+    "mode": "create",
+    "intent": "user-requested",
+    "status": "saved",
+    "artifact": {
+      "name": "Reusable JSX",
+      "description": "What the script does",
+      "kind": "jsx",
+      "category": "workflow",
+      "tags": [],
+      "compatibility": {},
+      "declaredRisk": "write",
+      "content": "JSON.stringify({ok:true});",
+      "argsSchema": {}
+    }
+  }
+}
+```
+
+Promotion shape:
+
+```json
+{
+  "action": "save",
+  "save": {
+    "mode": "promote",
+    "intent": "user-requested",
+    "status": "saved",
+    "artifactId": "user-or-chat-candidate-id",
+    "expectedRevision": 1,
+    "expectedContentHash": "64-lowercase-hex-characters"
+  }
+}
+```
+
+Admission rules are narrow:
+
+- `mode = "create"` requires the complete artifact draft and forbids existing
+  artifact identity fields;
+- `mode = "promote"` requires candidate identity plus revision/content-hash
+  compare-and-swap fields and forbids a replacement draft;
+- `intent = "model-curated"` may create only `status = "candidate"`;
+- `intent = "user-requested"` may create `candidate` or `saved`;
+- promotion always requires `intent = "user-requested"` and
+  `status = "saved"`; and
+- V1 accepts only `kind = "jsx"` through this model-facing save action.
+
+The model-facing execution skill explains that ordinary `ae_exec` calls are
+ephemeral, user-requested retention uses `saved`, model-judged possible reuse
+uses `candidate`, and candidates are not executable until promoted.
+
 The current final public registry, public schema registry, annotation registry,
 backend-supported verb sets, generated tool listings, default execution skill,
-and user-visible model instructions must not gain a new tool.
+and user-visible model instructions must not gain a new tool name.
 
 ## Panel-only Mutation Boundary
 
@@ -212,15 +306,15 @@ execution does not resolve the default Tool Library service at all.
 ## Existing Data and Compatibility
 
 Existing candidates, including earlier `chat-tool-call` candidates, are user
-data and remain untouched.
+data and remain untouched. New model-curated candidates deliberately reuse the
+same source type with explicit intent provenance.
 
 - No startup migration deletes them.
 - No background job archives or prunes them.
 - Candidate filtering remains available for imported or historical content.
 - Existing candidates may still be explicitly inspected, deleted, or promoted
-  through the panel.
-- `chat-tool-call` remains a readable source type for compatibility, even
-  though new `ae_exec` calls stop producing it.
+  through the panel or promoted by the model after a user request.
+- New `ae_exec` calls stop producing candidates automatically.
 
 This is a forward behavior change, not a destructive data migration.
 
@@ -230,6 +324,16 @@ This is a forward behavior change, not a destructive data migration.
 
 Execution errors keep the current result contract. The absence of history
 capture adds no new error and no new success field.
+
+### Model save
+
+`ae_toolUse action = "save"` is a separate Tool Library mutation. Its success
+or failure does not change, reinterpret, or roll back any preceding
+`ae_exec` result.
+
+Malformed intent/status/mode combinations fail before store mutation. Store
+validation, revision conflicts, content-hash conflicts, secret scanning, and
+structured errors reuse the canonical Tool Library path.
 
 ### Panel mutation
 
@@ -263,20 +367,30 @@ Tool Library error conversion.
 
 ### Explicit reusable tool
 
-1. The user opens the Tools panel and chooses **New**.
-2. The user supplies a name, JSX content, optional argument schema, category,
-   tags, and declared risk.
-3. The panel calls the private `ae.toolCreate` handler.
-4. The canonical Tool Library store creates a `saved` user artifact.
-5. The panel refreshes and inspects the new stable artifact.
-6. Future model discovery uses the existing
+1. The user asks the model to save the JSX, or opens the Tools panel and chooses
+   **New**.
+2. The model calls public `ae_toolUse` with `action = "save"` and
+   `intent = "user-requested"`, or the panel calls private `ae.toolCreate`.
+3. The canonical Tool Library store creates a `saved` user artifact.
+4. The caller reads back the new stable identity, revision, and content hash.
+5. Future model discovery uses the existing
    `Index -> Search -> Inspect -> Use` flow.
+
+### Model-curated temporary storage
+
+1. The model determines that generated JSX may be useful again.
+2. The model makes a separate `ae_toolUse action = "save"` call with
+   `intent = "model-curated"` and `status = "candidate"`.
+3. The canonical store creates a non-executable candidate.
+4. Default Tool Library discovery remains unchanged.
+5. The candidate remains until explicitly promoted or deleted.
 
 ### Historical candidate
 
 1. The user deliberately selects the candidate filter.
 2. The panel reads a pre-existing or imported candidate.
-3. The user may delete it or explicitly promote it.
+3. The user may delete it, promote it in the panel, or ask the model to promote
+   it.
 4. No automatic decision is made on the user's behalf.
 
 ## Acceptance Tests
@@ -289,7 +403,15 @@ Tool Library error conversion.
 - Repeated identical `ae_exec` calls create no candidate and no deduplication
   record.
 - The public registry, schemas, annotations, and `tools/list` remain exactly
-  unchanged.
+  unchanged in tool names.
+- A valid user-requested save creates a `saved` JSX artifact through public
+  `ae_toolUse`.
+- A valid model-curated save creates a non-executable `candidate` excluded from
+  default index/search and included only when candidate status is requested.
+- Invalid save mode, intent, status, or payload combinations fail before any
+  Tool Library mutation.
+- A user-requested promotion changes the selected candidate to `saved` using
+  the exact expected revision and content hash.
 - A panel-only mutation name without the panel capability is unknown.
 - A panel-only mutation with the real test capability validates against its
   private schema and reaches exactly one existing handler.
@@ -306,7 +428,8 @@ Tool Library error conversion.
 - Creating a JSX artifact refreshes the list and selects the saved artifact.
 - A mutation conflict remains visible and requests refresh through the current
   reducer behavior.
-- No candidate is added to the Tools panel after an `ae_exec` call.
+- No candidate is added after `ae_exec` unless a separate model save call is
+  made.
 
 ### Regression
 
@@ -339,17 +462,18 @@ the actual AE execution path contrary to this design.
 Only a defect reproduced in one of these paths is a P0 blocker:
 
 - `ae_exec` still persists Tool Library content;
+- user-requested model save cannot create a stable saved JSX artifact;
+- model-curated save is exposed in default discovery or becomes executable;
 - explicit Tools panel save cannot create a stable saved JSX artifact;
 - a panel-only mutation becomes model-discoverable;
 - private dispatch can reach a mutation without the existing panel capability;
   or
 - the change breaks current Tool Library discovery or execution.
 
-Archive retention, cleanup races, restart census, generic permission hardening,
-system-command expansion, natural-language lifecycle inference, and unrelated
-Tool Library redesign are follow-up or out of scope. Review uses at most two
-concentrated rounds unless a reproduced blocker changes the acceptance
-boundary.
+Archive retention, cleanup races, candidate expiry, restart census, generic
+permission hardening, system-command expansion, and unrelated Tool Library
+redesign are follow-up or out of scope. Review uses at most two concentrated
+rounds unless a reproduced blocker changes the acceptance boundary.
 
 ## Delivery Boundary
 
@@ -358,12 +482,15 @@ This is one standalone product PR for Issue #82.
 The package is complete when:
 
 1. one-time `ae_exec` no longer persists;
-2. explicit panel creation produces a reusable saved JSX artifact;
-3. the public MCP surface is unchanged;
-4. focused tests and CI pass;
-5. concentrated review has no unresolved current-path blocker;
-6. the PR is merged; and
-7. Issue #82 is rewritten or closed with the superseded archive scope clearly
+2. user-requested model save and explicit panel creation both produce reusable
+   saved JSX artifacts;
+3. model-curated save produces a durable, non-default, non-executable
+   candidate;
+4. the public MCP tool-name surface is unchanged;
+5. focused tests and CI pass;
+6. concentrated review has no unresolved current-path blocker;
+7. the PR is merged; and
+8. Issue #82 is rewritten or closed with the superseded archive scope clearly
    recorded.
 
 No `.aep` fixture is created or retained for this package.
