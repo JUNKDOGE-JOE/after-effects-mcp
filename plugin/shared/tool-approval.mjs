@@ -3,7 +3,7 @@ export const PLAN_SCHEMA_KEY = 'x-ae-mcp-plan';
 const HASH_PATTERN = /^[0-9a-f]{64}$/;
 const OPERATIONS = new Set(['render', 'execute', 'apply']);
 const RISKS = new Set(['read', 'write', 'destructive', 'external']);
-const TOOL_USE_ACTIONS = new Set(['render', 'prepare', 'grant', 'execute']);
+const TOOL_USE_ACTIONS = new Set(['render', 'prepare', 'grant', 'execute', 'save']);
 
 function isPlainObject(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;

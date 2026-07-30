@@ -9,10 +9,18 @@ import {
 } from '../src/cep/toolsApi.js';
 
 test('Tools API uses exact progressive and mutation tool names', async () => {
-  const calls = [];
+  const publicCalls = [];
+  const panelCalls = [];
   const mcp = {
     async callTool(name, args) {
-      calls.push({ name, args });
+      publicCalls.push({ name, args });
+      return {
+        isError: false,
+        content: [{ type: 'text', text: JSON.stringify({ ok: true }) }],
+      };
+    },
+    async callPanelTool(name, args) {
+      panelCalls.push({ name, args });
       return {
         isError: false,
         content: [{ type: 'text', text: JSON.stringify({ ok: true }) }],
@@ -35,29 +43,32 @@ test('Tools API uses exact progressive and mutation tool names', async () => {
   await api.discardImport('import-1');
   await api.exportPackage(['user:1'], '/tmp/out.aemcptools');
 
-  assert.deepEqual(calls.map((call) => call.name), [
+  assert.deepEqual(publicCalls.map((call) => call.name), [
     'ae_toolIndex',
     'ae_toolSearch',
     'ae_toolInspect',
+    'ae_toolUse',
+  ]);
+  assert.deepEqual(panelCalls.map((call) => call.name), [
     'ae_toolCreate',
     'ae_toolEdit',
     'ae_toolDelete',
     'ae_toolArchive',
     'ae_toolDuplicate',
     'ae_toolPromoteFromHistory',
-    'ae_toolUse',
     'ae_toolImport',
     'ae_toolImport',
     'ae_toolImport',
     'ae_toolExport',
   ]);
-  assert.deepEqual(calls[2].args, { artifact_id: 'user:1' });
-  assert.deepEqual(calls[10].args, { action: 'preview', path: '/tmp/in.aemcptools' });
-  assert.deepEqual(calls[11].args, {
+  assert.deepEqual(publicCalls[2].args, { artifact_id: 'user:1' });
+  assert.deepEqual(publicCalls[3].args, { action: 'render', artifact_id: 'user:1' });
+  assert.deepEqual(panelCalls[6].args, { action: 'preview', path: '/tmp/in.aemcptools' });
+  assert.deepEqual(panelCalls[7].args, {
     action: 'commit', import_id: 'import-1', resolutions: { conflict: 'keep' },
   });
-  assert.deepEqual(calls[12].args, { action: 'discard', import_id: 'import-1' });
-  assert.deepEqual(calls[13].args, {
+  assert.deepEqual(panelCalls[8].args, { action: 'discard', import_id: 'import-1' });
+  assert.deepEqual(panelCalls[9].args, {
     artifact_ids: ['user:1'], out_path: '/tmp/out.aemcptools',
   });
 });

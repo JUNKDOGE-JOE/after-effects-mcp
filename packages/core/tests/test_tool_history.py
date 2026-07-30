@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import json
-import logging
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
@@ -15,7 +13,7 @@ from ae_mcp.tool_history import (
     extract_history_draft,
 )
 from ae_mcp.tool_secrets import RegexSecretScanner
-from ae_mcp.tool_store import ToolArtifactStore, ToolStoreError
+from ae_mcp.tool_store import ToolArtifactStore
 
 
 @pytest.fixture
@@ -45,7 +43,42 @@ def exec_arguments(code: str = "app.project.activeItem.layers.addNull();") -> di
     }
 
 
-def test_successful_exec_creates_non_executable_candidate(
+def test_successful_exec_is_not_extracted_for_history() -> None:
+    assert (
+        extract_history_draft(
+            "ae.exec",
+            exec_arguments(),
+            {"ok": True},
+            context(),
+        )
+        is None
+    )
+
+
+def test_expression_history_extraction_remains_available() -> None:
+    draft = extract_history_draft(
+        "ae.setExpression",
+        {"name": "Time driver", "expression": "time * 2"},
+        {"ok": True},
+        context(),
+    )
+
+    assert draft is not None
+    assert draft.status == "candidate"
+    assert draft.kind == "expression"
+    assert draft.name == "Time driver"
+    assert draft.content == "time * 2"
+    assert draft.source.type == "chat-tool-call"
+    assert draft.source.client == "panel-chat/0.9.0"
+    assert draft.source.ref == "req-1"
+    assert draft.source.provenance == {
+        "verbName": "ae.setExpression",
+        "requestId": "req-1",
+        "capturedAt": 1000,
+    }
+
+
+def test_successful_exec_does_not_create_candidate(
     store: ToolArtifactStore, scanner: RegexSecretScanner
 ) -> None:
     artifact = capture_history_candidate(
@@ -57,18 +90,8 @@ def test_successful_exec_creates_non_executable_candidate(
         context=context(),
     )
 
-    assert artifact is not None
-    assert artifact.status == "candidate"
-    assert artifact.kind == "jsx"
-    assert artifact.name == "Create control"
-    assert artifact.source.type == "chat-tool-call"
-    assert artifact.source.client == "panel-chat/0.9.0"
-    assert artifact.source.ref == "req-1"
-    assert artifact.source.provenance == {
-        "verbName": "ae.exec",
-        "requestId": "req-1",
-        "capturedAt": 1000,
-    }
+    assert artifact is None
+    assert store.list(statuses={"candidate"}) == []
 
 
 def test_failed_exec_does_not_create_candidate(
@@ -93,8 +116,8 @@ def test_secret_hit_does_not_persist_candidate(
     result = capture_history_candidate(
         store=store,
         scanner=scanner,
-        verb_name="ae.exec",
-        arguments={"code": 'var token = "Authorization: Bearer secret";'},
+        verb_name="ae.setExpression",
+        arguments={"expression": 'var token = "Authorization: Bearer secret";'},
         result={"ok": True},
         context=context("req-3"),
     )
@@ -119,8 +142,8 @@ def test_credential_named_values_do_not_persist_history_candidates(
     result = capture_history_candidate(
         store=store,
         scanner=scanner,
-        verb_name="ae.exec",
-        arguments={"code": code},
+        verb_name="ae.setExpression",
+        arguments={"expression": code},
         result={"ok": True},
         context=context("credential-shaped"),
     )
@@ -151,16 +174,16 @@ def test_repeated_candidate_updates_usage_and_provenance_under_artifact_cas(
     first = capture_history_candidate(
         store=store,
         scanner=scanner,
-        verb_name="ae.exec",
-        arguments=exec_arguments(),
+        verb_name="ae.setExpression",
+        arguments={"name": "Time driver", "expression": "time * 2"},
         result={"ok": True},
         context=context("req-first", 1000),
     )
     second = capture_history_candidate(
         store=store,
         scanner=scanner,
-        verb_name="ae.exec",
-        arguments=exec_arguments(),
+        verb_name="ae.setExpression",
+        arguments={"name": "Time driver", "expression": "time * 2"},
         result={"ok": True},
         context=HistoryContext("second-client/1", "req-second", 2000),
     )
@@ -172,65 +195,57 @@ def test_repeated_candidate_updates_usage_and_provenance_under_artifact_cas(
     assert second.source.type == "chat-tool-call"
     assert second.source.ref == "req-first"
     assert second.source.provenance == {
-        "verbName": "ae.exec",
+        "verbName": "ae.setExpression",
         "requestId": "req-first",
         "capturedAt": 2000,
         "lastRequestId": "req-second",
         "lastClient": "second-client/1",
     }
-    assert len(store.find_by_content_hash("jsx", first.content_hash, statuses={"candidate"})) == 1
+    assert (
+        len(
+            store.find_by_content_hash(
+                "expression",
+                first.content_hash,
+                statuses={"candidate"},
+            )
+        )
+        == 1
+    )
 
 
-async def test_server_captures_only_success_and_capture_failure_preserves_result(
-    monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+async def test_successful_exec_does_not_initialize_tool_service(
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from ae_mcp import server as server_module
 
     load_all()
     schema_cls, original_run = HANDLERS["ae.exec"]
-    results = iter(({"ok": True, "value": "first"}, {"ok": False, "error": "failed"}))
-    captured: list[tuple[str, dict[str, object], object]] = []
 
     async def fake_run(_validated: object, _ctx: object) -> object:
-        return next(results)
+        return {"ok": True, "value": "structured"}
 
     async def allow(_verb_name: str, _ctx: object) -> None:
         return None
 
-    def fake_capture(**kwargs: object) -> None:
-        captured.append(
-            (
-                str(kwargs["verb_name"]),
-                dict(kwargs["arguments"]),
-                kwargs["result"],
-            )
-        )
-        raise ToolStoreError("capture-secret-must-not-be-logged")
-
     monkeypatch.setitem(HANDLERS, "ae.exec", (schema_cls, fake_run))
     monkeypatch.setattr(server_module.approval_gate, "enforce", allow)
-    monkeypatch.setattr(server_module, "capture_history_candidate", fake_capture)
     monkeypatch.setattr(
         server_module,
         "default_tool_service",
-        lambda: SimpleNamespace(store=object()),
+        lambda: pytest.fail("ae_exec initialized Tool Library"),
     )
-    monkeypatch.setattr(server_module.client_identity, "get_client", lambda: "test-client/1")
     server = server_module.build_server()
 
-    with caplog.at_level(logging.WARNING, logger="ae_mcp.server"):
-        success = await server._ae_call_tool("ae_exec", exec_arguments("return 'first';"))
-        failure = await server._ae_call_tool("ae_exec", exec_arguments("return 'second';"))
+    result = await server._ae_call_tool(
+        "ae_exec",
+        exec_arguments("return 'structured';"),
+    )
 
     monkeypatch.setitem(HANDLERS, "ae.exec", (schema_cls, original_run))
-    assert json.loads(success.content[0].text) == {"ok": True, "value": "first"}
-    assert json.loads(failure.content[0].text) == {"ok": False, "error": "failed"}
-    assert len(captured) == 1
-    assert captured[0][0] == "ae.exec"
-    assert captured[0][1] == exec_arguments("return 'first';")
-    assert captured[0][2] == {"ok": True, "value": "first"}
-    assert any("ToolStoreError" in record.getMessage() for record in caplog.records)
-    assert all("capture-secret" not in record.getMessage() for record in caplog.records)
+    assert json.loads(result.content[0].text) == {
+        "ok": True,
+        "value": "structured",
+    }
 
 
 async def test_non_candidate_success_does_not_initialize_tool_service(

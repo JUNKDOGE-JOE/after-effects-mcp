@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping, cast
 
 from ae_mcp import client_identity, schemas
-from ae_mcp.handlers import register
+from ae_mcp.handlers import register, register_panel
 from ae_mcp.tool_archive import ImportConflict, ImportItemPreview, ImportPreview
 from ae_mcp.tool_artifact import (
     ArtifactOperation,
@@ -193,9 +193,67 @@ async def _run_tool_inspect(args: schemas.AeToolInspectArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
+def _save_tool_artifact(save: Any, ctx: Any, service: Any) -> dict[str, Any]:
+    if save.mode == "create":
+        request_id_value = getattr(ctx, "request_id", None)
+        request_id = (
+            str(request_id_value)[:512] if request_id_value is not None else None
+        )
+        client = client_identity.get_client()
+        provenance: dict[str, JsonValue] = {
+            "intent": save.intent,
+            "client": client,
+        }
+        if request_id:
+            provenance["requestId"] = request_id
+        artifact_input = save.artifact
+        artifact = service.store.create(
+            ToolArtifactDraft(
+                name=artifact_input.name,
+                description=artifact_input.description,
+                kind=artifact_input.kind,
+                category=artifact_input.category,
+                tags=tuple(artifact_input.tags),
+                compatibility=cast(
+                    Mapping[str, JsonValue], artifact_input.compatibility
+                ),
+                declared_risk=artifact_input.declared_risk,
+                source=ToolSource(
+                    type=(
+                        "user"
+                        if save.intent == "user-requested"
+                        else "chat-tool-call"
+                    ),
+                    ref=request_id or "model-save",
+                    client=client,
+                    product_version=None,
+                    provenance=provenance,
+                ),
+                status=save.status,
+                content=artifact_input.content,
+                args_schema=cast(
+                    Mapping[str, JsonValue], artifact_input.args_schema
+                ),
+            )
+        )
+    else:
+        artifact = service.store.promote_candidate(
+            save.artifact_id,
+            expected_revision=save.expected_revision,
+            expected_content_hash=save.expected_content_hash,
+        )
+    return {
+        "ok": True,
+        "artifact": artifact.to_dict(),
+        "executionCapabilities": execution_capabilities(artifact),
+    }
+
+
 async def _run_tool_use(args: schemas.AeToolUseArgs, ctx: Any) -> Any:
     try:
         service = default_tool_service()
+        if args.action == "save":
+            return _save_tool_artifact(cast(Any, args.save), ctx, service)
         if args.action == "render":
             return service.execution.render(cast(str, args.artifact_id), args.args)
         if args.action == "prepare":
@@ -245,7 +303,9 @@ async def _run_tool_use(args: schemas.AeToolUseArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_create(args: schemas.AeToolCreateArgs, ctx: Any) -> Any:
+async def _run_tool_create(
+    args: schemas._AePanelToolCreateArgs, ctx: Any
+) -> Any:
     del ctx
     try:
         draft = ToolArtifactDraft(
@@ -275,7 +335,7 @@ async def _run_tool_create(args: schemas.AeToolCreateArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_edit(args: schemas.AeToolEditArgs, ctx: Any) -> Any:
+async def _run_tool_edit(args: schemas._AePanelToolEditArgs, ctx: Any) -> Any:
     del ctx
     try:
         service = default_tool_service()
@@ -296,7 +356,9 @@ async def _run_tool_edit(args: schemas.AeToolEditArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_delete(args: schemas.AeToolDeleteArgs, ctx: Any) -> Any:
+async def _run_tool_delete(
+    args: schemas._AePanelToolDeleteArgs, ctx: Any
+) -> Any:
     del ctx
     try:
         default_tool_service().store.delete(
@@ -309,7 +371,9 @@ async def _run_tool_delete(args: schemas.AeToolDeleteArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_archive(args: schemas.AeToolArchiveArgs, ctx: Any) -> Any:
+async def _run_tool_archive(
+    args: schemas._AePanelToolArchiveArgs, ctx: Any
+) -> Any:
     del ctx
     try:
         artifact = default_tool_service().store.archive(
@@ -322,7 +386,9 @@ async def _run_tool_archive(args: schemas.AeToolArchiveArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_duplicate(args: schemas.AeToolDuplicateArgs, ctx: Any) -> Any:
+async def _run_tool_duplicate(
+    args: schemas._AePanelToolDuplicateArgs, ctx: Any
+) -> Any:
     del ctx
     try:
         service = default_tool_service()
@@ -340,7 +406,7 @@ async def _run_tool_duplicate(args: schemas.AeToolDuplicateArgs, ctx: Any) -> An
 
 
 async def _run_tool_promote(
-    args: schemas.AeToolPromoteFromHistoryArgs, ctx: Any
+    args: schemas._AePanelToolPromoteFromHistoryArgs, ctx: Any
 ) -> Any:
     del ctx
     try:
@@ -400,7 +466,7 @@ def _import_preview(value: ImportPreview) -> dict[str, JsonValue]:
     }
 
 
-async def _run_tool_import(args: schemas.AeToolImportArgs, ctx: Any) -> Any:
+async def _run_tool_import(args: schemas._AePanelToolImportArgs, ctx: Any) -> Any:
     del ctx
     try:
         packages = default_tool_service().packages
@@ -420,7 +486,7 @@ async def _run_tool_import(args: schemas.AeToolImportArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_export(args: schemas.AeToolExportArgs, ctx: Any) -> Any:
+async def _run_tool_export(args: schemas._AePanelToolExportArgs, ctx: Any) -> Any:
     del ctx
     try:
         package = default_tool_service().packages.export(
@@ -439,6 +505,22 @@ register("ae.toolIndex", schemas.AeToolIndexArgs, _run_tool_index)
 register("ae.toolSearch", schemas.AeToolSearchArgs, _run_tool_search)
 register("ae.toolInspect", schemas.AeToolInspectArgs, _run_tool_inspect)
 register("ae.toolUse", schemas.AeToolUseArgs, _run_tool_use)
+register_panel("ae.toolCreate", schemas._AePanelToolCreateArgs, _run_tool_create)
+register_panel("ae.toolEdit", schemas._AePanelToolEditArgs, _run_tool_edit)
+register_panel("ae.toolDelete", schemas._AePanelToolDeleteArgs, _run_tool_delete)
+register_panel("ae.toolArchive", schemas._AePanelToolArchiveArgs, _run_tool_archive)
+register_panel(
+    "ae.toolDuplicate",
+    schemas._AePanelToolDuplicateArgs,
+    _run_tool_duplicate,
+)
+register_panel(
+    "ae.toolPromoteFromHistory",
+    schemas._AePanelToolPromoteFromHistoryArgs,
+    _run_tool_promote,
+)
+register_panel("ae.toolImport", schemas._AePanelToolImportArgs, _run_tool_import)
+register_panel("ae.toolExport", schemas._AePanelToolExportArgs, _run_tool_export)
 
 
 __all__ = [

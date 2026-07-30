@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 RunFn = Callable[[BaseModel, Any], Awaitable[Any]]
 HANDLERS: Dict[str, Tuple[Type[BaseModel], RunFn]] = {}
+PANEL_HANDLERS: Dict[str, Tuple[Type[BaseModel], RunFn]] = {}
 FINAL_PUBLIC_TOOLS = frozenset(
     {
         "ae.checkpoint",
@@ -37,6 +38,12 @@ FINAL_PUBLIC_TOOLS = frozenset(
 def register(name: str, schema: Type[BaseModel], run_fn: RunFn) -> None:
     """Register a verb handler. Last writer wins (typed overrides core if collision)."""
     HANDLERS[name] = (schema, run_fn)
+
+
+def register_panel(name: str, schema: Type[BaseModel], run_fn: RunFn) -> None:
+    """Register one capability-bound panel handler outside the public registry."""
+
+    PANEL_HANDLERS[name] = (schema, run_fn)
 
 
 def load_all() -> None:

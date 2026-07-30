@@ -85,23 +85,6 @@ def extract_history_draft(
         return None
     if verb_name in {"ae.skillCreate", "ae.skillEdit"} or verb_name.startswith("ae.tool"):
         return None
-    if verb_name == "ae.exec":
-        content = arguments.get("code")
-        if not isinstance(content, str) or not content.strip():
-            return None
-        return ToolArtifactDraft(
-            name=_bounded_name(arguments.get("undo_group_name"), "Captured AE execution"),
-            description="Captured from a successful MCP tool call.",
-            kind="jsx",
-            category="workflow",
-            tags=(),
-            compatibility={},
-            declared_risk="write",
-            source=_source(verb_name, context),
-            status="candidate",
-            content=content,
-            args_schema={},
-        )
     for field in ("expression", "expression_text"):
         content = arguments.get(field)
         if not isinstance(content, str) or not content.strip():

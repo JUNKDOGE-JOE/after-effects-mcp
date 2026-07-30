@@ -25499,24 +25499,24 @@
       developerInspect: (artifactId) => panelCall("ae_toolInspect", {
         artifact_id: artifactId
       }),
-      create: (input) => call("ae_toolCreate", input),
-      edit: (input) => call("ae_toolEdit", input),
-      delete: (input) => call("ae_toolDelete", input),
-      archive: (input) => call("ae_toolArchive", input),
-      duplicate: (input) => call("ae_toolDuplicate", input),
-      promoteFromHistory: (input) => call("ae_toolPromoteFromHistory", input),
+      create: (input) => panelCall("ae_toolCreate", input),
+      edit: (input) => panelCall("ae_toolEdit", input),
+      delete: (input) => panelCall("ae_toolDelete", input),
+      archive: (input) => panelCall("ae_toolArchive", input),
+      duplicate: (input) => panelCall("ae_toolDuplicate", input),
+      promoteFromHistory: (input) => panelCall("ae_toolPromoteFromHistory", input),
       use: (input) => call("ae_toolUse", input),
-      previewImport: (path) => call("ae_toolImport", { action: "preview", path }),
-      commitImport: (importId, resolutions) => call("ae_toolImport", {
+      previewImport: (path) => panelCall("ae_toolImport", { action: "preview", path }),
+      commitImport: (importId, resolutions) => panelCall("ae_toolImport", {
         action: "commit",
         import_id: importId,
         resolutions
       }),
-      discardImport: (importId) => call("ae_toolImport", {
+      discardImport: (importId) => panelCall("ae_toolImport", {
         action: "discard",
         import_id: importId
       }),
-      exportPackage: (artifactIds, outPath) => call("ae_toolExport", {
+      exportPackage: (artifactIds, outPath) => panelCall("ae_toolExport", {
         artifact_ids: artifactIds,
         out_path: outPath
       }),
@@ -27702,7 +27702,7 @@
   var HASH_PATTERN = /^[0-9a-f]{64}$/;
   var OPERATIONS = /* @__PURE__ */ new Set(["render", "execute", "apply"]);
   var RISKS = /* @__PURE__ */ new Set(["read", "write", "destructive", "external"]);
-  var TOOL_USE_ACTIONS = /* @__PURE__ */ new Set(["render", "prepare", "grant", "execute"]);
+  var TOOL_USE_ACTIONS = /* @__PURE__ */ new Set(["render", "prepare", "grant", "execute", "save"]);
   function isPlainObject(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const prototype = Object.getPrototypeOf(value);

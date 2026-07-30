@@ -206,6 +206,7 @@ def test_default_execution_guide_is_generated_complete_and_examples_validate():
     for heading in (
         "## Route choice",
         "## Program composition",
+        "## JSX persistence",
         "## Readback",
         "## Undo",
         "## Uncertain native write",
@@ -222,6 +223,22 @@ def test_default_execution_guide_is_generated_complete_and_examples_validate():
         token in template
         for token in ("operationKey", "undoGroup", "operations", "program digest")
     )
+    for lifecycle_rule in (
+        "`ae_exec` is ephemeral",
+        "user-requested save",
+        '`action="save"`',
+        '`status="saved"`',
+        '`status="candidate"`',
+        '`intent="model-curated"`',
+        "model-judged reuse",
+        "separate `ae_toolUse` call",
+        "excluded from default discovery",
+        "cannot be rendered or executed",
+        "`expected_revision`",
+        "`expected_content_hash`",
+        "no automatic expiration or cleanup",
+    ):
+        assert lifecycle_rule in template
 
     stable, generated = template.split("<!-- GENERATED NATIVE REFERENCE -->", 1)
     assert len(re.findall(r"\b[\w'-]+\b", stable)) < 500

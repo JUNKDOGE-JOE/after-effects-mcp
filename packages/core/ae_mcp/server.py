@@ -35,7 +35,7 @@ from ae_mcp import approval_gate, client_identity, schemas
 from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.backends.native import NativeBackendError, NativeInvokeBackend
 from ae_mcp.error_hints import append_hint
-from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp.handlers import HANDLERS, PANEL_HANDLERS, load_all
 from ae_mcp.instructions import SERVER_INSTRUCTIONS, build_server_instructions
 from ae_mcp.tool_history import (
     HistoryContext,
@@ -79,7 +79,7 @@ def _panel_request(
     supplied = values.pop(_PANEL_CAPABILITY_ARGUMENT, None)
     expected = os.environ.get("AE_MCP_PANEL_CAPABILITY", "")
     trusted = (
-        canonical in _PANEL_DEVELOPER_TOOLS
+        (canonical in _PANEL_DEVELOPER_TOOLS or canonical in PANEL_HANDLERS)
         and isinstance(supplied, str)
         and len(expected) >= 64
         and hmac.compare_digest(supplied, expected)
@@ -1131,6 +1131,7 @@ def build_server() -> Server:
     # common underscore-name call path. Built once, after load_all() has
     # populated HANDLERS.
     reverse_map = build_reverse_map(HANDLERS)
+    panel_reverse_map = build_reverse_map(PANEL_HANDLERS)
 
     # Collision guard: expose_tool_name() is lossy (dots -> underscores), so a
     # future verb could collapse onto another's exposed name and make
@@ -1204,6 +1205,20 @@ def build_server() -> Server:
         # Tools are exposed with dots replaced by underscores; map the exposed
         # name back to the canonical verb (the dotted name is accepted too).
         canonical = resolve_tool_name(name, HANDLERS, reverse_map)
+        panel_private = False
+        if canonical is None:
+            private_canonical = resolve_tool_name(
+                name,
+                PANEL_HANDLERS,
+                panel_reverse_map,
+            )
+            if private_canonical is not None:
+                arguments, panel_private = _panel_request(
+                    private_canonical,
+                    arguments,
+                )
+                if panel_private:
+                    canonical = private_canonical
         if canonical is None:
             payload = _format_result({"ok": False, "error": f"unknown tool: {name}"})
             return CallToolResult(
@@ -1212,13 +1227,17 @@ def build_server() -> Server:
             )
         name = canonical
 
-        arguments, panel_developer = _panel_request(canonical, arguments)
-        public_schema_cls, run_fn = HANDLERS[name]
-        schema_cls = (
-            _PANEL_DEVELOPER_SCHEMAS[canonical]
-            if panel_developer
-            else public_schema_cls
-        )
+        if panel_private:
+            panel_developer = True
+            schema_cls, run_fn = PANEL_HANDLERS[name]
+        else:
+            arguments, panel_developer = _panel_request(canonical, arguments)
+            public_schema_cls, run_fn = HANDLERS[name]
+            schema_cls = (
+                _PANEL_DEVELOPER_SCHEMAS[canonical]
+                if panel_developer
+                else public_schema_cls
+            )
 
         # The SDK's default validation happens before this handler and reduces
         # every schema failure to unstructured text. Reapply the same
@@ -1339,7 +1358,7 @@ def build_server() -> Server:
         except LookupError:
             ctx = None
 
-        if canonical not in {"ae.toolUse", "ae.skillUse"}:
+        if not panel_private and canonical not in {"ae.toolUse", "ae.skillUse"}:
             gated = await approval_gate.enforce(canonical, ctx)
             if gated is not None:
                 payload = _format_result(gated)

@@ -198,6 +198,184 @@ def test_skill_use_defaults():
     assert args.execute is False
 
 
+def _jsx_save_artifact() -> dict[str, object]:
+    return {
+        "name": "Reusable JSX",
+        "description": "",
+        "kind": "jsx",
+        "category": "workflow",
+        "tags": [],
+        "compatibility": {},
+        "declared_risk": "write",
+        "content": "JSON.stringify({ok:true});",
+        "args_schema": {},
+    }
+
+
+@pytest.mark.parametrize(
+    ("save", "mode", "intent", "status"),
+    [
+        (
+            {
+                "mode": "create",
+                "intent": "user-requested",
+                "status": "saved",
+                "artifact": _jsx_save_artifact(),
+            },
+            "create",
+            "user-requested",
+            "saved",
+        ),
+        (
+            {
+                "mode": "create",
+                "intent": "model-curated",
+                "status": "candidate",
+                "artifact": _jsx_save_artifact(),
+            },
+            "create",
+            "model-curated",
+            "candidate",
+        ),
+        (
+            {
+                "mode": "create",
+                "intent": "user-requested",
+                "status": "candidate",
+                "artifact": _jsx_save_artifact(),
+            },
+            "create",
+            "user-requested",
+            "candidate",
+        ),
+        (
+            {
+                "mode": "promote",
+                "intent": "user-requested",
+                "status": "saved",
+                "artifact_id": "chat-tool-call:candidate",
+                "expected_revision": 1,
+                "expected_content_hash": "a" * 64,
+            },
+            "promote",
+            "user-requested",
+            "saved",
+        ),
+    ],
+)
+def test_tool_use_accepts_strict_jsx_save_requests(
+    save: dict[str, object],
+    mode: str,
+    intent: str,
+    status: str,
+):
+    args = S.AeToolUseArgs(action="save", save=save)
+
+    assert args.save is not None
+    assert args.save.mode == mode
+    assert args.save.intent == intent
+    assert args.save.status == status
+
+
+@pytest.mark.parametrize(
+    "save",
+    [
+        {
+            "mode": "create",
+            "intent": "model-curated",
+            "status": "saved",
+            "artifact": _jsx_save_artifact(),
+        },
+        {
+            "mode": "promote",
+            "intent": "model-curated",
+            "status": "saved",
+            "artifact_id": "chat-tool-call:candidate",
+            "expected_revision": 1,
+            "expected_content_hash": "a" * 64,
+        },
+        {
+            "mode": "promote",
+            "intent": "user-requested",
+            "status": "candidate",
+            "artifact_id": "chat-tool-call:candidate",
+            "expected_revision": 1,
+            "expected_content_hash": "a" * 64,
+        },
+        {
+            "mode": "create",
+            "intent": "user-requested",
+            "status": "saved",
+            "artifact": {**_jsx_save_artifact(), "kind": "expression"},
+        },
+        {
+            "mode": "create",
+            "intent": "user-requested",
+            "status": "saved",
+            "artifact": _jsx_save_artifact(),
+            "artifact_id": "chat-tool-call:candidate",
+        },
+        {
+            "mode": "promote",
+            "intent": "user-requested",
+            "status": "saved",
+            "artifact_id": "chat-tool-call:candidate",
+            "expected_revision": 1,
+            "expected_content_hash": "a" * 64,
+            "artifact": _jsx_save_artifact(),
+        },
+    ],
+)
+def test_tool_use_rejects_unsupported_jsx_save_shapes(save: dict[str, object]):
+    with pytest.raises(ValidationError):
+        S.AeToolUseArgs(action="save", save=save)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("artifact_id", "user:existing"),
+        ("operation", "execute"),
+        ("args", {"value": 1}),
+        ("target", {"comp_id": "1"}),
+        ("plan_hash", "plan"),
+        ("grant_id", "grant"),
+        ("grant_scope", "once"),
+        ("execution_id", "execution"),
+        ("operation_id", "operation-schema-save"),
+        ("limit", 1),
+    ],
+)
+def test_tool_use_save_forbids_staged_execution_fields(field: str, value: object):
+    request = {
+        "action": "save",
+        "save": {
+            "mode": "create",
+            "intent": "user-requested",
+            "status": "saved",
+            "artifact": _jsx_save_artifact(),
+        },
+        field: value,
+    }
+
+    with pytest.raises(ValidationError):
+        S.AeToolUseArgs(**request)
+
+
+def test_tool_use_save_payload_is_exclusive_to_save_action():
+    save = {
+        "mode": "create",
+        "intent": "user-requested",
+        "status": "saved",
+        "artifact": _jsx_save_artifact(),
+    }
+
+    with pytest.raises(ValidationError):
+        S.AeToolUseArgs(action="render", artifact_id="user:1", save=save)
+    with pytest.raises(ValidationError):
+        S.AeToolUseArgs(action="save")
+
+
 def test_tool_use_enforces_the_staged_protocol():
     assert S.AeToolUseArgs(action="render", artifact_id="user:1").operation == "render"
     S.AeToolUseArgs(

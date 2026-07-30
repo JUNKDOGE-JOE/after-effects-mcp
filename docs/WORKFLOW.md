@@ -35,6 +35,27 @@ GitHub Actions App 由同仓库 workflow 共享。attestation workflow 生成的
 4. 视觉变化至少预览一个静态时间点；运动变化至少预览两个时间点。
 5. 需要恢复时真正执行 Undo，再次读取并证明状态恢复。
 
+`ae_exec` 永远只执行本次请求，不持久化到 Tool Library。保存必须是独立的
+`ae_toolUse` `action="save"` 调用：
+
+```json
+{"action":"save","save":{"mode":"create","intent":"user-requested","status":"saved","artifact":{"name":"Reusable JSX","description":"What it does","kind":"jsx","category":"workflow","tags":[],"compatibility":{},"declared_risk":"write","content":"JSON.stringify({ok:true});","args_schema":{}}}}
+```
+
+用户要求保存时，`status` 可以是 `saved` 或 `candidate`。模型自行判断脚本可能
+长期有用时，只能另行创建 `intent="model-curated"`、`status="candidate"` 的
+candidate，不能把成功执行自动当作保存。晋升必须由用户要求，并使用严格的
+精确版本形状：
+
+```json
+{"action":"save","save":{"mode":"promote","intent":"user-requested","status":"saved","artifact_id":"chat-tool-call:candidate-id","expected_revision":1,"expected_content_hash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}
+```
+
+Create 接受完整 draft 而不接受已有 identity；promote 接受 identity 和精确
+revision/content hash 而不接受 replacement draft。Candidate 默认 discovery
+隐藏且不可 render/execute，并一直保留到面板明确删除或用户要求精确 CAS 晋升；
+没有自动过期或清理，已有 candidates 保持不变。
+
 ### 3. Native program 工作流
 
 1. 先运行独立的只读 discovery program，取得当前 host/session 的稳定 locator。
@@ -120,6 +141,29 @@ attestation Check is not release authorization.
 3. Verify real AE state with a fresh read-only `ae_exec`.
 4. Preview at least one time for a static change and two times for motion.
 5. When restoration is required, execute real Undo and read again.
+
+`ae_exec` is always request-only and never persists into the Tool Library.
+Saving requires a separate `ae_toolUse` call with `action="save"`:
+
+```json
+{"action":"save","save":{"mode":"create","intent":"user-requested","status":"saved","artifact":{"name":"Reusable JSX","description":"What it does","kind":"jsx","category":"workflow","tags":[],"compatibility":{},"declared_risk":"write","content":"JSON.stringify({ok:true});","args_schema":{}}}}
+```
+
+For a user-requested save, `status` may be `saved` or `candidate`. When the
+model independently judges the script may be useful later, it may only make a
+separate create call with `intent="model-curated"` and `status="candidate"`;
+successful execution is never an implicit save. Promotion requires a user
+request and this strict exact-version shape:
+
+```json
+{"action":"save","save":{"mode":"promote","intent":"user-requested","status":"saved","artifact_id":"chat-tool-call:candidate-id","expected_revision":1,"expected_content_hash":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}}
+```
+
+Create accepts the complete draft and no existing identity; promote accepts
+identity plus exact revision/content hash and no replacement draft. Candidates
+are hidden from default discovery and cannot render or execute. They remain
+until explicit panel deletion or user-requested exact-CAS promotion; there is
+no automatic expiration or cleanup, and existing candidates are unchanged.
 
 ### 3. Native program workflow
 
