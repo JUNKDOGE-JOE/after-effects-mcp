@@ -417,12 +417,63 @@ class _AePanelToolSearchArgs(AeToolSearchArgs):
     kinds: Optional[List[PanelToolArtifactKind]] = None
 
 
+class _AeToolSaveArtifactDraft(_StrictModel):
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = Field(..., max_length=4096)
+    kind: Literal["jsx"]
+    category: str = Field(..., min_length=1, max_length=128)
+    tags: List[
+        Annotated[str, Field(min_length=1, max_length=64)]
+    ] = Field(..., max_length=32)
+    compatibility: Dict[str, Any]
+    declared_risk: ToolArtifactRisk
+    content: str
+    args_schema: Dict[str, Any]
+
+
+class _AeToolSaveCreateRequest(_StrictModel):
+    mode: Literal["create"]
+    intent: Literal["user-requested", "model-curated"]
+    status: Literal["candidate", "saved"]
+    artifact: _AeToolSaveArtifactDraft
+
+    @model_validator(mode="after")
+    def validate_intent_status(self) -> "_AeToolSaveCreateRequest":
+        if self.intent == "model-curated" and self.status != "candidate":
+            raise ValueError("model-curated save may create only a candidate")
+        return self
+
+
+class _AeToolSavePromoteRequest(_StrictModel):
+    mode: Literal["promote"]
+    intent: Literal["user-requested"]
+    status: Literal["saved"]
+    artifact_id: str = Field(..., min_length=1, max_length=256)
+    expected_revision: int = Field(..., strict=True, ge=1)
+    expected_content_hash: str = Field(..., pattern=r"^[0-9a-f]{64}$")
+
+
+_AeToolSaveRequest = Annotated[
+    Union[_AeToolSaveCreateRequest, _AeToolSavePromoteRequest],
+    Field(discriminator="mode"),
+]
+
+
 class AeToolUseArgs(_StrictModel):
     """ae.toolUse — render or run the hash-bound execution protocol."""
     artifact_id: Optional[str] = Field(None, min_length=1, max_length=256)
     action: Literal[
-        "render", "prepare", "grant", "execute", "start", "status", "cancel", "history"
+        "render",
+        "prepare",
+        "grant",
+        "execute",
+        "start",
+        "status",
+        "cancel",
+        "history",
+        "save",
     ]
+    save: Optional[_AeToolSaveRequest] = None
     operation: Optional[ToolArtifactOperation] = None
     args: Dict[str, Any] = Field(default_factory=dict)
     target: Dict[str, Any] = Field(default_factory=dict)
@@ -445,7 +496,30 @@ class AeToolUseArgs(_StrictModel):
 
     @model_validator(mode="after")
     def validate_action_shape(self) -> "AeToolUseArgs":
-        if self.action == "render":
+        if self.action == "save":
+            if self.save is None:
+                raise ValueError("save requires a save payload")
+            if (
+                any(
+                    value is not None
+                    for value in (
+                        self.artifact_id,
+                        self.operation,
+                        self.plan_hash,
+                        self.grant_id,
+                        self.grant_scope,
+                        self.execution_id,
+                        self.operation_id,
+                        self.limit,
+                    )
+                )
+                or self.args
+                or self.target
+            ):
+                raise ValueError("save accepts a save payload only")
+        elif self.save is not None:
+            raise ValueError("save payload requires action save")
+        elif self.action == "render":
             if (
                 self.artifact_id is None
                 or self.plan_hash is not None
