@@ -979,6 +979,31 @@ export function createRuntimeManager({
     }
   }
 
+  async function prepareSelectedForActivation(selected, current, previous) {
+    try {
+      assertLauncherTransitionCompatible(selected, current);
+      await installLauncher(selected);
+    } catch (error) {
+      await reclaimOwnedState({
+        currentRelative: current?.relative || null,
+        previousRelative: previous?.relative || null,
+        inProgressRelative: null,
+      });
+      const selectedLayer = selected.record.layer;
+      if (
+        selected.lifecycle.layers.created === 1
+        && current?.record?.layer?.relative !== selectedLayer.relative
+        && previous?.record?.layer?.relative !== selectedLayer.relative
+      ) {
+        await promises.rm(
+          paths.join([root, 'layers', selectedLayer.id, selectedLayer.instanceId]),
+          { recursive: true, force: true },
+        );
+      }
+      throw error;
+    }
+  }
+
   async function refreshLayerReceipt(layerRoot, record, directory) {
     const refreshed = {
       ...record,
@@ -1191,11 +1216,11 @@ export function createRuntimeManager({
     }
   }
 
-  async function reclaimOwnedV2({ currentRelative, previousRelative, inProgressRelative }) {
+  async function reclaimOwnedState({ currentRelative, previousRelative, inProgressRelative }) {
     const lifecycle = emptyLifecycle();
     const retained = new Set(
       [currentRelative, previousRelative, inProgressRelative]
-        .filter((value) => value?.startsWith('generations/')),
+        .filter((value) => typeof value === 'string' && value.length > 0),
     );
     const referencedLayers = new Set();
     let layerGcSafe = true;
@@ -1221,6 +1246,32 @@ export function createRuntimeManager({
       const generationRoot = paths.join([generationsRoot, entry.name]);
       const usage = await treeUsage(generationRoot);
       await promises.rm(generationRoot, { recursive: true, force: true });
+      lifecycle.generations.reclaimed += 1;
+      lifecycle.logicalBytes.reclaimed += usage.logicalBytes;
+      lifecycle.physicalBytes.reclaimed += usage.physicalBytes;
+    }
+
+    const legacyEntries = await promises.readdir(root, { withFileTypes: true });
+    for (const entry of legacyEntries) {
+      if (!entry.isDirectory() || entry.name.startsWith('.')
+          || entry.name === 'generations' || entry.name === 'layers') continue;
+      const relative = `${entry.name}/${platform.id}`;
+      if (retained.has(relative)) continue;
+      try {
+        validateLegacyInstallRecord(
+          await readJson(
+            paths.join([root, entry.name, INSTALL_RECORD]),
+            'RUNTIME_INSTALL_RECORD_INVALID',
+          ),
+          relative,
+        );
+      } catch (error) {
+        if (error instanceof RuntimeManagerError || error?.code === 'ENOENT') continue;
+        throw error;
+      }
+      const legacyRoot = paths.join([root, entry.name]);
+      const usage = await treeUsage(legacyRoot);
+      await promises.rm(legacyRoot, { recursive: true, force: true });
       lifecycle.generations.reclaimed += 1;
       lifecycle.logicalBytes.reclaimed += usage.logicalBytes;
       lifecycle.physicalBytes.reclaimed += usage.physicalBytes;
@@ -1339,7 +1390,7 @@ export function createRuntimeManager({
         await installLauncher(previous);
         await writePointer(paths.currentPointer, previous.relative);
         await removePointer(paths.previousPointer);
-        const reclaimed = await reclaimOwnedV2({
+        const reclaimed = await reclaimOwnedState({
           currentRelative: previous.relative,
           previousRelative: null,
           inProgressRelative: previous.relative,
@@ -1366,7 +1417,7 @@ export function createRuntimeManager({
       } catch (error) {
         if (!current.ok) throw error;
         await installLauncher(current);
-        const reclaimed = await reclaimOwnedV2({
+        const reclaimed = await reclaimOwnedState({
           currentRelative: current.relative,
           previousRelative: previous.ok ? previous.relative : null,
           inProgressRelative: current.relative,
@@ -1403,7 +1454,7 @@ export function createRuntimeManager({
         && current.signals.python.linkTarget === packaged.signals.python.linkTarget;
       if (trustedSignalsMatch) {
         await installLauncher(current);
-        const reclaimed = await reclaimOwnedV2({
+        const reclaimed = await reclaimOwnedState({
           currentRelative: current.relative,
           previousRelative: previous.ok ? previous.relative : null,
           inProgressRelative: current.relative,
@@ -1432,10 +1483,9 @@ export function createRuntimeManager({
       }
       packaged = await verifyPackagedPayload();
       const selected = await installPackaged(packaged);
-      assertLauncherTransitionCompatible(selected, current);
-      await installLauncher(selected);
+      await prepareSelectedForActivation(selected, current, previous);
       await activate(selected, current);
-      const reclaimed = await reclaimOwnedV2({
+      const reclaimed = await reclaimOwnedState({
         currentRelative: selected.relative,
         previousRelative: current.ok ? current.relative : null,
         inProgressRelative: selected.relative,
@@ -1474,11 +1524,11 @@ export function createRuntimeManager({
     return withLock(async () => {
       const packaged = await verifyPackagedPayload();
       const current = await pointerState(paths.currentPointer);
+      const previous = await pointerState(paths.previousPointer);
       const selected = await installPackaged(packaged, { repair: true });
-      assertLauncherTransitionCompatible(selected, current);
-      await installLauncher(selected);
+      await prepareSelectedForActivation(selected, current, previous);
       await activate(selected, current);
-      const reclaimed = await reclaimOwnedV2({
+      const reclaimed = await reclaimOwnedState({
         currentRelative: selected.relative,
         previousRelative: current.ok ? current.relative : null,
         inProgressRelative: selected.relative,
@@ -1509,7 +1559,7 @@ export function createRuntimeManager({
       await writePointer(paths.currentPointer, previous.relative);
       if (current.ok && current.relative !== previous.relative) await writePointer(paths.previousPointer, current.relative);
       else await removePointer(paths.previousPointer);
-      const reclaimed = await reclaimOwnedV2({
+      const reclaimed = await reclaimOwnedState({
         currentRelative: previous.relative,
         previousRelative: current.ok && current.relative !== previous.relative
           ? current.relative : null,
@@ -1537,30 +1587,11 @@ export function createRuntimeManager({
       await removePointer(paths.previousPointer);
       await promises.rm(paths.launcher, { force: true });
       await promises.rm(stableLauncherRecordPath, { force: true });
-      const reclaimed = await reclaimOwnedV2({
+      const reclaimed = await reclaimOwnedState({
         currentRelative: null,
         previousRelative: null,
         inProgressRelative: null,
       });
-      const entries = await promises.readdir(root, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
-        const recordPath = paths.join([root, entry.name, INSTALL_RECORD]);
-        try {
-          validateLegacyInstallRecord(
-            await readJson(recordPath, 'RUNTIME_INSTALL_RECORD_INVALID'),
-            `${entry.name}/${platform.id}`,
-          );
-          const legacyRoot = paths.join([root, entry.name]);
-          const usage = await treeUsage(legacyRoot);
-          await promises.rm(legacyRoot, { recursive: true, force: true });
-          reclaimed.generations.reclaimed += 1;
-          reclaimed.logicalBytes.reclaimed += usage.logicalBytes;
-          reclaimed.physicalBytes.reclaimed += usage.physicalBytes;
-        } catch (error) {
-          // Unknown directories are not owned by RuntimeManager and are retained.
-        }
-      }
       return {
         ok: true,
         action: 'uninstall',

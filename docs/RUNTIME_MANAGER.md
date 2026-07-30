@@ -20,15 +20,22 @@ RuntimeManager 保护普通安装流程的正确性，不是断电续跑或抵�
   bin/ae-mcp                         stable absolute launcher / 稳定绝对入口
   runtime/current                    active relative runtime pointer / 当前相对指针
   runtime/previous                   verified rollback pointer / 已校验回滚指针
-  runtime/<version>-<source-sha>/
+  runtime/generations/g-<id>/
     install-record.json
     ae-mcp-launcher                    launcher bound to this generation / 与该版本绑定的入口
-    macos-arm64/                     verified packaged runtime / 已校验包内运行时
+    runtime -> ../../layers/<manifest-sha>/i-<id>/macos-arm64
+  runtime/layers/<manifest-sha>/i-<id>/
+    layer-record.json
+    macos-arm64/                       verified packaged runtime / 已校验包内运行时
 ```
 
-`current` and `previous` are ordinary text files. RuntimeManager writes each pointer through a sibling temporary file and an atomic rename. A process-safe exclusive lock serializes panel instances while they verify, install, activate, repair, roll back, or uninstall a runtime. Each generation retains its verified launcher bytes so rollback and fallback select a matching launcher. The stable launcher reads only `current` and invokes the selected packaged Python with `-I -m ae_mcp`.
+The current layout is schema-v2: generation metadata lives under `generations/` and verified runtime content is shared through `layers/`. RuntimeManager can still read a valid schema-v1 generation at `runtime/<version>-<source-sha>/` during migration. `current` and `previous` are the only retained generation references; they are ordinary text files. RuntimeManager writes each pointer through a sibling temporary file and an atomic rename. A process-safe exclusive lock serializes panel instances while they verify, install, activate, repair, roll back, or uninstall a runtime. Each generation retains its verified launcher bytes so rollback and fallback select a matching launcher. The stable launcher reads only `current` and invokes the selected packaged Python with `-I -m ae_mcp`.
 
-`current` 与 `previous` 都是普通文本文件。RuntimeManager 通过同目录临时文件和原子 rename 写入每个指针；进程级互斥锁会串行化多个 Panel 实例的校验、安装、激活、修复、回滚和卸载操作。每个 generation 会保留自身经过校验的 launcher 字节，确保回滚和 fallback 使用匹配入口。稳定 launcher 只读取 `current`，再以 `-I -m ae_mcp` 启动所选包内 Python。
+当前目录布局是 schema-v2：generation 元数据位于 `generations/`，已校验的 runtime 内容通过 `layers/` 共享。迁移期间，RuntimeManager 仍可读取位于 `runtime/<version>-<source-sha>/` 的有效 schema-v1 generation。`current` 与 `previous` 是仅有的保留 generation 引用，二者都是普通文本文件。RuntimeManager 通过同目录临时文件和原子 rename 写入每个指针；进程级互斥锁会串行化多个 Panel 实例的校验、安装、激活、修复、回滚和卸载操作。每个 generation 会保留自身经过校验的 launcher 字节，确保回滚和 fallback 使用匹配入口。稳定 launcher 只读取 `current`，再以 `-I -m ae_mcp` 启动所选包内 Python。
+
+After a successful transition, RuntimeManager prunes every other valid generation it owns, including readable schema-v1 generations, and then prunes their unreferenced shared layers. Directories with an unknown, malformed, or unowned record are preserved.
+
+成功转换后，RuntimeManager 会清理它拥有的其他有效 generation（包括可读取的 schema-v1 generation），随后清理其未被引用的共享 layer。记录未知、格式错误或不属于 RuntimeManager 的目录会被保留。
 
 ## State transitions / 状态转换
 

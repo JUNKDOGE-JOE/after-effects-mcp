@@ -182,6 +182,17 @@ async function harness(t) {
   return { root, home, platform: adapter(home) };
 }
 
+async function managedDirectoryCounts(runtimeRoot) {
+  const generations = await fs.promises.readdir(path.join(runtimeRoot, 'generations'));
+  const layersRoot = path.join(runtimeRoot, 'layers');
+  const layerDigests = await fs.promises.readdir(layersRoot);
+  let layers = 0;
+  for (const digest of layerDigests) {
+    layers += (await fs.promises.readdir(path.join(layersRoot, digest))).length;
+  }
+  return { generations: generations.length, layers };
+}
+
 function managerFor(h, extensionRoot, options = {}) {
   return createRuntimeManager({
     platform: h.platform,
@@ -406,11 +417,14 @@ macosRuntimeTest('clean macOS install activates and starts the bundled core with
 
 macosRuntimeTest('a readable schema-v1 generation migrates forward without deleting the legacy runtime', async (t) => {
   const h = await harness(t);
-  const payload = await packageFixture(h.root, {
+  const v1 = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'legacy',
   });
-  const legacy = await seedLegacyGeneration(h, payload);
-  const manager = managerFor(h, payload.extensionRoot);
+  const v2 = await packageFixture(h.root, {
+    version: '0.10.0', sourceCommitSha: '2'.repeat(40), marker: 'upgraded',
+  });
+  const legacy = await seedLegacyGeneration(h, v1);
+  const manager = managerFor(h, v1.extensionRoot);
   const before = await manager.inspect();
   assert.equal(before.current.ok, true, JSON.stringify(before.current));
 
@@ -433,12 +447,17 @@ macosRuntimeTest('a readable schema-v1 generation migrates forward without delet
   assert.equal(stableReceipt.signal.path, h.platform.paths.launcher);
   assert.equal(stableReceipt.signal.size > 0, true);
   assert.equal(stableReceipt.signal.mtimeMs > 0, true);
+
+  const upgraded = await managerFor(h, v2.extensionRoot).ensureReady();
+
+  assert.equal(upgraded.action, 'upgrade');
+  assert.equal(upgraded.lifecycle.generations.reclaimed, 1);
+  await assert.rejects(fs.promises.lstat(legacy.generationRoot), { code: 'ENOENT' });
   const uninstalled = await manager.uninstall();
-  assert.equal(uninstalled.lifecycle.generations.reclaimed >= 2, true);
-  assert.equal(uninstalled.lifecycle.layers.reclaimed, 1);
+  assert.equal(uninstalled.lifecycle.generations.reclaimed, 2);
+  assert.equal(uninstalled.lifecycle.layers.reclaimed, 2);
   assert.equal(uninstalled.lifecycle.logicalBytes.reclaimed > 0, true);
   assert.equal(uninstalled.lifecycle.physicalBytes.reclaimed > 0, true);
-  await assert.rejects(fs.promises.lstat(legacy.generationRoot), { code: 'ENOENT' });
 });
 
 macosRuntimeTest('upgrade, downgrade, and rollback atomically select verified versions', async (t) => {
@@ -632,15 +651,33 @@ macosRuntimeTest('a launcher contract change cannot publish a mixed launcher/run
     version: '0.10.0', sourceCommitSha: '2'.repeat(40), marker: 'two', launcherVersion: 'v2',
   });
   const one = managerFor(h, v1.extensionRoot);
-  const two = managerFor(h, v2.extensionRoot);
+  const incompatible = managerFor(h, v2.extensionRoot);
   const installed = await one.ensureReady();
   const pointerBefore = await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8');
   const launcherBefore = await fs.promises.readFile(h.platform.paths.launcher);
+  const malformed = path.join(
+    h.platform.paths.runtimeRoot,
+    'generations',
+    'g-0000000000000000',
+  );
+  await fs.promises.mkdir(malformed, { recursive: true });
+  const before = await managedDirectoryCounts(h.platform.paths.runtimeRoot);
 
-  await assert.rejects(two.ensureReady(), { code: 'RUNTIME_LAUNCHER_MIGRATION_REQUIRED' });
+  await assert.rejects(
+    incompatible.ensureReady(),
+    { code: 'RUNTIME_LAUNCHER_MIGRATION_REQUIRED' },
+  );
+  assert.deepEqual(await managedDirectoryCounts(h.platform.paths.runtimeRoot), before);
+  assert.equal((await fs.promises.lstat(malformed)).isDirectory(), true);
 
   assert.equal(await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8'), pointerBefore);
   assert.deepEqual(await fs.promises.readFile(h.platform.paths.launcher), launcherBefore);
+  await assert.rejects(
+    incompatible.repair(),
+    { code: 'RUNTIME_LAUNCHER_MIGRATION_REQUIRED' },
+  );
+  assert.deepEqual(await managedDirectoryCounts(h.platform.paths.runtimeRoot), before);
+  assert.equal((await fs.promises.lstat(malformed)).isDirectory(), true);
   const launched = await execFileAsync(installed.launcher, ['--unchanged'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });
