@@ -127,6 +127,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/build/evidence"
           node --input-type=module <<'NODE'
           import { execFile } from 'node:child_process';
           import { promisify } from 'node:util';

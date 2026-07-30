@@ -1104,6 +1104,15 @@ test('foundation CI is one credential-free Apple Silicon job', async () => {
   assert.match(workflow, /stage-platform-bundle\.mjs[\s\S]*macos-arm64/);
   assert.match(workflow, /verify-platform-bundle\.mjs[\s\S]*macos-arm64/);
   assert.match(workflow, /platform-foundation-receipt\.json/);
+  const evidenceDirectoryCreation = workflow.indexOf(
+    'mkdir -p "$GITHUB_WORKSPACE/build/evidence"',
+  );
+  const receiptWrite = workflow.indexOf('await writeCanonicalJson(');
+  assert.ok(evidenceDirectoryCreation >= 0, 'foundation CI must create the evidence directory');
+  assert.ok(
+    receiptWrite >= 0 && evidenceDirectoryCreation < receiptWrite,
+    'foundation CI must create the evidence directory before writing the receipt',
+  );
   assert.doesNotMatch(workflow, /macos-14-compat|windows-2025|schedule:/);
   assert.doesNotMatch(
     workflow,
