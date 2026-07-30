@@ -27,7 +27,7 @@ v0.9.2 已发布资产面向以下已验证范围：
   -> After Effects
 ```
 
-`ae_previewFrame` 通过 `CompItem.saveFrameToPng` 渲染真实合成像素，viewer snapshot 只作为 fallback。`packages/snapshot-mss` 提供跨平台 `mss` 截图后端，用于 `ae_snapshot` 屏幕捕获。
+`ae_previewFrame` 仍是 AE 内部的 `CompItem.saveFrameToPng` 路径，用于渲染真实合成像素，viewer snapshot 只作为 fallback。`packages/snapshot-mss` 通过 `mss` backend 提供 Windows `ae_snapshot` 屏幕捕获。
 
 MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与 AE 对话，CEP 面板也可以在 AE 内承载内嵌 agent 对话。现有面板层负责后端配置、审批、诊断和活动历史。已发布的 v0.9.2 Windows 资产早于包内 runtime 激活能力；当前 v0.9.3 macOS 开发版本已经实现 Panel RuntimeManager，可在不调用在线包管理器的情况下校验、安装、原子激活、修复、回滚和卸载包内 runtime。Claude、Codex、ZCode 是面板内置后端；OpenCode 和其他工具仍可以作为外部 MCP 客户端接入。
 
