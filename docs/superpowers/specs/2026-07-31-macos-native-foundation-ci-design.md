@@ -119,13 +119,15 @@ The verifier will:
    exact correspondence with the frozen manifest;
 4. verify every discovered native file with the platform's existing signing
    tool;
-5. require product-owned launcher/helper/addon/plugin files to match the
-   release job's expected product signer identity, while third-party
-   runtime-native files require a valid signature without pretending they use
-   the product certificate;
+5. require product-owned native helper/addon/plugin files, plus the Windows
+   native launcher, to match the release job's expected product signer
+   identity, while third-party runtime-native files require a valid signature
+   without pretending they use the product certificate;
 6. record the signer fingerprint, native architecture result, and current file
    hash;
-7. require the product launcher and platform helper to be present;
+7. require the product launcher and platform helper to be present; the current
+   macOS shell launcher is protected by the frozen manifest hash and executable
+   mode rather than being falsely reported as a codesigned Mach-O file;
 8. hash the already-produced ZXP and macOS DMG, when applicable; and
 9. write the canonical evidence shape already consumed by
    `artifact-manifest.mjs`.
@@ -216,6 +218,9 @@ evidence is supplied.
 - `.github/workflows/platform-foundation-ci.yml`
 - `scripts/package/verify-final-native-signatures.mjs`
 - `scripts/package/test/verify-final-native-signatures.test.mjs`
+- `native/platform-helper/macos/Tests/platform-helper-addon-live.test.mjs`
+- `scripts/release/artifact-manifest.mjs` and its fixtures/tests, narrowly
+  correcting the old assumption that the macOS shell launcher is native code
 - `scripts/release/verify-product-acceptance-coverage.mjs`
 - `scripts/release/test/verify-product-acceptance-coverage.test.mjs`
 - narrowly required existing workflow/schema contract tests
