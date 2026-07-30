@@ -406,11 +406,14 @@ macosRuntimeTest('clean macOS install activates and starts the bundled core with
 
 macosRuntimeTest('a readable schema-v1 generation migrates forward without deleting the legacy runtime', async (t) => {
   const h = await harness(t);
-  const payload = await packageFixture(h.root, {
+  const v1 = await packageFixture(h.root, {
     version: '0.9.3', sourceCommitSha: '1'.repeat(40), marker: 'legacy',
   });
-  const legacy = await seedLegacyGeneration(h, payload);
-  const manager = managerFor(h, payload.extensionRoot);
+  const v2 = await packageFixture(h.root, {
+    version: '0.10.0', sourceCommitSha: '2'.repeat(40), marker: 'upgraded',
+  });
+  const legacy = await seedLegacyGeneration(h, v1);
+  const manager = managerFor(h, v1.extensionRoot);
   const before = await manager.inspect();
   assert.equal(before.current.ok, true, JSON.stringify(before.current));
 
@@ -433,12 +436,17 @@ macosRuntimeTest('a readable schema-v1 generation migrates forward without delet
   assert.equal(stableReceipt.signal.path, h.platform.paths.launcher);
   assert.equal(stableReceipt.signal.size > 0, true);
   assert.equal(stableReceipt.signal.mtimeMs > 0, true);
+
+  const upgraded = await managerFor(h, v2.extensionRoot).ensureReady();
+
+  assert.equal(upgraded.action, 'upgrade');
+  assert.equal(upgraded.lifecycle.generations.reclaimed, 1);
+  await assert.rejects(fs.promises.lstat(legacy.generationRoot), { code: 'ENOENT' });
   const uninstalled = await manager.uninstall();
-  assert.equal(uninstalled.lifecycle.generations.reclaimed >= 2, true);
-  assert.equal(uninstalled.lifecycle.layers.reclaimed, 1);
+  assert.equal(uninstalled.lifecycle.generations.reclaimed, 2);
+  assert.equal(uninstalled.lifecycle.layers.reclaimed, 2);
   assert.equal(uninstalled.lifecycle.logicalBytes.reclaimed > 0, true);
   assert.equal(uninstalled.lifecycle.physicalBytes.reclaimed > 0, true);
-  await assert.rejects(fs.promises.lstat(legacy.generationRoot), { code: 'ENOENT' });
 });
 
 macosRuntimeTest('upgrade, downgrade, and rollback atomically select verified versions', async (t) => {
