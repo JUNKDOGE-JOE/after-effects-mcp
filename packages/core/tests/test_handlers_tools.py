@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from ae_mcp import schemas as S
+from ae_mcp import handlers as handler_registry
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.handlers import tools as handlers
 from ae_mcp.skill_store import Skill, SkillStore
@@ -38,6 +39,17 @@ TOOL_VERBS = {
     "ae.toolSearch",
     "ae.toolInspect",
     "ae.toolUse",
+}
+
+PANEL_TOOL_VERBS = {
+    "ae.toolCreate",
+    "ae.toolEdit",
+    "ae.toolDelete",
+    "ae.toolArchive",
+    "ae.toolDuplicate",
+    "ae.toolPromoteFromHistory",
+    "ae.toolImport",
+    "ae.toolExport",
 }
 
 
@@ -232,6 +244,12 @@ def service(monkeypatch):
 def test_exact_tool_handlers_are_registered():
     load_all()
     assert TOOL_VERBS <= set(HANDLERS)
+
+
+def test_exact_panel_mutation_handlers_are_private():
+    load_all()
+    assert set(handler_registry.PANEL_HANDLERS) == PANEL_TOOL_VERBS
+    assert PANEL_TOOL_VERBS.isdisjoint(HANDLERS)
 
 
 def test_content_hash_lookup_uses_unbounded_native_finder():

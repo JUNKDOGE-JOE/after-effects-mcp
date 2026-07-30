@@ -638,6 +638,125 @@ class AeToolUseArgs(_StrictModel):
         return self
 
 
+class _AePanelToolCreateArgs(_StrictModel):
+    """Private panel-only Tool Library create request."""
+
+    name: str = Field(..., min_length=1, max_length=128)
+    description: str = Field("", max_length=4096)
+    kind: ToolArtifactKind
+    category: str = Field("workflow", min_length=1, max_length=128)
+    tags: List[str] = Field(default_factory=list, max_length=32)
+    compatibility: Dict[str, Any] = Field(default_factory=dict)
+    declared_risk: ToolArtifactRisk = "write"
+    status: Literal["candidate", "saved"] = "saved"
+    content: Any
+    args_schema: Dict[str, Any] = Field(default_factory=dict)
+    expected_store_revision: Optional[int] = Field(None, ge=0)
+
+
+class _AePanelToolEditArgs(_StrictModel):
+    """Private panel-only Tool Library edit request."""
+
+    artifact_id: str = Field(..., min_length=1, max_length=256)
+    changes: Dict[str, Any] = Field(..., min_length=1)
+    expected_revision: int = Field(..., ge=1)
+    expected_content_hash: str = Field(..., min_length=64, max_length=64)
+    replace_artifact_id: Optional[str] = Field(None, min_length=1, max_length=256)
+
+    @model_validator(mode="after")
+    def validate_edit_shape(self) -> "_AePanelToolEditArgs":
+        allowed = {
+            "name",
+            "description",
+            "kind",
+            "category",
+            "tags",
+            "compatibility",
+            "declared_risk",
+            "declaredRisk",
+            "status",
+            "content",
+            "args_schema",
+            "argsSchema",
+            "verification_action",
+            "verificationAction",
+        }
+        if not set(self.changes).issubset(allowed):
+            raise ValueError("changes contain unsupported fields")
+        verification = self.changes.get(
+            "verification_action", self.changes.get("verificationAction")
+        )
+        if verification is not None and verification not in {
+            "mark-reviewed",
+            "clear",
+        }:
+            raise ValueError("verification_action is invalid")
+        if (
+            self.replace_artifact_id is not None
+            and self.changes.get("status") != "saved"
+        ):
+            raise ValueError(
+                "replacement is valid only while promoting a candidate"
+            )
+        return self
+
+
+class _AePanelToolCasMutationArgs(_StrictModel):
+    artifact_id: str = Field(..., min_length=1, max_length=256)
+    expected_revision: int = Field(..., ge=1)
+    expected_content_hash: str = Field(..., min_length=64, max_length=64)
+
+
+class _AePanelToolDeleteArgs(_AePanelToolCasMutationArgs):
+    """Private panel-only Tool Library delete request."""
+
+
+class _AePanelToolArchiveArgs(_AePanelToolCasMutationArgs):
+    """Private panel-only Tool Library archive request."""
+
+
+class _AePanelToolDuplicateArgs(_AePanelToolCasMutationArgs):
+    """Private panel-only Tool Library duplicate request."""
+
+    name: str = Field(..., min_length=1, max_length=128)
+
+
+class _AePanelToolPromoteFromHistoryArgs(_AePanelToolCasMutationArgs):
+    """Private panel-only candidate promotion request."""
+
+    replace_artifact_id: Optional[str] = Field(None, min_length=1, max_length=256)
+
+
+class _AePanelToolImportArgs(_StrictModel):
+    """Private panel-only Tool Library package import request."""
+
+    action: Literal["preview", "commit", "discard"]
+    path: Optional[str] = Field(None, min_length=1, max_length=32768)
+    import_id: Optional[str] = Field(None, min_length=1, max_length=256)
+    resolutions: Dict[str, Literal["keep", "duplicate"]] = Field(
+        default_factory=dict
+    )
+
+    @model_validator(mode="after")
+    def validate_import_shape(self) -> "_AePanelToolImportArgs":
+        if self.action == "preview":
+            if self.path is None or self.import_id is not None or self.resolutions:
+                raise ValueError("preview requires path only")
+        elif self.action == "commit":
+            if self.import_id is None or self.path is not None:
+                raise ValueError("commit requires import_id and forbids path")
+        elif self.import_id is None or self.path is not None or self.resolutions:
+            raise ValueError("discard requires import_id only")
+        return self
+
+
+class _AePanelToolExportArgs(_StrictModel):
+    """Private panel-only Tool Library package export request."""
+
+    artifact_ids: List[str] = Field(..., min_length=1, max_length=511)
+    out_path: str = Field(..., min_length=1, max_length=32768)
+
+
 _MEDIA_DECIMAL = r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
 
 

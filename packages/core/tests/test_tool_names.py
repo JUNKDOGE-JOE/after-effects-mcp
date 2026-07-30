@@ -21,6 +21,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 from pydantic import ValidationError
 
 from ae_mcp import schemas
+from ae_mcp import handlers as handler_registry
 from ae_mcp.annotations import VERB_ANNOTATIONS
 from ae_mcp.backends.base import ALL_VERBS
 from ae_mcp.handlers import FINAL_PUBLIC_TOOLS, HANDLERS, load_all
@@ -559,6 +560,119 @@ async def test_call_tool_unknown_returns_structured_error():
     payload = json.loads(result.content[0].text)
     assert payload["ok"] is False
     assert "unknown tool" in payload["error"]
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [
+        {"name": "Panel JSX", "kind": "jsx", "content": "return 1;"},
+        {
+            "_ae_panel_capability": "cd" * 32,
+            "name": "Panel JSX",
+            "kind": "jsx",
+            "content": "return 1;",
+        },
+    ],
+)
+async def test_panel_mutation_is_unknown_without_valid_capability(
+    monkeypatch, arguments
+):
+    secret = "ab" * 32
+    monkeypatch.setenv("AE_MCP_PANEL_CAPABILITY", secret)
+    server = build_server()
+
+    result = await server._ae_call_tool("ae_toolCreate", arguments)
+
+    assert result.isError is True
+    assert json.loads(result.content[0].text) == {
+        "ok": False,
+        "error": "unknown tool: ae_toolCreate",
+    }
+
+
+async def test_valid_panel_capability_validates_and_dispatches_private_schema_once(
+    monkeypatch,
+):
+    load_all()
+    secret = "ab" * 32
+    monkeypatch.setenv("AE_MCP_PANEL_CAPABILITY", secret)
+    calls = []
+    schema_cls, _run = handler_registry.PANEL_HANDLERS["ae.toolCreate"]
+
+    async def _fake_run(validated, ctx):
+        calls.append(validated.model_dump())
+        return {"ok": True, "name": validated.name}
+
+    monkeypatch.setitem(
+        handler_registry.PANEL_HANDLERS,
+        "ae.toolCreate",
+        (schema_cls, _fake_run),
+    )
+    server = build_server()
+
+    rejected = await server._ae_call_tool(
+        "ae_toolCreate",
+        {
+            "_ae_panel_capability": secret,
+            "name": "Panel JSX",
+            "kind": "jsx",
+            "content": "return 1;",
+            "unexpected": True,
+        },
+    )
+    accepted = await server._ae_call_tool(
+        "ae_toolCreate",
+        {
+            "_ae_panel_capability": secret,
+            "name": "Panel JSX",
+            "kind": "jsx",
+            "content": "return 1;",
+        },
+    )
+
+    assert rejected.isError is True
+    assert rejected.content[0].text.startswith("Input validation error:")
+    assert accepted.isError is False
+    assert json.loads(accepted.content[0].text) == {
+        "ok": True,
+        "name": "Panel JSX",
+    }
+    assert calls == [
+        {
+            "name": "Panel JSX",
+            "description": "",
+            "kind": "jsx",
+            "category": "workflow",
+            "tags": [],
+            "compatibility": {},
+            "declared_risk": "write",
+            "status": "saved",
+            "content": "return 1;",
+            "args_schema": {},
+            "expected_store_revision": None,
+        }
+    ]
+
+
+async def test_panel_mutations_stay_absent_from_tools_list(monkeypatch):
+    from ae_mcp import server as srv
+
+    load_all()
+    monkeypatch.setattr(srv, "_filtered_tool_names", lambda: set(HANDLERS))
+    listed = await build_server()._ae_list_tools()
+
+    assert {tool.name for tool in listed}.isdisjoint(
+        {
+            "ae_toolCreate",
+            "ae_toolEdit",
+            "ae_toolDelete",
+            "ae_toolArchive",
+            "ae_toolDuplicate",
+            "ae_toolPromoteFromHistory",
+            "ae_toolImport",
+            "ae_toolExport",
+        }
+    )
 
 
 def test_panel_developer_capability_is_secret_bound_and_consumed(monkeypatch):

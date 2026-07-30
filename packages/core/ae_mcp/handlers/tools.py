@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Mapping, cast
 
 from ae_mcp import client_identity, schemas
-from ae_mcp.handlers import register
+from ae_mcp.handlers import register, register_panel
 from ae_mcp.tool_archive import ImportConflict, ImportItemPreview, ImportPreview
 from ae_mcp.tool_artifact import (
     ArtifactOperation,
@@ -303,7 +303,9 @@ async def _run_tool_use(args: schemas.AeToolUseArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_create(args: schemas.AeToolCreateArgs, ctx: Any) -> Any:
+async def _run_tool_create(
+    args: schemas._AePanelToolCreateArgs, ctx: Any
+) -> Any:
     del ctx
     try:
         draft = ToolArtifactDraft(
@@ -333,7 +335,7 @@ async def _run_tool_create(args: schemas.AeToolCreateArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_edit(args: schemas.AeToolEditArgs, ctx: Any) -> Any:
+async def _run_tool_edit(args: schemas._AePanelToolEditArgs, ctx: Any) -> Any:
     del ctx
     try:
         service = default_tool_service()
@@ -354,7 +356,9 @@ async def _run_tool_edit(args: schemas.AeToolEditArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_delete(args: schemas.AeToolDeleteArgs, ctx: Any) -> Any:
+async def _run_tool_delete(
+    args: schemas._AePanelToolDeleteArgs, ctx: Any
+) -> Any:
     del ctx
     try:
         default_tool_service().store.delete(
@@ -367,7 +371,9 @@ async def _run_tool_delete(args: schemas.AeToolDeleteArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_archive(args: schemas.AeToolArchiveArgs, ctx: Any) -> Any:
+async def _run_tool_archive(
+    args: schemas._AePanelToolArchiveArgs, ctx: Any
+) -> Any:
     del ctx
     try:
         artifact = default_tool_service().store.archive(
@@ -380,7 +386,9 @@ async def _run_tool_archive(args: schemas.AeToolArchiveArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_duplicate(args: schemas.AeToolDuplicateArgs, ctx: Any) -> Any:
+async def _run_tool_duplicate(
+    args: schemas._AePanelToolDuplicateArgs, ctx: Any
+) -> Any:
     del ctx
     try:
         service = default_tool_service()
@@ -398,7 +406,7 @@ async def _run_tool_duplicate(args: schemas.AeToolDuplicateArgs, ctx: Any) -> An
 
 
 async def _run_tool_promote(
-    args: schemas.AeToolPromoteFromHistoryArgs, ctx: Any
+    args: schemas._AePanelToolPromoteFromHistoryArgs, ctx: Any
 ) -> Any:
     del ctx
     try:
@@ -458,7 +466,7 @@ def _import_preview(value: ImportPreview) -> dict[str, JsonValue]:
     }
 
 
-async def _run_tool_import(args: schemas.AeToolImportArgs, ctx: Any) -> Any:
+async def _run_tool_import(args: schemas._AePanelToolImportArgs, ctx: Any) -> Any:
     del ctx
     try:
         packages = default_tool_service().packages
@@ -478,7 +486,7 @@ async def _run_tool_import(args: schemas.AeToolImportArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
-async def _run_tool_export(args: schemas.AeToolExportArgs, ctx: Any) -> Any:
+async def _run_tool_export(args: schemas._AePanelToolExportArgs, ctx: Any) -> Any:
     del ctx
     try:
         package = default_tool_service().packages.export(
@@ -497,6 +505,22 @@ register("ae.toolIndex", schemas.AeToolIndexArgs, _run_tool_index)
 register("ae.toolSearch", schemas.AeToolSearchArgs, _run_tool_search)
 register("ae.toolInspect", schemas.AeToolInspectArgs, _run_tool_inspect)
 register("ae.toolUse", schemas.AeToolUseArgs, _run_tool_use)
+register_panel("ae.toolCreate", schemas._AePanelToolCreateArgs, _run_tool_create)
+register_panel("ae.toolEdit", schemas._AePanelToolEditArgs, _run_tool_edit)
+register_panel("ae.toolDelete", schemas._AePanelToolDeleteArgs, _run_tool_delete)
+register_panel("ae.toolArchive", schemas._AePanelToolArchiveArgs, _run_tool_archive)
+register_panel(
+    "ae.toolDuplicate",
+    schemas._AePanelToolDuplicateArgs,
+    _run_tool_duplicate,
+)
+register_panel(
+    "ae.toolPromoteFromHistory",
+    schemas._AePanelToolPromoteFromHistoryArgs,
+    _run_tool_promote,
+)
+register_panel("ae.toolImport", schemas._AePanelToolImportArgs, _run_tool_import)
+register_panel("ae.toolExport", schemas._AePanelToolExportArgs, _run_tool_export)
 
 
 __all__ = [
