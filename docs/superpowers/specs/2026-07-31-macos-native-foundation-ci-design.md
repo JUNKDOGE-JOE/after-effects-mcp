@@ -163,8 +163,10 @@ The verifier will require:
   `packaging/product-acceptance-coverage.json`;
 - one input entry per scenario with exactly `id`, `candidateSha`, `result`,
   `evidencePath`, `evidenceSha256`, `owner`, and `reviewedBy`;
-- repository-relative evidence paths, a non-empty owner and reviewer identity,
-  and a reviewer different from the owner;
+- repository-relative evidence paths plus non-empty owner and reviewer
+  identities; `reviewedBy` may identify the Subagent review task/receipt used
+  by this single-maintainer project and does not require a second human
+  maintainer;
 - one bounded, regular evidence JSON file per scenario whose top-level
   `candidateSha` and `result` identify the same passing candidate; and
 - the evidence digest recorded in the policy to match the supplied bytes.
