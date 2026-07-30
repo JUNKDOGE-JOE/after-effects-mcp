@@ -21,7 +21,7 @@ import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTie
 import { createToolsApi } from '../cep/toolsApi';
 import { createLegacyApiKeyStore } from '../cep/apiKey';
 import { createZcodeCredentialManager } from '../cep/zcodeCredential.js';
-import { probeClaudeLogin, resolveSidecarSelection } from '../cep/claudeAuth';
+import { probeClaudeLogin, resolveNodeForSidecarSelection, resolveSidecarSelection } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
@@ -645,9 +645,13 @@ function Shell({ cs }) {
   const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
   const resolvePanelNode = React.useCallback(
     ({ platform: requestedPlatform } = {}) => (runtimeManager
-      ? runtimeManager.resolveNode()
+      ? resolveNodeForSidecarSelection({
+        resolveNode: () => runtimeManager.resolveNode(),
+        runtimeSelection: runtimeActivation.result,
+        platform: requestedPlatform || platform,
+      })
       : resolveSystemNode({ platform: requestedPlatform || platform })),
-    [platform, runtimeManager],
+    [platform, runtimeActivation.result, runtimeManager],
   );
   const sidecarSelection = React.useMemo(() => resolveSidecarSelection({
     extRoot,

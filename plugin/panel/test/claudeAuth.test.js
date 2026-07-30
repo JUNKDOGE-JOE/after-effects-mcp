@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import {
   probeClaudeLogin,
+  resolveNodeForSidecarSelection,
   resolveSidecarPath,
   resolveSidecarSelection,
 } from '../src/cep/claudeAuth.js';
@@ -351,6 +352,78 @@ test('probeClaudeLogin reports resolveNode failure and does not spawn', async ()
 
   assert.equal(spawned, false);
   assert.deepEqual(result, { loggedIn: false, nodeOk: false, detail: 'node missing' });
+});
+
+test('resolveNodeForSidecarSelection rejects a Node receipt from another selected runtime generation', async () => {
+  const selectionA = selectedRuntime('/Users/test/.ae-mcp/runtime/layers/a/generation-a/macos-arm64');
+  const resolvedNodeB = {
+    ok: true,
+    nodePath: '/Users/test/.ae-mcp/runtime/layers/a/generation-b/macos-arm64/node/bin/node',
+    version: '24.17.0',
+    runtime: {
+      componentReceipt: {
+        ...selectionA.componentReceipt,
+        canonicalPath: '/Users/test/.ae-mcp/runtime/layers/a/generation-b/macos-arm64',
+      },
+    },
+  };
+  let resolutions = 0;
+
+  await assert.rejects(
+    () => resolveNodeForSidecarSelection({
+      resolveNode: async () => {
+        resolutions += 1;
+        return resolvedNodeB;
+      },
+      runtimeSelection: selectionA,
+      platform: macPlatform(),
+    }),
+    (error) => error.code === 'RUNTIME_SIDECAR_NODE_SELECTION_MISMATCH',
+  );
+  assert.equal(resolutions, 1);
+});
+
+test('probeClaudeLogin does not spawn a generation-B Node for a generation-A Sidecar selection', async () => {
+  const selectionA = selectedRuntime('/Users/test/.ae-mcp/runtime/layers/a/generation-a/macos-arm64');
+  const resolvedNodeB = {
+    ok: true,
+    nodePath: '/Users/test/.ae-mcp/runtime/layers/a/generation-b/macos-arm64/node/bin/node',
+    version: '24.17.0',
+    runtime: {
+      componentReceipt: {
+        ...selectionA.componentReceipt,
+        canonicalPath: '/Users/test/.ae-mcp/runtime/layers/a/generation-b/macos-arm64',
+      },
+    },
+  };
+  let spawns = 0;
+  const resolveSelectedNode = ({ platform }) => resolveNodeForSidecarSelection({
+    resolveNode: async () => resolvedNodeB,
+    runtimeSelection: selectionA,
+    platform,
+  });
+  const result = await probeClaudeLogin({
+    platform: macPlatform(),
+    resolveNode: async (options) => {
+      try {
+        return await resolveSelectedNode(options);
+      } catch (error) {
+        return { ok: false, detail: error.message };
+      }
+    },
+    sidecarPath: '/Users/test/.ae-mcp/runtime/layers/a/generation-a/macos-arm64/node/sidecar/agent-sidecar.mjs',
+    spawnImpl: () => {
+      spawns += 1;
+      return makeProc();
+    },
+  });
+
+  assert.deepEqual(result, {
+    loggedIn: false,
+    nodeOk: false,
+    detail: 'Selected Sidecar and Node runtime receipts do not match',
+  });
+  assert.equal(spawns, 0);
 });
 
 test('probeClaudeLogin does not resolve Node or spawn while Sidecar selection is pending', async () => {

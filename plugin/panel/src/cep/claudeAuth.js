@@ -78,6 +78,22 @@ export function resolveSidecarSelection({
   }
 }
 
+export async function resolveNodeForSidecarSelection({
+  resolveNode,
+  runtimeSelection,
+  platform,
+} = {}) {
+  const resolved = await resolveNode({ platform });
+  const sidecarCanonicalPath = runtimeSelection?.componentReceipt?.canonicalPath;
+  if (sidecarCanonicalPath
+      && resolved?.runtime?.componentReceipt?.canonicalPath !== sidecarCanonicalPath) {
+    const error = new Error('Selected Sidecar and Node runtime receipts do not match');
+    error.code = 'RUNTIME_SIDECAR_NODE_SELECTION_MISMATCH';
+    throw error;
+  }
+  return resolved;
+}
+
 export async function probeClaudeLogin({
   platform,
   resolveNode,
