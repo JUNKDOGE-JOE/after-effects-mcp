@@ -182,6 +182,17 @@ async function harness(t) {
   return { root, home, platform: adapter(home) };
 }
 
+async function managedDirectoryCounts(runtimeRoot) {
+  const generations = await fs.promises.readdir(path.join(runtimeRoot, 'generations'));
+  const layersRoot = path.join(runtimeRoot, 'layers');
+  const layerDigests = await fs.promises.readdir(layersRoot);
+  let layers = 0;
+  for (const digest of layerDigests) {
+    layers += (await fs.promises.readdir(path.join(layersRoot, digest))).length;
+  }
+  return { generations: generations.length, layers };
+}
+
 function managerFor(h, extensionRoot, options = {}) {
   return createRuntimeManager({
     platform: h.platform,
@@ -640,15 +651,25 @@ macosRuntimeTest('a launcher contract change cannot publish a mixed launcher/run
     version: '0.10.0', sourceCommitSha: '2'.repeat(40), marker: 'two', launcherVersion: 'v2',
   });
   const one = managerFor(h, v1.extensionRoot);
-  const two = managerFor(h, v2.extensionRoot);
+  const incompatible = managerFor(h, v2.extensionRoot);
   const installed = await one.ensureReady();
   const pointerBefore = await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8');
   const launcherBefore = await fs.promises.readFile(h.platform.paths.launcher);
+  const before = await managedDirectoryCounts(h.platform.paths.runtimeRoot);
 
-  await assert.rejects(two.ensureReady(), { code: 'RUNTIME_LAUNCHER_MIGRATION_REQUIRED' });
+  await assert.rejects(
+    incompatible.ensureReady(),
+    { code: 'RUNTIME_LAUNCHER_MIGRATION_REQUIRED' },
+  );
+  assert.deepEqual(await managedDirectoryCounts(h.platform.paths.runtimeRoot), before);
 
   assert.equal(await fs.promises.readFile(h.platform.paths.currentPointer, 'utf8'), pointerBefore);
   assert.deepEqual(await fs.promises.readFile(h.platform.paths.launcher), launcherBefore);
+  await assert.rejects(
+    incompatible.repair(),
+    { code: 'RUNTIME_LAUNCHER_MIGRATION_REQUIRED' },
+  );
+  assert.deepEqual(await managedDirectoryCounts(h.platform.paths.runtimeRoot), before);
   const launched = await execFileAsync(installed.launcher, ['--unchanged'], {
     env: { HOME: h.home, AE_MCP_HOME: h.platform.paths.configRoot, PATH: '/usr/bin:/bin' },
   });

@@ -979,6 +979,20 @@ export function createRuntimeManager({
     }
   }
 
+  async function prepareSelectedForActivation(selected, current, previous) {
+    try {
+      assertLauncherTransitionCompatible(selected, current);
+      await installLauncher(selected);
+    } catch (error) {
+      await reclaimOwnedState({
+        currentRelative: current?.relative || null,
+        previousRelative: previous?.relative || null,
+        inProgressRelative: null,
+      });
+      throw error;
+    }
+  }
+
   async function refreshLayerReceipt(layerRoot, record, directory) {
     const refreshed = {
       ...record,
@@ -1458,8 +1472,7 @@ export function createRuntimeManager({
       }
       packaged = await verifyPackagedPayload();
       const selected = await installPackaged(packaged);
-      assertLauncherTransitionCompatible(selected, current);
-      await installLauncher(selected);
+      await prepareSelectedForActivation(selected, current, previous);
       await activate(selected, current);
       const reclaimed = await reclaimOwnedState({
         currentRelative: selected.relative,
@@ -1500,9 +1513,9 @@ export function createRuntimeManager({
     return withLock(async () => {
       const packaged = await verifyPackagedPayload();
       const current = await pointerState(paths.currentPointer);
+      const previous = await pointerState(paths.previousPointer);
       const selected = await installPackaged(packaged, { repair: true });
-      assertLauncherTransitionCompatible(selected, current);
-      await installLauncher(selected);
+      await prepareSelectedForActivation(selected, current, previous);
       await activate(selected, current);
       const reclaimed = await reclaimOwnedState({
         currentRelative: selected.relative,
