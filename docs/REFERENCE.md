@@ -2,6 +2,23 @@
 
 ## 中文
 
+### 快速信息
+
+| 项目 | 当前契约 |
+|---|---|
+| 公开工具数 | 16，按最终公开 surface 注册 |
+| Preview 输出 | 默认位于操作系统临时目录的 `ae_mcp_previews/<session>/...png`，可用 `out_dir` 覆盖 |
+| Checkpoint 存储 | 操作系统临时目录下的 `ae_mcp_checkpoints/<basename>/<id>.aep + .json` |
+
+### v0.9.2 平台与分发契约
+
+v0.9.2 是 Windows x64 正式版本，安装资产为
+`ae-mcp-panel-v0.9.2-windows-x64.zxp`。macOS、包内 RuntimeManager、
+正式跨平台签名链和完整 AE 25/26 实机矩阵转入 v0.9.3。
+
+Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都只是对应 AI 通道的
+**可选**依赖，不是 Core 或两个执行入口的前置条件。
+
 ### 最终公开工具面
 
 | 类别 | 工具 |
@@ -13,7 +30,8 @@
 | Tool 库 | `ae_toolIndex`、`ae_toolSearch`、`ae_toolInspect`、`ae_toolUse` |
 | 诊断 | `ae_ping`、`ae_status`、`ae_diagnose` |
 
-| `ae.toolUse` | staged action fields | render/prepare/grant/execute/start/status/cancel/history |
+`ae_toolUse` staged actions: `render`, `prepare`, `grant`, `execute`, `start`,
+`status`, `cancel`, and `history`.
 
 `ae_toolUse` action 参数：
 
@@ -123,6 +141,25 @@ uv run python scripts/generate_native_exec.py --check
 
 ## English
 
+### Quick facts
+
+| Item | Current contract |
+|---|---|
+| Public tool count | 16 on the final public surface |
+| Preview output | `ae_mcp_previews/<session>/...png` in the operating-system temporary directory unless `out_dir` is set |
+| Checkpoint store | `ae_mcp_checkpoints/<basename>/<id>.aep + .json` under the operating-system temporary directory |
+
+### v0.9.2 platform and distribution contract
+
+v0.9.2 is the Windows x64 release. Its install asset is
+`ae-mcp-panel-v0.9.2-windows-x64.zxp`. macOS, bundled RuntimeManager,
+the production cross-platform signing chain, and the complete AE 25/26
+hardware matrix move to v0.9.3.
+
+Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional**
+dependencies for their corresponding AI channels, not prerequisites for Core
+or either execution route.
+
 ### Final public tool surface
 
 | Category | Tools |
@@ -134,7 +171,8 @@ uv run python scripts/generate_native_exec.py --check
 | Tool library | `ae_toolIndex`, `ae_toolSearch`, `ae_toolInspect`, `ae_toolUse` |
 | Diagnostics | `ae_ping`, `ae_status`, `ae_diagnose` |
 
-| `ae.toolUse` | staged action fields | render/prepare/grant/execute/start/status/cancel/history |
+`ae_toolUse` staged actions are `render`, `prepare`, `grant`, `execute`, `start`,
+`status`, `cancel`, and `history`.
 
 `ae_toolUse` action fields:
 

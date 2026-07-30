@@ -215,9 +215,34 @@ test('user docs distinguish the Windows v0.9.2 release from deferred v0.9.3 work
   assert.doesNotMatch(reference, /203 passed/);
   assert.doesNotMatch(reference, /24 passed/);
   assert.doesNotMatch(reference, /\| Handler count \| 30 verbs/);
-  assert.match(reference, /\| Handler count \| 52 verbs/);
-  assert.equal((reference.match(/\| `ae\.status` \|/g) || []).length, 2);
-  assert.equal((reference.match(/\| `ae\.diagnose` \|/g) || []).length, 2);
+  assert.doesNotMatch(reference, /\| Handler count \| 52 verbs/);
+  assert.match(reference, /\| 公开工具数 \| 16/);
+  assert.match(reference, /\| Public tool count \| 16/);
+  for (const toolName of [
+    'ae_checkpoint',
+    'ae_diagnose',
+    'ae_exec',
+    'ae_nativeExec',
+    'ae_ping',
+    'ae_previewFrame',
+    'ae_revert',
+    'ae_skillList',
+    'ae_skillUse',
+    'ae_snapshot',
+    'ae_status',
+    'ae_toolIndex',
+    'ae_toolInspect',
+    'ae_toolSearch',
+    'ae_toolUse',
+    'ae_validateExpressions',
+  ]) {
+    assert.match(
+      reference,
+      new RegExp(`\\|[^\\n]*\`${toolName}\`[^\\n]*\\|`, 'u'),
+      `docs/REFERENCE.md public table must include ${toolName}`,
+    );
+  }
+  assert.doesNotMatch(reference, /`ae\.[A-Za-z][A-Za-z0-9]*`/u);
   assert.match(reference, /operating-system temporary directory/i);
   assert.match(reference, /操作系统临时目录/);
 

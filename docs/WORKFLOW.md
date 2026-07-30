@@ -2,6 +2,22 @@
 
 ## 中文
 
+这份文档描述 v0.9.2 的执行工作流。Windows x64 安装资产是
+`ae-mcp-panel-v0.9.2-windows-x64.zxp`；使用受支持的 ZXP installer 安装。
+Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都是相应 AI 通道的
+**可选**依赖，不是 Core 或 AE 执行的前置条件。
+
+稳定 launcher 配置使用展开后的绝对路径
+`/Users/<USER>/.ae-mcp/bin/ae-mcp`。v0.9.3 macOS RuntimeManager 在启动 Core
+前校验并激活包内 runtime，且不会回退到裸 PATH；Windows v0.9.2 行为保持不变。
+
+### Attestation Check provenance（外部前置）
+
+GitHub Actions App 由同仓库 workflow 共享。attestation workflow 生成的 Check
+使用该 App，但共享身份不能单独证明写入来自指定 workflow。因此发布的外部前置条件是：
+仓库策略和评审必须防止不受信任的同仓库 workflow 获得 `checks:write`。无法证明
+该限制时，attestation Check 不能作为发布授权。
+
 ### 1. 选择执行路径
 
 1. 加载 `builtin:skill:ae-execution-guide`。
@@ -68,6 +84,26 @@ uv run python scripts/generate_native_exec.py --check
 生成 reference、Core schema、protocol metadata 与 native bindings 必须全部一致。
 
 ## English
+
+This document describes the v0.9.2 execution workflow. The Windows x64 install
+asset is `ae-mcp-panel-v0.9.2-windows-x64.zxp`. Install it with a supported ZXP installer.
+Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional**
+dependencies for their corresponding AI channels, not prerequisites for Core
+or AE execution.
+
+The stable launcher configuration uses the expanded absolute path
+`/Users/<USER>/.ae-mcp/bin/ae-mcp`. The v0.9.3 macOS RuntimeManager verifies and
+activates the packaged runtime before starting Core and never falls back to
+bare PATH; Windows v0.9.2 behavior is unchanged.
+
+### Attestation Check Provenance (External Prerequisite)
+
+The GitHub Actions App is shared by workflows in the same repository. Checks
+created by the attestation workflow use that App, but its shared identity alone
+cannot prove which workflow wrote a Check. A release external prerequisite is
+a repository policy and review boundary that prevents untrusted same-repository
+workflows from receiving `checks:write`. Without that restriction, an
+attestation Check is not release authorization.
 
 ### 1. Choose the execution route
 
