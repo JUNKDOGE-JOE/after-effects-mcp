@@ -56,38 +56,19 @@ Adobe approval or completed host validation.
 2. The plug-in selects the highest overlapping version and returns its compiled
    SDK identity, actual AE host identity, instance/session IDs, limits, and a
    capability digest. No overlap returns `WIRE_VERSION_MISMATCH`.
-3. The broker requests compact capability summaries by default. It can request
-   full, bounded contracts for selected IDs. Version 1 has 67 compile-time
-   capabilities. The checked-in complete-registry golden exchange is therefore
-   `detail=summary`; one response containing all 67 full descriptors exceeds the
-   fixed 524,288-byte frame and is rejected before encoding, while bounded
-   selected-ID full responses remain available. Capability discovery deliberately
-   does not support pagination:
+3. The broker requests the compact `ae.native.exec` capability summary by
+   default and can request its full generated 23-primitive program contract.
+   Capability discovery deliberately does not support pagination:
    `cursor` is rejected and `nextCursor` must be null. If the effective limit is smaller than the
    number of matching descriptors, the plug-in fails closed instead of returning
    an incomplete page. Unknown requested IDs produce an empty, digest-bound page.
    Responses bind the normalized ids/detail/limit query and session with
    `queryDigest` and can never be replayed.
-4. `invoke` is a closed `oneOf` over compile-time registered capability-specific
-   input schemas. Version 1 permits `ae.project.summary` and
-   `ae.project.bit-depth.read` with empty argument objects, plus
-   `ae.project.bit-depth.set` with exactly `targetDepth` (`8`, `16`, or `32`)
-   and `idempotencyKey`. It also permits `ae.project.items.list` with rendered
-   `offset`/`limit` and an optional first-page `projectLocator`, and
-   `ae.composition.layers.list` with a composition locator plus rendered
-   `offset`/`limit`. Those reads use bounded capability-owned pagination with a
-   default public page size of 25 and a maximum of 50. The closed allowlist also
-   includes `ae.layer.source.read`, Track Matte read/set/clear, AV-state read,
-   and audio/video-enabled set. It intentionally does not include a generic
-   `ae.layer.source.set`; controlled source replacement stays outside this
-   native package. At the wire boundary, Track Matte set rejects self-targets and
-   locators from a different project/context. The same-project,
-   different-composition case cannot be represented by the unchanged layer
-   locator shape; Task 4 must resolve both layer owners in the dispatcher/host
-   and reject different composition owners before mutation. Future capabilities
-   extend that allowlist with closed, bounded
-   schemas; a generic argument bag or field-name blacklist is never a security
-   boundary. Arbitrary C++, JSX, shell text, command lines, pointers,
+4. `invoke` accepts only `ae.native.exec` version 1. Its arguments are a closed,
+   generated program union: each operation selects one of 23 typed primitives,
+   references may only target earlier saved resolver handles, read programs
+   carry no write metadata, and write programs require one operation key and one
+   Undo-group label. Arbitrary C++, JSX, shell text, command lines, pointers,
    native handles, and unknown nested data are rejected before dispatch.
 5. `invalidateGraph` is an authenticated, internal lifecycle method used when the
    trusted CEP host already has a connected native session and is about to start

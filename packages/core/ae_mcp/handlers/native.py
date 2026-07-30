@@ -14,6 +14,8 @@ from ae_mcp.backends.native import (
     NativeCancellationToken,
     NativeInvokeBackend,
     NativeRecovery,
+    NativeProgramExecution,
+    invoke_native_program,
     invoke_composition_layers_list,
     invoke_selected_composition_layers_list,
     invoke_composition_time_read,
@@ -138,6 +140,7 @@ _LAYER_TRANSFORM_TIMEOUT_MS = 20_000
 _KEYFRAME_DETAILS_READ_TIMEOUT_MS = 10_000
 _KEYFRAME_WRITE_TIMEOUT_MS = 10_000
 _NATIVE_MEDIA_TIMEOUT_MS = 20_000
+_NATIVE_EXEC_TIMEOUT_MS = 30_000
 
 
 def _backend() -> NativeInvokeBackend:
@@ -207,6 +210,76 @@ def _native_read_response(execution: Any) -> dict[str, Any]:
             exclude_none=True,
         ),
     }
+
+
+def _native_program_response(execution: NativeProgramExecution) -> dict[str, Any]:
+    result = execution.result
+    negotiation = execution.negotiation
+    response = {
+        "ok": True,
+        **result.model_dump(
+            mode="json",
+            by_alias=True,
+            exclude_none=True,
+        ),
+    }
+    response["provenance"] = {
+        "engine": result.evidence.engine,
+        "selectedWireVersion": negotiation.selected_wire_version,
+        "pluginVersion": negotiation.plugin_version,
+        "compiledSdkVersion": negotiation.compiled_sdk_version,
+        "sourceCommit": negotiation.source_commit,
+        "hostInstanceId": negotiation.host_instance_id,
+        "sessionId": negotiation.session_id,
+        "sessionGeneration": negotiation.session_generation,
+        "capabilitiesDigest": negotiation.capabilities_digest,
+    }
+    response["audit"] = {
+        "requestId": execution.request.request_id,
+        "capabilityId": result.capability_id,
+        "operationKey": result.operation_key,
+        "programDigest": execution.request.program_digest,
+        "requestDigest": result.evidence.request_digest,
+        "postconditionAlgorithm": result.evidence.postcondition.algorithm,
+        "postconditionDigest": result.evidence.postcondition.digest,
+        "effect": result.evidence.effect,
+        "undoAvailable": result.undo.available,
+        "undoVerified": result.undo.verified,
+        "replayed": result.replayed,
+        "startedAtUnixMs": result.evidence.started_at_unix_ms,
+        "completedAtUnixMs": result.evidence.completed_at_unix_ms,
+    }
+    if result.operation_key is None:
+        del response["audit"]["operationKey"]
+    return response
+
+
+async def _run_native_exec(
+    args: schemas.AeNativeExecArgs,
+    ctx: Any,
+) -> dict[str, Any]:
+    cancellation = NativeCancellationToken()
+    deadline_unix_ms = int(time.time() * 1000) + _NATIVE_EXEC_TIMEOUT_MS
+
+    async def _call() -> NativeProgramExecution:
+        return await invoke_native_program(
+            _backend(),
+            request_id=f"mcp-{uuid.uuid4().hex}",
+            args=args,
+            deadline_unix_ms=deadline_unix_ms,
+            cancellation=cancellation,
+        )
+
+    try:
+        execution = await progress.with_heartbeat(
+            ctx,
+            _call(),
+            start_msg="ae.nativeExec bounded native AEGP program...",
+        )
+    except asyncio.CancelledError:
+        cancellation.cancel()
+        raise
+    return _native_program_response(execution)
 
 
 def _layer_transform_read_response(result: LayerTransformRead) -> dict[str, Any]:
@@ -2553,277 +2626,10 @@ def _native_media_runner(operation: str, *, write: bool):
 
 
 register(
-    "ae.getProjectContext",
-    schemas.AeGetProjectContextArgs,
-    _run_get_project_context,
+    "ae.nativeExec",
+    schemas.AeNativeExecArgs,
+    _run_native_exec,
 )
-register(
-    "ae.getProjectItemMetadata",
-    schemas.AeGetProjectItemMetadataArgs,
-    _run_get_project_item_metadata,
-)
-register(
-    "ae.getCompositionSettings",
-    schemas.AeGetCompositionSettingsArgs,
-    _run_get_composition_settings,
-)
-register(
-    "ae.setCompositionWorkArea",
-    schemas.AeSetCompositionWorkAreaArgs,
-    _run_set_composition_work_area,
-)
-register(
-    "ae.setCompositionDimensions",
-    schemas.AeSetCompositionDimensionsArgs,
-    _run_set_composition_dimensions,
-)
-register(
-    "ae.setCompositionDuration",
-    schemas.AeSetCompositionDurationArgs,
-    _run_set_composition_duration,
-)
-register(
-    "ae.setCompositionFrameRate",
-    schemas.AeSetCompositionFrameRateArgs,
-    _run_set_composition_frame_rate,
-)
-register(
-    "ae.setCompositionPixelAspectRatio",
-    schemas.AeSetCompositionPixelAspectRatioArgs,
-    _run_set_composition_pixel_aspect_ratio,
-)
-register(
-    "ae.setCompositionBackgroundColor",
-    schemas.AeSetCompositionBackgroundColorArgs,
-    _run_set_composition_background_color,
-)
-register(
-    "ae.setCompositionDisplayStartTime",
-    schemas.AeSetCompositionDisplayStartTimeArgs,
-    _run_set_composition_display_start_time,
-)
-register(
-    "ae.renameProjectItem",
-    schemas.AeRenameProjectItemArgs,
-    _run_rename_project_item,
-)
-register(
-    "ae.setProjectItemComment",
-    schemas.AeSetProjectItemCommentArgs,
-    _run_set_project_item_comment,
-)
-register(
-    "ae.setProjectItemLabel",
-    schemas.AeSetProjectItemLabelArgs,
-    _run_set_project_item_label,
-)
-register(
-    "ae.duplicateComposition",
-    schemas.AeDuplicateCompositionArgs,
-    _run_duplicate_composition,
-)
-register(
-    "ae.getLayerDetails",
-    schemas.AeGetLayerDetailsArgs,
-    _run_get_layer_details,
-)
-register("ae.getLayerCompositingState", schemas.AeGetLayerCompositingStateArgs, _run_get_layer_compositing_state)
-register("ae.getLayerSource", schemas.AeGetLayerSourceArgs, _run_get_layer_source)
-register("ae.setLayerSource", schemas.AeSetLayerSourceArgs, _run_set_layer_source)
-register("ae.getLayerTrackMatte", schemas.AeGetLayerTrackMatteArgs, _run_get_layer_track_matte)
-register("ae.setLayerTrackMatte", schemas.AeSetLayerTrackMatteArgs, _run_set_layer_track_matte)
-register("ae.clearLayerTrackMatte", schemas.AeClearLayerTrackMatteArgs, _run_clear_layer_track_matte)
-register("ae.getLayerAVState", schemas.AeGetLayerAVStateArgs, _run_get_layer_av_state)
-register("ae.setLayerAudioEnabled", schemas.AeSetLayerAudioEnabledArgs, _run_set_layer_audio_enabled)
-register("ae.setLayerVideoEnabled", schemas.AeSetLayerVideoEnabledArgs, _run_set_layer_video_enabled)
-register("ae.setLayerVisibility", schemas.AeSetLayerVisibilityArgs, _run_set_layer_visibility)
-register("ae.setLayerSolo", schemas.AeSetLayerSoloArgs, _run_set_layer_solo)
-register("ae.setLayerLocked", schemas.AeSetLayerLockedArgs, _run_set_layer_locked)
-register("ae.setLayerShy", schemas.AeSetLayerShyArgs, _run_set_layer_shy)
-register("ae.setLayerMotionBlur", schemas.AeSetLayerMotionBlurArgs, _run_set_layer_motion_blur)
-register("ae.setLayerThreeD", schemas.AeSetLayerThreeDArgs, _run_set_layer_three_d)
-register("ae.setLayerAdjustment", schemas.AeSetLayerAdjustmentArgs, _run_set_layer_adjustment)
-register("ae.setLayerQuality", schemas.AeSetLayerQualityArgs, _run_set_layer_quality)
-register("ae.setLayerBlendingMode", schemas.AeSetLayerBlendingModeArgs, _run_set_layer_blending_mode)
-register("ae.getLayerTransform", schemas.AeGetLayerTransformArgs, _run_get_layer_transform)
-register("ae.setLayerAnchorPoint", schemas.AeSetLayerAnchorPointArgs, _run_set_layer_anchor_point)
-register("ae.setLayerPosition", schemas.AeSetLayerPositionArgs, _run_set_layer_position)
-register("ae.setLayerScale", schemas.AeSetLayerScaleArgs, _run_set_layer_scale)
-register("ae.setLayerRotation", schemas.AeSetLayerRotationArgs, _run_set_layer_rotation)
-register("ae.setLayerOpacity", schemas.AeSetLayerOpacityArgs, _run_set_layer_opacity)
-register("ae.setLayerOrientation", schemas.AeSetLayerOrientationArgs, _run_set_layer_orientation)
-register(
-    "ae.renameLayer",
-    schemas.AeRenameLayerArgs,
-    _run_rename_layer,
-)
-register(
-    "ae.setLayerRange",
-    schemas.AeSetLayerRangeArgs,
-    _run_set_layer_range,
-)
-register(
-    "ae.setLayerStartTime",
-    schemas.AeSetLayerStartTimeArgs,
-    _run_set_layer_start_time,
-)
-register(
-    "ae.setLayerStretch",
-    schemas.AeSetLayerStretchArgs,
-    _run_set_layer_stretch,
-)
-register(
-    "ae.reorderLayer",
-    schemas.AeReorderLayerArgs,
-    _run_reorder_layer,
-)
-register(
-    "ae.setLayerParent",
-    schemas.AeSetLayerParentArgs,
-    _run_set_layer_parent,
-)
-register(
-    "ae.duplicateLayer",
-    schemas.AeDuplicateLayerArgs,
-    _run_duplicate_layer,
-)
-register(
-    "ae.projectSummary",
-    schemas.AeProjectSummaryArgs,
-    _run_project_summary,
-)
-register(
-    "ae.listProjectItems",
-    schemas.AeListProjectItemsArgs,
-    _run_list_project_items,
-)
-register(
-    "ae.listCompositionLayers",
-    schemas.AeListCompositionLayersArgs,
-    _run_list_composition_layers,
-)
-register(
-    "ae.listSelectedLayers",
-    schemas.AeListSelectedLayersArgs,
-    _run_list_selected_layers,
-)
-register(
-    "ae.getCompositionTime",
-    schemas.AeGetCompositionTimeArgs,
-    _run_get_composition_time,
-)
-register(
-    "ae.setCompositionTime",
-    schemas.AeSetCompositionTimeArgs,
-    _run_set_composition_time,
-)
-register(
-    "ae.createComposition",
-    schemas.AeCreateCompositionArgs,
-    _run_create_composition,
-)
-register(
-    "ae.createCompositionLayer",
-    schemas.AeCreateCompositionLayerArgs,
-    _run_create_composition_layer,
-)
-register(
-    "ae.applyLayerEffect",
-    schemas.AeApplyLayerEffectArgs,
-    _run_apply_layer_effect,
-)
-register(
-    "ae.listLayerProperties",
-    schemas.AeListLayerPropertiesArgs,
-    _run_list_layer_properties,
-)
-register(
-    "ae.listLayerPropertyKeyframes",
-    schemas.AeListLayerPropertyKeyframesArgs,
-    _run_list_layer_property_keyframes,
-)
-register(
-    "ae.getProjectBitDepth",
-    schemas.AeGetProjectBitDepthArgs,
-    _run_get_project_bit_depth,
-)
-register(
-    "ae.setProjectBitDepth",
-    schemas.AeSetProjectBitDepthArgs,
-    _run_set_project_bit_depth,
-)
-register(
-    "ae.setLayerPropertyValue",
-    schemas.AeSetLayerPropertyValueArgs,
-    _run_set_layer_property_value,
-)
-register(
-    "ae.getLayerPropertyKeyframeDetails",
-    schemas.AeGetLayerPropertyKeyframeDetailsArgs,
-    _run_get_layer_property_keyframe_details,
-)
-register(
-    "ae.addLayerPropertyKeyframe",
-    schemas.AeAddLayerPropertyKeyframeArgs,
-    _run_add_layer_property_keyframe,
-)
-register(
-    "ae.setLayerPropertyKeyframeValue",
-    schemas.AeSetLayerPropertyKeyframeValueArgs,
-    _run_set_layer_property_keyframe_value,
-)
-register(
-    "ae.setLayerPropertyKeyframeInterpolation",
-    schemas.AeSetLayerPropertyKeyframeInterpolationArgs,
-    _run_set_layer_property_keyframe_interpolation,
-)
-register(
-    "ae.setLayerPropertyKeyframeTemporalEase",
-    schemas.AeSetLayerPropertyKeyframeTemporalEaseArgs,
-    _run_set_layer_property_keyframe_temporal_ease,
-)
-register(
-    "ae.setLayerPropertyKeyframeBehavior",
-    schemas.AeSetLayerPropertyKeyframeBehaviorArgs,
-    _run_set_layer_property_keyframe_behavior,
-)
-register(
-    "ae.deleteLayerPropertyKeyframe",
-    schemas.AeDeleteLayerPropertyKeyframeArgs,
-    _run_delete_layer_property_keyframe,
-)
-
-_NATIVE_MEDIA_PUBLIC_TOOLS = (
-    ("ae.listInstalledEffects", schemas.AeListInstalledEffectsArgs, "effects-installed-list", False),
-    ("ae.listLayerEffects", schemas.AeListLayerEffectsArgs, "effects-layer-list", False),
-    ("ae.getLayerEffectDetails", schemas.AeGetLayerEffectDetailsArgs, "effect-details", False),
-    ("ae.setLayerEffectEnabled", schemas.AeSetLayerEffectEnabledArgs, "effect-enabled", True),
-    ("ae.reorderLayerEffect", schemas.AeReorderLayerEffectArgs, "effect-reorder", True),
-    ("ae.duplicateLayerEffect", schemas.AeDuplicateLayerEffectArgs, "effect-duplicate", True),
-    ("ae.deleteLayerEffect", schemas.AeDeleteLayerEffectArgs, "effect-delete", True),
-    ("ae.listLayerMasks", schemas.AeListLayerMasksArgs, "masks-list", False),
-    ("ae.getLayerMaskDetails", schemas.AeGetLayerMaskDetailsArgs, "mask-details", False),
-    ("ae.getLayerMaskPath", schemas.AeGetLayerMaskPathArgs, "mask-path", False),
-    ("ae.createLayerMask", schemas.AeCreateLayerMaskArgs, "mask-create", True),
-    ("ae.setLayerMaskProperties", schemas.AeSetLayerMaskPropertiesArgs, "mask-properties", True),
-    ("ae.setLayerMaskPath", schemas.AeSetLayerMaskPathArgs, "mask-path", True),
-    ("ae.duplicateLayerMask", schemas.AeDuplicateLayerMaskArgs, "mask-duplicate", True),
-    ("ae.deleteLayerMask", schemas.AeDeleteLayerMaskArgs, "mask-delete", True),
-    ("ae.getFootageDetails", schemas.AeGetFootageDetailsArgs, "footage-details", False),
-    ("ae.importFootage", schemas.AeImportFootageArgs, "footage-import", True),
-    ("ae.replaceFootage", schemas.AeReplaceFootageArgs, "footage-replace", True),
-    ("ae.getFootageInterpretation", schemas.AeGetFootageInterpretationArgs, "footage-interpretation", False),
-    ("ae.setFootageInterpretation", schemas.AeSetFootageInterpretationArgs, "footage-interpretation", True),
-    ("ae.setFootageProxy", schemas.AeSetFootageProxyArgs, "footage-proxy", True),
-    ("ae.setItemUseProxy", schemas.AeSetItemUseProxyArgs, "item-use-proxy", True),
-)
-
-for _tool_name, _tool_schema, _operation, _write in _NATIVE_MEDIA_PUBLIC_TOOLS:
-    register(
-        _tool_name,
-        _tool_schema,
-        _native_media_runner(_operation, write=_write),
-    )
 
 
 __all__ = [

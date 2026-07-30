@@ -162,11 +162,14 @@ Three edges are easy to misread:
 ## Ordinary development HDEV
 
 `development_smoke.py` is the permanently non-candidate real-AE proof for
-ordinary AE-changing PRs. Scenario `core-native-write-undo@1` performs exactly
-seven public MCP calls: readiness, composition creation, complete settings
-before/after one background write, post-Undo locator reacquisition, and
-complete restored settings. It never runs T5/T6, never uses the stable
-RuntimeManager launcher, and every event and summary records
+ordinary AE-changing PRs. Scenario `native-exec-ir@1` performs exactly nine
+public MCP calls: readiness/status, `ae_exec` fixture creation, one read-only
+`ae_nativeExec` locator discovery, native composition/layer/time read, one
+native time-write program, independent readback, a post-Undo fresh discovery
+and restored-state readback, plus one structurally invalid native program that
+must be rejected before dispatch. The GUI Undo checkpoint is not an MCP call.
+It never runs T5/T6, never uses the stable RuntimeManager launcher, and every
+event and summary records
 `validationProfile=development`, `candidateRun=false`, and
 `candidateEvidence=false`.
 
@@ -176,13 +179,13 @@ formal-AE launch, or directly:
 ```bash
 PYTHONDONTWRITEBYTECODE=1 .venv/bin/python3 -B -I \
   scripts/hardware/development_smoke.py \
-  --scenario core-native-write-undo@1 \
+  --scenario native-exec-ir@1 \
   --selected-components core \
   --reused-components cep,native \
   --checkout "$PWD" \
-  --fixture-path "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active/hdev-core-native.aep" \
+  --fixture-path "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active/hdev-native-exec-ir.aep" \
   --recovery-archive-root "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/recovery" \
-  --evidence-dir "$HOME/Library/Application Support/AfterEffectsMCP/evidence/hdev-core-native" \
+  --evidence-dir "$HOME/Library/Application Support/AfterEffectsMCP/evidence/hdev-native-exec-ir" \
   --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
 ```
 

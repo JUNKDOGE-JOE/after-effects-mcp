@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import importlib
 import io
 import json
 import re
@@ -19,7 +20,11 @@ import pytest
 from mcp.shared.memory import create_connected_server_and_client_session
 from pydantic import ValidationError
 
-from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp import schemas
+from ae_mcp.annotations import VERB_ANNOTATIONS
+from ae_mcp.backends.base import ALL_VERBS
+from ae_mcp.handlers import FINAL_PUBLIC_TOOLS, HANDLERS, load_all
+from ae_mcp.instructions import SERVER_INSTRUCTIONS
 from ae_mcp.server import (
     build_reverse_map,
     build_server,
@@ -28,6 +33,90 @@ from ae_mcp.server import (
 )
 
 _MCP_TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_ROOT = Path(__file__).resolve().parents[3]
+_MIGRATION = (
+    _ROOT / "native/ae-plugin/protocol/native-exec-migration.json"
+)
+_FINAL_JSX_BACKEND_VERBS = set(FINAL_PUBLIC_TOOLS) - {
+    "ae.diagnose",
+    "ae.nativeExec",
+    "ae.status",
+}
+
+
+def _removed_public_tools() -> set[str]:
+    payload = json.loads(_MIGRATION.read_text(encoding="utf-8"))
+    return {
+        row["id"]
+        for row in payload["publicTools"]
+        if row["disposition"].startswith("REMOVE_TO_")
+    }
+
+
+def _token_present(text: str, token: str) -> bool:
+    return re.search(
+        rf"(?<![A-Za-z0-9_]){re.escape(token)}(?![A-Za-z0-9_])",
+        text,
+    ) is not None
+
+
+def test_migration_manifest_defines_the_exact_public_surface():
+    """The breaking switch removes every manifest row at every public edge."""
+
+    load_all()
+    removed = _removed_public_tools()
+    assert len(removed) == 136
+    assert removed.isdisjoint(FINAL_PUBLIC_TOOLS)
+
+    assert set(HANDLERS) == set(FINAL_PUBLIC_TOOLS)
+    assert set(ALL_VERBS) == _FINAL_JSX_BACKEND_VERBS
+    assert set(schemas.SCHEMAS) == set(FINAL_PUBLIC_TOOLS)
+    assert set(VERB_ANNOTATIONS) == set(FINAL_PUBLIC_TOOLS)
+    from ae_mcp.schemas_tsm import PUBLIC_SCHEMAS as tsm_public_schemas
+
+    assert tsm_public_schemas == {}
+
+    public_text = {
+        "README.md": (_ROOT / "README.md").read_text(encoding="utf-8"),
+        "README.zh-CN.md": (
+            _ROOT / "README.zh-CN.md"
+        ).read_text(encoding="utf-8"),
+        "docs/REFERENCE.md": (
+            _ROOT / "docs/REFERENCE.md"
+        ).read_text(encoding="utf-8"),
+        "docs/WORKFLOW.md": (
+            _ROOT / "docs/WORKFLOW.md"
+        ).read_text(encoding="utf-8"),
+        "server instructions": SERVER_INSTRUCTIONS,
+    }
+    leaks = {
+        source: sorted(
+            tool
+            for tool in removed
+            if _token_present(text, tool)
+            or _token_present(text, expose_tool_name(tool))
+        )
+        for source, text in public_text.items()
+    }
+    assert {source: names for source, names in leaks.items() if names} == {}
+
+
+def test_importing_legacy_handler_modules_cannot_reregister_removed_tools():
+    """An incidental module import must not revive a deleted public route."""
+
+    load_all()
+    baseline = dict(HANDLERS)
+    try:
+        for module_name in (
+            "ae_mcp.handlers.rig",
+            "ae_mcp.handlers.text_shape_marker",
+        ):
+            module = importlib.import_module(module_name)
+            importlib.reload(module)
+        assert set(HANDLERS) == set(FINAL_PUBLIC_TOOLS)
+    finally:
+        HANDLERS.clear()
+        HANDLERS.update(baseline)
 
 
 def test_expose_tool_name_strips_dots():
@@ -45,14 +134,11 @@ def test_every_exposed_verb_matches_mcp_pattern():
         assert _MCP_TOOL_NAME.fullmatch(exposed), f"{verb!r} -> {exposed!r} is not MCP-compliant"
 
 
-def test_tool_library_exposes_exact_twelve_names():
+def test_tool_library_exposes_only_the_four_read_or_execute_names():
     load_all()
     exposed = {expose_tool_name(name) for name in HANDLERS if name.startswith("ae.tool")}
     assert exposed == {
         "ae_toolIndex", "ae_toolSearch", "ae_toolInspect", "ae_toolUse",
-        "ae_toolCreate", "ae_toolEdit", "ae_toolDelete", "ae_toolArchive",
-        "ae_toolDuplicate", "ae_toolPromoteFromHistory",
-        "ae_toolImport", "ae_toolExport",
     }
 
 
@@ -342,11 +428,8 @@ async def test_tool_use_reference_tracks_public_schema_and_action_requirements(
     reference = (
         Path(__file__).resolve().parents[3] / "docs" / "REFERENCE.md"
     ).read_text("utf-8")
-    quick_reference_row = (
-        "| `ae.toolUse` | staged action fields | "
-        "render/prepare/grant/execute/start/status/cancel/history |"
-    )
-    assert reference.count(quick_reference_row) == 2
+    assert reference.count("`ae_toolUse` staged actions") == 2
+    assert "`ae.toolUse`" not in reference
     for disposition in (
         "cancelled-before-dispatch",
         "not-cancellable-after-dispatch",
@@ -648,26 +731,26 @@ async def test_mcp_transport_keeps_json_schema_type_validation(monkeypatch):
     from ae_mcp import server as srv
 
     load_all()
-    schema_cls, _ = HANDLERS["ae.init"]
+    schema_cls, _ = HANDLERS["ae.snapshot"]
     dispatches = 0
 
     async def _fake_run(validated, _ctx):
         nonlocal dispatches
         dispatches += 1
-        return {"ok": True, "refreshOnly": validated.refresh_only}
+        return {"ok": True, "mainWindow": validated.main_window}
 
-    monkeypatch.setitem(HANDLERS, "ae.init", (schema_cls, _fake_run))
-    monkeypatch.setattr(srv, "_filtered_tool_names", lambda: {"ae.init"})
+    monkeypatch.setitem(HANDLERS, "ae.snapshot", (schema_cls, _fake_run))
+    monkeypatch.setattr(srv, "_filtered_tool_names", lambda: {"ae.snapshot"})
     server = build_server()
 
     async with create_connected_server_and_client_session(server) as client:
         listed = await client.list_tools()
-        tool = next(item for item in listed.tools if item.name == "ae_init")
-        assert tool.inputSchema["properties"]["refresh_only"]["type"] == "boolean"
+        tool = next(item for item in listed.tools if item.name == "ae_snapshot")
+        assert tool.inputSchema["properties"]["main_window"]["type"] == "boolean"
 
         rejected = await client.call_tool(
-            "ae_init",
-            {"refresh_only": "false"},
+            "ae_snapshot",
+            {"main_window": "false"},
         )
         assert rejected.isError is True
         assert rejected.content[0].text.startswith("Input validation error:")
@@ -675,8 +758,8 @@ async def test_mcp_transport_keeps_json_schema_type_validation(monkeypatch):
         assert dispatches == 0
 
         rejected_dotted = await client.call_tool(
-            "ae.init",
-            {"refresh_only": "false"},
+            "ae.snapshot",
+            {"main_window": "false"},
         )
         assert rejected_dotted.isError is True
         assert rejected_dotted.content[0].text.startswith(
@@ -686,12 +769,12 @@ async def test_mcp_transport_keeps_json_schema_type_validation(monkeypatch):
         assert dispatches == 0
 
         accepted = await client.call_tool(
-            "ae_init",
-            {"refresh_only": False},
+            "ae_snapshot",
+            {"main_window": False},
         )
         assert accepted.isError is False
         assert json.loads(accepted.content[0].text) == {
             "ok": True,
-            "refreshOnly": False,
+            "mainWindow": False,
         }
         assert dispatches == 1

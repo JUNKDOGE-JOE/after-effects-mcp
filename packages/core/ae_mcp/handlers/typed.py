@@ -106,7 +106,6 @@ async def _run_create_layer(args: schemas.AeCreateLayerArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.createLayer", schemas.AeCreateLayerArgs, _run_create_layer)
 
 
 # ---------------------------------------------------------------------------
@@ -130,7 +129,6 @@ async def _run_set_property(args: schemas.AeSetPropertyArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.setProperty", schemas.AeSetPropertyArgs, _run_set_property)
 
 
 # ---------------------------------------------------------------------------
@@ -157,7 +155,6 @@ async def _run_move_layer(args: schemas.AeMoveLayerArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.moveLayer", schemas.AeMoveLayerArgs, _run_move_layer)
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +187,6 @@ async def _run_select_layers(args: schemas.AeSelectLayersArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.selectLayers", schemas.AeSelectLayersArgs, _run_select_layers)
 
 
 # ---------------------------------------------------------------------------
@@ -216,7 +212,6 @@ async def _run_set_time(args: schemas.AeSetTimeArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.setTime", schemas.AeSetTimeArgs, _run_set_time)
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +232,6 @@ async def _run_get_time(args: schemas.AeGetTimeArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.getTime", schemas.AeGetTimeArgs, _run_get_time)
 
 
 # ---------------------------------------------------------------------------
@@ -340,7 +334,6 @@ async def _run_get_properties(args: schemas.AeGetPropertiesArgs, ctx: Any) -> An
     )
 
 
-register("ae.getProperties", schemas.AeGetPropertiesArgs, _run_get_properties)
 
 
 # ---------------------------------------------------------------------------
@@ -371,7 +364,6 @@ async def _run_scan_property_tree(args: schemas.AeScanPropertyTreeArgs, ctx: Any
     )
 
 
-register("ae.scanPropertyTree", schemas.AeScanPropertyTreeArgs, _run_scan_property_tree)
 
 
 # ---------------------------------------------------------------------------
@@ -402,9 +394,6 @@ async def _run_inspect_property_capabilities(
     )
 
 
-register("ae.inspectPropertyCapabilities",
-         schemas.AeInspectPropertyCapabilitiesArgs,
-         _run_inspect_property_capabilities)
 
 
 # ---------------------------------------------------------------------------
@@ -434,7 +423,6 @@ async def _run_get_expressions(args: schemas.AeGetExpressionsArgs, ctx: Any) -> 
     )
 
 
-register("ae.getExpressions", schemas.AeGetExpressionsArgs, _run_get_expressions)
 
 
 # ---------------------------------------------------------------------------
@@ -499,7 +487,6 @@ async def _run_get_keyframes(args: schemas.AeGetKeyframesArgs, ctx: Any) -> Any:
     )
 
 
-register("ae.getKeyframes", schemas.AeGetKeyframesArgs, _run_get_keyframes)
 
 
 # ---------------------------------------------------------------------------
@@ -527,6 +514,3 @@ async def _run_search_project(args: schemas.AeSearchProjectArgs, ctx: Any) -> An
     return await progress.run_with_timeout(
         ctx, _call(), timeout_sec=40.0, start_msg="ae.searchProject..."
     )
-
-
-register("ae.searchProject", schemas.AeSearchProjectArgs, _run_search_project)

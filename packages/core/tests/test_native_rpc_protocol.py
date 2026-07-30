@@ -1,10 +1,9 @@
+"""Contract checks for the single native-program RPC surface."""
+
 from __future__ import annotations
 
-import ast
 import hashlib
-import importlib
 import json
-from collections.abc import Mapping
 from copy import deepcopy
 from pathlib import Path
 
@@ -12,64 +11,24 @@ import pytest
 from jsonschema import Draft202012Validator
 from jsonschema.exceptions import ValidationError
 
-import ae_mcp
-
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 PROTOCOL_ROOT = REPO_ROOT / "native" / "ae-plugin" / "protocol"
 SCHEMA_PATH = PROTOCOL_ROOT / "aegp-rpc.schema.json"
 FIXTURE_ROOT = PROTOCOL_ROOT / "fixtures"
-CORE_PACKAGE_ROOT = Path(ae_mcp.__file__).resolve().parent
+SYNTHETIC_FIXTURE = {
+    "classification": "synthetic-contract-vector",
+    "runtimeEvidence": False,
+    "compatibilityEvidence": False,
+}
 
 
 def _json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _defines_capability_contracts(path: Path) -> bool:
-    tree = ast.parse(path.read_text(encoding="utf-8-sig"), filename=str(path))
-    return any(
-        (
-            isinstance(node, ast.Assign)
-            and any(
-                isinstance(target, ast.Name)
-                and target.id == "CAPABILITY_CONTRACTS"
-                for target in node.targets
-            )
-        )
-        or (
-            isinstance(node, ast.AnnAssign)
-            and isinstance(node.target, ast.Name)
-            and node.target.id == "CAPABILITY_CONTRACTS"
-        )
-        for node in tree.body
-    )
-
-
-def _core_capability_contracts():
-    contracts = {}
-    for path in sorted(CORE_PACKAGE_ROOT.rglob("*.py")):
-        if not _defines_capability_contracts(path):
-            continue
-        relative = path.relative_to(CORE_PACKAGE_ROOT).with_suffix("")
-        module_parts = relative.parts[:-1] if relative.name == "__init__" else relative.parts
-        module_name = ".".join(("ae_mcp", *module_parts))
-        module_contracts = getattr(
-            importlib.import_module(module_name), "CAPABILITY_CONTRACTS"
-        )
-        assert isinstance(module_contracts, Mapping), module_name
-        for capability_id, contract in module_contracts.items():
-            assert capability_id not in contracts, (
-                f"{capability_id} is declared by both "
-                f"{contracts[capability_id][0]} and {module_name}"
-            )
-            contracts[capability_id] = (module_name, contract)
-    assert contracts, "Core exports no CAPABILITY_CONTRACTS"
-    return contracts
-
-
 def _jcs_subset(value) -> bytes:
-    """Independent JCS encoder for the fixture's integer/string JSON subset."""
+    """Independent JCS encoder for the registry's JSON subset."""
 
     def encode(item) -> str:
         if item is None:
@@ -92,326 +51,202 @@ def _jcs_subset(value) -> bytes:
             return "{" + ",".join(
                 f"{encode(key)}:{encode(member)}" for key, member in members
             ) + "}"
-        raise TypeError(f"unsupported independent JCS fixture value: {type(item)!r}")
+        raise TypeError(f"unsupported independent JCS value: {type(item)!r}")
 
     return encode(value).encode("utf-8")
 
 
-def test_native_rpc_schema_and_golden_vectors_are_draft_2020_12_valid():
+def _program_request(*, write: bool) -> dict:
+    arguments = {
+        "operations": [
+            {
+                "op": "project.items.list",
+                "args": {"offset": 0, "limit": 1},
+                "returnAs": "items",
+            }
+        ]
+    }
+    if write:
+        arguments = {
+            "operationKey": "native-program-protocol-0001",
+            "undoGroup": "Native protocol write",
+            "operations": [
+                {
+                    "op": "composition.time.set",
+                    "args": {
+                        "composition": {"ref": "composition"},
+                        "targetTime": {"value": 1, "scale": 24},
+                    },
+                    "returnAs": "time",
+                }
+            ],
+        }
+    return {
+        "wireVersion": 1,
+        "kind": "request",
+        "sessionId": "11111111-1111-4111-8111-111111111111",
+        "requestId": f"native-program-{'write' if write else 'read'}",
+        "method": "invoke",
+        "params": {
+            "capabilityId": "ae.native.exec",
+            "capabilityVersion": 1,
+            "arguments": arguments,
+        },
+    }
+
+
+def _program_response(request: dict, *, write: bool) -> dict:
+    request_id = request["requestId"]
+    operation = request["params"]["arguments"]["operations"][0]
+    result = {
+        "capabilityId": "ae.native.exec",
+        "outputs": {
+            operation["returnAs"]: (
+                {"value": 1, "scale": 24}
+                if write
+                else {"items": [], "nextOffset": None}
+            )
+        },
+        "operations": [
+            {"index": 0, "op": operation["op"], "status": "completed"}
+        ],
+        "evidence": {
+            "engine": "native-aegp",
+            "hostInstanceId": "22222222-2222-4222-8222-222222222222",
+            "sessionId": request["sessionId"],
+            "requestId": request_id,
+            "capabilityId": "ae.native.exec",
+            "capabilityVersion": 1,
+            "startedAtUnixMs": 1_900_000_000_000,
+            "completedAtUnixMs": 1_900_000_000_001,
+            "effect": "committed" if write else "none",
+            "postcondition": {
+                "verified": True,
+                "kind": "native-program",
+                "algorithm": "sha256-rfc8785-jcs-v1",
+                "digest": "a" * 64,
+            },
+            "requestDigest": "b" * 64,
+        },
+        "undo": (
+            {
+                "available": True,
+                "verified": False,
+                "groupLabel": "Native protocol write",
+            }
+            if write
+            else {"available": False, "verified": False}
+        ),
+    }
+    if write:
+        result["operationKey"] = request["params"]["arguments"]["operationKey"]
+    return {
+        "wireVersion": 1,
+        "kind": "response",
+        "sessionId": request["sessionId"],
+        "requestId": request_id,
+        "method": "invoke",
+        "ok": True,
+        "replayed": False,
+        "result": result,
+    }
+
+
+def test_native_rpc_schema_and_current_fixtures_are_draft_2020_12_valid():
     schema = _json(SCHEMA_PATH)
     Draft202012Validator.check_schema(schema)
     validator = Draft202012Validator(schema)
 
-    for name in (
-        "hello.json",
-        "capabilities.json",
-        "invoke-project-summary.json",
-        "invoke-project-bit-depth-read.json",
-        "invoke-project-bit-depth-set.json",
-        "invoke-project-items-list.json",
-        "invoke-composition-layers-list.json",
-        "invoke-composition-selected-layers-list.json",
-        "invoke-composition-time-read.json",
-        "invoke-composition-time-set.json",
-        "invoke-composition-create.json",
-        "invoke-composition-layer-create.json",
-        "invoke-layer-effect-apply.json",
-        "invoke-layer-properties-list.json",
-        "invoke-layer-property-keyframes-list.json",
-        "invoke-layer-property-set.json",
-        "invoke-project-context-read.json",
-        "invoke-project-item-metadata-read.json",
-        "invoke-composition-settings-read.json",
-        "invoke-composition-work-area-set.json",
-        "invoke-project-item-name-set.json",
-        "invoke-project-item-comment-set.json",
-        "invoke-project-item-label-set.json",
-        "invoke-composition-duplicate.json",
-        "cancel.json",
-    ):
+    for name in ("hello.json", "capabilities.json", "invalidate-graph.json"):
         fixture = _json(FIXTURE_ROOT / name)
+        assert fixture["_fixture"] == SYNTHETIC_FIXTURE
         validator.validate(fixture["request"])
-        for event in fixture.get("events", []):
-            validator.validate(event)
         validator.validate(fixture["response"])
 
-    for response in _json(FIXTURE_ROOT / "errors.json")["responses"].values():
-        validator.validate(response)
+    errors = _json(FIXTURE_ROOT / "errors.json")
+    assert errors["_fixture"] == SYNTHETIC_FIXTURE
+    for name in ("duplicateRequest", "queueFull", "wireVersionMismatch"):
+        validator.validate(errors["responses"][name])
 
-    for vector in _json(FIXTURE_ROOT / "version-negotiation.json")["vectors"]:
+    versions = _json(FIXTURE_ROOT / "version-negotiation.json")
+    assert versions["_fixture"] == SYNTHETIC_FIXTURE
+    for vector in versions["vectors"]:
         validator.validate(vector["request"])
         validator.validate(vector["response"])
 
-    for name in (
-        "hello.json",
-        "capabilities.json",
-        "invoke-project-summary.json",
-        "invoke-project-bit-depth-read.json",
-        "invoke-project-bit-depth-set.json",
-        "invoke-project-items-list.json",
-        "invoke-composition-layers-list.json",
-        "invoke-composition-selected-layers-list.json",
-        "invoke-composition-time-read.json",
-        "invoke-composition-time-set.json",
-        "invoke-composition-create.json",
-        "invoke-composition-layer-create.json",
-        "invoke-layer-effect-apply.json",
-        "invoke-layer-properties-list.json",
-        "invoke-layer-property-keyframes-list.json",
-        "invoke-layer-property-set.json",
-        "invoke-project-context-read.json",
-        "invoke-project-item-metadata-read.json",
-        "invoke-composition-settings-read.json",
-        "invoke-composition-work-area-set.json",
-        "invoke-project-item-name-set.json",
-        "invoke-project-item-comment-set.json",
-        "invoke-project-item-label-set.json",
-        "invoke-composition-duplicate.json",
-        "cancel.json",
-        "errors.json",
-        "negative-corpus.json",
-        "framing-corpus.json",
-        "version-negotiation.json",
-    ):
-        fixture = _json(FIXTURE_ROOT / name)
-        assert fixture["_fixture"] == {
-            "classification": "synthetic-contract-vector",
-            "runtimeEvidence": False,
-            "compatibilityEvidence": False,
-        }
 
-    items = _json(FIXTURE_ROOT / "capability-registry-full.json")["items"]
-    descriptor = next(item for item in items if item["id"] == "ae.project.summary")
-    assert descriptor["requirements"] == [
-        {
-            "id": "aemcp.requirement.native.project-read",
-            "contractVersion": 1,
-        }
-    ]
-    assert {example["kind"] for example in descriptor["examples"]} == {
-        "positive",
-        "negative",
+def test_registry_has_one_native_exec_descriptor_with_generated_primitives():
+    registry = _json(FIXTURE_ROOT / "capability-registry-full.json")
+    assert registry["_fixture"] == SYNTHETIC_FIXTURE
+    assert len(registry["items"]) == 1
+
+    descriptor = registry["items"][0]
+    assert descriptor["id"] == "ae.native.exec"
+    assert descriptor["requiredSkill"] == "builtin:skill:ae-execution-guide"
+    assert descriptor["primitiveCount"] == len(descriptor["primitives"]) == 23
+    primitive_ids = [primitive["id"] for primitive in descriptor["primitives"]]
+    assert len(primitive_ids) == len(set(primitive_ids))
+
+    Draft202012Validator.check_schema(descriptor["inputSchema"])
+    Draft202012Validator.check_schema(descriptor["resultSchema"])
+    contract = {
+        "inputSchema": descriptor["inputSchema"],
+        "primitives": descriptor["primitives"],
+        "requiredSkill": descriptor["requiredSkill"],
+        "resultSchema": descriptor["resultSchema"],
     }
-    assert all("arguments" in example and "expected" in example for example in descriptor["examples"])
-
-    input_schema = descriptor["inputSchema"]
-    result_schema = descriptor["resultSchema"]
-    Draft202012Validator.check_schema(input_schema)
-    Draft202012Validator.check_schema(result_schema)
-    Draft202012Validator(input_schema).validate({})
-    with pytest.raises(ValidationError):
-        Draft202012Validator(input_schema).validate({"jsx": "forbidden"})
-    Draft202012Validator(result_schema).validate(
-        {"projectOpen": True, "projectName": "😀" * 1024, "itemCount": 1}
-    )
-    with pytest.raises(ValidationError):
-        Draft202012Validator(result_schema).validate(
-            {"projectOpen": True, "projectName": "😀" * 1025, "itemCount": 1}
-        )
-
-    contract = {"inputSchema": input_schema, "resultSchema": result_schema}
     assert hashlib.sha256(_jcs_subset(contract)).hexdigest() == descriptor[
         "contractDigest"
     ]
-    capabilities = _json(FIXTURE_ROOT / "capability-registry-full.json")
-    hello = _json(FIXTURE_ROOT / "hello.json")
-    capability_ids = [item["id"] for item in capabilities["items"]]
-    assert len(capability_ids) == len(set(capability_ids))
-    assert capabilities["capabilitiesDigest"] == hello[
-        "response"
-    ]["result"]["capabilitiesDigest"]
-    assert _jcs_subset({"\ue000": 1, "😀": 2}).decode("utf-8") == (
-        '{"😀":2,"\ue000":1}'
-    )
 
 
-def test_native_capabilities_fixture_covers_every_core_capability_contract():
-    descriptors = {
-        item["id"]: item
-        for item in _json(FIXTURE_ROOT / "capability-registry-full.json")[
-            "items"
-        ]
-    }
-    violations = []
-    for capability_id, (module_name, contract) in _core_capability_contracts().items():
-        if capability_id not in descriptors:
-            violations.append(
-                f"{capability_id} from {module_name}: missing descriptor"
-            )
-            continue
-        descriptor = descriptors[capability_id]
-        if descriptor["contractDigest"] != contract.contract_digest:
-            violations.append(
-                f"{capability_id} from {module_name}: contractDigest mismatch"
-            )
-        if descriptor["inputSchema"] != contract.input_schema:
-            violations.append(
-                f"{capability_id} from {module_name}: inputSchema mismatch"
-            )
-    assert not violations, "\n".join(violations)
+def test_capabilities_advertises_only_the_native_exec_root():
+    capabilities = _json(FIXTURE_ROOT / "capabilities.json")["response"]["result"]
+    registry = _json(FIXTURE_ROOT / "capability-registry-full.json")
+    hello = _json(FIXTURE_ROOT / "hello.json")["response"]["result"]
+
+    assert [item["id"] for item in capabilities["items"]] == ["ae.native.exec"]
+    assert capabilities["items"][0]["primitiveCount"] == 23
+    assert capabilities["capabilitiesDigest"] == registry["capabilitiesDigest"]
+    assert capabilities["capabilitiesDigest"] == hello["capabilitiesDigest"]
 
 
-def test_every_core_capability_contract_has_a_valid_native_result_vector():
-    descriptors = {
-        item["id"]: item
-        for item in _json(FIXTURE_ROOT / "capability-registry-full.json")[
-            "items"
-        ]
-    }
-    violations = []
-    for capability_id, (module_name, contract) in _core_capability_contracts().items():
-        descriptor = descriptors.get(capability_id)
-        if descriptor is None:
-            violations.append(
-                f"{capability_id} from {module_name}: MISSING descriptor"
-            )
-            continue
-        if descriptor["resultSchema"] != contract.result_schema:
-            violations.append(
-                f"{capability_id} from {module_name}: resultSchema mismatch"
-            )
-        carriers = [
-            example["expected"]["value"]
-            for example in descriptor.get("examples", ())
-            if example.get("expected", {}).get("outcome") == "succeeded"
-            and "value" in example["expected"]
-        ]
-        if not carriers:
-            violations.append(
-                f"{capability_id} from {module_name}: MISSING native result vector"
-            )
-            continue
-        if len(carriers) != 1:
-            violations.append(
-                f"{capability_id} from {module_name}: "
-                f"expected exactly one native result vector, got {len(carriers)}"
-            )
-            continue
-        errors = sorted(
-            Draft202012Validator(contract.result_schema).iter_errors(carriers[0]),
-            key=lambda error: tuple(str(part) for part in error.absolute_path),
-        )
-        for error in errors:
-            location = ".".join(str(part) for part in error.absolute_path) or "<root>"
-            violations.append(
-                f"{capability_id} from {module_name}: "
-                f"native result vector {location}: {error.message}"
-            )
-    assert not violations, "\n".join(violations)
+@pytest.mark.parametrize("write", [False, True])
+def test_common_native_program_request_and_result_validate(write):
+    validator = Draft202012Validator(_json(SCHEMA_PATH))
+    request = _program_request(write=write)
+    response = _program_response(request, write=write)
 
-
-def test_bit_depth_mutation_success_can_never_be_a_transport_replay():
-    schema = _json(SCHEMA_PATH)
-    validator = Draft202012Validator(schema)
-    response = {
-        "wireVersion": 1,
-        "kind": "response",
-        "sessionId": "11111111-1111-4111-8111-111111111111",
-        "requestId": "bit-depth-set-1",
-        "method": "invoke",
-        "ok": True,
-        "replayed": False,
-        "result": {
-            "capabilityId": "ae.project.bit-depth.set",
-            "capabilityVersion": 1,
-            "engine": "native-aegp",
-            "outcome": "succeeded",
-            "value": {
-                "changed": True,
-                "beforeBitsPerChannel": 8,
-                "afterBitsPerChannel": 16,
-            },
-            "evidence": {
-                "engine": "native-aegp",
-                "hostInstanceId": "22222222-2222-4222-8222-222222222222",
-                "sessionId": "11111111-1111-4111-8111-111111111111",
-                "requestId": "bit-depth-set-1",
-                "capabilityId": "ae.project.bit-depth.set",
-                "capabilityVersion": 1,
-                "startedAtUnixMs": 1_900_000_000_000,
-                "completedAtUnixMs": 1_900_000_000_025,
-                "effect": "committed",
-                "requestDigest": "a" * 64,
-                "postcondition": {
-                    "verified": True,
-                    "kind": "project-bit-depth-set",
-                    "algorithm": "sha256-rfc8785-jcs-v1",
-                    "digest": "b" * 64,
-                },
-                "undo": {"available": True, "verified": False},
-            },
-        },
-    }
+    validator.validate(request)
     validator.validate(response)
+
+    legacy = deepcopy(request)
+    legacy["params"]["capabilityId"] = "ae.project.summary"
+    with pytest.raises(ValidationError):
+        validator.validate(legacy)
+
+
+def test_native_program_write_replay_remains_bound_to_the_operation_key():
+    validator = Draft202012Validator(_json(SCHEMA_PATH))
+    request = _program_request(write=True)
+    response = _program_response(request, write=True)
+    validator.validate(response)
+
     response["replayed"] = True
-    with pytest.raises(ValidationError):
-        validator.validate(response)
-
-
-def test_native_rpc_negative_corpus_is_rejected_by_the_public_envelope():
-    schema = _json(SCHEMA_PATH)
-    validator = Draft202012Validator(schema)
-    for seed in _json(FIXTURE_ROOT / "negative-corpus.json")["vectors"]:
-        with pytest.raises(ValidationError):
-            validator.validate(seed["message"])
-
-    capabilities = _json(FIXTURE_ROOT / "capabilities.json")["request"]
-    capabilities["params"]["cursor"] = "pagination-is-fail-closed-in-v1"
-    with pytest.raises(ValidationError):
-        validator.validate(capabilities)
-
-    capabilities = _json(FIXTURE_ROOT / "capabilities.json")
-    replayed_capabilities = deepcopy(capabilities["response"])
-    replayed_capabilities["replayed"] = True
-    with pytest.raises(ValidationError):
-        validator.validate(replayed_capabilities)
-
-    replayed_cancel = deepcopy(_json(FIXTURE_ROOT / "cancel.json")["response"])
-    replayed_cancel["replayed"] = True
-    with pytest.raises(ValidationError):
-        validator.validate(replayed_cancel)
-
-    reversed_range = deepcopy(_json(FIXTURE_ROOT / "hello.json")["request"])
-    reversed_range["params"]["supportedWireVersions"] = {
-        "minimum": 2,
-        "maximum": 1,
-    }
-    validator.validate(reversed_range)
-    assert (
-        schema["$defs"]["wireRange"]["x-invariant"]
-        == "minimum-must-not-exceed-maximum"
-    )
+    validator.validate(response)
+    assert response["result"]["operationKey"] == request["params"]["arguments"][
+        "operationKey"
+    ]
 
 
 def test_native_rpc_error_policy_rejects_unsafe_retry_combinations():
     schema = _json(SCHEMA_PATH)
-    valid = _json(FIXTURE_ROOT / "errors.json")["responses"][
-        "possiblySideEffecting"
-    ]["error"]
-
-    # Resolve local refs by validating through the root response schema.
     response = _json(FIXTURE_ROOT / "errors.json")["responses"][
-        "possiblySideEffecting"
+        "queueFull"
     ]
     Draft202012Validator(schema).validate(response)
 
     unsafe = deepcopy(response)
-    unsafe["error"]["retryable"] = True
-    unsafe["error"]["sideEffect"] = "not-started"
-    unsafe["error"]["recovery"]["action"] = "retry"
+    unsafe["error"]["retryable"] = False
     with pytest.raises(ValidationError):
         Draft202012Validator(schema).validate(unsafe)
-
-    delayed_non_queue = deepcopy(response)
-    delayed_non_queue["error"]["recovery"]["retryAfterMs"] = 250
-    with pytest.raises(ValidationError):
-        Draft202012Validator(schema).validate(delayed_non_queue)
-
-    queue_full = deepcopy(
-        _json(FIXTURE_ROOT / "errors.json")["responses"]["queueFull"]
-    )
-    del queue_full["error"]["recovery"]["retryAfterMs"]
-    with pytest.raises(ValidationError):
-        Draft202012Validator(schema).validate(queue_full)
-
-    assert valid["retryable"] is False

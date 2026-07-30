@@ -4,7 +4,6 @@
 #include "aemcp_native/mac_ipc_server.hpp"
 #include "aemcp_native/rpc_codec.hpp"
 
-#include <array>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -18,112 +17,57 @@ struct NativeRpcRuntimeInfo {
   std::string host_version;
   std::uint64_t host_build{0};
   std::string host_instance_id;
-  std::string capabilities_digest;
-  std::string project_summary_contract_digest;
-  std::string project_bit_depth_read_contract_digest;
-  std::string project_bit_depth_set_contract_digest;
-  std::string project_items_list_contract_digest;
-  std::string composition_layers_list_contract_digest;
-  std::string composition_time_read_contract_digest;
-  std::string composition_time_set_contract_digest;
-  std::string composition_create_contract_digest;
-  std::string composition_layer_create_contract_digest;
-  std::string layer_effect_apply_contract_digest;
-  std::string layer_properties_list_contract_digest;
-  std::string layer_property_keyframes_list_contract_digest;
-  std::string layer_property_set_contract_digest;
-  std::string composition_selected_layers_list_contract_digest;
-  std::string project_context_read_contract_digest;
-  std::string project_item_metadata_read_contract_digest;
-  std::string composition_settings_read_contract_digest;
-  std::string composition_work_area_set_contract_digest;
-  std::string project_item_name_set_contract_digest;
-  std::string project_item_comment_set_contract_digest;
-  std::string project_item_label_set_contract_digest;
-  std::string composition_duplicate_contract_digest;
-  std::string layer_details_read_contract_digest;
-  std::string layer_name_set_contract_digest;
-  std::string layer_range_set_contract_digest;
-  std::string layer_start_time_set_contract_digest;
-  std::string layer_stretch_set_contract_digest;
-  std::string layer_order_set_contract_digest;
-  std::string layer_parent_set_contract_digest;
-  std::string layer_duplicate_contract_digest;
-  std::string layer_compositing_read_contract_digest;
-  std::string layer_switch_set_contract_digest;
-  std::string layer_quality_set_contract_digest;
-  std::string layer_blending_mode_set_contract_digest;
-  std::string layer_property_keyframe_details_read_contract_digest;
-  std::string layer_property_keyframe_add_contract_digest;
-  std::string layer_property_keyframe_value_set_contract_digest;
-  std::string layer_property_keyframe_interpolation_set_contract_digest;
-  std::string layer_property_keyframe_temporal_ease_set_contract_digest;
-  std::string layer_property_keyframe_behavior_set_contract_digest;
-  std::string layer_property_keyframe_delete_contract_digest;
-  std::string native_media_read_contract_digest;
-  std::string native_media_write_contract_digest;
-  std::string layer_source_read_contract_digest;
-  std::string layer_track_matte_read_contract_digest;
-  std::string layer_track_matte_set_contract_digest;
-  std::string layer_track_matte_clear_contract_digest;
-  std::string layer_av_state_read_contract_digest;
-  std::string layer_audio_enabled_set_contract_digest;
-  std::string layer_video_enabled_set_contract_digest;
-  std::array<std::string, 6> composition_setting_contract_digests;
 };
 
 class NativeRpcObserver {
- public:
+public:
   virtual ~NativeRpcObserver() = default;
-  virtual void on_rpc_event(
-      std::string_view event,
-      std::string_view request_id,
-      std::string_view decision) noexcept = 0;
-  virtual void on_rpc_terminal(
-      const Completion& completion,
-      std::string_view request_digest,
-      std::string_view postcondition_digest,
-      std::uint64_t started_at_unix_ms,
-      std::uint64_t completed_at_unix_ms) noexcept = 0;
+  virtual void on_rpc_event(std::string_view event, std::string_view request_id,
+                            std::string_view decision) noexcept = 0;
+  virtual void on_rpc_terminal(const Completion &completion,
+                               std::string_view request_digest,
+                               std::string_view postcondition_digest,
+                               std::uint64_t started_at_unix_ms,
+                               std::uint64_t completed_at_unix_ms) noexcept = 0;
 };
 
 // Signals After Effects that its registered idle hooks should run. Production
 // uses the SDK's worker-safe asynchronous wake routine; tests provide a fake.
 // The signal never performs host work itself.
 class HostIdleSignal {
- public:
+public:
   virtual ~HostIdleSignal() = default;
   [[nodiscard]] virtual bool request_idle() noexcept = 0;
 };
 
-// Classifies a terminal-evidence failure after host dispatch. Mutating
-// capabilities must remain ambiguous because the host write may have landed.
-[[nodiscard]] std::string_view post_dispatch_evidence_failure_code(
-    std::string_view capability_id,
-    bool graph_invalidation = false) noexcept;
+// Classifies a terminal-evidence failure after host dispatch. A native program
+// that contains a write must remain ambiguous because the host write may have
+// landed.
+[[nodiscard]] std::string_view
+post_dispatch_evidence_failure_code(bool native_program_contains_write,
+                                    bool graph_invalidation = false) noexcept;
 
 // Owns #72 framing/session state on the single IPC worker and bridges only
 // admitted invoke/cancel requests to HostDispatcher. It never calls HostApi;
 // after a queued progress frame is delivered it only schedules AE's idle hook.
 class NativeRpcConnectionHandler final : public AuthenticatedConnectionHandler {
- public:
-  NativeRpcConnectionHandler(
-      HostDispatcher& dispatcher,
-      Clock& dispatcher_clock,
-      rpc::SessionClock& session_clock,
-      NativeRpcRuntimeInfo runtime,
-      NativeRpcObserver& observer,
-      HostIdleSignal& idle_signal);
+public:
+  NativeRpcConnectionHandler(HostDispatcher &dispatcher,
+                             Clock &dispatcher_clock,
+                             rpc::SessionClock &session_clock,
+                             NativeRpcRuntimeInfo runtime,
+                             NativeRpcObserver &observer,
+                             HostIdleSignal &idle_signal);
 
-  void serve(const AuthenticatedConnection& connection) noexcept override;
+  void serve(const AuthenticatedConnection &connection) noexcept override;
 
- private:
-  HostDispatcher& dispatcher_;
-  Clock& dispatcher_clock_;
-  rpc::SessionClock& session_clock_;
+private:
+  HostDispatcher &dispatcher_;
+  Clock &dispatcher_clock_;
+  rpc::SessionClock &session_clock_;
   const NativeRpcRuntimeInfo runtime_;
-  NativeRpcObserver& observer_;
-  HostIdleSignal& idle_signal_;
+  NativeRpcObserver &observer_;
+  HostIdleSignal &idle_signal_;
 };
 
-}  // namespace aemcp::native
+} // namespace aemcp::native

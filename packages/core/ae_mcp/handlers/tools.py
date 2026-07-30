@@ -439,18 +439,6 @@ register("ae.toolIndex", schemas.AeToolIndexArgs, _run_tool_index)
 register("ae.toolSearch", schemas.AeToolSearchArgs, _run_tool_search)
 register("ae.toolInspect", schemas.AeToolInspectArgs, _run_tool_inspect)
 register("ae.toolUse", schemas.AeToolUseArgs, _run_tool_use)
-register("ae.toolCreate", schemas.AeToolCreateArgs, _run_tool_create)
-register("ae.toolEdit", schemas.AeToolEditArgs, _run_tool_edit)
-register("ae.toolDelete", schemas.AeToolDeleteArgs, _run_tool_delete)
-register("ae.toolArchive", schemas.AeToolArchiveArgs, _run_tool_archive)
-register("ae.toolDuplicate", schemas.AeToolDuplicateArgs, _run_tool_duplicate)
-register(
-    "ae.toolPromoteFromHistory",
-    schemas.AeToolPromoteFromHistoryArgs,
-    _run_tool_promote,
-)
-register("ae.toolImport", schemas.AeToolImportArgs, _run_tool_import)
-register("ae.toolExport", schemas.AeToolExportArgs, _run_tool_export)
 
 
 __all__ = [

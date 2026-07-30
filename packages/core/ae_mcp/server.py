@@ -37,7 +37,6 @@ from ae_mcp.backends.native import NativeBackendError, NativeInvokeBackend
 from ae_mcp.error_hints import append_hint
 from ae_mcp.handlers import HANDLERS, load_all
 from ae_mcp.instructions import SERVER_INSTRUCTIONS, build_server_instructions
-from ae_mcp.schemas_tsm import PUBLIC_SCHEMAS as TSM_PUBLIC_SCHEMAS
 from ae_mcp.tool_history import (
     HistoryContext,
     capture_history_candidate,
@@ -53,11 +52,10 @@ _PANEL_DEVELOPER_TOOLS = frozenset(
     {"ae.toolIndex", "ae.toolSearch", "ae.toolInspect"}
 )
 _PANEL_DEVELOPER_SCHEMAS = {
-    "ae.toolIndex": schemas.AePanelToolIndexArgs,
-    "ae.toolSearch": schemas.AePanelToolSearchArgs,
+    "ae.toolIndex": schemas._AePanelToolIndexArgs,
+    "ae.toolSearch": schemas._AePanelToolSearchArgs,
     "ae.toolInspect": schemas.AeToolInspectArgs,
 }
-_TEXT_SHAPE_MARKER_TOOLS = frozenset(TSM_PUBLIC_SCHEMAS)
 
 # Matches a leading dotted verb token at the very start of a docstring, e.g.
 # "ae.init — bootstrap …". Only the leading token is rewritten so the rest of
@@ -117,191 +115,9 @@ def _filtered_tool_names() -> set:
     if snapshotter is None:
         supported = supported - {"ae.snapshot"}
     if isinstance(backend, NativeInvokeBackend):
-        supported = supported | _TEXT_SHAPE_MARKER_TOOLS | {
-            "ae.getProjectContext",
-            "ae.getProjectItemMetadata",
-            "ae.getCompositionSettings",
-            "ae.setCompositionWorkArea",
-            "ae.setCompositionDimensions",
-            "ae.setCompositionDuration",
-            "ae.setCompositionFrameRate",
-            "ae.setCompositionPixelAspectRatio",
-            "ae.setCompositionBackgroundColor",
-            "ae.setCompositionDisplayStartTime",
-            "ae.renameProjectItem",
-            "ae.setProjectItemComment",
-            "ae.setProjectItemLabel",
-            "ae.duplicateComposition",
-            "ae.projectSummary",
-            "ae.getProjectBitDepth",
-            "ae.setProjectBitDepth",
-            "ae.listProjectItems",
-            "ae.listCompositionLayers",
-            "ae.listSelectedLayers",
-            "ae.getLayerDetails",
-            "ae.getLayerCompositingState",
-            "ae.getLayerSource",
-            "ae.setLayerSource",
-            "ae.getLayerTrackMatte",
-            "ae.setLayerTrackMatte",
-            "ae.clearLayerTrackMatte",
-            "ae.getLayerAVState",
-            "ae.setLayerAudioEnabled",
-            "ae.setLayerVideoEnabled",
-            "ae.setLayerVisibility",
-            "ae.setLayerSolo",
-            "ae.setLayerLocked",
-            "ae.setLayerShy",
-            "ae.setLayerMotionBlur",
-            "ae.setLayerThreeD",
-            "ae.setLayerAdjustment",
-            "ae.setLayerQuality",
-            "ae.setLayerBlendingMode",
-            "ae.getLayerTransform",
-            "ae.setLayerAnchorPoint",
-            "ae.setLayerPosition",
-            "ae.setLayerScale",
-            "ae.setLayerRotation",
-            "ae.setLayerOpacity",
-            "ae.setLayerOrientation",
-            "ae.renameLayer",
-            "ae.setLayerRange",
-            "ae.setLayerStartTime",
-            "ae.setLayerStretch",
-            "ae.reorderLayer",
-            "ae.setLayerParent",
-            "ae.duplicateLayer",
-            "ae.getCompositionTime",
-            "ae.setCompositionTime",
-            "ae.createComposition",
-            "ae.createCompositionLayer",
-            "ae.applyLayerEffect",
-            "ae.listLayerProperties",
-            "ae.listLayerPropertyKeyframes",
-            "ae.setLayerPropertyValue",
-            "ae.getLayerPropertyKeyframeDetails",
-            "ae.addLayerPropertyKeyframe",
-            "ae.setLayerPropertyKeyframeValue",
-            "ae.setLayerPropertyKeyframeInterpolation",
-            "ae.setLayerPropertyKeyframeTemporalEase",
-            "ae.setLayerPropertyKeyframeBehavior",
-            "ae.deleteLayerPropertyKeyframe",
-            "ae.listInstalledEffects",
-            "ae.listLayerEffects",
-            "ae.getLayerEffectDetails",
-            "ae.setLayerEffectEnabled",
-            "ae.reorderLayerEffect",
-            "ae.duplicateLayerEffect",
-            "ae.deleteLayerEffect",
-            "ae.listLayerMasks",
-            "ae.getLayerMaskDetails",
-            "ae.getLayerMaskPath",
-            "ae.createLayerMask",
-            "ae.setLayerMaskProperties",
-            "ae.setLayerMaskPath",
-            "ae.duplicateLayerMask",
-            "ae.deleteLayerMask",
-            "ae.getFootageDetails",
-            "ae.importFootage",
-            "ae.replaceFootage",
-            "ae.getFootageInterpretation",
-            "ae.setFootageInterpretation",
-            "ae.setFootageProxy",
-            "ae.setItemUseProxy",
-        }
+        supported = supported | {"ae.nativeExec"}
     else:
-        supported = supported - {
-            "ae.getProjectContext",
-            "ae.getProjectItemMetadata",
-            "ae.getCompositionSettings",
-            "ae.setCompositionWorkArea",
-            "ae.setCompositionDimensions",
-            "ae.setCompositionDuration",
-            "ae.setCompositionFrameRate",
-            "ae.setCompositionPixelAspectRatio",
-            "ae.setCompositionBackgroundColor",
-            "ae.setCompositionDisplayStartTime",
-            "ae.renameProjectItem",
-            "ae.setProjectItemComment",
-            "ae.setProjectItemLabel",
-            "ae.duplicateComposition",
-            "ae.projectSummary",
-            "ae.getProjectBitDepth",
-            "ae.setProjectBitDepth",
-            "ae.listProjectItems",
-            "ae.listCompositionLayers",
-            "ae.listSelectedLayers",
-            "ae.getLayerDetails",
-            "ae.getLayerCompositingState",
-            "ae.getLayerSource",
-            "ae.setLayerSource",
-            "ae.getLayerTrackMatte",
-            "ae.setLayerTrackMatte",
-            "ae.clearLayerTrackMatte",
-            "ae.getLayerAVState",
-            "ae.setLayerAudioEnabled",
-            "ae.setLayerVideoEnabled",
-            "ae.setLayerVisibility",
-            "ae.setLayerSolo",
-            "ae.setLayerLocked",
-            "ae.setLayerShy",
-            "ae.setLayerMotionBlur",
-            "ae.setLayerThreeD",
-            "ae.setLayerAdjustment",
-            "ae.setLayerQuality",
-            "ae.setLayerBlendingMode",
-            "ae.getLayerTransform",
-            "ae.setLayerAnchorPoint",
-            "ae.setLayerPosition",
-            "ae.setLayerScale",
-            "ae.setLayerRotation",
-            "ae.setLayerOpacity",
-            "ae.setLayerOrientation",
-            "ae.renameLayer",
-            "ae.setLayerRange",
-            "ae.setLayerStartTime",
-            "ae.setLayerStretch",
-            "ae.reorderLayer",
-            "ae.setLayerParent",
-            "ae.duplicateLayer",
-            "ae.getCompositionTime",
-            "ae.setCompositionTime",
-            "ae.createComposition",
-            "ae.createCompositionLayer",
-            "ae.applyLayerEffect",
-            "ae.listLayerProperties",
-            "ae.listLayerPropertyKeyframes",
-            "ae.setLayerPropertyValue",
-            "ae.getLayerPropertyKeyframeDetails",
-            "ae.addLayerPropertyKeyframe",
-            "ae.setLayerPropertyKeyframeValue",
-            "ae.setLayerPropertyKeyframeInterpolation",
-            "ae.setLayerPropertyKeyframeTemporalEase",
-            "ae.setLayerPropertyKeyframeBehavior",
-            "ae.deleteLayerPropertyKeyframe",
-            "ae.listInstalledEffects",
-            "ae.listLayerEffects",
-            "ae.getLayerEffectDetails",
-            "ae.setLayerEffectEnabled",
-            "ae.reorderLayerEffect",
-            "ae.duplicateLayerEffect",
-            "ae.deleteLayerEffect",
-            "ae.listLayerMasks",
-            "ae.getLayerMaskDetails",
-            "ae.getLayerMaskPath",
-            "ae.createLayerMask",
-            "ae.setLayerMaskProperties",
-            "ae.setLayerMaskPath",
-            "ae.duplicateLayerMask",
-            "ae.deleteLayerMask",
-            "ae.getFootageDetails",
-            "ae.importFootage",
-            "ae.replaceFootage",
-            "ae.getFootageInterpretation",
-            "ae.setFootageInterpretation",
-            "ae.setFootageProxy",
-            "ae.setItemUseProxy",
-        }
+        supported = supported - {"ae.nativeExec"}
     return supported | {"ae.status", "ae.diagnose"}
 
 
@@ -440,6 +256,48 @@ def resolve_tool_name(name: str, handlers, reverse_map=None) -> "str | None":
         if expose_tool_name(verb) == name:
             return verb
     return None
+
+
+def _native_exec_validation_error(
+    error: JsonSchemaValidationError | PydanticValidationError,
+) -> dict[str, Any]:
+    """Map public native-program admission failures before any dispatch."""
+
+    if isinstance(error, PydanticValidationError):
+        errors = error.errors(include_url=False, include_input=False)
+        path = list(errors[0].get("loc") or ()) if errors else []
+    else:
+        path = list(error.absolute_path)
+        if (
+            error.validator == "required"
+            and isinstance(error.instance, dict)
+            and isinstance(error.validator_value, list)
+        ):
+            missing = [
+                key for key in error.validator_value if key not in error.instance
+            ]
+            if len(missing) == 1:
+                path.append(missing[0])
+    field = "arguments"
+    if path:
+        field += "." + ".".join(str(part) for part in path)
+    return NativeBackendError(
+        "INVALID_ARGUMENT",
+        "ae.nativeExec arguments did not match the generated native program schema.",
+        retryable=False,
+        side_effect="not-started",
+        recovery={
+            "action": "change-arguments",
+            "hint": (
+                "Use 1 to 64 generated primitives, backward-only typed refs, "
+                "and operationKey plus undoGroup only for write programs."
+            ),
+        },
+        details={
+            "field": field[:128],
+            "capabilityId": "ae.native.exec",
+        },
+    ).public_dict()
 
 
 def _layer_properties_validation_error(
@@ -1379,7 +1237,10 @@ def build_server() -> Server:
                     schema=input_schema,
                 )
             except JsonSchemaValidationError as error:
-                if name in _PROJECT_COMPOSITION_VALIDATION:
+                if name == "ae.nativeExec":
+                    public_error = _native_exec_validation_error(error)
+                    payload = _format_result({"ok": False, "error": public_error})
+                elif name in _PROJECT_COMPOSITION_VALIDATION:
                     public_error: Any = _project_composition_validation_error(
                         name, error
                     )
@@ -1421,7 +1282,9 @@ def build_server() -> Server:
         try:
             validated = schema_cls(**(arguments or {}))
         except Exception as e:  # noqa: BLE001
-            if name in _PROJECT_COMPOSITION_VALIDATION and isinstance(
+            if name == "ae.nativeExec" and isinstance(e, PydanticValidationError):
+                error = _native_exec_validation_error(e)
+            elif name in _PROJECT_COMPOSITION_VALIDATION and isinstance(
                 e, PydanticValidationError
             ):
                 error: Any = _project_composition_validation_error(name, e)

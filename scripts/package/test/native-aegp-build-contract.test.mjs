@@ -100,13 +100,11 @@ test('native mac build emits the AE-recognized AEGP package metadata', async () 
 
 test('native idle hook drains only real authenticated requests', () => {
   const idleStart = PLUGIN_ENTRY.indexOf('A_Err idle_hook(');
-  const namespaceEnd = PLUGIN_ENTRY.indexOf('}  // namespace', idleStart);
-  const entryStart = PLUGIN_ENTRY.indexOf('extern "C"', namespaceEnd);
+  const entryStart = PLUGIN_ENTRY.indexOf('extern "C"', idleStart);
   assert.notEqual(idleStart, -1);
-  assert.notEqual(namespaceEnd, -1);
   assert.notEqual(entryStart, -1);
 
-  const idleHook = PLUGIN_ENTRY.slice(idleStart, namespaceEnd);
+  const idleHook = PLUGIN_ENTRY.slice(idleStart, entryStart);
   const pluginEntry = PLUGIN_ENTRY.slice(entryStart);
   assert.match(idleHook, /state->dispatcher\.drain\(host\)/u);
   assert.doesNotMatch(PLUGIN_ENTRY, /submit_boot_probe_once|boot_probe_submitted/u);
@@ -150,41 +148,34 @@ test('native build has one local admission path and no manual confirmation surfa
   assert.match(PLUGIN_ENTRY, /AEGP_RegisterCommandHook/u);
 });
 
-test('native composition-create diagnostics use the redacted serializer', () => {
+test('native terminal diagnostics expose aggregate native-program evidence', () => {
   const completionStart = PLUGIN_ENTRY.indexOf('void log_completion(');
   const completionEnd = PLUGIN_ENTRY.indexOf('bool PluginState::start_ipc', completionStart);
   assert.notEqual(completionStart, -1);
   assert.notEqual(completionEnd, -1);
 
   const completionLogger = PLUGIN_ENTRY.slice(completionStart, completionEnd);
-  assert.match(
-    completionLogger,
-    /composition_create_persistent_diagnostic_fields\(\s*completion\.composition_create_result\s*\)/u,
-  );
-  assert.doesNotMatch(
-    completionLogger,
-    /composition_create_result\.name/u,
-  );
-});
-
-test('native terminal diagnostics recognize all six composition setters', () => {
-  const completionStart = PLUGIN_ENTRY.indexOf('void log_completion(');
-  const completionEnd = PLUGIN_ENTRY.indexOf('bool PluginState::start_ipc', completionStart);
-  const completionLogger = PLUGIN_ENTRY.slice(completionStart, completionEnd);
-  for (const capability of [
-    'kCompositionDimensionsSetCapability',
-    'kCompositionDurationSetCapability',
-    'kCompositionFrameRateSetCapability',
-    'kCompositionPixelAspectRatioSetCapability',
-    'kCompositionBackgroundColorSetCapability',
-    'kCompositionDisplayStartTimeSetCapability',
+  assert.match(completionLogger, /completion\.capability_id == kNativeProgramCapability/u);
+  for (const evidenceField of [
+    'requestDigest',
+    'postconditionDigest',
+    'startedAtUnixMs',
+    'completedAtUnixMs',
+    'completedOperationCount',
+    'outputCount',
+    'writeStarted',
+    'undoAvailable',
+    'replayed',
+    'disposition',
+    'failedOperationIndex',
   ]) {
-    assert.match(completionLogger, new RegExp(`completion\\.capability_id == ${capability}`, 'u'));
+    assert.match(
+      completionLogger,
+      new RegExp(String.raw`\\"${evidenceField}\\"`, 'u'),
+    );
   }
-  assert.match(
-    completionLogger,
-    /composition_settings_change_persistent_diagnostic_fields\(\s*completion\.capability_id,\s*completion\.composition_settings_change_result\s*\)/u,
-  );
+  assert.doesNotMatch(completionLogger, /composition_create_result/u);
+  assert.doesNotMatch(completionLogger, /composition_settings_change_result/u);
 });
 
 test('native composition settings use the pinned SDK ratio and frame-rate ABI', () => {
@@ -192,7 +183,7 @@ test('native composition settings use the pinned SDK ratio and frame-rate ABI', 
     'HostCompositionSettingsWriteResult set_composition_setting(',
   );
   const end = PLUGIN_ENTRY.indexOf(
-    'HostNativeMediaResult execute_native_media(',
+    'list_composition_layers(',
     start,
   );
   assert.notEqual(start, -1);
@@ -218,10 +209,10 @@ test('native standard transform writes reacquire canonical layer streams before 
     'standard_layer_stream_for_match_name(',
   );
   const setterStart = PLUGIN_ENTRY.indexOf(
-    'HostLayerPropertyWriteResult set_layer_property(',
+    'set_layer_property(',
   );
   const setterEnd = PLUGIN_ENTRY.indexOf(
-    'HostLayerDetailsResult read_layer_details(',
+    'resolve_program_layer_handle(',
     setterStart,
   );
   assert.notEqual(helperStart, -1);
@@ -276,64 +267,34 @@ test('native standard transform writes reacquire canonical layer streams before 
   assert.match(setter, /time_varying_after != FALSE/u);
 });
 
-test('native marker creation uses the marker-supported keyframe sequence', () => {
-  const mediaStart = PLUGIN_ENTRY.indexOf(
-    'HostNativeMediaResult execute_native_media(',
+test('native keyframe add inserts before setting the typed value', () => {
+  const mutationStart = PLUGIN_ENTRY.indexOf(
+    'mutate_layer_property_keyframe(',
   );
-  const markerWriteStart = PLUGIN_ENTRY.indexOf(
-    'const auto existing = find_exact(command.marker_time);',
-    mediaStart,
+  const mutationEnd = PLUGIN_ENTRY.indexOf(
+    'HostLayerPropertyWriteResult',
+    mutationStart,
   );
-  const markerMutationStart = PLUGIN_ENTRY.indexOf(
-    'A_Err mutation_error = A_Err_NONE;',
-    markerWriteStart,
-  );
-  const markerCreateStart = PLUGIN_ENTRY.indexOf(
-    'if (command.operation == aemcp::native::kMarkerCreateCapability) {',
-    markerMutationStart,
-  );
-  const markerSetStart = PLUGIN_ENTRY.indexOf(
-    '} else if (command.operation == aemcp::native::kMarkerSetCapability) {',
-    markerCreateStart,
-  );
-  assert.notEqual(mediaStart, -1);
-  assert.notEqual(markerWriteStart, -1);
-  assert.notEqual(markerMutationStart, -1);
-  assert.notEqual(markerCreateStart, -1);
-  assert.notEqual(markerSetStart, -1);
+  assert.notEqual(mutationStart, -1);
+  assert.notEqual(mutationEnd, -1);
 
-  const markerCreate = PLUGIN_ENTRY.slice(markerCreateStart, markerSetStart);
-  const insert = markerCreate.indexOf('AEGP_InsertKeyframe(');
-  const set = markerCreate.indexOf('AEGP_SetKeyframeValue(', insert);
+  const mutation = PLUGIN_ENTRY.slice(mutationStart, mutationEnd);
+  const addStart = mutation.indexOf('if (adding) {');
+  const addEnd = mutation.indexOf('} else if (command.kind ==', addStart);
+  assert.notEqual(addStart, -1);
+  assert.notEqual(addEnd, -1);
+
+  const add = mutation.slice(addStart, addEnd);
+  const insert = add.indexOf('AEGP_InsertKeyframe(');
+  const set = add.indexOf('AEGP_SetKeyframeValue(', insert);
   assert.ok(
     insert !== -1 && set > insert,
-    'marker creation must insert first and then set the marker value',
+    'keyframe add must insert first and then set the typed value',
   );
-  assert.doesNotMatch(markerCreate, /AEGP_StartAddKeyframes\(/u);
-  assert.doesNotMatch(markerCreate, /AEGP_AddKeyframes\(/u);
-  assert.doesNotMatch(markerCreate, /AEGP_SetAddKeyframe\(/u);
-  assert.doesNotMatch(markerCreate, /AEGP_EndAddKeyframes\(/u);
-});
-
-test('native layer-parent adapter distinguishes stale, cross-composition, and self-parent failures', () => {
-  const start = PLUGIN_ENTRY.indexOf('HostLayerParentWriteResult set_layer_parent(');
-  const end = PLUGIN_ENTRY.indexOf('HostLayerDuplicateResult duplicate_layer(', start);
-  assert.notEqual(start, -1);
-  assert.notEqual(end, -1);
-  const adapter = PLUGIN_ENTRY.slice(start, end);
-
-  assert.match(
-    adapter,
-    /!parent\.has_value\(\)[\s\S]*"STALE_LOCATOR"[\s\S]*params\.arguments\.parentLayerLocator/u,
-  );
-  assert.match(
-    adapter,
-    /parent->composition_item_id != resolved->composition_item_id[\s\S]*"PRECONDITION_FAILED"/u,
-  );
-  assert.match(
-    adapter,
-    /parent->layer == resolved->layer[\s\S]*"INVALID_ARGUMENT"/u,
-  );
+  assert.doesNotMatch(add, /AEGP_StartAddKeyframes\(/u);
+  assert.doesNotMatch(add, /AEGP_AddKeyframes\(/u);
+  assert.doesNotMatch(add, /AEGP_SetAddKeyframe\(/u);
+  assert.doesNotMatch(add, /AEGP_EndAddKeyframes\(/u);
 });
 
 test('native README examples use safe shell variables and the complete build inputs', async () => {

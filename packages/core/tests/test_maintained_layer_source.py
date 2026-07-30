@@ -9,9 +9,7 @@ from typing import Any
 
 import pytest
 
-from ae_mcp import schemas
 from ae_mcp.backends import maintained_layer_source as S
-from ae_mcp.handlers import native as native_handlers
 
 
 HOST = "11111111-1111-4111-8111-111111111111"
@@ -48,8 +46,8 @@ def args(
     layer_locator: dict[str, Any] = LAYER,
     source_item_locator: dict[str, Any] = NEW_SOURCE,
     idempotency_key: str = KEY,
-) -> schemas.AeSetLayerSourceArgs:
-    return schemas.AeSetLayerSourceArgs(
+) -> S._LayerSourceReplaceInput:
+    return S._LayerSourceReplaceInput(
         layer_locator=layer_locator,
         source_item_locator=source_item_locator,
         idempotency_key=idempotency_key,
@@ -733,78 +731,6 @@ async def test_malformed_template_rejection_is_indeterminate_and_never_redispatc
     )
     assert replay == {**deepcopy(first), "replayed": True}
     assert len(backend.calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_public_timeout_after_exec_returns_cached_indeterminate_without_redispatch(
-    monkeypatch, tmp_path,
-):
-    S.clear_replay_cache_for_tests()
-    monkeypatch.setenv("AE_MCP_LAYER_SOURCE_AUDIT_PATH", str(tmp_path / "audit.jsonl"))
-    monkeypatch.setenv("AE_MCP_SOURCE_COMMIT_SHA", "1" * 40)
-    backend = NativeExecBackend(jsx_success())
-    reacquire_started = asyncio.Event()
-
-    async def resolve_address(*_args, **_kwargs):
-        return resolved()
-
-    async def block_after_dispatch(*_args, **_kwargs):
-        reacquire_started.set()
-        await asyncio.Event().wait()
-        raise AssertionError("unreachable")
-
-    async def quick_timeout(ctx, coro, **_kwargs):
-        try:
-            return await asyncio.wait_for(coro, timeout=0.01)
-        except asyncio.TimeoutError:
-            return {"ok": False, "error": "generic outer timeout"}
-
-    monkeypatch.setattr(S, "resolve_source_replacement", resolve_address)
-    monkeypatch.setattr(S, "reacquire_source_state", block_after_dispatch)
-    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
-    monkeypatch.setattr(native_handlers.progress, "run_with_timeout", quick_timeout)
-    public_args = args()
-    first = await native_handlers._run_set_layer_source(public_args, None)
-    assert reacquire_started.is_set()
-    assert first["error"]["code"] == "POSSIBLY_SIDE_EFFECTING_FAILURE"
-    assert first["error"]["details"]["idempotencyKey"] == KEY
-    assert "audit" not in first
-    operation_id = first["error"]["details"]["operationId"]
-    assert operation_id.startswith("layer-source-")
-    assert KEY in S._REPLAY
-    replay = await native_handlers._run_set_layer_source(public_args, None)
-    assert replay["replayed"] is True
-    assert replay["error"]["details"]["operationId"] == operation_id
-    assert len(backend.calls) == 1
-
-
-@pytest.mark.asyncio
-async def test_public_timeout_before_dispatch_remains_safe_and_uncached(
-    monkeypatch,
-):
-    S.clear_replay_cache_for_tests()
-    backend = NativeExecBackend(jsx_success())
-    resolve_started = asyncio.Event()
-
-    async def block_before_dispatch(*_args, **_kwargs):
-        resolve_started.set()
-        await asyncio.Event().wait()
-        raise AssertionError("unreachable")
-
-    async def quick_timeout(ctx, coro, **_kwargs):
-        try:
-            return await asyncio.wait_for(coro, timeout=0.01)
-        except asyncio.TimeoutError:
-            return {"ok": False, "error": "generic outer timeout"}
-
-    monkeypatch.setattr(S, "resolve_source_replacement", block_before_dispatch)
-    monkeypatch.setattr(native_handlers._discovery, "select_backend", lambda: backend)
-    monkeypatch.setattr(native_handlers.progress, "run_with_timeout", quick_timeout)
-    response = await native_handlers._run_set_layer_source(args(), None)
-    assert resolve_started.is_set()
-    assert response == {"ok": False, "error": "generic outer timeout"}
-    assert backend.calls == []
-    assert KEY not in S._REPLAY
 
 
 @pytest.mark.asyncio

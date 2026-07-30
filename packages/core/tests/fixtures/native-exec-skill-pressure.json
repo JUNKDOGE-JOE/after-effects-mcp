@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "scenarios": [
+    {
+      "id": "disable-layer-and-verify",
+      "prompt": "Disable a layer and verify it.",
+      "expected": {
+        "route": "ae_exec",
+        "verification": "readback and visual verification"
+      },
+      "baseline": {
+        "route": "legacy operation-specific typed tool",
+        "choice": "ae_setLayerVisibility with typed pre/post reads",
+        "rationale": "The current instructions say to prefer typed verbs.",
+        "confidence": 0.98,
+        "passed": false
+      },
+      "postSkill": {
+        "route": "ae_exec",
+        "choice": "ae_exec write followed by a fresh ae_exec readback and ae_previewFrame",
+        "rationale": "The default guide routes maintained AE scripting operations through ae_exec and requires both state and visual verification.",
+        "confidence": 0.99,
+        "passed": true,
+        "loophole": "The short server instructions said to load the guide only before a complex operation, so a simple layer toggle could skip it while legacy tools remain registered."
+      }
+    },
+    {
+      "id": "read-exact-composition-rational-time",
+      "prompt": "Read exact composition rational time through AEGP.",
+      "expected": {
+        "route": "ae_nativeExec",
+        "program": [
+          "composition.resolve",
+          "composition.time.read"
+        ]
+      },
+      "baseline": {
+        "route": "legacy operation-specific native tools",
+        "choice": "ae_listProjectItems followed by ae_getCompositionTime",
+        "rationale": "The current surface presents the typed native graph route directly.",
+        "confidence": 0.98,
+        "passed": false
+      },
+      "postSkill": {
+        "route": "ae_nativeExec",
+        "choice": "One read-only program: composition.resolve(saveAs composition) followed by composition.time.read(returnAs time).",
+        "rationale": "Exact AEGP rational-time semantics are a generated native primitive; a read-only program omits operationKey and undoGroup.",
+        "confidence": 0.99,
+        "passed": true,
+        "loophole": "The schema-valid example UUID is not live AE state, and the guide did not explain how to obtain a fresh server-issued composition locator."
+      }
+    },
+    {
+      "id": "timed-out-native-write",
+      "prompt": "A native write timed out. Decide whether and how to retry.",
+      "expected": {
+        "route": "read-only ae_nativeExec reconciliation",
+        "retry": "preserve the operationKey and do not retry until AE state and audit evidence reconcile the result"
+      },
+      "baseline": {
+        "route": "read-only ae_nativeExec reconciliation",
+        "choice": "Refuse a blind retry, read back with ae_nativeExec, and preserve the same operationKey.",
+        "rationale": "There is no public operationKey audit or outcome lookup; stop if readback cannot reconcile the write.",
+        "confidence": 0.98,
+        "passed": true
+      },
+      "postSkill": {
+        "route": "read-only ae_nativeExec reconciliation",
+        "choice": "Freeze the write, run a read-only reconciliation program, and do not blindly retry.",
+        "rationale": "A timeout may be side-effecting; preserve the operationKey and stop when state and returned evidence cannot reconcile it.",
+        "confidence": 0.98,
+        "passed": true,
+        "loophole": "The guide did not explicitly preserve the original operations, undoGroup, and program digest, leaving a changed-program same-key ambiguity."
+      }
+    }
+  ]
+}

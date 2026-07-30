@@ -20,6 +20,8 @@ from ae_mcp.backends.native import (
     NativeInvokeBackend,
     NativeInvokeRequest,
     NativeInvokeResult,
+    NativeProgramInvokeResult,
+    NativeProgramRequest,
     NativeNegotiation,
     NativeRecovery,
     COMPOSITION_LAYER_CREATE_CAPABILITY_ID,
@@ -161,6 +163,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
     def _possibly_side_effecting_error(
         message: str,
         capability_id: str,
+        operation_key: str | None = None,
     ) -> NativeBackendError:
         if capability_id == LAYER_PROPERTY_SET_CAPABILITY_ID:
             recovery_hint = (
@@ -230,8 +233,16 @@ class HttpBridge(Backend, NativeInvokeBackend):
                 "Matte, and AV state with fresh locators and inspect the Undo "
                 "stack before retrying."
             )
+        elif capability_id == "ae.native.exec":
+            recovery_hint = (
+                "Run a read-only native program and inspect audit evidence "
+                "before deciding whether to retry."
+            )
         else:
             recovery_hint = "Inspect the project bit depth and Undo stack before retrying."
+        details = {"capabilityId": capability_id}
+        if operation_key is not None:
+            details["operationKey"] = operation_key
         return NativeBackendError(
             "POSSIBLY_SIDE_EFFECTING_FAILURE",
             message,
@@ -241,7 +252,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
                 action="inspect-state",
                 hint=recovery_hint,
             ),
-            details={"capabilityId": capability_id},
+            details=details,
         )
 
     @staticmethod
@@ -433,6 +444,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
         deadline_unix_ms: int,
         cancellation: NativeCancellationToken | None,
         uncertain_capability_id: str | None = None,
+        uncertain_operation_key: str | None = None,
     ) -> Mapping[str, Any]:
         if cancellation is not None and cancellation.is_cancelled:
             raise self._cancelled_error()
@@ -464,6 +476,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
                 raise self._possibly_side_effecting_error(
                     "The broker response was lost after native mutation dispatch.",
                     uncertain_capability_id,
+                    uncertain_operation_key,
                 ) from error
             raise self._deadline_error(
                 "Authenticated CEP native request exceeded its deadline."
@@ -473,6 +486,7 @@ class HttpBridge(Backend, NativeInvokeBackend):
                 raise self._possibly_side_effecting_error(
                     "The native transport failed after mutation dispatch may have begun.",
                     uncertain_capability_id,
+                    uncertain_operation_key,
                 ) from error
             raise self._unavailable_error(
                 "Authenticated CEP native transport is unavailable.",
@@ -559,8 +573,13 @@ class HttpBridge(Backend, NativeInvokeBackend):
         request: NativeInvokeRequest,
         *,
         cancellation: NativeCancellationToken | None = None,
-    ) -> NativeInvokeResult:
-        mutating = request.capability_id in {
+    ) -> NativeInvokeResult | NativeProgramInvokeResult:
+        program_operation_key = (
+            request.arguments.get("operationKey")
+            if request.capability_id == "ae.native.exec"
+            else None
+        )
+        mutating = program_operation_key is not None or request.capability_id in {
             PROJECT_BIT_DEPTH_SET_CAPABILITY_ID,
             COMPOSITION_TIME_SET_CAPABILITY_ID,
             COMPOSITION_CREATE_CAPABILITY_ID,
@@ -590,23 +609,28 @@ class HttpBridge(Backend, NativeInvokeBackend):
                 deadline_unix_ms=request.deadline_unix_ms,
                 cancellation=cancellation,
                 uncertain_capability_id=(request.capability_id if mutating else None),
+                uncertain_operation_key=program_operation_key,
             )
         except NativeBackendError as error:
             if mutating and error.code == "NATIVE_CONTRACT_MISMATCH":
                 raise self._possibly_side_effecting_error(
                     "The broker returned an unverifiable native mutation response.",
                     request.capability_id,
+                    program_operation_key,
                 ) from error
             raise
         try:
             if mutating and not isinstance(raw.get("replayed"), bool):
                 raise ValueError("native mutation result omitted replay status")
+            if request.capability_id == "ae.native.exec":
+                return NativeProgramInvokeResult.model_validate(raw)
             return NativeInvokeResult.model_validate(raw)
         except (TypeError, ValueError) as error:
             if mutating:
                 raise self._possibly_side_effecting_error(
                     "The native mutation result failed Core validation.",
                     request.capability_id,
+                    program_operation_key,
                 ) from error
             raise self._contract_error(
                 "CEP native invocation result failed Core validation."

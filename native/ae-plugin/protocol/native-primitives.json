@@ -1,0 +1,464 @@
+{
+  "version": 1,
+  "primitives": [
+    {
+      "id": "composition.resolve",
+      "order": 1,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {},
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "locator"
+        ],
+        "properties": {
+          "locator": {
+            "$ref": "aegp-rpc.schema.json#/$defs/compositionLocator"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "handle",
+          "exportable"
+        ],
+        "properties": {
+          "handle": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value"
+            ],
+            "properties": {
+              "kind": {
+                "const": "composition"
+              },
+              "value": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "exportable": {
+            "const": false
+          }
+        }
+      },
+      "executor": "execute_composition_resolve",
+      "summary": "Read composition.resolve.",
+      "example": {},
+      "exportable": false
+    },
+    {
+      "id": "layer.resolve",
+      "order": 2,
+      "mutability": "read",
+      "requiredSuite": "AEGP_LayerSuite9",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "locator"
+        ],
+        "properties": {
+          "locator": {
+            "$ref": "aegp-rpc.schema.json#/$defs/layerLocator"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "handle",
+          "exportable"
+        ],
+        "properties": {
+          "handle": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value"
+            ],
+            "properties": {
+              "kind": {
+                "const": "layer"
+              },
+              "value": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "exportable": {
+            "const": false
+          }
+        }
+      },
+      "executor": "execute_layer_resolve",
+      "summary": "Read layer.resolve.",
+      "example": {},
+      "exportable": false
+    },
+    {
+      "id": "property.resolve",
+      "order": 3,
+      "mutability": "read",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"layer": "LayerHandle"},
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "locator"
+        ],
+        "properties": {
+          "locator": {
+            "$ref": "aegp-rpc.schema.json#/$defs/streamLocator"
+          }
+        }
+      },
+      "resultSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "handle",
+          "exportable"
+        ],
+        "properties": {
+          "handle": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "value"
+            ],
+            "properties": {
+              "kind": {
+                "const": "property"
+              },
+              "value": {
+                "type": "integer",
+                "minimum": 1
+              }
+            }
+          },
+          "exportable": {
+            "const": false
+          }
+        }
+      },
+      "executor": "execute_property_resolve",
+      "summary": "Read property.resolve.",
+      "example": {},
+      "exportable": false
+    },
+    {
+      "id": "project.items.list",
+      "order": 4,
+      "mutability": "read",
+      "requiredSuite": "AEGP_ProjSuite6",
+      "referenceArguments": {},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":50},"projectLocator":{"$ref":"aegp-rpc.schema.json#/$defs/projectLocator"}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/projectItemsListValue"
+      },
+      "executor": "execute_project_items_list",
+      "summary": "Read project.items.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.layers.list",
+      "order": 5,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionLayersListValue"
+      },
+      "executor": "execute_composition_layers_list",
+      "summary": "Read composition.layers.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.selectedLayers.list",
+      "order": 6,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionLayersListValue"
+      },
+      "executor": "execute_composition_selectedLayers_list",
+      "summary": "Read composition.selectedLayers.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.time.read",
+      "order": 7,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":[],"properties":{}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeReadValue"
+      },
+      "executor": "execute_composition_time_read",
+      "summary": "Read composition.time.read.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.time.set",
+      "order": 8,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["targetTime"],"properties":{"targetTime":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionTimeSetValue"
+      },
+      "executor": "execute_composition_time_set",
+      "summary": "Write composition.time.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.settings.read",
+      "order": 9,
+      "mutability": "read",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":[],"properties":{}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsReadValue"
+      },
+      "executor": "execute_composition_settings_read",
+      "summary": "Read composition.settings.read.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.duration.set",
+      "order": 10,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["duration"],"properties":{"duration":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":1,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsChangedValue"
+      },
+      "executor": "execute_composition_duration_set",
+      "summary": "Write composition.duration.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.frameRate.set",
+      "order": 11,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["frameRate"],"properties":{"frameRate":{"type":"object","additionalProperties":false,"required":["numerator","denominator"],"properties":{"numerator":{"type":"integer","minimum":1,"maximum":2147483647},"denominator":{"type":"integer","minimum":1,"maximum":2147483647}}}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsChangedValue"
+      },
+      "executor": "execute_composition_frameRate_set",
+      "summary": "Write composition.frameRate.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.pixelAspectRatio.set",
+      "order": 12,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["pixelAspectRatio"],"properties":{"pixelAspectRatio":{"type":"object","additionalProperties":false,"required":["numerator","denominator"],"properties":{"numerator":{"type":"integer","minimum":1,"maximum":2147483647},"denominator":{"type":"integer","minimum":1,"maximum":2147483647}}}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsChangedValue"
+      },
+      "executor": "execute_composition_pixelAspectRatio_set",
+      "summary": "Write composition.pixelAspectRatio.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "composition.displayStartTime.set",
+      "order": 13,
+      "mutability": "write",
+      "requiredSuite": "AEGP_CompSuite12",
+      "referenceArguments": {"composition": "CompositionHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["displayStartTime"],"properties":{"displayStartTime":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/compositionSettingsChangedValue"
+      },
+      "executor": "execute_composition_displayStartTime_set",
+      "summary": "Write composition.displayStartTime.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "layer.properties.list",
+      "order": 14,
+      "mutability": "read",
+      "requiredSuite": "AEGP_LayerSuite9",
+      "referenceArguments": {"layer": "LayerHandle", "parentProperty": {"kind": "PropertyHandle", "required": false}},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertiesListValue"
+      },
+      "executor": "execute_layer_properties_list",
+      "summary": "Read layer.properties.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframes.list",
+      "order": 15,
+      "mutability": "read",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertyKeyframesListValue"
+      },
+      "executor": "execute_property_keyframes_list",
+      "summary": "Read property.keyframes.list.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.value.set",
+      "order": 16,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["value"],"properties":{"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/layerPropertySetValue"
+      },
+      "executor": "execute_property_value_set",
+      "summary": "Write property.value.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.details.read",
+      "order": 17,
+      "mutability": "read",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeDetailsValue"
+      },
+      "executor": "execute_property_keyframe_details_read",
+      "summary": "Read property.keyframe.details.read.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.add",
+      "order": 18,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","value"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
+      },
+      "executor": "execute_property_keyframe_add",
+      "summary": "Write property.keyframe.add.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.value.set",
+      "order": 19,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","value"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"value":{"$ref":"aegp-rpc.schema.json#/$defs/layerPropertyPrimitiveValue"}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
+      },
+      "executor": "execute_property_keyframe_value_set",
+      "summary": "Write property.keyframe.value.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.interpolation.set",
+      "order": 20,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","inInterpolation","outInterpolation"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"inInterpolation":{"enum":["linear","bezier","hold"]},"outInterpolation":{"enum":["linear","bezier","hold"]}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
+      },
+      "executor": "execute_property_keyframe_interpolation_set",
+      "summary": "Write property.keyframe.interpolation.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.temporalEase.set",
+      "order": 21,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","dimensions"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"dimensions":{"type":"array","minItems":1,"maxItems":4,"items":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeEaseDimension"}}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
+      },
+      "executor": "execute_property_keyframe_temporalEase_set",
+      "summary": "Write property.keyframe.temporalEase.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.behavior.set",
+      "order": 22,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time","behavior","enabled"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"},"behavior":{"enum":["temporal-continuous","temporal-auto-bezier","spatial-continuous","spatial-auto-bezier","roving"]},"enabled":{"type":"boolean"}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
+      },
+      "executor": "execute_property_keyframe_behavior_set",
+      "summary": "Write property.keyframe.behavior.set.",
+      "example": {},
+      "exportable": true
+    },
+    {
+      "id": "property.keyframe.delete",
+      "order": 23,
+      "mutability": "write",
+      "requiredSuite": "AEGP_StreamSuite5",
+      "referenceArguments": {"layer": "LayerHandle", "property": "PropertyHandle"},
+      "inputSchema": {"type":"object","additionalProperties":false,"required":["time"],"properties":{"time":{"$ref":"aegp-rpc.schema.json#/$defs/keyframeTimeInput"}}},
+      "resultSchema": {
+        "$ref": "aegp-rpc.schema.json#/$defs/keyframeMutationValue"
+      },
+      "executor": "execute_property_keyframe_delete",
+      "summary": "Write property.keyframe.delete.",
+      "example": {},
+      "exportable": true
+    }
+  ]
+}

@@ -8,6 +8,10 @@ skillCreate yet fail on every skillUse.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import re
+
 import pytest
 
 from ae_mcp.skill_store import Skill, SkillError, SkillStore, render_skill
@@ -141,7 +145,6 @@ def test_create_writes_only_user_root(tmp_path):
 
 def test_real_bundled_cookbook_parses_and_renders():
     from ae_mcp.skill_store import _bundled_root, Skill, render_skill
-    import json
     data = json.loads(
         (_bundled_root() / "extendscript-cookbook.json").read_text(encoding="utf-8")
     )
@@ -153,6 +156,7 @@ def test_real_bundled_cookbook_parses_and_renders():
 # --- All shipped bundled skills (batch 1 cookbook + batch 2 creative skills) ---
 
 _EXPECTED_BUNDLED = {
+    "ae-execution-guide",
     "extendscript-cookbook",
     "kinetic-typography",
     "ease-and-timing",
@@ -179,7 +183,6 @@ def test_each_bundled_skill_parses_renders_and_is_self_contained(name):
     """Every shipped bundled skill must parse, be a prompt, carry a recall
     description, and need no args (knowledge skills render verbatim)."""
     from ae_mcp.skill_store import _bundled_root, Skill, render_skill
-    import json
     data = json.loads(
         (_bundled_root() / f"{name}.json").read_text(encoding="utf-8")
     )
@@ -188,6 +191,88 @@ def test_each_bundled_skill_parses_renders_and_is_self_contained(name):
     assert skill.template_type == "prompt"
     assert skill.description.strip()
     assert render_skill(skill, {}) == skill.template
+
+
+def test_default_execution_guide_is_generated_complete_and_examples_validate():
+    from ae_mcp import schemas as S
+    from ae_mcp.native_exec_generated import PRIMITIVES
+    from ae_mcp.skill_store import _bundled_root
+
+    path = _bundled_root() / "ae-execution-guide.json"
+    skill = Skill.from_dict(json.loads(path.read_text(encoding="utf-8")))
+    assert skill.name == "ae-execution-guide"
+    assert skill.template_type == "prompt"
+    template = skill.template
+    for heading in (
+        "## Route choice",
+        "## Program composition",
+        "## Readback",
+        "## Undo",
+        "## Uncertain native write",
+        "## Visual verification",
+        "## ExtendScript essentials",
+        "## Native primitive reference",
+    ):
+        assert heading in template
+    assert "Never invent locators" in template
+    assert "project.items.list" in template
+    assert "copy its returned locator verbatim" in template
+    assert "canonical-identical replay" in template
+    assert all(
+        token in template
+        for token in ("operationKey", "undoGroup", "operations", "program digest")
+    )
+
+    stable, generated = template.split("<!-- GENERATED NATIVE REFERENCE -->", 1)
+    assert len(re.findall(r"\b[\w'-]+\b", stable)) < 500
+    for primitive in PRIMITIVES:
+        assert generated.count(primitive["id"]) == 1
+
+    exec_examples = re.findall(
+        r"<!-- AE_EXEC_EXAMPLE -->\s*```json\s*(.*?)\s*```",
+        template,
+        flags=re.DOTALL,
+    )
+    native_examples = re.findall(
+        r"<!-- AE_NATIVE_EXEC_EXAMPLE -->\s*```json\s*(.*?)\s*```",
+        template,
+        flags=re.DOTALL,
+    )
+    assert exec_examples and native_examples
+    for example in exec_examples:
+        S.AeExecArgs.model_validate(json.loads(example))
+    for example in native_examples:
+        S.AeNativeExecArgs.model_validate(json.loads(example))
+
+
+def test_default_execution_guide_does_not_name_removed_public_tools():
+    from ae_mcp.skill_store import _bundled_root
+    from scripts.generate_native_exec import load_migration_manifest
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[3]
+    template = json.loads(
+        (_bundled_root() / "ae-execution-guide.json").read_text(encoding="utf-8")
+    )["template"]
+    migration = load_migration_manifest(
+        root / "native/ae-plugin/protocol/native-exec-migration.json"
+    )
+    removed = {
+        tool_id.replace(".", "_")
+        for tool_id, row in migration.public_tools.items()
+        if row.disposition.startswith("REMOVE_TO_")
+    }
+    assert sorted(name for name in removed if name in template) == []
+
+
+def test_bundled_manifest_sha_matches_default_execution_guide():
+    from ae_mcp.skill_store import _bundled_root
+
+    root = _bundled_root()
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    hashes = {row["path"]: row["sha256"] for row in manifest["artifacts"]}
+    guide = root / "ae-execution-guide.json"
+    assert hashes[guide.name] == hashlib.sha256(guide.read_bytes()).hexdigest()
 
 
 def test_bundled_skills_surface_with_empty_user_dir(monkeypatch, tmp_path):

@@ -26,53 +26,6 @@
         }
       }
     },
-    "staleLocator": {
-      "wireVersion": 1,
-      "kind": "response",
-      "sessionId": "11111111-1111-4111-8111-111111111111",
-      "requestId": "invoke-stale-1",
-      "method": "invoke",
-      "ok": false,
-      "replayed": false,
-      "error": {
-        "code": "STALE_LOCATOR",
-        "message": "The locator generation does not match current state.",
-        "retryable": true,
-        "sideEffect": "not-started",
-        "recovery": {
-          "action": "refresh-locator",
-          "hint": "Read the parent object again and retry with its new locator."
-        },
-        "details": {
-          "field": "arguments.layer",
-          "capabilityId": "ae.layer.inspect",
-          "currentGeneration": 8
-        }
-      }
-    },
-    "possiblySideEffecting": {
-      "wireVersion": 1,
-      "kind": "response",
-      "sessionId": "11111111-1111-4111-8111-111111111111",
-      "requestId": "invoke-mutation-1",
-      "method": "invoke",
-      "ok": false,
-      "replayed": false,
-      "error": {
-        "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
-        "message": "The host stopped responding after accepting the mutation.",
-        "retryable": false,
-        "sideEffect": "may-have-occurred",
-        "recovery": {
-          "action": "inspect-state",
-          "hint": "Read the affected object before deciding whether to retry."
-        },
-        "details": {
-          "capabilityId": "ae.project.set_current_time",
-          "idempotencyKey": "synthetic-current-time-ambiguous-0001"
-        }
-      }
-    },
     "queueFull": {
       "wireVersion": 1,
       "kind": "response",

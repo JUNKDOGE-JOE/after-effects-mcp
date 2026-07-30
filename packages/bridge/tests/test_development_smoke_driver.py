@@ -1,8 +1,9 @@
-"""Construction tests for the seven-call non-candidate HDEV driver."""
+"""Construction tests for the EXEC-route non-candidate HDEV driver."""
 
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import stat
@@ -16,6 +17,9 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[3]
 HARDWARE = ROOT / "scripts/hardware"
+sys.path.insert(0, str(ROOT / "packages/core"))
+
+from ae_mcp import schemas as S
 
 
 def _load(name: str, path: Path) -> ModuleType:
@@ -35,6 +39,7 @@ HOST = "11111111-1111-4111-8111-111111111111"
 SESSION = "22222222-2222-4222-8222-222222222222"
 PROJECT = "33333333-3333-4333-8333-333333333333"
 COMP = "44444444-4444-4444-8444-444444444444"
+LAYER = "55555555-5555-4555-8555-555555555555"
 DIGEST = "a" * 64
 
 
@@ -49,6 +54,14 @@ def _locator(*, generation: int = 1) -> dict:
     }
 
 
+def _layer_locator(*, generation: int = 1) -> dict:
+    return {
+        **_locator(generation=generation),
+        "kind": "layer",
+        "objectId": LAYER,
+    }
+
+
 def _time(value: int, scale: int) -> dict:
     from fractions import Fraction
 
@@ -59,38 +72,60 @@ def _time(value: int, scale: int) -> dict:
     }
 
 
-def _ratio(numerator: int, denominator: int) -> dict:
-    from fractions import Fraction
-
-    return {
-        "numerator": numerator,
-        "denominator": denominator,
-        "rational": str(Fraction(numerator, denominator)),
-    }
+def _program_digest(arguments: dict) -> str:
+    return hashlib.sha256(json.dumps(
+        arguments, ensure_ascii=False, separators=(",", ":"), sort_keys=True,
+    ).encode("utf-8")).hexdigest()
 
 
-def _settings(color: dict, *, generation: int = 1) -> dict:
-    return {
-        "name": "HDEV Core Native Fixture",
-        "width": 640,
-        "height": 360,
-        "duration": _time(5, 1),
-        "frameDuration": _time(1, 24),
-        "frameRate": _ratio(24, 1),
-        "pixelAspectRatio": _ratio(1, 1),
-        "backgroundColor": dict(color),
-        "workArea": {"start": _time(0, 1), "duration": _time(5, 1)},
-        "displayStartTime": _time(0, 1),
-        "layerCount": 0,
-        "compositionLocator": _locator(generation=generation),
-    }
+def test_exact_time_rejects_noncanonical_rational_and_open_shape():
+    with pytest.raises(
+        driver.DevelopmentSmokeFailure,
+        match="exact time rational drifted",
+    ):
+        driver._time({
+            "value": 5120,
+            "scale": 24576,
+            "secondsRational": "5120/24576",
+        })
+    with pytest.raises(
+        driver.DevelopmentSmokeFailure,
+        match="exact time is not closed",
+    ):
+        driver._time({
+            "value": 5120,
+            "scale": 24576,
+            "secondsRational": "5/24",
+            "seconds": 5 / 24,
+        })
 
 
-def _payload(capability: str, value: dict, *, write: bool = False) -> dict:
-    request_id = f"mcp-{capability.replace('.', '-')}"
+def _bind_native_program(payload: dict, arguments: dict) -> None:
+    payload["audit"]["programDigest"] = _program_digest(arguments)
+    payload["operations"] = [
+        {"index": index, "op": operation["op"], "status": "completed"}
+        for index, operation in enumerate(arguments["operations"])
+    ]
+    if "operationKey" in arguments:
+        payload["operationKey"] = arguments["operationKey"]
+        payload["audit"]["operationKey"] = arguments["operationKey"]
+        payload["undo"]["groupLabel"] = arguments["undoGroup"]
+    else:
+        payload.pop("operationKey", None)
+        payload["audit"].pop("operationKey", None)
+        payload["undo"].pop("groupLabel", None)
+
+
+def _native_payload(
+    outputs: dict,
+    operations: list[str],
+    *,
+    write: bool = False,
+) -> dict:
+    request_id = "mcp-native-program"
     postcondition = {
         "verified": True,
-        "kind": f"{capability}-postcondition",
+        "kind": "native-program",
         "algorithm": "sha256-rfc8785-jcs-v1",
         "digest": DIGEST,
     }
@@ -99,7 +134,7 @@ def _payload(capability: str, value: dict, *, write: bool = False) -> dict:
         "hostInstanceId": HOST,
         "sessionId": SESSION,
         "requestId": request_id,
-        "capabilityId": capability,
+        "capabilityId": "ae.native.exec",
         "capabilityVersion": 1,
         "startedAtUnixMs": 1,
         "completedAtUnixMs": 2,
@@ -107,22 +142,21 @@ def _payload(capability: str, value: dict, *, write: bool = False) -> dict:
         "requestDigest": "b" * 64,
         "postcondition": postcondition,
     }
-    if write:
-        evidence["undo"] = {"available": True, "verified": False}
     return {
         "ok": True,
-        **({"replayed": False} if write else {}),
-        "value": value,
-        "implementation": {
-            "engine": "native-aegp",
-            "capabilityId": capability,
-            "capabilityVersion": 1,
-            "contractDigest": DIGEST,
-            "risk": "write" if write else "read",
-            "mutability": "mutating" if write else "read-only",
-            "idempotency": "required" if write else "not-applicable",
-            **({"undo": "single-group"} if write else {}),
+        "capabilityId": "ae.native.exec",
+        **({"operationKey": "hdev-native-time-write-0001"} if write else {}),
+        "outputs": outputs,
+        "operations": [
+            {"index": index, "op": operation, "status": "completed"}
+            for index, operation in enumerate(operations)
+        ],
+        "undo": {
+            "available": write,
+            "verified": False,
+            **({"groupLabel": "HDEV exact native time"} if write else {}),
         },
+        "replayed": False,
         "provenance": {
             "engine": "native-aegp",
             "selectedWireVersion": 1,
@@ -136,16 +170,16 @@ def _payload(capability: str, value: dict, *, write: bool = False) -> dict:
         },
         "audit": {
             "requestId": request_id,
-            **({"evidenceRequestId": request_id} if write else {}),
-            **({"idempotencyKey": "fixture-key", "replayed": False} if write else {}),
-            "capabilityId": capability,
+            "capabilityId": "ae.native.exec",
             "capabilityVersion": 1,
-            "contractDigest": DIGEST,
             "effect": "committed" if write else "none",
             "requestDigest": "b" * 64,
             "postconditionAlgorithm": "sha256-rfc8785-jcs-v1",
             "postconditionDigest": DIGEST,
-            **({"undoAvailable": True, "undoVerified": False} if write else {}),
+            "undoAvailable": write,
+            "undoVerified": False,
+            "programDigest": DIGEST,
+            "replayed": False,
             "startedAtUnixMs": 1,
             "completedAtUnixMs": 2,
         },
@@ -154,78 +188,96 @@ def _payload(capability: str, value: dict, *, write: bool = False) -> dict:
 
 
 def _responses() -> list[tuple[bool, dict]]:
-    baseline = _settings(spec.BASELINE_COLOR)
-    changed = _settings(spec.CHANGED_COLOR)
-    restored = _settings(spec.BASELINE_COLOR, generation=2)
+    baseline = _time(0, 24576)
+    changed = _time(5120, 24576)
+    restored = _time(0, 24576)
+    discovery = {
+        "projectLocator": {
+            **_locator(), "kind": "project", "objectId": PROJECT,
+        },
+        "total": 1, "offset": 0, "limit": 50, "returned": 1,
+        "hasMore": False, "nextOffset": None,
+        "items": [{
+            "locator": _locator(), "name": "HDEV Native EXEC Fixture",
+            "type": "composition", "parentLocator": None,
+        }],
+    }
+    undo_discovery = {
+        **discovery,
+        "projectLocator": {
+            **_locator(generation=2), "kind": "project", "objectId": PROJECT,
+        },
+        "items": [{
+            "locator": _locator(generation=2), "name": "HDEV Native EXEC Fixture",
+            "type": "composition", "parentLocator": None,
+        }],
+    }
+    layers = {
+        "compositionLocator": _locator(),
+        "compositionName": "HDEV Native EXEC Fixture",
+        "total": 1, "offset": 0, "limit": 25, "returned": 1,
+        "hasMore": False, "nextOffset": None,
+        "layers": [{
+            "locator": _layer_locator(), "stackIndex": 1,
+            "name": "HDEV Native EXEC Layer", "type": "null",
+            "videoEnabled": True, "isThreeD": False, "locked": False,
+            "parentLocator": None, "sourceItemLocator": None,
+        }],
+    }
     return [
-        (False, _payload(
-            "ae.project.summary",
-            {"projectOpen": True, "projectName": "dev.aep", "itemCount": 0},
+        (False, {"ok": True, "nativeExecutionPlane": {"available": True}}),
+        (False, {"ok": True, "value": {
+            "compositionName": "HDEV Native EXEC Fixture",
+            "layerName": "HDEV Native EXEC Layer",
+        }}),
+        (False, _native_payload({"items": discovery}, ["project.items.list"])),
+        (False, _native_payload(
+            {"layers": layers, "time": {
+                "compositionLocator": _locator(), "currentTime": baseline,
+            }},
+            ["composition.resolve", "composition.layers.list", "composition.time.read"],
         )),
-        (False, _payload(
-            "ae.composition.create",
-            {
-                "changed": True,
-                "name": "HDEV Core Native Fixture",
-                "compositionLocator": _locator(),
-                "projectItemCountBefore": 1,
-                "projectItemCountAfter": 2,
-                "layerCount": 0,
-                "width": 640,
-                "height": 360,
-                "duration": _time(5, 1),
-                "frameRate": _ratio(24, 1),
-                "pixelAspectRatio": _ratio(1, 1),
-            },
-            write=True,
+        (False, _native_payload(
+            {"time": {
+                "changed": True, "compositionLocator": _locator(),
+                "beforeTime": baseline, "afterTime": changed,
+            }},
+            ["composition.resolve", "composition.time.set"], write=True,
         )),
-        (False, _payload("ae.composition.settings.read", baseline)),
-        (False, _payload(
-            "ae.composition.background-color.set",
-            {
-                "changed": True,
-                "compositionLocator": _locator(),
-                "before": baseline,
-                "after": changed,
-            },
-            write=True,
+        (False, _native_payload(
+            {"time": {
+                "compositionLocator": _locator(), "currentTime": changed,
+            }},
+            ["composition.resolve", "composition.time.read"],
         )),
-        (False, _payload("ae.composition.settings.read", changed)),
-        (False, _payload(
-            "ae.project.items.list",
-            {
-                "projectLocator": {
-                    **_locator(generation=2),
-                    "kind": "project",
-                    "objectId": PROJECT,
-                },
-                "total": 1,
-                "offset": 0,
-                "limit": 50,
-                "returned": 1,
-                "hasMore": False,
-                "nextOffset": None,
-                "items": [{
-                    "locator": _locator(generation=2),
-                    "name": "HDEV Core Native Fixture",
-                    "type": "composition",
-                    "parentLocator": None,
-                }],
-            },
+        (False, _native_payload({"items": undo_discovery}, ["project.items.list"])),
+        (False, _native_payload(
+            {"time": {
+                "compositionLocator": _locator(), "currentTime": restored,
+            }},
+            ["composition.resolve", "composition.time.read"],
         )),
-        (False, _payload("ae.composition.settings.read", restored)),
+        (True, {"ok": False, "error": {
+            "code": "INVALID_ARGUMENT", "sideEffect": "not-started",
+        }}),
     ]
 
 
 class FakeSession:
-    def __init__(self, responses: list[tuple[bool, dict]]) -> None:
+    def __init__(self, responses: list[tuple[bool, dict]], mutate=None) -> None:
         self.responses = list(responses)
         self.calls: list[tuple[str, dict]] = []
         self.tool_names = frozenset(tool for _, tool in spec.CALLS)
+        self.mutate = mutate
 
     async def call(self, tool: str, arguments: dict):
         self.calls.append((tool, arguments))
-        return self.responses.pop(0)
+        is_error, payload = self.responses.pop(0)
+        if tool == "ae_nativeExec" and not is_error and payload.get("ok") is True:
+            _bind_native_program(payload, arguments)
+        if self.mutate is not None:
+            self.mutate(len(self.calls), tool, arguments, payload)
+        return is_error, payload
 
 
 def _config(tmp_path: Path) -> object:
@@ -247,7 +299,7 @@ def _config(tmp_path: Path) -> object:
 
 
 @pytest.mark.asyncio
-async def test_hdev_runs_exactly_seven_calls_real_undo_and_one_archive(tmp_path):
+async def test_hdev_runs_exec_and_native_exec_with_real_undo_and_one_archive(tmp_path):
     session = FakeSession(_responses())
     checkpoints: list[tuple[str, dict]] = []
     config = _config(tmp_path)
@@ -267,22 +319,25 @@ async def test_hdev_runs_exactly_seven_calls_real_undo_and_one_archive(tmp_path)
 
     assert result.exit_code == 0
     assert result.summary["passed"] is True
-    assert result.summary["publicCalls"]["total"] == 7
+    assert result.summary["publicCalls"]["total"] == 9
     assert [tool for tool, _ in session.calls] == [tool for _, tool in spec.CALLS]
-    assert session.calls[1] == ("ae_createComposition", {
-        "name": "HDEV Core Native Fixture",
-        "width": 640,
-        "height": 360,
-        "duration": {"value": 5, "scale": 1},
-        "frame_rate": {"numerator": 24, "denominator": 1},
-        "pixel_aspect_ratio": {"numerator": 1, "denominator": 1},
-        "idempotency_key": "hdev-core-native-composition-0001",
-    })
-    assert session.calls[3][0] == "ae_setCompositionBackgroundColor"
-    assert session.calls[3][1]["background_color"] == spec.CHANGED_COLOR
+    assert [tool for _, tool in spec.CALLS] == [
+        "ae_status", "ae_exec", "ae_nativeExec", "ae_nativeExec",
+        "ae_nativeExec", "ae_nativeExec", "ae_nativeExec", "ae_nativeExec",
+        "ae_nativeExec",
+    ]
+    assert session.calls[1][1]["undo_group_name"] == "Create HDEV Native EXEC fixture"
+    assert session.calls[2][1] == {"operations": [{
+        "op": "project.items.list", "args": {"offset": 0, "limit": 50},
+        "returnAs": "items",
+    }]}
+    assert session.calls[4][1]["operationKey"] == "hdev-native-time-write-0001"
+    assert session.calls[4][1]["undoGroup"] == "HDEV exact native time"
+    assert session.calls[7][1]["operations"][0]["args"]["locator"]["generation"] == 2
+    assert session.calls[8][1] == {"operations": []}
     assert [kind for kind, _ in checkpoints] == [
         "save-empty-project",
-        "undo-background-change",
+        "undo-native-time",
         "close-formal-ae",
     ]
     assert result.summary["aepLifecycle"] == {
@@ -298,9 +353,90 @@ async def test_hdev_runs_exactly_seven_calls_real_undo_and_one_archive(tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_every_intended_native_program_validates_against_generated_schema(tmp_path):
+    session = FakeSession(_responses())
+    result = await driver.run_development_smoke(
+        _config(tmp_path),
+        session=session,
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+
+    assert result.exit_code == 0
+    intended = [
+        arguments for tool, arguments in session.calls
+        if tool == "ae_nativeExec" and arguments != {"operations": []}
+    ]
+    assert len(intended) == 6
+    assert [arguments for tool, arguments in session.calls
+            if tool == "ae_nativeExec" and arguments == {"operations": []}] == [
+        {"operations": []},
+    ]
+    for arguments in intended:
+        S.AeNativeExecArgs.model_validate(arguments)
+
+
+@pytest.mark.asyncio
+async def test_non_equivalent_native_time_still_fails(tmp_path):
+    def mutate(call_number, tool, _arguments, payload) -> None:
+        if call_number == 6 and tool == "ae_nativeExec":
+            payload["outputs"]["time"]["currentTime"] = _time(5119, 24576)
+
+    result = await driver.run_development_smoke(
+        _config(tmp_path),
+        session=FakeSession(_responses(), mutate=mutate),
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+
+    assert result.exit_code == 2
+    assert result.summary["passed"] is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("drift", [
+    "program-digest",
+    "operation-summary",
+    "operation-key",
+    "audit-operation-key",
+    "undo-group",
+    "request-digest",
+    "capabilities-digest",
+])
+async def test_terminal_drift_fails_instead_of_passing(tmp_path, drift):
+    def mutate(call_number, tool, _arguments, payload) -> None:
+        if tool != "ae_nativeExec":
+            return
+        if drift == "program-digest" and call_number == 3:
+            payload["audit"]["programDigest"] = "e" * 64
+        elif drift == "operation-summary" and call_number == 3:
+            payload["operations"][0]["op"] = "composition.time.read"
+        elif drift == "operation-key" and call_number == 5:
+            payload["operationKey"] = "hdev-native-time-write-drifted"
+        elif drift == "audit-operation-key" and call_number == 5:
+            payload["audit"]["operationKey"] = "hdev-native-time-write-drifted"
+        elif drift == "undo-group" and call_number == 5:
+            payload["undo"]["groupLabel"] = "Drifted undo group"
+        elif drift == "request-digest" and call_number == 3:
+            payload["audit"]["requestDigest"] = "e" * 64
+        elif drift == "capabilities-digest" and call_number == 4:
+            payload["provenance"]["capabilitiesDigest"] = "e" * 64
+
+    result = await driver.run_development_smoke(
+        _config(tmp_path),
+        session=FakeSession(_responses(), mutate=mutate),
+        checkpoint=lambda *_: driver.completed_checkpoint(),
+        after_effects_running=lambda: driver.completed_process_check(False),
+    )
+
+    assert result.exit_code == 2
+    assert result.summary["passed"] is False
+
+
+@pytest.mark.asyncio
 async def test_uncertain_write_stops_with_exit_three_without_retry(tmp_path):
     responses = _responses()
-    responses[3] = (True, {
+    responses[4] = (True, {
         "ok": False,
         "error": {
             "code": "POSSIBLY_SIDE_EFFECTING_FAILURE",
@@ -319,9 +455,10 @@ async def test_uncertain_write_stops_with_exit_three_without_retry(tmp_path):
     assert result.exit_code == 3
     assert result.summary["passed"] is False
     assert result.summary["stopReason"] == "possibly-side-effecting"
-    assert len(session.calls) == 4
-    assert [tool for tool, _ in session.calls].count(
-        "ae_setCompositionBackgroundColor"
+    assert len(session.calls) == 5
+    assert sum(
+        1 for tool, arguments in session.calls
+        if tool == "ae_nativeExec" and "operationKey" in arguments
     ) == 1
 
 
@@ -336,7 +473,7 @@ async def test_call_budget_stops_before_call_eight(tmp_path):
     runner.ledger.total = spec.CALL_HARD_LIMIT
 
     with pytest.raises(driver.DevelopmentSmokeFailure, match="budget exhausted"):
-        await runner.public_call(session, "overflow", "ae_projectSummary", {})
+        await runner.public_call(session, "overflow", "ae_status", {})
     assert session.calls == []
 
 
@@ -346,7 +483,7 @@ def test_candidate_evidence_is_permanently_false_and_files_are_private(tmp_path)
     summary = evidence.finish(
         passed=True,
         public_calls={
-            "target": 7, "hardLimit": 7, "total": 7,
+            "target": 9, "hardLimit": 9, "total": 9,
             "byTool": {}, "byPhase": {},
         },
         component_disposition={
@@ -398,7 +535,7 @@ def test_driver_starts_under_the_isolated_interpreter_used_by_the_cli():
     )
 
     assert completed.returncode == 0, completed.stderr
-    assert "core-native-write-undo@1" not in completed.stderr
+    assert "native-exec-ir@1" not in completed.stderr
 
 
 @pytest.mark.skipif(

@@ -176,8 +176,8 @@ def test_read_tier_uses_mtime_cache(tmp_path):
 def test_gate_decision_matrix(
     tier, read_decision, write_decision, destructive_decision
 ):
-    assert gate_decision(tier, "ae.overview") == read_decision
-    assert gate_decision(tier, "ae.setTime") == write_decision
+    assert gate_decision(tier, "ae.status") == read_decision
+    assert gate_decision(tier, "ae.checkpoint") == write_decision
     assert gate_decision(tier, "ae.exec") == destructive_decision
 
 
@@ -194,7 +194,7 @@ async def test_enforce_blocks_writes_in_readonly_tier(monkeypatch, tmp_path):
     tier_file.write_text("readonly\n", encoding="utf-8")
     monkeypatch.setenv("AE_MCP_APPROVAL_TIER_FILE", str(tier_file))
 
-    result = await approval_gate.enforce("ae.setProperty", None)
+    result = await approval_gate.enforce("ae.checkpoint", None)
 
     assert result == {
         "ok": False,
@@ -223,16 +223,16 @@ async def test_enforce_allows_when_elicitation_is_accepted(monkeypatch, tmp_path
     session = _FakeSession("accept")
     ctx = SimpleNamespace(session=session, request_id="req-1")
 
-    result = await approval_gate.enforce("ae.setTime", ctx)
+    result = await approval_gate.enforce("ae.checkpoint", ctx)
 
     assert result is None
     assert session.calls
-    assert "ae.setTime" in session.calls[0]["message"]
+    assert "ae.checkpoint" in session.calls[0]["message"]
     assert "non-destructive write" in session.calls[0]["message"]
     assert session.calls[0]["related_request_id"] == "req-1"
 
 
-@pytest.mark.parametrize("verb", ("ae.readProps", "ae.setProperty"))
+@pytest.mark.parametrize("verb", ("ae.exec", "ae.toolUse"))
 @pytest.mark.asyncio
 async def test_enforce_prompts_for_executable_input_tools_in_auto_tier(
     monkeypatch, tmp_path, verb
@@ -258,7 +258,7 @@ async def test_enforce_denies_when_elicitation_is_declined(monkeypatch, tmp_path
     monkeypatch.setenv("AE_MCP_APPROVAL_TIER_FILE", str(tier_file))
     ctx = SimpleNamespace(session=_FakeSession("decline"), request_id="req-1")
 
-    result = await approval_gate.enforce("ae.setProperty", ctx)
+    result = await approval_gate.enforce("ae.checkpoint", ctx)
 
     assert result == {"ok": False, "error": "User denied this action."}
 
@@ -270,7 +270,7 @@ async def test_enforce_denies_when_elicitation_api_is_missing(monkeypatch, tmp_p
     monkeypatch.setenv("AE_MCP_APPROVAL_TIER_FILE", str(tier_file))
     ctx = SimpleNamespace(session=object(), request_id="req-1")
 
-    result = await approval_gate.enforce("ae.setProperty", ctx)
+    result = await approval_gate.enforce("ae.checkpoint", ctx)
 
     assert result == {
         "ok": False,
@@ -299,10 +299,10 @@ async def test_server_gate_blocks_write_in_readonly_tier(monkeypatch, tmp_path):
     tier_file = tmp_path / "tier.txt"
     tier_file.write_text("readonly\n", encoding="utf-8")
     monkeypatch.setenv("AE_MCP_APPROVAL_TIER_FILE", str(tier_file))
-    monkeypatch.setattr(server_module, "HANDLERS", {"ae.setProperty": (Args, run)})
+    monkeypatch.setattr(server_module, "HANDLERS", {"ae.checkpoint": (Args, run)})
 
     server = build_server()
-    result = await server._ae_call_tool("ae_setProperty", {})
+    result = await server._ae_call_tool("ae_checkpoint", {})
     payload = json.loads(result.content[0].text)
 
     assert result.isError is True

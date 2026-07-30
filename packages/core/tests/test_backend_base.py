@@ -3,28 +3,22 @@ import pytest
 from ae_mcp.backends.base import ALL_VERBS, Backend, LegacyExtendScriptBackend
 
 
-def test_all_verbs_constant_has_60_entries():
-    assert len(ALL_VERBS) == 60
-    assert "ae.exec" in ALL_VERBS
-    assert "ae.ping" in ALL_VERBS
-    assert "ae.previewFrame" in ALL_VERBS
-    assert "ae.skillUse" in ALL_VERBS
-    assert "ae.createRig" in ALL_VERBS
-    assert "ae.validateExpressions" in ALL_VERBS
-    assert "ae.searchProject" in ALL_VERBS
-    assert "ae.toolIndex" in ALL_VERBS
-    assert "ae.toolExport" in ALL_VERBS
-    assert "ae.listProjectItems" in ALL_VERBS
-    assert "ae.listCompositionLayers" in ALL_VERBS
-    assert "ae.listSelectedLayers" in ALL_VERBS
-    assert "ae.getCompositionTime" in ALL_VERBS
-    assert "ae.listLayerProperties" in ALL_VERBS
-    assert "ae.listLayerPropertyKeyframes" in ALL_VERBS
-    assert "ae.setLayerPropertyValue" in ALL_VERBS
-    assert "ae.createCompositionLayer" in ALL_VERBS
-    assert "ae.applyLayerEffect" in ALL_VERBS
-    assert "ae.isolateToggle" not in ALL_VERBS
-    assert "ae.toastQuery" not in ALL_VERBS
+def test_all_verbs_is_the_exact_jsx_and_control_surface():
+    assert ALL_VERBS == {
+        "ae.checkpoint",
+        "ae.exec",
+        "ae.ping",
+        "ae.previewFrame",
+        "ae.revert",
+        "ae.skillList",
+        "ae.skillUse",
+        "ae.snapshot",
+        "ae.toolIndex",
+        "ae.toolInspect",
+        "ae.toolSearch",
+        "ae.toolUse",
+        "ae.validateExpressions",
+    }
 
 
 def test_cannot_instantiate_backend_directly():

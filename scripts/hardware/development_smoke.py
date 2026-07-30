@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import contextlib
 import dataclasses
+import hashlib
 import json
 import os
 import re
@@ -27,16 +28,18 @@ if os.fspath(HARDWARE_ROOT) not in sys.path:
     sys.path.insert(0, os.fspath(HARDWARE_ROOT))
 
 from development_smoke_spec import (
-    BASELINE_COLOR,
+    BASELINE_TIME,
     CALL_HARD_LIMIT,
     CALLS,
-    CHANGED_COLOR,
+    CHANGED_TIME,
+    FIXTURE_COMPOSITION_NAME,
+    FIXTURE_LAYER_NAME,
     SCENARIO_ID,
 )
 
 COMPONENTS = frozenset({"core", "cep", "native"})
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
-FIXTURE_NAME = "HDEV Core Native Fixture"
+FIXTURE_NAME = FIXTURE_COMPOSITION_NAME
 CORE_BOOTSTRAP = (
     "import runpy,sys;"
     "sys.path.insert(0,sys.argv[1]);"
@@ -238,7 +241,7 @@ class DevelopmentCallLedger:
         }
 
 
-def _time(value: Any) -> Fraction:
+def _time(value: Any) -> dict[str, Any]:
     exact = mapping(value, "exact time is invalid")
     require(
         set(exact) == {"value", "scale", "secondsRational"}
@@ -247,76 +250,23 @@ def _time(value: Any) -> Fraction:
         and exact["scale"] > 0,
         "exact time is not closed",
     )
-    result = Fraction(exact["value"], exact["scale"])
-    require(exact["secondsRational"] == str(result), "exact time rational drifted")
-    return result
+    rational = str(Fraction(exact["value"], exact["scale"]))
+    require(exact["secondsRational"] == rational, "exact time rational drifted")
+    return exact
 
 
-def _ratio(value: Any) -> Fraction:
-    exact = mapping(value, "exact ratio is invalid")
-    require(
-        set(exact) == {"numerator", "denominator", "rational"}
-        and type(exact.get("numerator")) is int
-        and type(exact.get("denominator")) is int
-        and exact["denominator"] > 0,
-        "exact ratio is not closed",
-    )
-    result = Fraction(exact["numerator"], exact["denominator"])
-    require(exact["rational"] == str(result), "exact ratio rational drifted")
-    return result
+def _times_equal(left: Mapping[str, Any], right: Mapping[str, Any]) -> bool:
+    return left["value"] * right["scale"] == right["value"] * left["scale"]
 
 
-def _snapshot(value: Any) -> dict[str, Any]:
-    state = mapping(value, "composition settings snapshot is invalid")
-    state.pop("compositionLocator", None)
-    require(set(state) == {
-        "name", "width", "height", "duration", "frameDuration", "frameRate",
-        "pixelAspectRatio", "backgroundColor", "workArea",
-        "displayStartTime", "layerCount",
-    }, "composition settings snapshot is not closed")
-    color = mapping(state["backgroundColor"], "background color is invalid")
-    work = mapping(state["workArea"], "work area is invalid")
-    require(
-        set(color) == {"red", "green", "blue", "alpha"},
-        "background color is not closed",
-    )
-    require(set(work) == {"start", "duration"}, "work area is not closed")
-    snapshot = {
-        "name": state["name"],
-        "width": state["width"],
-        "height": state["height"],
-        "duration": _time(state["duration"]),
-        "frameDuration": _time(state["frameDuration"]),
-        "frameRate": _ratio(state["frameRate"]),
-        "pixelAspectRatio": _ratio(state["pixelAspectRatio"]),
-        "backgroundColor": dict(color),
-        "workArea": {
-            "start": _time(work["start"]),
-            "duration": _time(work["duration"]),
-        },
-        "displayStartTime": _time(state["displayStartTime"]),
-        "layerCount": state["layerCount"],
-    }
-    require(
-        snapshot["frameDuration"] * snapshot["frameRate"] == 1,
-        "frame duration and frame rate disagree",
-    )
-    return snapshot
-
-
-EXPECTED_BASELINE = {
-    "name": FIXTURE_NAME,
-    "width": 640,
-    "height": 360,
-    "duration": Fraction(5),
-    "frameDuration": Fraction(1, 24),
-    "frameRate": Fraction(24),
-    "pixelAspectRatio": Fraction(1),
-    "backgroundColor": BASELINE_COLOR,
-    "workArea": {"start": Fraction(0), "duration": Fraction(5)},
-    "displayStartTime": Fraction(0),
-    "layerCount": 0,
-}
+def _program_digest(arguments: Mapping[str, Any]) -> str:
+    encoded = json.dumps(
+        dict(arguments),
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class DevelopmentSmokeRunner:
@@ -335,6 +285,7 @@ class DevelopmentSmokeRunner:
         self.ledger = DevelopmentCallLedger()
         self.host_instance_id: str | None = None
         self.session_id: str | None = None
+        self.capabilities_digest: str | None = None
         self.lifecycle = {
             "created": 0,
             "canonicalRetained": 0,
@@ -344,30 +295,30 @@ class DevelopmentSmokeRunner:
             "saveAsCopies": 0,
         }
 
-    def _validate_native(self, payload: Mapping[str, Any], *, write: bool) -> None:
-        implementation = mapping(payload.get("implementation"), "implementation missing")
+    def _validate_native_program(
+        self,
+        payload: Mapping[str, Any],
+        arguments: Mapping[str, Any],
+        *,
+        write: bool,
+    ) -> None:
         provenance = mapping(payload.get("provenance"), "provenance missing")
         audit = mapping(payload.get("audit"), "audit missing")
         evidence = mapping(payload.get("evidence"), "evidence missing")
         postcondition = mapping(evidence.get("postcondition"), "postcondition missing")
+        outputs = mapping(payload.get("outputs"), "native program outputs missing")
+        operations = payload.get("operations")
+        requested_operations = arguments.get("operations")
         require(
-            implementation.get("engine") == "native-aegp"
+            payload.get("capabilityId") == "ae.native.exec"
             and provenance.get("engine") == "native-aegp"
             and evidence.get("engine") == "native-aegp",
             "native AEGP provenance drifted",
         )
-        contract_digest = implementation.get("contractDigest")
         require(
-            isinstance(contract_digest, str)
-            and SHA256.fullmatch(contract_digest) is not None
-            and audit.get("contractDigest") == contract_digest,
-            "capability contract digest drifted",
-        )
-        require(
-            implementation.get("capabilityId") == audit.get("capabilityId")
-            == evidence.get("capabilityId")
-            and implementation.get("capabilityVersion") == 1
-            and audit.get("capabilityVersion") == evidence.get("capabilityVersion") == 1,
+            audit.get("capabilityId") == evidence.get("capabilityId")
+            == "ae.native.exec"
+            and evidence.get("capabilityVersion") == 1,
             "capability identity drifted",
         )
         host = provenance.get("hostInstanceId")
@@ -384,25 +335,59 @@ class DevelopmentSmokeRunner:
             host == self.host_instance_id and session == self.session_id,
             "formal host/session changed during HDEV",
         )
+        capabilities_digest = provenance.get("capabilitiesDigest")
         require(
-            isinstance(provenance.get("capabilitiesDigest"), str)
-            and SHA256.fullmatch(provenance["capabilitiesDigest"]) is not None,
+            isinstance(capabilities_digest, str)
+            and SHA256.fullmatch(capabilities_digest) is not None,
             "capabilities digest missing",
+        )
+        if self.capabilities_digest is None:
+            self.capabilities_digest = capabilities_digest
+        require(
+            capabilities_digest == self.capabilities_digest,
+            "capabilities digest changed during HDEV",
+        )
+        require(isinstance(requested_operations, list), "native program arguments missing")
+        expected_operations = [
+            {"index": index, "op": operation["op"], "status": "completed"}
+            for index, operation in enumerate(requested_operations)
+            if isinstance(operation, Mapping) and isinstance(operation.get("op"), str)
+        ]
+        require(
+            len(expected_operations) == len(requested_operations)
+            and operations == expected_operations,
+            "native program operation summary drifted",
+        )
+        expected_key = arguments.get("operationKey")
+        expected_undo_group = arguments.get("undoGroup")
+        undo = mapping(payload.get("undo"), "native program Undo evidence missing")
+        require(
+            payload.get("operationKey") == expected_key
+            and (expected_key is not None or "operationKey" not in payload)
+            and audit.get("operationKey") == expected_key
+            and (expected_key is not None or "operationKey" not in audit)
+            and undo.get("groupLabel") == expected_undo_group
+            and (expected_undo_group is not None or "groupLabel" not in undo),
+            "native program operation key or Undo group drifted",
         )
         require(
             isinstance(audit.get("requestId"), str)
             and audit["requestId"] == evidence.get("requestId")
+            and isinstance(operations, list)
+            and bool(operations)
+            and isinstance(outputs, dict)
+            and audit.get("programDigest") == _program_digest(arguments)
+            and audit.get("requestDigest") == evidence.get("requestDigest")
+            and audit.get("effect") == evidence.get("effect")
             and postcondition.get("verified") is True
             and postcondition.get("algorithm") == "sha256-rfc8785-jcs-v1"
             and postcondition.get("digest") == audit.get("postconditionDigest"),
             "audit/postcondition evidence drifted",
         )
         if write:
-            value = mapping(payload.get("value"), "write value missing")
-            undo = mapping(evidence.get("undo"), "write Undo evidence missing")
-            require(value.get("changed") is True, "write did not report changed=true")
             require(
-                set(undo) >= {"available", "verified"}
+                isinstance(payload.get("operationKey"), str)
+                and set(undo) >= {"available", "verified", "groupLabel"}
                 and type(undo["available"]) is bool
                 and type(undo["verified"]) is bool
                 and audit.get("undoAvailable") is undo["available"]
@@ -440,8 +425,38 @@ class DevelopmentSmokeRunner:
                 f"{tool} may have changed AE; inspect state and audit before any retry"
             )
         require(not is_error and code is None and payload.get("ok") is True, f"{tool} failed")
-        self._validate_native(payload, write=write)
+        if tool == "ae_nativeExec":
+            self._validate_native_program(payload, arguments, write=write)
         return dict(payload)
+
+    async def invalid_native_program(
+        self,
+        session: PublicSession,
+        phase: str,
+        arguments: Mapping[str, Any],
+    ) -> None:
+        sequence = self.ledger.reserve("ae_nativeExec", phase)
+        self.evidence.record("public-tool-request", {
+            "call": sequence,
+            "phase": phase,
+            "tool": "ae_nativeExec",
+            "arguments": dict(arguments),
+        })
+        is_error, payload = await session.call("ae_nativeExec", dict(arguments))
+        self.evidence.record("public-tool-response", {
+            "call": sequence,
+            "phase": phase,
+            "tool": "ae_nativeExec",
+            "isError": is_error,
+            "payload": payload,
+        })
+        error = mapping(payload.get("error"), "invalid native program error missing")
+        require(
+            is_error and payload.get("ok") is False
+            and error.get("code") == "INVALID_ARGUMENT"
+            and error.get("sideEffect") == "not-started",
+            "structurally invalid native program reached dispatch",
+        )
 
     @staticmethod
     def _composition_locator(value: Any) -> dict[str, Any]:
@@ -490,87 +505,119 @@ class DevelopmentSmokeRunner:
         })
         require(self.config.fixture_path.is_file(), "saved HDEV fixture is missing")
         self.lifecycle["created"] = 1
-        readiness = await self.public_call(
-            session, "readiness", "ae_projectSummary", {}
-        )
-        readiness_value = mapping(readiness.get("value"), "readiness value missing")
+        readiness = await self.public_call(session, "readiness", "ae_status", {})
         require(
-            readiness_value.get("projectOpen") is True
-            and readiness_value.get("itemCount") == 0,
-            "saved HDEV project is not empty and ready",
+            mapping(readiness.get("nativeExecutionPlane"), "native status missing")
+            .get("available") is True,
+            "native execution plane is not ready",
         )
 
-        created = await self.public_call(
-            session,
-            "composition-create",
-            "ae_createComposition",
-            {
-                "name": FIXTURE_NAME,
-                "width": 640,
-                "height": 360,
-                "duration": {"value": 5, "scale": 1},
-                "frame_rate": {"numerator": 24, "denominator": 1},
-                "pixel_aspect_ratio": {"numerator": 1, "denominator": 1},
-                "idempotency_key": "hdev-core-native-composition-0001",
+        fixture = await self.public_call(session, "fixture-create", "ae_exec", {
+            "code": (
+                "var comp=app.project.items.addComp('HDEV Native EXEC Fixture',640,360,1,5,24);"
+                "var layer=comp.layers.addNull();layer.name='HDEV Native EXEC Layer';"
+                "JSON.stringify({ok:true,value:{compositionName:comp.name,layerName:layer.name}});"
+            ),
+            "undo_group_name": "Create HDEV Native EXEC fixture",
+            "timeout_sec": 30,
+        })
+        fixture_value = mapping(fixture.get("value"), "fixture exec value missing")
+        require(
+            fixture_value == {
+                "compositionName": FIXTURE_NAME,
+                "layerName": FIXTURE_LAYER_NAME,
             },
-            write=True,
+            "ae_exec fixture result drifted",
         )
-        locator = self._composition_locator(
-            mapping(created.get("value"), "composition create value missing")
-            .get("compositionLocator")
+
+        discovered_payload = await self.public_call(
+            session, "locator-discovery", "ae_nativeExec", {
+                "operations": [{
+                    "op": "project.items.list",
+                    "args": {"offset": 0, "limit": 50},
+                    "returnAs": "items",
+                }],
+            },
         )
+        discovered = mapping(
+            mapping(discovered_payload.get("outputs"), "locator discovery outputs missing")
+            .get("items"),
+            "locator discovery items missing",
+        )
+        items = discovered.get("items")
+        require(isinstance(items, list), "locator discovery items are invalid")
+        matches = [
+            mapping(item, "project item invalid") for item in items
+            if isinstance(item, Mapping)
+            and item.get("name") == FIXTURE_NAME
+            and item.get("type") == "composition"
+        ]
+        require(len(matches) == 1, "HDEV composition was not uniquely discovered")
+        locator = self._composition_locator(matches[0].get("locator"))
+
         baseline_payload = await self.public_call(
-            session,
-            "baseline-settings",
-            "ae_getCompositionSettings",
-            {"composition_locator": locator},
+            session, "baseline-native-state", "ae_nativeExec", {
+                "operations": [
+                    {"op": "composition.resolve", "args": {"locator": locator}, "saveAs": "composition"},
+                    {"op": "composition.layers.list", "args": {"composition": {"ref": "composition"}, "offset": 0, "limit": 25}, "returnAs": "layers"},
+                    {"op": "composition.time.read", "args": {"composition": {"ref": "composition"}}, "returnAs": "time"},
+                ],
+            },
         )
-        baseline_value = mapping(baseline_payload.get("value"), "baseline value missing")
-        baseline = _snapshot(baseline_value)
-        require(baseline == EXPECTED_BASELINE, "new composition baseline drifted")
-        locator = self._composition_locator(baseline_value.get("compositionLocator"))
+        baseline_outputs = mapping(baseline_payload.get("outputs"), "baseline outputs missing")
+        layers = mapping(baseline_outputs.get("layers"), "baseline layers missing")
+        layer_rows = layers.get("layers")
+        require(
+            isinstance(layer_rows, list)
+            and len([row for row in layer_rows if isinstance(row, Mapping) and row.get("name") == FIXTURE_LAYER_NAME]) == 1,
+            "native layer read did not observe the fixture layer",
+        )
+        baseline = _time(mapping(baseline_outputs.get("time"), "baseline time missing").get("currentTime"))
+        require(_times_equal(baseline, BASELINE_TIME), "native baseline time drifted")
 
         changed_payload = await self.public_call(
-            session,
-            "background-set",
-            "ae_setCompositionBackgroundColor",
-            {
-                "composition_locator": locator,
-                "background_color": CHANGED_COLOR,
-                "idempotency_key": "hdev-core-native-background-0001",
-            },
-            write=True,
+            session, "native-write", "ae_nativeExec", {
+                "operationKey": "hdev-native-time-write-0001",
+                "undoGroup": "HDEV exact native time",
+                "operations": [
+                    {"op": "composition.resolve", "args": {"locator": locator}, "saveAs": "composition"},
+                    {"op": "composition.time.set", "args": {"composition": {"ref": "composition"}, "targetTime": CHANGED_TIME}, "returnAs": "time"},
+                ],
+            }, write=True,
         )
-        changed_value = mapping(changed_payload.get("value"), "background write value missing")
-        before = _snapshot(changed_value.get("before"))
-        after = _snapshot(changed_value.get("after"))
-        require(before == baseline, "write before snapshot drifted")
-        require(before["backgroundColor"] == BASELINE_COLOR, "write before colour drifted")
-        require(after == {**baseline, "backgroundColor": CHANGED_COLOR}, "write after drifted")
-        require(after["backgroundColor"] == CHANGED_COLOR, "write after colour drifted")
-        locator = self._composition_locator(changed_value.get("compositionLocator"))
-
-        changed_read_payload = await self.public_call(
-            session,
-            "changed-settings",
-            "ae_getCompositionSettings",
-            {"composition_locator": locator},
+        changed_value = mapping(
+            mapping(changed_payload.get("outputs"), "write outputs missing").get("time"),
+            "write time missing",
         )
         require(
-            _snapshot(changed_read_payload.get("value")) == after,
-            "independent changed settings readback drifted",
+            changed_value.get("changed") is True
+            and _times_equal(_time(changed_value.get("beforeTime")), baseline)
+            and _times_equal(_time(changed_value.get("afterTime")), CHANGED_TIME),
+            "native write time evidence drifted",
         )
-        undo = mapping(
-            mapping(changed_payload.get("evidence"), "write evidence missing").get("undo"),
-            "write Undo evidence missing",
-        )
+        undo = mapping(changed_payload.get("undo"), "write Undo evidence missing")
         require(
             undo.get("available") is True and undo.get("verified") is False,
-            "background write is not one available, unexecuted Undo",
+            "native write is not one available, unexecuted Undo",
         )
-        await self.checkpoint("undo-background-change", {
+        changed_read_payload = await self.public_call(
+            session, "changed-native-read", "ae_nativeExec", {
+                "operations": [
+                    {"op": "composition.resolve", "args": {"locator": locator}, "saveAs": "composition"},
+                    {"op": "composition.time.read", "args": {"composition": {"ref": "composition"}}, "returnAs": "time"},
+                ],
+            },
+        )
+        require(
+            _times_equal(
+                _time(mapping(mapping(changed_read_payload.get("outputs"), "changed read outputs missing").get("time"), "changed time missing").get("currentTime")),
+                CHANGED_TIME,
+            ),
+            "independent changed native readback drifted",
+        )
+        await self.checkpoint("undo-native-time", {
             "instruction": (
-                "Refresh Edit, execute exactly one real Undo for the background "
+                "Refresh Edit, execute exactly one real Undo for the native time "
                 "change, refresh Edit again, and do not retry the write."
             ),
             "fixturePath": os.fspath(self.config.fixture_path),
@@ -579,14 +626,17 @@ class DevelopmentSmokeRunner:
         })
 
         reacquired_payload = await self.public_call(
-            session,
-            "undo-reacquire",
-            "ae_listProjectItems",
-            {"offset": 0, "limit": 50},
+            session, "undo-discovery", "ae_nativeExec", {
+                "operations": [{
+                    "op": "project.items.list", "args": {"offset": 0, "limit": 50},
+                    "returnAs": "items",
+                }],
+            },
         )
-        items = mapping(reacquired_payload.get("value"), "project items value missing").get(
-            "items"
-        )
+        items = mapping(
+            mapping(reacquired_payload.get("outputs"), "undo discovery outputs missing").get("items"),
+            "undo discovery items missing",
+        ).get("items")
         require(isinstance(items, list), "project items are invalid")
         matches = [
             mapping(item, "project item invalid")
@@ -598,17 +648,22 @@ class DevelopmentSmokeRunner:
         require(len(matches) == 1, "HDEV composition was not uniquely reacquired")
         locator = self._composition_locator(matches[0].get("locator"))
         restored_payload = await self.public_call(
-            session,
-            "undo-settings",
-            "ae_getCompositionSettings",
-            {"composition_locator": locator},
+            session, "undo-native-read", "ae_nativeExec", {
+                "operations": [
+                    {"op": "composition.resolve", "args": {"locator": locator}, "saveAs": "composition"},
+                    {"op": "composition.time.read", "args": {"composition": {"ref": "composition"}}, "returnAs": "time"},
+                ],
+            },
         )
-        restored = _snapshot(restored_payload.get("value"))
-        require(restored == baseline, "real Undo did not restore the complete baseline")
+        restored = _time(mapping(
+            mapping(restored_payload.get("outputs"), "restored outputs missing").get("time"),
+            "restored time missing",
+        ).get("currentTime"))
         require(
-            restored["backgroundColor"] == BASELINE_COLOR,
-            "real Undo did not restore background colour",
+            _times_equal(restored, baseline),
+            "real Undo did not restore exact native time",
         )
+        await self.invalid_native_program(session, "invalid-native-program", {"operations": []})
         require(self.ledger.total == CALL_HARD_LIMIT, "HDEV call count drifted")
 
         await self.checkpoint("close-formal-ae", {
@@ -634,7 +689,7 @@ class DevelopmentSmokeRunner:
             "realUndo": {
                 "executed": 1,
                 "verified": True,
-                "tool": "ae_setCompositionBackgroundColor",
+                "tool": "ae_nativeExec",
             },
         }
 

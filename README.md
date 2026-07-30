@@ -19,11 +19,11 @@ The published v0.9.2 asset targets this verified release scope:
 
 ```text
 Embedded panel chat or external MCP client
-  -> packages/core (ae_mcp, Python stdio MCP server, 51 ae_ tools)
+  -> packages/core (ae_mcp, Python stdio MCP server, 16 public tools)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
      -> native RPC -> AEGP main-thread dispatcher
-     -> CSInterface.evalScript -> ExtendScript (legacy JSX tools)
+     -> CSInterface.evalScript -> ExtendScript (`ae_exec`)
   -> After Effects
 ```
 
@@ -106,28 +106,30 @@ External clients must run on the same machine as After Effects, or otherwise be 
 
 ## Tool Surface
 
-| Category | Tools |
+| Category | Public tools |
 |---|---|
-| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_getProjectContext`, `ae_getProjectItemMetadata`, `ae_getCompositionSettings`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_listLayerPropertyKeyframes`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
-| Mutation | `ae_exec`, `ae_applyEffect`, `ae_applyLayerEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setCompositionWorkArea`, `ae_renameProjectItem`, `ae_setProjectItemComment`, `ae_setProjectItemLabel`, `ae_duplicateComposition`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
-| Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
-| Preview / capture | `ae_previewFrame`, `ae_snapshot` |
-| Rigging | `ae_createRig` |
-| Skill | `ae_skillList`, `ae_skillCreate`, `ae_skillEdit`, `ae_skillDelete`, `ae_skillUse` |
-| Tools library | `ae_toolIndex`, `ae_toolSearch`, `ae_toolInspect`, `ae_toolUse`, `ae_toolCreate`, `ae_toolEdit`, `ae_toolDelete`, `ae_toolArchive`, `ae_toolDuplicate`, `ae_toolPromoteFromHistory`, `ae_toolImport`, `ae_toolExport` |
-| Checkpoint | `ae_checkpoint`, `ae_revert` |
-| Diagnostic | `ae_ping`, `ae_status`, `ae_diagnose` |
+| Execution | `ae_exec`, `ae_nativeExec` |
+| Visual / expression verification | `ae_previewFrame`, `ae_validateExpressions` |
+| Undo / recovery | `ae_checkpoint`, `ae_revert`, `ae_snapshot` |
+| Skill library | `ae_skillList`, `ae_skillUse` |
+| Tool library | `ae_toolIndex`, `ae_toolSearch`, `ae_toolInspect`, `ae_toolUse` |
+| Diagnostics | `ae_ping`, `ae_status`, `ae_diagnose` |
 
-Expression workflows should run `ae_validateExpressions` before visual review. For risky edits, use `ae_checkpoint` or pass `checkpoint_label` to `ae_exec`.
+`ae_exec` is the default route for maintained ExtendScript semantics.
+`ae_nativeExec` accepts only generated curated AEGP primitives. Load
+`builtin:skill:ae-execution-guide` for routing, program composition, readback,
+uncertain-write reconciliation, and real Undo verification.
 
-### Local Tools library
+Native programs contain at most 64 ordered operations. Values saved by resolver
+operations are request-local; use stable locators to resolve again in a later
+request. Writes require `operationKey` and `undoGroup`, then an independent
+readback. Do not retry a possibly-side-effecting result before reconciling AE
+state and audit evidence.
 
-The Tools tab stores native artifacts under `~/.ae-mcp/tools` and indexes existing `ae.skill*` files in place; it does not copy legacy skills or provide cloud sync. User and bundled same-name skills keep distinct Tool Library IDs, while `ae_skillUse` preserves its existing user-first resolution order. Successful generated JSX/expression calls may appear as non-executable history candidates. Imported `.aemcptools` packages also enter candidate state after quarantine, bounds, hash, schema, and secret scanning. Inspect candidate content before changing its status: history candidates use `ae_toolPromoteFromHistory`, while imported candidates use `ae_toolEdit` with `{"changes":{"status":"saved"}}`.
-
-Discovery is progressive: call `ae_toolIndex`, then `ae_toolSearch`, then `ae_toolInspect`. Non-executing rendering uses `ae_toolUse(action="render")`; execute/apply operations use the content-bound prepare → grant → execute sequence. The plan binds the artifact and dependency hashes, normalized arguments, operation, target, risk, and expiry; grants are short-lived and one-time. Read-only denies writes, manual asks for writes, auto allows ordinary writes, and destructive/external plans always require a fresh decision even in bypass mode. Session approval is available only for write-risk plans and is bound to artifact content, operation, and normalized target rather than the tool name.
-
-Give each side-effecting start/execute request a stable `operation_id` and reuse it only for retries of the same `planHash`. Concurrent Core clients sharing the Tool Library return the same queued/running/terminal execution for that pair, so only the reservation owner dispatches the backend; reusing the operation ID with another plan returns `tool_operation_conflict`. If an owner exits after dispatch, recovery becomes `outcome-unknown` with `inspect-state`; check AE state and audit evidence before using a new operation ID.
-
+Inspect the generated primitive catalog in
+`native/ae-plugin/protocol/native-primitives.json`, or load the default execution
+guide through the Skill library. The four Tool Library calls follow progressive
+disclosure: Index, Search, Inspect, then Use.
 ## Usage Notes
 
 AI is not a finished-motion-design replacement. ae-mcp works best when you keep creative direction, taste, and final compositing judgment in human hands, while delegating repetitive operations, procedural animation, expression work, project cleanup, and refactoring of reusable AE structures.
@@ -250,64 +252,30 @@ node native/ae-plugin/install-dev-macos.mjs recover
 
 Ad-hoc signing and a successful local build are development evidence only. The generated receipt
 deliberately keeps `distributionApproved`, `runtimeEvidence`, and `compatibilityEvidence` false;
-each candidate still requires a recorded component-set real-AE gate through the public MCP surface. The
-development-native surface is intentionally small: `ae_projectSummary` reads a project summary,
-`ae_getProjectBitDepth` reads the current 8/16/32 bits-per-channel value, and
-`ae_setProjectBitDepth` performs the SDK-declared undoable change with an idempotency key and
-verified native readback. `ae_listProjectItems` returns bounded project-item pages; copy a returned
-composition locator into `ae_getCompositionTime` to read its exact current time as signed
-`value`, positive `scale`, and canonical reduced `secondsRational`; or copy it into
-`ae_listCompositionLayers` to read its bounded layer pages (default 25, maximum 50), or into
-`ae_listSelectedLayers` to read the layers currently selected in that exact composition. Selection
-pages use the same stable layer locators and deterministic stack order; non-layer selections such
-as properties, masks, effects, or keyframes are intentionally excluded. Copy a returned layer
-locator into `ae_listLayerProperties` to list one bounded page of
-its direct properties (default and maximum 25); pass a returned property locator to descend exactly
-one group only when its `groupingType` is `named-group` or `indexed-group`. Primitive values are
-sampled at the current composition time and encoded as explicit decimal strings, while complex SDK
-values are marked unsupported rather than leaking native handles.
-Pass a returned primitive leaf locator to `ae_listLayerPropertyKeyframes` to read one bounded page
-of native keyframes (default and maximum 25). Each entry includes its one-based index, exact
-composition-time `value/scale`, typed primitive value, and native in/out interpolation; the tool
-never falls back to JSX.
-Pass a returned layer locator and primitive leaf locator to `ae_setLayerPropertyValue` with a stable
-idempotency key to perform a native `AEGP_SetStreamValue` write. The result includes verified
-before/after values, audit provenance, and AE Undo availability. If a post-dispatch response is
-uncertain, inspect AE state before retrying.
-Use `ae_createComposition` with an exact name and stable idempotency key to create a root
-composition directly through `AEGP_CreateComp`. Dimensions default to 1920x1080, duration to 5/1
-seconds, frame rate to 24/1, and pixel aspect ratio to 1/1; every value can be supplied as an exact
-integer or rational pair. The result returns a fresh composition locator, verified settings and
-counts, native provenance, and Undo availability without falling back to JSX.
-Pass a fresh composition locator to `ae_createCompositionLayer` to create one native null or solid
-layer with an exact name and stable idempotency key. Solid color, dimensions, and duration are
-optional and otherwise inherit documented defaults. The result returns fresh post-mutation
-locators, count evidence, native provenance, and Undo availability; replaying the same intent does
-not create a duplicate. Use the returned composition locator after success because the prior graph
-generation is stale.
-Pass a fresh layer locator to `ae_applyLayerEffect` with an installed effect's exact,
-locale-independent match name (for example, `ADBE Slider Control`) and a stable idempotency key.
-The AEGP main-thread dispatcher calls `AEGP_ApplyEffect`, verifies that the total and matching
-effect counts each increased by exactly one, and returns the insertion index, effect identity, a
-fresh layer locator, native provenance, audit evidence, and Undo availability. The same intent
-replays without adding a duplicate. Use the returned locator to inspect the Effects group; after
-`POSSIBLY_SIDE_EFFECTING_FAILURE`, inspect AE state and audit before any retry.
-The Project / Composition Operations package adds three native-only reads and five native-only
-writes. `ae_getProjectContext(selection_offset?, selection_limit?)` returns the active item, most
-recently used composition, and a bounded Project-panel selection; its locators feed
-`ae_getProjectItemMetadata(item_locator)` and
-`ae_getCompositionSettings(composition_locator)`. The write tools are
-`ae_setCompositionWorkArea(composition_locator, start, duration, idempotency_key)`,
-`ae_renameProjectItem(item_locator, name, idempotency_key)`,
-`ae_setProjectItemComment(item_locator, comment, idempotency_key)`,
-`ae_setProjectItemLabel(item_locator, label_id, idempotency_key)`, and
-`ae_duplicateComposition(composition_locator, new_name, idempotency_key)`. Each write executes in
-one AE Undo group and returns verified before/after state, native provenance, audit evidence, and
-Undo availability. The call does not execute Undo for the user: hardware acceptance and callers
-that need restoration must perform real AE Undo and re-read the full project context, item
-metadata, and composition settings to prove the baseline was restored. After an uncertain write
-failure, reconcile AE state and audit before retrying.
-These native tools fail explicitly when the native plane is unavailable and never fall back to JSX.
+each candidate still requires a recorded component-set real-AE gate through the public MCP surface.
+
+The public AE execution surface has two routes. Use `ae_exec` for maintained
+After Effects scripting-object-model operations. Use `ae_nativeExec` only for
+curated AEGP primitives that require exact native graph, time, ratio, or
+property semantics. Load `builtin:skill:ae-execution-guide` before composing a
+non-trivial request.
+
+A native request is one bounded linear `operations` array. Resolver operations
+create typed request-local handles; later operations refer to them with
+`{"ref":"name"}`. Handles never serialize and never survive a request, so
+every later request resolves fresh handles from stable locators. Read programs
+omit `operationKey` and `undoGroup`. A program containing a write requires both,
+runs inside one real AE Undo group, and is not advertised as atomic.
+
+Verify every write with an independent read. A possibly-side-effecting result
+must be reconciled against AE state and audit evidence before any retry. Undo
+availability is not Undo verification: execute real Undo and run another
+independent read to prove restoration.
+
+The generated primitive reference is bundled into the execution guide. The sole
+hand-maintained catalog is
+`native/ae-plugin/protocol/native-primitives.json`; validate generated projections
+with `uv run python scripts/generate_native_exec.py --check`.
 
 CEP panel macOS development setup:
 

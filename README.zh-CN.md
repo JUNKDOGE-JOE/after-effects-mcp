@@ -19,11 +19,11 @@ v0.9.2 已发布资产面向以下已验证范围：
 
 ```text
 面板内对话或外部 MCP 客户端
-  -> packages/core (ae_mcp, Python stdio MCP server, 51 个 ae_ 工具)
+  -> packages/core (ae_mcp, Python stdio MCP server, 16 个公开工具)
   -> backend (packages/bridge, httpx)
   -> CEP panel Node host (plugin/host, Express, 127.0.0.1:11488)
      -> native RPC -> AEGP 主线程 dispatcher
-     -> CSInterface.evalScript -> ExtendScript（legacy JSX 工具）
+     -> CSInterface.evalScript -> ExtendScript（`ae_exec`）
   -> After Effects
 ```
 
@@ -141,28 +141,28 @@ v0.9.3 macOS Panel 生成的最小配置形态如下：
 
 ## 工具能力
 
-| 分类 | Tools |
+| 分类 | 公开工具 |
 |---|---|
-| Project | `ae_init`, `ae_overview`, `ae_layers`, `ae_getProjectContext`, `ae_getProjectItemMetadata`, `ae_getCompositionSettings`, `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, `ae_listLayerPropertyKeyframes`, `ae_setLayerPropertyValue`, `ae_readProps`, `ae_searchProject` |
-| Mutation | `ae_exec`, `ae_applyEffect`, `ae_applyLayerEffect`, `ae_createLayer`, `ae_createComposition`, `ae_createCompositionLayer`, `ae_setCompositionWorkArea`, `ae_renameProjectItem`, `ae_setProjectItemComment`, `ae_setProjectItemLabel`, `ae_duplicateComposition`, `ae_setProperty`, `ae_moveLayer`, `ae_selectLayers`, `ae_setTime` |
-| Read-typed | `ae_getTime`, `ae_getProperties`, `ae_scanPropertyTree`, `ae_inspectPropertyCapabilities`, `ae_getExpressions`, `ae_validateExpressions`, `ae_getKeyframes` |
-| Preview / capture | `ae_previewFrame`, `ae_snapshot` |
-| Rigging | `ae_createRig` |
-| Skill | `ae_skillList`, `ae_skillCreate`, `ae_skillEdit`, `ae_skillDelete`, `ae_skillUse` |
-| Tools 工具库 | `ae_toolIndex`, `ae_toolSearch`, `ae_toolInspect`, `ae_toolUse`, `ae_toolCreate`, `ae_toolEdit`, `ae_toolDelete`, `ae_toolArchive`, `ae_toolDuplicate`, `ae_toolPromoteFromHistory`, `ae_toolImport`, `ae_toolExport` |
-| Checkpoint | `ae_checkpoint`, `ae_revert` |
-| Diagnostic | `ae_ping`, `ae_status`, `ae_diagnose` |
+| 执行 | `ae_exec`、`ae_nativeExec` |
+| 画面 / 表达式验证 | `ae_previewFrame`、`ae_validateExpressions` |
+| Undo / 恢复 | `ae_checkpoint`、`ae_revert`、`ae_snapshot` |
+| Skill 库 | `ae_skillList`、`ae_skillUse` |
+| Tool 库 | `ae_toolIndex`、`ae_toolSearch`、`ae_toolInspect`、`ae_toolUse` |
+| 诊断 | `ae_ping`、`ae_status`、`ae_diagnose` |
 
-表达式工作流建议先跑 `ae_validateExpressions`，再做视觉检查。大改前建议使用 `ae_checkpoint` 或在 `ae_exec` 上传 `checkpoint_label`。
+`ae_exec` 是维护中 ExtendScript 语义的默认执行路径。`ae_nativeExec` 只接受
+由统一 catalog 生成的精选 AEGP primitive。需要路由、program 组合、readback、
+不确定写入核对和真实 Undo 验证时，加载
+`builtin:skill:ae-execution-guide`。
 
-### 本地 Tools 工具库
+原生 program 最多包含 64 个有序 operation。resolver 保存的值只在本次请求内
+有效；下一次请求必须用稳定 locator 重新解析。写 program 必须提供
+`operationKey` 与 `undoGroup`，然后独立读取验证。可能已产生副作用的结果在
+核对 AE 状态与审计证据前不得重试。
 
-原生制品保存在 `~/.ae-mcp/tools`。已有 `ae.skill*` 文件仍以原路径作为唯一规范副本，升级不会复制或分叉它们；用户与 bundled 的同名 skill 在 Tool Library 中保留不同 ID，`ae_skillUse` 继续按用户优先的既有顺序解析。成功生成的 JSX/表达式可以成为不可执行的 history candidate；导入的 `.aemcptools` 包在隔离区完成路径、链接、体积、哈希、schema 和秘密扫描后也只会进入 candidate。改变状态前应先 Inspect：history candidate 用 `ae_toolPromoteFromHistory`，imported candidate 用 `ae_toolEdit` 并传 `{"changes":{"status":"saved"}}`。
-
-发现顺序是 `ae_toolIndex` → `ae_toolSearch` → `ae_toolInspect`。只渲染、不执行时使用 `ae_toolUse(action="render")`；execute/apply 操作使用 prepare → grant → execute 三阶段协议。计划绑定制品及依赖哈希、规范化参数、operation、target、risk 与过期时间；grant 短时有效且只能消费一次。session 放行只适用于 write 风险，并绑定 content hash、operation 和规范化 target，不能按工具名缓存。
-
-每次有副作用的 start/execute 请求都应使用稳定的 `operation_id`，且只能在重试同一 `planHash` 时复用。共享同一 Tool Library 的多个 Core 会为这组标识返回同一个 queued/running/terminal execution，只有预约持有者会分发 backend；同一 operation ID 配另一个计划会返回 `tool_operation_conflict`。若持有者在分发后退出，恢复结果会是 `outcome-unknown` 与 `inspect-state`；使用新 operation ID 前必须先核对 AE 状态和审计证据。
-
+统一 primitive catalog 位于
+`native/ae-plugin/protocol/native-primitives.json`；也可通过 Skill 库加载默认
+执行指南查看生成的 reference。Tool 库只保留渐进式 Index、Search、Inspect、Use。
 ## 使用建议
 
 AI 目前还不能稳定替代动效师、合成师或设计师的最终判断。更可靠的使用方式是分工协作：
@@ -268,53 +268,23 @@ node native/ae-plugin/install-dev-macos.mjs recover
 
 Ad-hoc 签名和本地构建成功只属于开发证据。生成的回执会刻意保持
 `distributionApproved`、`runtimeEvidence` 和 `compatibilityEvidence` 为 false；每个候选仍必须通过
-已记录组件集的真实 AE + 公开 MCP 门禁。当前开发态原生 surface 刻意保持很小：
-`ae_projectSummary` 读取工程摘要，`ae_getProjectBitDepth` 读取当前 8/16/32 bits-per-channel，
-`ae_setProjectBitDepth` 使用幂等键执行 SDK 明确标记为可撤销的修改，并做原生 readback 验证。
-`ae_listProjectItems` 返回有界的工程项目分页；将其中的 composition locator 原样复制给
-`ae_getCompositionTime`，可读取合成当前时间的有符号 `value`、正数 `scale` 与精确约分后的
-`secondsRational`；也可复制给 `ae_listCompositionLayers`，读取对应合成的有界图层分页（默认
-25、最大 50），或复制给 `ae_listSelectedLayers`，读取该精确合成中当前被选中的图层。选择结果
-复用同一套稳定 layer locator，并按图层堆栈顺序确定性排列；property、mask、effect、keyframe
-等非图层选择会被明确排除。原生通道
-返回的 layer locator 可继续交给 `ae_listLayerProperties`，读取一页直接子属性（默认和最大均为
-25）；仅当返回项的 `groupingType` 为 `named-group` 或 `indexed-group` 时，才可把其 property
-locator 再传回并只向下进入一层 group。原始值绑定当前合成时间，
-可安全表示的 primitive 使用明确的十进制字符串编码，复杂 SDK 值会标记为 unsupported，绝不
-泄露原生 handle。将返回的 primitive leaf locator 交给 `ae_listLayerPropertyKeyframes`，可分页
-读取原生关键帧（默认和最大均为 25）；每项包含一基索引、精确合成时间 `value/scale`、带类型的
-primitive 值以及原生入/出插值，并且绝不回退 JSX。将返回的 layer locator 与 primitive leaf locator 交给
-`ae_setLayerPropertyValue`，并提供稳定的幂等键，即可通过原生 `AEGP_SetStreamValue` 写入。
-结果包含已验证的 before/after、审计 provenance 与 AE Undo 可用性；若写入后的响应不确定，
-必须先检查 AE 状态再考虑重试。`ae_createComposition` 接受精确名称和稳定幂等键，通过
-`AEGP_CreateComp` 直接创建根级合成；尺寸默认 1920x1080、时长默认 5/1 秒、帧率默认 24/1、
-像素宽高比默认 1/1，也可全部用整数或精确有理数覆盖。结果返回新 composition locator、已验证
-的设置与数量、原生 provenance 和 Undo 可用性，且不会回退 JSX。将新鲜的 composition locator 传给
-`ae_createCompositionLayer`，可用精确名称与稳定幂等键创建一个原生 null 或 solid 图层；solid
-的颜色、尺寸与时长可选，省略时使用契约声明的默认值。结果返回修改后的新 locator、数量证据、
-原生 provenance 与 Undo 可用性；同一 intent 的 replay 不会重复创建。成功后旧图结构 generation
-已失效，后续读取应使用结果中的新 composition locator。原生通道不可用时这些工具会明确失败，
-不会回退到 JSX。将新鲜的 layer locator、已安装效果精确且不受语言影响的 matchName（例如
-`ADBE Slider Control`）和稳定幂等键传给 `ae_applyLayerEffect`，AEGP 主线程 dispatcher 会调用
-`AEGP_ApplyEffect`，并验证效果总数与同 matchName 数量都恰好增加 1。结果返回插入索引、效果
-身份、新 layer locator、原生 provenance、审计证据和 Undo 可用性；相同 intent 的 replay 不会
-重复添加。后续读取 Effects group 必须使用返回的新 locator；遇到
-`POSSIBLY_SIDE_EFFECTING_FAILURE` 时，先核对 AE 状态与审计，禁止盲目重试。
-Project / Composition Operations 能力包新增 3 个严格原生只读工具和 5 个严格原生写工具。
-`ae_getProjectContext(selection_offset?, selection_limit?)` 返回 active item、最近使用的合成和
-有界的 Project 面板选择；将其中 locator 原样交给
-`ae_getProjectItemMetadata(item_locator)` 或
-`ae_getCompositionSettings(composition_locator)`。写工具包括
-`ae_setCompositionWorkArea(composition_locator, start, duration, idempotency_key)`、
-`ae_renameProjectItem(item_locator, name, idempotency_key)`、
-`ae_setProjectItemComment(item_locator, comment, idempotency_key)`、
-`ae_setProjectItemLabel(item_locator, label_id, idempotency_key)` 和
-`ae_duplicateComposition(composition_locator, new_name, idempotency_key)`。每次写入都在一个 AE
-Undo group 内执行，并返回已验证的 before/after、原生 provenance、审计证据与 Undo
-可用性；调用本身不会替用户执行 Undo。实机验收或需要恢复状态的调用方必须真正执行 AE Undo，
-再读取完整工程上下文、项目项 metadata 与合成 settings，证明基线已完全恢复。若写入结果不确定，
-必须先核对 AE 状态与审计，禁止盲目重试。
-上述能力在原生通道不可用时会结构化失败，绝不回退 JSX。
+公开 AE 执行面只保留两条路径：维护中的 AE scripting object model 能完成的操作
+使用 `ae_exec`；只有精确原生图结构、时间、有理数或属性语义才使用
+`ae_nativeExec`。组合非平凡请求前先加载 `builtin:skill:ae-execution-guide`。
+
+原生请求是一个有界、线性的 `operations` 数组。resolver 产生带类型且仅在本次
+请求内有效的 handle，后续 operation 用 `{"ref":"name"}` 引用。handle 不会序列化，
+也不会跨请求存活；后续请求必须用稳定 locator 重新解析。只读 program 不携带
+`operationKey` 和 `undoGroup`；包含写入的 program 两者都必填，在一个真实 AE Undo
+group 中执行，但不承诺原子性。
+
+每次写入后都要用独立读取验证。若结果可能已产生副作用，必须先结合 AE 状态和
+审计证据核对，再决定是否重试。Undo 可用不等于 Undo 已验证：必须真正执行 Undo，
+再用独立读取证明状态恢复。
+
+生成的 primitive reference 已进入默认执行指南。唯一手工维护的 catalog 是
+`native/ae-plugin/protocol/native-primitives.json`；使用
+`uv run python scripts/generate_native_exec.py --check` 校验全部生成投影。
 
 CEP 面板 macOS 开发环境：
 

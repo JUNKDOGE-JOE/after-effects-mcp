@@ -122,6 +122,48 @@ def test_scan_json_allows_native_write_idempotency_fields(key):
     ) == ()
 
 
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("sessionId", "11111111-1111-4111-8111-111111111111"),
+        ("operationKey", "native-time-write-0001"),
+    ],
+)
+def test_scan_json_allows_native_locator_and_request_identity_fields(key, value):
+    scanner = RegexSecretScanner()
+    assert scanner.scan_json("native-program.json", {key: value}) == ()
+    assert scanner.scan_json(
+        "execution-guide.json",
+        {"content": json.dumps({key: value})},
+    ) == ()
+
+
+@pytest.mark.parametrize("key", ["sessionId", "operationKey"])
+@pytest.mark.parametrize(
+    ("kind", "value"),
+    [
+        ("sk-key", "sk-this-is-still-a-provider-secret"),
+        (
+            "jwt",
+            "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.signaturevalue123",
+        ),
+        (
+            "private-key",
+            "-----BEGIN PRIVATE KEY-----\nprivate-key-body\n-----END PRIVATE KEY-----",
+        ),
+    ],
+)
+def test_scan_json_still_detects_concrete_secrets_in_native_identity_fields(
+    key, kind, value
+):
+    findings = RegexSecretScanner().scan_json(
+        "native-program.json",
+        {key: value},
+    )
+    assert any(finding.kind == kind for finding in findings)
+    assert value not in repr(findings)
+
+
 def test_scan_json_still_detects_concrete_secret_in_idempotency_field():
     findings = RegexSecretScanner().scan_json(
         "native-recipe.json",

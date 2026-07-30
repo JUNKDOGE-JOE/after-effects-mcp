@@ -1,697 +1,270 @@
-# ae-mcp 参考 / Reference
+# ae-mcp Reference
 
 ## 中文
 
 ### 快速信息
 
-| 项目 | 值 |
+| 项目 | 当前契约 |
 |---|---|
-| MCP transport | stdio JSON-RPC 2.0 |
-| AE transport | HTTP RPC, `127.0.0.1:11488` |
-| 入口 | `ae-mcp` |
-| Backend | `AE_MCP_BACKEND=ae-mcp` |
-| Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
-| Handler count | 52 verbs，按 backend `supported_verbs()` 过滤 |
-| Skill storage | `~/.ae-mcp/skills/<name>.json` |
-| Tool Library | `~/.ae-mcp/tools`；legacy skill 保持原路径，不复制 |
-| Preview output | 默认位于操作系统临时目录的 `ae_mcp_previews/<session>/...png`，可用 `out_dir` 覆盖 |
-| Checkpoint store | 操作系统临时目录下的 `ae_mcp_checkpoints/<basename>/<id>.aep + .json` |
+| 公开工具数 | 16，按最终公开 surface 注册 |
+| Preview 输出 | 默认位于操作系统临时目录的 `ae_mcp_previews/<session>/...png`，可用 `out_dir` 覆盖 |
+| Checkpoint 存储 | 操作系统临时目录下的 `ae_mcp_checkpoints/<basename>/<id>.aep + .json` |
 
 ### v0.9.2 平台与分发契约
 
-v0.9.2 是 Windows x64 正式版本。Provider、Tool Library 与 Platform Helper 已完成实现并通过 Windows AE 2025 实机验证；macOS、包内 RuntimeManager、正式跨平台签名链和完整实机矩阵转入 v0.9.3：
+v0.9.2 是 Windows x64 正式版本，安装资产为
+`ae-mcp-panel-v0.9.2-windows-x64.zxp`。macOS、包内 RuntimeManager、
+正式跨平台签名链和完整 AE 25/26 实机矩阵转入 v0.9.3。
 
-| 平台 | 安装资产 | 审计载荷 |
-|---|---|---|
-| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | 同一个 ZXP |
+Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都只是对应 AI 通道的
+**可选**依赖，不是 Core 或两个执行入口的前置条件。
 
-v0.9.2 保持 CEP host 范围 `[25.0,26.9]`，但本次发布证据只覆盖 Windows AE 2025。Panel 继续使用现有外部 runtime/launcher 配置；包内离线 RuntimeManager 转入 v0.9.3。Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都是对应 AI 通道的**可选**依赖，不是 core 前置。Provider 配置与凭据不可导出；系统凭据库与 Helper 功能已经落地并保持 fail-closed。
+### 最终公开工具面
 
-### 环境变量
+| 类别 | 工具 |
+|---|---|
+| 执行 | `ae_exec`、`ae_nativeExec` |
+| 画面与表达式验证 | `ae_previewFrame`、`ae_validateExpressions` |
+| Undo 与恢复 | `ae_checkpoint`、`ae_revert`、`ae_snapshot` |
+| Skill 库 | `ae_skillList`、`ae_skillUse` |
+| Tool 库 | `ae_toolIndex`、`ae_toolSearch`、`ae_toolInspect`、`ae_toolUse` |
+| 诊断 | `ae_ping`、`ae_status`、`ae_diagnose` |
 
-| 变量 | 作用 | 默认值 |
-|---|---|---|
-| `AE_MCP_BACKEND` | 选择后端 entry point 名称（bridge 注册为 `ae-mcp`） | 无（单后端时自动选用） |
-| `AE_MCP_PLUGIN_URL` | bridge 后端连接 AE 面板 HTTP RPC 的地址 | `http://127.0.0.1:11488` |
-| `AE_MCP_SKILL_DIR` | skill 存储目录（`ae.skill*` 读写的 `<name>.json`） | `~/.ae-mcp/skills` |
-| `AE_MCP_TOOL_DIR` | 原生 Tool Library、索引、审计、迁移备份与 legacy metadata 根目录 | `~/.ae-mcp/tools` |
-| `AE_MCP_TOOL_APPROVAL_TIER_FILE` | 动态制品执行的 panel 管理审批档文件 | 无；缺失/非法时按 `manual` |
-| `AE_MCP_CHECKPOINT_KEEP` | 每个工程保留的 checkpoint 数量上限（旧的自动清理，最小 1） | `50` |
+`ae_toolUse` staged actions: `render`, `prepare`, `grant`, `execute`, `start`,
+`status`, `cancel`, and `history`.
 
-### 面板内嵌 provider 配置
+`ae_toolUse` action 参数：
 
-- 面板设置页以 Claude / Codex / ZCode 三路后端组织内嵌 AI 服务，每路后端显示凭证通道卡，并可自动选择或手动锁定可用通道。
-- Claude 的 API 直连通道取代旧 BYOK 后端：官方 Anthropic API 或 Anthropic-compatible provider 都通过 Provider 管理器配置，`/v1/messages` 与 `/v1/models` 接到对应 Base URL。
-- Codex 后端默认走 `codex app-server` + Codex CLI 登录态；也可继承 `~/.codex/config.toml` 的自定义 model provider，或使用 Provider 管理器中的 OpenAI-compatible provider。
-- Provider 管理器把 OpenAI-compatible 与 Anthropic provider 保存在本机 `~/.ae-mcp/providers.json`，并支持通过 `/v1/models` 枚举模型列表。列表本身不代表所有模型使用相同 API；Codex 会对当前明确的模型 ID 分别验证并缓存 dialect：原生支持 Responses 的模型直连 `/responses`，仅支持 Chat Completions 的模型经本地 `/responses` facade 安全转换，只有无法等价转换的 Responses 特性才返回结构化 compact 501，且不静默丢字段。旧版未绑定模型的 Provider 级探测结果按未确认处理。显式自定义 provider 优先于继承配置。
-- 自定义模型 ID 会插入对应通道的模型列表首位，作为默认模型；清空后回到探测到的模型列表。
+| action | required | optional | 说明 |
+|---|---|---|---|
+| `render` | `action`, `artifact_id` | `args`, `operation` | 只渲染 |
+| `prepare` | `action`, `artifact_id`, `operation` | `args`, `target` | 生成绑定内容的计划 |
+| `grant` | `action`, `plan_hash`, `grant_scope` | 无 | 授权计划 |
+| `execute` | `action`, `plan_hash`, `grant_id`, `operation_id` | 无 | 同步执行 |
+| `start` | `action`, `plan_hash`, `grant_id`, `operation_id` | 无 | 异步开始 |
+| `status` | `action`, `execution_id` | 无 | 读取状态 |
+| `cancel` | `action`, `execution_id` | 无 | 请求取消 |
+| `history` | `action`, `artifact_id` | `limit` | 读取历史 |
 
-### 架构
+取消结果为 `cancelled-before-dispatch`、`not-cancellable-after-dispatch`、
+`owned-by-another-core` 或 `already-terminal`。这些结果仅在 execution record 或 reservation 仍被保留时成立。
+若当前 Core 尚未观察该 reservation，应先查询；跨 Core 缓存可能仍停留在旧 reservation。
+Inspect 返回包含完整 `content`；status/history 可暴露非终态 `reservations`（`queued`/`running`）。
+
+公开执行入口只有两条。AE scripting object model 能完成的操作使用
+`ae_exec`；只有统一 primitive catalog 中明确提供的 AEGP-only 语义使用
+`ae_nativeExec`。不要寻找或调用 operation-specific convenience tool。
+
+### 默认执行 Skill
+
+在选择路径或组合非平凡请求前加载：
 
 ```text
-MCP client
-  -> ae_mcp.server
-  -> ae-mcp backend package
-  -> HTTP 127.0.0.1:11488
-  -> CEP panel Node host
-     -> native RPC -> AEGP main-thread dispatcher -> After Effects
-     -> CSInterface.evalScript -> After Effects ExtendScript（legacy JSX 工具）
+builtin:skill:ae-execution-guide
 ```
 
-### Verb Reference
+该 Skill 给出 ExtendScript、native program、readback、Undo、不确定写入核对和
+画面验证的完整规则，并包含从统一 registry 生成的 primitive reference。
 
-除特别说明外，工具返回 JSON：成功时 `ok: true`，失败时 `ok: false` 和 `error`。`ae.toolUse` 的 `action="prepare"` 成功时直接返回 plan object，不含 `ok`。
+### `ae_exec`
 
-| Verb | Args | 说明 |
-|---|---|---|
-| `ae.init` | `refresh_only?` | 初始化/刷新项目状态 |
-| `ae.status` | none | 检查 backend 选择、已安装 backend 与 snapshotter 状态 |
-| `ae.diagnose` | none | 端到端检查 host、Python 握手、token 与 AE 响应 |
-| `ae.overview` | none | 项目和 comp 概览 |
-| `ae.projectSummary` | none | 通过原生 AEGP 返回带 provenance 与 postcondition 的工程摘要；不回退 JSX |
-| `ae_getProjectContext` | `selection_offset?`, `selection_limit?` | 原生读取 active item、最近使用的合成与 Project 面板选择；默认/最多返回 50 个选择项；不回退 JSX |
-| `ae_getProjectItemMetadata` | `item_locator` | 原生读取一个项目项或合成的 metadata；不回退 JSX |
-| `ae_getCompositionSettings` | `composition_locator` | 原生读取一个合成的精确 settings；不回退 JSX |
-| `ae_setCompositionWorkArea` | `composition_locator`, `start`, `duration`, `idempotency_key` | 原生设置精确 work area，返回 before/after、Undo 可用性与审计；不回退 JSX |
-| `ae_renameProjectItem` | `item_locator`, `name`, `idempotency_key` | 原生重命名一个项目项，返回 before/after、Undo 可用性与审计；不回退 JSX |
-| `ae_setProjectItemComment` | `item_locator`, `comment`, `idempotency_key` | 原生设置或清空项目项 comment，返回 before/after、Undo 可用性与审计；不回退 JSX |
-| `ae_setProjectItemLabel` | `item_locator`, `label_id`, `idempotency_key` | 原生设置项目项的 0–16 label slot，返回 before/after、Undo 可用性与审计；不回退 JSX |
-| `ae_duplicateComposition` | `composition_locator`, `new_name`, `idempotency_key` | 原生复制合成，返回新 locator、settings、数量、Undo 与审计证据；不回退 JSX |
-| `ae.getProjectBitDepth` | none | 通过原生 AEGP 读取当前 `8/16/32` bits-per-channel；不回退 JSX |
-| `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | 通过原生 AEGP 设置 `8/16/32`，返回 before/after、Undo 可用性和审计；不回退 JSX |
-| `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | 通过原生 AEGP 分页列出工程项；默认 25、最多 50；不回退 JSX |
-| `ae_listCompositionLayers` | `composition_locator`, `offset?`, `limit?` | 通过原生 AEGP 分页列出指定合成的图层；默认 25、最多 50；不回退 JSX |
-| `ae_listSelectedLayers` | `composition_locator`, `offset?`, `limit?` | 通过原生 AEGP 分页列出指定合成中当前选中的图层；默认 25、最多 50；不回退 JSX |
-| `ae_getCompositionTime` | `composition_locator` | 通过原生 AEGP 读取指定合成的精确当前时间；不回退 JSX |
-| `ae_createComposition` | `name`, `idempotency_key`, `width?`, `height?`, `duration?`, `frame_rate?`, `pixel_aspect_ratio?` | 通过原生 `AEGP_CreateComp` 创建根级合成，返回新 locator、设置、数量、Undo 与审计证据；不回退 JSX |
-| `ae_createCompositionLayer` | `composition_locator`, `kind`, `name`, `idempotency_key`, `color?`, `width?`, `height?`, `duration?` | 通过原生 AEGP 创建一个 null 或 solid 图层，返回新 locator、数量、Undo 与审计证据；不回退 JSX |
-| `ae_applyLayerEffect` | `layer_locator`, `effect_match_name`, `idempotency_key` | 通过原生 `AEGP_ApplyEffect` 添加一个已安装效果，返回新 locator、插入索引、数量、Undo 与审计证据；不回退 JSX |
-| `ae_listLayerProperties` | `layer_locator`, `parent_property_locator?`, `offset?`, `limit?` | 通过原生 AEGP 分页列出图层或属性组的一层直接子属性；默认/最多 25；不回退 JSX |
-| `ae_listLayerPropertyKeyframes` | `property_locator`, `offset?`, `limit?` | 通过原生 AEGP 分页读取 primitive leaf 的精确关键帧时间、值与入/出插值；默认/最多 25；不回退 JSX |
-| `ae_setLayerPropertyValue` | `layer_locator`, `property_locator`, `value`, `idempotency_key` | 通过原生 AEGP 写入一个非关键帧 primitive leaf，返回 before/after、Undo 可用性和审计；不回退 JSX |
-| `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | legacy JSX 图层列表（行为保持不变） |
-| `ae.readProps` | `code` | 执行只读 JSX |
-| `ae.exec` | `code`, `undo_group_name?`, `checkpoint_label?`, `timeout_sec?` | 执行 JSX |
-| `ae.checkpoint` | `action`, `label?`, `limit?` | 创建/列出 `.aep` checkpoint |
-| `ae.revert` | `checkpoint_id`, `branch_before_revert?` | 回滚到 checkpoint |
-| `ae.snapshot` | `out_path?`, `hwnd?`, `main_window?`, `method?` | 诊断截图 |
-| `ae.previewFrame` | `comp_id?`, `time?`, `times?`, `out_dir?`, `include_base64?`, `scale?` | 快速 viewer capture |
-| `ae.applyEffect` | `comp_id?`, `layer_id`, `effect_match_name` | 按 matchName 添加效果 |
-| `ae.createLayer` | `type`, `name`, etc. | 创建 solid/text/shape/null/adjustment/camera/light |
-| `ae.setProperty` | `layer_id`, `path`, `value`, `at_time?` | 写属性 |
-| `ae.moveLayer` | `layer_id`, `to_index` | 调整图层顺序 |
-| `ae.selectLayers` | `layer_ids` | 选择全部/无/指定图层 |
-| `ae.setTime` | `comp_id?`, `time` | 设置 comp 时间 |
-| `ae.getTime` | `comp_id?` | 读取 comp 时间 |
-| `ae.getProperties` | `comp_id?`, `layer_ids`, `query`, `offset?`, `limit?` | 搜索属性 |
-| `ae.scanPropertyTree` | `comp_id?`, `layer_id`, `max_depth?`, `include_values?` | 扫描属性树 |
-| `ae.inspectPropertyCapabilities` | `comp_id?`, `layer_id`, `path` | 检查属性可变更能力 |
-| `ae.getExpressions` | `comp_id`, `layer_ids?`, `prop?`, `max_results?` | 读取表达式 |
-| `ae.validateExpressions` | `comp_id?`, `layer_ids?`, `prop?`, `sample_times?`, `max_results?` | 强制求值表达式并返回错误 |
-| `ae.getKeyframes` | `comp_id?`, `layer_id`, `path` | 读取关键帧 |
-| `ae.searchProject` | `query`, `scope?`, `limit?` | 搜索项目 |
-| `ae.skillList` | `include_templates?` | 列出本地 skill |
-| `ae.skillCreate` | `name`, `description?`, `template_type?`, `template`, `args_schema?`, `overwrite?` | 创建 skill |
-| `ae.skillEdit` | `name`, update fields | 编辑 skill |
-| `ae.skillDelete` | `name` | 删除 skill |
-| `ae.skillUse` | `name`, `args?`, `execute?` | 渲染或执行 skill |
-| `ae.toolIndex` | `kinds?`, `statuses?`, `source_types?`, `include_candidates?`, `limit?` | 只列制品摘要 |
-| `ae.toolSearch` | `query`, `kinds?`, `categories?`, `tags?`, `risks?`, `statuses?`, `source_types?`, `offset?`, `limit?` | 搜索摘要；不返回 content |
-| `ae.toolInspect` | `artifact_id` | 首个返回完整 content 的调用 |
-| `ae.toolUse` | staged action fields | render/prepare/grant/execute/start/status/cancel/history |
-| `ae.toolCreate` | `name`, `kind`, `content` 及可选元数据字段 | 创建原生制品 |
-| `ae.toolEdit` | `artifact_id`, `changes`, `expected_revision`, `expected_content_hash`, `replace_artifact_id?` | 编辑或验证制品 |
-| `ae.toolDelete` | `artifact_id`, `expected_revision`, `expected_content_hash` | 永久删除用户制品 |
-| `ae.toolArchive` | `artifact_id`, `expected_revision`, `expected_content_hash` | 归档制品 |
-| `ae.toolDuplicate` | `artifact_id`, `name`, `expected_revision`, `expected_content_hash` | 复制为原生用户制品 |
-| `ae.toolPromoteFromHistory` | `artifact_id`, `expected_revision`, `expected_content_hash`, `replace_artifact_id?` | 提升 chat history candidate |
-| `ae.toolImport` | staged import fields | preview/commit/discard 隔离导入 |
-| `ae.toolExport` | `artifact_ids`, `out_path` | 确定性导出 `.aemcptools` |
-| `ae.createRig` | `comp_id?`, `target_layer_id`, `rig_type`, `name?`, `options?`, `controls?` | 创建 controller/effect/preset rig |
-| `ae.ping` | `expect?` | bridge 握手 |
-
-### 原生工程与合成操作
-
-Project / Composition Operations 能力包固定包含 8 个公开 MCP 工具，并全部走 `MCP -> Core -> native RPC -> AEGP -> AE`。其中 `ae_getProjectContext`、`ae_getProjectItemMetadata`、`ae_getCompositionSettings` 是 3 个严格原生只读工具；`ae_setCompositionWorkArea`、`ae_renameProjectItem`、`ae_setProjectItemComment`、`ae_setProjectItemLabel`、`ae_duplicateComposition` 是 5 个严格原生写工具。原生能力、契约或传输不可用时均返回结构化错误，**不会回退到 JSX**。
-
-- `ae_getProjectContext` 的 `selection_offset` 默认为 `0`，`selection_limit` 默认和最大均为 `50`。结果返回 project locator/generation、active item、最近使用的合成和当前 Project 面板选择页；后续工具必须原样复制其中的新鲜 locator。
-- `ae_getProjectItemMetadata` 接受 context 或 `ae_listProjectItems` 返回的 `item_locator`，读取名称、类型、parent、comment 与 label 等项目项 metadata。`ae_getCompositionSettings` 只接受 composition locator，读取名称、尺寸、时长、帧率、像素宽高比、work area 与图层数等精确 settings。
-- `ae_setCompositionWorkArea` 接受新鲜 `composition_locator`、`start={value,scale}`、`duration={value,scale}` 和至少 16 字符的稳定 `idempotency_key`；start 必须非负，duration 必须为正。它在一个 AE Undo group 中写入并原生读回验证。
-- `ae_renameProjectItem` 的 `name` 为 1–255 个 Unicode scalar；`ae_setProjectItemComment` 的 `comment` 为 0–1024 个 scalar，空字符串表示清空；`ae_setProjectItemLabel` 的 `label_id` 为 `0..16`，其中 `0` 表示无 label。三者都需要新鲜 `item_locator` 和至少 16 字符的稳定 `idempotency_key`，并在一个 AE Undo group 中执行原生写入与读回验证。
-- `ae_duplicateComposition` 接受新鲜 `composition_locator`、1–255 scalar 的 `new_name` 和至少 16 字符的稳定 `idempotency_key`。复制会改变工程图 generation；结果返回新鲜的 source/new composition locator、复制前后项目项数量与两份 settings。相同 intent 的安全重放不会再创建副本。
-- 5 个写工具的成功响应都会分别报告 `undo.available` 与 `undo.verified`；`available=true` 只表示 AE 已创建 Undo 步骤，调用本身不会替用户执行 Undo。需要恢复时必须真正执行 AE Undo，并重新读取完整工程 context、目标 metadata/settings 与项目项数量，证明所有语义状态回到 before 基线。遇到 `POSSIBLY_SIDE_EFFECTING_FAILURE` 时先核对 AE 状态与审计，禁止盲目重试。
-
-### 原生工程与属性导航
-
-公开 MCP 工具 `ae_listProjectItems`、`ae_listCompositionLayers`、`ae_listSelectedLayers`、`ae_getCompositionTime`、`ae_listLayerProperties` 和 `ae_listLayerPropertyKeyframes` 分别调用对应 canonical Core verb，并固定走 `MCP -> Core -> native RPC -> AEGP -> AE`。六者均为严格的原生只读工具；原生能力、契约或传输不可用时返回结构化错误，**不会回退到 JSX**。
-
-- 首次调用 `ae_listProjectItems` 时省略 `project_locator`；`offset` 默认为 `0`，`limit` 默认为 `25`、最大为 `50`。续页时传回上一页的 `projectLocator`，且 `offset > 0` 时该 locator 必填。
-- `ae_listCompositionLayers` 的 `composition_locator` 必须来自工程项结果中 `type="composition"` 的 `locator`；同样使用 `offset` 分页，`limit` 默认为 `25`、最大为 `50`。
-- `ae_listSelectedLayers` 接受相同的 `composition_locator`，只返回该合成在调用时直接选中的图层，并复用 `ae_listCompositionLayers` 所签发的稳定 layer locator。结果按一基图层堆栈索引升序排列；property、mask、effect、keyframe 等非图层 collection 项不会被伪装成已选图层。每一页都是实时快照；若两次分页调用之间选择发生变化，应从 `offset=0` 重新读取。
-- `ae_getCompositionTime` 使用同一种 `composition_locator`，只返回回显的 `compositionLocator` 与 `currentTime`。`currentTime.value/scale` 是 SDK 时间基准的精确有理数，`secondsRational` 是其规范约分形式（例如 `60/24` 返回 `5/2`），不会转换成有精度损失的浮点秒数。它读取 item CTI，不代表实时播放/渲染时钟；Adobe SDK 明确说明渲染期间该值不会更新。
-- `ae_createComposition` 接受精确名称和至少 16 字符的稳定 `idempotency_key`；宽高默认 1920x1080，时长默认 `5/1` 秒，帧率默认 `24/1`，像素宽高比默认 `1/1`，也可用精确整数/有理数覆盖。AEGP 主线程调用 `AEGP_CreateComp` 创建根级合成，并在同一 Undo group 内完成；随后读回名称、尺寸、时长、帧率、像素宽高比、图层数与工程项数量，刷新工程图 generation 并返回新 composition locator。同一 key 与相同参数返回 `replayed=true`；同 key 不同参数返回 `DUPLICATE_REQUEST`。不确定失败必须先读取工程项和审计，禁止盲目重试。
-- `ae_createCompositionLayer` 接受新鲜的 composition locator、`kind="null"|"solid"`、精确名称与至少 16 字符的稳定 `idempotency_key`。null 不接受 solid 专用字段；solid 可选 RGBA 0–255、宽高与精确有理数时长，省略时继承合成尺寸/时长并使用不透明白色。AEGP 主线程分别调用 `AEGP_CreateNullInComp` 或 `AEGP_CreateSolidInComp`，置于一个 Undo group 中并读回名称、索引、数量、source 与 solid 元数据。成功会刷新工程图 generation 并返回新的 locator；旧 locator 随即失效。同一 key 与相同参数返回 `replayed=true` 且不重复创建；同 key 不同参数返回 `DUPLICATE_REQUEST`。`undo.available=true` 与 `undo.verified=false` 仍分别表示 Undo 步骤存在、但工具未替用户执行 Undo；不确定失败必须先读 AE 状态与审计，禁止盲目重试。
-- `ae_applyLayerEffect` 接受 `ae_listCompositionLayers` 返回的新鲜 layer locator、已安装效果精确且不受语言影响的 `effect_match_name`，以及至少 16 字符的稳定 `idempotency_key`。AEGP 主线程在单个 Undo group 中调用 `AEGP_ApplyEffect`，读回效果堆栈并验证总数和同 matchName 数量都恰好增加 1；结果返回显示名、matchName、一基插入索引、新 layer locator、数量和审计证据。同一 key 与相同参数返回 `replayed=true` 且不重复添加；同 key 不同参数返回 `DUPLICATE_REQUEST`。成功后输入 locator 已失效；读取 Effects group 必须使用结果中的新 locator。`POSSIBLY_SIDE_EFFECTING_FAILURE` 后先核对 AE 状态、Undo 栈与审计，禁止盲目重试。
-- `ae_listLayerProperties` 的 `layer_locator` 必须来自合成图层结果。省略 `parent_property_locator` 时读取图层属性根；仅可传入本工具返回且 `groupingType` 为 `named-group` 或 `indexed-group` 的 property locator，并只列该 group 的直接子项。默认和最大 `limit` 均为 `25`，不会递归返回整棵属性树；leaf locator 会得到结构化 `INVALID_ARGUMENT`。
-- `ae_listLayerPropertyKeyframes` 只接受 `ae_listLayerProperties` 在当前原生 session 中签发的 primitive leaf `property_locator`。结果以一基 `keyframeIndex` 升序返回精确合成时间 `time.value/scale`、typed decimal-string primitive value，以及 SDK 可无歧义表达的 `none|linear|bezier|hold` 入/出插值。默认和最大 `limit` 均为 `25`；过期或伪造 locator、不可关键帧化或不受支持的 stream 会返回结构化错误。
-- 原始 primitive 值绑定返回的精确 `sampleTime.value/scale`，并使用带类型的十进制字符串编码；复杂、handle-backed 的 SDK 值会明确返回 `valueStatus="unsupported"` 和 `value=null`。
-- `ae_setLayerPropertyValue` 必须同时传回 `ae_listLayerProperties` 签发的 layer/property locator，并使用稳定且至少 16 字符的 `idempotency_key`。首版只接受无关键帧、非时变的 `one-d`、2D/3D（含 spatial）和 color leaf；写入由 `AEGP_SetStreamValue` 在 AE 主线程执行，置于一个 AE Undo group 中并立即读回验证。`undo.available=true` 表示 AE 已创建 Undo 步骤，`undo.verified=false` 表示调用本身没有替用户执行 Undo。写入响应丢失或读回证据不完整时返回 `POSSIBLY_SIDE_EFFECTING_FAILURE`；先重新读取 AE 状态和审计，禁止盲目重试同一 intent。
-- Locator 是服务端签发的不透明标识，绑定当前 host、session、project 与 generation；它不是跨请求保留的 AEGP handle。不要拆解、改写或跨工程切换/重启缓存。成功结果携带 `native-aegp` provenance、已验证 postcondition 与 audit evidence。
-
-现有 `ae.layers` 是 legacy JSX 工具，继续保留原参数、数值 ID、`limit=0` 全量返回及可选文本格式语义。它没有被改造成原生工具，也不与上述 locator 契约混用。
-现有 `ae.getTime` 同样保持原 legacy JSX 参数和返回值；它没有被重定向到 `ae_getCompositionTime`。
-
-### `ae.layers`
-
-这是 legacy JSX 工具。默认一次返回**全部**图层（与旧行为兼容）。分页与紧凑输出均为可选：
-
-| 参数 | 说明 |
-|---|---|
-| `offset?` | 0-based 起始下标，默认 `0` |
-| `limit?` | 返回上限；`0`（默认）表示全部 |
-| `format?` | `json`（默认，结构化）或 `text`（紧凑分页表，约为 JSON 的 1/3 token） |
-
-每个图层含 `id / name / type / enabled / inPoint / outPoint / isThreeD / hasParent / parent`。
-`type` 为 `camera/light/text/shape/null/adjustment/solid/footage/av` 之一；`parent` 为父层名（无则 `null`），`hasParent` 为布尔。
-返回 envelope 含 `total / offset / limit / returned / hasMore`，便于分页。
-
-### 运行时 helper（`ae.exec` / `ae.readProps`）
-
-面板启动时会把一组 helper 载入持久 ExtendScript 引擎，agent 编写的 JSX 可直接调用。所有 helper「永不抛异常」——坏输入返回 `null`：
-
-| Helper | 作用 |
-|---|---|
-| `AEMCP.compById(id)` | 按 item id 取 CompItem（未知 id 返回 `null`，不抛异常） |
-| `AEMCP.activeComp()` | 当前活动 comp，或 `null` |
-| `AEMCP.layerById(comp, idx)` | 按 1-based 下标取图层 |
-| `AEMCP.propByPath(root, "Transform/Position")` | 按显示名路径解析属性 |
-| `AEMCP.propByMatchPath(root, "ADBE Transform Group#1/ADBE Position#1")` | 按 matchName 路径（支持 `#序号`）解析属性 |
-
-同时为经典引擎补齐 ES3 的 Array/Object polyfill（`indexOf/map/filter/...`、`Object.keys/...`），在 AE 2026 现代引擎上自动 no-op。
-
-`ae.exec` 的自动 checkpoint 是**非阻塞**的：探测/快照失败或超时会降级为返回结果里的 `checkpointSkipped` 说明，绝不中断你的编辑。多语句脚本在设置 undo group 时也会完整执行。
-
-### `ae.previewFrame`
-
-`times` 优先于 `time`；两者都不传时使用当前 comp 时间。默认返回文件路径，`include_base64=true` 时返回 base64。
-
-当前实现会让 AE 打开目标 comp、设置时间，然后优先调用 `CompItem.saveFrameToPng` 写出合成帧 PNG。这个路径不依赖可见窗口，不会把 AE 面板、前景遮挡窗口或桌面像素写进 preview。若当前 AE 版本或工程状态无法写出 PNG，才回退到 snapshotter 抓取可见 viewer，并在返回帧里标记 `source: "viewer"`。
-
-`source: "comp"` 表示拿到的是合成帧像素；`source: "viewer"` 表示使用了兼容 fallback。`ae.snapshot` 仍然是底层诊断截图。
-
-默认输出目录是操作系统临时目录下的 `ae_mcp_previews/<session>/`。服务进程内首次使用默认目录时会清理超过 24 小时未更新的旧 session 目录；显式传入 `out_dir` 时不做清理，调用方负责管理该目录。
-
-### Skill System
-
-Skill 存储在 `~/.ae-mcp/skills/<name>.json`：
+`ae_exec` 接受完整 JSX：
 
 ```json
 {
-  "name": "wiggle-position",
-  "description": "Add wiggle expression",
-  "template_type": "jsx",
-  "template": "wiggle(${freq}, ${amp})",
-  "args_schema": {
-    "freq": {"type": "number", "default": 2},
-    "amp": {"type": "number", "default": 30}
-  }
+  "code": "JSON.stringify({ok:true});",
+  "undo_group_name": "Describe the edit",
+  "timeout_sec": 30
 }
 ```
 
-`ae.skillUse` 渲染 `${arg}` 占位符。JSX skill 参数会先 JSON encode 再替换。
+读操作应以 `JSON.stringify(...)` 结尾。写操作应提供可识别的 Undo label，
+随后使用独立读取验证状态。需要画面判断时再调用 `ae_previewFrame`；写入表达式
+后先调用 `ae_validateExpressions`。
 
-### Tool Library 协议
+### `ae_nativeExec`
 
-| Dotted verb | MCP 暴露名 | 必填参数 | 可选参数 | 成功响应重点 |
-|---|---|---|---|---|
-| `ae.toolIndex` | `ae_toolIndex` | 无 | `kinds`, `statuses`, `source_types`, `include_candidates`, `limit` | `ok`, `artifacts[]`（`ToolSummary`，无 content） |
-| `ae.toolSearch` | `ae_toolSearch` | `query` | `kinds`, `categories`, `tags`, `risks`, `statuses`, `source_types`, `offset`, `limit` | `ok`, `artifacts[]`, `total`, `offset`, `limit`；无 content |
-| `ae.toolInspect` | `ae_toolInspect` | `artifact_id` | 无 | `ok`, 完整 `artifact`, `trust` |
-| `ae.toolUse` | `ae_toolUse` | `action` 及对应 action 字段 | 见下方 action 表 | render、plan/grant、execution job 或同步 execute 结果 |
-| `ae.toolCreate` | `ae_toolCreate` | `name`, `kind`, `content` | `description`, `category`, `tags`, `compatibility`, `declared_risk`, `status`, `args_schema`, `expected_store_revision` | `ok`, 完整新 `artifact` |
-| `ae.toolEdit` | `ae_toolEdit` | `artifact_id`, `changes`, `expected_revision`, `expected_content_hash` | `replace_artifact_id` | `ok`, 完整更新 `artifact` |
-| `ae.toolDelete` | `ae_toolDelete` | `artifact_id`, `expected_revision`, `expected_content_hash` | 无 | `ok`, `deleted` |
-| `ae.toolArchive` | `ae_toolArchive` | `artifact_id`, `expected_revision`, `expected_content_hash` | 无 | `ok`, 完整 archived `artifact` |
-| `ae.toolDuplicate` | `ae_toolDuplicate` | `artifact_id`, `name`, `expected_revision`, `expected_content_hash` | 无 | `ok`, 完整副本 `artifact` |
-| `ae.toolPromoteFromHistory` | `ae_toolPromoteFromHistory` | `artifact_id`, `expected_revision`, `expected_content_hash` | `replace_artifact_id` | `ok`, 完整 saved `artifact` |
-| `ae.toolImport` | `ae_toolImport` | `action`；preview 用 `path`，commit/discard 用 `import_id` | commit 的 `resolutions` | 见下方 import flow |
-| `ae.toolExport` | `ae_toolExport` | `artifact_ids`（1..511，且不可重复）, `out_path` | 无 | `ok`, `path`, `packageSha256` |
-
-Wire enum 如下：
-
-- `kind`: `jsx`, `expression`, `prompt-skill`, `recipe`, `diagnostic`。
-- `status`: `candidate`, `saved`, `pinned`, `archived`, `deprecated`。可编辑的 user/legacy artifact 通过公开 Edit 只允许 `candidate -> saved`, `saved -> pinned`, `pinned -> saved`；归档使用 `ae.toolArchive`。
-- `source.type` / 摘要的 `sourceType`: `user`, `legacy`, `bundled`, `chat-tool-call`, `imported`。
-- `declaredRisk` / plan `risk`: `read`, `write`, `destructive`, `external`；`operation`: `render`, `execute`, `apply`。
-
-`jsx`, `expression`, `prompt-skill` 的 `content` 是 UTF-8 string。`recipe` 的 `content` 是 `{"steps": [...]}`，每步严格包含 `refType` (`artifact`/`tool`), `ref`, `operation` (`render`/`execute`/`apply`/`call`), `args`, `target`。`diagnostic` 的 `content` 严格为 `{"capability": string, "args": object}`。未知键会被拒绝。Create 的 `status` 只能是 `candidate` 或 `saved`。
-
-Edit 的 `changes` 只允许 `name`, `description`, `kind`, `category`, `tags`, `compatibility`, `declared_risk`/`declaredRisk`, `status`, `content`, `args_schema`/`argsSchema`, `verification_action`/`verificationAction`。`verification_action` 只能是 `mark-reviewed` 或 `clear`；修改 content、kind 或 args schema 会清除旧 verification。
-
-`ae.toolIndex` 和 `ae.toolSearch` 默认只查 `saved`/`pinned`。Index 的 `include_candidates=true` 会额外加入 `candidate`；Search 要查 candidate 必须显式传 `statuses`。`ToolSummary` 含 `id`, `name`, `description`, `kind`, `category`, `tags`, `status`, `verified`, `declaredRisk`, `contentHash`, `revision`, `updatedAt`, `lastUsedAt`, `sourceType`，不含 content。Inspect 返回完整 `ToolArtifact`；只有 manifest 验签通过的 bundled artifact 获得 `trust="signed-bundled"`，其余为 `user-untrusted`。
-
-`candidate`、`archived`、`deprecated` 均不能 render、prepare、获取 grant 或 execute。Index/Search 永不返回 content，Inspect 是 progressive discovery 中第一个 content-bearing 调用。成功的 `ae.exec` 或带顶层 expression 文本的调用可产生 `chat-tool-call` candidate；失败、secret 命中、`ae.skillCreate`/`ae.skillEdit` 和所有 `ae.tool*` 调用都不会捕获。同 kind/content hash 的重复 history candidate 会合并。`chat-tool-call` candidate 用 `ae.toolPromoteFromHistory`；`imported` candidate 用 `ae.toolEdit` 将 `status` 改为 `saved`。`replace_artifact_id` 只能随 candidate-to-saved 提升使用。
-
-`ae.toolUse` 的精确 action 形状：
-
-| Action | 必填 | 可选 | 成功响应 |
-|---|---|---|---|
-| `render` | `action`, `artifact_id` | `args`；`operation` 若传只能是 `render` | `ok`, `artifactId`, `contentHash`, `trust`，以及 `rendered` 或 `untrustedContext` |
-| `prepare` | `action`, `artifact_id`, `operation` | `args` 和 `target`（默认都为 `{}`） | 裸 plan object：`artifactId`, `contentHash`, `operation`, `normalizedArgs`, `target`, `dependencyHashes`, `planHash`, `risk`, `expiresAt`；不含 `ok` |
-| `grant` | `action`, `plan_hash`, `grant_scope` (`once`/`session`) | 无 | `ok`, `grantId`, `planHash`, `scope`, `expiresAt` |
-| `execute` | `action`, `plan_hash`, `grant_id`, `operation_id` | 无 | 同步等待终态；成功时返回依 kind/operation 而定的 `ok: true` render/backend/handler 结果，recipe 返回 `results[]`；失败包含 execution/recovery 证据 |
-| `start` | `action`, `plan_hash`, `grant_id`, `operation_id` | 无 | 立即返回 execution job；通常先为 `queued`，调用方用 `executionId` 查询 |
-| `status` | `action`, `execution_id` | 无 | 当前 execution job；终态可在 Core 重启后恢复 |
-| `cancel` | `action`, `execution_id` | 无 | 当前 execution job，加 `cancelDisposition` |
-| `history` | `action`, `artifact_id` | `limit`（1..100，默认 20） | `ok`, `artifactId`, `executions[]`，按最新优先排序 |
-
-grant 只能消费一次。execute 前会重新读取制品、args schema 与 recipe/handler 依赖，任一变化都会使旧 plan/grant 失效。
-
-`execute` 和 `start` 都要求调用方生成稳定的 `operation_id`（16..128 字符）。同一 plan 丢失响应后，使用同一个 `operation_id` 再次 `start` 会返回原 `executionId`，不会重新派发 backend；该去重保证仅在 execution record 或 reservation 仍被保留时成立，终态记录超过保留上限被淘汰后不能再依赖旧 ID 去重。如果已经拿到 `executionId`，直接用 `status` 恢复。不得在状态与审计尚未核对时换一个新的 `operation_id` 重试。相同 `operation_id` 若绑定不同 plan，会返回 `tool_operation_conflict`。
-
-Execution job 的公共字段包括 `executionId`, `operationId`, `artifactId`, `contentHash`, `artifactRevision`, `planHash`, `operation`, `initiator`, `status`, `progress`, `terminal`, `cancelRequested`, `outcomeUnknown`, 时间字段，以及可空的 `result`, `error`, `audit`。`status` 为 `queued`, `running`, `succeeded`, `failed`, `cancelled`, `outcome-unknown` 之一。`error` 保留可用的 `sideEffect` 与 `recovery` 元数据；`outcomeUnknown=true` 时必须先检查 AE 状态和 audit，不能盲目重新执行。
-
-`cancel` 只保证报告结构化 disposition：本 Core 拥有的排队任务可返回 `cancelled-before-dispatch`，已派发的运行任务返回 `not-cancellable-after-dispatch`；共享 Tool Library 中由另一个 Core 拥有、且当前 Core 已经通过启动加载、`status`/`history` 或重复 `start` 观察到的排队或运行任务返回 `owned-by-another-core`。当前 Core 已经观察到终态时返回 `already-terminal`；跨 Core 缓存可能仍停留在旧 reservation，因此取消前先用 `status` 或 `history` 刷新。若当前 Core 尚未观察该 reservation，直接 `cancel` 可能返回 `tool_execution_not_found`；先调用 `status` 加载共享状态。它绝不把“请求取消”表述成 AE 已经停止。
-
-普通公开 MCP schema 没有 `developer_mode` 开关，公开 Tool Library kind 也不包含 `system-command`。持有私有 capability 的开发者面板可查看隔离的 system-command 元数据，并通过 Inspect 返回包含完整 `content` 的制品；其 direct-run capability 仍为不可用，`ae.toolUse` 仍拒绝执行，普通 agent 也无法发现该类制品。
-
-Tool Library 根目录的 `execution-history.json` 分别保存最多 500 条脱敏终态 `executions`，以及用于跨 Core 原子占用 operation ID 的非终态 `reservations`（`queued`/`running`）。`status`/`history` 可在 Core 重启后恢复仍被保留的 `succeeded`、`failed`、`cancelled` 或 `outcome-unknown`；在对应 execution 或 reservation 仍被保留时，相同 `operation_id` 与相同 plan 返回原 execution，不会再次派发 backend，若 plan 不同则返回 `tool_operation_conflict`。该文件只用于执行与占用恢复，与 artifact 的 `lastUsedAt` 和追加式 `audit.jsonl` 各自独立；它不保存 grant、批准秘密、panel capability token 或未脱敏参数。`queued`/`running` reservation 只证明 operation ID 已占用，不能描述成已获得持久终态；失效 reservation 会按是否已经运行恢复为 `failed` 或 `outcome-unknown`。
-
-四档最低策略：read 始终可读；readonly 拒绝其他风险；manual 对 write/destructive/external 询问；auto/none 自动放行普通 write，但 destructive/external 仍逐次询问。只有 write plan 可获得 session 放行；destructive/external 只能 once。write 的 session key 绑定 artifact/content/operation/normalized target，不按工具名缓存。
-
-Import flow：
-
-1. `action="preview"` 只传 `path`，返回 `ok`, `importId`, `packageSha256`, `artifacts[]`, `conflicts[]`, `highestRisk`, `expiresAt`。每个 artifact preview 含 `summary`, `existingId`, `metadataChanges`, `contentChanged`, `calculatedRisk`；conflict 含 `conflictId`, incoming/existing ID 与 content hash。preview 在 15 分钟后过期。
-2. `action="commit"` 传 `import_id` 和 `resolutions`。每个 conflict 都必须精确给出 `keep` 或 `duplicate`；`replace` 不可用。commit 返回 `ok` 和新建制品的 summary-only `artifacts[]`。所有接受的导入制品都以 `source.type="imported"`, `status="candidate"`, `verified=false` 进入原生 store，不会覆盖现有制品。
-3. `action="discard"` 只传 `import_id`，返回 `ok`, `discarded`；对已清理/不存在的 id 也是幂等成功。
-
-`.aemcptools` 上限：压缩包 10 MiB、展开总量 50 MiB、单文件 5 MiB、最多 512 entries（含 `manifest.json`，因此 `artifact_ids` 严格为 1..511）、路径深度 8、单成员压缩比 100:1。加密、嵌套 archive、symlink/特殊文件、跨平台不安全/重复路径、未声明成员、hash/schema/secret 不匹配均 fail-closed，commit 不留下部分制品。Export 还要求 `artifact_ids` 不重复，并在写目标前扫描整个输出包的 secret。
-
-Legacy skill 仍以 `AE_MCP_SKILL_DIR`/`~/.ae-mcp/skills` 下的 JSON 为唯一正本，不复制到原生 artifact store。用户 legacy skill 可经 Tool Library 编辑、归档和删除；content/args schema 编辑写回原 JSON，Tool-only metadata 写入 `legacy-metadata.json`。Legacy 名称不可在 Tool Editor 中重命名，skill 字段与 Tool-only metadata 也必须分两次 CAS 事务保存。同名 user/bundled skill 会以不同 ID 同时显示，而 `ae.skillUse` 仍保持 user-first 的旧解析顺序。Bundled skill 经过 manifest 校验且只读，但可 Duplicate 为新的原生 user artifact。`ae.skillUse execute=false` 保持旧响应；`execute=true` 只允许 JSX skill，并走与 `ae.toolUse` 相同的 plan/grant 执行引擎。
-
-### 表达式校验
-
-写表达式后，视觉检查前应运行 `ae.validateExpressions`。它会扫描表达式属性，按 sample time 调用 `valueAtTime()`，并返回 `expressionError` 和求值错误。
+原生入口接受一个最多 64 个 operation 的线性 program：
 
 ```json
 {
-  "ok": true,
-  "valid": false,
-  "checked": 1,
-  "errors": [
+  "operationKey": "required-for-write-programs",
+  "undoGroup": "One real AE Undo group",
+  "operations": [
     {
-      "layerId": 1,
-      "propPath": "Text/Source Text",
-      "expressionError": "..."
+      "op": "composition.resolve",
+      "args": {"locator": {"kind": "composition"}},
+      "saveAs": "composition"
+    },
+    {
+      "op": "composition.time.read",
+      "args": {"composition": {"ref": "composition"}},
+      "returnAs": "time"
     }
   ]
 }
 ```
 
-这个工具用于提前发现本地化敏感引用等问题，例如中文 AE 下 `effect("Value")("Slider")` 失效，应改用 `effect("Value")(1)`。
+实际 locator 必须从真实读取结果原样复制；示例中的缩略 locator 只说明 envelope，
+不能直接提交。resolver 保存的是带类型、仅在本次请求内有效的 handle。引用只能
+指向前面已命名的值，handle 不会序列化，也不会跨请求、重连或 host 重启存活。
 
-### `ae.createRig`
+只读 program 不携带 `operationKey` 与 `undoGroup`。只要包含一个写 primitive，
+两者都必填；同一 key 只能绑定规范化后完全相同的 program。一个写 program 使用
+一个真实 AE Undo group，但不承诺原子性，也不会在部分失败后静默回滚。
 
-MVP rig 类型：
+### Readback、失败与 Undo
 
-| Type | 行为 |
-|---|---|
-| `transform_controller` | 创建 null controller，并用表达式连接 transform 属性 |
-| `effect_controls` | 创建带 Slider/Angle/Checkbox/Color controls 的 controller，并连接目标属性 |
-| `puppet_pin_nulls` | 没有 Puppet pin 时 graceful skip |
-| `apply_preset` | 应用用户提供的 `.ffx` preset |
+- 写入前读取基线，写入后用新的独立请求读取结果。
+- 图结构变化或 Undo 后重新解析 locator。
+- typed terminal、AE 状态、postcondition 和 audit 必须一致。
+- timeout 或断连发生在 dispatch 之后时，结果可能已经产生副作用；先读 AE 状态并
+  核对 audit，再考虑重放。
+- `undo.available=true` 只说明 Undo 边界存在，不说明 Undo 已执行或已验证。
+- 真正执行 Undo 后，再用独立读取证明基线恢复。
 
-`effect_controls` 支持用类型化的 `controls` 声明（优先于手写的 `options['controls']`）：每项为 `{name, type, property}`，`type` ∈ `slider/angle/checkbox/color`，`property` 为要驱动的目标属性显示名路径。
+### Primitive catalog
 
-MVP 不生成任意二进制 `.ffx` 文件。
+唯一手工维护的 primitive catalog：
 
-### Atom-Parity 状态
+```text
+native/ae-plugin/protocol/native-primitives.json
+```
 
-以下是当前代码已覆盖的能力清单，不是 v0.9.2 双平台或四格实机验收证据：
+检查所有生成投影：
 
-- CEP panel 到 AE bridge
-- 57 个已注册 `ae.*` handlers（52 个 backend verbs、3 个 native-only verbs，加 `ae.status`/`ae.diagnose`）
-- read/mutate/search/checkpoint/revert
-- `ae.previewFrame` 快速 viewer preview
-- Python 侧持久化 skill system
-- Panel Tools 页、progressive Tool Library discovery 与 `.aemcptools` import/export UX
-- `ae.createRig` MVP
-- `ae.validateExpressions` 表达式校验
+```bash
+uv run python scripts/generate_native_exec.py --check
+```
 
-剩余差距：
-
-- `ae.previewFrame` 还不是精准 Composition Viewer crop
-- `ae.createRig` 需要更深的 Puppet pin 和 preset workflow
-- signed ZXP clean install 还需验证
-- 单安装 MCP-over-HTTP transport 可作为未来方向
-
-### 授权与借鉴
-
-ae-mcp 是独立实现，参考了 Atom 风格 AE 操作面和 FX Console 风格即时预览体验，但不 vendoring Atom、FX Console 或 AtomX 代码。
-
-项目代码使用 MIT License。Adobe `plugin/client/CSInterface.js` 保留其上游许可声明。其他依赖遵循其各自上游许可证。
+不要维护第二份 primitive ID、schema 或文档表。
 
 ## English
 
-### Quick Facts
+### Quick facts
 
-| Item | Value |
+| Item | Current contract |
 |---|---|
-| MCP transport | stdio JSON-RPC 2.0 |
-| AE transport | HTTP RPC, `127.0.0.1:11488` |
-| Entry point | `ae-mcp` |
-| Backend | `AE_MCP_BACKEND=ae-mcp` |
-| Plugin URL | `AE_MCP_PLUGIN_URL=http://127.0.0.1:11488` |
-| Handler count | 52 verbs, filtered by backend `supported_verbs()` |
-| Skill storage | `~/.ae-mcp/skills/<name>.json` |
-| Tool Library | `~/.ae-mcp/tools`; legacy skills remain canonical in place |
+| Public tool count | 16 on the final public surface |
 | Preview output | `ae_mcp_previews/<session>/...png` in the operating-system temporary directory unless `out_dir` is set |
 | Checkpoint store | `ae_mcp_checkpoints/<basename>/<id>.aep + .json` under the operating-system temporary directory |
 
-### v0.9.2 Platform and Distribution Contract
+### v0.9.2 platform and distribution contract
 
-v0.9.2 is the Windows x64 release. Provider, Tool Library, and Platform Helper implementation is complete and has passed Windows AE 2025 hardware validation; macOS, bundled RuntimeManager, the production cross-platform signing chain, and the complete hardware matrix move to v0.9.3:
+v0.9.2 is the Windows x64 release. Its install asset is
+`ae-mcp-panel-v0.9.2-windows-x64.zxp`. macOS, bundled RuntimeManager,
+the production cross-platform signing chain, and the complete AE 25/26
+hardware matrix move to v0.9.3.
 
-| Platform | Install asset | Audit payload |
-|---|---|---|
-| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | the same ZXP |
+Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional**
+dependencies for their corresponding AI channels, not prerequisites for Core
+or either execution route.
 
-v0.9.2 retains the CEP host range `[25.0,26.9]`, while this release evidence covers Windows AE 2025 only. The Panel continues to use the existing external runtime/launcher setup; bundled offline RuntimeManager moves to v0.9.3. Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional** dependencies for their corresponding AI channels, not core prerequisites. Provider configuration and credentials are not exportable; system-credential and Helper behavior is implemented and fail-closed.
+### Final public tool surface
 
-### Environment Variables
-
-| Variable | Purpose | Default |
-|---|---|---|
-| `AE_MCP_BACKEND` | Selects the backend entry-point name (the bridge registers as `ae-mcp`) | unset (auto-selected when exactly one backend is installed) |
-| `AE_MCP_PLUGIN_URL` | Address the bridge backend uses to reach the AE panel's HTTP RPC | `http://127.0.0.1:11488` |
-| `AE_MCP_SKILL_DIR` | Directory where skills are stored (the `<name>.json` files read/written by `ae.skill*`) | `~/.ae-mcp/skills` |
-| `AE_MCP_TOOL_DIR` | Root for native artifacts, index, audit, migration backups, and legacy metadata | `~/.ae-mcp/tools` |
-| `AE_MCP_TOOL_APPROVAL_TIER_FILE` | Panel-managed tier file for dynamic artifact execution | unset; missing/invalid means `manual` |
-| `AE_MCP_CHECKPOINT_KEEP` | Max checkpoints retained per project (older ones are pruned; minimum 1) | `50` |
-
-### Built-In Provider Configuration
-
-- Built-in AI services are organized as Claude / Codex / ZCode backends. Each backend shows credential-channel cards in Settings, with automatic selection and optional manual channel locking.
-- Claude's API direct channel replaces the old BYOK backend. Official Anthropic API and Anthropic-compatible providers are configured in Provider Manager, and `/v1/messages` plus `/v1/models` route to the selected Base URL.
-- The Codex backend uses `codex app-server` plus Codex CLI login by default. It can also inherit custom model providers from `~/.codex/config.toml` or use an OpenAI-compatible provider from Provider Manager.
-- Provider Manager stores OpenAI-compatible and Anthropic providers locally in `~/.ae-mcp/providers.json` and uses `/v1/models` only to enumerate model IDs. A list does not imply one API for every model: Codex verifies and caches the dialect for the exact current model ID. Models with native Responses support call `/responses` directly; Chat-Completions-only models use the local `/responses` facade for safe conversion; only Responses features that cannot be represented equivalently return a structured compact 501, with no silent field dropping. Legacy Provider-level detections without a model binding are treated as unconfirmed. Explicit custom providers take priority over inherited config.
-- A custom model ID is inserted at the top of the selected channel's model list and becomes the default model. Clearing it returns to the probed model list.
-
-### Architecture
-
-```text
-MCP client
-  -> ae_mcp.server
-  -> ae-mcp backend package
-  -> HTTP 127.0.0.1:11488
-  -> CEP panel Node host
-     -> native RPC -> AEGP main-thread dispatcher -> After Effects
-     -> CSInterface.evalScript -> After Effects ExtendScript (legacy JSX tools)
-```
-
-### Verb Reference
-
-Unless noted otherwise, tools return JSON with `ok: true` on success, or `ok: false` plus `error` on failure. A successful `ae.toolUse` call with `action="prepare"` returns the plan object directly and does not include `ok`.
-
-| Verb | Args | Notes |
-|---|---|---|
-| `ae.init` | `refresh_only?` | initialize/refresh project state |
-| `ae.status` | none | inspect backend selection, installed backends, and snapshotter status |
-| `ae.diagnose` | none | end-to-end host, Python handshake, token, and AE responsiveness check |
-| `ae.overview` | none | project and comp overview |
-| `ae.projectSummary` | none | return a provenance-bound native AEGP project summary; never falls back to JSX |
-| `ae_getProjectContext` | `selection_offset?`, `selection_limit?` | natively read the active item, most-recently-used composition, and Project-panel selection; default/maximum 50 selected items; never falls back to JSX |
-| `ae_getProjectItemMetadata` | `item_locator` | natively read metadata for one project item or composition; never falls back to JSX |
-| `ae_getCompositionSettings` | `composition_locator` | natively read exact settings for one composition; never falls back to JSX |
-| `ae_setCompositionWorkArea` | `composition_locator`, `start`, `duration`, `idempotency_key` | natively set an exact work area with before/after, Undo availability, and audit evidence; never falls back to JSX |
-| `ae_renameProjectItem` | `item_locator`, `name`, `idempotency_key` | natively rename one project item with before/after, Undo availability, and audit evidence; never falls back to JSX |
-| `ae_setProjectItemComment` | `item_locator`, `comment`, `idempotency_key` | natively set or clear one project-item comment with before/after, Undo availability, and audit evidence; never falls back to JSX |
-| `ae_setProjectItemLabel` | `item_locator`, `label_id`, `idempotency_key` | natively set project-item label slot 0–16 with before/after, Undo availability, and audit evidence; never falls back to JSX |
-| `ae_duplicateComposition` | `composition_locator`, `new_name`, `idempotency_key` | natively duplicate a composition with fresh locators, settings/counts, Undo availability, and audit evidence; never falls back to JSX |
-| `ae.getProjectBitDepth` | none | read native AEGP `8/16/32` bits per channel; never falls back to JSX |
-| `ae.setProjectBitDepth` | `target_depth`, `idempotency_key` | set native AEGP `8/16/32` with before/after, Undo availability, and audit evidence; never falls back to JSX |
-| `ae_listProjectItems` | `project_locator?`, `offset?`, `limit?` | page through project items via native AEGP; default 25, maximum 50; never falls back to JSX |
-| `ae_listCompositionLayers` | `composition_locator`, `offset?`, `limit?` | page through one composition's layers via native AEGP; default 25, maximum 50; never falls back to JSX |
-| `ae_listSelectedLayers` | `composition_locator`, `offset?`, `limit?` | page through the currently selected layers in one composition via native AEGP; default 25, maximum 50; never falls back to JSX |
-| `ae_getCompositionTime` | `composition_locator` | read one composition's exact current time via native AEGP; never falls back to JSX |
-| `ae_createComposition` | `name`, `idempotency_key`, `width?`, `height?`, `duration?`, `frame_rate?`, `pixel_aspect_ratio?` | create one root composition through native `AEGP_CreateComp` with a fresh locator, verified settings/counts, Undo availability, and audit evidence; never falls back to JSX |
-| `ae_createCompositionLayer` | `composition_locator`, `kind`, `name`, `idempotency_key`, `color?`, `width?`, `height?`, `duration?` | create one native null or solid layer with fresh locators, counts, Undo availability, and audit evidence; never falls back to JSX |
-| `ae_applyLayerEffect` | `layer_locator`, `effect_match_name`, `idempotency_key` | apply one installed effect through native `AEGP_ApplyEffect` with a fresh locator, insertion index, counts, Undo availability, and audit evidence; never falls back to JSX |
-| `ae_listLayerProperties` | `layer_locator`, `parent_property_locator?`, `offset?`, `limit?` | page through one direct level of layer/group properties via native AEGP; default/maximum 25; never falls back to JSX |
-| `ae_listLayerPropertyKeyframes` | `property_locator`, `offset?`, `limit?` | page through exact native keyframe time/value/in-out interpolation for one primitive leaf; default/maximum 25; never falls back to JSX |
-| `ae_setLayerPropertyValue` | `layer_locator`, `property_locator`, `value`, `idempotency_key` | set one non-keyframed primitive leaf through native AEGP with before/after, Undo availability, and audit evidence; never falls back to JSX |
-| `ae.layers` | `comp_id?`, `offset?`, `limit?`, `format?` | legacy JSX layer listing (behavior unchanged) |
-| `ae.readProps` | `code` | run read-only JSX |
-| `ae.exec` | `code`, `undo_group_name?`, `checkpoint_label?`, `timeout_sec?` | run JSX |
-| `ae.checkpoint` | `action`, `label?`, `limit?` | create/list `.aep` checkpoints |
-| `ae.revert` | `checkpoint_id`, `branch_before_revert?` | revert to a checkpoint |
-| `ae.snapshot` | `out_path?`, `hwnd?`, `main_window?`, `method?` | diagnostic screenshot |
-| `ae.previewFrame` | `comp_id?`, `time?`, `times?`, `out_dir?`, `include_base64?`, `scale?` | fast viewer capture |
-| `ae.applyEffect` | `comp_id?`, `layer_id`, `effect_match_name` | add effect by matchName |
-| `ae.createLayer` | `type`, `name`, etc. | create solid/text/shape/null/adjustment/camera/light |
-| `ae.setProperty` | `layer_id`, `path`, `value`, `at_time?` | write property |
-| `ae.moveLayer` | `layer_id`, `to_index` | reorder layer |
-| `ae.selectLayers` | `layer_ids` | select all/none/by index |
-| `ae.setTime` | `comp_id?`, `time` | set comp time |
-| `ae.getTime` | `comp_id?` | read comp time |
-| `ae.getProperties` | `comp_id?`, `layer_ids`, `query`, `offset?`, `limit?` | search properties |
-| `ae.scanPropertyTree` | `comp_id?`, `layer_id`, `max_depth?`, `include_values?` | scan property tree |
-| `ae.inspectPropertyCapabilities` | `comp_id?`, `layer_id`, `path` | inspect mutation capability |
-| `ae.getExpressions` | `comp_id`, `layer_ids?`, `prop?`, `max_results?` | read expressions |
-| `ae.validateExpressions` | `comp_id?`, `layer_ids?`, `prop?`, `sample_times?`, `max_results?` | force-evaluate expressions and report errors |
-| `ae.getKeyframes` | `comp_id?`, `layer_id`, `path` | read keyframes |
-| `ae.searchProject` | `query`, `scope?`, `limit?` | search project |
-| `ae.skillList` | `include_templates?` | list local skills |
-| `ae.skillCreate` | `name`, `description?`, `template_type?`, `template`, `args_schema?`, `overwrite?` | create skill |
-| `ae.skillEdit` | `name`, update fields | edit skill |
-| `ae.skillDelete` | `name` | delete skill |
-| `ae.skillUse` | `name`, `args?`, `execute?` | render or execute skill |
-| `ae.toolIndex` | `kinds?`, `statuses?`, `source_types?`, `include_candidates?`, `limit?` | list summaries only |
-| `ae.toolSearch` | `query`, `kinds?`, `categories?`, `tags?`, `risks?`, `statuses?`, `source_types?`, `offset?`, `limit?` | search summaries; no content |
-| `ae.toolInspect` | `artifact_id` | first content-bearing call |
-| `ae.toolUse` | staged action fields | render/prepare/grant/execute/start/status/cancel/history |
-| `ae.toolCreate` | `name`, `kind`, `content`, plus optional metadata fields | create native artifact |
-| `ae.toolEdit` | `artifact_id`, `changes`, `expected_revision`, `expected_content_hash`, `replace_artifact_id?` | edit or verify artifact |
-| `ae.toolDelete` | `artifact_id`, `expected_revision`, `expected_content_hash` | permanently delete user artifact |
-| `ae.toolArchive` | `artifact_id`, `expected_revision`, `expected_content_hash` | archive artifact |
-| `ae.toolDuplicate` | `artifact_id`, `name`, `expected_revision`, `expected_content_hash` | copy to native user store |
-| `ae.toolPromoteFromHistory` | `artifact_id`, `expected_revision`, `expected_content_hash`, `replace_artifact_id?` | promote chat-history candidate |
-| `ae.toolImport` | staged import fields | quarantined preview/commit/discard |
-| `ae.toolExport` | `artifact_ids`, `out_path` | deterministic `.aemcptools` export |
-| `ae.createRig` | `comp_id?`, `target_layer_id`, `rig_type`, `name?`, `options?`, `controls?` | create controller/effect/preset rigs |
-| `ae.ping` | `expect?` | bridge handshake |
-
-### Native Project and Composition Operations
-
-The Project / Composition Operations package contains exactly eight public MCP tools on the fixed `MCP -> Core -> native RPC -> AEGP -> AE` path. `ae_getProjectContext`, `ae_getProjectItemMetadata`, and `ae_getCompositionSettings` are three strict native reads. `ae_setCompositionWorkArea`, `ae_renameProjectItem`, `ae_setProjectItemComment`, `ae_setProjectItemLabel`, and `ae_duplicateComposition` are five strict native writes. If the native capability, contract, or transport is unavailable, every tool returns a structured error and **never falls back to JSX**.
-
-- `ae_getProjectContext` defaults `selection_offset` to `0`; `selection_limit` defaults to and is capped at `50`. It returns the project locator/generation, active item, most-recently-used composition, and a page of the current Project-panel selection. Copy its fresh locators unchanged into later calls.
-- `ae_getProjectItemMetadata` accepts an `item_locator` from context or `ae_listProjectItems` and reads the item's name, type, parent, comment, label, and related metadata. `ae_getCompositionSettings` accepts only a composition locator and reads exact name, dimensions, duration, frame rate, pixel aspect ratio, work area, layer count, and related settings.
-- `ae_setCompositionWorkArea` accepts a fresh `composition_locator`, exact `start={value,scale}`, exact `duration={value,scale}`, and a stable `idempotency_key` of at least 16 characters. Start must be non-negative and duration positive. The write runs inside one AE Undo group and is verified by native readback.
-- `ae_renameProjectItem` accepts a 1–255 Unicode-scalar `name`; `ae_setProjectItemComment` accepts a 0–1024-scalar `comment`, with an empty string clearing it; `ae_setProjectItemLabel` accepts `label_id` from `0` through `16`, where `0` means no label. Each also requires a fresh `item_locator` and a stable idempotency key of at least 16 characters, then performs one native, readback-verified AE Undo group.
-- `ae_duplicateComposition` accepts a fresh `composition_locator`, a 1–255-scalar `new_name`, and a stable idempotency key of at least 16 characters. Duplication advances the project-graph generation and returns fresh source/new composition locators, project-item counts, and both settings snapshots. Safe replay of the same intent does not create another duplicate.
-- Every write reports `undo.available` separately from `undo.verified`; `available=true` only means AE created an Undo step, and the call does not execute Undo for the user. To restore state, execute real AE Undo and re-read the complete project context, target metadata/settings, and project-item count to prove that all semantic state matches the before baseline. After `POSSIBLY_SIDE_EFFECTING_FAILURE`, reconcile AE state and audit before any retry.
-
-### Native Project and Property Navigation
-
-The public MCP tools `ae_listProjectItems`, `ae_listCompositionLayers`, `ae_listSelectedLayers`, `ae_getCompositionTime`, `ae_listLayerProperties`, and `ae_listLayerPropertyKeyframes` call their canonical Core verbs over the fixed `MCP -> Core -> native RPC -> AEGP -> AE` path. All six are strict native reads: if the native capability, contract, or transport is unavailable, they return a structured error and **never fall back to JSX**.
-
-- Omit `project_locator` on the first `ae_listProjectItems` call. `offset` defaults to `0`; `limit` defaults to `25` and is capped at `50`. Pass the returned `projectLocator` on continuation pages; it is required when `offset > 0`.
-- `ae_listCompositionLayers` requires the `locator` of an item whose `type="composition"` in the project-items result. It uses the same offset pagination and default/max limits.
-- `ae_listSelectedLayers` accepts that same `composition_locator` and returns only layers directly selected in that composition at call time, reusing the stable layer locators issued by `ae_listCompositionLayers`. Results are sorted by one-based stack index; non-layer collection entries such as properties, masks, effects, and keyframes are never mislabeled as selected layers. Each page is a live snapshot, so restart at `offset=0` if selection changes between page calls.
-- `ae_getCompositionTime` accepts the same `composition_locator` and returns only the echoed `compositionLocator` plus `currentTime`. `currentTime.value/scale` is the SDK timebase's exact rational value, and `secondsRational` is its canonical reduced form (for example, `60/24` is returned as `5/2`) rather than a lossy floating-point seconds value. This is the item CTI, not a live playback/render clock; Adobe documents that it is not updated while rendering.
-- `ae_createComposition` accepts an exact name and a stable idempotency key of at least 16 characters. Width/height default to 1920x1080, duration to `5/1` seconds, frame rate to `24/1`, and pixel aspect ratio to `1/1`; each may be overridden with exact integers or rational pairs. On AE's main thread, `AEGP_CreateComp` creates a root composition inside one Undo group, then name, dimensions, duration, frame rate, pixel aspect ratio, layer count, and project-item counts are read back. Success advances the project-graph generation and returns a fresh composition locator. The same key and arguments return `replayed=true`; different arguments with the same key return `DUPLICATE_REQUEST`. Inspect project items and audit before retrying any uncertain failure.
-- `ae_createCompositionLayer` accepts a fresh composition locator, `kind="null"|"solid"`, an exact name, and a stable idempotency key of at least 16 characters. Null creation rejects solid-only fields. Solid creation accepts optional RGBA 0–255, dimensions, and exact rational duration; omitted values inherit the composition dimensions/duration and use opaque white. On AE's main thread, `AEGP_CreateNullInComp` or `AEGP_CreateSolidInComp` runs inside one Undo group and the name, stack index, counts, source, and solid metadata are read back. Success advances the project-graph generation and returns fresh locators, making the input locator stale. The same key plus identical arguments returns `replayed=true` without another layer; different arguments with the same key return `DUPLICATE_REQUEST`. `undo.available=true` and `undo.verified=false` separately report that an Undo step exists and that the tool did not execute it. Reconcile AE state and audit before retrying any uncertain failure.
-- `ae_applyLayerEffect` accepts a fresh layer locator from `ae_listCompositionLayers`, an installed effect's exact locale-independent `effect_match_name`, and a stable idempotency key of at least 16 characters. On AE's main thread, `AEGP_ApplyEffect` runs inside one Undo group; the effect stack is read back to prove that both the total count and matching count increased by exactly one. The result returns the display name, matchName, one-based insertion index, a fresh layer locator, counts, and audit evidence. The same key plus identical arguments returns `replayed=true` without another effect; different arguments with the same key return `DUPLICATE_REQUEST`. The input locator is stale after success, so inspect the Effects group with the returned locator. After `POSSIBLY_SIDE_EFFECTING_FAILURE`, reconcile AE state, Undo, and audit before any retry.
-- `ae_listLayerProperties` requires a layer locator from the composition-layers result. Omit `parent_property_locator` for the layer root, or pass a locator returned by this tool only when its `groupingType` is `named-group` or `indexed-group`, to list exactly that group's direct children. Its default and maximum `limit` are both `25`; it never returns a recursive tree, and a leaf locator produces structured `INVALID_ARGUMENT`.
-- `ae_listLayerPropertyKeyframes` accepts only a primitive leaf `property_locator` issued by `ae_listLayerProperties` in the current native session. Results are ordered by one-based `keyframeIndex` and carry exact composition-time `time.value/scale`, typed decimal-string primitive values, and the unambiguous native `none|linear|bezier|hold` in/out interpolation. Its default and maximum `limit` are both `25`; stale/forged locators and non-keyframeable or unsupported streams return structured errors.
-- Primitive values are bound to the exact returned `sampleTime.value/scale` and use typed decimal-string encoding. Complex handle-backed SDK values explicitly return `valueStatus="unsupported"` with `value=null`.
-- `ae_setLayerPropertyValue` requires both the layer and property locators issued by `ae_listLayerProperties`, plus a stable idempotency key of at least 16 characters. The first slice accepts only non-keyframed, non-time-varying `one-d`, 2D/3D (including spatial), and color leaves. `AEGP_SetStreamValue` runs on AE's main thread inside one AE Undo group and is immediately read back. `undo.available=true` means an AE Undo step exists; `undo.verified=false` means the call did not execute Undo for the user. A lost response or incomplete readback returns `POSSIBLY_SIDE_EFFECTING_FAILURE`; inspect AE state and audit before any retry.
-- Locators are server-issued opaque identifiers bound to the current host, session, project, and generation; they are not retained AEGP handles. Do not decompose, edit, or cache them across project changes or restarts. Successful results carry `native-aegp` provenance, a verified postcondition, and audit evidence.
-
-The existing `ae.layers` tool remains a legacy JSX tool with its original arguments, numeric IDs, `limit=0` all-items behavior, and optional text format. It was not converted to native and does not share the locator contract above.
-The existing `ae.getTime` tool likewise keeps its legacy JSX arguments and result; it is not redirected to `ae_getCompositionTime`.
-
-### `ae.layers`
-
-This is a legacy JSX tool. It returns **all** layers by default (matching the historical behavior). Pagination
-and compact output are both opt-in:
-
-| Arg | Notes |
+| Category | Tools |
 |---|---|
-| `offset?` | 0-based start index, default `0` |
-| `limit?` | max layers to return; `0` (default) returns all |
-| `format?` | `json` (default, structured) or `text` (compact paginated table, ~1/3 the tokens of JSON) |
+| Execution | `ae_exec`, `ae_nativeExec` |
+| Visual and expression verification | `ae_previewFrame`, `ae_validateExpressions` |
+| Undo and recovery | `ae_checkpoint`, `ae_revert`, `ae_snapshot` |
+| Skill library | `ae_skillList`, `ae_skillUse` |
+| Tool library | `ae_toolIndex`, `ae_toolSearch`, `ae_toolInspect`, `ae_toolUse` |
+| Diagnostics | `ae_ping`, `ae_status`, `ae_diagnose` |
 
-Each layer carries `id / name / type / enabled / inPoint / outPoint / isThreeD / hasParent / parent`.
-`type` is one of `camera/light/text/shape/null/adjustment/solid/footage/av`; `parent` is the parent layer name (or `null`), and `hasParent` is a boolean.
-The envelope includes `total / offset / limit / returned / hasMore` for paging.
+`ae_toolUse` staged actions are `render`, `prepare`, `grant`, `execute`, `start`,
+`status`, `cancel`, and `history`.
 
-### Runtime Helpers (`ae.exec` / `ae.readProps`)
+`ae_toolUse` action fields:
 
-At panel startup a set of helpers is loaded into the persistent ExtendScript
-engine, so agent-authored JSX can call them directly. All helpers honor a
-never-throw invariant — bad input returns `null`:
+| action | required | optional | purpose |
+|---|---|---|---|
+| `render` | `action`, `artifact_id` | `args`, `operation` | render only |
+| `prepare` | `action`, `artifact_id`, `operation` | `args`, `target` | build a content-bound plan |
+| `grant` | `action`, `plan_hash`, `grant_scope` | none | grant the plan |
+| `execute` | `action`, `plan_hash`, `grant_id`, `operation_id` | none | execute synchronously |
+| `start` | `action`, `plan_hash`, `grant_id`, `operation_id` | none | start asynchronously |
+| `status` | `action`, `execution_id` | none | read status |
+| `cancel` | `action`, `execution_id` | none | request cancellation |
+| `history` | `action`, `artifact_id` | `limit` | read history |
 
-| Helper | Purpose |
-|---|---|
-| `AEMCP.compById(id)` | CompItem by item id (`null`, never throws, on an unknown id) |
-| `AEMCP.activeComp()` | the active comp, or `null` |
-| `AEMCP.layerById(comp, idx)` | layer by 1-based index |
-| `AEMCP.propByPath(root, "Transform/Position")` | resolve a property by display-name path |
-| `AEMCP.propByMatchPath(root, "ADBE Transform Group#1/ADBE Position#1")` | resolve by matchName path (supports `#ordinals`) |
+Cancellation reports `cancelled-before-dispatch`,
+`not-cancellable-after-dispatch`, `owned-by-another-core`, or
+`already-terminal`. These outcomes apply only while the execution record or reservation is retained.
+Before this Core has observed any shared reservation, query first; cross-Core caches can still hold an older reservation.
+The executor receives the artifact's full `content` from Inspect, while status/history may expose nonterminal `reservations` (`queued`/`running`).
 
-ES3 Array/Object polyfills (`indexOf/map/filter/...`, `Object.keys/...`) are also
-provided for the classic engine and no-op on AE 2026's modern engine.
+There are exactly two public execution routes. Use `ae_exec` when the
+maintained AE scripting object model can perform the operation. Use
+`ae_nativeExec` only for AEGP-only semantics present in the generated
+primitive catalog. Do not look for operation-specific convenience tools.
 
-`ae.exec` auto-checkpoint is **non-blocking**: a failed/timed-out probe or
-snapshot degrades to a `checkpointSkipped` note in the result rather than
-aborting your edit. Multi-statement scripts also run fully under an undo group.
+### Default execution skill
 
-### `ae.previewFrame`
+Load `builtin:skill:ae-execution-guide` before choosing a route or composing
+a non-trivial request. It contains the complete ExtendScript and native-program
+workflow plus the generated primitive reference.
 
-`times` wins over `time`; if neither is supplied, the current comp time is previewed. The default response returns file paths. Set `include_base64=true` to include inline image bytes.
-
-The implementation opens the target comp, sets the requested time, then prefers `CompItem.saveFrameToPng` to write a comp-frame PNG. This path does not depend on visible window pixels, so AE panels, foreground windows, and desktop occlusion are not included in the preview. If the current AE version or project state cannot write the PNG, it falls back to the installed snapshotter and marks the frame with `source: "viewer"`.
-
-`source: "comp"` means the preview contains comp-frame pixels; `source: "viewer"` means the compatibility fallback was used. `ae.snapshot` remains the lower-level diagnostic capture primitive.
-
-The default output directory is `ae_mcp_previews/<session>/` under the operating-system temporary directory. On the first use of that default root in a service process, stale session directories not updated for 24 hours are pruned. Explicit `out_dir` values are never pruned by ae-mcp; the caller owns that directory.
-
-### Skill System
-
-Skills live in `~/.ae-mcp/skills/<name>.json`:
+### `ae_exec`
 
 ```json
 {
-  "name": "wiggle-position",
-  "description": "Add wiggle expression",
-  "template_type": "jsx",
-  "template": "wiggle(${freq}, ${amp})",
-  "args_schema": {
-    "freq": {"type": "number", "default": 2},
-    "amp": {"type": "number", "default": 30}
-  }
+  "code": "JSON.stringify({ok:true});",
+  "undo_group_name": "Describe the edit",
+  "timeout_sec": 30
 }
 ```
 
-`ae.skillUse` renders `${arg}` placeholders. JSX skill arguments are JSON-encoded before substitution.
+End reads with `JSON.stringify(...)`. Give writes a recognizable Undo label
+and verify them with an independent read. Use `ae_previewFrame` when visual
+correctness matters, and validate expressions before preview.
 
-### Tool Library Protocol
+### `ae_nativeExec`
 
-| Dotted verb | Exposed MCP name | Required | Optional | Success payload |
-|---|---|---|---|---|
-| `ae.toolIndex` | `ae_toolIndex` | none | `kinds`, `statuses`, `source_types`, `include_candidates`, `limit` | `ok`, summary-only `artifacts[]` |
-| `ae.toolSearch` | `ae_toolSearch` | `query` | `kinds`, `categories`, `tags`, `risks`, `statuses`, `source_types`, `offset`, `limit` | `ok`, `artifacts[]`, `total`, `offset`, `limit`; no content |
-| `ae.toolInspect` | `ae_toolInspect` | `artifact_id` | none | `ok`, full `artifact`, `trust` |
-| `ae.toolUse` | `ae_toolUse` | `action` and that action's fields | see the action table below | render, plan/grant, execution-job, or synchronous execute result |
-| `ae.toolCreate` | `ae_toolCreate` | `name`, `kind`, `content` | `description`, `category`, `tags`, `compatibility`, `declared_risk`, `status`, `args_schema`, `expected_store_revision` | `ok`, full new `artifact` |
-| `ae.toolEdit` | `ae_toolEdit` | `artifact_id`, `changes`, `expected_revision`, `expected_content_hash` | `replace_artifact_id` | `ok`, full updated `artifact` |
-| `ae.toolDelete` | `ae_toolDelete` | `artifact_id`, `expected_revision`, `expected_content_hash` | none | `ok`, `deleted` |
-| `ae.toolArchive` | `ae_toolArchive` | `artifact_id`, `expected_revision`, `expected_content_hash` | none | `ok`, full archived `artifact` |
-| `ae.toolDuplicate` | `ae_toolDuplicate` | `artifact_id`, `name`, `expected_revision`, `expected_content_hash` | none | `ok`, full duplicate `artifact` |
-| `ae.toolPromoteFromHistory` | `ae_toolPromoteFromHistory` | `artifact_id`, `expected_revision`, `expected_content_hash` | `replace_artifact_id` | `ok`, full saved `artifact` |
-| `ae.toolImport` | `ae_toolImport` | `action`; `path` for preview, `import_id` for commit/discard | commit `resolutions` | see the import flow below |
-| `ae.toolExport` | `ae_toolExport` | `artifact_ids` (1..511, unique), `out_path` | none | `ok`, `path`, `packageSha256` |
+```json
+{
+  "operationKey": "required-for-write-programs",
+  "undoGroup": "One real AE Undo group",
+  "operations": [
+    {
+      "op": "composition.resolve",
+      "args": {"locator": {"kind": "composition"}},
+      "saveAs": "composition"
+    },
+    {
+      "op": "composition.time.read",
+      "args": {"composition": {"ref": "composition"}},
+      "returnAs": "time"
+    }
+  ]
+}
+```
 
-The wire enums are:
+Copy real locators verbatim from real read results; the abbreviated locator
+above documents only the envelope. Resolver values are typed request-local
+handles. References may point only backward. Handles never serialize or
+survive a request, reconnect, or host restart.
 
-- `kind`: `jsx`, `expression`, `prompt-skill`, `recipe`, `diagnostic`.
-- `status`: `candidate`, `saved`, `pinned`, `archived`, `deprecated`. For editable user/legacy artifacts, public Edit transitions are limited to `candidate -> saved`, `saved -> pinned`, and `pinned -> saved`; use `ae.toolArchive` to archive.
-- `source.type`, or `sourceType` in a summary: `user`, `legacy`, `bundled`, `chat-tool-call`, `imported`.
-- `declaredRisk`, or plan `risk`: `read`, `write`, `destructive`, `external`; `operation`: `render`, `execute`, `apply`.
+Read programs omit `operationKey` and `undoGroup`. A program containing any
+write requires both; one key binds one canonical program. A write program uses
+one real AE Undo group, is not atomic, and never silently rolls back partial
+execution.
 
-For `jsx`, `expression`, and `prompt-skill`, `content` is a UTF-8 string. Recipe content is `{"steps": [...]}`, where every step contains exactly `refType` (`artifact`/`tool`), `ref`, `operation` (`render`/`execute`/`apply`/`call`), `args`, and `target`. Diagnostic content is exactly `{"capability": string, "args": object}`. Unknown keys are rejected. Create accepts only `candidate` or `saved` for `status`.
+### Readback, failures, and Undo
 
-Edit `changes` accepts only `name`, `description`, `kind`, `category`, `tags`, `compatibility`, `declared_risk`/`declaredRisk`, `status`, `content`, `args_schema`/`argsSchema`, and `verification_action`/`verificationAction`. `verification_action` is `mark-reviewed` or `clear`; changing content, kind, or args schema clears prior verification.
+- Read a baseline before writing and use a fresh independent request afterward.
+- Re-resolve locators after graph changes or Undo.
+- Require agreement among the typed terminal, AE state, postcondition, and audit.
+- After a post-dispatch timeout or disconnect, reconcile AE state and audit
+  before considering a replay.
+- `undo.available=true` does not mean Undo ran or was verified.
+- After real Undo, read again and prove the baseline was restored.
 
-`ae.toolIndex` and `ae.toolSearch` default to `saved`/`pinned`. `include_candidates=true` adds `candidate` to Index; Search requires an explicit `statuses` filter to include candidates. `ToolSummary` contains `id`, `name`, `description`, `kind`, `category`, `tags`, `status`, `verified`, `declaredRisk`, `contentHash`, `revision`, `updatedAt`, `lastUsedAt`, and `sourceType`, but no content. Inspect returns the full `ToolArtifact`. Only a bundled artifact verified by its signed manifest receives `trust="signed-bundled"`; every other artifact is `user-untrusted`.
+### Primitive catalog
 
-`candidate`, `archived`, and `deprecated` artifacts cannot render, prepare, receive a grant, or execute. Index/Search never return content; Inspect is the first content-bearing progressive-discovery call. A successful `ae.exec` or call with a top-level expression string may produce a `chat-tool-call` candidate; failures, secret hits, `ae.skillCreate`/`ae.skillEdit`, and all `ae.tool*` calls are not captured. Repeated history candidates with the same kind/content hash are merged. Use `ae.toolPromoteFromHistory` for a `chat-tool-call` candidate; move an `imported` candidate to `saved` with `ae.toolEdit`. `replace_artifact_id` is valid only as part of a candidate-to-saved promotion.
+The sole hand-maintained catalog is
+`native/ae-plugin/protocol/native-primitives.json`. Check every generated
+projection with:
 
-The exact `ae.toolUse` action shapes are:
-
-| Action | Required | Optional | Success payload |
-|---|---|---|---|
-| `render` | `action`, `artifact_id` | `args`; if present, `operation` must be `render` | `ok`, `artifactId`, `contentHash`, `trust`, plus `rendered` or `untrustedContext` |
-| `prepare` | `action`, `artifact_id`, `operation` | `args` and `target` (both default to `{}`) | bare plan object: `artifactId`, `contentHash`, `operation`, `normalizedArgs`, `target`, `dependencyHashes`, `planHash`, `risk`, `expiresAt`; no `ok` |
-| `grant` | `action`, `plan_hash`, `grant_scope` (`once`/`session`) | none | `ok`, `grantId`, `planHash`, `scope`, `expiresAt` |
-| `execute` | `action`, `plan_hash`, `grant_id`, `operation_id` | none | waits for a terminal state; success returns the kind/operation-specific render, backend, or handler result with `ok: true`, and recipes return `results[]`; failure carries execution/recovery evidence |
-| `start` | `action`, `plan_hash`, `grant_id`, `operation_id` | none | returns an execution job immediately, normally first as `queued`; poll it by `executionId` |
-| `status` | `action`, `execution_id` | none | current execution job, including terminal recovery after a Core restart |
-| `cancel` | `action`, `execution_id` | none | current execution job plus `cancelDisposition` |
-| `history` | `action`, `artifact_id` | `limit` (1..100, default 20) | `ok`, `artifactId`, newest-first `executions[]` |
-
-A grant is consumed once. Immediately before execution the artifact, args schema, and recipe/handler dependencies are re-read, so any change invalidates the old plan/grant.
-
-Both `execute` and `start` require a stable caller-generated `operation_id` of 16..128 characters. After losing a response for the same plan, repeat `start` with that same `operation_id` to recover the original `executionId` without redispatching the backend. This deduplication guarantee applies only while the execution record or reservation is retained; once a terminal record ages out of retention, an old ID must not be relied on for deduplication. If the `executionId` is already known, resume with `status`. Do not mint a new `operation_id` and retry until state and audit evidence have been reconciled. Reusing an operation ID with a different plan returns `tool_operation_conflict`.
-
-The public execution-job shape contains `executionId`, `operationId`, `artifactId`, `contentHash`, `artifactRevision`, `planHash`, `operation`, `initiator`, `status`, `progress`, `terminal`, `cancelRequested`, `outcomeUnknown`, timestamps, and nullable `result`, `error`, and `audit`. Status is one of `queued`, `running`, `succeeded`, `failed`, `cancelled`, or `outcome-unknown`. The `error` retains available `sideEffect` and `recovery` metadata. When `outcomeUnknown=true`, inspect AE state and audit before any retry.
-
-`cancel` promises only a structured disposition. A queued job owned by this Core can report `cancelled-before-dispatch`; a dispatched running job reports `not-cancellable-after-dispatch`. A queued or running job owned by another Core sharing the Tool Library reports `owned-by-another-core` only after this Core has observed the reservation during startup, `status`/`history`, or a duplicate `start`. `already-terminal` is returned when this Core has observed the terminal state; cross-Core caches can still hold an older reservation, so refresh with `status` or `history` before cancelling. Before this Core has observed any shared reservation, direct `cancel` can return `tool_execution_not_found`, so call `status` first to load shared state. A cancellation request never claims that AE has stopped.
-
-The ordinary public MCP schema has no `developer_mode` switch, and public Tool Library kinds exclude `system-command`. A Developer Panel holding the private capability can inspect quarantined system-command metadata and receives the artifact's full `content` from Inspect. Direct run remains unavailable, `ae.toolUse` still denies execution, and ordinary agents cannot discover these artifacts.
-
-`execution-history.json` under the Tool Library root separately stores at most 500 redacted terminal `executions` and nonterminal `reservations` (`queued`/`running`) used to reserve operation IDs atomically across Core processes. `status` and `history` can recover retained `succeeded`, `failed`, `cancelled`, or `outcome-unknown` records after a Core restart. While the corresponding execution or reservation remains retained, reusing the same `operation_id` with the same plan returns the original execution without backend redispatch; a different plan returns `tool_operation_conflict`. The file is separate from artifact `lastUsedAt` metadata and the append-only `audit.jsonl`, and stores no grants, approval secrets, panel capability tokens, or unredacted arguments. A `queued`/`running` reservation proves only that the operation ID is reserved, not that a durable terminal outcome exists; an expired reservation recovers to `failed` or `outcome-unknown` depending on whether it had entered running state.
-
-Minimum four-tier policy: reads are allowed; readonly denies other risks; manual asks for write/destructive/external; auto and none allow ordinary writes, while destructive/external always ask. Only write plans can receive session approval; destructive/external plans are once-only. A write session key binds artifact/content/operation/normalized target and is never cached by tool name.
-
-The import flow is:
-
-1. `action="preview"` accepts only `path` and returns `ok`, `importId`, `packageSha256`, `artifacts[]`, `conflicts[]`, `highestRisk`, and `expiresAt`. Each artifact preview contains `summary`, `existingId`, `metadataChanges`, `contentChanged`, and `calculatedRisk`; each conflict contains `conflictId`, incoming/existing IDs, and content hashes. A preview expires after 15 minutes.
-2. `action="commit"` accepts `import_id` and `resolutions`. Every conflict requires exactly one `keep` or `duplicate` resolution; `replace` is not accepted. Commit returns `ok` and summary-only `artifacts[]` for newly created artifacts. Every accepted artifact enters the native store with `source.type="imported"`, `status="candidate"`, and `verified=false`; import never overwrites an existing artifact.
-3. `action="discard"` accepts only `import_id` and returns `ok` and `discarded`. Discard is idempotent for an already-cleaned or unknown ID.
-
-`.aemcptools` limits are 10 MiB compressed, 50 MiB expanded, 5 MiB per file, 512 entries including `manifest.json` (so `artifact_ids` is strictly 1..511), path depth 8, and 100:1 per-member compression ratio. Encrypted or nested archives, links/special files, cross-platform unsafe or duplicate paths, undeclared members, and hash/schema/secret mismatches fail closed; commit leaves no partial artifacts. Export also requires unique IDs and secret-scans the complete output before writing the destination.
-
-Legacy skill JSON under `AE_MCP_SKILL_DIR`/`~/.ae-mcp/skills` remains the single canonical copy and is not copied into the native artifact store. User legacy skills can be edited, archived, and deleted through the Tool Library: content/args-schema edits write the original JSON, while Tool-only metadata goes to `legacy-metadata.json`. Legacy names cannot be renamed in the Tool Editor, and skill fields plus Tool-only metadata must be saved as two separate CAS transactions. Same-name user and bundled skills are both visible under distinct IDs, while `ae.skillUse` preserves its historical user-first resolution order. Bundled skills are manifest-verified and read-only, but can be duplicated into a new native user artifact. `ae.skillUse execute=false` preserves the legacy response; `execute=true` accepts JSX skills only and uses the same plan/grant execution engine as `ae.toolUse`.
-
-### Expression Validation
-
-After writing expressions and before visual review, run `ae.validateExpressions`. It scans expression properties, calls `valueAtTime()` at sample times, and returns `expressionError` plus evaluation errors.
-
-This catches locale-sensitive references before users see the project. For example, `effect("Value")("Slider")` can fail in localized AE; prefer `effect("Value")(1)`.
-
-### `ae.createRig`
-
-MVP rig types:
-
-| Type | Behavior |
-|---|---|
-| `transform_controller` | creates a null controller and expression-links transform properties |
-| `effect_controls` | creates a controller with Slider/Angle/Checkbox/Color controls and wires target properties |
-| `puppet_pin_nulls` | skips gracefully when no Puppet pins exist |
-| `apply_preset` | applies a user-supplied `.ffx` preset |
-
-`effect_controls` accepts a typed `controls` list (which takes precedence over a
-raw `options['controls']`): each entry is `{name, type, property}`, where `type`
-is one of `slider/angle/checkbox/color` and `property` is the display-name path
-of the target property to drive.
-
-The MVP does not generate arbitrary binary `.ffx` files.
-
-### Atom-Parity Status
-
-The following capabilities are present in the current code; this is not v0.9.2 dual-platform or four-cell hardware-acceptance evidence:
-
-- CEP panel to AE bridge
-- 57 registered `ae.*` handlers (52 backend verbs, 3 native-only verbs, plus `ae.status`/`ae.diagnose`)
-- read/mutate/search/checkpoint/revert workflows
-- fast viewer preview via `ae.previewFrame`
-- persistent Python-side skill system
-- Panel Tools screen, progressive Tool Library discovery, and `.aemcptools` import/export UX
-- MVP rig creation via `ae.createRig`
-- expression validation via `ae.validateExpressions`
-
-Remaining gaps:
-
-- precise Composition Viewer crop for `ae.previewFrame`
-- deeper Puppet pin and preset workflows for `ae.createRig`
-- signed ZXP clean install validation
-- optional future single-install MCP-over-HTTP transport
-
-### Credits And Licensing
-
-ae-mcp is an independent implementation inspired by Atom-style AE operation coverage and FX Console-style instant preview behavior. It does not vendor Atom, FX Console, or AtomX code.
-
-Project code is MIT licensed. Adobe `plugin/client/CSInterface.js` keeps its upstream license notice. Other dependencies keep their upstream licenses.
+```bash
+uv run python scripts/generate_native_exec.py --check
+```

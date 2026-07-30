@@ -17,6 +17,7 @@ from abc import ABC, abstractmethod
 from decimal import Decimal, InvalidOperation
 from typing import Annotated, Any, Callable, Literal, Mapping, TypeAlias
 
+from jsonschema import Draft202012Validator
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -29,6 +30,13 @@ from pydantic import (
 )
 
 from ae_mcp.backends.base import BackendError, ExecutionEngine
+from ae_mcp.native_exec_generated import (
+    MODEL_RESULT_DEFINITIONS,
+    MODEL_RESULT_SCHEMA_INDEXES,
+    MODEL_RESULT_SCHEMAS,
+    NATIVE_EXEC_INPUT_SCHEMA,
+    PRIMITIVES as NATIVE_EXEC_PRIMITIVES,
+)
 
 
 NativeSideEffect: TypeAlias = Literal[
@@ -268,6 +276,56 @@ class NativeInvokeRequest(_NativeModel):
         return self
 
 
+_NATIVE_EXEC_ARGUMENTS_VALIDATOR = Draft202012Validator(NATIVE_EXEC_INPUT_SCHEMA)
+_NATIVE_EXEC_RESULT_VALIDATORS = {
+    primitive["id"]: Draft202012Validator(
+        {
+            "$defs": MODEL_RESULT_DEFINITIONS,
+            **MODEL_RESULT_SCHEMAS[
+                MODEL_RESULT_SCHEMA_INDEXES[primitive["id"]]
+            ],
+        }
+    )
+    for primitive in NATIVE_EXEC_PRIMITIVES
+}
+
+
+class NativeProgramRequest(NativeInvokeRequest):
+    """The one root native invoke contract carrying a validated linear program."""
+
+    capability_id: Literal["ae.native.exec"] = "ae.native.exec"
+    capability_version: Literal[1] = 1
+
+    @model_validator(mode="after")
+    def _valid_native_program(self) -> "NativeProgramRequest":
+        errors = list(_NATIVE_EXEC_ARGUMENTS_VALIDATOR.iter_errors(self.arguments))
+        if errors:
+            raise ValueError("native program arguments failed the generated contract")
+        return self
+
+    @classmethod
+    def from_args(
+        cls,
+        *,
+        request_id: str,
+        args: Any,
+        deadline_unix_ms: int,
+    ) -> "NativeProgramRequest":
+        return cls(
+            request_id=request_id,
+            arguments=args.model_dump(
+                mode="json",
+                by_alias=True,
+                exclude_none=True,
+            ),
+            deadline_unix_ms=deadline_unix_ms,
+        )
+
+    @property
+    def program_digest(self) -> str:
+        return _sha256_closed_json(self.arguments)
+
+
 class NativePostconditionEvidence(_NativeModel):
     verified: Literal[True]
     kind: Annotated[
@@ -326,6 +384,143 @@ class NativeInvokeResult(_NativeModel):
         return self
 
 
+NativeProgramPrimitiveId = Annotated[
+    StrictStr,
+    Field(
+        min_length=3,
+        max_length=96,
+        pattern=r"^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$",
+    ),
+]
+
+
+class NativeProgramOperationSummary(_NativeModel):
+    index: NonNegativeInt
+    op: NativeProgramPrimitiveId
+    status: Literal["completed", "failed"]
+
+
+class NativeProgramPostconditionEvidence(_NativeModel):
+    verified: StrictBool
+    kind: Literal["native-program"]
+    algorithm: Literal["sha256-rfc8785-jcs-v1"]
+    digest: Sha256
+
+
+class NativeProgramEvidence(_NativeModel):
+    engine: Literal["native-aegp"]
+    host_instance_id: Uuid
+    session_id: Uuid
+    request_id: RequestId
+    capability_id: Literal["ae.native.exec"]
+    capability_version: Literal[1]
+    started_at_unix_ms: PositiveInt
+    completed_at_unix_ms: PositiveInt
+    effect: Literal["none", "committed", "may-have-occurred"]
+    postcondition: NativeProgramPostconditionEvidence
+    request_digest: Sha256
+
+    @model_validator(mode="after")
+    def _ordered_times(self) -> "NativeProgramEvidence":
+        if self.completed_at_unix_ms < self.started_at_unix_ms:
+            raise ValueError("native program completion time precedes its start")
+        return self
+
+
+class NativeProgramUndoEvidence(_NativeModel):
+    available: StrictBool
+    verified: Literal[False]
+    group_label: Annotated[StrictStr, Field(min_length=1, max_length=128)] | None = None
+
+    @model_validator(mode="after")
+    def _label_matches_availability(self) -> "NativeProgramUndoEvidence":
+        if self.available is not (self.group_label is not None):
+            raise ValueError("native program Undo label does not match availability")
+        return self
+
+
+class NativeProgramInvokeResult(_NativeModel):
+    capability_id: Literal["ae.native.exec"]
+    operation_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ] | None = None
+    outputs: dict[str, Any]
+    operations: tuple[NativeProgramOperationSummary, ...] = Field(max_length=64)
+    evidence: NativeProgramEvidence
+    undo: NativeProgramUndoEvidence
+    replayed: StrictBool
+
+    @model_validator(mode="after")
+    def _closed_success(self) -> "NativeProgramInvokeResult":
+        _validate_json(self.outputs)
+        if len(self.outputs) > 64:
+            raise ValueError("native program exported too many outputs")
+        if any(operation.status != "completed" for operation in self.operations):
+            raise ValueError("native program success contains an incomplete operation")
+        mutating = self.operation_key is not None
+        if (
+            self.evidence.capability_id != self.capability_id
+            or self.evidence.postcondition.verified is not True
+            or self.evidence.effect != ("committed" if mutating else "none")
+            or self.undo.available is not mutating
+        ):
+            raise ValueError("native program success evidence is inconsistent")
+        return self
+
+
+class NativeProgramFailureDetails(_NativeModel):
+    capability_id: Literal["ae.native.exec"]
+    operation_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ] | None = None
+    disposition: Literal["not-started", "completed", "possibly-side-effecting"]
+    completed_operations: tuple[NativeProgramOperationSummary, ...] = Field(
+        max_length=64
+    )
+    failed_operation: NativeProgramOperationSummary | None = None
+    outputs: dict[str, Any]
+    evidence: NativeProgramEvidence
+    undo: NativeProgramUndoEvidence
+
+    @model_validator(mode="after")
+    def _closed_failure(self) -> "NativeProgramFailureDetails":
+        _validate_json(self.outputs)
+        if len(self.outputs) > 64:
+            raise ValueError("native program failure exported too many outputs")
+        if any(
+            operation.status != "completed"
+            for operation in self.completed_operations
+        ):
+            raise ValueError("native program failure has invalid completed operations")
+        if (
+            self.failed_operation is not None
+            and self.failed_operation.status != "failed"
+        ):
+            raise ValueError("native program failed operation is not failed")
+        expected_effect = (
+            "may-have-occurred"
+            if self.disposition == "possibly-side-effecting"
+            else "none"
+        )
+        if (
+            self.evidence.postcondition.verified is not False
+            or self.evidence.effect != expected_effect
+        ):
+            raise ValueError("native program failure evidence is inconsistent")
+        if self.disposition == "possibly-side-effecting" and self.operation_key is None:
+            raise ValueError("uncertain native program failure requires operationKey")
+        if self.disposition == "not-started" and (
+            self.completed_operations
+            or self.failed_operation is not None
+            or self.outputs
+            or self.undo.available
+        ):
+            raise ValueError("not-started native program failure has execution state")
+        return self
+
+
 class NativeCancelResult(_NativeModel):
     target_request_id: RequestId
     state: Literal[
@@ -370,6 +565,10 @@ class NativeErrorDetails(_NativeModel):
     field: Annotated[StrictStr, Field(min_length=1, max_length=128)] | None = None
     capability_id: CapabilityId | None = None
     idempotency_key: Annotated[
+        StrictStr,
+        Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
+    ] | None = None
+    operation_key: Annotated[
         StrictStr,
         Field(min_length=16, max_length=64, pattern=_IDEMPOTENCY_KEY_PATTERN),
     ] | None = None
@@ -434,7 +633,7 @@ class NativeErrorPayload(_NativeModel):
     retryable: StrictBool
     side_effect: NativeSideEffect
     recovery: NativeRecovery
-    details: NativeErrorDetails | None = None
+    details: NativeErrorDetails | NativeProgramFailureDetails | None = None
 
     @model_validator(mode="after")
     def _policy_matches_code(self) -> "NativeErrorPayload":
@@ -442,7 +641,7 @@ class NativeErrorPayload(_NativeModel):
         actual = (self.retryable, self.side_effect, self.recovery.action)
         property_precondition = (
             self.code == "PRECONDITION_FAILED"
-            and self.details is not None
+            and isinstance(self.details, NativeErrorDetails)
             and self.details.capability_id in {
                 LAYER_PROPERTY_SET_CAPABILITY_ID,
                 LAYER_PROPERTY_KEYFRAMES_LIST_CAPABILITY_ID,
@@ -450,7 +649,20 @@ class NativeErrorPayload(_NativeModel):
             and self.details.field == "params.arguments.propertyLocator"
             and actual == (False, "not-started", "change-arguments")
         )
-        if actual != expected and not property_precondition:
+        program_failure = (
+            isinstance(self.details, NativeProgramFailureDetails)
+            and actual
+            == (
+                False,
+                {
+                    "not-started": "not-started",
+                    "completed": "completed",
+                    "possibly-side-effecting": "may-have-occurred",
+                }[self.details.disposition],
+                "inspect-state",
+            )
+        )
+        if actual != expected and not property_precondition and not program_failure:
             raise ValueError("native error policy does not match its code")
         if self.code == "QUEUE_FULL":
             if self.recovery.retry_after_ms is None:
@@ -608,7 +820,7 @@ class NativeInvokeBackend(ABC):
         request: NativeInvokeRequest,
         *,
         cancellation: NativeCancellationToken | None = None,
-    ) -> NativeInvokeResult:
+    ) -> NativeInvokeResult | NativeProgramInvokeResult:
         """Invoke one typed native capability; raw source text is impossible."""
 
     async def cancel(
@@ -4700,15 +4912,184 @@ def _invoke_request_digest(
     )
 
 
+def _native_program_postcondition_digest(
+    *,
+    outputs: Mapping[str, Any],
+    operations: tuple[NativeProgramOperationSummary, ...],
+) -> str:
+    return _sha256_closed_json(
+        {
+            "operations": [
+                operation.model_dump(mode="json", by_alias=True)
+                for operation in operations
+            ],
+            "outputs": dict(outputs),
+        }
+    )
+
+
+class NativeProgramExecution(_NativeModel):
+    negotiation: NativeNegotiation
+    request: NativeProgramRequest
+    result: NativeProgramInvokeResult
+    engine: Literal["native-aegp"] = "native-aegp"
+
+
+def _native_program_result_error(
+    request: NativeProgramRequest,
+    message: str,
+) -> NativeBackendError:
+    operation_key = request.arguments.get("operationKey")
+    if operation_key is not None:
+        return NativeBackendError(
+            "POSSIBLY_SIDE_EFFECTING_FAILURE",
+            message,
+            retryable=False,
+            side_effect="may-have-occurred",
+            recovery=NativeRecovery(
+                action="inspect-state",
+                hint=(
+                    "Run a read-only native program and inspect audit evidence "
+                    "before deciding whether to retry."
+                ),
+            ),
+            details={
+                "capabilityId": "ae.native.exec",
+                "operationKey": operation_key,
+            },
+        )
+    return _structured_error(
+        "NATIVE_CONTRACT_MISMATCH",
+        message,
+    )
+
+
+def _native_program_outputs_match_generated_contract(
+    *,
+    arguments: Mapping[str, Any],
+    outputs: Mapping[str, Any],
+    completed_count: int,
+) -> bool:
+    operations = arguments.get("operations")
+    if not isinstance(operations, list) or completed_count > len(operations):
+        return False
+    expected: dict[str, Draft202012Validator] = {}
+    for operation in operations[:completed_count]:
+        if not isinstance(operation, dict):
+            return False
+        return_as = operation.get("returnAs")
+        if return_as is None:
+            continue
+        validator = _NATIVE_EXEC_RESULT_VALIDATORS.get(operation.get("op"))
+        if not isinstance(return_as, str) or validator is None:
+            return False
+        expected[return_as] = validator
+    return set(outputs) == set(expected) and all(
+        validator.is_valid(outputs[name])
+        for name, validator in expected.items()
+    )
+
+
+async def invoke_native_program(
+    backend: NativeInvokeBackend,
+    *,
+    request_id: str,
+    args: Any,
+    deadline_unix_ms: int,
+    cancellation: NativeCancellationToken | None = None,
+) -> NativeProgramExecution:
+    """Negotiate and invoke one bounded root native program exactly once."""
+
+    request = NativeProgramRequest.from_args(
+        request_id=request_id,
+        args=args,
+        deadline_unix_ms=deadline_unix_ms,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    negotiation = await backend.negotiate(
+        deadline_unix_ms=deadline_unix_ms,
+        cancellation=cancellation,
+    )
+    _ensure_active(deadline_unix_ms, cancellation)
+    try:
+        result = await backend.invoke(request, cancellation=cancellation)
+    except NativeBackendError as exc:
+        _validate_invoke_error_binding(exc, request)
+        _validate_native_program_failure_binding(exc, request, negotiation)
+        raise
+    if not isinstance(result, NativeProgramInvokeResult):
+        raise _native_program_result_error(
+            request,
+            "Native program result did not use the common program contract.",
+        )
+
+    expected_operations = [
+        (index, operation["op"])
+        for index, operation in enumerate(request.arguments["operations"])
+    ]
+    actual_operations = [
+        (operation.index, operation.op) for operation in result.operations
+    ]
+    operation_key = request.arguments.get("operationKey")
+    undo_group = request.arguments.get("undoGroup")
+    expected_postcondition = _native_program_postcondition_digest(
+        outputs=result.outputs,
+        operations=result.operations,
+    )
+    valid = (
+        result.capability_id == request.capability_id
+        and result.operation_key == operation_key
+        and result.evidence.request_id == request.request_id
+        and result.evidence.host_instance_id == negotiation.host_instance_id
+        and result.evidence.session_id == negotiation.session_id
+        and result.evidence.request_digest
+        == _invoke_request_digest(request, negotiation)
+        and result.evidence.completed_at_unix_ms <= deadline_unix_ms
+        and actual_operations == expected_operations
+        and _native_program_outputs_match_generated_contract(
+            arguments=request.arguments,
+            outputs=result.outputs,
+            completed_count=len(result.operations),
+        )
+        and result.evidence.postcondition.digest == expected_postcondition
+        and result.undo.available is (operation_key is not None)
+        and result.undo.group_label == undo_group
+        and (operation_key is not None or result.replayed is False)
+    )
+    if not valid:
+        raise _native_program_result_error(
+            request,
+            "Native program result did not match its negotiated request.",
+        )
+    return NativeProgramExecution(
+        negotiation=negotiation,
+        request=request,
+        result=result,
+    )
+
+
 def _validate_invoke_error_binding(
     error: NativeBackendError,
     request: NativeInvokeRequest,
 ) -> None:
-    if error.code not in _CAPABILITY_DETAIL_ERROR_CODES:
-        return
     capability_id = (error.details or {}).get("capabilityId")
-    if capability_id == request.capability_id:
+    if (
+        error.code not in _CAPABILITY_DETAIL_ERROR_CODES
+        and capability_id != "ae.native.exec"
+    ):
         return
+    program_key_matches = True
+    if isinstance(request, NativeProgramRequest):
+        program_key_matches = (error.details or {}).get(
+            "operationKey"
+        ) == request.arguments.get("operationKey")
+    if capability_id == request.capability_id and program_key_matches:
+        return
+    if isinstance(request, NativeProgramRequest):
+        raise _native_program_result_error(
+            request,
+            "Native program failure was not bound to its requested operation.",
+        ) from error
     if error.side_effect == "may-have-occurred":
         raise NativeBackendError(
             "POSSIBLY_SIDE_EFFECTING_FAILURE",
@@ -4726,6 +5107,72 @@ def _validate_invoke_error_binding(
         "NATIVE_CONTRACT_MISMATCH",
         "Native failure was not bound to the requested capability.",
     ) from error
+
+
+def _validate_native_program_failure_binding(
+    error: NativeBackendError,
+    request: NativeProgramRequest,
+    negotiation: NativeNegotiation,
+) -> None:
+    details = error.payload.details
+    if not isinstance(details, NativeProgramFailureDetails):
+        return
+
+    requested_operations = request.arguments["operations"]
+    completed_prefix = [
+        (index, operation["op"], "completed")
+        for index, operation in enumerate(
+            requested_operations[: len(details.completed_operations)]
+        )
+    ]
+    actual_completed = [
+        (operation.index, operation.op, operation.status)
+        for operation in details.completed_operations
+    ]
+    failed_operation = details.failed_operation
+    failed_operation_matches = failed_operation is None
+    if (
+        failed_operation is not None
+        and len(details.completed_operations) < len(requested_operations)
+    ):
+        next_index = len(details.completed_operations)
+        failed_operation_matches = (
+            failed_operation.index == next_index
+            and failed_operation.op == requested_operations[next_index]["op"]
+            and failed_operation.status == "failed"
+        )
+
+    expected_postcondition = _native_program_postcondition_digest(
+        outputs=details.outputs,
+        operations=details.completed_operations,
+    )
+    undo_group = request.arguments.get("undoGroup")
+    valid = (
+        details.capability_id == request.capability_id
+        and details.operation_key == request.arguments.get("operationKey")
+        and details.evidence.request_id == request.request_id
+        and details.evidence.host_instance_id == negotiation.host_instance_id
+        and details.evidence.session_id == negotiation.session_id
+        and details.evidence.request_digest
+        == _invoke_request_digest(request, negotiation)
+        and actual_completed == completed_prefix
+        and failed_operation_matches
+        and _native_program_outputs_match_generated_contract(
+            arguments=request.arguments,
+            outputs=details.outputs,
+            completed_count=len(details.completed_operations),
+        )
+        and details.evidence.postcondition.digest == expected_postcondition
+        and (
+            not details.undo.available
+            or details.undo.group_label == undo_group
+        )
+    )
+    if not valid:
+        raise _native_program_result_error(
+            request,
+            "Native program failure did not match its negotiated request.",
+        ) from error
 
 
 async def _invoke_native_read_request(
@@ -6741,6 +7188,14 @@ __all__ = [
     "NativeInvokeBackend",
     "NativeInvokeRequest",
     "NativeInvokeResult",
+    "NativeProgramEvidence",
+    "NativeProgramExecution",
+    "NativeProgramFailureDetails",
+    "NativeProgramInvokeResult",
+    "NativeProgramOperationSummary",
+    "NativeProgramPostconditionEvidence",
+    "NativeProgramRequest",
+    "NativeProgramUndoEvidence",
     "NativeLocator",
     "NativeNegotiation",
     "NativePostconditionEvidence",
@@ -6844,6 +7299,7 @@ __all__ = [
     "PROJECT_SUMMARY_CAPABILITY_ID",
     "PROJECT_SUMMARY_CAPABILITY_VERSION",
     "PROJECT_SUMMARY_CONTRACT_DIGEST",
+    "invoke_native_program",
     "invoke_project_bit_depth_read",
     "invoke_project_bit_depth_set",
     "invoke_composition_layers_list",
