@@ -202,9 +202,9 @@ Create shape:
       "category": "workflow",
       "tags": [],
       "compatibility": {},
-      "declaredRisk": "write",
+      "declared_risk": "write",
       "content": "JSON.stringify({ok:true});",
-      "argsSchema": {}
+      "args_schema": {}
     }
   }
 }
@@ -219,9 +219,9 @@ Promotion shape:
     "mode": "promote",
     "intent": "user-requested",
     "status": "saved",
-    "artifactId": "user-or-chat-candidate-id",
-    "expectedRevision": 1,
-    "expectedContentHash": "64-lowercase-hex-characters"
+    "artifact_id": "user-or-chat-candidate-id",
+    "expected_revision": 1,
+    "expected_content_hash": "64-lowercase-hex-characters"
   }
 }
 ```
