@@ -15,6 +15,7 @@ import { zcodeDefaultModelLocked as shouldLockZcodeDefaultModel, zcodeManagedMod
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 import { createPlatformAdapter } from '../cep/platform/index';
+import { platformHelperRepairView } from '../app/providerInitState';
 
 const REPO_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp';
 const DOCS_URL = 'https://github.com/JUNKDOGE-JOE/after-effects-mcp#readme';
@@ -51,6 +52,8 @@ const S = {
     claude3pNote: '同一个 Provider 可同时用于 Claude 和 Codex；协议与兼容转换按当前模型自动选择。',
     providerHelperStartFailed: 'Provider 凭据功能已安全停用。平台 Helper 会随 AE 自动启动，但本次未能启动或连接；请先重新打开面板，仍失败时重启 AE。不会回退读取明文凭据。',
     providerHelperRepair: 'Provider 凭据功能已安全停用。平台 Helper 已启动但未通过握手、版本或授权检查；请重启 AE，仍失败时再修复当前安装。不会回退读取明文凭据。',
+    repairHelper: '修复 Helper',
+    repairingHelper: '正在修复 Helper…',
     providerStoreCorrupt: 'Provider 配置文件损坏；当前列表已保留。请先从备份恢复 providers.json，再点「重新检测」。',
     providerStoreUnavailable: 'Provider 配置文件不可用；当前列表已保留。请检查 ~/.ae-mcp 的磁盘空间与读写权限。',
     providerMigrationConflict: 'Provider 迁移期间配置发生冲突；当前列表已保留。请关闭其他面板实例后重新启动 AE 再检测。',
@@ -114,6 +117,8 @@ const S = {
     claude3pNote: 'The same Provider can serve Claude and Codex; protocol routing and compatibility conversion are selected per model.',
     providerHelperStartFailed: 'Provider credentials are safely disabled. Platform Helper starts with AE but could not start or connect in this session. Reopen the panel, then restart AE if it still fails. Plaintext fallback is disabled.',
     providerHelperRepair: 'Provider credentials are safely disabled. Platform Helper started but failed its handshake, version, or authorization check. Restart AE, then repair the current install if it still fails. Plaintext fallback is disabled.',
+    repairHelper: 'Repair Helper',
+    repairingHelper: 'Repairing Helper…',
     providerStoreCorrupt: 'The provider configuration is corrupt; the current list was retained. Restore providers.json from backup, then re-check.',
     providerStoreUnavailable: 'The provider configuration is unavailable; the current list was retained. Check disk space and permissions for ~/.ae-mcp.',
     providerMigrationConflict: 'The provider configuration changed during migration; the current list was retained. Close other panel instances, restart AE, then re-check.',
@@ -321,6 +326,8 @@ export function SettingsScreen({
   codexCliConfig = null,
   providerManager = null,
   providerInit = { state: 'checking', error: '' },
+  onRepairPlatformHelper,
+  providerRepairing = false,
   logLevel = 'info',
   onLogLevel,
   onExportLogs,
@@ -336,6 +343,11 @@ export function SettingsScreen({
     PROVIDER_SECRET_MISMATCH: t.providerSecretMismatch,
     PROVIDER_INITIALIZATION_FAILED: t.providerInitializationFailed,
   }[providerInit.error] || t.providerInitializationFailed;
+  const helperRepair = platformHelperRepairView(
+    providerInit,
+    providerRepairing,
+    typeof onRepairPlatformHelper === 'function',
+  );
   const zcodeModelLocked = shouldLockZcodeDefaultModel({ backend, models: modelOptions });
   const [customModelDraft, setCustomModelDraft] = React.useState(customModel);
   const [draftPort, setDraftPort] = React.useState(String(port));
@@ -430,7 +442,19 @@ export function SettingsScreen({
         />
         {providerInit.state === 'unavailable' ? (
           <div role="alert" style={{ padding: '7px 8px', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', background: 'var(--error-bg)', color: 'var(--error)', font: '400 10px/1.5 var(--font-ui)' }}>
-            {providerInitMessage}{providerInit.error ? ` (${providerInit.error})` : ''}
+            {providerInitMessage}{providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : ''}
+            {helperRepair ? (
+              <div style={{ marginTop: 6 }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={helperRepair.disabled}
+                  onClick={onRepairPlatformHelper}
+                >
+                  {helperRepair.label === 'repairing' ? t.repairingHelper : t.repairHelper}
+                </Button>
+              </div>
+            ) : null}
           </div>
         ) : null}
         {providerManager}

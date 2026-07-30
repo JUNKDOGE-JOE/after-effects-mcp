@@ -50,6 +50,53 @@ test('provider init failure state never exposes the original message', async () 
   assert.equal(JSON.stringify(result).includes('sensitive implementation detail'), false);
 });
 
+test('Repair Helper is available only for the explicit repair-required state', async () => {
+  const {
+    platformHelperRepairView,
+    providerRepairFailure,
+  } = await import('../src/app/providerInitState.js');
+  assert.deepEqual(
+    platformHelperRepairView(
+      { state: 'unavailable', error: 'PLATFORM_HELPER_REPAIR_REQUIRED' },
+      false,
+      true,
+    ),
+    { disabled: false, label: 'repair' },
+  );
+  assert.deepEqual(
+    platformHelperRepairView(
+      { state: 'unavailable', error: 'PLATFORM_HELPER_REPAIR_REQUIRED' },
+      true,
+      true,
+    ),
+    { disabled: true, label: 'repairing' },
+  );
+  for (const providerInit of [
+    { state: 'checking', error: '' },
+    { state: 'ready', error: '' },
+    { state: 'unavailable', error: 'PLATFORM_HELPER_START_FAILED' },
+  ]) {
+    assert.equal(platformHelperRepairView(providerInit, false, true), null);
+  }
+  assert.equal(
+    platformHelperRepairView(
+      { state: 'unavailable', error: 'PLATFORM_HELPER_REPAIR_REQUIRED' },
+      false,
+      false,
+    ),
+    null,
+  );
+
+  const failure = new Error('private helper path');
+  failure.code = 'HELPER_START_FAILED';
+  assert.deepEqual(providerRepairFailure(failure), {
+    state: 'unavailable',
+    error: 'PLATFORM_HELPER_REPAIR_REQUIRED',
+    detail: 'PLATFORM_HELPER_START_FAILED',
+  });
+  assert.equal(JSON.stringify(providerRepairFailure(failure)).includes('private helper path'), false);
+});
+
 test('provider init rejects persisted model metadata containing resolved credentials', async () => {
   const { assertProviderStateCredentialFree } = await import('../src/app/providerInitState.js');
   for (const secret of ['opaque"provider-secret', 'opaque\\provider-secret']) {
