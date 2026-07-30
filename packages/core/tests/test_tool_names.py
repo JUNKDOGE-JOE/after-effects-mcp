@@ -428,11 +428,8 @@ async def test_tool_use_reference_tracks_public_schema_and_action_requirements(
     reference = (
         Path(__file__).resolve().parents[3] / "docs" / "REFERENCE.md"
     ).read_text("utf-8")
-    quick_reference_row = (
-        "| `ae.toolUse` | staged action fields | "
-        "render/prepare/grant/execute/start/status/cancel/history |"
-    )
-    assert reference.count(quick_reference_row) == 2
+    assert reference.count("`ae_toolUse` staged actions") == 2
+    assert "`ae.toolUse`" not in reference
     for disposition in (
         "cancelled-before-dispatch",
         "not-cancellable-after-dispatch",
