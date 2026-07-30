@@ -193,9 +193,67 @@ async def _run_tool_inspect(args: schemas.AeToolInspectArgs, ctx: Any) -> Any:
         return _error(exc)
 
 
+def _save_tool_artifact(save: Any, ctx: Any, service: Any) -> dict[str, Any]:
+    if save.mode == "create":
+        request_id_value = getattr(ctx, "request_id", None)
+        request_id = (
+            str(request_id_value)[:512] if request_id_value is not None else None
+        )
+        client = client_identity.get_client()
+        provenance: dict[str, JsonValue] = {
+            "intent": save.intent,
+            "client": client,
+        }
+        if request_id:
+            provenance["requestId"] = request_id
+        artifact_input = save.artifact
+        artifact = service.store.create(
+            ToolArtifactDraft(
+                name=artifact_input.name,
+                description=artifact_input.description,
+                kind=artifact_input.kind,
+                category=artifact_input.category,
+                tags=tuple(artifact_input.tags),
+                compatibility=cast(
+                    Mapping[str, JsonValue], artifact_input.compatibility
+                ),
+                declared_risk=artifact_input.declared_risk,
+                source=ToolSource(
+                    type=(
+                        "user"
+                        if save.intent == "user-requested"
+                        else "chat-tool-call"
+                    ),
+                    ref=request_id or "model-save",
+                    client=client,
+                    product_version=None,
+                    provenance=provenance,
+                ),
+                status=save.status,
+                content=artifact_input.content,
+                args_schema=cast(
+                    Mapping[str, JsonValue], artifact_input.args_schema
+                ),
+            )
+        )
+    else:
+        artifact = service.store.promote_candidate(
+            save.artifact_id,
+            expected_revision=save.expected_revision,
+            expected_content_hash=save.expected_content_hash,
+        )
+    return {
+        "ok": True,
+        "artifact": artifact.to_dict(),
+        "executionCapabilities": execution_capabilities(artifact),
+    }
+
+
 async def _run_tool_use(args: schemas.AeToolUseArgs, ctx: Any) -> Any:
     try:
         service = default_tool_service()
+        if args.action == "save":
+            return _save_tool_artifact(cast(Any, args.save), ctx, service)
         if args.action == "render":
             return service.execution.render(cast(str, args.artifact_id), args.args)
         if args.action == "prepare":

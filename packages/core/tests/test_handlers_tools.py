@@ -481,6 +481,177 @@ async def test_tool_use_dispatches_staged_protocol_exactly(service, action):
 
 
 @pytest.mark.asyncio
+async def test_public_tool_use_save_creates_discovers_blocks_and_promotes_jsx(
+    monkeypatch, tmp_path
+):
+    reset_default_tool_service_for_tests()
+    monkeypatch.setenv("AE_MCP_TOOL_DIR", str(tmp_path / "tools"))
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path / "skills"))
+    monkeypatch.setattr(
+        handlers.client_identity, "get_client", lambda: "test-model/1.0"
+    )
+    ctx = SimpleNamespace(request_id="request-model-save")
+
+    def create_args(*, intent, status, name):
+        return S.AeToolUseArgs(
+            action="save",
+            save={
+                "mode": "create",
+                "intent": intent,
+                "status": status,
+                "artifact": {
+                    "name": name,
+                    "description": "Reusable test JSX",
+                    "kind": "jsx",
+                    "category": "workflow",
+                    "tags": ["test"],
+                    "compatibility": {},
+                    "declared_risk": "write",
+                    "content": "JSON.stringify({ok:true});",
+                    "args_schema": {},
+                },
+            },
+        )
+
+    try:
+        saved_result = await handlers._run_tool_use(
+            create_args(
+                intent="user-requested",
+                status="saved",
+                name="User requested JSX",
+            ),
+            ctx,
+        )
+
+        assert saved_result["ok"] is True
+        saved = saved_result["artifact"]
+        assert saved["id"].startswith("user:")
+        assert saved["kind"] == "jsx"
+        assert saved["status"] == "saved"
+        assert saved["source"]["type"] == "user"
+        assert saved["revision"] == 1
+        assert len(saved["contentHash"]) == 64
+        assert saved_result["executionCapabilities"]["directRun"]["available"] is True
+
+        index = await handlers._run_tool_index(S.AeToolIndexArgs(), None)
+        inspect = await handlers._run_tool_inspect(
+            S.AeToolInspectArgs(artifact_id=saved["id"]), None
+        )
+        indexed = next(
+            row for row in index["artifacts"] if row["id"] == saved["id"]
+        )
+        assert indexed["contentHash"] == saved["contentHash"]
+        assert indexed["revision"] == saved["revision"]
+        assert inspect["artifact"]["id"] == saved["id"]
+        assert inspect["artifact"]["contentHash"] == saved["contentHash"]
+
+        candidate_result = await handlers._run_tool_use(
+            create_args(
+                intent="model-curated",
+                status="candidate",
+                name="Model curated JSX",
+            ),
+            ctx,
+        )
+
+        assert candidate_result["ok"] is True
+        candidate = candidate_result["artifact"]
+        assert candidate["status"] == "candidate"
+        assert candidate["source"] == {
+            "type": "chat-tool-call",
+            "ref": "request-model-save",
+            "client": "test-model/1.0",
+            "productVersion": None,
+            "provenance": {
+                "intent": "model-curated",
+                "requestId": "request-model-save",
+                "client": "test-model/1.0",
+            },
+        }
+        assert (
+            candidate_result["executionCapabilities"]["directRun"]["disabledReason"][
+                "code"
+            ]
+            == "tool_status_blocked"
+        )
+
+        default_index = await handlers._run_tool_index(S.AeToolIndexArgs(), None)
+        default_search = await handlers._run_tool_search(
+            S.AeToolSearchArgs(query="Model curated"), None
+        )
+        candidate_index = await handlers._run_tool_index(
+            S.AeToolIndexArgs(statuses=["candidate"]), None
+        )
+        candidate_search = await handlers._run_tool_search(
+            S.AeToolSearchArgs(query="Model curated", statuses=["candidate"]),
+            None,
+        )
+        assert candidate["id"] not in {
+            row["id"] for row in default_index["artifacts"]
+        }
+        assert default_search["artifacts"] == []
+        assert [row["id"] for row in candidate_index["artifacts"]] == [
+            candidate["id"]
+        ]
+        assert [row["id"] for row in candidate_search["artifacts"]] == [
+            candidate["id"]
+        ]
+
+        blocked = await handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="prepare",
+                artifact_id=candidate["id"],
+                operation="execute",
+            ),
+            None,
+        )
+        assert blocked["ok"] is False
+        assert blocked["error"] == "tool_status_blocked"
+
+        promotion = await handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="save",
+                save={
+                    "mode": "promote",
+                    "intent": "user-requested",
+                    "status": "saved",
+                    "artifact_id": candidate["id"],
+                    "expected_revision": candidate["revision"],
+                    "expected_content_hash": candidate["contentHash"],
+                },
+            ),
+            ctx,
+        )
+        assert promotion["ok"] is True
+        assert promotion["artifact"]["id"] == candidate["id"]
+        assert promotion["artifact"]["status"] == "saved"
+        assert promotion["artifact"]["revision"] == candidate["revision"] + 1
+        assert promotion["executionCapabilities"]["directRun"]["available"] is True
+
+        stale = await handlers._run_tool_use(
+            S.AeToolUseArgs(
+                action="save",
+                save={
+                    "mode": "promote",
+                    "intent": "user-requested",
+                    "status": "saved",
+                    "artifact_id": candidate["id"],
+                    "expected_revision": candidate["revision"],
+                    "expected_content_hash": candidate["contentHash"],
+                },
+            ),
+            ctx,
+        )
+        assert stale == {
+            "ok": False,
+            "error": "tool_revision_conflict",
+            "message": "Tool artifact revision conflict",
+        }
+    finally:
+        reset_default_tool_service_for_tests()
+
+
+@pytest.mark.asyncio
 async def test_public_status_history_and_start_recover_after_default_service_restart(
     monkeypatch, tmp_path
 ):
