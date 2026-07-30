@@ -1096,6 +1096,9 @@ test('foundation CI is one credential-free Apple Silicon job', async () => {
   );
   assert.match(workflow, /runs-on:\s*macos-15/);
   assert.match(workflow, /\[\[ "\$\(uname -m\)" == 'arm64' \]\]/);
+  assert.match(workflow, /uv python install 3\.13\.13/);
+  assert.match(workflow, /uv python find 3\.13\.13/);
+  assert.doesNotMatch(workflow, /\$\(python --version\)/);
   assert.match(workflow, /swift test[\s\S]*native\/platform-helper\/macos/);
   assert.match(workflow, /build-platform-helper\.mjs[\s\S]*macos-arm64/);
   assert.match(workflow, /stage-platform-bundle\.mjs[\s\S]*macos-arm64/);

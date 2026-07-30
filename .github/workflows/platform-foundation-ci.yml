@@ -38,6 +38,14 @@ jobs:
           python-version: 3.13.13
           enable-cache: false
 
+      - name: Install exact bootstrap Python
+        shell: bash
+        run: |
+          set -euo pipefail
+          uv python install 3.13.13
+          python_path="$(uv python find 3.13.13)"
+          [[ "$("$python_path" --version)" == 'Python 3.13.13' ]]
+
       - name: Assert native arm64 runner and locked bootstrap tools
         shell: bash
         run: |
@@ -45,7 +53,6 @@ jobs:
           [[ "$(uname -m)" == 'arm64' ]]
           [[ "$(node --version)" == 'v24.17.0' ]]
           [[ "$(uv --version)" == 'uv 0.11.7 '* ]]
-          [[ "$(python --version)" == 'Python 3.13.13' ]]
 
       - name: Run focused foundation tests
         shell: bash
