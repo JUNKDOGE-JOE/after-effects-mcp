@@ -21,7 +21,7 @@ import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTie
 import { createToolsApi } from '../cep/toolsApi';
 import { createLegacyApiKeyStore } from '../cep/apiKey';
 import { createZcodeCredentialManager } from '../cep/zcodeCredential.js';
-import { probeClaudeLogin, resolveSidecarPath } from '../cep/claudeAuth';
+import { probeClaudeLogin, resolveSidecarSelection } from '../cep/claudeAuth';
 import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
@@ -649,7 +649,12 @@ function Shell({ cs }) {
       : resolveSystemNode({ platform: requestedPlatform || platform })),
     [platform, runtimeManager],
   );
-  const sidecarPath = React.useMemo(() => resolveSidecarPath({ extRoot, platform }), [extRoot, platform]);
+  const sidecarSelection = React.useMemo(() => resolveSidecarSelection({
+    extRoot,
+    platform,
+    runtimeActivation,
+  }), [extRoot, platform, runtimeActivation]);
+  const sidecarPath = sidecarSelection.path;
   const getMcpSpec = React.useCallback(async () => {
     try {
       const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
@@ -1122,6 +1127,17 @@ function Shell({ cs }) {
   const runClaudeProbe = React.useCallback(() => {
     let alive = true;
     setProbe(null);
+    if (sidecarSelection.state !== 'ready') {
+      if (sidecarSelection.state === 'error') {
+        const error = sidecarSelection.error;
+        setProbe({
+          loggedIn: false,
+          nodeOk: false,
+          detail: error?.message || String(error),
+        });
+      }
+      return () => { alive = false; };
+    }
     probeClaudeLogin({
       platform,
       resolveNode: resolvePanelNode,
@@ -1132,7 +1148,7 @@ function Shell({ cs }) {
       if (alive) setProbe({ loggedIn: false, nodeOk: false, detail: e && e.message ? e.message : String(e) });
     });
     return () => { alive = false; };
-  }, [platform, resolvePanelNode, sidecarPath]);
+  }, [platform, resolvePanelNode, sidecarPath, sidecarSelection]);
 
   React.useEffect(() => {
     if (backendPref !== 'subscription') return undefined;

@@ -2,7 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
-import { probeClaudeLogin, resolveSidecarPath } from '../src/cep/claudeAuth.js';
+import {
+  probeClaudeLogin,
+  resolveSidecarPath,
+  resolveSidecarSelection,
+} from '../src/cep/claudeAuth.js';
 
 function makeProc() {
   const proc = new EventEmitter();
@@ -173,6 +177,88 @@ test('resolveSidecarPath returns a diagnostic runtime candidate without throwing
   assert.equal(result, 'C:\\missing\\runtime\\windows-x64\\node\\sidecar\\agent-sidecar.mjs');
 });
 
+test('resolveSidecarSelection keeps macOS pending until runtime activation is ready', () => {
+  const selection = resolveSidecarSelection({
+    extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
+    platform: macPlatform(),
+    runtimeActivation: { state: 'starting', result: null, error: null },
+    fsImpl: { existsSync: () => false },
+  });
+
+  assert.deepEqual(selection, { state: 'pending', path: null, error: null });
+});
+
+test('resolveSidecarSelection exposes the verified path only after macOS activation', () => {
+  const runtime = selectedRuntime('/Users/test/.ae-mcp/runtime/layers/a/i-active/macos-arm64');
+  const selection = resolveSidecarSelection({
+    extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
+    platform: macPlatform(),
+    runtimeActivation: { state: 'ready', result: runtime, error: null },
+    fsImpl: { existsSync: () => false },
+  });
+
+  assert.deepEqual(selection, {
+    state: 'ready',
+    path: '/Users/test/.ae-mcp/runtime/layers/a/i-active/macos-arm64/node/sidecar/agent-sidecar.mjs',
+    error: null,
+  });
+});
+
+test('resolveSidecarSelection preserves RuntimeManager and receipt errors before dispatch', () => {
+  const runtimeError = Object.assign(new Error('runtime failed'), {
+    code: 'RUNTIME_MANIFEST_INVALID',
+  });
+  const activationFailure = resolveSidecarSelection({
+    extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
+    platform: macPlatform(),
+    runtimeActivation: { state: 'error', result: null, error: runtimeError },
+    fsImpl: { existsSync: () => false },
+  });
+  assert.equal(activationFailure.state, 'error');
+  assert.equal(activationFailure.path, null);
+  assert.equal(activationFailure.error, runtimeError);
+
+  const runtime = selectedRuntime('/Applications/Adobe/CEP/extensions/ae-mcp/runtime/macos-arm64');
+  const receiptFailure = resolveSidecarSelection({
+    extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
+    platform: macPlatform(),
+    runtimeActivation: { state: 'ready', result: runtime, error: null },
+    fsImpl: { existsSync: () => false },
+  });
+  assert.equal(receiptFailure.state, 'error');
+  assert.equal(receiptFailure.path, null);
+  assert.equal(receiptFailure.error.code, 'RUNTIME_SIDECAR_SELECTION_INCOMPATIBLE');
+});
+
+test('resolveSidecarSelection keeps Windows and debug paths independent of RuntimeManager', () => {
+  const windows = resolveSidecarSelection({
+    extRoot: 'C:\\ext',
+    platform: windowsPlatform(),
+    runtimeActivation: { state: 'ready', result: null, error: null },
+    fsImpl: { existsSync: () => false },
+  });
+  assert.deepEqual(windows, {
+    state: 'ready',
+    path: 'C:\\ext\\runtime\\windows-x64\\node\\sidecar\\agent-sidecar.mjs',
+    error: null,
+  });
+
+  const debug = resolveSidecarSelection({
+    extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
+    platform: macPlatform(),
+    runtimeActivation: { state: 'ready', result: null, error: null },
+    fsImpl: {
+      existsSync: (value) => value === '/Applications/Adobe/CEP/extensions/ae-mcp/.debug'
+        || value === '/Applications/Adobe/CEP/extensions/ae-mcp/sidecar/agent-sidecar.mjs',
+    },
+  });
+  assert.deepEqual(debug, {
+    state: 'ready',
+    path: '/Applications/Adobe/CEP/extensions/ae-mcp/sidecar/agent-sidecar.mjs',
+    error: null,
+  });
+});
+
 test('probeClaudeLogin resolves logged in probe-result', async () => {
   const proc = makeProc();
   let spawnArgs;
@@ -265,4 +351,28 @@ test('probeClaudeLogin reports resolveNode failure and does not spawn', async ()
 
   assert.equal(spawned, false);
   assert.deepEqual(result, { loggedIn: false, nodeOk: false, detail: 'node missing' });
+});
+
+test('probeClaudeLogin does not resolve Node or spawn while Sidecar selection is pending', async () => {
+  let nodeResolutions = 0;
+  let spawns = 0;
+  const result = await probeClaudeLogin({
+    sidecarPath: null,
+    resolveNode: async () => {
+      nodeResolutions += 1;
+      return { ok: true, nodePath: 'node', version: '20.0.0' };
+    },
+    spawnImpl: () => {
+      spawns += 1;
+      return makeProc();
+    },
+  });
+
+  assert.deepEqual(result, {
+    loggedIn: false,
+    nodeOk: false,
+    detail: 'verified runtime sidecar is not ready',
+  });
+  assert.equal(nodeResolutions, 0);
+  assert.equal(spawns, 0);
 });

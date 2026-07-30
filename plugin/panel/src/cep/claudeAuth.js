@@ -49,6 +49,35 @@ export function resolveSidecarPath({
   ]);
 }
 
+export function resolveSidecarSelection({
+  runtimeActivation,
+  extRoot,
+  fsImpl,
+  platform,
+} = {}) {
+  const adapter = platform || createPlatformAdapter();
+  if (adapter.id === 'macos-arm64'
+      && runtimeActivation?.state === 'error'
+      && runtimeActivation.error) {
+    return { state: 'error', path: null, error: runtimeActivation.error };
+  }
+  try {
+    const path = resolveSidecarPath({
+      extRoot,
+      fsImpl,
+      platform: adapter,
+      runtimeSelection: runtimeActivation?.state === 'ready'
+        ? runtimeActivation.result
+        : null,
+    });
+    return path
+      ? { state: 'ready', path, error: null }
+      : { state: 'pending', path: null, error: null };
+  } catch (error) {
+    return { state: 'error', path: null, error };
+  }
+}
+
 export async function probeClaudeLogin({
   platform,
   resolveNode,
@@ -57,6 +86,13 @@ export async function probeClaudeLogin({
   env,
   timeoutMs = 30000,
 } = {}) {
+  if (!sidecarPath) {
+    return {
+      loggedIn: false,
+      nodeOk: false,
+      detail: 'verified runtime sidecar is not ready',
+    };
+  }
   const adapter = platform || (spawnImpl ? {
     completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
     spawn: (executable, args, options) => spawnImpl(executable.path, [...(executable.argsPrefix || []), ...args], options),

@@ -33,6 +33,16 @@ The current layout is schema-v2: generation metadata lives under `generations/` 
 
 当前目录布局是 schema-v2：generation 元数据位于 `generations/`，已校验的 runtime 内容通过 `layers/` 共享。迁移期间，RuntimeManager 仍可读取位于 `runtime/<version>-<source-sha>/` 的有效 schema-v1 generation。`current` 与 `previous` 是仅有的保留 generation 引用，二者都是普通文本文件。RuntimeManager 通过同目录临时文件和原子 rename 写入每个指针；进程级互斥锁会串行化多个 Panel 实例的校验、安装、激活、修复、回滚和卸载操作。每个 generation 会保留自身经过校验的 launcher 字节，确保回滚和 fallback 使用匹配入口。稳定 launcher 只读取 `current`，再以 `-I -m ae_mcp` 启动所选包内 Python。
 
+On macOS production paths, the panel also resolves the Claude Agent sidecar
+from the selected generation's verified `componentReceipt.canonicalPath`.
+It does not pair the selected Node executable with an extension-owned sidecar
+or fall back to another payload copy.
+
+在 macOS 正式路径中，面板也会从已选 generation 的已验证
+`componentReceipt.canonicalPath` 解析 Claude Agent Sidecar。它不会把已选
+Node 可执行文件与扩展目录中的另一份 Sidecar 混用，也不会回退到其他
+payload 副本。
+
 After a successful transition, RuntimeManager prunes every other valid generation it owns, including readable schema-v1 generations, and then prunes their unreferenced shared layers. Directories with an unknown, malformed, or unowned record are preserved.
 
 成功转换后，RuntimeManager 会清理它拥有的其他有效 generation（包括可读取的 schema-v1 generation），随后清理其未被引用的共享 layer。记录未知、格式错误或不属于 RuntimeManager 的目录会被保留。
