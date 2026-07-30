@@ -149,7 +149,8 @@ function validMacosRegistration(value) {
     return value
         && typeof value.helperPath === 'string'
         && value.helperPath.length > 0
-        && typeof value.ensureRegistered === 'function';
+        && typeof value.ensureRegistered === 'function'
+        && typeof value.repairRegistered === 'function';
 }
 
 function createPlatformHelperTransport(options) {
@@ -290,7 +291,11 @@ function createPlatformHelperTransport(options) {
             opened = await connectWindows();
         } else {
             try {
-                await macosRegistration.ensureRegistered();
+                if (input.repairRegistration === true) {
+                    await macosRegistration.repairRegistered();
+                } else {
+                    await macosRegistration.ensureRegistered();
+                }
                 const createBrokerTransport = input.createMacosBrokerTransport
                     || createPlatformHelperStdioTransport;
                 opened = createBrokerTransport({
