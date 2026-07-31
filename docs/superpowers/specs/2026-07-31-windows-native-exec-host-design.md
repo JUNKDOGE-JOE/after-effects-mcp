@@ -65,8 +65,11 @@ install. Validate through the public MCP surface only.
 
 ### Rejected: port the retired standalone tool or add a Windows-specific capability
 
-`ae.project.summary` no longer exists as a tool. A Windows-only capability
-would fork the capability contract and violate the Issue's non-goals. The
+`ae.project.summary` no longer exists as a tool (the string survives only as
+an internal negotiated native capability/contract ID in
+`packages/core/ae_mcp/backends/native.py`, never as a public MCP tool). A
+Windows-only capability would fork the capability contract and violate the
+Issue's non-goals. The
 existing read-only Native EXEC registry already contains programs sufficient
 for acceptance.
 
@@ -223,7 +226,8 @@ Classify findings under `AGENTS.md` section 5:
 - only a reproduced failure in the Windows build/adapter/acceptance path is
   a current blocker;
 - credible Windows hardening beyond the single-user boundary is a follow-up
-  recorded against #80/#81 or a new issue;
+  recorded as a new issue (or against #80/#81 only when it directly concerns
+  their packaging/release-matrix scope);
 - reviving #88-style authentication, pairing, or process defenses is out of
   scope by product decision.
 
