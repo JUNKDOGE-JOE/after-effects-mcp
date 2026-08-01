@@ -182,7 +182,17 @@ effect_text_utf8(const std::array<A_char, Size> &buffer,
   };
   identity.version = query_string(L"ProductVersion");
   identity.build = query_string(L"PrivateBuild");
-  identity.build_number = positive_integer(identity.build);
+  // Windows AfterFX carries the build counter in PrivateBuild, e.g.
+  // "25.6.6x4" -> 4 (the macOS "Adobe Product Build" integer counterpart).
+  identity.build_number = [&identity]() -> std::uint64_t {
+    const std::size_t cross = identity.build.find_last_of("xX");
+    if (cross != std::string::npos && cross + 1 < identity.build.size()) {
+      const std::uint64_t parsed = positive_integer(
+          std::string_view(identity.build).substr(cross + 1));
+      if (parsed != 0) return parsed;
+    }
+    return positive_integer(identity.build);
+  }();
   return identity;
 }
 
