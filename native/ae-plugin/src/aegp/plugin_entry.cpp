@@ -894,8 +894,15 @@ private:
                                         std::string_view right) {
   const auto left_value = decimal_value(left);
   const auto right_value = decimal_value(right);
-  return left_value.has_value() && right_value.has_value() &&
-         *left_value == *right_value;
+  if (!left_value.has_value() || !right_value.has_value()) return false;
+  // Percent-scaled and unit-converted streams accumulate sub-1e-14 binary
+  // conversion noise across the write/read round trip (55 -> 0.55 -> 55.000…7),
+  // so exact double equality misreports successful writes as side-effecting
+  // failures. The tolerance stays far below any meaningful user-visible delta.
+  const A_FpLong magnitude = std::max<A_FpLong>(
+      {static_cast<A_FpLong>(1), std::fabs(*left_value),
+       std::fabs(*right_value)});
+  return std::fabs(*left_value - *right_value) <= magnitude * 1e-9;
 }
 
 [[nodiscard]] bool

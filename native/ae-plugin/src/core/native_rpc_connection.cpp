@@ -689,20 +689,6 @@ void NativeRpcConnectionHandler::serve(
       }
     }
     front_door.close();
-  } catch (const std::exception &diag_error) {
-    // TEMPORARY DIAGNOSTIC (revert before merge): capture the exception that
-    // kills selectedLayers.list / frameRate.set dispatches on Windows.
-#if defined(_WIN32)
-    try {
-      std::ofstream diag(
-          std::string(std::getenv("LOCALAPPDATA") ? std::getenv("LOCALAPPDATA") : "")
-              + "\\AfterEffectsMCP\\Logs\\native-exception.log",
-          std::ios::app);
-      diag << diag_error.what() << '\n';
-    } catch (...) {
-    }
-#endif
-    observer_.on_rpc_event("connection", "none", "codec-or-transport-failure");
   } catch (...) {
     observer_.on_rpc_event("connection", "none", "codec-or-transport-failure");
   }
