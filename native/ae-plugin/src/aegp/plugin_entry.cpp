@@ -5278,7 +5278,15 @@ extern "C" AE_MCP_PLUGIN_EXPORT A_Err AeMcpNativeMain(
       // turn a live AE-owned state into a failed initialization.
     }
     return A_Err_NONE;
+  } catch (const std::exception &error) {
+    // TEMPORARY T4 DIAGNOSTIC (not for commit)
+    aemcp::native::DiagnosticLog probe_log2;
+    probe_log2.append(std::string("{\"schemaVersion\":1,\"event\":\"entry.probe\",\"stage\":\"state-throw\",\"what\":\"") +
+                      json_escape(error.what()) + "\"}");
+    return A_Err_GENERIC;
   } catch (...) {
+    aemcp::native::DiagnosticLog probe_log3;
+    probe_log3.append("{\"schemaVersion\":1,\"event\":\"entry.probe\",\"stage\":\"state-throw-unknown\"}");
     return A_Err_GENERIC;
   }
 }
