@@ -778,6 +778,21 @@ test('client rejects a response rebound to another native session', UNIX_SOCKET_
     );
 });
 
+test('client surfaces a duplicate request id as a typed error, not a contract mismatch', UNIX_SOCKET_TEST, async (t) => {
+    const { client } = await connectedFixture(t);
+    const first = await invoke(client, 'native-program-dup-0001', readProgram());
+    assert.equal(first.ok ?? first.result?.ok ?? true, true);
+    // The duplicate carries no native-program failure details; it must pass
+    // through as the typed DUPLICATE_REQUEST error instead of tripping the
+    // program-failure validator.
+    await assert.rejects(
+        invoke(client, 'native-program-dup-0001', readProgram()),
+        function (error) {
+            return error.code === 'DUPLICATE_REQUEST';
+        },
+    );
+});
+
 test('client bounds an authenticating wait by the absolute deadline', UNIX_SOCKET_TEST, async (t) => {
     const fixture = await endpointFixture(t);
     installProtocol(fixture.server, { suppressHello: true });

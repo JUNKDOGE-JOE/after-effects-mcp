@@ -756,7 +756,8 @@ function createNativeAegpClient(options) {
                 'Native AEGP returned an unverifiable mutation error after dispatch.',
             );
         }
-        if (pending?.capabilityId === NATIVE_EXEC_CAPABILITY) {
+        if (pending?.capabilityId === NATIVE_EXEC_CAPABILITY
+            && error.details !== undefined) {
             const details = error.details;
             const disposition = details?.disposition;
             const sideEffect = disposition === 'possibly-side-effecting'
@@ -823,6 +824,22 @@ function createNativeAegpClient(options) {
                     'Native AEGP returned an unverifiable program failure after dispatch.',
                 );
             }
+        }
+        // Program-terminal failures must carry their details envelope;
+        // session/transport-level typed errors (DUPLICATE_REQUEST,
+        // SESSION_STALE, …) have none and pass through as typed errors.
+        if (pending?.capabilityId === NATIVE_EXEC_CAPABILITY
+            && error.details === undefined
+            && ['POSSIBLY_SIDE_EFFECTING_FAILURE', 'PRECONDITION_FAILED',
+                'STALE_LOCATOR', 'CAPABILITY_FAILED', 'NATIVE_UNSUPPORTED',
+                'INVALID_ARGUMENT'].includes(error.code)) {
+            return pendingTransportFailure(
+                pending,
+                nativeContractMismatch(
+                    'native AEGP omitted the native program failure details',
+                ),
+                'Native AEGP returned an unverifiable program failure after dispatch.',
+            );
         }
         return nativeError(
             error.code,
