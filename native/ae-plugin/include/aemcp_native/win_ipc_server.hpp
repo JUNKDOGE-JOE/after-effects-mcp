@@ -72,6 +72,7 @@ class WindowsIpcServer final {
   const WindowsIpcServerConfig config_;
   std::atomic<bool> stop_requested_{false};
   std::atomic<bool> running_{false};
+  std::atomic<HANDLE> waiting_pipe_{nullptr};
   std::thread worker_;
   HANDLE listener_{nullptr};
   std::atomic<std::uint32_t> next_session_generation_{1};

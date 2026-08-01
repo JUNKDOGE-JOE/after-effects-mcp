@@ -308,6 +308,23 @@ EndpointResult WindowsEndpointRegistry::create_listener() {
   return {EndpointCode::kOk, {}};
 }
 
+HANDLE WindowsEndpointRegistry::create_pipe_instance() noexcept {
+  if (!started_ || pipe_name_.empty()) return nullptr;
+  SecurityDescriptorOwner security;
+  SECURITY_ATTRIBUTES* attributes = security.same_user_attributes();
+  if (attributes == nullptr) return nullptr;
+  const HANDLE pipe = CreateNamedPipeW(
+      widen(pipe_name_).c_str(),
+      PIPE_ACCESS_DUPLEX,
+      PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
+      1,
+      8192,
+      8192,
+      0,
+      attributes);
+  return pipe == INVALID_HANDLE_VALUE ? nullptr : pipe;
+}
+
 EndpointResult WindowsEndpointRegistry::publish_descriptor() {
   // Descriptor files carry the host instance UUID (d-<uuid>.endpoint), the
   // same naming the macOS registry and the shared client discovery use.

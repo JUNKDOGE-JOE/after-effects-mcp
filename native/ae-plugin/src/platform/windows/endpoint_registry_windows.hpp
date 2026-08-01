@@ -78,6 +78,11 @@ class WindowsEndpointRegistry final {
   void stop() noexcept;
 
   [[nodiscard]] HANDLE listener_pipe() const noexcept { return listener_pipe_; }
+  // Creates one additional pipe instance with the identical same-user ACL as
+  // the primary listener (#88 NOT_PLANNED: the ACL is the entire boundary,
+  // and every instance must enforce it, including those created by an
+  // elevated host for non-elevated same-user clients).
+  [[nodiscard]] HANDLE create_pipe_instance() noexcept;
   [[nodiscard]] const NativeEndpointDescriptor& descriptor() const noexcept {
     return descriptor_;
   }

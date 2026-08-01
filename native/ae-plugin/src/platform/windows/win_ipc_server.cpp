@@ -52,21 +52,10 @@ WindowsIpcServer::~WindowsIpcServer() {
 }
 
 HANDLE WindowsIpcServer::create_next_listener() noexcept {
-  // Same same-user ACL boundary as the registry listener (#88 NOT_PLANNED):
-  // the pipe name is identical, so the OS applies the registry's DACL policy
-  // to every subsequent instance through the creation call below.
-  const std::wstring name(endpoint_.pipe_name().begin(), endpoint_.pipe_name().end());
-  const HANDLE pipe = CreateNamedPipeW(
-      name.c_str(),
-      PIPE_ACCESS_DUPLEX,
-      PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT,
-      1,
-      8192,
-      8192,
-      0,
-      nullptr);
-  if (pipe == INVALID_HANDLE_VALUE) return nullptr;
-  return pipe;
+  // Every instance carries the registry's same-user ACL; a default-DACL
+  // instance created by an elevated host would deny non-elevated same-user
+  // clients (#88 NOT_PLANNED: the ACL is the entire boundary).
+  return endpoint_.create_pipe_instance();
 }
 
 bool WindowsIpcServer::start() {
@@ -84,11 +73,11 @@ bool WindowsIpcServer::start() {
 
 void WindowsIpcServer::stop() noexcept {
   stop_requested_.store(true);
-  const HANDLE listener = listener_;
-  if (listener != nullptr) {
+  const HANDLE waiting = waiting_pipe_.load();
+  if (waiting != nullptr) {
     // Unblock a pending ConnectNamedPipe so the worker can observe the stop.
-    (void)CancelIoEx(listener, nullptr);
-    (void)DisconnectNamedPipe(listener);
+    (void)CancelIoEx(waiting, nullptr);
+    (void)DisconnectNamedPipe(waiting);
   }
   if (worker_.joinable()) worker_.join();
   running_.store(false);
@@ -106,19 +95,21 @@ void WindowsIpcServer::run() noexcept {
         break;
       }
     }
+    waiting_pipe_.store(pipe);
     const BOOL connected = ConnectNamedPipe(pipe, nullptr);
-    if (connected == 0 && GetLastError() == ERROR_PIPE_CONNECTED) {
+    waiting_pipe_.store(nullptr);
+    const DWORD connect_error = connected == 0 ? GetLastError() : ERROR_SUCCESS;
+    if (connected == 0 && connect_error == ERROR_PIPE_CONNECTED) {
       // Client already connected before the call; the pipe is usable.
-    } else if (connected == 0 && GetLastError() == ERROR_NO_DATA) {
+    } else if (connected == 0 && connect_error == ERROR_NO_DATA) {
       // Client connected and disconnected immediately; recycle the instance.
       (void)DisconnectNamedPipe(pipe);
       continue;
     } else if (connected == 0) {
-      const DWORD error = GetLastError();
       CloseHandle(pipe);
       pipe = nullptr;
-      if (stop_requested_.load() || error == ERROR_OPERATION_ABORTED
-          || error == ERROR_INVALID_HANDLE) {
+      if (stop_requested_.load() || connect_error == ERROR_OPERATION_ABORTED
+          || connect_error == ERROR_INVALID_HANDLE) {
         break;
       }
       observer_.on_ipc_event("listener", "connect-failed");

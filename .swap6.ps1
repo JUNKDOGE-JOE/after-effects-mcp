@@ -7,7 +7,7 @@ try {
     if (-not $ae.HasExited) { Stop-Process -Id $ae.Id -Force }
     Start-Sleep 2
   }
-  Copy-Item 'C:\Users\A\AppData\Local\Temp\aemcp-build\dev-013-probe\AeMcpNative.aex' `
+  Copy-Item 'C:\Users\A\AppData\Local\Temp\aemcp-build\dev-014\AeMcpNative.aex' `
     'C:\Program Files\Adobe\Adobe After Effects 2025\Support Files\Plug-ins\Extensions\AeMcpNative.aex' `
     -Force -ErrorAction Stop
   Start-Process 'C:\Program Files\Adobe\Adobe After Effects 2025\Support Files\AfterFX.exe'

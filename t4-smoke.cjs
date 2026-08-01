@@ -58,7 +58,7 @@ async function main() {
         capabilityId: 'ae.native.exec',
         capabilityVersion: 1,
         arguments: {
-          operations: [{ op: 'project.items.list', args: {} }],
+          operations: [{ op: 'project.items.list', args: { offset: 0, limit: 10 } }],
         },
         deadlineUnixMs: Date.now() + 15000,
       });
