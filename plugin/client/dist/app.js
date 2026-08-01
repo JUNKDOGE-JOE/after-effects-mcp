@@ -24057,6 +24057,7 @@
           allowPaste: true,
           allowBrowse: !disabled,
           allowDrop: !disabled,
+          dropOnPage: true,
           allowReorder: false,
           instantUpload: false,
           maxFiles: MAX_ATTACHMENTS_PER_TURN,
