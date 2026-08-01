@@ -387,7 +387,7 @@ function newestVersionedDirectory(parent, label) {
   let entries;
   try {
     entries = fs.readdirSync(parent, { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && /^\d+\.\d+\.\d+\.\d+$/u.test(entry.name))
+      .filter((entry) => entry.isDirectory() && /^\d+\.\d+\.\d+(?:\.\d+)?$/u.test(entry.name))
       .map((entry) => entry.name);
   } catch {
     entries = [];
@@ -401,8 +401,10 @@ function newestVersionedDirectory(parent, label) {
   entries.sort((left, right) => {
     const leftParts = left.split('.').map(Number);
     const rightParts = right.split('.').map(Number);
-    for (let index = 0; index < 4; index += 1) {
-      if (leftParts[index] !== rightParts[index]) return rightParts[index] - leftParts[index];
+    for (let index = 0; index < Math.max(leftParts.length, rightParts.length); index += 1) {
+      const leftPart = leftParts[index] ?? 0;
+      const rightPart = rightParts[index] ?? 0;
+      if (leftPart !== rightPart) return rightPart - leftPart;
     }
     return 0;
   });
