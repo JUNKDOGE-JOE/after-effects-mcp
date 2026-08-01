@@ -609,12 +609,13 @@ function compileWindowsObjects({
   ];
   const defineFlags = [
     '/DMSWindows', '/DWIN32', '/D_WINDOWS', '/DUNICODE', '/D_UNICODE',
+    '/D_CRT_SECURE_NO_WARNINGS',
     `/DAE_MCP_SOURCE_COMMIT="${sourceCommit}"`,
     `/DAE_MCP_PRODUCT_VERSION="${productVersion}"`,
   ];
   const baseFlags = [
     '/nologo', '/c', '/std:c++20', '/EHsc', '/W4', '/WX', '/external:W0',
-    '/Od', '/MD', '/GS', '/guard:cf', '/permissive-',
+    '/utf-8', '/Od', '/MD', '/GS', '/guard:cf', '/permissive-',
     ...includeFlags, ...defineFlags,
   ];
   const objectFiles = [];
