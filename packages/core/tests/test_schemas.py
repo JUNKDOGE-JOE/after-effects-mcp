@@ -198,6 +198,18 @@ def test_skill_use_defaults():
     assert args.execute is False
 
 
+def test_skill_use_accepts_canonical_builtin_id():
+    # instructions.py and generated capability metadata reference skills as
+    # `builtin:skill:<name>`; the tool must accept that form (#regression:
+    # agents were rejected by the strict short-name pattern).
+    args = S.AeSkillUseArgs(name="builtin:skill:ae-execution-guide")
+    assert args.name == "builtin:skill:ae-execution-guide"
+    with pytest.raises(ValidationError):
+        S.AeSkillUseArgs(name="builtin:other:ae-execution-guide")
+    with pytest.raises(ValidationError):
+        S.AeSkillUseArgs(name="builtin:skill:has space")
+
+
 def _jsx_save_artifact() -> dict[str, object]:
     return {
         "name": "Reusable JSX",
