@@ -25,9 +25,12 @@ const PRODUCT_MANIFEST_PATH = 'plugin/host/package.json';
 const PRODUCT_VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 const PRODUCT_VERSION_TOKEN = Buffer.from('__AE_MCP_PRODUCT_VERSION__', 'ascii');
 const CLI_USAGE = `Usage: node native/ae-plugin/build-windows.mjs \\
-  [--sdk-archive <path>] [--sdk-root <path>] --output <absolute-path>
+  [--sdk-archive <path>] [--sdk-root <path>] --output <absolute-path> [--evidence]
 
 AE_SDK_ARCHIVE and AE_SDK_ROOT may provide the corresponding SDK inputs.
+Development builds (default) allow a dirty worktree and use cheap SDK change
+signals; --evidence restores the strict acceptance gates (clean tree,
+repeated locked-input verification).
 `;
 
 const PRODUCT_INPUT_PATHS = Object.freeze([
@@ -239,14 +242,20 @@ async function digestFile(filePath) {
 
 function parseCli(argv, environment = process.env) {
   const options = new Map();
+  let evidence = false;
   for (let index = 0; index < argv.length;) {
     const name = argv[index];
+    if (name === '--evidence' && !evidence) {
+      evidence = true;
+      index += 1;
+      continue;
+    }
     const value = argv[index + 1];
     if (!['--sdk-archive', '--sdk-root', '--output'].includes(name)
         || !value || options.has(name)) {
       throw buildError(
         'AE_PLUGIN_ARGUMENT_INVALID',
-        'expected unique --sdk-archive, --sdk-root, and --output options',
+        'expected unique --sdk-archive, --sdk-root, --output, and --evidence options',
       );
     }
     options.set(name, value);
@@ -266,6 +275,10 @@ function parseCli(argv, environment = process.env) {
     sdkArchive,
     sdkRoot,
     output: path.resolve(output),
+    // Development builds are the default: dirty worktree allowed, cheap
+    // SDK change signals. --evidence restores the strict gates (clean tree,
+    // repeated locked-input verification) used for acceptance receipts.
+    evidence,
   };
 }
 
@@ -306,23 +319,15 @@ function assertOutsideBoundaries(candidate, boundaries, label) {
   }
 }
 
-async function safeBuildRoots(environment = process.env) {
-  const temp = environment.TEMP ?? environment.TMP
-    ?? (environment.LOCALAPPDATA ? path.join(environment.LOCALAPPDATA, 'Temp') : null);
-  if (!temp) {
-    throw buildError(
-      'AE_PLUGIN_OUTPUT_INVALID',
-      'the current-user Windows temp root is required for native development builds',
-    );
-  }
-  const root = await fs.promises.realpath(temp).catch(() => null);
-  if (!root) {
-    throw buildError(
-      'AE_PLUGIN_OUTPUT_INVALID',
-      'the current-user Windows temp root must already exist',
-    );
-  }
-  return [root];
+function adobeScanRoots(environment = process.env) {
+  const roots = [];
+  const programFiles = environment.ProgramFiles ?? 'C:\\Program Files';
+  const programFilesX86 = environment['ProgramFiles(x86)'] ?? 'C:\\Program Files (x86)';
+  const commonFiles = environment.CommonProgramFiles ?? path.join(programFiles, 'Common Files');
+  roots.push(path.join(programFiles, 'Adobe'));
+  roots.push(path.join(programFilesX86, 'Adobe'));
+  roots.push(path.join(commonFiles, 'Adobe'));
+  return roots;
 }
 
 async function ensureOutputParent(output, sdkRoot, boundaries, environment) {
@@ -347,12 +352,16 @@ async function ensureOutputParent(output, sdkRoot, boundaries, environment) {
   }
   const canonicalOutput = path.join(realParent, path.basename(resolvedOutput));
   assertOutsideBoundaries(canonicalOutput, boundaries, 'native build output');
-  const allowedRoots = await safeBuildRoots(environment);
-  if (!allowedRoots.some((root) => isInside(root, canonicalOutput))) {
-    throw buildError(
-      'AE_PLUGIN_OUTPUT_INVALID',
-      'native development builds are restricted to the current-user Windows temp root',
-    );
+  // Build staging must never land where After Effects scans for plug-ins
+  // (AGENTS.md section 7): an .aex in a scan root would load an unreviewed
+  // binary on the next AE start.
+  for (const scanRoot of adobeScanRoots(environment)) {
+    if (isInside(scanRoot, canonicalOutput)) {
+      throw buildError(
+        'AE_PLUGIN_OUTPUT_INVALID',
+        'native build output must remain outside Adobe plug-in scan roots',
+      );
+    }
   }
   if (isInside(sdkRoot, canonicalOutput)) {
     throw buildError(
@@ -360,27 +369,39 @@ async function ensureOutputParent(output, sdkRoot, boundaries, environment) {
       'native build output must remain outside the repository and verified SDK root',
     );
   }
-  return { canonicalOutput, realParent: outputParent(realParent) };
+  return { canonicalOutput, realParent };
 }
 
-function outputParent(realParent) {
-  return realParent;
-}
-
-function readCleanSourceCommit() {
+// Development builds record the dirty state instead of rejecting it
+// (AGENTS.md section 4 local development trust model: cheap change signals,
+// no full-tree identity gate in the routine loop). --evidence restores the
+// clean-tree requirement for acceptance receipts.
+function readSourceCommit({ requireClean }) {
   const redactions = [REPO_ROOT];
   const status = command('git', [
     '-C', REPO_ROOT, 'status', '--porcelain=v1', '--untracked-files=all',
   ], { redactions });
-  if (status.trim()) {
+  const dirty = status.trim() !== '';
+  if (dirty && requireClean) {
     throw buildError(
       'AE_PLUGIN_SOURCE_DIRTY',
       'native evidence builds require a fully committed, clean repository worktree',
     );
   }
-  return command('git', [
+  const commit = command('git', [
     '-C', REPO_ROOT, 'rev-parse', '--verify', 'HEAD',
   ], { redactions }).trim();
+  return { commit, clean: !dirty };
+}
+
+function assertSourceCommitUnchanged(expected) {
+  const redactions = [REPO_ROOT];
+  const current = command('git', [
+    '-C', REPO_ROOT, 'rev-parse', '--verify', 'HEAD',
+  ], { redactions }).trim();
+  if (current !== expected) {
+    throw buildError('AE_PLUGIN_SOURCE_CHANGED', 'repository HEAD changed during native build');
+  }
 }
 
 function newestVersionedDirectory(parent, label) {
@@ -635,7 +656,7 @@ function compileWindowsObjects({
 async function writeReceipt(
   stage,
   artifact,
-  sourceCommit,
+  sourceState,
   productVersion,
   prerequisites,
   schemaBytes,
@@ -645,10 +666,10 @@ async function writeReceipt(
     schemaVersion: 1,
     artifact,
     productVersion,
-    sourceCommit,
+    sourceCommit: sourceState.commit,
     source: {
-      commit: sourceCommit,
-      repositoryClean: true,
+      commit: sourceState.commit,
+      repositoryClean: sourceState.clean,
     },
     protocolSchemaSha256: crypto.createHash('sha256').update(schemaBytes).digest('hex'),
     sdk: {
@@ -666,7 +687,7 @@ async function writeReceipt(
       windowsSdkVersion: prerequisites.windowsSdkVersion,
     },
     build: {
-      configuration: 'development',
+      configuration: sourceState.evidence ? 'evidence' : 'development',
       signing: 'unsigned-development',
       distributionApproved: false,
       runtimeEvidence: false,
@@ -685,8 +706,13 @@ async function buildWindowsAexInternal({
   sdkArchive: sdkArchiveInput,
   sdkRoot: sdkRootInput,
   output,
+  evidence = false,
 }) {
-  const sourceCommit = readCleanSourceCommit();
+  const sourceState = {
+    ...readSourceCommit({ requireClean: evidence }),
+    evidence,
+  };
+  const sourceCommit = sourceState.commit;
   const productVersion = productVersionFromCommit(sourceCommit);
   const boundaries = await repositoryBoundaries();
   const prerequisites = await checkWindowsBuildPrerequisites({
@@ -735,23 +761,29 @@ async function buildWindowsAexInternal({
         verbatimSymlinks: true,
       },
     );
-    const [sourceSdkDigest, snapshotSdkDigest, repeatedSdkVerification] = await Promise.all([
-      digestSafeTree(path.join(sdkRoot, 'Examples', 'Headers')),
-      digestSafeTree(path.join(sdkSnapshot, 'Examples', 'Headers')),
-      verifyAeSdkInput({
-        archivePath: sdkArchiveInput,
-        rootInput: sdkRootInput,
-        platform: 'windows-x64',
-        policy: await loadAeSdkPolicy(),
-        repoRoot: REPO_ROOT,
-      }),
-    ]);
-    if (!isDeepStrictEqual(sourceSdkDigest, snapshotSdkDigest)
-        || !isDeepStrictEqual(prerequisites.sdkVerification, repeatedSdkVerification)) {
-      throw buildError(
-        'AE_SDK_INPUT_CHANGED',
-        'verified SDK inputs changed while the private build snapshot was created',
-      );
+    // Development builds trust the single locked-input verification from
+    // checkWindowsBuildPrerequisites plus the copy succeeding (cheap change
+    // signals per AGENTS.md section 4). Evidence builds re-verify the locked
+    // inputs and the private snapshot to catch mid-build drift.
+    if (evidence) {
+      const [sourceSdkDigest, snapshotSdkDigest, repeatedSdkVerification] = await Promise.all([
+        digestSafeTree(path.join(sdkRoot, 'Examples', 'Headers')),
+        digestSafeTree(path.join(sdkSnapshot, 'Examples', 'Headers')),
+        verifyAeSdkInput({
+          archivePath: sdkArchiveInput,
+          rootInput: sdkRootInput,
+          platform: 'windows-x64',
+          policy: await loadAeSdkPolicy(),
+          repoRoot: REPO_ROOT,
+        }),
+      ]);
+      if (!isDeepStrictEqual(sourceSdkDigest, snapshotSdkDigest)
+          || !isDeepStrictEqual(prerequisites.sdkVerification, repeatedSdkVerification)) {
+        throw buildError(
+          'AE_SDK_INPUT_CHANGED',
+          'verified SDK inputs changed while the private build snapshot was created',
+        );
+      }
     }
 
     await fs.promises.mkdir(objects);
@@ -817,13 +849,11 @@ async function buildWindowsAexInternal({
       architecture: 'x64',
       entryExport: 'AeMcpNativeMain',
     });
-    if (readCleanSourceCommit() !== sourceCommit) {
-      throw buildError('AE_PLUGIN_SOURCE_CHANGED', 'repository HEAD changed during native build');
-    }
+    assertSourceCommitUnchanged(sourceCommit);
     const receipt = await writeReceipt(
       stage,
       artifact,
-      sourceCommit,
+      sourceState,
       productVersion,
       prerequisites,
       schemaBytes,
@@ -837,6 +867,8 @@ async function buildWindowsAexInternal({
       artifactSha256: artifact.sha256,
       productVersion: receipt.productVersion,
       sourceCommit: receipt.sourceCommit,
+      repositoryClean: sourceState.clean,
+      evidence,
       msvcVersion: prerequisites.msvcVersion,
       windowsSdkVersion: prerequisites.windowsSdkVersion,
       runtimeEvidence: false,

@@ -341,6 +341,19 @@ test('native windows build fails fast on every locked external input before comp
   assert.match(script, /AE_PLUGIN_OUTPUT_EXISTS/u);
   assert.match(script, /assertOutsideBoundaries\(sdkRoot/u);
   assert.match(script, /assertOutsideBoundaries\(sdkArchive/u);
+  // Build staging must never land in an Adobe plug-in scan root.
+  assert.match(script, /Adobe plug-in scan roots/u);
+  // Development loop follows the AGENTS.md local trust model: dirty
+  // worktrees are recorded, not rejected; strict gates are evidence-only.
+  assert.match(script, /--evidence/u);
+  assert.match(script, /repositoryClean: sourceState\.clean/u);
+  assert.match(script, /readSourceCommit\(\{ requireClean/u);
+  assert.doesNotMatch(script, /development builds are restricted to the current-user/u);
+  // The repeated locked-input re-verification is gated behind evidence mode.
+  const reverify = script.indexOf('AE_SDK_INPUT_CHANGED');
+  const evidenceGate = script.lastIndexOf('if (evidence)', reverify);
+  assert.notEqual(reverify, -1);
+  assert.ok(evidenceGate !== -1 && evidenceGate < reverify);
   // Public interface promised by the implementation plan.
   assert.match(script, /export async function checkWindowsBuildPrerequisites/u);
   assert.match(script, /export async function buildWindowsAex/u);
