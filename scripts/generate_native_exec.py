@@ -407,7 +407,12 @@ def _cpp_raw(value: str) -> str:
     delimiter = "NATIVEEXEC"
     if f"){delimiter}\"" in value:
         raise ValueError("generated primitive JSON conflicts with C++ raw delimiter")
-    return f'R"{delimiter}({value}){delimiter}"'
+    # MSVC rejects string literals longer than 16380 characters (C2026);
+    # adjacent literals concatenate, so chunking keeps bytes identical on
+    # every compiler.
+    chunk = 16000
+    parts = [value[index:index + chunk] for index in range(0, len(value), chunk)] or [""]
+    return "\n    ".join(f'R"{delimiter}({part}){delimiter}"' for part in parts)
 
 
 def _model_input_schema(row: PrimitiveRow, root_definitions: dict[str, Any]) -> dict[str, Any]:
