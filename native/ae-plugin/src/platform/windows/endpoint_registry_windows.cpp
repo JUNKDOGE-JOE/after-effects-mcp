@@ -122,8 +122,9 @@ class SecurityDescriptorOwner {
 bool WindowsEndpointRegistry::parse_descriptor(
     const std::string& text,
     NativeEndpointDescriptor& output) noexcept {
+  constexpr std::string_view kMagic = "AEMCP_NATIVE_ENDPOINT_V1\n";
   if (text.empty() || text.size() > kMaximumDescriptorBytes
-      || text.substr(0, 24) != "AEMCP_NATIVE_ENDPOINT_V1\n") {
+      || text.compare(0, kMagic.size(), kMagic) != 0) {
     return false;
   }
   NativeEndpointDescriptor parsed{};
@@ -134,12 +135,17 @@ bool WindowsEndpointRegistry::parse_descriptor(
   bool have_socket = false;
   bool have_wire = false;
   bool have_source = false;
-  std::size_t offset = 24;
+  std::size_t offset = kMagic.size();
   while (offset < text.size()) {
     const std::size_t newline = text.find('\n', offset);
+    if (newline == std::string::npos) {
+      // Every field line must be newline-terminated; a trailing partial
+      // line means the descriptor was truncated or tampered with.
+      return false;
+    }
     const std::string_view line = std::string_view(text).substr(
-        offset, newline == std::string::npos ? text.size() - offset : newline - offset);
-    offset = newline == std::string::npos ? text.size() : newline + 1;
+        offset, newline - offset);
+    offset = newline + 1;
     const std::size_t equals = line.find('=');
     if (equals == std::string_view::npos || equals == 0) return false;
     const std::string_view key = line.substr(0, equals);
@@ -258,9 +264,12 @@ EndpointResult WindowsEndpointRegistry::cleanup_stale() {
         || item.path().extension() != ".endpoint") {
       continue;
     }
-    std::ifstream input(item.path(), std::ios::binary);
-    std::string text(
-        (std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    std::string text;
+    {
+      std::ifstream input(item.path(), std::ios::binary);
+      text.assign(
+          (std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    }
     NativeEndpointDescriptor candidate{};
     if (!WindowsEndpointRegistry::parse_descriptor(text, candidate)) {
       return {EndpointCode::kStaleEntryUnsafe, "stale-descriptor-unparseable"};
@@ -300,8 +309,11 @@ EndpointResult WindowsEndpointRegistry::create_listener() {
 }
 
 EndpointResult WindowsEndpointRegistry::publish_descriptor() {
+  // Descriptor files carry the host instance UUID (d-<uuid>.endpoint), the
+  // same naming the macOS registry and the shared client discovery use.
   descriptor_path_ =
-      (std::filesystem::path(directory_path_) / (config_.endpoint_nonce + ".endpoint")).string();
+      (std::filesystem::path(directory_path_)
+       / ("d-" + descriptor_.host_instance_id + ".endpoint")).string();
   const std::string body = serialize_descriptor(descriptor_);
   {
     std::ofstream output(
@@ -376,9 +388,12 @@ void WindowsEndpointRegistry::stop() noexcept {
     listener_pipe_ = nullptr;
   }
   if (started_ && !descriptor_path_.empty()) {
-    std::ifstream input(descriptor_path_, std::ios::binary);
-    std::string text(
-        (std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    std::string text;
+    {
+      std::ifstream input(descriptor_path_, std::ios::binary);
+      text.assign(
+          (std::istreambuf_iterator<char>(input)), std::istreambuf_iterator<char>());
+    }
     NativeEndpointDescriptor published{};
     if (WindowsEndpointRegistry::parse_descriptor(text, published)
         && published.host_instance_id == descriptor_.host_instance_id

@@ -11,6 +11,7 @@ const test = require('node:test');
 const {
     createNativeAegpClient,
     discoverNativeEndpoints,
+    discoverWindowsEndpoints,
     endpointDescriptor,
     parseAuthChallenge,
     parseAuthDecision,
@@ -487,6 +488,83 @@ test('discovery accepts the private descriptor and socket owned by this user', U
         wireVersion: 1,
         sourceCommit: SOURCE,
     }]);
+});
+
+// Issue #86: Windows endpoint discovery reads the same descriptor format
+// from %LOCALAPPDATA%\AfterEffectsMCP\aemcp-n1 and returns the full named
+// pipe path. No uid/mode checks apply — the per-user profile and the
+// same-user pipe ACL are the boundary (#88 NOT_PLANNED).
+const PIPE = '\\\\.\\pipe\\aemcp-n1-123456abcdef';
+
+async function windowsEndpointFixture(t, options) {
+    const root = await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'ae-mcp-win-endpoint-'),
+    );
+    t.after(() => fs.promises.rm(root, { force: true, recursive: true }));
+    const directory = path.join(root, 'aemcp-n1');
+    await fs.promises.mkdir(directory, { recursive: true });
+    await fs.promises.writeFile(
+        path.join(directory, 'd-' + HOST + '.endpoint'),
+        descriptor(PIPE),
+    );
+    for (const stale of options?.stale || []) {
+        await fs.promises.writeFile(path.join(directory, stale.name), stale.text);
+    }
+    return { root, directory };
+}
+
+test('windows discovery parses the pipe descriptor and ignores stale names', async (t) => {
+    const fixture = await windowsEndpointFixture(t, {
+        stale: [
+            // Wrong host instance id in the file name.
+            { name: 'd-99999999-9999-4999-8999-999999999999.endpoint', text: descriptor(PIPE) },
+            // Unparseable descriptor.
+            { name: 'd-88888888-8888-4888-8888-888888888888.endpoint', text: 'garbage\n' },
+            // Not an endpoint file at all.
+            { name: 'notes.txt', text: descriptor(PIPE) },
+        ],
+    });
+    assert.deepEqual(discoverWindowsEndpoints({ runtimeRoot: fixture.root }), [{
+        descriptorPath: path.join(fixture.directory, 'd-' + HOST + '.endpoint'),
+        socketPath: PIPE,
+        pipePath: PIPE,
+        hostInstanceId: HOST,
+        pid: 4242,
+        startSeconds: 1700000000,
+        startMicros: 123456,
+        socketName: PIPE,
+        wireVersion: 1,
+        sourceCommit: SOURCE,
+    }]);
+});
+
+test('windows discovery rejects socket values that are not aemcp pipes', async (t) => {
+    const fixture = await windowsEndpointFixture(t, {
+        stale: [],
+    });
+    await fs.promises.writeFile(
+        path.join(fixture.directory, 'd-' + HOST + '.endpoint'),
+        descriptor('\\\\.\\pipe\\other-prefix-123456abcdef'),
+    );
+    assert.deepEqual(discoverWindowsEndpoints({ runtimeRoot: fixture.root }), []);
+    await fs.promises.writeFile(
+        path.join(fixture.directory, 'd-' + HOST + '.endpoint'),
+        descriptor('s-123456abcdef.sock'),
+    );
+    assert.deepEqual(discoverWindowsEndpoints({ runtimeRoot: fixture.root }), []);
+});
+
+test('client factory accepts windows x64 and still rejects unsupported runtimes', () => {
+    assert.equal(typeof createNativeAegpClient({
+        runtime: { platform: 'win32', arch: 'x64' },
+        runtimeRoot: os.tmpdir(),
+        clientInstanceId: CLIENT,
+    }), 'object');
+    assert.throws(() => createNativeAegpClient({
+        runtime: { platform: 'linux', arch: 'x64' },
+        runtimeRoot: os.tmpdir(),
+        clientInstanceId: CLIENT,
+    }), /supports macOS arm64 and Windows x64 only/u);
 });
 
 test('client negotiates and validates the sole native program descriptor', UNIX_SOCKET_TEST, async (t) => {

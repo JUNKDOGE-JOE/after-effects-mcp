@@ -16,6 +16,10 @@
 
 namespace aemcp::native {
 
+// Host identity values reported by the shared hello handshake.
+inline constexpr const char* kHostPlatformId = "windows-x64";
+inline constexpr const char* kHostArchId = "x64";
+
 [[nodiscard]] int transport_wait_readable(int fd, int timeout_ms) noexcept;
 [[nodiscard]] int transport_wait_writable(int fd, int timeout_ms) noexcept;
 
@@ -26,7 +30,7 @@ namespace aemcp::native {
 
 }  // namespace aemcp::native
 
-#elif defined(__APPLE__)
+#elif defined(__APPLE__) || defined(__linux__)
 
 #include <cerrno>
 #include <cstddef>
@@ -35,6 +39,12 @@ namespace aemcp::native {
 #include <sys/socket.h>
 
 namespace aemcp::native {
+
+// Host identity values reported by the shared hello handshake. The Linux
+// branch exists so portable CI test binaries compile; the shipping macOS
+// host reports these same values.
+inline constexpr const char* kHostPlatformId = "macos-arm64";
+inline constexpr const char* kHostArchId = "arm64";
 
 [[nodiscard]] inline int transport_wait_readable(int fd, int timeout_ms) noexcept {
   pollfd socket{};
