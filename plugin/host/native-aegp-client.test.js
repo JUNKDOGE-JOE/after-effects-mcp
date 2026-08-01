@@ -15,7 +15,12 @@ const {
     endpointDescriptor,
     parseAuthChallenge,
     parseAuthDecision,
+    validNativeProgramArguments,
 } = require('./native-aegp-client');
+
+const PRIMITIVE_IDS = require(
+    '../../native/ae-plugin/protocol/native-primitives.json'
+).primitives.map((primitive) => primitive.id);
 
 const FULL_REGISTRY = require(
     '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json'
@@ -565,6 +570,26 @@ test('client factory accepts windows x64 and still rejects unsupported runtimes'
         runtimeRoot: os.tmpdir(),
         clientInstanceId: CLIENT,
     }), /supports macOS arm64 and Windows x64 only/u);
+});
+
+test('invoke validation accepts every generated primitive id including camelCase ops', () => {
+    // Regression for the OP_PATTERN lowercase-segment bug that rejected
+    // composition.selectedLayers.list, composition.frameRate.set,
+    // composition.pixelAspectRatio.set, composition.displayStartTime.set,
+    // and property.keyframe.temporalEase.set before dispatch.
+    assert.ok(PRIMITIVE_IDS.length >= 23, 'primitive registry fixture is loaded');
+    for (const op of PRIMITIVE_IDS) {
+        const valid = validNativeProgramArguments({
+            operations: [{ op, args: {} }],
+        });
+        assert.equal(valid, true, `generated op rejected by invoke validation: ${op}`);
+    }
+    assert.equal(validNativeProgramArguments({
+        operations: [
+            { op: 'composition.resolve', args: {}, saveAs: 'comp' },
+            { op: 'composition.selectedLayers.list', args: { composition: { ref: 'comp' } } },
+        ],
+    }), true);
 });
 
 test('client negotiates and validates the sole native program descriptor', UNIX_SOCKET_TEST, async (t) => {
