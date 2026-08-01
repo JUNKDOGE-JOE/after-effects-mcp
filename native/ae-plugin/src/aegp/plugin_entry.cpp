@@ -5204,14 +5204,22 @@ extern "C" AE_MCP_PLUGIN_EXPORT A_Err AeMcpNativeMain(
     SPBasicSuite *pica_basic, A_long driver_major, A_long driver_minor,
     AEGP_PluginID plugin_id, AEGP_GlobalRefcon *global_refcon) noexcept {
   try {
+    // TEMPORARY T4 DIAGNOSTIC (not for commit): pinpoint where the Windows
+    // entry stops before log_load.
+    aemcp::native::DiagnosticLog probe_log;
+    probe_log.append("{\"schemaVersion\":1,\"event\":\"entry.probe\",\"stage\":\"enter\"}");
     if (pica_basic == nullptr || global_refcon == nullptr ||
         driver_major < AEGP_INITFUNC_MAJOR_VERSION ||
         (driver_major == AEGP_INITFUNC_MAJOR_VERSION &&
          driver_minor < AEGP_INITFUNC_MINOR_VERSION)) {
+      probe_log.append("{\"schemaVersion\":1,\"event\":\"entry.probe\",\"stage\":\"version-reject\"}");
       return A_Err_GENERIC;
     }
     auto state = std::unique_ptr<PluginState>(new (std::nothrow) PluginState(
         pica_basic, plugin_id, driver_major, driver_minor));
+    probe_log.append(state
+        ? "{\"schemaVersion\":1,\"event\":\"entry.probe\",\"stage\":\"state-ok\"}"
+        : "{\"schemaVersion\":1,\"event\":\"entry.probe\",\"stage\":\"state-null\"}");
     if (!state)
       return A_Err_GENERIC;
     *global_refcon = reinterpret_cast<AEGP_GlobalRefcon>(state.get());
