@@ -504,14 +504,38 @@ function findWindowsSdk(environment = process.env) {
   };
 }
 
-// Runs one MSVC-family command with the vcvars64.bat x64 environment. The
-// batch file is the SDK-supported way to derive INCLUDE/LIB/PATH; deriving
-// them manually would silently drift from the installed toolset.
-function msvcCommand(toolchain, commandLine, redactions = []) {
-  const invocation = `"${toolchain.vcvars64}" >nul 2>&1 && ${commandLine}`;
+// Builds the deterministic INCLUDE/LIB/PATH environment for MSVC-family
+// tools from the discovered toolset roots. vcvars64.bat is verified to exist
+// as the toolchain anchor, but the build derives the environment explicitly
+// so the receipt toolchain identity fully determines every compile input.
+function msvcEnvironment(toolchain, windowsSdk) {
+  return {
+    ...process.env,
+    PATH: [
+      toolchain.bin,
+      path.join(windowsSdk.root, 'bin', windowsSdk.version, 'x64'),
+      process.env.PATH ?? '',
+    ].join(';'),
+    INCLUDE: [
+      path.join(toolchain.msvcRoot, 'include'),
+      path.join(windowsSdk.includeRoot, 'ucrt'),
+      path.join(windowsSdk.includeRoot, 'um'),
+      path.join(windowsSdk.includeRoot, 'shared'),
+      path.join(windowsSdk.includeRoot, 'winrt'),
+    ].join(';'),
+    LIB: [
+      path.join(toolchain.msvcRoot, 'lib', 'x64'),
+      path.join(windowsSdk.libRoot, 'ucrt', 'x64'),
+      path.join(windowsSdk.libRoot, 'um', 'x64'),
+    ].join(';'),
+  };
+}
+
+function msvcCommand(tool, args, environment, redactions = []) {
   try {
-    return execFileSync('cmd.exe', ['/d', '/s', '/c', invocation], {
+    return execFileSync(tool, args, {
       encoding: 'utf8',
+      env: environment,
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 16 * 1024 * 1024,
       windowsHide: true,
@@ -521,7 +545,7 @@ function msvcCommand(toolchain, commandLine, redactions = []) {
     for (const redaction of redactions) detail = detail.split(redaction).join('<redacted-path>');
     throw buildError(
       'AE_PLUGIN_BUILD_TOOL_FAILED',
-      `msvc toolchain command failed${detail.trim() ? `: ${detail.trim()}` : ''}`,
+      `${path.basename(tool)} failed${detail.trim() ? `: ${detail.trim()}` : ''}`,
     );
   }
 }
@@ -566,6 +590,7 @@ export async function checkWindowsBuildPrerequisites(input = {}) {
 
 function compileWindowsObjects({
   toolchain,
+  windowsSdk,
   sdkSnapshot,
   sourceSnapshot,
   objects,
@@ -574,12 +599,13 @@ function compileWindowsObjects({
   productInputs,
   redactions,
 }) {
+  const environment = msvcEnvironment(toolchain, windowsSdk);
   const includeFlags = [
-    '/external:I', quote(path.join(sdkSnapshot, 'Examples', 'Headers')),
-    '/external:I', quote(path.join(sdkSnapshot, 'Examples', 'Headers', 'SP')),
-    '/external:I', quote(path.join(sdkSnapshot, 'Examples', 'Headers', 'Win')),
-    '/I', quote(path.join(sourceSnapshot, 'native', 'ae-plugin', 'include')),
-    '/I', quote(path.join(sourceSnapshot, 'native', 'ae-plugin', 'src', 'platform', 'windows')),
+    '/external:I', path.join(sdkSnapshot, 'Examples', 'Headers'),
+    '/external:I', path.join(sdkSnapshot, 'Examples', 'Headers', 'SP'),
+    '/external:I', path.join(sdkSnapshot, 'Examples', 'Headers', 'Win'),
+    '/I', path.join(sourceSnapshot, 'native', 'ae-plugin', 'include'),
+    '/I', path.join(sourceSnapshot, 'native', 'ae-plugin', 'src', 'platform', 'windows'),
   ];
   const defineFlags = [
     '/DMSWindows', '/DWIN32', '/D_WINDOWS', '/DUNICODE', '/D_UNICODE',
@@ -595,12 +621,11 @@ function compileWindowsObjects({
   for (const [index, relativePath] of COMPILE_SOURCES.entries()) {
     const source = productInputs.get(relativePath);
     const object = path.join(objects, `${index}.obj`);
-    msvcCommand(toolchain, [
-      quote(toolchain.cl),
+    msvcCommand(toolchain.cl, [
       ...baseFlags,
-      `/Fo${quote(object)}`,
-      quote(source),
-    ].join(' '), redactions);
+      `/Fo${object}`,
+      source,
+    ], environment, redactions);
     objectFiles.push(object);
   }
   return objectFiles;
@@ -731,6 +756,7 @@ async function buildWindowsAexInternal({
     await fs.promises.mkdir(objects);
     const objectFiles = compileWindowsObjects({
       toolchain: prerequisites.msvc,
+      windowsSdk: prerequisites.windowsSdk,
       sdkSnapshot,
       sourceSnapshot,
       objects,
@@ -755,23 +781,22 @@ async function buildWindowsAexInternal({
       { flag: 'wx' },
     );
     const resourceObject = path.join(stage, 'AeMcpNative_PiPL.res');
-    msvcCommand(prerequisites.msvc, [
-      quote(prerequisites.windowsSdk.rc),
+    const environment = msvcEnvironment(prerequisites.msvc, prerequisites.windowsSdk);
+    msvcCommand(prerequisites.windowsSdk.rc, [
       '/nologo', '/l', '0x409',
-      `/fo${quote(resourceObject)}`,
-      quote(resourceSource),
-    ].join(' '), redactions);
+      `/fo${resourceObject}`,
+      resourceSource,
+    ], environment, redactions);
 
     const executable = path.join(stage, 'AeMcpNative.aex');
-    msvcCommand(prerequisites.msvc, [
-      quote(prerequisites.msvc.link),
+    msvcCommand(prerequisites.msvc.link, [
       '/NOLOGO', '/DLL', '/SUBSYSTEM:WINDOWS', '/MACHINE:X64',
       '/GUARD:CF', '/NXCOMPAT', '/DYNAMICBASE',
-      `/OUT:${quote(executable)}`,
-      ...objectFiles.map(quote),
-      quote(resourceObject),
+      `/OUT:${executable}`,
+      ...objectFiles,
+      resourceObject,
       'bcrypt.lib', 'version.lib', 'kernel32.lib', 'user32.lib',
-    ].join(' '), redactions);
+    ], environment, redactions);
 
     await fs.promises.rm(objects, { recursive: true });
     await fs.promises.rm(sourceSnapshot, { recursive: true });
