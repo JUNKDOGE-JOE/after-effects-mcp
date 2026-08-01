@@ -3918,50 +3918,58 @@ public:
     const bool count_valid = adding     ? count_after == count_before + 1
                              : deleting ? count_after + 1 == count_before
                                         : count_after == count_before;
-    const bool state_valid =
-        deleting ? !after_index.has_value()
-                 : after.has_value() &&
-                       keyframe_time_equal(after->time, command.time);
-    bool requested_state_valid = state_valid;
-    if (requested_state_valid && after.has_value()) {
-      if (adding ||
-          command.kind ==
-              aemcp::native::LayerPropertyKeyframeMutationKind::kSetValue) {
-        requested_state_valid =
-            layer_property_values_equal(after->value, command.value);
-      } else if (command.kind ==
-                 aemcp::native::LayerPropertyKeyframeMutationKind::
-                     kSetInterpolation) {
-        requested_state_valid =
-            after->in_interpolation == command.in_interpolation &&
-            after->out_interpolation == command.out_interpolation;
-      } else if (command.kind ==
-                 aemcp::native::LayerPropertyKeyframeMutationKind::
-                     kSetTemporalEase) {
-        requested_state_valid = requested_state_valid &&
-                                after->in_interpolation == "bezier" &&
-                                after->out_interpolation == "bezier";
-        for (const auto &dimension : command.temporal_ease) {
-          requested_state_valid =
-              requested_state_valid &&
-              keyframe_dimension_ease_equal(
-                  after->temporal_ease[dimension.dimension], dimension);
-        }
-      } else if (command.kind ==
-                 aemcp::native::LayerPropertyKeyframeMutationKind::
-                     kSetBehavior) {
-        const bool actual = command.behavior == "temporal-continuous"
-                                ? after->behavior.temporal_continuous
-                            : command.behavior == "temporal-auto-bezier"
-                                ? after->behavior.temporal_auto_bezier
-                            : command.behavior == "spatial-continuous"
-                                ? after->behavior.spatial_continuous
-                            : command.behavior == "spatial-auto-bezier"
-                                ? after->behavior.spatial_auto_bezier
-                                : after->behavior.roving;
-        requested_state_valid = actual == command.enabled;
+    const char *state_failure = nullptr;
+    if (deleting) {
+      if (after_index.has_value()) {
+        state_failure = "deleted keyframe is still present at the requested time";
+      }
+    } else if (!after_index.has_value() || !after.has_value()) {
+      state_failure = "readback could not find the mutated keyframe";
+    } else if (!keyframe_time_equal(after->time, command.time)) {
+      state_failure = "mutated keyframe landed at an unexpected time";
+    } else if (adding ||
+               command.kind ==
+                   aemcp::native::LayerPropertyKeyframeMutationKind::kSetValue) {
+      if (!layer_property_values_equal(after->value, command.value)) {
+        state_failure = "keyframe value did not match the requested value";
+      }
+    } else if (command.kind ==
+               aemcp::native::LayerPropertyKeyframeMutationKind::
+                   kSetInterpolation) {
+      if (after->in_interpolation != command.in_interpolation ||
+          after->out_interpolation != command.out_interpolation) {
+        state_failure = "keyframe interpolation did not match the request";
+      }
+    } else if (command.kind ==
+               aemcp::native::LayerPropertyKeyframeMutationKind::
+                   kSetTemporalEase) {
+      bool ease_valid = after->in_interpolation == "bezier" &&
+                        after->out_interpolation == "bezier";
+      for (const auto &dimension : command.temporal_ease) {
+        ease_valid = ease_valid &&
+                     keyframe_dimension_ease_equal(
+                         after->temporal_ease[dimension.dimension], dimension);
+      }
+      if (!ease_valid) {
+        state_failure = "keyframe temporal ease did not match the request";
+      }
+    } else if (command.kind ==
+               aemcp::native::LayerPropertyKeyframeMutationKind::
+                   kSetBehavior) {
+      const bool actual = command.behavior == "temporal-continuous"
+                              ? after->behavior.temporal_continuous
+                          : command.behavior == "temporal-auto-bezier"
+                              ? after->behavior.temporal_auto_bezier
+                          : command.behavior == "spatial-continuous"
+                              ? after->behavior.spatial_continuous
+                          : command.behavior == "spatial-auto-bezier"
+                              ? after->behavior.spatial_auto_bezier
+                              : after->behavior.roving;
+      if (actual != command.enabled) {
+        state_failure = "keyframe behavior did not match the request";
       }
     }
+    const bool requested_state_valid = state_failure == nullptr;
     if (mutation_error != A_Err_NONE || end_error != A_Err_NONE) {
       return HostLayerPropertyKeyframeWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
@@ -3977,8 +3985,7 @@ public:
     }
     if (!requested_state_valid) {
       return HostLayerPropertyKeyframeWriteResult::failure(
-          "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "keyframe readback did not match the requested state");
+          "POSSIBLY_SIDE_EFFECTING_FAILURE", state_failure);
     }
     if (std::chrono::steady_clock::now() >= work_deadline) {
       return HostLayerPropertyKeyframeWriteResult::failure(
