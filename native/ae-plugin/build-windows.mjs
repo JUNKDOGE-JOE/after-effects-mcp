@@ -796,7 +796,7 @@ async function buildWindowsAexInternal({
       `/OUT:${executable}`,
       ...objectFiles,
       resourceObject,
-      'bcrypt.lib', 'version.lib', 'kernel32.lib', 'user32.lib',
+      'bcrypt.lib', 'version.lib', 'advapi32.lib', 'kernel32.lib', 'user32.lib',
     ], environment, redactions);
 
     await fs.promises.rm(objects, { recursive: true });
