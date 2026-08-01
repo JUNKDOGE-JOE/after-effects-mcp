@@ -2521,6 +2521,8 @@ public:
                                                kAEGPMemorySuiteVersion1);
     SuiteLease<AEGP_UtilitySuite6> utility_suite(basic_, kAEGPUtilitySuite,
                                                  kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion12);
     if (project_suite.get() == nullptr || item_suite.get() == nullptr ||
         memory_suite.get() == nullptr || utility_suite.get() == nullptr) {
       return HostCompositionTimeWriteResult::failure(
@@ -2704,7 +2706,30 @@ public:
     after.scale = static_cast<std::uint32_t>(after_sdk.scale);
     after.seconds_rational =
         aemcp::native::canonical_seconds_rational(after.value, after.scale);
-    if (same_time(before, after) || !same_time(after, command.target_time)) {
+    bool transition_verified = same_time(after, command.target_time);
+    if (!transition_verified) {
+      // After Effects quantizes composition time to whole frames; accept the
+      // landed state when it is exactly the frame-aligned quantization of
+      // the requested target (e.g. 2.5 s at 25 fps lands on frame 63).
+      AEGP_CompH comp_for_rate = nullptr;
+      A_FpLong fps = 0.0;
+      if (comp_suite.get() != nullptr &&
+          comp_suite->AEGP_GetCompFromItem(composition_item, &comp_for_rate) ==
+              A_Err_NONE &&
+          comp_for_rate != nullptr &&
+          comp_suite->AEGP_GetCompFramerate(comp_for_rate, &fps) == A_Err_NONE &&
+          fps > 0.0) {
+        const auto frame_index = [fps](std::int64_t value, std::uint64_t scale) {
+          return std::llround((static_cast<double>(value) /
+                               static_cast<double>(scale)) *
+                              static_cast<double>(fps));
+        };
+        transition_verified =
+            frame_index(command.target_time.value, command.target_time.scale) ==
+            frame_index(after.value, after.scale);
+      }
+    }
+    if (same_time(before, after) || !transition_verified) {
       return HostCompositionTimeWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "composition time readback did not verify the requested state "
@@ -3937,13 +3962,28 @@ public:
         requested_state_valid = actual == command.enabled;
       }
     }
-    if (mutation_error != A_Err_NONE || end_error != A_Err_NONE ||
-        !count_valid || !requested_state_valid ||
-        std::chrono::steady_clock::now() >= work_deadline) {
+    if (mutation_error != A_Err_NONE || end_error != A_Err_NONE) {
       return HostLayerPropertyKeyframeWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "keyframe may have changed but native readback or Undo validation "
-          "failed");
+          "keyframe may have changed but the mutation call or its Undo group "
+          "closure failed");
+    }
+    if (!count_valid) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "keyframe count after the mutation (" +
+              std::to_string(count_after) + ") does not match the expected "
+              "transition from " + std::to_string(count_before));
+    }
+    if (!requested_state_valid) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "keyframe readback did not match the requested state");
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "keyframe may have changed but the validation budget elapsed");
     }
     LayerPropertyKeyframeChanged changed;
     changed.layer_locator = command.layer_locator;

@@ -93,6 +93,13 @@ struct ParsedRequest {
   std::optional<std::uint64_t> deadline_unix_ms;
   RequestParams params{HelloParams{}};
 
+  // Set when the frame decoded cleanly but semantic classification failed
+  // (including native program admission): the session front door rejects the
+  // request with a typed error instead of poisoning the connection.
+  bool malformed{false};
+  std::string malformed_code;
+  std::string malformed_error;
+
   // SHA-256 over the normalized, closed request envelope. Raw untrusted JSON is
   // deliberately not retained by the public API.
   std::string request_fingerprint_sha256;

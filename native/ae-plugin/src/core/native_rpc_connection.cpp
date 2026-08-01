@@ -489,9 +489,11 @@ void NativeRpcConnectionHandler::serve(
                input.data(), static_cast<std::size_t>(received)))) {
         const rpc::SessionIngressResult ingress = front_door.admit(request);
         if (!ingress.accepted()) {
-          const std::string message = ingress.error_code.empty()
-                                          ? "native request admission failed"
-                                          : "native request was rejected";
+          const std::string message = request.malformed
+              ? (request.malformed_error.empty() ? "native request was rejected"
+                                                 : request.malformed_error)
+              : (ingress.error_code.empty() ? "native request admission failed"
+                                            : "native request was rejected");
           if (!write_frame(connection.socket_fd,
                            rpc::encode_error_response(
                                error_for(request, connection.session_id,
