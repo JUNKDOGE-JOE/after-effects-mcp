@@ -401,6 +401,9 @@ async function buildMacPluginInternal({
     const productInputPaths = [
       'native/ae-plugin/include/aemcp_native/endpoint_registry_macos.hpp',
       'native/ae-plugin/include/aemcp_native/host_dispatcher.hpp',
+      'native/ae-plugin/include/aemcp_native/host_platform.hpp',
+      'native/ae-plugin/include/aemcp_native/host_platform_macos.hpp',
+      'native/ae-plugin/include/aemcp_native/ipc_server_types.hpp',
       'native/ae-plugin/include/aemcp_native/mac_ipc_server.hpp',
       'native/ae-plugin/include/aemcp_native/native_primitive_registry.generated.hpp',
       'native/ae-plugin/include/aemcp_native/native_program.hpp',
@@ -412,6 +415,7 @@ async function buildMacPluginInternal({
       'native/ae-plugin/include/aemcp_native/selection_collection.hpp',
       'native/ae-plugin/include/aemcp_native/secure_random_macos.hpp',
       'native/ae-plugin/include/aemcp_native/transport_auth.hpp',
+      'native/ae-plugin/include/aemcp_native/transport_io.hpp',
       'native/ae-plugin/src/core/host_dispatcher.cpp',
       'native/ae-plugin/src/core/native_program.cpp',
       'native/ae-plugin/src/core/native_rpc_connection.cpp',

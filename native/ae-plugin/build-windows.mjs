@@ -1,0 +1,862 @@
+#!/usr/bin/env node
+
+// Windows x64 development build for the AeMcpNative AEGP plug-in.
+// Mirrors build-macos.mjs: pinned-SDK verification, clean-commit product
+// snapshots, a private restricted SDK snapshot, one .aex artifact, and a
+// canonical build receipt. Scope guards for #86: no signing, no installer,
+// no pairing, no new primitives.
+
+import crypto from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
+
+import {
+  loadAeSdkPolicy,
+  verifyAeSdkInput,
+} from '../../scripts/package/ae-sdk-input.mjs';
+
+const MODULE_PATH = fileURLToPath(import.meta.url);
+const MODULE_ROOT = path.dirname(MODULE_PATH);
+const REPO_ROOT = path.resolve(MODULE_ROOT, '../..');
+const PRODUCT_MANIFEST_PATH = 'plugin/host/package.json';
+const PRODUCT_VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
+const PRODUCT_VERSION_TOKEN = Buffer.from('__AE_MCP_PRODUCT_VERSION__', 'ascii');
+const CLI_USAGE = `Usage: node native/ae-plugin/build-windows.mjs \\
+  [--sdk-archive <path>] [--sdk-root <path>] --output <absolute-path>
+
+AE_SDK_ARCHIVE and AE_SDK_ROOT may provide the corresponding SDK inputs.
+`;
+
+const PRODUCT_INPUT_PATHS = Object.freeze([
+  'native/ae-plugin/include/aemcp_native/host_dispatcher.hpp',
+  'native/ae-plugin/include/aemcp_native/host_platform.hpp',
+  'native/ae-plugin/include/aemcp_native/host_platform_windows.hpp',
+  'native/ae-plugin/include/aemcp_native/ipc_server_types.hpp',
+  'native/ae-plugin/include/aemcp_native/native_primitive_registry.generated.hpp',
+  'native/ae-plugin/include/aemcp_native/native_program.hpp',
+  'native/ae-plugin/include/aemcp_native/native_rpc_connection.hpp',
+  'native/ae-plugin/include/aemcp_native/peer_identity.hpp',
+  'native/ae-plugin/include/aemcp_native/peer_identity_windows.hpp',
+  'native/ae-plugin/include/aemcp_native/project_epoch.hpp',
+  'native/ae-plugin/include/aemcp_native/rpc_codec.hpp',
+  'native/ae-plugin/include/aemcp_native/secure_random_windows.hpp',
+  'native/ae-plugin/include/aemcp_native/selection_collection.hpp',
+  'native/ae-plugin/include/aemcp_native/transport_auth.hpp',
+  'native/ae-plugin/include/aemcp_native/transport_io.hpp',
+  'native/ae-plugin/include/aemcp_native/win_ipc_server.hpp',
+  'native/ae-plugin/src/core/host_dispatcher.cpp',
+  'native/ae-plugin/src/core/native_program.cpp',
+  'native/ae-plugin/src/core/native_rpc_connection.cpp',
+  'native/ae-plugin/src/core/rpc_codec.cpp',
+  'native/ae-plugin/src/core/transport_auth.cpp',
+  'native/ae-plugin/src/platform/windows/endpoint_registry_windows.hpp',
+  'native/ae-plugin/src/platform/windows/endpoint_registry_windows.cpp',
+  'native/ae-plugin/src/platform/windows/peer_identity_windows.cpp',
+  'native/ae-plugin/src/platform/windows/plugin_entry_windows.cpp',
+  'native/ae-plugin/src/platform/windows/secure_random_windows.cpp',
+  'native/ae-plugin/src/platform/windows/transport_io_windows.cpp',
+  'native/ae-plugin/src/platform/windows/win_ipc_server.cpp',
+  'native/ae-plugin/src/aegp/native_primitive_bindings.generated.inc',
+  'native/ae-plugin/src/aegp/native_program_executor.cpp',
+  'native/ae-plugin/src/aegp/native_program_executor.hpp',
+  'native/ae-plugin/src/aegp/plugin_entry.cpp',
+  'native/ae-plugin/resources/AeMcpNative_PiPL.win.rc',
+]);
+
+const COMPILE_SOURCES = Object.freeze([
+  'native/ae-plugin/src/core/host_dispatcher.cpp',
+  'native/ae-plugin/src/core/native_program.cpp',
+  'native/ae-plugin/src/core/native_rpc_connection.cpp',
+  'native/ae-plugin/src/core/rpc_codec.cpp',
+  'native/ae-plugin/src/core/transport_auth.cpp',
+  'native/ae-plugin/src/platform/windows/endpoint_registry_windows.cpp',
+  'native/ae-plugin/src/platform/windows/peer_identity_windows.cpp',
+  'native/ae-plugin/src/platform/windows/plugin_entry_windows.cpp',
+  'native/ae-plugin/src/platform/windows/secure_random_windows.cpp',
+  'native/ae-plugin/src/platform/windows/transport_io_windows.cpp',
+  'native/ae-plugin/src/platform/windows/win_ipc_server.cpp',
+  'native/ae-plugin/src/aegp/native_program_executor.cpp',
+  'native/ae-plugin/src/aegp/plugin_entry.cpp',
+]);
+
+function buildError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
+
+function normalizeBuildError(error) {
+  if (typeof error?.code === 'string' && error.code.startsWith('AE_')) return error;
+  return buildError(
+    'AE_PLUGIN_BUILD_IO_FAILED',
+    'native build input/output access failed without producing an artifact',
+  );
+}
+
+function isInside(parent, candidate) {
+  const relative = path.relative(parent, candidate);
+  return relative === ''
+    || (relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+function command(tool, args, options = {}) {
+  const { env, redactions = [] } = options;
+  try {
+    return execFileSync(tool, args, {
+      encoding: 'utf8',
+      env: env ?? { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
+    });
+  } catch (error) {
+    let detail = `${error?.stderr ?? ''}`.slice(-4000);
+    for (const redaction of redactions) detail = detail.split(redaction).join('<redacted-path>');
+    throw buildError(
+      'AE_PLUGIN_BUILD_TOOL_FAILED',
+      `${path.basename(tool)} failed${detail.trim() ? `: ${detail.trim()}` : ''}`,
+    );
+  }
+}
+
+function commandBytes(tool, args, redactions = []) {
+  try {
+    return execFileSync(tool, args, {
+      env: { ...process.env },
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true,
+    });
+  } catch (error) {
+    let detail = `${error?.stderr ?? ''}`.slice(-4000);
+    for (const redaction of redactions) detail = detail.split(redaction).join('<redacted-path>');
+    throw buildError(
+      'AE_PLUGIN_BUILD_TOOL_FAILED',
+      `${path.basename(tool)} failed${detail.trim() ? `: ${detail.trim()}` : ''}`,
+    );
+  }
+}
+
+function gitFileBytes(sourceCommit, relativePath) {
+  return commandBytes('git', [
+    '-C', REPO_ROOT, 'show', `${sourceCommit}:${relativePath}`,
+  ], [REPO_ROOT]);
+}
+
+function productVersionFromCommit(sourceCommit) {
+  const bytes = gitFileBytes(sourceCommit, PRODUCT_MANIFEST_PATH);
+  if (bytes.length === 0 || bytes.length > 64 * 1024) {
+    throw buildError(
+      'AE_PLUGIN_PRODUCT_VERSION_INVALID',
+      'repository product manifest is not a bounded file',
+    );
+  }
+  let manifest;
+  try {
+    manifest = JSON.parse(bytes.toString('utf8'));
+  } catch {
+    throw buildError(
+      'AE_PLUGIN_PRODUCT_VERSION_INVALID',
+      'repository product manifest is not valid JSON',
+    );
+  }
+  const productVersion = manifest?.version;
+  if (typeof productVersion !== 'string'
+      || productVersion.length > 64
+      || !PRODUCT_VERSION_PATTERN.test(productVersion)) {
+    throw buildError(
+      'AE_PLUGIN_PRODUCT_VERSION_INVALID',
+      'repository product manifest does not declare a numeric semantic version',
+    );
+  }
+  return productVersion;
+}
+
+function replaceExactlyOnce(bytes, token, replacement, label) {
+  const offset = bytes.indexOf(token);
+  if (offset < 0 || bytes.indexOf(token, offset + token.length) >= 0) {
+    throw buildError(
+      'AE_PLUGIN_PRODUCT_VERSION_INVALID',
+      `${label} must contain exactly one product version token`,
+    );
+  }
+  return Buffer.concat([
+    bytes.subarray(0, offset),
+    replacement,
+    bytes.subarray(offset + token.length),
+  ]);
+}
+
+async function snapshotProductFile(sourceCommit, relativePath, snapshotRoot) {
+  const destination = path.join(snapshotRoot, ...relativePath.split('/'));
+  await fs.promises.mkdir(path.dirname(destination), { recursive: true });
+  await fs.promises.writeFile(destination, gitFileBytes(sourceCommit, relativePath), { flag: 'wx' });
+  return destination;
+}
+
+async function digestSafeTree(root) {
+  const records = [];
+  let totalBytes = 0;
+  async function visit(directory) {
+    const entries = await fs.promises.readdir(directory, { withFileTypes: true });
+    entries.sort((left, right) => Buffer.from(left.name).compare(Buffer.from(right.name)));
+    for (const entry of entries) {
+      const candidate = path.join(directory, entry.name);
+      const stats = await fs.promises.lstat(candidate);
+      if (stats.isSymbolicLink()) {
+        throw buildError('AE_SDK_LAYOUT_INVALID', 'SDK build snapshot source contains a symlink');
+      }
+      if (stats.isDirectory()) {
+        await visit(candidate);
+        continue;
+      }
+      if (!stats.isFile() || stats.nlink !== 1 || stats.size > 16 * 1024 * 1024) {
+        throw buildError('AE_SDK_LAYOUT_INVALID', 'SDK build snapshot source is not a safe file tree');
+      }
+      totalBytes += stats.size;
+      if (records.length >= 2048 || totalBytes > 64 * 1024 * 1024) {
+        throw buildError('AE_SDK_LAYOUT_INVALID', 'SDK build snapshot source exceeds safety bounds');
+      }
+      const bytes = await fs.promises.readFile(candidate);
+      records.push({
+        path: path.relative(root, candidate).split(path.sep).join('/'),
+        bytes: bytes.length,
+        sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+      });
+    }
+  }
+  await visit(root);
+  return crypto.createHash('sha256').update(JSON.stringify(records)).digest('hex');
+}
+
+async function digestFile(filePath) {
+  return crypto.createHash('sha256').update(
+    await fs.promises.readFile(filePath),
+  ).digest('hex');
+}
+
+function parseCli(argv, environment = process.env) {
+  const options = new Map();
+  for (let index = 0; index < argv.length;) {
+    const name = argv[index];
+    const value = argv[index + 1];
+    if (!['--sdk-archive', '--sdk-root', '--output'].includes(name)
+        || !value || options.has(name)) {
+      throw buildError(
+        'AE_PLUGIN_ARGUMENT_INVALID',
+        'expected unique --sdk-archive, --sdk-root, and --output options',
+      );
+    }
+    options.set(name, value);
+    index += 2;
+  }
+  const sdkArchive = options.get('--sdk-archive') ?? environment.AE_SDK_ARCHIVE;
+  const sdkRoot = options.get('--sdk-root') ?? environment.AE_SDK_ROOT;
+  const output = options.get('--output');
+  if (!sdkArchive) {
+    throw buildError('AE_SDK_ARCHIVE_REQUIRED', 'AE_SDK_ARCHIVE or --sdk-archive is required');
+  }
+  if (!sdkRoot) throw buildError('AE_SDK_ROOT_REQUIRED', 'AE_SDK_ROOT or --sdk-root is required');
+  if (!output || !path.isAbsolute(output)) {
+    throw buildError('AE_PLUGIN_ARGUMENT_INVALID', '--output must be an absolute path outside the repository');
+  }
+  return {
+    sdkArchive,
+    sdkRoot,
+    output: path.resolve(output),
+  };
+}
+
+async function resolveSdkRoot(input, expectedRoot) {
+  const resolvedInput = await fs.promises.realpath(input);
+  return path.basename(resolvedInput) === expectedRoot
+    ? resolvedInput : fs.promises.realpath(path.join(resolvedInput, expectedRoot));
+}
+
+async function repositoryBoundaries() {
+  const redactions = [REPO_ROOT];
+  const commonInput = command('git', [
+    '-C', REPO_ROOT, 'rev-parse', '--git-common-dir',
+  ], { redactions }).trim();
+  const commonDirectory = await fs.promises.realpath(
+    path.resolve(REPO_ROOT, commonInput),
+  );
+  const worktreeOutput = command('git', [
+    '-C', REPO_ROOT, 'worktree', 'list', '--porcelain',
+  ], { redactions });
+  const worktrees = [];
+  for (const line of worktreeOutput.split(/\r?\n/u)) {
+    if (!line.startsWith('worktree ')) continue;
+    worktrees.push(await fs.promises.realpath(line.slice('worktree '.length)));
+  }
+  if (worktrees.length === 0) {
+    throw buildError('AE_PLUGIN_REPOSITORY_INVALID', 'Git reported no repository worktrees');
+  }
+  return Object.freeze([commonDirectory, ...new Set(worktrees)]);
+}
+
+function assertOutsideBoundaries(candidate, boundaries, label) {
+  if (boundaries.some((boundary) => isInside(boundary, candidate))) {
+    throw buildError(
+      'AE_PLUGIN_PATH_INVALID',
+      `${label} must remain outside every repository worktree and the Git common directory`,
+    );
+  }
+}
+
+async function safeBuildRoots(environment = process.env) {
+  const temp = environment.TEMP ?? environment.TMP
+    ?? (environment.LOCALAPPDATA ? path.join(environment.LOCALAPPDATA, 'Temp') : null);
+  if (!temp) {
+    throw buildError(
+      'AE_PLUGIN_OUTPUT_INVALID',
+      'the current-user Windows temp root is required for native development builds',
+    );
+  }
+  const root = await fs.promises.realpath(temp).catch(() => null);
+  if (!root) {
+    throw buildError(
+      'AE_PLUGIN_OUTPUT_INVALID',
+      'the current-user Windows temp root must already exist',
+    );
+  }
+  return [root];
+}
+
+async function ensureOutputParent(output, sdkRoot, boundaries, environment) {
+  if (typeof output !== 'string' || !path.isAbsolute(output)) {
+    throw buildError('AE_PLUGIN_OUTPUT_INVALID', 'native build output must be an absolute path');
+  }
+  const resolvedOutput = path.resolve(output);
+  assertOutsideBoundaries(resolvedOutput, boundaries, 'native build output');
+  const existing = await fs.promises.lstat(resolvedOutput).catch(() => null);
+  if (existing) throw buildError('AE_PLUGIN_OUTPUT_EXISTS', 'native build output already exists');
+  const parent = path.dirname(resolvedOutput);
+  const parentStats = await fs.promises.lstat(parent).catch(() => null);
+  if (!parentStats?.isDirectory() || parentStats.isSymbolicLink()) {
+    throw buildError(
+      'AE_PLUGIN_OUTPUT_INVALID',
+      'native build output parent must already exist as a real directory',
+    );
+  }
+  const realParent = await fs.promises.realpath(parent);
+  if (realParent !== parent) {
+    throw buildError('AE_PLUGIN_OUTPUT_INVALID', 'native build output cannot traverse a symlink');
+  }
+  const canonicalOutput = path.join(realParent, path.basename(resolvedOutput));
+  assertOutsideBoundaries(canonicalOutput, boundaries, 'native build output');
+  const allowedRoots = await safeBuildRoots(environment);
+  if (!allowedRoots.some((root) => isInside(root, canonicalOutput))) {
+    throw buildError(
+      'AE_PLUGIN_OUTPUT_INVALID',
+      'native development builds are restricted to the current-user Windows temp root',
+    );
+  }
+  if (isInside(sdkRoot, canonicalOutput)) {
+    throw buildError(
+      'AE_PLUGIN_OUTPUT_INVALID',
+      'native build output must remain outside the repository and verified SDK root',
+    );
+  }
+  return { canonicalOutput, realParent: outputParent(realParent) };
+}
+
+function outputParent(realParent) {
+  return realParent;
+}
+
+function readCleanSourceCommit() {
+  const redactions = [REPO_ROOT];
+  const status = command('git', [
+    '-C', REPO_ROOT, 'status', '--porcelain=v1', '--untracked-files=all',
+  ], { redactions });
+  if (status.trim()) {
+    throw buildError(
+      'AE_PLUGIN_SOURCE_DIRTY',
+      'native evidence builds require a fully committed, clean repository worktree',
+    );
+  }
+  return command('git', [
+    '-C', REPO_ROOT, 'rev-parse', '--verify', 'HEAD',
+  ], { redactions }).trim();
+}
+
+function newestVersionedDirectory(parent, label) {
+  let entries;
+  try {
+    entries = fs.readdirSync(parent, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^\d+\.\d+\.\d+\.\d+$/u.test(entry.name))
+      .map((entry) => entry.name);
+  } catch {
+    entries = [];
+  }
+  if (entries.length === 0) {
+    throw buildError(
+      label.code,
+      `${label.message}: no versioned directory under ${path.basename(parent)}`,
+    );
+  }
+  entries.sort((left, right) => {
+    const leftParts = left.split('.').map(Number);
+    const rightParts = right.split('.').map(Number);
+    for (let index = 0; index < 4; index += 1) {
+      if (leftParts[index] !== rightParts[index]) return rightParts[index] - leftParts[index];
+    }
+    return 0;
+  });
+  return path.join(parent, entries[0]);
+}
+
+function findMsvcToolchain(environment = process.env) {
+  const programFilesX86 = environment['ProgramFiles(x86)']
+    ?? 'C:\\Program Files (x86)';
+  const vswhere = path.join(
+    programFilesX86, 'Microsoft Visual Studio', 'Installer', 'vswhere.exe',
+  );
+  if (!fs.existsSync(vswhere)) {
+    throw buildError(
+      'AE_PLUGIN_MSVC_UNAVAILABLE',
+      'vswhere.exe is unavailable; the Visual Studio 2022 C++ toolchain is required',
+    );
+  }
+  let installation;
+  try {
+    installation = execFileSync(vswhere, [
+      '-latest',
+      '-products', '*',
+      '-requires', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+      '-property', 'installationPath',
+    ], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true }).trim();
+  } catch {
+    installation = '';
+  }
+  if (!installation || !fs.existsSync(installation)) {
+    throw buildError(
+      'AE_PLUGIN_MSVC_UNAVAILABLE',
+      'no Visual Studio installation with the MSVC x64 C++ workload was found',
+    );
+  }
+  const vcvars64 = path.join(installation, 'VC', 'Auxiliary', 'Build', 'vcvars64.bat');
+  if (!fs.existsSync(vcvars64)) {
+    throw buildError(
+      'AE_PLUGIN_MSVC_UNAVAILABLE',
+      'vcvars64.bat is missing from the Visual Studio C++ workload',
+    );
+  }
+  const msvcRoot = newestVersionedDirectory(
+    path.join(installation, 'VC', 'Tools', 'MSVC'),
+    { code: 'AE_PLUGIN_MSVC_UNAVAILABLE', message: 'MSVC toolset directory is missing' },
+  );
+  const bin = path.join(msvcRoot, 'bin', 'Hostx64', 'x64');
+  const cl = path.join(bin, 'cl.exe');
+  const link = path.join(bin, 'link.exe');
+  if (!fs.existsSync(cl) || !fs.existsSync(link)) {
+    throw buildError(
+      'AE_PLUGIN_MSVC_UNAVAILABLE',
+      'cl.exe/link.exe are missing from the MSVC x64 toolset',
+    );
+  }
+  return {
+    installation,
+    vcvars64,
+    msvcRoot,
+    msvcVersion: path.basename(msvcRoot),
+    bin,
+    cl,
+    link,
+  };
+}
+
+function findWindowsSdk(environment = process.env) {
+  const programFilesX86 = environment['ProgramFiles(x86)']
+    ?? 'C:\\Program Files (x86)';
+  const kitsRoot = path.join(programFilesX86, 'Windows Kits', '10');
+  const includeRoot = newestVersionedDirectory(
+    path.join(kitsRoot, 'Include'),
+    { code: 'AE_PLUGIN_WINDOWS_SDK_UNAVAILABLE', message: 'Windows SDK headers are missing' },
+  );
+  const version = path.basename(includeRoot);
+  const umHeader = path.join(includeRoot, 'um', 'Windows.h');
+  const ucrtHeader = path.join(includeRoot, 'ucrt', 'stdio.h');
+  if (!fs.existsSync(umHeader) || !fs.existsSync(ucrtHeader)) {
+    throw buildError(
+      'AE_PLUGIN_WINDOWS_SDK_UNAVAILABLE',
+      'Windows SDK um/ucrt headers are incomplete',
+    );
+  }
+  const rc = path.join(kitsRoot, 'bin', version, 'x64', 'rc.exe');
+  if (!fs.existsSync(rc)) {
+    throw buildError(
+      'AE_PLUGIN_WINDOWS_SDK_UNAVAILABLE',
+      'rc.exe is missing from the Windows SDK bin directory',
+    );
+  }
+  return {
+    root: kitsRoot,
+    version,
+    includeRoot,
+    libRoot: path.join(kitsRoot, 'Lib', version),
+    rc,
+  };
+}
+
+// Runs one MSVC-family command with the vcvars64.bat x64 environment. The
+// batch file is the SDK-supported way to derive INCLUDE/LIB/PATH; deriving
+// them manually would silently drift from the installed toolset.
+function msvcCommand(toolchain, commandLine, redactions = []) {
+  const invocation = `"${toolchain.vcvars64}" >nul 2>&1 && ${commandLine}`;
+  try {
+    return execFileSync('cmd.exe', ['/d', '/s', '/c', invocation], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true,
+    });
+  } catch (error) {
+    let detail = `${error?.stdout ?? ''}${error?.stderr ?? ''}`.slice(-4000);
+    for (const redaction of redactions) detail = detail.split(redaction).join('<redacted-path>');
+    throw buildError(
+      'AE_PLUGIN_BUILD_TOOL_FAILED',
+      `msvc toolchain command failed${detail.trim() ? `: ${detail.trim()}` : ''}`,
+    );
+  }
+}
+
+function quote(argument) {
+  return `"${argument}"`;
+}
+
+export async function checkWindowsBuildPrerequisites(input = {}) {
+  if (process.platform !== 'win32' || process.arch !== 'x64') {
+    throw buildError(
+      'AE_PLUGIN_PLATFORM_UNSUPPORTED',
+      'Windows x64 is required for this development build',
+    );
+  }
+  const policy = await loadAeSdkPolicy();
+  const verification = await verifyAeSdkInput({
+    archivePath: input.sdkArchive,
+    rootInput: input.sdkRoot,
+    platform: 'windows-x64',
+    policy,
+    repoRoot: REPO_ROOT,
+  });
+  if (!verification.sdkRootReady) {
+    throw buildError(
+      'AE_SDK_CONTENT_EVIDENCE_PENDING',
+      'verified SDK content is required before building',
+    );
+  }
+  const sdkRoot = await resolveSdkRoot(input.sdkRoot, policy.sdk.extractedRoot);
+  const msvc = findMsvcToolchain();
+  const windowsSdk = findWindowsSdk();
+  return Object.freeze({
+    sdkRoot,
+    sdkVerification: verification,
+    msvc,
+    windowsSdk,
+    msvcVersion: msvc.msvcVersion,
+    windowsSdkVersion: windowsSdk.version,
+  });
+}
+
+function compileWindowsObjects({
+  toolchain,
+  sdkSnapshot,
+  sourceSnapshot,
+  objects,
+  sourceCommit,
+  productVersion,
+  productInputs,
+  redactions,
+}) {
+  const includeFlags = [
+    '/external:I', quote(path.join(sdkSnapshot, 'Examples', 'Headers')),
+    '/external:I', quote(path.join(sdkSnapshot, 'Examples', 'Headers', 'SP')),
+    '/external:I', quote(path.join(sdkSnapshot, 'Examples', 'Headers', 'Win')),
+    '/I', quote(path.join(sourceSnapshot, 'native', 'ae-plugin', 'include')),
+    '/I', quote(path.join(sourceSnapshot, 'native', 'ae-plugin', 'src', 'platform', 'windows')),
+  ];
+  const defineFlags = [
+    '/DMSWindows', '/DWIN32', '/D_WINDOWS', '/DUNICODE', '/D_UNICODE',
+    `/DAE_MCP_SOURCE_COMMIT="${sourceCommit}"`,
+    `/DAE_MCP_PRODUCT_VERSION="${productVersion}"`,
+  ];
+  const baseFlags = [
+    '/nologo', '/c', '/std:c++20', '/EHsc', '/W4', '/WX', '/external:W0',
+    '/Od', '/MD', '/GS', '/guard:cf', '/permissive-',
+    ...includeFlags, ...defineFlags,
+  ];
+  const objectFiles = [];
+  for (const [index, relativePath] of COMPILE_SOURCES.entries()) {
+    const source = productInputs.get(relativePath);
+    const object = path.join(objects, `${index}.obj`);
+    msvcCommand(toolchain, [
+      quote(toolchain.cl),
+      ...baseFlags,
+      `/Fo${quote(object)}`,
+      quote(source),
+    ].join(' '), redactions);
+    objectFiles.push(object);
+  }
+  return objectFiles;
+}
+
+async function writeReceipt(
+  stage,
+  artifact,
+  sourceCommit,
+  productVersion,
+  prerequisites,
+  schemaBytes,
+) {
+  const sdkVerification = prerequisites.sdkVerification;
+  const receipt = {
+    schemaVersion: 1,
+    artifact,
+    productVersion,
+    sourceCommit,
+    source: {
+      commit: sourceCommit,
+      repositoryClean: true,
+    },
+    protocolSchemaSha256: crypto.createHash('sha256').update(schemaBytes).digest('hex'),
+    sdk: {
+      name: 'Adobe After Effects C/C++ Plug-in SDK',
+      claimedVersion: '25.6.61',
+      claimedBuild: 61,
+      materialIncluded: false,
+      archiveVerification: sdkVerification.archiveVerification,
+      rootVerification: sdkVerification.rootVerification,
+      inputProvenance: sdkVerification.provenance,
+    },
+    toolchain: {
+      platform: 'windows-x64',
+      msvcVersion: prerequisites.msvcVersion,
+      windowsSdkVersion: prerequisites.windowsSdkVersion,
+    },
+    build: {
+      configuration: 'development',
+      signing: 'unsigned-development',
+      distributionApproved: false,
+      runtimeEvidence: false,
+      compatibilityEvidence: false,
+    },
+  };
+  await fs.promises.writeFile(
+    path.join(stage, 'build-receipt.json'),
+    `${JSON.stringify(receipt, null, 2)}\n`,
+    { flag: 'wx' },
+  );
+  return receipt;
+}
+
+async function buildWindowsAexInternal({
+  sdkArchive: sdkArchiveInput,
+  sdkRoot: sdkRootInput,
+  output,
+}) {
+  const sourceCommit = readCleanSourceCommit();
+  const productVersion = productVersionFromCommit(sourceCommit);
+  const boundaries = await repositoryBoundaries();
+  const prerequisites = await checkWindowsBuildPrerequisites({
+    sdkArchive: sdkArchiveInput,
+    sdkRoot: sdkRootInput,
+  });
+  const sdkRoot = prerequisites.sdkRoot;
+  const sdkArchive = await fs.promises.realpath(sdkArchiveInput);
+  assertOutsideBoundaries(sdkRoot, boundaries, 'Adobe SDK root');
+  assertOutsideBoundaries(sdkArchive, boundaries, 'Adobe SDK archive');
+  const { canonicalOutput, realParent } = await ensureOutputParent(
+    output, sdkRoot, boundaries, process.env,
+  );
+  const stage = path.join(
+    realParent,
+    `.${path.basename(output)}.stage-${process.pid}-${crypto.randomBytes(6).toString('hex')}`,
+  );
+  const objects = path.join(stage, '.objects');
+  const sourceSnapshot = path.join(stage, '.product-source');
+  const sdkSnapshot = path.join(stage, '.restricted-sdk-snapshot');
+  const redactions = [sdkRoot, REPO_ROOT, stage, sdkSnapshot];
+  let stageOwned = false;
+
+  try {
+    await fs.promises.mkdir(stage);
+    stageOwned = true;
+    const productInputs = new Map();
+    for (const relativePath of PRODUCT_INPUT_PATHS) {
+      productInputs.set(
+        relativePath,
+        await snapshotProductFile(sourceCommit, relativePath, sourceSnapshot),
+      );
+    }
+    const schemaBytes = gitFileBytes(
+      sourceCommit, 'native/ae-plugin/protocol/aegp-rpc.schema.json',
+    );
+
+    await fs.promises.cp(
+      path.join(sdkRoot, 'Examples', 'Headers'),
+      path.join(sdkSnapshot, 'Examples', 'Headers'),
+      {
+        recursive: true,
+        force: false,
+        errorOnExist: true,
+        dereference: false,
+        verbatimSymlinks: true,
+      },
+    );
+    const [sourceSdkDigest, snapshotSdkDigest, repeatedSdkVerification] = await Promise.all([
+      digestSafeTree(path.join(sdkRoot, 'Examples', 'Headers')),
+      digestSafeTree(path.join(sdkSnapshot, 'Examples', 'Headers')),
+      verifyAeSdkInput({
+        archivePath: sdkArchiveInput,
+        rootInput: sdkRootInput,
+        platform: 'windows-x64',
+        policy: await loadAeSdkPolicy(),
+        repoRoot: REPO_ROOT,
+      }),
+    ]);
+    if (!isDeepStrictEqual(sourceSdkDigest, snapshotSdkDigest)
+        || !isDeepStrictEqual(prerequisites.sdkVerification, repeatedSdkVerification)) {
+      throw buildError(
+        'AE_SDK_INPUT_CHANGED',
+        'verified SDK inputs changed while the private build snapshot was created',
+      );
+    }
+
+    await fs.promises.mkdir(objects);
+    const objectFiles = compileWindowsObjects({
+      toolchain: prerequisites.msvc,
+      sdkSnapshot,
+      sourceSnapshot,
+      objects,
+      sourceCommit,
+      productVersion,
+      productInputs,
+      redactions,
+    });
+
+    const resourceTemplate = await fs.promises.readFile(
+      productInputs.get('native/ae-plugin/resources/AeMcpNative_PiPL.win.rc'),
+    );
+    const resourceSource = path.join(stage, 'AeMcpNative_PiPL.win.rc');
+    await fs.promises.writeFile(
+      resourceSource,
+      replaceExactlyOnce(
+        resourceTemplate,
+        PRODUCT_VERSION_TOKEN,
+        Buffer.from(productVersion, 'ascii'),
+        'native Windows resource template',
+      ),
+      { flag: 'wx' },
+    );
+    const resourceObject = path.join(stage, 'AeMcpNative_PiPL.res');
+    msvcCommand(prerequisites.msvc, [
+      quote(prerequisites.windowsSdk.rc),
+      '/nologo', '/l', '0x409',
+      `/fo${quote(resourceObject)}`,
+      quote(resourceSource),
+    ].join(' '), redactions);
+
+    const executable = path.join(stage, 'AeMcpNative.aex');
+    msvcCommand(prerequisites.msvc, [
+      quote(prerequisites.msvc.link),
+      '/NOLOGO', '/DLL', '/SUBSYSTEM:WINDOWS', '/MACHINE:X64',
+      '/GUARD:CF', '/NXCOMPAT', '/DYNAMICBASE',
+      `/OUT:${quote(executable)}`,
+      ...objectFiles.map(quote),
+      quote(resourceObject),
+      'bcrypt.lib', 'version.lib', 'kernel32.lib', 'user32.lib',
+    ].join(' '), redactions);
+
+    await fs.promises.rm(objects, { recursive: true });
+    await fs.promises.rm(sourceSnapshot, { recursive: true });
+    await fs.promises.rm(sdkSnapshot, { recursive: true });
+    const artifactStats = await fs.promises.lstat(executable);
+    if (!artifactStats.isFile() || artifactStats.size < 1024) {
+      throw buildError(
+        'AE_PLUGIN_BUILD_IO_FAILED',
+        'native build did not produce a bounded .aex artifact',
+      );
+    }
+    const artifact = Object.freeze({
+      path: executable,
+      fileName: 'AeMcpNative.aex',
+      bytes: artifactStats.size,
+      sha256: await digestFile(executable),
+      architecture: 'x64',
+      entryExport: 'AeMcpNativeMain',
+    });
+    if (readCleanSourceCommit() !== sourceCommit) {
+      throw buildError('AE_PLUGIN_SOURCE_CHANGED', 'repository HEAD changed during native build');
+    }
+    const receipt = await writeReceipt(
+      stage,
+      artifact,
+      sourceCommit,
+      productVersion,
+      prerequisites,
+      schemaBytes,
+    );
+    await fs.promises.rename(stage, canonicalOutput);
+    return Object.freeze({
+      schemaVersion: 1,
+      output: canonicalOutput,
+      artifact: path.join(canonicalOutput, 'AeMcpNative.aex'),
+      receipt: path.join(canonicalOutput, 'build-receipt.json'),
+      artifactSha256: artifact.sha256,
+      productVersion: receipt.productVersion,
+      sourceCommit: receipt.sourceCommit,
+      msvcVersion: prerequisites.msvcVersion,
+      windowsSdkVersion: prerequisites.windowsSdkVersion,
+      runtimeEvidence: false,
+    });
+  } catch (error) {
+    if (stageOwned) {
+      try {
+        await fs.promises.rm(stage, { recursive: true, force: true });
+      } catch {
+        throw buildError(
+          'AE_PLUGIN_BUILD_CLEANUP_REQUIRED',
+          'native build failed and its private staging cleanup did not complete',
+        );
+      }
+    }
+    throw error;
+  }
+}
+
+export async function buildWindowsAex(options) {
+  try {
+    return await buildWindowsAexInternal(options);
+  } catch (error) {
+    throw normalizeBuildError(error);
+  }
+}
+
+function publicError(error) {
+  return {
+    ok: false,
+    error: {
+      code: typeof error?.code === 'string' ? error.code : 'AE_PLUGIN_BUILD_FAILED',
+      message: typeof error?.message === 'string' ? error.message : 'native plug-in build failed',
+    },
+  };
+}
+
+if (path.resolve(process.argv[1] ?? '') === MODULE_PATH) {
+  const argv = process.argv.slice(2);
+  if (argv.length === 1 && ['--help', '-h'].includes(argv[0])) {
+    process.stdout.write(CLI_USAGE);
+  } else {
+    try {
+      const result = await buildWindowsAex(parseCli(argv));
+      process.stdout.write(`${JSON.stringify({ ok: true, result })}\n`);
+    } catch (error) {
+      process.stderr.write(`${JSON.stringify(publicError(error))}\n`);
+      process.exitCode = 1;
+    }
+  }
+}

@@ -1,8 +1,6 @@
 #include "aemcp_native/native_rpc_connection.hpp"
 #include "aemcp_native/native_primitive_registry.generated.hpp"
-
-#include <poll.h>
-#include <sys/socket.h>
+#include "aemcp_native/transport_io.hpp"
 
 #include <algorithm>
 #include <array>
@@ -47,18 +45,16 @@ bool write_frame(int socket_fd, const std::vector<std::uint8_t> &frame) {
       return false;
     const auto remaining =
         std::chrono::duration_cast<std::chrono::milliseconds>(deadline - now);
-    pollfd item{socket_fd, POLLOUT, 0};
-    const int polled = ::poll(
-        &item, 1,
+    const int polled = transport_wait_writable(
+        socket_fd,
         static_cast<int>(std::clamp<std::int64_t>(remaining.count(), 1, 1000)));
     if (polled < 0 && errno == EINTR)
       continue;
-    if (polled <= 0 || (item.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0 ||
-        (item.revents & POLLOUT) == 0) {
+    if (polled <= 0) {
       return false;
     }
-    const ssize_t count =
-        ::send(socket_fd, frame.data() + sent, frame.size() - sent, 0);
+    const int count =
+        transport_send(socket_fd, frame.data() + sent, frame.size() - sent);
     if (count > 0) {
       sent += static_cast<std::size_t>(count);
     } else if (count < 0 && errno == EINTR) {
@@ -469,18 +465,16 @@ void NativeRpcConnectionHandler::serve(
       if (!connected)
         break;
 
-      pollfd socket{connection.socket_fd, POLLIN, 0};
-      const int polled = ::poll(&socket, 1, 20);
+      const int polled = transport_wait_readable(connection.socket_fd, 20);
       if (polled < 0 && errno == EINTR)
         continue;
-      if (polled < 0 || (polled > 0 && (socket.revents &
-                                        (POLLERR | POLLHUP | POLLNVAL)) != 0)) {
+      if (polled < 0) {
         break;
       }
-      if (polled == 0 || (socket.revents & POLLIN) == 0)
+      if (polled == 0)
         continue;
-      const ssize_t received =
-          ::recv(connection.socket_fd, input.data(), input.size(), 0);
+      const int received =
+          transport_recv(connection.socket_fd, input.data(), input.size());
       if (received == 0)
         break;
       if (received < 0) {
