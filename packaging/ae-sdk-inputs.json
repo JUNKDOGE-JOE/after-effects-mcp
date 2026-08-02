@@ -103,7 +103,7 @@
         "privateSelfHostedCi": "blocked-pending-scope-approval",
         "privateHostedArtifactStorage": "blocked-pending-scope-approval",
         "rawSdkRedistribution": "blocked",
-        "compiledPluginDistribution": "blocked-pending-separate-review",
+        "compiledPluginDistribution": "allowed-by-explicit-user-release-approval-2026-08-03",
         "adobeSampleDerivedCode": "blocked-pending-separate-review"
       }
     },
