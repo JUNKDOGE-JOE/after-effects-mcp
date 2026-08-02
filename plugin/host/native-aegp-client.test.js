@@ -779,14 +779,29 @@ test('client rejects a response rebound to another native session', UNIX_SOCKET_
 });
 
 test('client surfaces a duplicate request id as a typed error, not a contract mismatch', UNIX_SOCKET_TEST, async (t) => {
-    const { client } = await connectedFixture(t);
-    const first = await invoke(client, 'native-program-dup-0001', readProgram());
-    assert.equal(first.ok ?? first.result?.ok ?? true, true);
-    // The duplicate carries no native-program failure details; it must pass
-    // through as the typed DUPLICATE_REQUEST error instead of tripping the
-    // program-failure validator.
+    // The server answers the first invoke and then returns a details-less
+    // typed DUPLICATE_REQUEST for the repeated request id; the duplicate must
+    // pass through as its typed code instead of tripping the program-failure
+    // validator (which requires the details envelope).
+    const { client } = await connectedFixture(t, {
+        mutateEnvelope: function (response, request) {
+            if (request.method === 'invoke'
+                && request.requestId === 'native-program-dup-0002') {
+                delete response.result;
+                response.ok = false;
+                response.error = {
+                    code: 'DUPLICATE_REQUEST',
+                    message: 'request id was already used in this session',
+                    retryable: false,
+                    sideEffect: 'not-started',
+                    recovery: { action: 'change-arguments', hint: 'Use a fresh request id.' },
+                };
+            }
+        },
+    });
+    await invoke(client, 'native-program-dup-0001', readProgram());
     await assert.rejects(
-        invoke(client, 'native-program-dup-0001', readProgram()),
+        invoke(client, 'native-program-dup-0002', readProgram()),
         function (error) {
             return error.code === 'DUPLICATE_REQUEST';
         },
