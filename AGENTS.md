@@ -2,6 +2,16 @@
 
 These rules apply to human developers and coding agents working in this repository. They exist to keep engineering effort aligned with observable After Effects functionality. When an issue plan, reviewer suggestion, or local preference conflicts with these rules, stop and resolve the conflict in favor of the user-visible acceptance outcome unless the user explicitly changes the priority.
 
+## 0. User authorization is the scope boundary
+
+- The current user's explicit requested outcome and named deliverables are the authorization boundary. An Issue, Epic, milestone, checklist, review comment, repository rule, prior plan, branch, worktree, or sunk implementation is context or evidence only; none authorizes additional product work or delivery mechanisms.
+- A release request authorizes only the named release assets and the smallest indispensable build, signing, verification, documentation, and publication steps. It does not implicitly authorize an installer, RuntimeManager, zero-environment onboarding, new CI or runner topology, private artifact service, distribution or update channel, repair/rollback/uninstall system, new trust or secret infrastructure, an additional OS, architecture, or After Effects version, or another user workflow.
+- Before introducing any such item—or any other deliverable or workflow not named by the user—stop, describe its concrete user benefit, expected footprint and cost, and explicit non-goals, and obtain new explicit approval. Do not create an Issue, branch, worktree, scaffold, secret, workflow, or implementation for it while awaiting approval.
+- Treat a prerequisite as indispensable only when the named outcome cannot be produced or truthfully verified without it. If an existing or bounded manual path can produce the approved assets, replacement infrastructure is follow-up work, not a prerequisite.
+- Unless the user explicitly approved a package brief that anticipates the footprint, stop and reconfirm scope before touching more than 15 files or adding more than 500 non-generated, hand-written lines; stop sooner whenever the delivery model or user workflow changes. Report implementation, tests, documentation, generated files, and mechanical version changes separately. Crossing a threshold is a scope alarm, not permission to continue.
+- If the user narrows or changes direction, immediately stop the superseded path, cancel further implementation, review, and CI for it, preserve unfinished work only as clearly labeled recoverable state, and provide a keep/drop inventory. Continue only the newly approved scope; sunk cost never justifies finishing the old path.
+- Quality, security, testing, and acceptance rules constrain how approved work is delivered; they do not expand what is approved. Resolve any conflict by satisfying the approved outcome with the smallest compliant change or by asking the user.
+
 ## 1. Measure outcomes, not activity
 
 - The primary P0 measure is a working capability through the public MCP surface. Lines changed, tests added, commits, PRs, protocol completeness, and CI status are supporting evidence, not delivery.
