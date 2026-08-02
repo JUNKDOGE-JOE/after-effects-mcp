@@ -384,12 +384,14 @@ class NativeInvokeResult(_NativeModel):
         return self
 
 
+# Primitive ids are dot-separated and may contain camelCase segments
+# (composition.selectedLayers.list, composition.frameRate.set, …).
 NativeProgramPrimitiveId = Annotated[
     StrictStr,
     Field(
         min_length=3,
         max_length=96,
-        pattern=r"^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$",
+        pattern=r"^[a-zA-Z][a-zA-Z0-9_-]*(?:\.[a-zA-Z][a-zA-Z0-9_-]*)+$",
     ),
 ]
 
