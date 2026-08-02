@@ -690,8 +690,14 @@ def _read_state(payload: Mapping[str, Any]) -> dict[str, Any]:
         settings.get("name") == FIXTURE_COMPOSITION_NAME
         and settings.get("width") == FIXTURE_WIDTH
         and settings.get("height") == FIXTURE_HEIGHT
-        and settings.get("frameRate") == {"numerator": FIXTURE_FRAME_RATE, "denominator": 1}
-        and settings.get("pixelAspectRatio") == {"numerator": 1, "denominator": 1}
+        and settings.get("frameRate")
+        == {
+            "numerator": FIXTURE_FRAME_RATE,
+            "denominator": 1,
+            "rational": str(FIXTURE_FRAME_RATE),
+        }
+        and settings.get("pixelAspectRatio")
+        == {"numerator": 1, "denominator": 1, "rational": "1"}
         and settings.get("layerCount") == 1,
         "fixture composition settings drifted",
     )

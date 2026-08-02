@@ -191,8 +191,13 @@ def _state(host: str, session: str, comp: str, layer: str) -> dict:
             "frameRate": {
                 "numerator": spec.FIXTURE_FRAME_RATE,
                 "denominator": 1,
+                "rational": str(spec.FIXTURE_FRAME_RATE),
             },
-            "pixelAspectRatio": {"numerator": 1, "denominator": 1},
+            "pixelAspectRatio": {
+                "numerator": 1,
+                "denominator": 1,
+                "rational": "1",
+            },
             "backgroundColor": {"red": 0, "green": 0, "blue": 0, "alpha": 255},
             "workArea": {
                 "start": {"value": 0, "scale": 1, "secondsRational": "0"},
