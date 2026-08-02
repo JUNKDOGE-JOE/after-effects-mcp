@@ -451,7 +451,43 @@ ParsedRequest decode_request_frame(std::span<const std::uint8_t> frame) {
   try {
     const char *body =
         reinterpret_cast<const char *>(frame.data() + kFramePrefixBytes);
-    return classify_request(parse_json(std::string_view(body, size)));
+    JsonValue root = parse_json(std::string_view(body, size));
+    try {
+      return classify_request(std::move(root));
+    } catch (const CodecError &error) {
+      // Semantic request failures (including native program admission) must
+      // not poison the connection: the frame decoded cleanly, so the session
+      // front door can reject this one request with a typed error.
+      ParsedRequest malformed;
+      malformed.malformed = true;
+      malformed.malformed_code = std::string(error.error_code());
+      malformed.malformed_error = error.what();
+      if (const JsonObject *envelope = object_of(root)) {
+        if (const JsonValue *id = member(*envelope, "requestId")) {
+          if (const std::string *text = string_of(*id)) {
+            malformed.request_id = valid_request_id(*text) ? *text : "unknown";
+          }
+        }
+        if (const JsonValue *session = member(*envelope, "sessionId")) {
+          if (const std::string *text = string_of(*session);
+              text != nullptr && valid_uuid(*text)) {
+            malformed.session_id = *text;
+          }
+        }
+        if (const JsonValue *method = member(*envelope, "method")) {
+          if (const std::string *text = string_of(*method)) {
+            if (*text == "invoke") malformed.method = RpcMethod::kInvoke;
+            else if (*text == "capabilities") malformed.method = RpcMethod::kCapabilities;
+            else if (*text == "cancel") malformed.method = RpcMethod::kCancel;
+            else if (*text == "invalidateGraph") malformed.method = RpcMethod::kInvalidateGraph;
+          }
+        }
+      }
+      if (malformed.request_id.empty()) malformed.request_id = "unknown";
+      malformed.request_fingerprint_sha256 =
+          sha256_hex_digest(canonicalize_json(root));
+      return malformed;
+    }
   } catch (const CodecError &) {
     throw;
   } catch (const std::exception &error) {
@@ -552,6 +588,12 @@ RpcSessionFrontDoor::RpcSessionFrontDoor(std::string connection_id,
 SessionIngressResult RpcSessionFrontDoor::admit(const ParsedRequest &request) {
   if (closed_) {
     return {SessionIngressCode::kClosed, "SESSION_STALE", std::nullopt, false};
+  }
+  if (request.malformed) {
+    return {SessionIngressCode::kInvalidRequest,
+            request.malformed_code.empty() ? "INVALID_ARGUMENT"
+                                           : request.malformed_code,
+            std::nullopt, false};
   }
   if (!valid_request_id(request.request_id) ||
       !valid_digest(request.request_fingerprint_sha256)) {

@@ -197,6 +197,60 @@ wire/capability/RPC digest, strict product-version mismatch, failed native load,
 `POSSIBLY_SIDE_EFFECTING_FAILURE`, corrupted fixture baseline, or AE crash.
 Never retry an uncertain write.
 
+### Issue #86 Windows Native EXEC HDEV
+
+`issue86_windows_native_exec_acceptance.py` is the permanently
+development-only Windows HDEV wrapper for the Issue #86 native EXEC host. It
+performs exactly six read-only public MCP calls: `ae_status`, native list and
+native read before restart, followed by the same three calls after restart. It
+does not call `ae_exec`, dispatch a write, create an Undo group, or retry a
+failed public call. Every event and summary records
+`validationProfile=development`, `candidateRun=false`, and
+`candidateEvidence=false`.
+
+Run it only after a zero-evidence preflight has prepared the single
+`ephemeral-validation` fixture and captured the selected native build receipt,
+install receipt, and current component signals. The build receipt must use
+schema version 1. The install receipt must use schema version 2 with topology
+kind `windows-after-effects-per-app-extensions`; its installed path must equal
+`pluginsRoot/artifactName`. The component-signals document must describe
+Windows x64, the exact formal `AfterFX.exe`, and the current Core, CEP, and
+native canonical paths, versions, source revisions, sizes, and modification
+times.
+
+From the exact checkout being tested:
+
+```powershell
+& .\.venv\Scripts\python.exe -B -I `
+  .\scripts\hardware\issue86_windows_native_exec_acceptance.py `
+  --scenario issue86-windows-native-exec-hdev@1 `
+  --selected-components native `
+  --reused-components core,cep `
+  --checkout (Resolve-Path .) `
+  --fixture-path 'C:\AfterEffectsMCP\fixtures\active\issue86-windows-native-exec.aep' `
+  --recovery-archive-root 'C:\AfterEffectsMCP\fixtures\recovery' `
+  --evidence-dir 'C:\AfterEffectsMCP\evidence\hdev-issue86' `
+  --formal-ae-app 'C:\Program Files\Adobe\Adobe After Effects 2025\Support Files\AfterFX.exe' `
+  --native-build-receipt 'C:\AfterEffectsMCP\receipts\issue86-build.json' `
+  --native-install-receipt 'C:\AfterEffectsMCP\receipts\issue86-install.json' `
+  --component-signals 'C:\AfterEffectsMCP\receipts\issue86-components.json'
+```
+
+The wrapper emits machine-readable checkpoints owned by the authorized
+agent/orchestrator; each checkpoint sets `userActionRequired=false`. The
+controller binds each checkpoint's `targetPid` to the exact formal executable;
+another AfterFX version may remain open and must not be focused, closed, or
+waited on. The controller normally quits the first target process, lets the
+wrapper launch the exact formal `AfterFX.exe` with no project argument, then
+opens the fixture from inside the fresh PID/path-bound AE process using File >
+Open or Open Recent. A launcher-to-process PID handoff is allowed only when the
+fresh native endpoint identifies the exact formal executable. A final
+checkpoint normally quits that restarted target process. Do not use file
+double-click, shell association, or force-kill. Checkpoint acknowledgement
+only records that the controller attempted the action; the wrapper
+independently requires the expected PID/image path, endpoint, native log,
+public response, and fixture evidence.
+
 ### Issue #190 layer source, Track Matte, and AV HDEV
 
 `issue190_layer_source_matte_av_acceptance.py` is the package-specific,

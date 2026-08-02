@@ -82,7 +82,12 @@ async def _run_skill_delete(args: schemas.AeSkillDeleteArgs, ctx: Any) -> Any:
 
 async def _run_skill_use(args: schemas.AeSkillUseArgs, ctx: Any) -> Any:
     try:
-        record = _store().resolve(str(args.name))
+        # Normalize the canonical artifact id form (`builtin:skill:<name>`)
+        # that instructions and generated capability metadata reference.
+        name = str(args.name)
+        if name.startswith("builtin:skill:"):
+            name = name.removeprefix("builtin:skill:")
+        record = _store().resolve(name)
         rendered = render_skill(record.skill, args.args)
         if not args.execute:
             return {

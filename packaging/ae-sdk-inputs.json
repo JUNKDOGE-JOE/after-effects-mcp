@@ -55,10 +55,10 @@
           "sha256": "640b513bfdfdab264057f3fce0356ced468cdb6d3bd3e2666e6743ec8be1fdba"
         },
         "rootContentLock": {
-          "status": "pending-windows-extraction-evidence",
-          "fileCount": null,
-          "fileBytes": null,
-          "sha256": null
+          "status": "canonical-file-tree-verified",
+          "fileCount": 497,
+          "fileBytes": 15960949,
+          "sha256": "9ca19fe536e39445fdf0f9f2a1e981d30dcce8e56989c17fc9170a0da98abfbe"
         },
         "buildSentinel": { "path": "Examples/BuildAll.sln", "type": "file" }
       }

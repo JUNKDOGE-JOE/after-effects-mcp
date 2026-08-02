@@ -1,6 +1,6 @@
 #pragma once
 
-#include "aemcp_native/endpoint_registry_macos.hpp"
+#include "endpoint_registry_windows.hpp"
 #include "aemcp_native/ipc_server_types.hpp"
 #include "aemcp_native/peer_identity.hpp"
 #include "aemcp_native/transport_auth.hpp"
@@ -14,30 +14,34 @@
 #include <string>
 #include <thread>
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+
 namespace aemcp::native {
 
-struct MacIpcServerConfig {
+struct WindowsIpcServerConfig {
   std::chrono::milliseconds handshake_timeout{1500};
   std::size_t maximum_ancestor_depth{16};
   std::int32_t expected_cpu_type{0};
 };
 
-// Minimum P0 authenticated transport. It deliberately does not claim the
-// strict Adobe signing/client-attestation hardening tracked in #89. Admission
-// requires same UID, exact current AE ancestry, stable peer identity, endpoint
-// re-verification, and the wire-v1 compatibility challenge before the handler
-// sees the connection.
-class MacIpcServer final {
+// Named-pipe transport with a same-user ACL implementation constraint. The
+// wire-v1 compatibility challenge preserves the macOS client byte contract.
+// maximum_ancestor_depth and expected_cpu_type are accepted for config parity
+// and deliberately unused on Windows.
+class WindowsIpcServer final {
  public:
-  MacIpcServer(
-      MacEndpointRegistry& endpoint,
+  WindowsIpcServer(
+      WindowsEndpointRegistry& endpoint,
       PeerIdentityBackend& peer_backend,
       AuthenticatedConnectionHandler& handler,
       NativeIpcObserver& observer,
-      MacIpcServerConfig config);
-  MacIpcServer(const MacIpcServer&) = delete;
-  MacIpcServer& operator=(const MacIpcServer&) = delete;
-  ~MacIpcServer();
+      WindowsIpcServerConfig config);
+  WindowsIpcServer(const WindowsIpcServer&) = delete;
+  WindowsIpcServer& operator=(const WindowsIpcServer&) = delete;
+  ~WindowsIpcServer();
 
   [[nodiscard]] bool start();
   void stop() noexcept;
@@ -45,30 +49,35 @@ class MacIpcServer final {
   [[nodiscard]] bool running() const noexcept { return running_.load(); }
 
  private:
-  void run() noexcept;
-  void handle_connection(int socket_fd) noexcept;
+  void run(HANDLE initial_pipe) noexcept;
+  void handle_connection(int fd) noexcept;
+  [[nodiscard]] bool connect_pipe(HANDLE pipe, DWORD& error) noexcept;
+  void set_waiting(HANDLE pipe) noexcept;
+  void set_active(HANDLE pipe) noexcept;
+  void close_active(HANDLE pipe, int fd) noexcept;
   [[nodiscard]] bool read_exact(
-      int socket_fd,
+      int fd,
       std::uint8_t* output,
       std::size_t size,
       std::chrono::steady_clock::time_point deadline) noexcept;
   [[nodiscard]] bool write_exact(
-      int socket_fd,
+      int fd,
       const std::uint8_t* input,
       std::size_t size,
       std::chrono::steady_clock::time_point deadline) noexcept;
-  void close_active(int socket_fd) noexcept;
+  [[nodiscard]] HANDLE create_next_listener() noexcept;
 
-  MacEndpointRegistry& endpoint_;
+  WindowsEndpointRegistry& endpoint_;
   PeerIdentityBackend& peer_backend_;
   AuthenticatedConnectionHandler& handler_;
   NativeIpcObserver& observer_;
-  const MacIpcServerConfig config_;
+  const WindowsIpcServerConfig config_;
   std::atomic<bool> stop_requested_{false};
   std::atomic<bool> running_{false};
+  std::mutex pipe_mutex_;
+  HANDLE waiting_pipe_{nullptr};
+  HANDLE active_pipe_{nullptr};
   std::thread worker_;
-  std::mutex active_mutex_;
-  int active_fd_{-1};
   std::atomic<std::uint32_t> next_session_generation_{1};
 };
 

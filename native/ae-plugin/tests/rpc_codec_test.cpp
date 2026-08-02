@@ -48,6 +48,14 @@ void rejects(Action &&action, std::string_view label) {
   throw std::runtime_error(std::string(label) + " was accepted");
 }
 
+class TestClock final : public SessionClock {
+public:
+  [[nodiscard]] std::uint64_t now_unix_ms() const noexcept override {
+    return now;
+  }
+  std::uint64_t now{1000};
+};
+
 void decodes_only_program_and_control_requests() {
   const auto hello = decode_request_frame(frame(
       R"({"wireVersion":1,"kind":"request","requestId":"11111111-1111-4111-8111-111111111111","method":"hello","params":{"supportedWireVersions":{"minimum":1,"maximum":1},"client":{"component":"core-broker","version":"1.0.0","instanceId":"44444444-4444-4444-8444-444444444444"},"nonce":"abcdefghijklmnopqrstuvwxyzABCDEF"}})"));
@@ -59,13 +67,50 @@ void decodes_only_program_and_control_requests() {
   const auto *native = std::get_if<NativeProgramParams>(&invoke.params);
   require(native != nullptr && native->program.operations.size() == 1,
           "native program was not admitted");
+}
 
-  rejects(
-      [] {
-        (void)decode_request_frame(frame(
-            R"({"wireVersion":1,"kind":"request","requestId":"11111111-1111-4111-8111-111111111113","sessionId":"22222222-2222-4222-8222-222222222222","method":"invoke","params":{"capabilityId":"ae.retired.direct","capabilityVersion":1,"arguments":{}}})"));
-      },
-      "legacy direct capability");
+void semantic_failures_become_malformed_requests_without_poisoning() {
+  // An unsupported capability is a semantic rejection, not transport
+  // corruption: the decoder must yield a malformed request and stay usable.
+  FrameDecoder decoder;
+  const auto bad = frame(
+      R"({"wireVersion":1,"kind":"request","requestId":"11111111-1111-4111-8111-111111111113","sessionId":"22222222-2222-4222-8222-222222222222","method":"invoke","params":{"capabilityId":"ae.retired.direct","capabilityVersion":1,"arguments":{}}})");
+  const auto decoded = decoder.push(std::span<const std::uint8_t>(bad));
+  require(decoded.size() == 1, "semantic rejection did not decode");
+  require(decoded[0].malformed && decoded[0].method == RpcMethod::kInvoke,
+          "semantic rejection was not marked malformed");
+  require(!decoded[0].malformed_error.empty(), "malformed reason was not kept");
+  require(decoded[0].request_id == "11111111-1111-4111-8111-111111111113",
+          "malformed request lost its identity");
+  require(!decoder.failed(), "decoder was poisoned by a semantic rejection");
+
+  // Admission failures (e.g. a primitive's missing required literal) follow
+  // the same typed path instead of killing the connection.
+  const auto bad_program = frame(
+      R"({"wireVersion":1,"kind":"request","requestId":"11111111-1111-4111-8111-111111111114","sessionId":"22222222-2222-4222-8222-222222222222","method":"invoke","params":{"capabilityId":"ae.native.exec","capabilityVersion":1,"arguments":{"operations":[{"op":"project.items.list","args":{"offset":0}}]}}})");
+  const auto rejected = decoder.push(std::span<const std::uint8_t>(bad_program));
+  require(rejected.size() == 1 && rejected[0].malformed,
+          "invalid program was not marked malformed");
+  require(std::string(rejected[0].malformed_error)
+                  .find("missing required literal argument") != std::string::npos,
+          "admission detail was not preserved");
+  require(!decoder.failed(), "decoder was poisoned by an invalid program");
+
+  // A well-formed request still decodes afterwards on the same connection.
+  const auto good = frame(
+      R"({"wireVersion":1,"kind":"request","requestId":"11111111-1111-4111-8111-111111111115","sessionId":"22222222-2222-4222-8222-222222222222","method":"invoke","params":{"capabilityId":"ae.native.exec","capabilityVersion":1,"arguments":{"operations":[{"op":"project.items.list","args":{"offset":0,"limit":1}}]}}})");
+  const auto recovered = decoder.push(std::span<const std::uint8_t>(good));
+  require(recovered.size() == 1 && !recovered[0].malformed
+              && recovered[0].method == RpcMethod::kInvoke,
+          "decoder did not recover after malformed requests");
+
+  // The session front door rejects malformed requests with a typed error.
+  TestClock clock;
+  RpcSessionFrontDoor front("connection-1", std::string(kHost),
+                            std::string(kSession), clock);
+  const auto ingress = front.admit(decoded[0]);
+  require(!ingress.accepted() && ingress.error_code == "INVALID_ARGUMENT",
+          "front door did not reject a malformed request with INVALID_ARGUMENT");
 }
 
 void capabilities_expose_one_top_level_descriptor() {
@@ -198,14 +243,6 @@ void native_program_success_and_failure_are_structured() {
       "completed failure did not override retry and recovery policy");
 }
 
-class TestClock final : public SessionClock {
-public:
-  [[nodiscard]] std::uint64_t now_unix_ms() const noexcept override {
-    return now;
-  }
-  std::uint64_t now{1000};
-};
-
 void framing_and_session_front_door_remain_bounded() {
   const auto encoded = frame(
       R"({"wireVersion":1,"kind":"request","requestId":"11111111-1111-4111-8111-111111111111","method":"hello","params":{"supportedWireVersions":{"minimum":1,"maximum":1},"client":{"component":"core-broker","version":"1.0.0","instanceId":"44444444-4444-4444-8444-444444444444"},"nonce":"abcdefghijklmnopqrstuvwxyzABCDEF"}})");
@@ -238,6 +275,7 @@ void framing_and_session_front_door_remain_bounded() {
 int main() {
   try {
     decodes_only_program_and_control_requests();
+    semantic_failures_become_malformed_requests_without_poisoning();
     capabilities_expose_one_top_level_descriptor();
     progress_uses_the_protocol_event_envelope();
     native_program_success_and_failure_are_structured();

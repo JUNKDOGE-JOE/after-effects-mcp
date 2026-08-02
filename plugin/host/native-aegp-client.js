@@ -15,10 +15,18 @@ const ENDPOINT_DIRECTORY = 'aemcp-n1';
 const ENDPOINT_PATTERN =
     /^d-([0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})\.endpoint$/;
 const SOCKET_PATTERN = /^s-[0-9a-f]{12}\.sock$/;
+const PIPE_PATTERN = /^\\\\\.\\pipe\\aemcp-n1-[0-9a-f]{12}$/;
+const WINDOWS_RUNTIME_SUBDIRECTORY = 'AfterEffectsMCP';
+const PLATFORM_IDS = Object.freeze({
+    darwin: Object.freeze({ arch: 'arm64', platform: 'macos-arm64' }),
+    win32: Object.freeze({ arch: 'x64', platform: 'windows-x64' }),
+});
 const UUID_PATTERN =
     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const TOKEN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$/;
-const OP_PATTERN = /^[a-z][a-z0-9_-]*(?:\.[a-z][a-z0-9_-]*)+$/;
+// Operation ids are dot-separated and may contain camelCase segments
+// (composition.selectedLayers.list, composition.frameRate.set, …).
+const OP_PATTERN = /^[a-zA-Z][a-zA-Z0-9_-]*(?:\.[a-zA-Z][a-zA-Z0-9_-]*)+$/;
 const REFERENCE_PATTERN = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const NATIVE_EXEC_CAPABILITY = 'ae.native.exec';
@@ -136,7 +144,7 @@ function uuidV4(randomBytes) {
     ].join('-');
 }
 
-function endpointDescriptor(text) {
+function endpointDescriptor(text, socketPattern = SOCKET_PATTERN) {
     const lines = String(text).split('\n');
     if (lines.length !== 9 || lines[8] !== ''
         || lines[0] !== 'AEMCP_NATIVE_ENDPOINT_V1') {
@@ -168,7 +176,7 @@ function endpointDescriptor(text) {
         || !Number.isSafeInteger(startSeconds) || startSeconds <= 0
         || !Number.isSafeInteger(startMicros) || startMicros < 0
         || startMicros >= 1000000
-        || !SOCKET_PATTERN.test(values.socket)
+        || !socketPattern.test(values.socket)
         || values.wire !== '1'
         || !/^[0-9a-f]{40}$/.test(values.source)) {
         return null;
@@ -279,6 +287,80 @@ function discoverNativeEndpoints(options) {
             ...descriptor,
             descriptorPath,
             socketPath,
+        }));
+    }
+    return Object.freeze(endpoints);
+}
+
+// Windows endpoint discovery: descriptors live under
+// %LOCALAPPDATA%\AfterEffectsMCP\aemcp-n1\d-<uuid>.endpoint with socket=
+// carrying the full \\.\pipe\aemcp-n1-<nonce> pipe path. The per-user
+// profile directory and same-user pipe ACL are implementation constraints;
+// pipe liveness is proven by the connection attempt itself.
+function discoverWindowsEndpoints(options) {
+    const input = options || {};
+    const fsImpl = input.fsImpl || fs;
+    const pathImpl = input.pathImpl || path;
+    const env = input.env || process.env;
+    let runtimeRoot = input.runtimeRoot;
+    if (!runtimeRoot) {
+        const base = env.LOCALAPPDATA;
+        if (typeof base !== 'string' || base.length === 0) {
+            throw nativeError(
+                'NATIVE_UNAVAILABLE',
+                'native endpoint discovery requires %LOCALAPPDATA%',
+                true,
+            );
+        }
+        runtimeRoot = pathImpl.join(base, WINDOWS_RUNTIME_SUBDIRECTORY);
+    }
+    const directory = pathImpl.join(runtimeRoot, ENDPOINT_DIRECTORY);
+    let names;
+    try {
+        if (!fsImpl.lstatSync(directory).isDirectory()) {
+            throw new Error('unsafe endpoint directory');
+        }
+        names = fsImpl.readdirSync(directory);
+    } catch (cause) {
+        throw nativeError(
+            'NATIVE_UNAVAILABLE',
+            'native endpoint directory is unavailable',
+            true,
+            cause,
+        );
+    }
+    if (!Array.isArray(names) || names.length > MAX_ENDPOINT_ENTRIES) {
+        throw nativeError(
+            'NATIVE_UNAVAILABLE',
+            'native endpoint directory exceeds its discovery bound',
+            true,
+        );
+    }
+    const endpoints = [];
+    for (const name of names.sort()) {
+        const match = ENDPOINT_PATTERN.exec(name);
+        if (!match) continue;
+        const descriptorPath = pathImpl.join(directory, name);
+        let descriptor;
+        try {
+            const descriptorStats = fsImpl.lstatSync(descriptorPath);
+            if (!descriptorStats.isFile()
+                || descriptorStats.size <= 0 || descriptorStats.size > 1024) {
+                continue;
+            }
+            descriptor = endpointDescriptor(
+                fsImpl.readFileSync(descriptorPath, 'utf8'),
+                PIPE_PATTERN,
+            );
+        } catch (_) {
+            continue;
+        }
+        if (!descriptor || descriptor.hostInstanceId !== match[1]) continue;
+        endpoints.push(Object.freeze({
+            ...descriptor,
+            descriptorPath,
+            socketPath: descriptor.socketName,
+            pipePath: descriptor.socketName,
         }));
     }
     return Object.freeze(endpoints);
@@ -561,15 +643,19 @@ function programPostconditionDigest(outputs, operations) {
 function createNativeAegpClient(options) {
     const input = options || {};
     const runtime = input.runtime;
-    if (!runtime || runtime.platform !== 'darwin' || runtime.arch !== 'arm64') {
+    const platformIds = runtime && PLATFORM_IDS[runtime.platform];
+    if (!platformIds || runtime.arch !== platformIds.arch) {
         throw nativeError(
             'NATIVE_UNAVAILABLE',
-            'native AEGP transport currently supports macOS arm64 only',
+            'native AEGP transport supports macOS arm64 and Windows x64 only',
             true,
         );
     }
     const netImpl = input.netImpl || net;
-    const discoverEndpoints = input.discoverEndpoints || discoverNativeEndpoints;
+    const discoverEndpoints = input.discoverEndpoints
+        || (runtime.platform === 'win32'
+            ? discoverWindowsEndpoints
+            : discoverNativeEndpoints);
     const randomBytes = input.randomBytes || crypto.randomBytes;
     const now = input.now || Date.now;
     const requestTimeoutMs = input.requestTimeoutMs === undefined
@@ -669,7 +755,8 @@ function createNativeAegpClient(options) {
                 'Native AEGP returned an unverifiable mutation error after dispatch.',
             );
         }
-        if (pending?.capabilityId === NATIVE_EXEC_CAPABILITY) {
+        if (pending?.capabilityId === NATIVE_EXEC_CAPABILITY
+            && error.details !== undefined) {
             const details = error.details;
             const disposition = details?.disposition;
             const sideEffect = disposition === 'possibly-side-effecting'
@@ -736,6 +823,22 @@ function createNativeAegpClient(options) {
                     'Native AEGP returned an unverifiable program failure after dispatch.',
                 );
             }
+        }
+        // Program-terminal failures must carry their details envelope;
+        // session/transport-level typed errors (DUPLICATE_REQUEST,
+        // SESSION_STALE, …) have none and pass through as typed errors.
+        if (pending?.capabilityId === NATIVE_EXEC_CAPABILITY
+            && error.details === undefined
+            && ['POSSIBLY_SIDE_EFFECTING_FAILURE', 'PRECONDITION_FAILED',
+                'STALE_LOCATOR', 'CAPABILITY_FAILED', 'NATIVE_UNSUPPORTED',
+                'INVALID_ARGUMENT'].includes(error.code)) {
+            return pendingTransportFailure(
+                pending,
+                nativeContractMismatch(
+                    'native AEGP omitted the native program failure details',
+                ),
+                'Native AEGP returned an unverifiable program failure after dispatch.',
+            );
         }
         return nativeError(
             error.code,
@@ -965,8 +1068,8 @@ function createNativeAegpClient(options) {
             || !SHA256_PATTERN.test(result.capabilitiesDigest)
             || result.host?.instanceId !== endpoint.hostInstanceId
             || result.host?.application !== 'after-effects'
-            || result.host?.platform !== 'macos-arm64'
-            || result.compiledSdk?.architecture !== 'arm64') {
+            || result.host?.platform !== platformIds.platform
+            || result.compiledSdk?.architecture !== platformIds.arch) {
             throw nativeContractMismatch(
                 'native AEGP hello identity did not match discovery',
             );
@@ -1469,6 +1572,7 @@ function createNativeAegpClient(options) {
 module.exports = {
     createNativeAegpClient,
     discoverNativeEndpoints,
+    discoverWindowsEndpoints,
     endpointDescriptor,
     parseAuthChallenge,
     parseAuthDecision,

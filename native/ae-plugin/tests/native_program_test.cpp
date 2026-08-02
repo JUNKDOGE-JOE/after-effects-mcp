@@ -291,14 +291,14 @@ void named_results_and_unicode_parser_are_uniform() {
 }
 
 void codec_accepts_only_the_native_program_invoke_shape() {
+  // Semantic rejections (unsupported capability) no longer throw from the
+  // decoder; they surface as malformed requests the session front door
+  // rejects with a typed error while the connection stays usable.
   const std::string legacy =
       R"({"wireVersion":1,"kind":"request","sessionId":"session","requestId":"legacy","method":"invoke","params":{"capabilityId":"ae.retired.direct","capabilityVersion":1,"arguments":{}}})";
-  rejects(
-      [&] {
-        const auto encoded = frame(legacy);
-        (void)aemcp::native::rpc::decode_request_frame(encoded);
-      },
-      "legacy operation-specific invoke");
+  const auto rejected = aemcp::native::rpc::decode_request_frame(frame(legacy));
+  require(rejected.malformed && !rejected.malformed_error.empty(),
+          "legacy operation-specific invoke was not marked malformed");
   const std::string accepted =
       R"({"wireVersion":1,"kind":"request","sessionId":"11111111-1111-4111-8111-111111111111","requestId":"native","method":"invoke","params":{"capabilityId":"ae.native.exec","capabilityVersion":1,"arguments":{"operations":[{"op":"composition.resolve","args":{"locator":)" +
       composition_locator() + R"(},"saveAs":"composition"}]}}})";
