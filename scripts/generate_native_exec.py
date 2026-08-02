@@ -1235,11 +1235,11 @@ def _generate_execution_guide(registry: PrimitiveRegistry) -> str:
 
 ## Route choice
 
-Use `ae_exec` when maintained AE scripting can do the job; do not seek a typed convenience verb. Use `ae_nativeExec` only for listed AEGP-only primitives.
+Use `ae_exec` when maintained AE scripting can do the job; do not seek convenience verbs. Use `ae_nativeExec` only for listed AEGP-only primitives.
 
 ## Program composition
 
-`operations` is a bounded linear array. Use `saveAs`/`{{"ref":"name"}}` for request-local handles and `returnAs` for JSON-safe values. Reads omit `operationKey`/`undoGroup`; writes require both. Never invent locators: run `project.items.list`, copy its returned locator verbatim, then walk `composition.resolve` → `composition.layers.list` → `layer.resolve` → `layer.properties.list` (groups need `parentProperty`) → `property.resolve` with its literal `locator` and refs. Lists need `offset`/`limit`; keyframe reads use only the `property` ref, while keyframe mutations use both `layer` and `property` refs; times are `{{"value","scale"}}` rationals. Per-op contracts: below.
+`operations` is bounded. Use `saveAs`/`{{"ref":"name"}}` for local handles and `returnAs` for JSON values. Reads omit `operationKey`/`undoGroup`; writes require both. Never invent locators: run `project.items.list`, copy its returned locator verbatim, then walk `composition.resolve` → `composition.layers.list` → `layer.resolve` → `layer.properties.list` (groups need `parentProperty`) → `property.resolve` with `locator` and refs. Lists need `offset`/`limit`; keyframe reads use only the `property` ref, while keyframe mutations use both `layer` and `property` refs; times are `{{"value","scale"}}` rationals. Per-op contracts: below.
 
 Exact rational-time read (`AeNativeExecArgs`):
 <!-- AE_NATIVE_EXEC_EXAMPLE -->
