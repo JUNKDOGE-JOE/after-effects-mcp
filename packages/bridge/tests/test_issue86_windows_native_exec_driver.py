@@ -908,6 +908,7 @@ def test_process_image_lookup_treats_access_denied_as_unmatched(monkeypatch, ope
     kernel32 = type("FakeKernel32", (), {
         "OpenProcess": FakeWindowsFunction(open_result),
         "QueryFullProcessImageNameW": FakeWindowsFunction(0),
+        "GetExitCodeProcess": FakeWindowsFunction(1),
         "CloseHandle": FakeWindowsFunction(1),
     })()
     monkeypatch.setattr(driver.os, "name", "nt")
@@ -915,6 +916,45 @@ def test_process_image_lookup_treats_access_denied_as_unmatched(monkeypatch, ope
     monkeypatch.setattr(driver.ctypes, "get_last_error", lambda: 5)
 
     assert driver.windows_process_image_path(63208) is None
+
+
+@pytest.mark.parametrize(
+    ("exit_code", "expected_stopped"),
+    [(0, True), (driver.STILL_ACTIVE, False)],
+    ids=["terminated", "still-active"],
+)
+def test_process_image_lookup_reconciles_query_failure_with_exit_state(
+    monkeypatch,
+    exit_code,
+    expected_stopped,
+):
+    class FakeWindowsFunction:
+        def __init__(self, result):
+            self.result = result
+
+        def __call__(self, *_args):
+            return self.result
+
+    class FakeExitCodeFunction(FakeWindowsFunction):
+        def __call__(self, _handle, output):
+            output._obj.value = exit_code
+            return self.result
+
+    kernel32 = type("FakeKernel32", (), {
+        "OpenProcess": FakeWindowsFunction(123),
+        "QueryFullProcessImageNameW": FakeWindowsFunction(0),
+        "GetExitCodeProcess": FakeExitCodeFunction(1),
+        "CloseHandle": FakeWindowsFunction(1),
+    })()
+    monkeypatch.setattr(driver.os, "name", "nt")
+    monkeypatch.setattr(driver.ctypes, "WinDLL", lambda *_args, **_kwargs: kernel32)
+    monkeypatch.setattr(driver.ctypes, "get_last_error", lambda: 31)
+
+    if expected_stopped:
+        assert driver.windows_process_image_path(63208) is None
+    else:
+        with pytest.raises(driver.Issue86Failure, match="Windows error 31"):
+            driver.windows_process_image_path(63208)
 
 
 @pytest.mark.asyncio

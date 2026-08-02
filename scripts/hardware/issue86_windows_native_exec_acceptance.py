@@ -76,6 +76,7 @@ CASES = (
 )
 MAX_JSON_BYTES = 2 * 1024 * 1024
 MAX_LOG_BYTES = 1024 * 1024
+STILL_ACTIVE = 259
 
 
 class Issue86Failure(RuntimeError):
@@ -1257,6 +1258,9 @@ def windows_process_image_path(pid: int) -> str | None:
         ctypes.POINTER(wintypes.DWORD),
     )
     query_image.restype = wintypes.BOOL
+    get_exit_code = kernel32.GetExitCodeProcess
+    get_exit_code.argtypes = (wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD))
+    get_exit_code.restype = wintypes.BOOL
     close_handle = kernel32.CloseHandle
     close_handle.argtypes = (wintypes.HANDLE,)
     close_handle.restype = wintypes.BOOL
@@ -1274,6 +1278,9 @@ def windows_process_image_path(pid: int) -> str | None:
         if not query_image(handle, 0, buffer, ctypes.byref(length)):
             error = ctypes.get_last_error()
             if error in {5, 6, 87, 1168}:
+                return None
+            exit_code = wintypes.DWORD()
+            if get_exit_code(handle, ctypes.byref(exit_code)) and exit_code.value != STILL_ACTIVE:
                 return None
             raise Issue86Failure(f"could not query process PID {pid}: Windows error {error}")
         require(0 < length.value < capacity, "Windows process image path is invalid")
