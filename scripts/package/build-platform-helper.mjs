@@ -243,7 +243,19 @@ async function extractNodeHeaders(archivePath, scratchRoot) {
   const snapshotArchive = await snapshotNodeHeadersArchive({ archivePath, scratchRoot });
   await validateNodeHeadersArchive({ archivePath: snapshotArchive });
   const tar = process.platform === 'win32' ? 'tar.exe' : '/usr/bin/tar';
-  await run(tar, ['-xzf', snapshotArchive, '-C', extractionRoot]);
+  // bsdtar on Windows mis-parses drive-letter paths as remote hosts
+  // ("Cannot connect to C:") and rejects backslash -C targets; keep
+  // archive paths local and POSIX-shaped for the extraction.
+  const tarArgs = process.platform === 'win32'
+    ? [
+        '--force-local',
+        '-xzf',
+        snapshotArchive.replaceAll('\\', '/'),
+        '-C',
+        extractionRoot.replaceAll('\\', '/'),
+      ]
+    : ['-xzf', snapshotArchive, '-C', extractionRoot];
+  await run(tar, tarArgs);
   return validateNodeHeadersArchive({ archivePath: snapshotArchive, extractedRoot: extractionRoot });
 }
 
