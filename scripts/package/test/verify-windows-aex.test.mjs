@@ -7,12 +7,43 @@ import { test } from 'node:test';
 
 import { verifyWindowsAex } from '../../../native/ae-plugin/verify-windows.mjs';
 
-// Minimal synthetic PE32+ fixtures exercising the verifier without a real
-// .aex. Layout: DOS stub (0x80) | PE sig + COFF + optional (240) | two
-// section headers | .text raw (export directory + names) | .rsrc raw
-// (resource tree + payloads).
+// The synthetic PE32+ fixture preserves the resource formats emitted by
+// rc.exe, so malformed-resource tests exercise the parser rather than marker
+// strings embedded in an arbitrary byte buffer.
 
 const ENTRY = 'AeMcpNativeMain';
+const SOURCE_COMMIT = '0123456789abcdef0123456789abcdef01234567';
+const TEXT_RVA = 0x1000;
+const TEXT_RAW_POINTER = 0x200;
+const EXPORT_DIRECTORY_SIZE = 0x100;
+const EXPORT_FUNCTIONS_OFFSET = 0x28;
+const PIPL_PROPERTIES = [
+  { vendor: 'MIB8', key: 'dnik', payload: Buffer.from('xgEA', 'ascii') },
+  {
+    vendor: 'MIB8',
+    key: 'eman',
+    payload: Buffer.from('\x18After Effects MCP Native\0\0\0', 'latin1'),
+  },
+  {
+    vendor: 'MIB8',
+    key: 'gtac',
+    payload: Buffer.from('\x0eGeneral Plugin\0', 'latin1'),
+  },
+  { vendor: 'MIB8', key: 'srev', payload: Buffer.from([0x00, 0x00, 0x01, 0x00]) },
+  { vendor: 'MIB8', key: '4668', payload: Buffer.from('AeMcpNativeMain\0', 'ascii') },
+];
+
+function align4(value) {
+  return Math.ceil(value / 4) * 4;
+}
+
+function padding(length) {
+  return Buffer.alloc(align4(length) - length);
+}
+
+function utf16z(value) {
+  return Buffer.from(`${value}\0`, 'utf16le');
+}
 
 function buildResourceTree({ pipl, versionInfo }) {
   const chunks = [];
@@ -120,24 +151,109 @@ function buildResourceTree({ pipl, versionInfo }) {
   return section;
 }
 
-function validPipl() {
-  const body = Buffer.alloc(64);
-  body.writeUInt16LE(0x0001, 0);
-  body.writeUInt32LE(5, 6);
-  body.write('MIB8dnikxgEAemangtacsrev4668', 10, 'ascii');
-  const tail = Buffer.concat([
-    body,
-    Buffer.from('After Effects MCP Native\0General Plugin\0AeMcpNativeMain\0', 'ascii'),
-  ]);
-  return tail;
+function piplProperty({ vendor, key, payload, reserved = 0, declaredLength }) {
+  const header = Buffer.alloc(16);
+  header.write(vendor, 0, 'latin1');
+  header.write(key, 4, 'latin1');
+  header.writeUInt32LE(reserved, 8);
+  header.writeUInt32LE(declaredLength ?? payload.length, 12);
+  return Buffer.concat([header, payload]);
 }
 
-function validVersionInfo(productVersion = '9.9.9') {
-  return Buffer.concat([
-    Buffer.from('VS_VERSION_INFO\0', 'utf16le'),
-    Buffer.from(productVersion, 'utf16le'),
-    Buffer.from('\0', 'utf16le'),
-  ]);
+function validPipl({
+  version = 1,
+  reserved = 0,
+  properties = PIPL_PROPERTIES,
+  propertyCount = properties.length,
+  trailing = Buffer.alloc(0),
+} = {}) {
+  const header = Buffer.alloc(10);
+  header.writeUInt16LE(version, 0);
+  header.writeUInt32LE(reserved, 2);
+  header.writeUInt32LE(propertyCount, 6);
+  return Buffer.concat([header, ...properties.map(piplProperty), trailing]);
+}
+
+function versionBlock({ key, type, value = Buffer.alloc(0), children = [] }) {
+  const keyBytes = utf16z(key);
+  let body = Buffer.concat([Buffer.alloc(6), keyBytes]);
+  body = Buffer.concat([body, padding(body.length), value]);
+  if (children.length > 0) {
+    body = Buffer.concat([body, padding(body.length)]);
+    children.forEach((child, index) => {
+      body = Buffer.concat([body, child]);
+      if (index + 1 < children.length) body = Buffer.concat([body, padding(body.length)]);
+    });
+  }
+  body.writeUInt16LE(body.length, 0);
+  body.writeUInt16LE(type === 1 ? value.length / 2 : value.length, 2);
+  body.writeUInt16LE(type, 4);
+  return body;
+}
+
+function fixedFileInfo() {
+  const value = Buffer.alloc(52);
+  [
+    0xfeef04bd,
+    0x00010000,
+    0x00010000,
+    0,
+    0x00010000,
+    0,
+    0x3f,
+    0,
+    0x00040004,
+    2,
+    0,
+    0,
+    0,
+  ].forEach((field, index) => value.writeUInt32LE(field, index * 4));
+  return value;
+}
+
+function versionString(key, value) {
+  return versionBlock({ key, type: 1, value: utf16z(value) });
+}
+
+function validVersionInfo(productVersion = '9.9.9', options = {}) {
+  const sourceCommit = options.sourceCommit ?? SOURCE_COMMIT;
+  const strings = options.strings ?? [
+    ['FileDescription', 'After Effects MCP Native'],
+    ['OriginalFilename', 'AeMcpNative.aex'],
+    ['ProductName', 'After Effects MCP Native'],
+    ['ProductVersion', productVersion],
+    ['SourceCommit', sourceCommit],
+  ];
+  const stringTable = versionBlock({
+    key: '040904E4',
+    type: 1,
+    children: strings.map(([key, value]) => versionString(key, value)),
+  });
+  const stringFileInfo = versionBlock({
+    key: 'StringFileInfo',
+    type: 1,
+    children: [stringTable],
+  });
+  const translation = Buffer.alloc(4);
+  translation.writeUInt16LE(0x0409, 0);
+  translation.writeUInt16LE(1252, 2);
+  const varFileInfo = versionBlock({
+    key: 'VarFileInfo',
+    type: 1,
+    children: [versionBlock({ key: 'Translation', type: 0, value: translation })],
+  });
+  return versionBlock({
+    key: 'VS_VERSION_INFO',
+    type: 0,
+    value: fixedFileInfo(),
+    children: options.rootChildren ?? [stringFileInfo, varFileInfo],
+  });
+}
+
+function versionBlockOffset(bytes, key) {
+  const keyOffset = bytes.indexOf(utf16z(key));
+  assert.notEqual(keyOffset, -1, `missing fixture key ${key}`);
+  return keyOffset - 6;
 }
 
 function buildPe({
@@ -153,20 +269,31 @@ function buildPe({
 
   const textRaw = Buffer.alloc(0x200);
   if (exportNames !== null) {
+    const functionsOffset = EXPORT_FUNCTIONS_OFFSET;
+    const namesOffset = functionsOffset + exportNames.length * 4;
+    const ordinalsOffset = namesOffset + exportNames.length * 4;
+    const stringsOffset = align4(ordinalsOffset + exportNames.length * 2);
+    textRaw.writeUInt32LE(1, 16);
     textRaw.writeUInt32LE(exportNames.length, 20);
     textRaw.writeUInt32LE(exportNames.length, 24);
-    textRaw.writeUInt32LE(0x1000 + 0x28, 32); // AddressOfNames
+    textRaw.writeUInt32LE(TEXT_RVA + functionsOffset, 28);
+    textRaw.writeUInt32LE(TEXT_RVA + namesOffset, 32);
+    textRaw.writeUInt32LE(TEXT_RVA + ordinalsOffset, 36);
     exportNames.forEach((name, index) => {
-      const stringOffset = 0x28 + exportNames.length * 4 + index * 0x20;
-      textRaw.writeUInt32LE(0x1000 + stringOffset, 0x28 + index * 4);
+      const functionOffset = 0x180 + index * 4;
+      const stringOffset = stringsOffset + index * 0x20;
+      textRaw.writeUInt32LE(TEXT_RVA + functionOffset, functionsOffset + index * 4);
+      textRaw.writeUInt32LE(TEXT_RVA + stringOffset, namesOffset + index * 4);
+      textRaw.writeUInt16LE(index, ordinalsOffset + index * 2);
       textRaw.write(name, stringOffset, 'ascii');
+      textRaw[functionOffset] = 0xc3;
     });
   }
   const rsrcRaw = buildResourceTree({ pipl, versionInfo });
 
   const optionalSize = 240;
   const headerSize = 0x80 + 4 + 20 + optionalSize + 2 * 40;
-  const textRawPointer = 0x200;
+  const textRawPointer = TEXT_RAW_POINTER;
   const rsrcRawPointer = 0x400;
   const bytes = Buffer.alloc(0x400 + rsrcRaw.length);
   dos.copy(bytes, 0);
@@ -180,8 +307,8 @@ function buildPe({
   const optional = pe + 24;
   bytes.writeUInt16LE(0x20b, optional);
   if (exportNames !== null) {
-    bytes.writeUInt32LE(0x1000, optional + 112);
-    bytes.writeUInt32LE(0x200, optional + 116);
+    bytes.writeUInt32LE(TEXT_RVA, optional + 112);
+    bytes.writeUInt32LE(EXPORT_DIRECTORY_SIZE, optional + 116);
   }
   bytes.writeUInt32LE(0x2000, optional + 112 + 16);
   bytes.writeUInt32LE(rsrcRaw.length, optional + 112 + 20);
@@ -189,7 +316,7 @@ function buildPe({
   let section = optional + optionalSize;
   bytes.write('.text', section, 'ascii');
   bytes.writeUInt32LE(0x200, section + 8);
-  bytes.writeUInt32LE(0x1000, section + 12);
+  bytes.writeUInt32LE(TEXT_RVA, section + 12);
   bytes.writeUInt32LE(0x200, section + 16);
   bytes.writeUInt32LE(textRawPointer, section + 20);
   section += 40;
@@ -214,11 +341,22 @@ async function fixturePath(t, bytes, name = 'fixture.aex') {
 }
 
 test('windows aex verifier accepts a well-formed x64 plugin fixture', async (t) => {
+  assert.equal(validPipl().length, 158);
+  assert.equal(validVersionInfo('0.9.2').length, 632);
   const artifact = await fixturePath(t, buildPe());
-  const result = await verifyWindowsAex({ artifactPath: artifact });
+  const result = await verifyWindowsAex({
+    artifactPath: artifact,
+    expectedCommit: SOURCE_COMMIT,
+    expectedProductVersion: '9.9.9',
+  });
   assert.equal(result.result, 'PASS');
   assert.equal(result.architecture, 'x64');
   assert.equal(result.entryExport, ENTRY);
+  assert.equal(result.bytes, (await fs.promises.stat(artifact)).size);
+  assert.equal(result.sourceCommit, SOURCE_COMMIT);
+  assert.equal(result.productVersion, '9.9.9');
+  assert.equal(result.receipt.sourceCommit, result.sourceCommit);
+  assert.equal(result.receipt.productVersion, result.productVersion);
   const bytes = await fs.promises.readFile(artifact);
   assert.equal(
     result.artifactSha256,
@@ -263,28 +401,122 @@ test('windows aex verifier rejects extra entry surface and wrong export names', 
   );
 });
 
-test('windows aex verifier rejects missing or altered PiPL resources', async (t) => {
+test('windows aex verifier validates every export address table and the function RVA', async (t) => {
+  const directory = TEXT_RAW_POINTER;
+  const functions = TEXT_RAW_POINTER + EXPORT_FUNCTIONS_OFFSET;
+  const names = functions + 4;
+  const ordinals = names + 4;
+  const cases = [
+    ['functions-zero', (bytes) => bytes.writeUInt32LE(0, directory + 28), /address tables/u],
+    ['functions-unmapped', (bytes) => bytes.writeUInt32LE(0x70000000, directory + 28), /function table RVA/u],
+    ['names-zero', (bytes) => bytes.writeUInt32LE(0, directory + 32), /address tables/u],
+    ['names-unmapped', (bytes) => bytes.writeUInt32LE(0x70000000, directory + 32), /name table RVA/u],
+    ['ordinals-zero', (bytes) => bytes.writeUInt32LE(0, directory + 36), /address tables/u],
+    ['ordinals-unmapped', (bytes) => bytes.writeUInt32LE(0x70000000, directory + 36), /ordinal table RVA/u],
+    ['ordinal-out-of-bounds', (bytes) => bytes.writeUInt16LE(1, ordinals), /ordinal/u],
+    ['function-null', (bytes) => bytes.writeUInt32LE(0, functions), /null function RVA/u],
+    ['function-unmapped', (bytes) => bytes.writeUInt32LE(0x70000000, functions), /function RVA/u],
+    ['function-forwarder', (bytes) => bytes.writeUInt32LE(TEXT_RVA + 0x80, functions), /forwarded export/u],
+  ];
+  for (const [name, mutate, expected] of cases) {
+    const bytes = buildPe();
+    mutate(bytes);
+    const artifact = await fixturePath(t, bytes, `${name}.aex`);
+    await assert.rejects(verifyWindowsAex({ artifactPath: artifact }), expected);
+  }
+});
+
+test('windows aex verifier rejects missing and malformed PiPL headers', async (t) => {
   const missing = await fixturePath(t, buildPe({ pipl: null }));
   await assert.rejects(
     verifyWindowsAex({ artifactPath: missing }),
     /PiPL resource 16000 is missing/u,
   );
-  const altered = validPipl();
-  altered[6] ^= 0xff; // corrupt the property-count word at offset 6
-  await assert.rejects(
-    verifyWindowsAex({ artifactPath: await fixturePath(t, buildPe({ pipl: altered })) }),
-    /PiPL resource must declare exactly five properties/u,
-  );
-  const renamed = validPipl();
-  const swapped = Buffer.from(renamed);
-  swapped.write('After Effects MCP Renamed', swapped.indexOf('After Effects MCP Native'), 'ascii');
-  await assert.rejects(
-    verifyWindowsAex({ artifactPath: await fixturePath(t, buildPe({ pipl: swapped })) }),
-    /identity marker/u,
-  );
+
+  for (const [name, pipl] of [
+    ['version', validPipl({ version: 2 })],
+    ['reserved', validPipl({ reserved: 1 })],
+    ['missing', validPipl({ properties: PIPL_PROPERTIES.slice(0, 4) })],
+    [
+      'missing-record',
+      validPipl({ properties: PIPL_PROPERTIES.slice(0, 4), propertyCount: 5 }),
+    ],
+    ['extra', validPipl({ properties: [...PIPL_PROPERTIES, PIPL_PROPERTIES[0]] })],
+    [
+      'extra-record',
+      validPipl({ properties: [...PIPL_PROPERTIES, PIPL_PROPERTIES[0]], propertyCount: 5 }),
+    ],
+  ]) {
+    const artifact = await fixturePath(t, buildPe({ pipl }), `${name}.aex`);
+    await assert.rejects(verifyWindowsAex({ artifactPath: artifact }), /PiPL/u);
+  }
 });
 
-test('windows aex verifier binds the expected product version when provided', async (t) => {
+test('windows aex verifier rejects invalid PiPL property records and identity payloads', async (t) => {
+  const invalidVendor = [
+    { ...PIPL_PROPERTIES[0], vendor: 'EVIL' },
+    ...PIPL_PROPERTIES.slice(1),
+  ];
+  const invalidReserved = [
+    { ...PIPL_PROPERTIES[0], reserved: 1 },
+    ...PIPL_PROPERTIES.slice(1),
+  ];
+  const invalidLength = [
+    { ...PIPL_PROPERTIES[0], declaredLength: 3 },
+    ...PIPL_PROPERTIES.slice(1),
+  ];
+  const outOfBounds = [
+    { ...PIPL_PROPERTIES[0], declaredLength: 0xfffc },
+    ...PIPL_PROPERTIES.slice(1),
+  ];
+  const alteredName = Buffer.from(PIPL_PROPERTIES[1].payload);
+  alteredName[alteredName.indexOf('Native')] ^= 0x01;
+  const invalidIdentity = [
+    PIPL_PROPERTIES[0],
+    { ...PIPL_PROPERTIES[1], payload: alteredName },
+    ...PIPL_PROPERTIES.slice(2),
+  ];
+  const duplicate = [
+    ...PIPL_PROPERTIES.slice(0, 4),
+    PIPL_PROPERTIES[0],
+  ];
+  for (const [name, pipl] of [
+    ['vendor', validPipl({ properties: invalidVendor })],
+    ['reserved', validPipl({ properties: invalidReserved })],
+    ['unaligned-length', validPipl({ properties: invalidLength })],
+    ['out-of-bounds', validPipl({ properties: outOfBounds })],
+    ['identity', validPipl({ properties: invalidIdentity })],
+    ['duplicate', validPipl({ properties: duplicate })],
+    ['trailing', validPipl({ trailing: Buffer.from([0]) })],
+  ]) {
+    const artifact = await fixturePath(t, buildPe({ pipl }), `${name}.aex`);
+    await assert.rejects(verifyWindowsAex({ artifactPath: artifact }), /PiPL/u);
+  }
+});
+
+test('windows aex verifier rejects PiPL identity markers outside real properties', async (t) => {
+  const header = Buffer.alloc(10);
+  header.writeUInt16LE(1, 0);
+  header.writeUInt32LE(5, 6);
+  const markers = Buffer.from([
+    'MIB8',
+    'dnik',
+    'xgEA',
+    'eman',
+    'gtac',
+    'srev',
+    '4668',
+    'After Effects MCP Native',
+    'General Plugin',
+    'AeMcpNativeMain',
+  ].join(''), 'ascii');
+  const artifact = await fixturePath(t, buildPe({
+    pipl: Buffer.concat([header, markers]),
+  }));
+  await assert.rejects(verifyWindowsAex({ artifactPath: artifact }), /PiPL/u);
+});
+
+test('windows aex verifier binds the parsed ProductVersion value', async (t) => {
   const matching = await fixturePath(t, buildPe({ versionInfo: validVersionInfo('1.2.3') }));
   const result = await verifyWindowsAex({
     artifactPath: matching,
@@ -296,6 +528,141 @@ test('windows aex verifier binds the expected product version when provided', as
     verifyWindowsAex({ artifactPath: mismatched, expectedProductVersion: '1.2.3' }),
     /does not bind the expected product version/u,
   );
+
+  const decoy = validVersionInfo('4.5.6', {
+    strings: [
+      ['FileDescription', 'After Effects MCP Native 1.2.3'],
+      ['OriginalFilename', 'AeMcpNative.aex'],
+      ['ProductName', 'After Effects MCP Native'],
+      ['ProductVersion', '4.5.6'],
+      ['SourceCommit', SOURCE_COMMIT],
+    ],
+  });
+  assert.notEqual(decoy.indexOf(Buffer.from('1.2.3', 'utf16le')), -1);
+  const decoyArtifact = await fixturePath(t, buildPe({ versionInfo: decoy }));
+  await assert.rejects(
+    verifyWindowsAex({ artifactPath: decoyArtifact, expectedProductVersion: '1.2.3' }),
+    /does not bind the expected product version/u,
+  );
+});
+
+test('windows aex verifier binds one strict parsed SourceCommit value', async (t) => {
+  const matching = await fixturePath(t, buildPe());
+  const result = await verifyWindowsAex({
+    artifactPath: matching,
+    expectedCommit: SOURCE_COMMIT,
+  });
+  assert.equal(result.sourceCommit, SOURCE_COMMIT);
+  assert.equal(result.receipt.sourceCommit, SOURCE_COMMIT);
+
+  const differentCommit = 'f'.repeat(40);
+  const mismatch = await fixturePath(t, buildPe({
+    versionInfo: validVersionInfo('9.9.9', { sourceCommit: differentCommit }),
+  }));
+  await assert.rejects(
+    verifyWindowsAex({ artifactPath: mismatch, expectedCommit: SOURCE_COMMIT }),
+    /does not bind the expected source commit/u,
+  );
+
+  const decoy = validVersionInfo('9.9.9', {
+    sourceCommit: differentCommit,
+    strings: [
+      ['FileDescription', `After Effects MCP Native ${SOURCE_COMMIT}`],
+      ['ProductVersion', '9.9.9'],
+      ['SourceCommit', differentCommit],
+    ],
+  });
+  const decoyArtifact = await fixturePath(t, buildPe({ versionInfo: decoy }));
+  await assert.rejects(
+    verifyWindowsAex({ artifactPath: decoyArtifact, expectedCommit: SOURCE_COMMIT }),
+    /does not bind the expected source commit/u,
+  );
+});
+
+test('windows aex verifier rejects missing, duplicate, and malformed SourceCommit values', async (t) => {
+  const variants = [
+    ['missing', validVersionInfo('9.9.9', {
+      strings: [['ProductVersion', '9.9.9']],
+    })],
+    ['duplicate', validVersionInfo('9.9.9', {
+      strings: [
+        ['ProductVersion', '9.9.9'],
+        ['SourceCommit', SOURCE_COMMIT],
+        ['SourceCommit', 'f'.repeat(40)],
+      ],
+    })],
+    ['uppercase', validVersionInfo('9.9.9', { sourceCommit: SOURCE_COMMIT.toUpperCase() })],
+    ['short', validVersionInfo('9.9.9', { sourceCommit: SOURCE_COMMIT.slice(1) })],
+    ['non-hex', validVersionInfo('9.9.9', { sourceCommit: `${SOURCE_COMMIT.slice(0, 39)}g` })],
+  ];
+  for (const [name, versionInfo] of variants) {
+    const artifact = await fixturePath(t, buildPe({ versionInfo }), `${name}.aex`);
+    await assert.rejects(verifyWindowsAex({ artifactPath: artifact }), /SourceCommit|duplicate/u);
+  }
+});
+
+test('windows aex verifier rejects malformed VERSIONINFO headers and fixed values', async (t) => {
+  const wrongLength = validVersionInfo();
+  wrongLength.writeUInt16LE(wrongLength.length - 1, 0);
+  const wrongValueLength = validVersionInfo();
+  wrongValueLength.writeUInt16LE(50, 2);
+  const wrongType = validVersionInfo();
+  wrongType.writeUInt16LE(1, 4);
+  const wrongKey = validVersionInfo();
+  wrongKey.writeUInt16LE('X'.charCodeAt(0), 6);
+  const wrongPadding = validVersionInfo();
+  wrongPadding[38] = 1;
+  const wrongFixedSignature = validVersionInfo();
+  wrongFixedSignature.writeUInt32LE(0, 40);
+  for (const [name, versionInfo] of [
+    ['length', wrongLength],
+    ['value-length', wrongValueLength],
+    ['type', wrongType],
+    ['key', wrongKey],
+    ['padding', wrongPadding],
+    ['fixed-signature', wrongFixedSignature],
+  ]) {
+    const artifact = await fixturePath(t, buildPe({ versionInfo }), `${name}.aex`);
+    await assert.rejects(verifyWindowsAex({ artifactPath: artifact }), /VERSION|VS_/u);
+  }
+});
+
+test('windows aex verifier rejects malformed VERSIONINFO children and duplicate keys', async (t) => {
+  const childLength = validVersionInfo();
+  childLength.writeUInt16LE(7, versionBlockOffset(childLength, 'StringFileInfo'));
+  const valueLength = validVersionInfo();
+  const productOffset = versionBlockOffset(valueLength, 'ProductVersion');
+  valueLength.writeUInt16LE(valueLength.readUInt16LE(productOffset + 2) + 1, productOffset + 2);
+  const childPadding = validVersionInfo();
+  const descriptionOffset = versionBlockOffset(childPadding, 'FileDescription');
+  const descriptionEnd = descriptionOffset + childPadding.readUInt16LE(descriptionOffset);
+  childPadding[descriptionEnd] = 1;
+  const duplicate = validVersionInfo('1.2.3', {
+    strings: [
+      ['FileDescription', 'After Effects MCP Native'],
+      ['ProductVersion', '1.2.3'],
+      ['ProductVersion', '9.9.9'],
+      ['SourceCommit', SOURCE_COMMIT],
+    ],
+  });
+  const missing = validVersionInfo('1.2.3', {
+    strings: [
+      ['FileDescription', 'After Effects MCP Native 1.2.3'],
+      ['SourceCommit', SOURCE_COMMIT],
+    ],
+  });
+  const trailing = Buffer.concat([validVersionInfo(), Buffer.from('9.9.9', 'utf16le')]);
+  for (const [name, versionInfo] of [
+    ['child-length', childLength],
+    ['value-length', valueLength],
+    ['child-padding', childPadding],
+    ['duplicate', duplicate],
+    ['missing', missing],
+    ['trailing', trailing],
+  ]) {
+    const artifact = await fixturePath(t, buildPe({ versionInfo }), `${name}.aex`);
+    await assert.rejects(verifyWindowsAex({ artifactPath: artifact }), /VERSION|String/u);
+  }
 });
 
 test('windows aex verifier rejects truncated and non-PE inputs', async (t) => {

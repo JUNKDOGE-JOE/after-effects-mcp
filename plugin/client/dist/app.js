@@ -24057,7 +24057,6 @@
           allowPaste: true,
           allowBrowse: !disabled,
           allowDrop: !disabled,
-          dropOnPage: true,
           allowReorder: false,
           instantUpload: false,
           maxFiles: MAX_ATTACHMENTS_PER_TURN,
@@ -51260,9 +51259,6 @@ ${baseUrl}`),
 
   // src/main.jsx
   var import_jsx_runtime43 = __toESM(require_jsx_runtime(), 1);
-  for (const type of ["dragover", "drop"]) {
-    window.addEventListener(type, (event) => event.preventDefault());
-  }
   var cs = new window.CSInterface();
   (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime43.jsx)(App, { cs }));
 })();

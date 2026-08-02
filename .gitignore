@@ -13,6 +13,7 @@ packages/core/tests/live/_artifacts/
 dist/
 build/
 /release/
+*.obj
 plugin/host/node_modules/
 plugin/sidecar/node_modules/
 plugin/platform/
@@ -28,3 +29,6 @@ Thumbs.db
 .superpowers/sdd/
 .cache/capability-package-index/
 plugin/panel/ae_viewer_*.png
+/.install-panel.ps1
+/.restart-ae.ps1
+/.swap*.ps1

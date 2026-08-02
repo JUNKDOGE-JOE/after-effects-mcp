@@ -67,6 +67,9 @@ jobs:
       - name: Run native AEGP RPC contract tests
         run: node --test native/ae-plugin/protocol/protocol.test.mjs
 
+      - name: Build and run the Windows native transport test
+        run: node --test scripts/package/test/windows-native-transport.test.mjs
+
       - name: Run host tests
         working-directory: plugin/host
         run: |

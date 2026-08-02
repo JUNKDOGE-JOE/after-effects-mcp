@@ -313,13 +313,6 @@ test('native README examples use safe shell variables and the complete build inp
   }
 });
 
-// ---------------------------------------------------------------------------
-// Issue #86: Windows x64 native EXEC host (Task 1 — build prerequisites,
-// PiPL resource, entry export). The Windows adapter must reuse the shared
-// dispatch and pinned SDK policy without touching macOS behavior, and must
-// never grow signing, pairing, or new primitives (#80/#81/#88 dispositions).
-// ---------------------------------------------------------------------------
-
 async function readWindowsBuildScript() {
   return fs.promises.readFile('native/ae-plugin/build-windows.mjs', 'utf8');
 }
@@ -343,8 +336,8 @@ test('native windows build fails fast on every locked external input before comp
   assert.match(script, /assertOutsideBoundaries\(sdkArchive/u);
   // Build staging must never land in an Adobe plug-in scan root.
   assert.match(script, /Adobe plug-in scan roots/u);
-  // Development loop follows the AGENTS.md local trust model: dirty
-  // worktrees are recorded, not rejected; strict gates are evidence-only.
+  // Routine builds record dirty worktrees; evidence mode restores the clean
+  // source and repeated locked-input gates.
   assert.match(script, /--evidence/u);
   assert.match(script, /repositoryClean: sourceState\.clean/u);
   assert.match(script, /readSourceCommit\(\{ requireClean/u);
@@ -409,6 +402,35 @@ test('native windows build compiles one x64 aex with msvc and records the toolch
   assert.doesNotMatch(script, /codesign/u);
 });
 
+test('native windows build verifies the staged PE and publishes an exact canonical output set', async () => {
+  const script = await readWindowsBuildScript();
+  assert.match(script, /import \{ verifyWindowsAex \} from '.\/verify-windows\.mjs'/u);
+  assert.match(script, /verifyWindowsAex\(\{/u);
+  assert.match(script, /expectedCommit: sourceCommit/u);
+  assert.match(script, /expectedProductVersion: productVersion/u);
+  assert.match(script, /assertWindowsVerification\(/u);
+  assert.match(script, /verification\.sourceCommit !== sourceCommit/u);
+  assert.match(script, /verification\.productVersion !== productVersion/u);
+  assert.match(script, /receipt\.sourceCommit !== verification\.sourceCommit/u);
+  assert.match(script, /receipt\.productVersion !== verification\.productVersion/u);
+  assert.match(script, /verification: \{/u);
+  assert.match(script, /receipt: verification\.receipt/u);
+  assert.match(script, /path\.join\(canonicalOutput, ARTIFACT_NAME\)/u);
+  assert.match(script, /sha256: verification\.artifactSha256/u);
+  assert.match(script, /architecture: verification\.architecture/u);
+  assert.match(script, /entryExport: verification\.entryExport/u);
+  assert.match(script, /resources: verification\.receipt\.resources/u);
+  assert.match(script, /assertExactOutputSet\(stage\)/u);
+  assert.match(script, /objects = path\.join\(privateBuild/u);
+  assert.match(script, /sourceSnapshot = path\.join\(privateBuild/u);
+  assert.match(script, /sdkSnapshot = path\.join\(privateBuild/u);
+  assert.match(script, /resourceSource = path\.join\(privateBuild/u);
+  assert.match(script, /resourceObject = path\.join\(privateBuild/u);
+  assert.match(script, /\/IMPLIB:/u);
+  assert.match(script, /rm\(privateBuild, \{ recursive: true \}\)/u);
+  assert.doesNotMatch(script, /path: executable/u);
+});
+
 test('native windows PiPL resource carries the same identity as the mac PiPL', async () => {
   const winRc = await fs.promises.readFile(
     'native/ae-plugin/resources/AeMcpNative_PiPL.win.rc', 'utf8',
@@ -438,11 +460,16 @@ test('native windows PiPL resource carries the same identity as the mac PiPL', a
       `PiPL identity drifted between platforms: ${identity}`,
     );
   }
-  // The product version token is substituted exactly once, like Info.plist.
+  // Build identity tokens are each substituted exactly once before rc.exe.
   assert.equal(
     winRc.match(/__AE_MCP_PRODUCT_VERSION__/gu)?.length,
     1,
     'Windows resource must contain exactly one deterministic product version token',
+  );
+  assert.equal(
+    winRc.match(/__AE_MCP_SOURCE_COMMIT__/gu)?.length,
+    1,
+    'Windows resource must contain exactly one deterministic source commit token',
   );
   // No second identity may appear: match name stays the shared one.
   assert.doesNotMatch(winRc, /AeMcpNativeWindows|AeMcpWin/u);
@@ -499,11 +526,8 @@ test('native windows endpoint registry interface mirrors the mac semantics on na
   assert.match(header, /aemcp-n1-/u);
   assert.match(header, /\\\\\.\\pipe\\/u);
   assert.match(header, /NativeEndpointDescriptor/u);
-  // Same-user ACL is the deliberate #88 NOT_PLANNED boundary, recorded so a
-  // later reviewer cannot mistake the missing peer authentication for an
-  // oversight.
-  assert.match(header, /NOT_PLANNED/u);
-  assert.match(header, /#88/u);
+  // The same-user ACL is the local transport boundary; no manual pairing
+  // state participates in endpoint discovery.
   assert.match(header, /same-user ACL/u);
   assert.doesNotMatch(header, /pairing|fingerprint|connection-code/u);
 });

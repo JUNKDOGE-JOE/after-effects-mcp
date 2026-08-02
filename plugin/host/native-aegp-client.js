@@ -294,9 +294,8 @@ function discoverNativeEndpoints(options) {
 
 // Windows endpoint discovery: descriptors live under
 // %LOCALAPPDATA%\AfterEffectsMCP\aemcp-n1\d-<uuid>.endpoint with socket=
-// carrying the full \\.\pipe\aemcp-n1-<nonce> pipe path. Per the #88
-// NOT_PLANNED disposition there are no uid/mode checks here: the per-user
-// profile directory and the same-user pipe ACL are the entire boundary, and
+// carrying the full \\.\pipe\aemcp-n1-<nonce> pipe path. The per-user
+// profile directory and same-user pipe ACL are implementation constraints;
 // pipe liveness is proven by the connection attempt itself.
 function discoverWindowsEndpoints(options) {
     const input = options || {};

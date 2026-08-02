@@ -1150,18 +1150,20 @@ def _primitive_contract_line(row: PrimitiveRow) -> str:
             for name, kind, required in row.reference_arguments
         )
         parts.append("refs `{}`".format(refs))
-    required = row.input_schema.get("required") or []
-    if required:
+    required = set(row.input_schema.get("required") or [])
+    properties = row.input_schema.get("properties") or {}
+    if properties:
         literals = []
-        properties = row.input_schema.get("properties") or {}
-        for name in required:
-            schema = properties.get(name) or {}
+        for name, schema in properties.items():
+            optional = "" if name in required else "?"
             if name == "limit" and isinstance(schema.get("maximum"), int):
-                literals.append("limit(1..{})".format(schema["maximum"]))
+                literals.append(
+                    "limit{}(1..{})".format(optional, schema["maximum"])
+                )
             elif name == "offset":
-                literals.append("offset(>=0)")
+                literals.append("offset{}(>=0)".format(optional))
             else:
-                literals.append(name)
+                literals.append("{}{}".format(name, optional))
         parts.append("literals `{}`".format(", ".join(literals)))
     parts.append("suite `{}`".format(row.required_suite))
     parts.append("result {}".format(_primitive_value_kind(row).removeprefix("k")))
@@ -1237,7 +1239,7 @@ Use `ae_exec` when maintained AE scripting can do the job; do not seek a typed c
 
 ## Program composition
 
-`operations` is a bounded linear array. Use `saveAs`/`{{"ref":"name"}}` for request-local handles and `returnAs` for JSON-safe values. Reads omit `operationKey`/`undoGroup`; writes require both. Never invent locators: run `project.items.list`, copy its returned locator verbatim, then walk `composition.resolve` → `composition.layers.list` → `layer.resolve` → `layer.properties.list` (groups need `parentProperty`) → `property.resolve` with its literal `locator` and refs. Lists need `offset`/`limit`; keyframes need both `layer` and `property` refs; times are `{{"value","scale"}}` rationals. Per-op contracts: below.
+`operations` is a bounded linear array. Use `saveAs`/`{{"ref":"name"}}` for request-local handles and `returnAs` for JSON-safe values. Reads omit `operationKey`/`undoGroup`; writes require both. Never invent locators: run `project.items.list`, copy its returned locator verbatim, then walk `composition.resolve` → `composition.layers.list` → `layer.resolve` → `layer.properties.list` (groups need `parentProperty`) → `property.resolve` with its literal `locator` and refs. Lists need `offset`/`limit`; keyframe reads use only the `property` ref, while keyframe mutations use both `layer` and `property` refs; times are `{{"value","scale"}}` rationals. Per-op contracts: below.
 
 Exact rational-time read (`AeNativeExecArgs`):
 <!-- AE_NATIVE_EXEC_EXAMPLE -->

@@ -8,9 +8,8 @@
 // the byte counts or Pascal-string padding.
 //
 // The VERSIONINFO block is the Windows counterpart of the macOS Info.plist
-// product-version binding: build-windows.mjs substitutes the single product
-// version token below with the repository product version, mirroring
-// build-macos.mjs replaceExactlyOnce semantics.
+// product-version and source-revision binding: build-windows.mjs substitutes
+// each unique token below from the locked repository state before rc.exe runs.
 
 16000  PiPL  DISCARDABLE
 BEGIN
@@ -65,6 +64,7 @@ BEGIN
             VALUE "OriginalFilename", "AeMcpNative.aex\0"
             VALUE "ProductName", "After Effects MCP Native\0"
             VALUE "ProductVersion", "__AE_MCP_PRODUCT_VERSION__\0"
+            VALUE "SourceCommit", "__AE_MCP_SOURCE_COMMIT__\0"
         END
     END
     BLOCK "VarFileInfo"

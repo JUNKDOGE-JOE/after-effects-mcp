@@ -25,9 +25,8 @@ constexpr std::int32_t kAmd64MachineType = 0x8664;  // IMAGE_FILE_MACHINE_AMD64
 
 class WindowsPeerIdentityBackend final : public PeerIdentityBackend {
  public:
-  // fd is a C-runtime descriptor wrapping the server end of a named pipe;
-  // the OS reports the connected client PID. No admission decision is made
-  // from this value anywhere on the Windows path (#88 NOT_PLANNED).
+  // fd wraps the server end of a named pipe. The OS-reported client PID is
+  // diagnostic evidence only and does not participate in admission.
   [[nodiscard]] bool socket_peer(int socket_fd, SocketPeerEvidence& output) override {
     const HANDLE pipe = reinterpret_cast<HANDLE>(_get_osfhandle(socket_fd));
     if (pipe == INVALID_HANDLE_VALUE || pipe == nullptr) return false;

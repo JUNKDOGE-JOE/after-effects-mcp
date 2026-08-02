@@ -495,10 +495,9 @@ test('discovery accepts the private descriptor and socket owned by this user', U
     }]);
 });
 
-// Issue #86: Windows endpoint discovery reads the same descriptor format
-// from %LOCALAPPDATA%\AfterEffectsMCP\aemcp-n1 and returns the full named
-// pipe path. No uid/mode checks apply — the per-user profile and the
-// same-user pipe ACL are the boundary (#88 NOT_PLANNED).
+// Windows endpoint discovery reads the shared descriptor format from the
+// per-user profile and returns the full named-pipe path. Unix uid/mode checks
+// do not apply to this Windows implementation.
 const PIPE = '\\\\.\\pipe\\aemcp-n1-123456abcdef';
 
 async function windowsEndpointFixture(t, options) {

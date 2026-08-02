@@ -27,12 +27,10 @@ struct WindowsIpcServerConfig {
   std::int32_t expected_cpu_type{0};
 };
 
-// Same-user named-pipe transport. Per the #88 NOT_PLANNED disposition there
-// is NO peer authentication here: admission is the OS same-user pipe ACL plus
-// the wire-v1 compatibility challenge (preface, challenge, decision) so the
-// client speaks exactly the bytes it speaks on macOS. maximum_ancestor_depth
-// and expected_cpu_type are accepted for config parity and deliberately
-// unused on Windows.
+// Named-pipe transport with a same-user ACL implementation constraint. The
+// wire-v1 compatibility challenge preserves the macOS client byte contract.
+// maximum_ancestor_depth and expected_cpu_type are accepted for config parity
+// and deliberately unused on Windows.
 class WindowsIpcServer final {
  public:
   WindowsIpcServer(
@@ -51,8 +49,12 @@ class WindowsIpcServer final {
   [[nodiscard]] bool running() const noexcept { return running_.load(); }
 
  private:
-  void run() noexcept;
-  void handle_connection(HANDLE pipe) noexcept;
+  void run(HANDLE initial_pipe) noexcept;
+  void handle_connection(int fd) noexcept;
+  [[nodiscard]] bool connect_pipe(HANDLE pipe, DWORD& error) noexcept;
+  void set_waiting(HANDLE pipe) noexcept;
+  void set_active(HANDLE pipe) noexcept;
+  void close_active(HANDLE pipe, int fd) noexcept;
   [[nodiscard]] bool read_exact(
       int fd,
       std::uint8_t* output,
@@ -72,9 +74,10 @@ class WindowsIpcServer final {
   const WindowsIpcServerConfig config_;
   std::atomic<bool> stop_requested_{false};
   std::atomic<bool> running_{false};
-  std::atomic<HANDLE> waiting_pipe_{nullptr};
+  std::mutex pipe_mutex_;
+  HANDLE waiting_pipe_{nullptr};
+  HANDLE active_pipe_{nullptr};
   std::thread worker_;
-  HANDLE listener_{nullptr};
   std::atomic<std::uint32_t> next_session_generation_{1};
 };
 

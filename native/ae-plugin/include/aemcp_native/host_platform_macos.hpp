@@ -1,9 +1,8 @@
 #pragma once
 
-// macOS half of the host platform seam (included only via host_platform.hpp).
-// The implementations below are the exact code that previously lived inside
-// src/aegp/plugin_entry.cpp; they moved here unchanged so the shared dispatch
-// keeps one platform-neutral call surface. macOS behavior is byte-identical.
+// macOS implementation of the host platform seam. The shared dispatcher
+// includes this file only on macOS so CoreFoundation, endpoint, IPC, peer,
+// and randomness details stay outside the platform-neutral call surface.
 
 #include "aemcp_native/endpoint_registry_macos.hpp"
 #include "aemcp_native/host_platform.hpp"

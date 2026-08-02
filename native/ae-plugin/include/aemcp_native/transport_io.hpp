@@ -5,10 +5,13 @@
 // macOS wraps the POSIX socket syscalls with their exact current semantics.
 // Windows implements the same contract over the named-pipe HANDLE wrapped by
 // the C runtime (_open_osfhandle), so the shared framing code keeps its
-// fd-based shape.
+// fd-based shape while reads and writes remain cancellable overlapped I/O.
 //
-// Contract for transport_wait_*: 1 = ready, 0 = timeout, negative = error or
-// hangup (with errno semantics preserved on macOS, including EINTR).
+// transport_wait_readable returns 1 when ready, 0 on timeout, and a negative
+// value on error or hangup. transport_send and transport_recv return a byte
+// count, or a negative value with errno set. The timeout bounds the POSIX
+// readiness wait or Windows overlapped operation; shared callers recompute
+// their deadline between partial transfers.
 
 #if defined(_WIN32)
 
@@ -21,12 +24,17 @@ inline constexpr const char* kHostPlatformId = "windows-x64";
 inline constexpr const char* kHostArchId = "x64";
 
 [[nodiscard]] int transport_wait_readable(int fd, int timeout_ms) noexcept;
-[[nodiscard]] int transport_wait_writable(int fd, int timeout_ms) noexcept;
 
-// Mirrors send/recv: byte count on success, 0 on orderly peer shutdown
-// (recv only), negative on error.
-[[nodiscard]] int transport_send(int fd, const void* data, std::size_t size) noexcept;
-[[nodiscard]] int transport_recv(int fd, void* output, std::size_t size) noexcept;
+[[nodiscard]] int transport_send(
+    int fd,
+    const void* data,
+    std::size_t size,
+    int timeout_ms) noexcept;
+[[nodiscard]] int transport_recv(
+    int fd,
+    void* output,
+    std::size_t size,
+    int timeout_ms) noexcept;
 
 }  // namespace aemcp::native
 
@@ -56,21 +64,50 @@ inline constexpr const char* kHostArchId = "arm64";
   return (socket.revents & POLLIN) != 0 ? 1 : 0;
 }
 
-[[nodiscard]] inline int transport_wait_writable(int fd, int timeout_ms) noexcept {
+[[nodiscard]] inline int transport_send(
+    int fd,
+    const void* data,
+    std::size_t size,
+    int timeout_ms) noexcept {
   pollfd item{};
   item.fd = fd;
   item.events = POLLOUT;
   const int polled = ::poll(&item, 1, timeout_ms);
-  if (polled <= 0) return polled;
-  if ((item.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) return -1;
-  return (item.revents & POLLOUT) != 0 ? 1 : 0;
-}
-
-[[nodiscard]] inline int transport_send(int fd, const void* data, std::size_t size) noexcept {
+  if (polled == 0) {
+    errno = ETIMEDOUT;
+    return -1;
+  }
+  if (polled < 0) return polled;
+  if ((item.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0
+      || (item.revents & POLLOUT) == 0) {
+    errno = EPIPE;
+    return -1;
+  }
   return static_cast<int>(::send(fd, data, size, 0));
 }
 
-[[nodiscard]] inline int transport_recv(int fd, void* output, std::size_t size) noexcept {
+[[nodiscard]] inline int transport_recv(
+    int fd,
+    void* output,
+    std::size_t size,
+    int timeout_ms) noexcept {
+  pollfd item{};
+  item.fd = fd;
+  item.events = POLLIN;
+  const int polled = ::poll(&item, 1, timeout_ms);
+  if (polled == 0) {
+    errno = ETIMEDOUT;
+    return -1;
+  }
+  if (polled < 0) return polled;
+  if ((item.revents & (POLLERR | POLLNVAL)) != 0) {
+    errno = EPIPE;
+    return -1;
+  }
+  if ((item.revents & (POLLIN | POLLHUP)) == 0) {
+    errno = EPIPE;
+    return -1;
+  }
   return static_cast<int>(::recv(fd, output, size, 0));
 }
 

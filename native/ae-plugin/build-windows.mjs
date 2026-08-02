@@ -1,10 +1,8 @@
 #!/usr/bin/env node
 
-// Windows x64 development build for the AeMcpNative AEGP plug-in.
-// Mirrors build-macos.mjs: pinned-SDK verification, clean-commit product
-// snapshots, a private restricted SDK snapshot, one .aex artifact, and a
-// canonical build receipt. Scope guards for #86: no signing, no installer,
-// no pairing, no new primitives.
+// Windows x64 development build for the AeMcpNative AEGP plug-in. It binds
+// pinned SDK inputs and commit-owned source snapshots to one verified PE
+// artifact and an exact, canonical output receipt.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -17,6 +15,7 @@ import {
   loadAeSdkPolicy,
   verifyAeSdkInput,
 } from '../../scripts/package/ae-sdk-input.mjs';
+import { verifyWindowsAex } from './verify-windows.mjs';
 
 const MODULE_PATH = fileURLToPath(import.meta.url);
 const MODULE_ROOT = path.dirname(MODULE_PATH);
@@ -24,6 +23,10 @@ const REPO_ROOT = path.resolve(MODULE_ROOT, '../..');
 const PRODUCT_MANIFEST_PATH = 'plugin/host/package.json';
 const PRODUCT_VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u;
 const PRODUCT_VERSION_TOKEN = Buffer.from('__AE_MCP_PRODUCT_VERSION__', 'ascii');
+const SOURCE_COMMIT_TOKEN = Buffer.from('__AE_MCP_SOURCE_COMMIT__', 'ascii');
+const ARTIFACT_NAME = 'AeMcpNative.aex';
+const BUILD_RECEIPT_NAME = 'build-receipt.json';
+const FINAL_OUTPUT_NAMES = Object.freeze([ARTIFACT_NAME, BUILD_RECEIPT_NAME]);
 const CLI_USAGE = `Usage: node native/ae-plugin/build-windows.mjs \\
   [--sdk-archive <path>] [--sdk-root <path>] --output <absolute-path> [--evidence]
 
@@ -240,6 +243,45 @@ async function digestFile(filePath) {
   ).digest('hex');
 }
 
+async function assertExactOutputSet(directory) {
+  const entries = await fs.promises.readdir(directory, { withFileTypes: true });
+  const names = entries.map((entry) => entry.name).sort();
+  if (!isDeepStrictEqual(names, [...FINAL_OUTPUT_NAMES].sort())
+      || entries.some((entry) => !entry.isFile() || entry.isSymbolicLink())) {
+    throw buildError(
+      'AE_PLUGIN_BUILD_OUTPUT_INVALID',
+      'native build output must contain only the verified AEX and its receipt',
+    );
+  }
+}
+
+function assertWindowsVerification(
+  verification,
+  { artifactPath, artifactStats, artifactSha256, sourceCommit, productVersion },
+) {
+  const receipt = verification?.receipt;
+  if (verification?.result !== 'PASS'
+      || verification.artifactSha256 !== artifactSha256
+      || verification.bytes !== artifactStats.size
+      || verification.architecture !== 'x64'
+      || verification.entryExport !== 'AeMcpNativeMain'
+      || verification.sourceCommit !== sourceCommit
+      || verification.productVersion !== productVersion
+      || receipt?.artifact !== path.basename(artifactPath)
+      || receipt.artifactSha256 !== artifactSha256
+      || receipt.bytes !== artifactStats.size
+      || receipt.architecture !== verification.architecture
+      || receipt.entryExport !== verification.entryExport
+      || receipt.sourceCommit !== verification.sourceCommit
+      || receipt.productVersion !== verification.productVersion
+      || !isDeepStrictEqual(receipt.resources, ['PiPL/16000', 'VERSION/1'])) {
+    throw buildError(
+      'AE_PLUGIN_VERIFY_FAILED',
+      'Windows verifier returned an inconsistent artifact identity',
+    );
+  }
+}
+
 function parseCli(argv, environment = process.env) {
   const options = new Map();
   let evidence = false;
@@ -275,9 +317,8 @@ function parseCli(argv, environment = process.env) {
     sdkArchive,
     sdkRoot,
     output: path.resolve(output),
-    // Development builds are the default: dirty worktree allowed, cheap
-    // SDK change signals. --evidence restores the strict gates (clean tree,
-    // repeated locked-input verification) used for acceptance receipts.
+    // Routine development records dirty state and uses cheap SDK change
+    // signals. Evidence mode restores clean-source and repeated-input gates.
     evidence,
   };
 }
@@ -352,9 +393,8 @@ async function ensureOutputParent(output, sdkRoot, boundaries, environment) {
   }
   const canonicalOutput = path.join(realParent, path.basename(resolvedOutput));
   assertOutsideBoundaries(canonicalOutput, boundaries, 'native build output');
-  // Build staging must never land where After Effects scans for plug-ins
-  // (AGENTS.md section 7): an .aex in a scan root would load an unreviewed
-  // binary on the next AE start.
+  // Staging outside scan roots prevents AE from loading a partial or
+  // unverified binary on its next start.
   for (const scanRoot of adobeScanRoots(environment)) {
     if (isInside(scanRoot, canonicalOutput)) {
       throw buildError(
@@ -372,10 +412,8 @@ async function ensureOutputParent(output, sdkRoot, boundaries, environment) {
   return { canonicalOutput, realParent };
 }
 
-// Development builds record the dirty state instead of rejecting it
-// (AGENTS.md section 4 local development trust model: cheap change signals,
-// no full-tree identity gate in the routine loop). --evidence restores the
-// clean-tree requirement for acceptance receipts.
+// Routine builds record dirty state so the local loop stays lightweight;
+// evidence builds require a clean commit identity.
 function readSourceCommit({ requireClean }) {
   const redactions = [REPO_ROOT];
   const status = command('git', [
@@ -630,7 +668,7 @@ function compileWindowsObjects({
   ];
   const defineFlags = [
     '/DMSWindows', '/DWIN32', '/D_WINDOWS', '/DUNICODE', '/D_UNICODE',
-    '/D_CRT_SECURE_NO_WARNINGS',
+    '/DNOMINMAX', '/D_CRT_SECURE_NO_WARNINGS',
     `/DAE_MCP_SOURCE_COMMIT="${sourceCommit}"`,
     `/DAE_MCP_PRODUCT_VERSION="${productVersion}"`,
   ];
@@ -656,6 +694,7 @@ function compileWindowsObjects({
 async function writeReceipt(
   stage,
   artifact,
+  verification,
   sourceState,
   productVersion,
   prerequisites,
@@ -686,6 +725,14 @@ async function writeReceipt(
       msvcVersion: prerequisites.msvcVersion,
       windowsSdkVersion: prerequisites.windowsSdkVersion,
     },
+    verification: {
+      result: verification.result,
+      sourceCommit: verification.sourceCommit,
+      productVersion: verification.productVersion,
+      expectedSourceCommit: sourceState.commit,
+      expectedProductVersion: productVersion,
+      receipt: verification.receipt,
+    },
     build: {
       configuration: sourceState.evidence ? 'evidence' : 'development',
       signing: 'unsigned-development',
@@ -695,7 +742,7 @@ async function writeReceipt(
     },
   };
   await fs.promises.writeFile(
-    path.join(stage, 'build-receipt.json'),
+    path.join(stage, BUILD_RECEIPT_NAME),
     `${JSON.stringify(receipt, null, 2)}\n`,
     { flag: 'wx' },
   );
@@ -730,15 +777,17 @@ async function buildWindowsAexInternal({
     realParent,
     `.${path.basename(output)}.stage-${process.pid}-${crypto.randomBytes(6).toString('hex')}`,
   );
-  const objects = path.join(stage, '.objects');
-  const sourceSnapshot = path.join(stage, '.product-source');
-  const sdkSnapshot = path.join(stage, '.restricted-sdk-snapshot');
-  const redactions = [sdkRoot, REPO_ROOT, stage, sdkSnapshot];
+  const privateBuild = path.join(stage, '.private-build');
+  const objects = path.join(privateBuild, 'objects');
+  const sourceSnapshot = path.join(privateBuild, 'product-source');
+  const sdkSnapshot = path.join(privateBuild, 'restricted-sdk-snapshot');
+  const redactions = [sdkRoot, REPO_ROOT, stage, privateBuild, sdkSnapshot];
   let stageOwned = false;
 
   try {
     await fs.promises.mkdir(stage);
     stageOwned = true;
+    await fs.promises.mkdir(privateBuild);
     const productInputs = new Map();
     for (const relativePath of PRODUCT_INPUT_PATHS) {
       productInputs.set(
@@ -761,10 +810,8 @@ async function buildWindowsAexInternal({
         verbatimSymlinks: true,
       },
     );
-    // Development builds trust the single locked-input verification from
-    // checkWindowsBuildPrerequisites plus the copy succeeding (cheap change
-    // signals per AGENTS.md section 4). Evidence builds re-verify the locked
-    // inputs and the private snapshot to catch mid-build drift.
+    // Evidence builds repeat the locked-input comparison so a mid-build SDK
+    // change cannot be hidden by the private snapshot.
     if (evidence) {
       const [sourceSdkDigest, snapshotSdkDigest, repeatedSdkVerification] = await Promise.all([
         digestSafeTree(path.join(sdkRoot, 'Examples', 'Headers')),
@@ -802,18 +849,21 @@ async function buildWindowsAexInternal({
     const resourceTemplate = await fs.promises.readFile(
       productInputs.get('native/ae-plugin/resources/AeMcpNative_PiPL.win.rc'),
     );
-    const resourceSource = path.join(stage, 'AeMcpNative_PiPL.win.rc');
-    await fs.promises.writeFile(
-      resourceSource,
-      replaceExactlyOnce(
-        resourceTemplate,
-        PRODUCT_VERSION_TOKEN,
-        Buffer.from(productVersion, 'ascii'),
-        'native Windows resource template',
-      ),
-      { flag: 'wx' },
+    const resourceSource = path.join(privateBuild, 'AeMcpNative_PiPL.win.rc');
+    const versionedResource = replaceExactlyOnce(
+      resourceTemplate,
+      PRODUCT_VERSION_TOKEN,
+      Buffer.from(productVersion, 'ascii'),
+      'native Windows resource product version token',
     );
-    const resourceObject = path.join(stage, 'AeMcpNative_PiPL.res');
+    const boundResource = replaceExactlyOnce(
+      versionedResource,
+      SOURCE_COMMIT_TOKEN,
+      Buffer.from(sourceCommit, 'ascii'),
+      'native Windows resource source commit token',
+    );
+    await fs.promises.writeFile(resourceSource, boundResource, { flag: 'wx' });
+    const resourceObject = path.join(privateBuild, 'AeMcpNative_PiPL.res');
     const environment = msvcEnvironment(prerequisites.msvc, prerequisites.windowsSdk);
     msvcCommand(prerequisites.windowsSdk.rc, [
       '/nologo', '/l', '0x409',
@@ -821,19 +871,17 @@ async function buildWindowsAexInternal({
       resourceSource,
     ], environment, redactions);
 
-    const executable = path.join(stage, 'AeMcpNative.aex');
+    const executable = path.join(stage, ARTIFACT_NAME);
     msvcCommand(prerequisites.msvc.link, [
       '/NOLOGO', '/DLL', '/SUBSYSTEM:WINDOWS', '/MACHINE:X64',
       '/GUARD:CF', '/NXCOMPAT', '/DYNAMICBASE',
       `/OUT:${executable}`,
+      `/IMPLIB:${path.join(privateBuild, 'AeMcpNative.lib')}`,
       ...objectFiles,
       resourceObject,
       'bcrypt.lib', 'version.lib', 'advapi32.lib', 'kernel32.lib', 'user32.lib',
     ], environment, redactions);
 
-    await fs.promises.rm(objects, { recursive: true });
-    await fs.promises.rm(sourceSnapshot, { recursive: true });
-    await fs.promises.rm(sdkSnapshot, { recursive: true });
     const artifactStats = await fs.promises.lstat(executable);
     if (!artifactStats.isFile() || artifactStats.size < 1024) {
       throw buildError(
@@ -841,29 +889,47 @@ async function buildWindowsAexInternal({
         'native build did not produce a bounded .aex artifact',
       );
     }
+    const artifactSha256 = await digestFile(executable);
+    const verification = await verifyWindowsAex({
+      artifactPath: executable,
+      expectedCommit: sourceCommit,
+      expectedProductVersion: productVersion,
+    });
+    assertWindowsVerification(verification, {
+      artifactPath: executable,
+      artifactStats,
+      artifactSha256,
+      sourceCommit,
+      productVersion,
+    });
+    await fs.promises.rm(privateBuild, { recursive: true });
     const artifact = Object.freeze({
-      path: executable,
-      fileName: 'AeMcpNative.aex',
-      bytes: artifactStats.size,
-      sha256: await digestFile(executable),
-      architecture: 'x64',
-      entryExport: 'AeMcpNativeMain',
+      path: path.join(canonicalOutput, ARTIFACT_NAME),
+      fileName: verification.receipt.artifact,
+      bytes: verification.receipt.bytes,
+      sha256: verification.artifactSha256,
+      architecture: verification.architecture,
+      entryExport: verification.entryExport,
+      resources: verification.receipt.resources,
     });
     assertSourceCommitUnchanged(sourceCommit);
     const receipt = await writeReceipt(
       stage,
       artifact,
+      verification,
       sourceState,
       productVersion,
       prerequisites,
       schemaBytes,
     );
+    await assertExactOutputSet(stage);
     await fs.promises.rename(stage, canonicalOutput);
+    stageOwned = false;
     return Object.freeze({
       schemaVersion: 1,
       output: canonicalOutput,
-      artifact: path.join(canonicalOutput, 'AeMcpNative.aex'),
-      receipt: path.join(canonicalOutput, 'build-receipt.json'),
+      artifact: path.join(canonicalOutput, ARTIFACT_NAME),
+      receipt: path.join(canonicalOutput, BUILD_RECEIPT_NAME),
       artifactSha256: artifact.sha256,
       productVersion: receipt.productVersion,
       sourceCommit: receipt.sourceCommit,
