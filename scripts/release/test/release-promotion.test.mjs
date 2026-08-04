@@ -25,18 +25,18 @@ test('promotion queues every idempotent retry instead of replacing an older pend
   );
 });
 
-test('v0.9.3 release docs describe only the approved minimal Windows publication', async () => {
+test('v0.9.4 release docs describe only the approved corrective Windows publication', async () => {
   const docs = await readFile('docs/RELEASE.md', 'utf8');
 
   for (const asset of [
-    'ae-mcp-panel-v0.9.3-windows-x64.zxp',
-    'AeMcpNative-v0.9.3-windows-x64.aex',
-    'SHA256SUMS-v0.9.3.txt',
+    'ae-mcp-panel-v0.9.4-windows-x64.zxp',
+    'AeMcpNative-v0.9.4-windows-x64.aex',
+    'SHA256SUMS-v0.9.4.txt',
   ]) {
     assert.match(docs, new RegExp(asset.replaceAll('.', '\\.')));
   }
   assert.match(docs, /(?:只发布以下三个文件|publishes exactly these files)/i);
-  assert.match(docs, /(?:新 CI\/runner 拓扑|new CI\/runner topology)/i);
+  assert.match(docs, /Windows (?:Platform )?Helper/i);
   assert.doesNotMatch(
     docs,
     /preflight artifact|latest attempt|tag ruleset|标签规则集|merge freeze|合并冻结|AE_MCP_RELEASE_ADMIN_TOKEN|Administration[^\n]*read|admin-read|details_url[^\n]*actions\/runs|workflow run[^\n]*provenance/i,
