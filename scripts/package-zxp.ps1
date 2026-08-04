@@ -1,9 +1,9 @@
 # Build a signed ZXP package for the ae-mcp CEP panel.
 #
 # Usage:
-#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw>
+#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw> -HelperRoot build\helper\windows-x64
 # Optional:
-#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw> -CertPath release\ae-mcp.p12
+#   .\scripts\package-zxp.ps1 -ZxpSignCmd C:\Tools\ZXPSignCmd.exe -CertPassword <pw> -HelperRoot build\helper\windows-x64 -CertPath release\ae-mcp.p12
 #
 # -CertPassword is REQUIRED (no baked-in default secret). The same password is
 # used to create the self-signed cert (if none exists) and to sign.
@@ -15,8 +15,12 @@ param(
     [Parameter(Mandatory=$true)]
     [string]$CertPassword,
 
+    [Parameter(Mandatory=$true)]
+    [string]$HelperRoot,
+
     [string]$CertPath = "",
     [string]$OutputPath = "",
+    [string]$Version = "0.9.4",
     # Timestamp server: an untimestamped self-signed ZXP fails validation once
     # the cert expires. Timestamping pins the signature to signing time.
     [string]$Tsa = "http://timestamp.digicert.com"
@@ -32,6 +36,10 @@ $pluginSrc = Join-Path $repoRoot 'plugin'
 if (-not (Test-Path $ZxpSignCmd)) {
     throw "ZXPSignCmd not found: $ZxpSignCmd"
 }
+if (-not (Test-Path -LiteralPath $HelperRoot -PathType Container)) {
+    throw "Windows Platform Helper root not found: $HelperRoot"
+}
+$HelperRoot = (Resolve-Path -LiteralPath $HelperRoot).Path
 
 if (-not $OutputPath) {
     $OutputPath = Join-Path $releaseDir 'ae-mcp-panel.zxp'
@@ -45,7 +53,7 @@ if (Test-Path $stageDir) {
     Remove-Item -Recurse -Force $stageDir
 }
 
-Write-Host "[1/5] Staging plugin files..."
+Write-Host "[1/6] Staging plugin files..."
 Copy-Item -Recurse -Force $pluginSrc $stageDir
 if (Test-Path (Join-Path $stageDir 'host\node_modules')) {
     Remove-Item -Recurse -Force (Join-Path $stageDir 'host\node_modules')
@@ -64,7 +72,14 @@ if (Test-Path (Join-Path $stageDir 'sidecar\test')) {
 # local process attach a DevTools/Node client. Strip it before signing.
 Remove-Item -Force (Join-Path $stageDir '.debug') -ErrorAction SilentlyContinue
 
-Write-Host "[2/5] Installing production host runtime dependencies..."
+Write-Host "[2/6] Staging the Windows Platform Helper..."
+$helperStageDir = Join-Path $stageDir 'platform\windows-x64'
+New-Item -ItemType Directory -Force -Path $helperStageDir | Out-Null
+Get-ChildItem -LiteralPath $HelperRoot -Force | ForEach-Object {
+    Copy-Item -LiteralPath $_.FullName -Destination $helperStageDir -Recurse -Force
+}
+
+Write-Host "[3/6] Installing production host runtime dependencies..."
 $runtimeHostDir = Join-Path $stageDir 'runtime\windows-x64\node\host'
 New-Item -ItemType Directory -Force -Path $runtimeHostDir | Out-Null
 Copy-Item -LiteralPath (Join-Path $stageDir 'host\package.json') -Destination $runtimeHostDir
@@ -84,7 +99,7 @@ foreach ($requiredHostFile in @('package.json', 'node_modules\express\package.js
     }
 }
 
-Write-Host "[3/5] Installing sidecar production dependencies..."
+Write-Host "[4/6] Installing sidecar production dependencies..."
 Push-Location (Join-Path $stageDir 'sidecar')
 try {
     npm ci --omit=dev
@@ -95,14 +110,19 @@ try {
     Pop-Location
 }
 
-if (-not (Test-Path $CertPath)) {
-    Write-Host "[4/5] Creating self-signed ZXP certificate..."
-    & $ZxpSignCmd -selfSignedCert US CA ae-mcp ae-mcp $CertPassword $CertPath
-} else {
-    Write-Host "[4/5] Using existing certificate $CertPath"
+& node (Join-Path $repoRoot 'scripts\package\verify-windows-zxp-stage.mjs') --stage $stageDir --version $Version
+if ($LASTEXITCODE -ne 0) {
+    throw "Windows ZXP stage validation failed"
 }
 
-Write-Host "[5/5] Signing package..."
+if (-not (Test-Path $CertPath)) {
+    Write-Host "[5/6] Creating self-signed ZXP certificate..."
+    & $ZxpSignCmd -selfSignedCert US CA ae-mcp ae-mcp $CertPassword $CertPath
+} else {
+    Write-Host "[5/6] Using existing certificate $CertPath"
+}
+
+Write-Host "[6/6] Signing package..."
 if (Test-Path $OutputPath) {
     Remove-Item -Force $OutputPath
 }

@@ -10,6 +10,14 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.9.4] — 2026-08-04
+
+#### 修复
+
+- 恢复 v0.9.3 ZXP 误删的 Windows Platform Helper，使 Provider 管理器重新使用 Windows Credential Manager 保存凭据；Helper manifest 与三个声明二进制在签名前逐项校验。
+- 新增 Windows 最小 ZXP 契约测试：必须保留生产 Host 依赖、Helper 与现有在线 `uv tool install` 首跑向导，同时拒绝 bundled Python/Node、Windows RuntimeManager manifest 与嵌套 AEX。
+- 修正文档：外部 Python runtime 不在 ZXP 内，但清洁环境可通过面板首跑向导联网安装；AEX 仍作为独立 Release 资产手动安装。
+
 ### [0.9.3] — 2026-08-03
 
 #### 发布范围
@@ -251,6 +259,14 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.9.4] — 2026-08-04
+
+#### Fixed
+
+- Restore Windows Platform Helper, which was mistakenly omitted from the v0.9.3 ZXP, so Provider Manager again stores credentials through Windows Credential Manager. Packaging verifies the Helper manifest and all three declared binaries before signing.
+- Add a minimal Windows ZXP contract test that requires production Host dependencies, Helper, and the existing online `uv tool install` first-run wizard while rejecting bundled Python/Node, Windows RuntimeManager manifests, and nested AEX files.
+- Correct the installation docs: the external Python runtime is not inside the ZXP, but a clean environment can install it online through the Panel's first-run wizard. The AEX remains a separate manual-install Release asset.
 
 ### [0.9.3] — 2026-08-03
 
