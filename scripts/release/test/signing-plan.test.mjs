@@ -1100,6 +1100,7 @@ test('fast PR validation keeps contracts on supported AE hosts', async () => {
     foundationWorkflow,
     /node --test scripts\/release\/test\/\*\.test\.mjs/,
   );
+  assert.match(foundationWorkflow, /export TMPDIR="\$RUNNER_TEMP"/);
   assert.doesNotMatch(workflow, /macos-15|macos-14-compat|windows-2025/);
 });
 

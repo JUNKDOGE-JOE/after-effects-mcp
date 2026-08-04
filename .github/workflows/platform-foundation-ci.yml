@@ -124,6 +124,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          export TMPDIR="$RUNNER_TEMP"
           node --test native/ae-plugin/protocol/protocol.test.mjs
           node --test scripts/package/test/*.test.mjs
           node scripts/check-repository-governance.mjs
