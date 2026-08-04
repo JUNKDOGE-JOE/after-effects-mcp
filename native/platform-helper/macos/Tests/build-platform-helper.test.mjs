@@ -230,7 +230,7 @@ test('locked archive digest is verified before tar sees attacker-controlled byte
   const tarArgsBlock = block.slice(tarArgsStart, tarArgsEnd);
   assert.match(
     tarArgsBlock,
-    /const tarArgs = process\.platform === 'win32'\s*\?\s*\[\s*'--force-local',\s*'-xzf',\s*snapshotArchive\.replaceAll\('\\\\', '\/'\),\s*'-C',\s*extractionRoot\.replaceAll\('\\\\', '\/'\),\s*\]\s*:\s*\['-xzf', snapshotArchive, '-C', extractionRoot\];/,
+    /const tarArgs = \[\s*'-xzf',\s*snapshotArchive\.replaceAll\('\\\\', '\/'\),\s*'-C',\s*extractionRoot\.replaceAll\('\\\\', '\/'\),\s*\];/,
   );
   assert.doesNotMatch(tarArgsBlock, /\barchivePath\b/);
   assert.match(block.slice(tarArgsEnd), /^await run\(tar, tarArgs\);/);
