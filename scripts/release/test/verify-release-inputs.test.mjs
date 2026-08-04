@@ -527,7 +527,7 @@ test('attestation workflow pins actions and binds platform checks to immutable b
   assert.doesNotMatch(workflow, /const digestFields = \[/);
 });
 
-test('attestation Check provenance is constrained and its same-App limitation is explicit', async () => {
+test('legacy attestation Check provenance stays constrained without governing v0.9.3', async () => {
   const workflow = await readFile('.github/workflows/attestation.yml', 'utf8');
   const writers = [
     workflowJob(workflow, 'preinvalidate-macos'),
@@ -537,9 +537,12 @@ test('attestation Check provenance is constrained and its same-App limitation is
   assert.equal((writers.match(/app\?\.slug !== 'github-actions'/g) || []).length, 2);
 
   const docs = await readFile('docs/WORKFLOW.md', 'utf8');
-  assert.match(docs, /GitHub Actions App[^\n]*(?:共享|shared)/i);
-  assert.match(docs, /checks:write/);
-  assert.match(docs, /外部前置|external prerequisite/i);
+  assert.doesNotMatch(docs, /GitHub Actions App[^\n]*(?:共享|shared)/i);
+  assert.doesNotMatch(docs, /checks:write/);
+  assert.doesNotMatch(docs, /外部前置|external prerequisite/i);
+  assert.match(docs, /ae-mcp-panel-v0\.9\.3-windows-x64\.zxp/);
+  assert.match(docs, /AeMcpNative-v0\.9\.3-windows-x64\.aex/);
+  assert.match(docs, /SHA256SUMS-v0\.9\.3\.txt/);
 });
 
 test('attestation workflow does not interpolate or log untrusted comment bodies', async () => {

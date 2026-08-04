@@ -132,6 +132,10 @@ test('production policy records the operator attestation and keeps unrelated sco
     'allowed-aggregate-locks-and-minimal-layout-sentinels',
   );
   assert.equal(policy.sdk.licenseReview.scopes.privateSelfHostedCi, 'blocked-pending-scope-approval');
+  assert.equal(
+    policy.sdk.licenseReview.scopes.compiledPluginDistribution,
+    'allowed-by-explicit-user-release-approval-2026-08-03',
+  );
   assert.deepEqual(policy.sdk.platforms['macos-arm64'].archive, {
     fileNameHint: 'AfterEffectsSDK_25.6_61_mac.zip',
     bytes: 2039255,

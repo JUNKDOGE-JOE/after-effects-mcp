@@ -10,6 +10,14 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.9.3] — 2026-08-03
+
+#### 发布范围
+
+- 新增 Windows x64 原生执行宿主的正式发布资产；ZXP 与 AEX 均从最终 `main` 提交重新构建，并分别使用本次新建的自签名身份签名。
+- 固定资产为 `ae-mcp-panel-v0.9.3-windows-x64.zxp`、`AeMcpNative-v0.9.3-windows-x64.aex` 与 `SHA256SUMS-v0.9.3.txt`。
+- AEX 由用户在关闭 AE 后手动复制到所选宿主的 `Support Files\Plug-ins\Extensions\AeMcpNative.aex`。本版继续使用现有外部 runtime/launcher，不提供零环境安装、一体化安装器、Windows RuntimeManager 或自动升级/修复/回滚/卸载。
+
 ### [0.9.2] — 2026-07-13
 
 #### ✨ 新增
@@ -243,6 +251,14 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.9.3] — 2026-08-03
+
+#### Release scope
+
+- Publish the Windows x64 native execution host as a release asset. The ZXP and AEX are rebuilt from the final `main` commit and signed with newly created self-signed identities.
+- Fixed assets are `ae-mcp-panel-v0.9.3-windows-x64.zxp`, `AeMcpNative-v0.9.3-windows-x64.aex`, and `SHA256SUMS-v0.9.3.txt`.
+- With AE closed, users manually copy the AEX to the selected host as `Support Files\Plug-ins\Extensions\AeMcpNative.aex`. The existing external runtime/launcher remains required; this release has no zero-environment install, integrated installer, Windows RuntimeManager, or automatic upgrade/repair/rollback/uninstall lifecycle.
 
 ### [0.9.2] — 2026-07-13
 

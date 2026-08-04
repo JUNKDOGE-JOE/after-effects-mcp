@@ -26,7 +26,7 @@ const MAX_TRACKED_BLOB_BYTES = 16 * 1024 * 1024;
 const MAX_TRACKED_BLOB_TOTAL_BYTES = 64 * 1024 * 1024;
 
 export const AE_SDK_POLICY_CANONICAL_SHA256 =
-  'e02aed46553c781d50a7a10a4c5577451cc8bbcd3713674c5f8f444af92985d6';
+  '00690979c34d23e109ca0456e9ac9df285c2a12794c492a525cbd391a064b2ed';
 
 const SDK_ONLY_PATH = new RegExp([
   String.raw`(?:^|\/)(?:AfterEffectsSDK_[^/]+|ae25\.6_61\.64bit\.AfterEffectsSDK)(?:\/|$)`,

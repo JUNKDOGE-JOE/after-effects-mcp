@@ -25,9 +25,26 @@ test('promotion queues every idempotent retry instead of replacing an older pend
   );
 });
 
+test('v0.9.3 release docs describe only the approved minimal Windows publication', async () => {
+  const docs = await readFile('docs/RELEASE.md', 'utf8');
+
+  for (const asset of [
+    'ae-mcp-panel-v0.9.3-windows-x64.zxp',
+    'AeMcpNative-v0.9.3-windows-x64.aex',
+    'SHA256SUMS-v0.9.3.txt',
+  ]) {
+    assert.match(docs, new RegExp(asset.replaceAll('.', '\\.')));
+  }
+  assert.match(docs, /(?:只发布以下三个文件|publishes exactly these files)/i);
+  assert.match(docs, /(?:新 CI\/runner 拓扑|new CI\/runner topology)/i);
+  assert.doesNotMatch(
+    docs,
+    /preflight artifact|latest attempt|tag ruleset|标签规则集|merge freeze|合并冻结|AE_MCP_RELEASE_ADMIN_TOKEN|Administration[^\n]*read|admin-read|details_url[^\n]*actions\/runs|workflow run[^\n]*provenance/i,
+  );
+});
+
 test('build inventory requires four live release artifacts and only permits two optional preflight artifacts', async () => {
   const text = await workflow();
-  const docs = await readFile('docs/RELEASE.md', 'utf8');
   const body = step(text, 'Resolve one successful build run and four exact artifact IDs');
   const tag = step(text, 'Revalidate active evidence and create or verify annotated tag');
 
@@ -50,7 +67,6 @@ test('build inventory requires four live release artifacts and only permits two 
   assert.match(tag, /if \(expectedArtifactId\)[\s\S]*artifact\.expired === true[\s\S]*releaseArtifacts\.push/);
   assert.match(tag, /else if \(!allowedPreflightNames\.has\(artifact\.name\)\)/);
   assert.doesNotMatch(tag, /JSON\.stringify\(actual\) !== JSON\.stringify\(wanted\)/);
-  assert.match(docs, /preflight artifact[^\n]*(?:过期|清理|缺失)[^\n]*(?:四个|4 个)[^\n]*(?:下载|晋级)/i);
 });
 
 test('draft promotion persists one release ID and never resolves mutable assets by tag', async () => {
@@ -108,7 +124,6 @@ test('attestation writers and promotion share the exact Actions run details URL 
 
 test('tag and publish reject every candidate attestation run whose latest attempt is not successful', async () => {
   const text = await workflow();
-  const docs = await readFile('docs/RELEASE.md', 'utf8');
   const tag = step(text, 'Revalidate active evidence and create or verify annotated tag');
   const publish = step(text, 'Revalidate comments, Checks, tag, and downloaded assets before publication');
 
@@ -121,7 +136,6 @@ test('tag and publish reject every candidate attestation run whose latest attemp
     assert.match(body, /await requireLatestAttestationAttemptsSuccessful\(/);
     assert.doesNotMatch(body, /for \(const status of \['queued', 'in_progress'/);
   }
-  assert.match(docs, /latest attempt[^\n]*(?:completed[^\n]*success|成功)[^\n]*(?:rerun|重跑)/i);
 });
 
 test('promotion and attestation enumerate deterministic Checks through check suites', async () => {
@@ -140,7 +154,6 @@ test('promotion and attestation enumerate deterministic Checks through check sui
 
 test('irreversible tag and publication mutations have adjacent full revalidation gates', async () => {
   const text = await workflow();
-  const docs = await readFile('docs/RELEASE.md', 'utf8');
   const tag = step(text, 'Revalidate active evidence and create or verify annotated tag');
   const publish = step(text, 'Revalidate comments, Checks, tag, and downloaded assets before publication');
 
@@ -166,15 +179,12 @@ test('irreversible tag and publication mutations have adjacent full revalidation
   assert.match(publish, /checks\.get/);
   assert.match(publish, /listAllWorkflowRunsForWorkflow/);
   assert.match(publish, /repos\.listReleaseAssets/);
-  assert.match(docs, /tag ruleset[\s\S]{0,240}merge freeze/i);
-  assert.match(docs, /标签规则集[\s\S]{0,240}合并冻结/);
 });
 
 test('protected admin-read token proves immutable releases before tag and publish and publication verifies immutable result', async () => {
   const text = await workflow();
   const tag = step(text, 'Revalidate active evidence and create or verify annotated tag');
   const publish = step(text, 'Revalidate comments, Checks, tag, and downloaded assets before publication');
-  const docs = await readFile('docs/RELEASE.md', 'utf8');
 
   for (const body of [tag, publish]) {
     assert.match(body, /AE_MCP_RELEASE_ADMIN_TOKEN/);
@@ -184,9 +194,6 @@ test('protected admin-read token proves immutable releases before tag and publis
   }
   assert.match(publish, /published\.immutable !== true/);
   assert.match(publish, /!release\.draft && release\.immutable !== true/);
-  assert.match(docs, /AE_MCP_RELEASE_ADMIN_TOKEN/);
-  assert.match(docs, /Administration[^\n]*read|admin-read/i);
-  assert.match(docs, /details_url[^\n]*actions\/runs|workflow run[^\n]*provenance/i);
 });
 
 test('promotion remains no-build and no-sign', async () => {

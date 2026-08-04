@@ -5,9 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
-const VERSION = '0.9.2';
+const VERSION = '0.9.3';
 const PLATFORM_ASSETS = [
-  'ae-mcp-panel-v0.9.2-windows-x64.zxp',
+  'ae-mcp-panel-v0.9.3-windows-x64.zxp',
+  'AeMcpNative-v0.9.3-windows-x64.aex',
+  'SHA256SUMS-v0.9.3.txt',
 ];
 
 const PYTHON_PROJECTS = [
@@ -67,7 +69,7 @@ function panelVersion(source) {
   return source.match(/PANEL_VERSION\s*=\s*['"]([^'"]+)['"];/)?.[1];
 }
 
-test('all active package and lockfile versions are v0.9.2', async () => {
+test('all active package and lockfile versions are v0.9.3', async () => {
   for (const relativePath of PYTHON_PROJECTS) {
     assert.equal(projectVersion(await text(relativePath), relativePath), VERSION, relativePath);
   }
@@ -104,6 +106,17 @@ test('Panel source, generated bundle, and CEP manifest use the release version',
   assert.equal(manifest.match(/<Host Name="AEFT" Version="([^"]+)"/)?.[1], '[25.0,26.9]');
 });
 
+test('Windows native client and Platform Helper use the release version', async () => {
+  const [client, cmake, helper] = await Promise.all([
+    text('plugin/host/native-aegp-client.js'),
+    text('native/platform-helper/windows/CMakeLists.txt'),
+    text('native/platform-helper/windows/src/main.cpp'),
+  ]);
+  assert.ok(client.includes(`version: input.version || '${VERSION}'`));
+  assert.ok(cmake.includes(`VERSION ${VERSION} LANGUAGES CXX`));
+  assert.ok(helper.includes(`helperVersion", StringValue("${VERSION}")`));
+});
+
 test('native product version is injected from the exact repository product manifest', async () => {
   const [build, entry, infoPlist, installer, verifier] = await Promise.all([
     text('native/ae-plugin/build-macos.mjs'),
@@ -134,10 +147,10 @@ test('native product version is injected from the exact repository product manif
   }
 });
 
-test('user docs describe the v0.9.2 platform assets and optional AI channel CLIs', async () => {
+test('user docs describe the v0.9.3 platform assets and optional AI channel CLIs', async () => {
   for (const relativePath of USER_DOCS) {
     const body = await text(relativePath);
-    assert.match(body, /v?0\.9\.2/, `${relativePath} release version`);
+    assert.match(body, /v?0\.9\.3/, `${relativePath} release version`);
     for (const asset of PLATFORM_ASSETS) {
       assert.ok(body.includes(asset), `${relativePath} must name ${asset}`);
     }
@@ -159,32 +172,23 @@ test('normal install docs do not make an online uv tool install the user path', 
   }
 });
 
-test('release docs retain the hardened dual-platform design for v0.9.3 work', async () => {
+test('release docs define the approved minimal Windows v0.9.3 contract', async () => {
   const release = await text('docs/RELEASE.md');
-  for (const marker of [
-    'build-rc.yml',
-    'artifact-manifest-v0.9.2.json',
-    'macos-rc-attestation',
-    'windows-rc-attestation',
-    'release.yml',
-  ]) {
+  for (const marker of PLATFORM_ASSETS) {
     assert.ok(release.includes(marker), `docs/RELEASE.md must name ${marker}`);
   }
-  assert.match(release, /no[- ]rebuild|不重新构建|禁止重建/i);
-  assert.match(release, /prerequisite|前置条件/i);
-  assert.doesNotMatch(release, /one-day signer-preflight|保留 1 天/);
-  assert.match(release,
-    /保留 30 天[^\n]*Environment[^\n]*(?:缺失|不影响)[^\n]*四个晋级资产/);
-  assert.match(release,
-    /30-day[^\n]*Environment[^\n]*(?:missing|absence)[^\n]*four promotion assets/i);
+  assert.match(release, /manual|手动/i);
+  assert.match(release, /external runtime|外部 runtime/i);
+  assert.match(release, /not.*zero-environment|不.*零环境/i);
+  assert.match(release, /installer|安装器/i);
 
   const changelog = await text('CHANGELOG.md');
   const firstRelease = changelog.match(/^### \[([^\]]+)\].*$/m)?.[1];
   assert.equal(firstRelease, VERSION);
-  assert.match(changelog, /^### \[0\.9\.2\].*2026-07-13/mi);
+  assert.match(changelog, /^### \[0\.9\.3\].*2026-08-03/mi);
 });
 
-test('user docs distinguish the Windows v0.9.2 release from deferred v0.9.3 work', async () => {
+test('user docs distinguish the minimal Windows v0.9.3 release from deferred work', async () => {
   const [readme, readmeZh, install, reference, release, workflow] = await Promise.all([
     readFile('README.md', 'utf8'),
     readFile('README.zh-CN.md', 'utf8'),
@@ -194,8 +198,8 @@ test('user docs distinguish the Windows v0.9.2 release from deferred v0.9.3 work
     readFile('docs/WORKFLOW.md', 'utf8'),
   ]);
 
-  assert.match(readme, /v0\.9\.2 Target Support Matrix/);
-  assert.match(readmeZh, /v0\.9\.2 目标支持矩阵/);
+  assert.match(readme, /v0\.9\.3 Target Support Matrix/);
+  assert.match(readmeZh, /v0\.9\.3 目标支持矩阵/);
   assert.match(readme, /historical v0\.9\.0 development wizard[\s\S]*online `uv`/i);
   assert.match(readmeZh, /历史 v0\.9\.0 开发向导[\s\S]*在线 `uv`/);
   assert.match(readme, /install-plugin-dev-macos\.sh/);
@@ -208,9 +212,11 @@ test('user docs distinguish the Windows v0.9.2 release from deferred v0.9.3 work
   assert.doesNotMatch(workflow, /Mac 安装 DMG|install the DMG/i);
   assert.match(workflow, /受支持的 ZXP installer/);
   assert.match(workflow, /supported ZXP installer/i);
-  assert.match(release, /six installed-runtime checks/i);
-  assert.match(release, /六项 installed-runtime/);
-  assert.match(release, /product-acceptance[\s\S]{0,300}blocked/i);
+  for (const value of [readme, readmeZh, install, reference, release, workflow]) {
+    for (const asset of PLATFORM_ASSETS) assert.ok(value.includes(asset));
+  }
+  assert.match(install, /manual|手动/i);
+  assert.match(install, /external runtime|外部 runtime/i);
 
   assert.doesNotMatch(reference, /203 passed/);
   assert.doesNotMatch(reference, /24 passed/);
@@ -246,12 +252,16 @@ test('user docs distinguish the Windows v0.9.2 release from deferred v0.9.3 work
   assert.match(reference, /operating-system temporary directory/i);
   assert.match(reference, /操作系统临时目录/);
 
-  for (const value of [readme, readmeZh, workflow]) {
-    assert.match(value, /\/Users\/<USER>\/\.ae-mcp\/bin\/ae-mcp/);
+  for (const value of [readme, readmeZh]) {
+    assert.ok(value.includes('C:\\\\Users\\\\<USER>\\\\.ae-mcp\\\\bin\\\\ae-mcp.exe'));
     assert.match(value, /RuntimeManager/i);
     assert.match(value, /(?:bare PATH|裸 PATH)/i);
     assert.match(value, /(?:absolute|绝对)/i);
   }
+  assert.match(workflow, /\/Users\/<USER>\/\.ae-mcp\/bin\/ae-mcp/);
+  assert.match(workflow, /RuntimeManager/i);
+  assert.match(workflow, /(?:bare PATH|裸 PATH)/i);
+  assert.match(workflow, /(?:absolute|绝对)/i);
   assert.match(install, /\/Users\/<USER>\/\.ae-mcp\/bin\/ae-mcp/);
 });
 
