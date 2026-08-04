@@ -594,8 +594,16 @@ test('policy schema and CI workflows preserve the reviewed SDK gate', async () =
     'gm',
   );
   const ciWorkflow = await fs.promises.readFile('.github/workflows/ci.yml', 'utf8');
-  const rcWorkflow = await fs.promises.readFile('.github/workflows/build-rc.yml', 'utf8');
-  assert.equal([...ciWorkflow.matchAll(activeRun)].length, 2);
+  const foundationWorkflow = await fs.promises.readFile(
+    '.github/workflows/platform-foundation-ci.yml',
+    'utf8',
+  );
+  const rcWorkflow = await fs.promises.readFile(
+    '.github/workflows/build-rc.yml',
+    'utf8',
+  );
+  assert.equal([...ciWorkflow.matchAll(activeRun)].length, 1);
+  assert.equal([...foundationWorkflow.matchAll(activeRun)].length, 1);
   assert.equal([...rcWorkflow.matchAll(activeRun)].length, 1);
 });
 
