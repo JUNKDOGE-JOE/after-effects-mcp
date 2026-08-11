@@ -18,9 +18,12 @@ const LOCK_TEXTS = {
   locked: { zh: '已锁定', en: 'Locked' },
   unlocked: { zh: '锁定', en: 'Lock' },
 };
+// Quote the provider dropdown's REAL first-option label (SettingsScreen
+// t.providerNone) — a paraphrase sends users hunting for an option that
+// doesn't exist (live finding, 2026-08-11).
 const PINNED_HINT = {
-  zh: '已由自定义 provider 钉住：在下方选择「无 provider」后可解锁。',
-  en: 'Pinned by the custom provider: select "No provider" below to unlock.',
+  zh: '已由自定义 provider 钉住：在下方下拉框选「（未选择 provider）」后自动解锁。',
+  en: 'Pinned by the custom provider: pick "(no provider selected)" in the dropdown below to unlock.',
 };
 
 export function lockLabel(channel, lockedChannel, lang = 'zh') {

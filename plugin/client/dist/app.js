@@ -20455,8 +20455,8 @@
     unlocked: { zh: "\u9501\u5B9A", en: "Lock" }
   };
   var PINNED_HINT = {
-    zh: "\u5DF2\u7531\u81EA\u5B9A\u4E49 provider \u9489\u4F4F\uFF1A\u5728\u4E0B\u65B9\u9009\u62E9\u300C\u65E0 provider\u300D\u540E\u53EF\u89E3\u9501\u3002",
-    en: 'Pinned by the custom provider: select "No provider" below to unlock.'
+    zh: "\u5DF2\u7531\u81EA\u5B9A\u4E49 provider \u9489\u4F4F\uFF1A\u5728\u4E0B\u65B9\u4E0B\u62C9\u6846\u9009\u300C\uFF08\u672A\u9009\u62E9 provider\uFF09\u300D\u540E\u81EA\u52A8\u89E3\u9501\u3002",
+    en: 'Pinned by the custom provider: pick "(no provider selected)" in the dropdown below to unlock.'
   };
   function lockButtonState(channel, { lockedChannel = "", pinnedChannel = "" } = {}, lang = "zh") {
     const pinnedGroup = Boolean(pinnedChannel);

@@ -35,7 +35,8 @@ test('lockButtonState disables the whole group and explains the pin (#224)', () 
   const pinned = lockButtonState('custom', { lockedChannel: 'custom', pinnedChannel: 'custom' }, 'zh');
   assert.equal(pinned.label, '已锁定');
   assert.equal(pinned.disabled, true);
-  assert.match(pinned.hint, /无 provider/);
+  // The hint must quote SettingsScreen's t.providerNone label verbatim.
+  assert.match(pinned.hint, /「（未选择 provider）」/);
 
   // Sibling rows in a pinned group also disable: the App lock handler re-pins
   // on any click, so a clickable sibling toggle would silently revert too.
@@ -48,5 +49,5 @@ test('lockButtonState disables the whole group and explains the pin (#224)', () 
   const drifted = lockButtonState('custom', { lockedChannel: '', pinnedChannel: 'custom' }, 'en');
   assert.equal(drifted.label, 'Locked');
   assert.equal(drifted.disabled, true);
-  assert.match(drifted.hint, /No provider/);
+  assert.match(drifted.hint, /"\(no provider selected\)"/);
 });
