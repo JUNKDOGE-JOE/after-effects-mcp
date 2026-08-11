@@ -982,6 +982,23 @@ export function createCodexBackend({
           setProviderSensitiveValues([String(cliConfig.apiKey)]);
         }
       }
+      // #230: the explicit-custom-provider channel runs codex in a private
+      // CODEX_HOME so the user's global ~/.codex config never reaches the
+      // panel session — with the real home every global MCP server's tools
+      // land in the model surface (202 foreign tools measured on 0.144.1,
+      // including arbitrary code execution via node_repl). Config overrides
+      // cannot do this: `-c mcp_servers=...` merges instead of replacing and
+      // per-server `enabled=false` is ignored (verified on 0.144.1/0.147.0);
+      // only a private home empties the surface down to the thread-injected
+      // `ae` server. The CLI-login and cli-config-provider channels keep the
+      // real home: ChatGPT auth.json and config-declared model_providers live
+      // there, and a private auth.json copy risks refresh-token rotation
+      // invalidating the user's own login.
+      if (runtimeConfig) {
+        const codexHome = adapter.paths.join([adapter.paths.configRoot, 'codex-home']);
+        adapter.fs.mkdirSync(codexHome, { recursive: true });
+        spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { CODEX_HOME: codexHome });
+      }
       assertCurrentStart();
       let spawnedProc;
       try {

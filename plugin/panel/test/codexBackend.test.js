@@ -359,11 +359,17 @@ function planElicitation(plan) {
 function makeBackend(options = {}) {
   const events = [];
   const spawned = makeSpawn();
+  const mkdirs = [];
   const platform = options.platform || {
     id: 'windows-x64',
     paths: {
       tempRoot: 'C:\\tmp',
+      configRoot: 'C:\\Users\\test\\.ae-mcp',
+      join: (parts) => (parts || []).map((part) => String(part || '')).filter(Boolean).join('\\'),
       dirname: (value) => String(value).replace(/[\\/][^\\/]+$/, ''),
+    },
+    fs: {
+      mkdirSync: (path, opts) => { mkdirs.push({ path, opts }); },
     },
     completeSpawnEnv: (base = {}, additions = {}) => ({
       ...base,
@@ -401,7 +407,7 @@ function makeBackend(options = {}) {
     createProviderRoute: () => localProviderRoute(),
     ...options,
   });
-  return { backend, events, spawned };
+  return { backend, events, spawned, mkdirs };
 }
 
 async function startTurn(backend, spawned, text = 'hello') {
@@ -526,6 +532,9 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   assert.equal(spawned.calls[0].options.shell, undefined);
   assert.equal(spawned.calls[0].options.stdio, 'pipe');
   assert.equal(spawned.calls[0].options.windowsHide, true);
+  // #230: only the custom-provider channel is isolated — the CLI channel keeps
+  // the real ~/.codex (ChatGPT auth.json lives there).
+  assert.equal(Object.hasOwn(spawned.calls[0].options.env, 'CODEX_HOME'), false);
 
   const proc = spawned.procs[0];
   const init = parseWrites(proc)[0];
@@ -582,7 +591,7 @@ test('native Responses providers also use the local universal route and keep ups
     resolveCalls += 1;
     return resolvedModelProfile();
   };
-  const { backend, spawned } = makeBackend({
+  const { backend, spawned, mkdirs } = makeBackend({
     createProviderRoute: (input) => {
       routeCalls.push(input);
       return localProviderRoute({ close: async () => { closed += 1; } });
@@ -592,6 +601,11 @@ test('native Responses providers also use the local universal route and keep ups
   });
 
   const { pending, proc } = await startTurn(backend, spawned, 'custom provider');
+
+  // #230: the custom-provider chat process runs in a private CODEX_HOME so the
+  // user's global ~/.codex MCP servers never reach the panel tool surface.
+  assert.equal(spawned.calls[0].options.env.CODEX_HOME, 'C:\\Users\\test\\.ae-mcp\\codex-home');
+  assert.deepEqual(mkdirs, [{ path: 'C:\\Users\\test\\.ae-mcp\\codex-home', opts: { recursive: true } }]);
 
   assert.equal(routeCalls.length, 1);
   assert.equal(routeCalls[0].provider, CUSTOM_PROVIDER);

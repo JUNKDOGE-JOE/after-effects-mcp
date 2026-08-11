@@ -41520,6 +41520,11 @@ data: ${JSON.stringify(payload)}
             setProviderSensitiveValues([String(cliConfig.apiKey)]);
           }
         }
+        if (runtimeConfig) {
+          const codexHome = adapter.paths.join([adapter.paths.configRoot, "codex-home"]);
+          adapter.fs.mkdirSync(codexHome, { recursive: true });
+          spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { CODEX_HOME: codexHome });
+        }
         assertCurrentStart();
         let spawnedProc;
         try {
