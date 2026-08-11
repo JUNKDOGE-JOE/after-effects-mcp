@@ -5,7 +5,7 @@
       "id": "composition.resolve",
       "order": 1,
       "mutability": "read",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {},
       "inputSchema": {
         "type": "object",
@@ -179,7 +179,7 @@
       "id": "composition.layers.list",
       "order": 5,
       "mutability": "read",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
       "resultSchema": {
@@ -194,7 +194,7 @@
       "id": "composition.selectedLayers.list",
       "order": 6,
       "mutability": "read",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["offset","limit"],"properties":{"offset":{"$ref":"aegp-rpc.schema.json#/$defs/pageOffset"},"limit":{"type":"integer","minimum":1,"maximum":25}}},
       "resultSchema": {
@@ -209,7 +209,7 @@
       "id": "composition.time.read",
       "order": 7,
       "mutability": "read",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":[],"properties":{}},
       "resultSchema": {
@@ -224,7 +224,7 @@
       "id": "composition.time.set",
       "order": 8,
       "mutability": "write",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["targetTime"],"properties":{"targetTime":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
       "resultSchema": {
@@ -239,7 +239,7 @@
       "id": "composition.settings.read",
       "order": 9,
       "mutability": "read",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":[],"properties":{}},
       "resultSchema": {
@@ -254,7 +254,7 @@
       "id": "composition.duration.set",
       "order": 10,
       "mutability": "write",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["duration"],"properties":{"duration":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":1,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
       "resultSchema": {
@@ -269,7 +269,7 @@
       "id": "composition.frameRate.set",
       "order": 11,
       "mutability": "write",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["frameRate"],"properties":{"frameRate":{"type":"object","additionalProperties":false,"required":["numerator","denominator"],"properties":{"numerator":{"type":"integer","minimum":1,"maximum":2147483647},"denominator":{"type":"integer","minimum":1,"maximum":2147483647}}}}},
       "resultSchema": {
@@ -284,7 +284,7 @@
       "id": "composition.pixelAspectRatio.set",
       "order": 12,
       "mutability": "write",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["pixelAspectRatio"],"properties":{"pixelAspectRatio":{"type":"object","additionalProperties":false,"required":["numerator","denominator"],"properties":{"numerator":{"type":"integer","minimum":1,"maximum":2147483647},"denominator":{"type":"integer","minimum":1,"maximum":2147483647}}}}},
       "resultSchema": {
@@ -299,7 +299,7 @@
       "id": "composition.displayStartTime.set",
       "order": 13,
       "mutability": "write",
-      "requiredSuite": "AEGP_CompSuite12",
+      "requiredSuite": "AEGP_CompSuite11",
       "referenceArguments": {"composition": "CompositionHandle"},
       "inputSchema": {"type":"object","additionalProperties":false,"required":["displayStartTime"],"properties":{"displayStartTime":{"type":"object","additionalProperties":false,"required":["value","scale"],"properties":{"value":{"type":"integer","minimum":-2147483648,"maximum":2147483647},"scale":{"type":"integer","minimum":1,"maximum":4294967295}}}}},
       "resultSchema": {

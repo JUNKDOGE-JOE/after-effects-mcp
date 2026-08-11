@@ -4,7 +4,7 @@
     "runtimeEvidence": false,
     "compatibilityEvidence": false
   },
-  "capabilitiesDigest": "a48f507dab63e2455394f4b305b58ba56521dd0a68a3650acf6a0166d796f98f",
+  "capabilitiesDigest": "f2c60f51f366a9111c818ae6af6ca1c135e1f66ad276fd3c6e9c93961e5ddb9a",
   "items": [
     {
       "cancellation": "before-dispatch",
@@ -32,7 +32,7 @@
       "undo": "ae-undo-group",
       "valueKind": "Json",
       "version": 1,
-      "contractDigest": "8b675cf29eb5c8fffbf2b22427f029b1574a593b296c389f609cd90ad6609efa",
+      "contractDigest": "6f71a946caf0a4692be5165afd2af6d9a82fbf12f6f9b9569f376a16ede0a217",
       "inputSchema": {
         "type": "object",
         "additionalProperties": false,
@@ -2163,9 +2163,9 @@
           "idempotency": "idempotent",
           "mutability": "read-only",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "read",
           "schemaVersion": 1,
           "sideEffectSummary": "Reads After Effects state without changing it.",
@@ -2417,9 +2417,9 @@
           "idempotency": "idempotent",
           "mutability": "read-only",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "read",
           "schemaVersion": 1,
           "sideEffectSummary": "Reads After Effects state without changing it.",
@@ -2464,9 +2464,9 @@
           "idempotency": "idempotent",
           "mutability": "read-only",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "read",
           "schemaVersion": 1,
           "sideEffectSummary": "Reads After Effects state without changing it.",
@@ -2511,9 +2511,9 @@
           "idempotency": "idempotent",
           "mutability": "read-only",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "read",
           "schemaVersion": 1,
           "sideEffectSummary": "Reads After Effects state without changing it.",
@@ -2546,9 +2546,9 @@
           "idempotency": "idempotency-key",
           "mutability": "mutating",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "write",
           "schemaVersion": 1,
           "sideEffectSummary": "Changes After Effects state within one native program Undo group.",
@@ -2604,9 +2604,9 @@
           "idempotency": "idempotent",
           "mutability": "read-only",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "read",
           "schemaVersion": 1,
           "sideEffectSummary": "Reads After Effects state without changing it.",
@@ -2639,9 +2639,9 @@
           "idempotency": "idempotency-key",
           "mutability": "mutating",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "write",
           "schemaVersion": 1,
           "sideEffectSummary": "Changes After Effects state within one native program Undo group.",
@@ -2697,9 +2697,9 @@
           "idempotency": "idempotency-key",
           "mutability": "mutating",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "write",
           "schemaVersion": 1,
           "sideEffectSummary": "Changes After Effects state within one native program Undo group.",
@@ -2755,9 +2755,9 @@
           "idempotency": "idempotency-key",
           "mutability": "mutating",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "write",
           "schemaVersion": 1,
           "sideEffectSummary": "Changes After Effects state within one native program Undo group.",
@@ -2813,9 +2813,9 @@
           "idempotency": "idempotency-key",
           "mutability": "mutating",
           "preconditions": [
-            "AEGP_CompSuite12 must be available."
+            "AEGP_CompSuite11 must be available."
           ],
-          "requiredSuite": "AEGP_CompSuite12",
+          "requiredSuite": "AEGP_CompSuite11",
           "risk": "write",
           "schemaVersion": 1,
           "sideEffectSummary": "Changes After Effects state within one native program Undo group.",

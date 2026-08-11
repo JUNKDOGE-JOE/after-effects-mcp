@@ -105,6 +105,15 @@ using aemcp::native::TimePoint;
 
 constexpr std::string_view kPluginVersion = AE_MCP_PRODUCT_VERSION;
 constexpr std::string_view kSdkVersion = "25.6.61";
+// #215 AE 2023 baseline: built against the 25.6 SDK, but every suite is
+// acquired at the newest version the AE 2023/2024 hosts already serve, so one
+// artifact covers AE 23-26. Concretely that pins AEGP_CompSuite to version 11
+// (12 only adds a horzB parameter to the two text-layer creation calls this
+// plugin never makes; the other 42 entries are byte-identical), and the other
+// ten suites were already at pre-2023 versions. The AEGP_INITFUNC 1.9 entry
+// baseline has been stable since at least the CC2019-era SDKs. Raising any
+// suite version here shrinks the supported host range - check the oldest
+// target SDK first.
 constexpr std::uint64_t kSdkBuild = 61;
 constexpr std::string_view kSourceCommit = AE_MCP_SOURCE_COMMIT;
 constexpr std::int64_t kMaximumProjectItems = 100000;
@@ -1315,8 +1324,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_MemorySuite1> memory_suite(basic_, kAEGPMemorySuite,
                                                kAEGPMemorySuiteVersion1);
     if (project_suite.get() == nullptr || item_suite.get() == nullptr ||
@@ -1543,8 +1552,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_MemorySuite1> memory_suite(basic_, kAEGPMemorySuite,
@@ -1596,8 +1605,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_UtilitySuite6> utility_suite(basic_, kAEGPUtilitySuite,
@@ -1749,8 +1758,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_MemorySuite1> memory_suite(basic_, kAEGPMemorySuite,
@@ -2020,8 +2029,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_CollectionSuite2> collection_suite(
@@ -2528,8 +2537,8 @@ public:
                                                kAEGPMemorySuiteVersion1);
     SuiteLease<AEGP_UtilitySuite6> utility_suite(basic_, kAEGPUtilitySuite,
                                                  kAEGPUtilitySuiteVersion6);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     if (project_suite.get() == nullptr || item_suite.get() == nullptr ||
         memory_suite.get() == nullptr || utility_suite.get() == nullptr) {
       return HostCompositionTimeWriteResult::failure(
@@ -2765,8 +2774,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_MemorySuite1> memory_suite(basic_, kAEGPMemorySuite,
@@ -3213,8 +3222,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_MemorySuite1> memory_suite(basic_, kAEGPMemorySuite,
@@ -3515,8 +3524,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_MemorySuite1> memory_suite(basic_, kAEGPMemorySuite,
@@ -3581,8 +3590,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_MemorySuite1> memory_suite(basic_, kAEGPMemorySuite,
@@ -4020,8 +4029,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_MemorySuite1> memory_suite(basic_, kAEGPMemorySuite,
@@ -4416,8 +4425,8 @@ public:
                                               kAEGPProjSuiteVersion6);
     SuiteLease<AEGP_ItemSuite9> item_suite(basic_, kAEGPItemSuite,
                                            kAEGPItemSuiteVersion9);
-    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
-                                            kAEGPCompSuiteVersion12);
+    SuiteLease<AEGP_CompSuite11> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion11);
     SuiteLease<AEGP_LayerSuite9> layer_suite(basic_, kAEGPLayerSuite,
                                              kAEGPLayerSuiteVersion9);
     SuiteLease<AEGP_MemorySuite1> memory_suite(basic_, kAEGPMemorySuite,
@@ -4573,7 +4582,7 @@ private:
 
   [[nodiscard]] std::optional<ResolvedLayer> resolve_layer(
       const AEGP_ProjSuite6 *project_suite, const AEGP_ItemSuite9 *item_suite,
-      const AEGP_CompSuite12 *comp_suite, const AEGP_LayerSuite9 *layer_suite,
+      const AEGP_CompSuite11 *comp_suite, const AEGP_LayerSuite9 *layer_suite,
       const AEGP_MemorySuite1 *memory_suite, const ObjectLocator &locator,
       std::string_view host, std::string_view session, TimePoint deadline) {
     const auto open =
@@ -4603,7 +4612,7 @@ private:
 
   [[nodiscard]] std::optional<ResolvedProperty> resolve_keyframe_property(
       const AEGP_ProjSuite6 *project_suite, const AEGP_ItemSuite9 *item_suite,
-      const AEGP_CompSuite12 *comp_suite, const AEGP_LayerSuite9 *layer_suite,
+      const AEGP_CompSuite11 *comp_suite, const AEGP_LayerSuite9 *layer_suite,
       const AEGP_MemorySuite1 *memory_suite,
       const AEGP_StreamSuite6 *stream_suite,
       const AEGP_DynamicStreamSuite4 *dynamic_suite,
@@ -4851,7 +4860,7 @@ private:
 
   [[nodiscard]] std::optional<CompositionSettings>
   composition_settings(const AEGP_ItemSuite9 *item_suite,
-                       const AEGP_CompSuite12 *comp_suite,
+                       const AEGP_CompSuite11 *comp_suite,
                        const AEGP_LayerSuite9 *layer_suite,
                        const AEGP_MemorySuite1 *memory_suite, AEGP_ItemH item,
                        AEGP_CompH comp, ObjectLocator locator) const {
