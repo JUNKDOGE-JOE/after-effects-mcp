@@ -13,7 +13,7 @@ The MCP server is the core. Outside the MCP layer, ae-mcp also ships a CEP panel
 The published v0.9.4 assets target this release scope:
 
 - Windows 11 24H2 (11.0.26100) or newer on x64. Windows on ARM is not supported.
-- After Effects 2025 is the packaged acceptance host. The CEP manifest remains `[25.0,26.9]`; this release contains no macOS asset.
+- After Effects 2025 is the packaged acceptance host. The CEP manifest now spans `[23.0,26.9]` behind AE 2023 baseline gates while the AE 2023/2024 real-host matrix is validated (#215); this release contains no macOS asset.
 
 ## Architecture
 

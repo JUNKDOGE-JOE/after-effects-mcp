@@ -77,6 +77,13 @@ for relative in "${required_files[@]}"; do
     || fail "required plugin source file is missing or symbolic: ${relative}"
 done
 
+# Bundle freshness gate (#223): dev installs deploy the committed dist tree
+# verbatim, so a bundle that no longer matches the panel sources must never
+# reach a real After Effects.
+require_tool node
+node "${repo_root}/plugin/panel/verify-bundle.mjs" \
+  || fail 'plugin/client/dist does not match the panel sources: run "npm run build" in plugin/panel, then retry'
+
 mkdir -p "$cep_parent"
 [[ -d "$cep_parent" && ! -L "$cep_parent" ]] \
   || fail "CEP extension parent is not a regular directory: ${cep_parent}"

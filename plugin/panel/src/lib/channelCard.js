@@ -14,12 +14,16 @@ export function channelTexts(probe, lang = 'zh') {
   };
 }
 
-const LOCK_TEXTS = {
-  locked: { zh: '已锁定', en: 'Locked' },
-  unlocked: { zh: '锁定', en: 'Lock' },
+const CHOICE_TEXTS = {
+  active: { zh: '使用中', en: 'In use' },
+  choose: { zh: '使用此通道', en: 'Use this channel' },
 };
 
-export function lockLabel(channel, lockedChannel, lang = 'zh') {
-  const texts = channel === lockedChannel ? LOCK_TEXTS.locked : LOCK_TEXTS.unlocked;
-  return texts[lang] || texts.zh;
+// #229: channels are explicitly enabled by the user — one active row per
+// backend group, no auto-pick and no lock. The active row's control is a
+// state marker; every other row offers to switch.
+export function channelChoiceState(channel, selectedChannel, lang = 'zh') {
+  const active = channel === selectedChannel;
+  const texts = active ? CHOICE_TEXTS.active : CHOICE_TEXTS.choose;
+  return { label: texts[lang] || texts.zh, active };
 }

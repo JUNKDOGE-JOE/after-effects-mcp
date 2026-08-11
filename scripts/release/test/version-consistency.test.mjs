@@ -103,7 +103,7 @@ test('Panel source, generated bundle, and CEP manifest use the release version',
   const manifest = await text('plugin/CSXS/manifest.xml');
   assert.equal(manifest.match(/ExtensionBundleVersion="([^"]+)"/)?.[1], VERSION);
   assert.equal(manifest.match(/<Extension Id="com\.aemcp\.panel" Version="([^"]+)"/)?.[1], VERSION);
-  assert.equal(manifest.match(/<Host Name="AEFT" Version="([^"]+)"/)?.[1], '[25.0,26.9]');
+  assert.equal(manifest.match(/<Host Name="AEFT" Version="([^"]+)"/)?.[1], '[23.0,26.9]');
 });
 
 test('Windows native client and Platform Helper use the release version', async () => {

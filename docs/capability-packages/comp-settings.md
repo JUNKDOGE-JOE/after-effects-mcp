@@ -152,6 +152,12 @@ final preview has no later locator consumer, for 17 calls total.
 A model can change the six ordinary composition settings that already have a
 hardware-proven `AEGP_CompSuite12` setter path:
 
+> Note (#215): since the AE 2023 baseline work the plugin acquires
+> `AEGP_CompSuite11` instead. Every member this package uses is byte-identical
+> across v11/v12 (v12 only added a `horzB` parameter to the two text-layer
+> creation calls, which this package never touches), so the CompSuite12
+> hardware evidence below remains valid for the v11 acquisition.
+
 1. dimensions;
 2. duration;
 3. frame rate;

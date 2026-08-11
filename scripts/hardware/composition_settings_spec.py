@@ -34,7 +34,7 @@ PREVIEW_HANDLER_SOURCE = (
 T6_POLICY_SOURCE = "docs/CAPABILITY_PACKAGE_WORKFLOW.md:151-179"
 T4_REQUIRED = False
 NO_T4_REASON = (
-    "All six writes use already-proven AEGP_CompSuite12 settings machinery and "
+    "All six writes use already-proven AEGP_CompSuite settings machinery and "
     "previewFrame changes only Core MCP content packaging; no new native "
     "primitive, lifecycle rule, suite, or main-thread mechanism is introduced."
 )
@@ -469,19 +469,19 @@ T6_SKIPS = {
     "ae_setCompositionFrameRate": {
         "replayedBy": "ae_setCompositionDimensions",
         "grounds": _SKIP_GROUNDS,
-        "detail": "thin CompSuite12 setting adapter already proven at T5",
+        "detail": "thin CompSuite setting adapter already proven at T5",
         "sources": (T6_POLICY_SOURCE, NATIVE_HANDLER_SOURCE, NATIVE_CONTRACT_SOURCE),
     },
     "ae_setCompositionDuration": {
         "replayedBy": "ae_setCompositionDimensions",
         "grounds": _SKIP_GROUNDS,
-        "detail": "thin CompSuite12 setting adapter already proven at T5",
+        "detail": "thin CompSuite setting adapter already proven at T5",
         "sources": (T6_POLICY_SOURCE, NATIVE_HANDLER_SOURCE, NATIVE_CONTRACT_SOURCE),
     },
     "ae_setCompositionPixelAspectRatio": {
         "replayedBy": "ae_setCompositionDimensions",
         "grounds": _SKIP_GROUNDS,
-        "detail": "thin CompSuite12 setting adapter already proven at T5",
+        "detail": "thin CompSuite setting adapter already proven at T5",
         "sources": (T6_POLICY_SOURCE, NATIVE_HANDLER_SOURCE, NATIVE_CONTRACT_SOURCE),
     },
 }

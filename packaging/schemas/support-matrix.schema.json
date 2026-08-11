@@ -39,8 +39,8 @@
       "additionalProperties": false,
       "required": ["majors", "manifestRange"],
       "properties": {
-        "majors": { "const": [25, 26] },
-        "manifestRange": { "const": "[25.0,26.9]" }
+        "majors": { "const": [23, 24, 25, 26] },
+        "manifestRange": { "const": "[23.0,26.9]" }
       }
     }
   }

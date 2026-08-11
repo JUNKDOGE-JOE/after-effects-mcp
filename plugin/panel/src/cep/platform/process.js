@@ -458,7 +458,10 @@ export function createProcessBoundary({ deps, paths, platform }) {
   }
 
   async function probe(candidate, id, options, attempts) {
-    const executable = { ok: true, id, path: candidate.path, argsPrefix: candidate.argsPrefix, source: candidate.source, version: null, arch: null };
+    // displayPath survives script materialization (#225): after a cmd-shim is
+    // rewritten to node.exe + entry, diagnostics still name the original tool
+    // path while `path`/`argsPrefix` stay the spawn truth.
+    const executable = { ok: true, id, path: candidate.path, displayPath: candidate.displayPath, argsPrefix: candidate.argsPrefix, source: candidate.source, version: null, arch: null };
     let verifiedArch = candidate.forcedArch || null;
     if (options.requiredArch && candidate.nativeArchitectures?.length) {
       if (!candidate.nativeArchitectures.includes(options.requiredArch)) {

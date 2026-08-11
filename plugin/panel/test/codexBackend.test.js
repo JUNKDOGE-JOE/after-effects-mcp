@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCodexBackend } from '../src/cep/codexBackend.js';
+import { createCodexBackend, resolveCodexCli } from '../src/cep/codexBackend.js';
 import { PANEL_VERSION } from '../src/cep/mcpClient.js';
 
 function makeProc() {
@@ -307,6 +307,8 @@ function expectedLocalProviderArgs({ chatCompatibility = false } = {}) {
       '-c', 'features.remote_plugin=false',
     );
   }
+  // #228: the chat process (not the probe) enables the user-input feature last.
+  args.push('-c', 'features.default_mode_request_user_input=true');
   return args;
 }
 
@@ -357,11 +359,17 @@ function planElicitation(plan) {
 function makeBackend(options = {}) {
   const events = [];
   const spawned = makeSpawn();
+  const mkdirs = [];
   const platform = options.platform || {
     id: 'windows-x64',
     paths: {
       tempRoot: 'C:\\tmp',
+      configRoot: 'C:\\Users\\test\\.ae-mcp',
+      join: (parts) => (parts || []).map((part) => String(part || '')).filter(Boolean).join('\\'),
       dirname: (value) => String(value).replace(/[\\/][^\\/]+$/, ''),
+    },
+    fs: {
+      mkdirSync: (path, opts) => { mkdirs.push({ path, opts }); },
     },
     completeSpawnEnv: (base = {}, additions = {}) => ({
       ...base,
@@ -399,7 +407,7 @@ function makeBackend(options = {}) {
     createProviderRoute: () => localProviderRoute(),
     ...options,
   });
-  return { backend, events, spawned };
+  return { backend, events, spawned, mkdirs };
 }
 
 async function startTurn(backend, spawned, text = 'hello') {
@@ -444,6 +452,75 @@ function pushElicitation(proc, id, params) {
   });
 }
 
+function pushUserInput(proc, id, params) {
+  proc.pushStdout({
+    jsonrpc: '2.0',
+    id,
+    method: 'item/tool/requestUserInput',
+    params,
+  });
+}
+
+test('codex enables the request_user_input feature on the chat process only (#228)', async () => {
+  const { backend, spawned } = makeBackend();
+  await startTurn(backend, spawned, 'hello');
+  const args = spawned.calls[0].args;
+  assert.equal(args[0], 'app-server');
+  assert.ok(args.includes('features.default_mode_request_user_input=true'),
+    'chat app-server must enable the user-input feature');
+});
+
+test('codex item/tool/requestUserInput becomes a question form and answers reply by id (#228)', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'ask me');
+
+  pushUserInput(proc, 'ui_1', {
+    threadId: 'thread_1', turnId: 'turn_1', itemId: 'call_x',
+    questions: [
+      {
+        id: 'color_choice', header: '颜色', question: '你喜欢哪种颜色？', isOther: true, isSecret: false,
+        options: [{ label: '红色', description: '暖' }, { label: '蓝色', description: '冷' }],
+      },
+    ],
+  });
+  await flush();
+
+  const ask = events.find((e) => e.type === 'question-required');
+  assert.ok(ask, 'a question-required event is emitted');
+  assert.equal(ask.source, 'codex-user-input');
+  assert.equal(ask.toolUseId, 'ask_ui_1');
+  assert.equal(ask.questions[0].key, 'color_choice');
+
+  backend.answerQuestion(ask.toolUseId, { action: 'submit', values: { q0: '蓝色' } });
+  await flush();
+
+  const reply = parseWrites(proc).find((w) => w.id === 'ui_1' && w.result);
+  assert.ok(reply, 'the RPC id is answered');
+  assert.deepEqual(reply.result, { answers: { color_choice: { answers: ['蓝色'] } } });
+  const resolved = events.find((e) => e.type === 'question-resolved' && e.outcome === 'answered');
+  assert.ok(resolved);
+  // The chat event carries display strings, not the codex wire objects — the
+  // card renders Object.values(answers), which must never be "[object Object]".
+  assert.deepEqual(resolved.answers, { color_choice: '蓝色' });
+});
+
+test('codex user-input question is settled as cancelled on reset (#228/#220)', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'ask me');
+  pushUserInput(proc, 'ui_2', {
+    questions: [{ id: 'q', question: 'pick', options: [{ label: 'A' }] }],
+  });
+  await flush();
+  assert.ok(events.some((e) => e.type === 'question-required'));
+
+  backend.reset();
+  await flush();
+  assert.ok(
+    events.some((e) => e.type === 'question-resolved' && e.outcome === 'cancelled'),
+    'reset settles the pending question as cancelled',
+  );
+});
+
 test('createCodexBackend starts codex app-server and sends thread/start with AE MCP config', async () => {
   const { backend, spawned } = makeBackend();
   const pending = backend.sendUser('hello');
@@ -451,10 +528,13 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
 
   assert.equal(spawned.calls.length, 1);
   assert.equal(spawned.calls[0].command, 'C:\\Tools\\codex.exe');
-  assert.deepEqual(spawned.calls[0].args, ['app-server']);
+  assert.deepEqual(spawned.calls[0].args, ['app-server', '-c', 'features.default_mode_request_user_input=true']);
   assert.equal(spawned.calls[0].options.shell, undefined);
   assert.equal(spawned.calls[0].options.stdio, 'pipe');
   assert.equal(spawned.calls[0].options.windowsHide, true);
+  // #230: only the custom-provider channel is isolated — the CLI channel keeps
+  // the real ~/.codex (ChatGPT auth.json lives there).
+  assert.equal(Object.hasOwn(spawned.calls[0].options.env, 'CODEX_HOME'), false);
 
   const proc = spawned.procs[0];
   const init = parseWrites(proc)[0];
@@ -511,7 +591,7 @@ test('native Responses providers also use the local universal route and keep ups
     resolveCalls += 1;
     return resolvedModelProfile();
   };
-  const { backend, spawned } = makeBackend({
+  const { backend, spawned, mkdirs } = makeBackend({
     createProviderRoute: (input) => {
       routeCalls.push(input);
       return localProviderRoute({ close: async () => { closed += 1; } });
@@ -521,6 +601,11 @@ test('native Responses providers also use the local universal route and keep ups
   });
 
   const { pending, proc } = await startTurn(backend, spawned, 'custom provider');
+
+  // #230: the custom-provider chat process runs in a private CODEX_HOME so the
+  // user's global ~/.codex MCP servers never reach the panel tool surface.
+  assert.equal(spawned.calls[0].options.env.CODEX_HOME, 'C:\\Users\\test\\.ae-mcp\\codex-home');
+  assert.deepEqual(mkdirs, [{ path: 'C:\\Users\\test\\.ae-mcp\\codex-home', opts: { recursive: true } }]);
 
   assert.equal(routeCalls.length, 1);
   assert.equal(routeCalls[0].provider, CUSTOM_PROVIDER);
@@ -818,8 +903,9 @@ test('createCodexBackend injects cli-config provider env var when no custom prov
   const { pending, proc } = await startTurn(backend, spawned, 'cli-config env');
 
   assert.equal(spawned.calls[0].command, 'C:\\Tools\\codex.exe');
-  // config.toml already declares model_provider; no -c override args.
-  assert.deepEqual(spawned.calls[0].args, ['app-server']);
+  // config.toml already declares model_provider; no provider -c override args,
+  // but the chat process still enables the user-input feature (#228).
+  assert.deepEqual(spawned.calls[0].args, ['app-server', '-c', 'features.default_mode_request_user_input=true']);
   assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'stored-codex-key');
   assert.equal(Object.hasOwn(spawned.calls[0].sourceOptions.env, 'MEDIASTORM_GLM_API_KEY'), false);
 
@@ -1907,4 +1993,126 @@ test('probeAccount resolves within bounds and kills the process when initialize 
   assert.equal(result.runtimeOk, false);
   assert.match(result.detail, /timeout/i);
   assert.equal(proc.killed, true);
+});
+
+test('probeAccount probes a bare app-server even when the selected custom provider route is stale (#226)', async () => {
+  let routeCreated = 0;
+  // Capabilities recorded at requestProfileRevision 1 while the provider is at
+  // 7: route selection is needs-probe, which used to throw inside the shared
+  // startProcess() before account/read ever ran.
+  const staleProvider = { ...providerFixtureV3(), requestProfileRevision: 7 };
+  const { backend, spawned } = makeBackend({
+    getProviderProfile: () => selectedProvider(staleProvider),
+    getProviderCandidate: () => selectedProvider(staleProvider),
+    resolveRequestProfile: async () => ({ auth: { kind: 'header', name: 'Authorization', value: 'opaque-key' } }),
+    createProviderRoute: () => { routeCreated += 1; return localProviderRoute(); },
+    createResponsesRoute: () => { routeCreated += 1; return localProviderRoute(); },
+  });
+  const probe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  assert.deepEqual(spawned.calls[0].args, ['app-server'], 'probe must not carry model_provider overrides');
+  assert.equal(
+    Object.keys(spawned.calls[0].options.env).some((key) => /^AE_MCP_PROVIDER_HEADER_/.test(key)),
+    false,
+    'probe env must not carry provider route headers',
+  );
+  respond(proc, parseWrites(proc)[0], {});
+  await flush();
+  assert.equal(parseWrites(proc)[1].method, 'account/read');
+  respond(proc, parseWrites(proc)[1], { account: { type: 'chatgpt', email: 'a@example.com', planType: 'pro' } });
+  await flush();
+  assert.equal(parseWrites(proc)[2].method, 'model/list');
+  respond(proc, parseWrites(proc)[2], { models: [{ id: 'gpt-5.5' }] });
+
+  const result = await probe;
+  assert.equal(result.loggedIn, true);
+  assert.equal(result.runtimeOk, true);
+  assert.equal(result.email, 'a@example.com');
+  assert.equal(routeCreated, 0, 'probe must not start the provider local route');
+  assert.equal(proc.killed, true, 'the probe process is single-use');
+});
+
+test('resolveCodexCli reports the shim displayPath for diagnostics and keeps the spawn truth (#225)', async () => {
+  const cli = await resolveCodexCli({
+    env: {},
+    platform: {
+      id: 'windows-x64',
+      resolveExecutable: async () => ({
+        ok: true,
+        id: 'codex',
+        path: 'C:\\Program Files\\nodejs\\node.exe',
+        displayPath: 'C:\\Users\\t\\AppData\\Roaming\\npm\\codex.cmd',
+        argsPrefix: ['C:\\Users\\t\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js'],
+        source: 'path',
+        version: '0.144.1',
+        arch: 'x64',
+      }),
+    },
+  });
+  assert.equal(cli.ok, true);
+  assert.equal(cli.cliPath, 'C:\\Users\\t\\AppData\\Roaming\\npm\\codex.cmd');
+  assert.equal(cli.executable.path, 'C:\\Program Files\\nodejs\\node.exe');
+});
+
+// --- #220: abnormal backend lifecycle must settle pending approvals ---
+
+test('process exit settles a pending approval exactly once and frees the next turn', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'exec');
+  proc.pushStdout({ method: 'turn/started', params: { threadId: 'thread_1', turn: { id: 'turn_1' } } });
+  pushElicitation(proc, 'ask_crash', realElicitation('ae_exec', { code: 'app.project' }));
+  assert.ok(events.some((e) => e.type === 'approval-required' && e.toolUseId === 'ask_crash'));
+
+  proc.exit(1);
+  await pending;
+  await flush();
+
+  const denied = events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'ask_crash');
+  assert.equal(denied.length, 1, 'pending approval settles exactly once on process exit');
+  assert.ok(events.some((e) => e.type === 'error'), 'turn reaches a typed error terminal state');
+
+  // Duplicate lifecycle signals must not settle the interaction twice.
+  proc.exit(1);
+  proc.error(new Error('late error'));
+  await flush();
+  assert.equal(events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'ask_crash').length, 1);
+
+  // The stale card cannot reach a dead peer, and a new turn can start cleanly.
+  backend.approve('ask_crash', 'allow');
+  assert.equal(events.some((e) => e.type === 'tool-allowed' && e.toolUseId === 'ask_crash'), false);
+  const second = await startTurnRequest(backend, spawned, 'next turn', 1, 'thread_2');
+  assert.ok(second.proc, 'a fresh process starts after cleanup');
+  respond(second.proc, second.turnStart, {});
+  await flush();
+  second.proc.pushStdout({ method: 'turn/completed', params: {} });
+  await second.pending;
+});
+
+test('process error settles a pending approval', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'exec');
+  pushElicitation(proc, 'ask_err', realElicitation('ae_exec', {}));
+
+  proc.error(new Error('spawn failed mid-flight'));
+  await pending;
+  await flush();
+
+  assert.equal(events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'ask_err').length, 1);
+});
+
+test('turn failure declines a pending approval on the still-live peer', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'exec');
+  proc.pushStdout({ method: 'turn/started', params: { threadId: 'thread_1', turn: { id: 'turn_1' } } });
+  pushElicitation(proc, 'ask_fail', realElicitation('ae_exec', {}));
+
+  proc.pushStdout({ method: 'error', params: { error: { message: 'model exploded' } } });
+  await pending;
+  await flush();
+
+  // The peer is alive, so the drain sends a protocol-correct decline.
+  const declineReply = parseWrites(proc).find((w) => w.id === 'ask_fail');
+  assert.deepEqual(declineReply.result, { action: 'decline', content: {} });
+  assert.equal(events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'ask_fail').length, 1);
 });

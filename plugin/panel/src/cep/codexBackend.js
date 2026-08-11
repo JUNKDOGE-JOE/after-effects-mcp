@@ -27,6 +27,11 @@ import {
   normalizeTurnInput,
   withAttachmentManifest,
 } from '../../../shared/chat-attachments.mjs';
+import {
+  answersForCodexUserInput,
+  displayAnswers,
+  questionsFromCodexUserInput,
+} from '../lib/questionForm.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -248,7 +253,9 @@ export async function resolveCodexCli({ env, platform } = {}) {
   if (!resolved.ok) {
     return { ok: false, cliPath: '', version: '', detail: 'codex CLI resolution failed: ' + resolved.code, resolution: resolved };
   }
-  return { ok: true, cliPath: resolved.path, version: resolved.version || '', executable: resolved };
+  // cliPath is diagnostics-only (#225): show the tool the user installed, not
+  // the node.exe a materialized cmd-shim spawns through.
+  return { ok: true, cliPath: resolved.displayPath || resolved.path, version: resolved.version || '', executable: resolved };
 }
 
 export function createCodexBackend({
@@ -322,6 +329,7 @@ export function createCodexBackend({
   let activeUserText = '';
   let activeUserRecorded = false;
   const pendingApprovals = new Map();
+  const pendingUserInputs = new Map();
   const sessionAllowedTools = new Set();
   const sessionAllowedPlans = new Set();
 
@@ -442,6 +450,40 @@ export function createCodexBackend({
       pendingApprovals.delete(toolUseId);
       emit({ type: 'tool-denied', toolUseId });
     }
+    // #228/#220: settle any pending agent-to-user question as cancelled so the
+    // card stops being actionable and the question never outlives the backend.
+    for (const [toolUseId, pending] of Array.from(pendingUserInputs.entries())) {
+      pendingUserInputs.delete(toolUseId);
+      if (rpc) rpc.respond(pending.rpcId, { answers: {} });
+      emit({ type: 'question-resolved', toolUseId, outcome: 'cancelled' });
+    }
+  }
+
+  // #228: settle a pending codex question. result:
+  //   { action:'submit', values: { [question.id]: string|string[] } }
+  //   | { action:'cancel' }
+  function answerQuestion(toolUseId, result) {
+    const id = String(toolUseId);
+    const pending = pendingUserInputs.get(id);
+    if (!pending) return false;
+    pendingUserInputs.delete(id);
+    if (!result || result.action !== 'submit') {
+      if (rpc) rpc.respond(pending.rpcId, { answers: {} });
+      emit({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
+      return true;
+    }
+    const answers = answersForCodexUserInput(pending.questions, result.values);
+    if (rpc) rpc.respond(pending.rpcId, { answers });
+    // The event carries the display shape (plain strings), not the wire shape —
+    // QuestionCard joins the values, and `{answers:[...]}` objects would render
+    // as "[object Object]".
+    emit({
+      type: 'question-resolved',
+      toolUseId: id,
+      outcome: 'answered',
+      answers: displayAnswers(pending.questions, result.values),
+    });
+    return true;
   }
 
   function detachRuntimeForProviderRecovery() {
@@ -557,7 +599,36 @@ export function createCodexBackend({
     emit({ type: 'tool-denied', toolUseId });
   }
 
+  // #228: surface an agent-to-user question through the #219 form. The answer
+  // returns via answerQuestion(); teardown settles it as cancelled so a
+  // question never outlives its backend (mirrors zcode / #220).
+  function handleUserInput(message) {
+    const params = message.params || {};
+    const questions = questionsFromCodexUserInput(params);
+    if (!questions.length) {
+      if (rpc) rpc.respond(message.id, { answers: {} });
+      return;
+    }
+    const toolUseId = 'ask_' + String(message.id);
+    pendingUserInputs.set(toolUseId, { rpcId: message.id, questions });
+    emit({
+      type: 'question-required',
+      toolUseId,
+      source: 'codex-user-input',
+      title: '',
+      questions,
+    });
+  }
+
   function handleRequest(message) {
+    // #228: codex asks the user directly via the experimental
+    // item/tool/requestUserInput server request (enabled with
+    // features.default_mode_request_user_input). Bridge it to the #219
+    // question form instead of the old -32601 Method-not-found reply.
+    if (message.method === 'item/tool/requestUserInput') {
+      handleUserInput(message);
+      return;
+    }
     if (message.method !== 'mcpServer/elicitation/request') {
       if (rpc) rpc.respondError(message.id, -32601, 'Method not found');
       return;
@@ -653,6 +724,10 @@ export function createCodexBackend({
     threadId = null;
     preambleSent = false;
     closeProviderRoute();
+    // Settle pending approvals now that the RPC peer is gone: without this the
+    // awaiting-approval card stays actionable forever (#220). rpc is already
+    // null, so drain releases local state without writing to a dead pipe.
+    drainApprovals();
     if (wasStopping) {
       clearProviderSensitiveValues();
       clearProcessStderrAttachmentPaths();
@@ -682,6 +757,7 @@ export function createCodexBackend({
     threadId = null;
     preambleSent = false;
     closeProviderRoute();
+    drainApprovals();
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message, ...activeTurnFailureFields() });
       finishActive();
@@ -906,10 +982,35 @@ export function createCodexBackend({
           setProviderSensitiveValues([String(cliConfig.apiKey)]);
         }
       }
+      // #230: the explicit-custom-provider channel runs codex in a private
+      // CODEX_HOME so the user's global ~/.codex config never reaches the
+      // panel session — with the real home every global MCP server's tools
+      // land in the model surface (202 foreign tools measured on 0.144.1,
+      // including arbitrary code execution via node_repl). Config overrides
+      // cannot do this: `-c mcp_servers=...` merges instead of replacing and
+      // per-server `enabled=false` is ignored (verified on 0.144.1/0.147.0);
+      // only a private home empties the surface down to the thread-injected
+      // `ae` server. The CLI-login and cli-config-provider channels keep the
+      // real home: ChatGPT auth.json and config-declared model_providers live
+      // there, and a private auth.json copy risks refresh-token rotation
+      // invalidating the user's own login.
+      if (runtimeConfig) {
+        const codexHome = adapter.paths.join([adapter.paths.configRoot, 'codex-home']);
+        adapter.fs.mkdirSync(codexHome, { recursive: true });
+        spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { CODEX_HOME: codexHome });
+      }
       assertCurrentStart();
       let spawnedProc;
       try {
-        spawnedProc = adapter.spawn(executable, codexAppServerArgs(runtimeConfig), {
+        // #228: enable the experimental request_user_input tool for the chat
+        // process only. The probe deliberately stays bare (see probeAccount /
+        // #226), so this flag is appended here rather than in the shared
+        // codexAppServerArgs builder.
+        const appServerArgs = [
+          ...codexAppServerArgs(runtimeConfig),
+          '-c', 'features.default_mode_request_user_input=true',
+        ];
+        spawnedProc = adapter.spawn(executable, appServerArgs, {
           stdio: 'pipe',
           windowsHide: true,
           env: spawnEnvWithCreds,
@@ -945,6 +1046,7 @@ export function createCodexBackend({
       if (startGeneration === runtimeGeneration) {
         closeProviderRoute();
         clearProviderSensitiveValues();
+        drainApprovals();
       }
       throw error;
     });
@@ -1140,6 +1242,10 @@ export function createCodexBackend({
         };
       }
       providerDeltaRedactor.discard();
+      // The turn is reaching its error terminal state; settle any approval that
+      // is still awaiting the user so the card cannot outlive its turn (#220).
+      // The peer may still be alive here, so drain delivers real declines.
+      drainApprovals();
       const message = failure?.message || 'Failed to start Codex turn.';
       const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
       emit({
@@ -1254,6 +1360,7 @@ export function createCodexBackend({
     currentTurnId = null;
     transcript = [];
     pendingApprovals.clear();
+    pendingUserInputs.clear();
     sessionAllowedTools.clear();
     sessionAllowedPlans.clear();
     toolMeta = { allowedTools: [], annotations: {} };
@@ -1274,9 +1381,9 @@ export function createCodexBackend({
   const PROBE_ACCOUNT_READ_TIMEOUT_MS = 10000;
   const PROBE_MODEL_LIST_TIMEOUT_MS = 4000;
 
-  async function boundedProbeRequest(method, params, ms, label) {
+  async function boundedProbeRequest(probeRpc, method, params, ms, label) {
     try {
-      return await rpc.request(method, params, ms);
+      return await probeRpc.request(method, params, ms);
     } catch (error) {
       if (error && /timed out/i.test(String(error.message || ''))) error.probeTimeout = label;
       throw error;
@@ -1291,19 +1398,51 @@ export function createCodexBackend({
       lastCliInfo = cliInfo;
     } catch (e) { /* diagnostics only, never blocks the probe */ }
     const diag = { cliPath: cliInfo.cliPath || '', cliVersion: cliInfo.version || '' };
-    let probedProc = null;
+    const probeSecrets = () => {
+      let secrets = [...providerSensitiveValues];
+      try { secrets = [...secrets, ...providerRedactionValues()]; } catch (e) { /* redaction stays best-effort */ }
+      return secrets;
+    };
+    const failure = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
+    if (!cliInfo.ok) {
+      return failure(redactText(cliInfo.detail || 'codex CLI is unavailable', probeSecrets()));
+    }
+
+    // #226: the probe answers "is the codex CLI itself logged in / runtime
+    // ok", so it runs a dedicated bare app-server. Routing it through the chat
+    // process would inherit the custom-provider config — a stale provider
+    // route then throws before account/read and reports a healthy login as
+    // runtimeOk:false — and would interleave probe RPC with an active turn.
+    const executable = cliInfo.executable || {
+      ok: true, id: 'codex', path: cliInfo.cliPath, argsPrefix: [], source: 'path', version: cliInfo.version || null, arch: null,
+    };
+    let probeProc;
     try {
-      try {
-        await initialize(PROBE_INITIALIZE_TIMEOUT_MS);
-      } catch (error) {
-        if (error && /timed out/i.test(String(error.message || ''))) error.probeTimeout = 'initialize';
-        throw error;
-      }
-      probedProc = proc;
-      const accountResult = await boundedProbeRequest('account/read', {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
+      probeProc = adapter.spawn(executable, codexAppServerArgs(null), {
+        stdio: 'pipe',
+        windowsHide: true,
+        env: codexSpawnEnv(null, spawnEnv),
+      });
+    } catch (error) {
+      return failure(redactText(error && error.message ? error.message : String(error), probeSecrets()));
+    }
+    const probeRpc = createRpc({ writeLine: (line) => probeProc.stdin.write(line) });
+    const reader = createNdjsonReader((message) => probeRpc.handleMessage(message));
+    if (probeProc.stdout && probeProc.stdout.on) probeProc.stdout.on('data', reader);
+    if (probeProc.stderr && probeProc.stderr.on) probeProc.stderr.on('data', () => {});
+    if (probeProc.on) {
+      probeProc.on('exit', () => probeRpc.close(new Error('codex app-server exited before the probe completed')));
+      probeProc.on('error', (error) => probeRpc.close(error instanceof Error ? error : new Error('codex app-server failed')));
+    }
+    try {
+      await boundedProbeRequest(probeRpc, 'initialize', {
+        clientInfo: { name: 'ae-mcp-panel', version: PANEL_VERSION },
+        capabilities: { experimentalApi: true },
+      }, PROBE_INITIALIZE_TIMEOUT_MS, 'initialize');
+      const accountResult = await boundedProbeRequest(probeRpc, 'account/read', {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
       let models = null;
       try {
-        const listed = await boundedProbeRequest('model/list', {}, PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
+        const listed = await boundedProbeRequest(probeRpc, 'model/list', {}, PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
         models = Array.isArray(listed) ? listed : listed && listed.models;
       } catch (e) {
         // Non-fatal: a stuck/slow model/list (e.g. a relay whose upstream
@@ -1325,38 +1464,28 @@ export function createCodexBackend({
         models,
         ...diag,
       };
-      const secrets = [...providerSensitiveValues, ...providerRedactionValues()];
-      if (containsExactSecret(result, secrets)) {
-        return { loggedIn: false, runtimeOk: false, detail: 'Provider probe metadata was rejected', ...diag };
+      if (containsExactSecret(result, probeSecrets())) {
+        return failure('Provider probe metadata was rejected');
       }
       return result;
     } catch (e) {
-      let secrets = [...providerSensitiveValues];
-      try { secrets = [...secrets, ...providerRedactionValues()]; } catch {}
-      const detail = redactText(
-        [e && e.message ? e.message : String(e), cliInfo.ok ? '' : cliInfo.detail]
-          .filter(Boolean)
-          .join(' | '),
-        secrets,
-      );
+      const detail = redactText(e && e.message ? e.message : String(e), probeSecrets());
       if (e && e.probeTimeout) {
-        // The app-server process behind this probe is stuck (e.g. hung
-        // upstream RPC). Kill this specific spawned process so it doesn't
-        // leak as a zombie; a fresh probe/turn will spawn a new one via
-        // startProcess()/initialize().
-        if (probedProc) {
-          try { probedProc.kill(); } catch (killErr) { /* best effort */ }
-        }
-        reset();
-        return { loggedIn: false, runtimeOk: false, detail: 'probe timeout: ' + e.probeTimeout + (detail ? ' | ' + detail : ''), ...diag };
+        return failure('probe timeout: ' + e.probeTimeout + (detail ? ' | ' + detail : ''));
       }
-      return { loggedIn: false, runtimeOk: false, detail, ...diag };
+      return failure(detail);
+    } finally {
+      // The probe process is single-use: kill it even on success so a hung
+      // app-server can never leak past its probe.
+      try { probeProc.kill(); } catch (killErr) { /* best effort */ }
+      probeRpc.close(new Error('codex login probe finished'));
     }
   }
 
   return {
     sendUser,
     approve,
+    answerQuestion,
     stop,
     reset,
     getMessages: () => clone(transcript),

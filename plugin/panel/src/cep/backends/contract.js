@@ -5,6 +5,7 @@
 // Factory(deps) -> {
 //   sendUser(text): Promise        // resolves when the turn settles
 //   approve(toolUseId, decision)   // 'allow' | 'allow-session' | 'deny'
+//   answerQuestion?(toolUseId, result) // {action:'submit', values} | {action:'cancel'}
 //   stop()                         // interrupt; MUST drain pending approvals
 //   reset()                        // kill process/session, clear conversation
 //   getMessages(): {role,text}[]
@@ -21,6 +22,13 @@
 //   | approval-required{toolUseId,name,input,risk}
 //       -> approve -> tool-allowed{toolUseId}
 //       -> deny    -> tool-denied{toolUseId}
+//   | question-required{toolUseId,source,title,questions}
+//       -> answerQuestion submit -> question-resolved{toolUseId,outcome:'answered',answers}
+//       -> answerQuestion cancel -> question-resolved{toolUseId,outcome:'cancelled'}
+//       (backend teardown settles it as cancelled — a question never outlives
+//        its backend; see #219/#220. source is the protocol origin:
+//        zcode-user-input / zcode-elicitation / codex-user-input (#228) /
+//        claude-ask-user-question (#228))
 //   | thinking{active} )*
 //   turn-end{stopReason} | error{kind,message}
 //
@@ -43,6 +51,8 @@ export const BACKEND_EVENTS = Object.freeze([
   'approval-required',
   'tool-allowed',
   'tool-denied',
+  'question-required',
+  'question-resolved',
   'thinking',
   'turn-end',
   'error',

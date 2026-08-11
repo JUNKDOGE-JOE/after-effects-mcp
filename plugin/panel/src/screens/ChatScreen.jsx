@@ -5,6 +5,7 @@ import { Spinner } from '../components/core/Spinner';
 import { ChatBubble } from '../components/chat/ChatBubble';
 import { ToolCallCard } from '../components/chat/ToolCallCard';
 import { ApprovalCard } from '../components/chat/ApprovalCard';
+import { QuestionCard } from '../components/chat/QuestionCard';
 import { PromptCard } from '../components/chat/PromptCard';
 import { Composer } from '../components/chat/Composer';
 import { ComposerChip } from '../components/chat/ComposerChip';
@@ -121,13 +122,30 @@ function titleForTool(entry, lang) {
   return eventTitle({ undoGroup: `MCP ${entry.name || ''}` }, lang);
 }
 
-function Entry({ entry, lang, onApprove }) {
+function Entry({ entry, lang, onApprove, onAnswerQuestion }) {
   const t = C[lang] || C.zh;
   if (entry.type === 'user-text') {
     return <ChatBubble role="user" attachments={entry.attachments}>{entry.text}</ChatBubble>;
   }
   if (entry.type === 'ai-text') {
     return <ChatBubble role="ai">{entry.text}</ChatBubble>;
+  }
+  if (entry.type === 'question') {
+    return (
+      <div style={{ paddingLeft: 28 }}>
+        <QuestionCard
+          lang={lang}
+          title={entry.title}
+          questions={entry.questions}
+          state={entry.state}
+          answers={entry.answers}
+          onSubmit={(values) => onAnswerQuestion
+            && onAnswerQuestion(entry.toolUseId, { action: 'submit', values })}
+          onCancel={() => onAnswerQuestion
+            && onAnswerQuestion(entry.toolUseId, { action: 'cancel' })}
+        />
+      </div>
+    );
   }
   if (entry.type === 'tool-call') {
     const highRisk = entry.risk === 'destructive' || entry.risk === 'external';
@@ -185,6 +203,7 @@ export function ChatScreen({
   onSend,
   onStop,
   onApprove,
+  onAnswerQuestion,
   onNewSession,
   promptCards,
   noticeActionLabel,
@@ -346,7 +365,7 @@ export function ChatScreen({
         ) : null}
 
         {entries.map((entry) => (
-          <Entry key={entry.id} entry={entry} lang={lang} onApprove={onApprove} />
+          <Entry key={entry.id} entry={entry} lang={lang} onApprove={onApprove} onAnswerQuestion={onAnswerQuestion} />
         ))}
 
         {streaming && thinking ? (

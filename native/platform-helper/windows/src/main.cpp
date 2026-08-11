@@ -35,12 +35,20 @@ using winrt::Windows::Data::Json::JsonObject;
 using winrt::Windows::Data::Json::JsonValue;
 using winrt::Windows::Data::Json::JsonValueType;
 
-constexpr wchar_t kPipeName[] = LR"(\\.\pipe\com.junkdoge.ae-mcp.platform-helper)";
-constexpr wchar_t kMutexName[] = LR"(Local\com.junkdoge.ae-mcp.platform-helper)";
+// Endpoint names are namespaced by this payload's generation identity (#216):
+// sha256(normalized image path + "\n" + image sha256) so an older installed
+// Helper can never occupy or impersonate the current generation's endpoint.
+// The client addon derives the same suffix from the verified helper manifest.
+constexpr wchar_t kPipeNameBase[] = LR"(\\.\pipe\com.junkdoge.ae-mcp.platform-helper)";
+constexpr wchar_t kMutexNameBase[] = LR"(Local\com.junkdoge.ae-mcp.platform-helper)";
 constexpr wchar_t kCredentialPrefix[] = L"com.junkdoge.ae-mcp/provider:";
 constexpr std::uint32_t kMaximumMessageBytes = 65536;
 constexpr std::uint32_t kCredentialMagic = 0x3150434d;
 constexpr std::size_t kMaximumAncestryDepth = 32;
+// Generation identity format shared with the client addon and the packaging
+// policy; bump only together with both of them.
+constexpr wchar_t kEndpointGenerationScheme[] = L"v1";
+constexpr std::size_t kEndpointGenerationHexChars = 16;
 
 class HelperFailure final : public std::runtime_error {
  public:
@@ -394,7 +402,9 @@ ProcessSnapshot AuthorizeAdobeAncestry(DWORD processId) {
     if (name == L"afterfx.exe") {
       RequireAdobeProcess(process, L"AfterFX.exe");
       const int major = FileVersionMajor(process.imagePath);
-      if (major != 25 && major != 26) {
+      // AE 2023 is the compatibility baseline (#215); keep in sync with the
+      // CEP manifest AEFT range and packaging/helper-identity-policy.json.
+      if (major < 23 || major > 26) {
         throw HelperFailure("HELPER_UNAUTHORIZED", "After Effects version is unsupported", false);
       }
       ancestry.push_back(std::move(process));
@@ -792,8 +802,111 @@ PSECURITY_DESCRIPTOR PipeSecurityDescriptor() {
   return descriptor;
 }
 
+class ScopedCryptHash final {
+ public:
+  ScopedCryptHash() {
+    if (!CryptAcquireContextW(&provider_, nullptr, nullptr, PROV_RSA_AES, CRYPT_VERIFYCONTEXT)
+        || !CryptCreateHash(provider_, CALG_SHA_256, 0, 0, &hash_)) {
+      throw HelperFailure("HELPER_UNAVAILABLE", "sha-256 context could not be created", true);
+    }
+  }
+  ~ScopedCryptHash() {
+    if (hash_) CryptDestroyHash(hash_);
+    if (provider_) CryptReleaseContext(provider_, 0);
+  }
+  ScopedCryptHash(const ScopedCryptHash&) = delete;
+  ScopedCryptHash& operator=(const ScopedCryptHash&) = delete;
+  void Update(const void* data, std::size_t size) {
+    if (!CryptHashData(hash_, static_cast<const BYTE*>(data), static_cast<DWORD>(size), 0)) {
+      throw HelperFailure("HELPER_UNAVAILABLE", "sha-256 update failed", true);
+    }
+  }
+  std::string HexDigest() {
+    std::array<BYTE, 32> digest{};
+    DWORD size = static_cast<DWORD>(digest.size());
+    if (!CryptGetHashParam(hash_, HP_HASHVAL, digest.data(), &size, 0) || size != digest.size()) {
+      throw HelperFailure("HELPER_UNAVAILABLE", "sha-256 digest failed", true);
+    }
+    static constexpr char kHex[] = "0123456789abcdef";
+    std::string hex;
+    hex.reserve(digest.size() * 2);
+    for (const BYTE value : digest) {
+      hex.push_back(kHex[value >> 4]);
+      hex.push_back(kHex[value & 0x0f]);
+    }
+    return hex;
+  }
+
+ private:
+  HCRYPTPROV provider_ = 0;
+  HCRYPTHASH hash_ = 0;
+};
+
+// Normalization is deliberately loose (prefix strip + separators + lowercase):
+// both sides feed long-form absolute paths, and the value only namespaces the
+// endpoint — exact-path authentication stays byte-precise elsewhere.
+std::wstring NormalizedIdentityPath(std::wstring path) {
+  if (path.rfind(LR"(\\?\)", 0) == 0) path.erase(0, 4);
+  for (wchar_t& character : path) {
+    if (character == L'/') character = L'\\';
+    character = towlower(character);
+  }
+  return path;
+}
+
+std::wstring OwnImagePath() {
+  std::wstring path(32768, L'\0');
+  const DWORD size = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
+  if (size == 0 || size >= path.size()) {
+    throw HelperFailure("HELPER_UNAVAILABLE", "helper image path query failed", true);
+  }
+  path.resize(size);
+  return path;
+}
+
+std::string OwnImageSha256Hex(const std::wstring& imagePath) {
+  ScopedHandle file(CreateFileW(
+      imagePath.c_str(), GENERIC_READ,
+      FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+      nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr));
+  if (!file) throw HelperFailure("HELPER_UNAVAILABLE", "helper image could not be opened", true);
+  ScopedCryptHash hash;
+  std::array<BYTE, 65536> buffer{};
+  for (;;) {
+    DWORD read = 0;
+    if (!ReadFile(file.get(), buffer.data(), static_cast<DWORD>(buffer.size()), &read, nullptr)) {
+      throw HelperFailure("HELPER_UNAVAILABLE", "helper image could not be read", true);
+    }
+    if (read == 0) break;
+    hash.Update(buffer.data(), read);
+  }
+  return hash.HexDigest();
+}
+
+// generation = <scheme>-<first 16 hex of sha256(normalized path + "\n" + image
+// sha256 hex)>. The client addon computes the identical value from the verified
+// helper manifest, so both ends agree without any prior communication and two
+// installed payloads can never share an endpoint.
+std::wstring EndpointGeneration() {
+  const std::wstring imagePath = OwnImagePath();
+  const std::string material = winrt::to_string(
+      winrt::hstring(NormalizedIdentityPath(imagePath)))
+      + "\n" + OwnImageSha256Hex(imagePath);
+  ScopedCryptHash hash;
+  hash.Update(material.data(), material.size());
+  const std::string digest = hash.HexDigest().substr(0, kEndpointGenerationHexChars);
+  std::wstring generation(kEndpointGenerationScheme);
+  generation.push_back(L'-');
+  for (const char character : digest) generation.push_back(static_cast<wchar_t>(character));
+  return generation;
+}
+
 int RunService() {
-  ScopedHandle mutex(CreateMutexW(nullptr, FALSE, kMutexName));
+  const std::wstring generation = EndpointGeneration();
+  const std::wstring mutexName = std::wstring(kMutexNameBase) + L"." + generation;
+  const std::wstring pipeName = std::wstring(kPipeNameBase) + L"." + generation;
+
+  ScopedHandle mutex(CreateMutexW(nullptr, FALSE, mutexName.c_str()));
   if (!mutex) return 70;
   if (GetLastError() == ERROR_ALREADY_EXISTS) return 0;
 
@@ -808,7 +921,7 @@ int RunService() {
 
   for (;;) {
     ScopedHandle pipe(CreateNamedPipeW(
-        kPipeName, PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
+        pipeName.c_str(), PIPE_ACCESS_DUPLEX | FILE_FLAG_FIRST_PIPE_INSTANCE,
         PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
         1, kMaximumMessageBytes + 4, kMaximumMessageBytes + 4, 0, &security));
     if (!pipe) return 70;

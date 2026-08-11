@@ -441,6 +441,7 @@ test('strict npm cmd-shims use native Node even when the caller omits requiredAr
 
   assert.equal(result.ok, true);
   assert.equal(result.path, node);
+  assert.equal(result.displayPath, golden.shim, 'diagnostics keep naming the shim (#225)');
   assert.deepEqual(result.argsPrefix, [golden.entry]);
   assert.deepEqual(calls.map((call) => call.file), [node, node]);
 });
@@ -464,6 +465,7 @@ test('requiredArch accepts strict local and global npm cmd-shims without cmd.exe
 
     assert.equal(result.ok, true);
     assert.equal(result.path, node);
+    assert.equal(result.displayPath, value.shim);
     assert.deepEqual(result.argsPrefix, [value.entry]);
     assert.deepEqual(calls.map((call) => call.file), [node, node]);
   }

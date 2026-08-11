@@ -6,6 +6,7 @@
   "scripts": {
     "build": "node build.mjs",
     "watch": "node build.mjs --watch",
+    "verify-bundle": "node verify-bundle.mjs",
     "test": "node --test"
   },
   "dependencies": {

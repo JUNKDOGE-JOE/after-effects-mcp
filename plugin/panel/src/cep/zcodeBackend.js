@@ -36,6 +36,12 @@ import {
   planSessionKey,
 } from '../../../shared/tool-approval.mjs';
 import { normalizeTurnInput, withAttachmentManifest } from '../../../shared/chat-attachments.mjs';
+import {
+  answersForUserInput,
+  contentForElicitation,
+  questionsFromElicitationSchema,
+  questionsFromUserInput,
+} from '../lib/questionForm.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -704,6 +710,12 @@ export function createZcodeBackend({
     };
   }
 
+  // Single idempotent settlement for every pending interaction. Called from
+  // stop, reset, turn completion/failure, process exit/error, and startup
+  // failure (#220): each entry is deleted before its terminal event, so
+  // duplicate lifecycle signals can never settle an interaction twice. When
+  // the peer is still reachable a protocol-correct decline is delivered;
+  // after a crash (rpc already null) only local state is released.
   function drainApprovals() {
     for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
       if (rpc && hasRpcId(approval.rpcId)) rpc.respond(approval.rpcId, { decision: 'decline' });
@@ -715,12 +727,16 @@ export function createZcodeBackend({
         rpc.respond(elicit.rpcId, elicit.kind === 'tool-plan' ? approvalResult('deny') : { action: 'decline' });
       }
       pendingElicitations.delete(toolUseId);
-      emit({ type: 'tool-denied', toolUseId });
+      if (elicit.kind === 'tool-plan') {
+        emit({ type: 'tool-denied', toolUseId });
+      } else {
+        emit({ type: 'question-resolved', toolUseId, outcome: 'cancelled' });
+      }
     }
     for (const [toolUseId, ui] of Array.from(pendingUserInputs.entries())) {
       if (rpc && hasRpcId(ui.rpcId)) rpc.respond(ui.rpcId, { decision: 'decline', answers: {} });
       pendingUserInputs.delete(toolUseId);
-      emit({ type: 'tool-denied', toolUseId });
+      emit({ type: 'question-resolved', toolUseId, outcome: 'cancelled' });
     }
   }
 
@@ -766,40 +782,28 @@ export function createZcodeBackend({
   // AskUserQuestion via interaction/requestUserInput. params shape:
   //   { input: { questions: [{ question, header, options: [{label, description}],
   //                            multiSelect }] }, prompt, questions }
-  // Reply: { decision: "allow", answers: { <question text>: <chosen label> } }
+  // Reply: { decision: "allow", answers: { <question text>: <answer string> } }
+  //
+  // Questions are CONTENT, not permissions: every tier surfaces the dedicated
+  // question form, and automatic permission modes never pick an answer for the
+  // user (#219). The answer comes back through answerQuestion().
   function handleUserInput(params, rpcId) {
-    const input = params.input || params;
-    const questions = input.questions || [];
-    const tier = getPermissionMode ? getPermissionMode() : 'manual';
+    const questions = questionsFromUserInput(params);
 
-    // No questions or non-interactive tier: auto-accept with first option.
-    if (!questions.length || tier === 'none' || tier === 'auto') {
-      const answers = {};
-      for (const q of questions) {
-        const opts = q.options || [];
-        answers[q.question || q.header || 'question'] = opts.length ? opts[0].label : '';
-      }
-      if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { decision: 'allow', answers });
+    // Nothing to ask: reply so the agent is not blocked on an empty form.
+    if (!questions.length) {
+      if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { decision: 'allow', answers: {} });
       return;
     }
 
-    // Surface the FIRST question as an approval card. The panel's ApprovalCard
-    // renders input.choices; the user's selection returns via approve().
-    const q = questions[0];
-    const choices = (q.options || []).map((o) => o.label);
     const toolUseId = 'ask_' + rpcId;
     pendingUserInputs.set(toolUseId, { rpcId, questions });
     emit({
-      type: 'approval-required',
+      type: 'question-required',
       toolUseId,
-      name: 'AskUserQuestion',
-      input: {
-        question: q.question || q.header || '',
-        header: q.header,
-        choices,
-        fields: questions.map((qq) => qq.question || qq.header || ''),
-      },
-      risk: 'write',
+      source: 'zcode-user-input',
+      title: safeText((params && typeof params.prompt === 'string' && params.prompt) || ''),
+      questions,
     });
   }
 
@@ -849,42 +853,34 @@ export function createZcodeBackend({
       return;
     }
 
-    const props = schema.properties || {};
-    const required = schema.required || [];
-
     // If there are no properties, this is a simple yes/no — auto-accept.
-    const fieldNames = Object.keys(props);
-    if (!fieldNames.length) {
+    if (!Object.keys(schema.properties || {}).length) {
       if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: 'accept', content: {} });
       return;
     }
 
-    // In non-interactive tiers (none/auto), auto-accept with the first option
-    // of each field so the turn isn't blocked.
-    const tier = getPermissionMode ? getPermissionMode() : 'manual';
-    if (tier === 'none' || tier === 'auto') {
-      const autoContent = {};
-      for (const fn of fieldNames) {
-        const opts = props[fn] && props[fn].enum;
-        autoContent[fn] = opts && opts.length ? opts[0] : '';
-      }
-      if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: 'accept', content: autoContent });
+    // A form is a question, not a permission: every tier (including auto/none)
+    // surfaces the dedicated question form instead of picking an answer for
+    // the user (#219). The answer comes back through answerQuestion().
+    const built = questionsFromElicitationSchema(message, schema);
+    if (!built.ok) {
+      // Unsupported schema: fail clearly instead of inventing an answer.
+      if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: 'decline' });
+      emit({
+        type: 'error',
+        kind: 'mcp',
+        message: 'Declined an agent question with an unsupported form schema (' + built.reason + ').',
+      });
       return;
     }
-
-    // Build a single approval card: the question text + the first field's
-    // options as choices (ZCode AskUserQuestion typically has one field).
-    const primaryField = fieldNames[0];
-    const primaryProp = props[primaryField] || {};
-    const choices = Array.isArray(primaryProp.enum) ? primaryProp.enum : [];
     const toolUseId = 'elicit_' + rpcId;
-    pendingElicitations.set(toolUseId, { rpcId, fieldNames, props, required });
+    pendingElicitations.set(toolUseId, { rpcId, questions: built.questions });
     emit({
-      type: 'approval-required',
+      type: 'question-required',
       toolUseId,
-      name: 'AskUserQuestion',
-      input: { question: message, field: primaryField, choices, fields: fieldNames },
-      risk: 'write',
+      source: 'zcode-elicitation',
+      title: safeText(message),
+      questions: built.questions,
     });
   }
 
@@ -947,6 +943,10 @@ export function createZcodeBackend({
     }
     if (type === 'turn.failed') {
       assistantDeltaRedactor.discard();
+      // The turn is reaching its error terminal state; settle anything still
+      // awaiting the user so no card outlives its turn (#220). The peer is
+      // alive here, so drain delivers real decline responses.
+      drainApprovals();
       const payload = params.payload || {};
       const message = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, 'ZCode turn failed', lang), activeRuntimeModel);
       emit({ type: 'error', kind: zcodeErrorKind(message), message, ...activeTurnFailureFields() });
@@ -1010,6 +1010,10 @@ export function createZcodeBackend({
     sessionModelRef = null;
     subscribed = false;
     activeRuntimeModel = null;
+    // Settle every pending approval/question now that the RPC peer is gone:
+    // without this the awaiting card stays actionable and blocks later turns
+    // (#220). rpc is already null, so drain only releases local state.
+    drainApprovals();
     if (wasStopping) {
       clearProcessStderrAttachmentPaths();
       scheduleSecretCleanup();
@@ -1039,6 +1043,7 @@ export function createZcodeBackend({
     sessionModelRef = null;
     subscribed = false;
     activeRuntimeModel = null;
+    drainApprovals();
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message, ...activeTurnFailureFields() });
       finishActive();
@@ -1081,6 +1086,10 @@ export function createZcodeBackend({
     })();
     try {
       return await startPromise;
+    } catch (error) {
+      // Startup failed: nothing can answer a pending interaction anymore.
+      drainApprovals();
+      throw error;
     } finally {
       startPromise = null;
     }
@@ -1266,58 +1275,27 @@ export function createZcodeBackend({
   function approve(toolUseId, decision) {
     const id = String(toolUseId);
 
-    // AskUserQuestion via interaction/requestUserInput: reply {decision, answers}.
-    const userInput = pendingUserInputs.get(id);
-    if (userInput) {
-      pendingUserInputs.delete(id);
-      if (decision === 'deny') {
-        if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: 'decline', answers: {} });
-        emit({ type: 'tool-denied', toolUseId: id });
-      } else {
-        // decision carries the chosen label; map it to each question.
-        const answers = {};
-        const chosen = typeof decision === 'string' && decision !== 'allow' && decision !== 'allow-session' ? decision : '';
-        for (const q of userInput.questions) {
-          const key = q.question || q.header || 'question';
-          answers[key] = chosen || (q.options && q.options[0] && q.options[0].label) || '';
-        }
-        if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: 'allow', answers });
-        emit({ type: 'tool-allowed', toolUseId: id });
-      }
+    // Questions are answered through answerQuestion(); an approve() decision
+    // carries no answer, so the only honest settlement here is a cancel —
+    // never fabricate a choice on the user's behalf (#219).
+    if (pendingUserInputs.has(id)
+      || (pendingElicitations.has(id) && pendingElicitations.get(id).kind !== 'tool-plan')) {
+      answerQuestion(id, { action: 'cancel' });
       return;
     }
 
-    // Elicitation (AskUserQuestion) reply: {action, content}. The "decision"
-    // from the panel carries the user's selected choice text.
     const elicit = pendingElicitations.get(id);
     if (elicit) {
       pendingElicitations.delete(id);
-      if (elicit.kind === 'tool-plan') {
-        const requestedDecision = decision === 'allow-session'
-          ? 'session'
-          : (decision === 'allow' ? 'once' : 'deny');
-        const result = approvalResult(requestedDecision, { allowSession: elicit.allowSession });
-        if (result.action === 'accept' && result.content.decision === 'session') {
-          sessionAllowedPlans.add(planSessionKey(elicit.plan));
-        }
-        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, result);
-        emit({ type: result.action === 'accept' ? 'tool-allowed' : 'tool-denied', toolUseId: id });
-        return;
+      const requestedDecision = decision === 'allow-session'
+        ? 'session'
+        : (decision === 'allow' ? 'once' : 'deny');
+      const result = approvalResult(requestedDecision, { allowSession: elicit.allowSession });
+      if (result.action === 'accept' && result.content.decision === 'session') {
+        sessionAllowedPlans.add(planSessionKey(elicit.plan));
       }
-      if (decision === 'deny') {
-        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: 'decline' });
-        emit({ type: 'tool-denied', toolUseId: id });
-      } else {
-        // Build content from the chosen value; for single-field elicitation,
-        // the decision string IS the chosen option.
-        const content = {};
-        const fn = elicit.fieldNames[0];
-        content[fn] = typeof decision === 'string' && decision !== 'allow' && decision !== 'allow-session'
-          ? decision
-          : (elicit.props[fn] && elicit.props[fn].enum && elicit.props[fn].enum[0]) || '';
-        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: 'accept', content });
-        emit({ type: 'tool-allowed', toolUseId: id });
-      }
+      if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, result);
+      emit({ type: result.action === 'accept' ? 'tool-allowed' : 'tool-denied', toolUseId: id });
       return;
     }
 
@@ -1329,6 +1307,51 @@ export function createZcodeBackend({
     if (allow && decision === 'allow-session') sessionAllowedTools.add(approval.name);
     if (hasRpcId(approval.rpcId) && rpc) rpc.respond(approval.rpcId, { decision: allow ? 'allow' : 'decline' });
     emit({ type: allow ? 'tool-allowed' : 'tool-denied', toolUseId: id });
+  }
+
+  // Settle a pending agent-to-user question (#219).
+  //   result: { action:'submit', values: { [question.id]: string|string[] } }
+  //         | { action:'cancel' }
+  // Values are assumed form-validated; the protocol reply is built per route.
+  function answerQuestion(toolUseId, result) {
+    const id = String(toolUseId);
+    const submit = result && result.action === 'submit';
+
+    const userInput = pendingUserInputs.get(id);
+    if (userInput) {
+      pendingUserInputs.delete(id);
+      if (!submit) {
+        if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: 'decline', answers: {} });
+        emit({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
+        return true;
+      }
+      const answers = answersForUserInput(userInput.questions, result.values);
+      if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: 'allow', answers });
+      emit({ type: 'question-resolved', toolUseId: id, outcome: 'answered', answers });
+      return true;
+    }
+
+    const elicit = pendingElicitations.get(id);
+    if (elicit && elicit.kind !== 'tool-plan' && Array.isArray(elicit.questions)) {
+      pendingElicitations.delete(id);
+      if (!submit) {
+        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: 'cancel' });
+        emit({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
+        return true;
+      }
+      const content = contentForElicitation(elicit.questions, result.values);
+      if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: 'accept', content });
+      emit({
+        type: 'question-resolved',
+        toolUseId: id,
+        outcome: 'answered',
+        answers: Object.fromEntries(Object.entries(content).map(([key, value]) => [
+          key, Array.isArray(value) ? value.join(', ') : value,
+        ])),
+      });
+      return true;
+    }
+    return false;
   }
 
   function stop() {
@@ -1410,6 +1433,7 @@ export function createZcodeBackend({
   return {
     sendUser,
     approve,
+    answerQuestion,
     stop,
     reset,
     setThoughtLevel,

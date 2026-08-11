@@ -9,14 +9,21 @@ function formatAttachmentBytes(value) {
   return (bytes / (1024 * 1024 * 1024)).toFixed(1) + ' GB';
 }
 
+// CR/CRLF handling varies between engines under pre-wrap; normalize to LF so
+// backend text renders one break per logical newline.
+function normalizeBreaks(children) {
+  return typeof children === 'string' ? children.replace(/\r\n?/g, '\n') : children;
+}
+
 export function ChatBubble({
   role = 'ai',
-  children,
+  children: rawChildren,
   attachments = [],
   streaming = false,
   avatar = true,
   style,
 }) {
+  const children = normalizeBreaks(rawChildren);
   if (role === 'user') {
     return (
       <div style={{ display: 'flex', justifyContent: 'flex-end', ...style }}>
@@ -31,6 +38,7 @@ export function ChatBubble({
             font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`,
             color: 'var(--text-primary)',
             overflowWrap: 'break-word',
+            whiteSpace: 'pre-wrap',
           }}
         >
           {children ? <div>{children}</div> : null}
@@ -72,6 +80,7 @@ export function ChatBubble({
           font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`,
           color: 'var(--text-primary)',
           overflowWrap: 'break-word',
+          whiteSpace: 'pre-wrap',
         }}
       >
         {children}

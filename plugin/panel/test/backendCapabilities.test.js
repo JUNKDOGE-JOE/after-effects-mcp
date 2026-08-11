@@ -6,7 +6,9 @@ import {
   codexStaticDescriptor, codexDescriptorFromModels, mergeCodexOfficialLoginModels,
   descriptorWithCustomModel,
   zcodeStaticDescriptor, zcodeDescriptorFromModels, zcodeDescriptorFromProbedModels,
+  resolveEffectiveEffort,
 } from '../src/lib/backendCapabilities.js';
+import { readFileSync } from 'node:fs';
 
 test('claude-sub descriptor lists the full family with effort levels', () => {
   const d = claudeSubDescriptor();
@@ -249,4 +251,47 @@ test('descriptorFromProbedModels replaces curated models for custom-provider cha
   assert.equal(probed.defaultModelId, 'glm-5.2');
   assert.equal(descriptorFromProbedModels(base, []), base, 'empty probe keeps descriptor (manual model id fallback)');
   assert.equal(descriptorFromProbedModels(base, null), base);
+});
+
+// #218: a session effort chosen for one model must never be dispatched after
+// switching to a model whose effort set does not include it.
+test('resolveEffectiveEffort keeps a supported session effort', () => {
+  const fable = CLAUDE_MODELS.find((m) => m.id === 'claude-fable-5');
+  assert.equal(resolveEffectiveEffort({ requested: 'max', model: fable, defaultEffort: 'high' }), 'max');
+});
+
+test('resolveEffectiveEffort clamps a stale higher effort to the nearest supported level', () => {
+  const haiku = CLAUDE_MODELS.find((m) => m.id === 'claude-haiku-4-5-20251001');
+  // max/ultra selected on GPT-5.6 or Fable, then switch to Haiku (low/medium/high).
+  assert.equal(resolveEffectiveEffort({ requested: 'max', model: haiku, defaultEffort: 'high' }), 'high');
+  assert.equal(resolveEffectiveEffort({ requested: 'ultra', model: haiku, defaultEffort: 'high' }), 'high');
+  // Sonnet 4.6 has no xhigh: xhigh clamps down to high, not up to max.
+  const sonnet46 = CLAUDE_MODELS.find((m) => m.id === 'claude-sonnet-4-6');
+  assert.equal(resolveEffectiveEffort({ requested: 'xhigh', model: sonnet46, defaultEffort: 'high' }), 'high');
+});
+
+test('resolveEffectiveEffort clamps up when the request sits below every supported level', () => {
+  const model = { id: 'x', effortLevels: ['high', 'xhigh'] };
+  assert.equal(resolveEffectiveEffort({ requested: 'low', model, defaultEffort: 'high' }), 'high');
+});
+
+test('resolveEffectiveEffort resolves null for models without effort levels', () => {
+  assert.equal(resolveEffectiveEffort({ requested: 'max', model: { id: 'custom', effortLevels: [] }, defaultEffort: 'high' }), null);
+  assert.equal(resolveEffectiveEffort({ requested: null, model: {}, defaultEffort: 'high' }), null);
+});
+
+test('resolveEffectiveEffort without a session override uses a supported default', () => {
+  const haiku = CLAUDE_MODELS.find((m) => m.id === 'claude-haiku-4-5-20251001');
+  assert.equal(resolveEffectiveEffort({ requested: null, model: haiku, defaultEffort: 'high' }), 'high');
+  // Descriptor default missing from the model's set falls back deterministically.
+  assert.equal(resolveEffectiveEffort({ requested: null, model: { effortLevels: ['low', 'medium'] }, defaultEffort: 'high' }), 'low');
+  // Unknown requested value (not on the canonical ladder) also lands on the default path.
+  assert.equal(resolveEffectiveEffort({ requested: 'turbo', model: haiku, defaultEffort: 'high' }), 'high');
+});
+
+test('App derives the dispatched effort through resolveEffectiveEffort', () => {
+  const app = readFileSync(new URL('../src/app/App.jsx', import.meta.url), 'utf8');
+  assert.match(app, /const effectiveEffort = resolveEffectiveEffort\(\{\s*requested: sessionEffort,\s*model: modelMeta,\s*defaultEffort: descriptor\.defaultEffort,\s*\}\)/);
+  // The old unreconciled derivation must not come back.
+  assert.doesNotMatch(app, /sessionEffort \|\| \(modelMeta\.effortLevels/);
 });

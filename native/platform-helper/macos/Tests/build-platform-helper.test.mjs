@@ -44,12 +44,17 @@ test('Windows identity policy locks pipe, signer, ancestry, and Credential Manag
     'utf8',
   ));
   assert.doesNotThrow(() => validateHelperIdentityPolicy(policy, 'windows-x64'));
-  assert.equal(policy.windows.pipeName, '\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper');
+  // #216 replaced the fixed pipe name with a generation-namespaced prefix so
+  // an older installed Helper can never occupy the current endpoint.
+  assert.equal(policy.windows.pipeNamePrefix, '\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper.');
+  assert.equal(policy.windows.endpointGeneration.scheme, 'v1');
+  assert.equal(policy.windows.endpointGeneration.suffixHexChars, 16);
   assert.equal(policy.windows.credentialTargetPrefix, 'com.junkdoge.ae-mcp/provider:');
   assert.equal(policy.windows.caller.publisherOrganization, 'Adobe Inc.');
   assert.equal(policy.windows.caller.directImage, 'CEPHtmlEngine.exe');
   assert.equal(policy.windows.caller.ancestorImage, 'AfterFX.exe');
-  assert.deepEqual(policy.windows.caller.afterEffectsMajors, [25, 26]);
+  // #215: Windows keeps the AE 2023 baseline (23-26); macOS stays 25-26.
+  assert.deepEqual(policy.windows.caller.afterEffectsMajors, [23, 24, 25, 26]);
   assert.equal(policy.windows.authorization.currentUserOnly, true);
   assert.equal(policy.windows.authorization.processGenerationDoubleRead, true);
   assert.equal(policy.windows.authorization.wholeChainFinalRead, true);

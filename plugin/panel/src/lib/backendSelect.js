@@ -1,29 +1,28 @@
 import { REAL_BACKENDS } from '../cep/backends/index.js';
-import { pickChannel } from './channels.js';
 
-// All backends use the same selection algorithm over uniform channel probe
-// arrays. `pref` is the 3-way backend choice (subscription|codex|zcode);
-// channels = { claude: [...], codex: [...], zcode: [...] }.
-export function pickBackend({ pref, channels = {}, lockedChannel = '' }) {
+const DEFAULT_CHANNEL = { claude: 'subscription', codex: 'cli', zcode: 'cli-config' };
+
+// Channels are chosen by the user, never auto-picked (#229): the effective
+// channel is exactly the enabled one. A broken choice surfaces its own
+// fixHint instead of silently falling back to a sibling channel, and only
+// the enabled channel's probe state gates sending.
+export function pickBackend({ pref, channels = {}, channelChoices = {} }) {
   const group = pref === 'codex' || pref === 'zcode' ? pref : 'claude';
   const list = channels[group] || [];
-  const selectedCustom = group === 'codex'
-    ? list.find((channel) => channel?.channel === 'custom' && channel.selected === true)
-    : null;
-  if ((!selectedCustom && list.some((c) => c && c.checking)) || selectedCustom?.checking) {
+  const wanted = channelChoices[group] || DEFAULT_CHANNEL[group];
+  const chosen = list.find((c) => c && c.channel === wanted) || list[0] || null;
+  if (chosen && chosen.checking) {
     return { backend: 'none', reason: group + '-probing', channel: null, fixHint: null };
   }
-  const chosen = selectedCustom || pickChannel(list, lockedChannel);
   if (group === 'codex' && chosen?.channel === 'custom' && chosen.canPreflight === true && !chosen.ok) {
     return { backend: 'codex', reason: 'provider-preflight', channel: 'custom', fixHint: null };
   }
   if (!chosen || !chosen.ok) {
-    const hintSource = chosen || list.find((c) => c && !c.ok) || list[0] || null;
     return {
       backend: 'none',
       reason: group + '-no-channel',
       channel: chosen ? chosen.channel : null,
-      fixHint: hintSource ? hintSource.fixHint || null : null,
+      fixHint: chosen ? chosen.fixHint || null : null,
     };
   }
   if (group === 'claude') {

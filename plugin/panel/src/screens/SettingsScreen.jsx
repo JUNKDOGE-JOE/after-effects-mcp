@@ -308,8 +308,8 @@ export function SettingsScreen({
   onExpertGuidance,
   channels = { claude: [], codex: [], zcode: [] },
   activeChannel = '',
-  lockedChannel = '',
-  onLockChannel,
+  selectedChannel = '',
+  onSelectChannel,
   onRecheckBackend,
   recheckDisabled = false,
   providers = [],
@@ -394,8 +394,8 @@ export function SettingsScreen({
           lang={lang}
           channels={backend === 'codex' ? channels.codex : backend === 'zcode' ? channels.zcode : channels.claude}
           activeChannel={activeChannel}
-          lockedChannel={lockedChannel}
-          onLockChannel={onLockChannel}
+          selectedChannel={selectedChannel}
+          onSelectChannel={onSelectChannel}
           onRecheck={onRecheckBackend}
           recheckLabel={t.recheck}
           recheckDisabled={recheckDisabled}

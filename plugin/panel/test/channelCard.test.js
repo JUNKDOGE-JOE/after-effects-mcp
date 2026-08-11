@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { channelDot, channelTexts, lockLabel } from '../src/lib/channelCard.js';
+import { channelChoiceState, channelDot, channelTexts } from '../src/lib/channelCard.js';
 
 test('channelDot maps probe state to a status color token', () => {
   assert.equal(channelDot({ checking: true, ok: false }), 'neutral');
@@ -15,9 +15,9 @@ test('channelTexts picks language-specific source badge and fixHint', () => {
   assert.equal(channelTexts({ ...probe, ok: true }, 'zh').fixHint, '', 'no fixHint when channel is ok');
 });
 
-test('lockLabel reflects current lock', () => {
-  assert.equal(lockLabel('api', 'api', 'zh'), '已锁定');
-  assert.equal(lockLabel('api', '', 'zh'), '锁定');
-  assert.equal(lockLabel('api', 'api', 'en'), 'Locked');
-  assert.equal(lockLabel('api', '', 'en'), 'Lock');
+test('channelChoiceState marks exactly the enabled row (#229)', () => {
+  assert.deepEqual(channelChoiceState('cli', 'cli', 'zh'), { label: '使用中', active: true });
+  assert.deepEqual(channelChoiceState('custom', 'cli', 'zh'), { label: '使用此通道', active: false });
+  assert.deepEqual(channelChoiceState('cli', 'cli', 'en'), { label: 'In use', active: true });
+  assert.deepEqual(channelChoiceState('custom', 'cli', 'en'), { label: 'Use this channel', active: false });
 });

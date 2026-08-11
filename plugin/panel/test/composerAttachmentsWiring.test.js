@@ -29,13 +29,18 @@ test('Composer delegates one complete file drop to FilePond and leaves text drop
   assert.match(composer, /if \(!files\.length\) return/);
   assert.match(composer, /event\.preventDefault\(\)/);
   assert.match(composer, /event\.stopPropagation\(\)/);
+  // Two delegation points since #208: the composer-box capture handler and
+  // the full-panel window guard. Box drops stop propagating before reaching
+  // the window guard, so exactly one fires per drop (panelFileDrop.test.js
+  // covers the exclusivity).
   assert.equal(
     (composer.match(/attachmentPondRef\.current\?\.addFiles\(files\)/g) || []).length,
-    1,
+    2,
   );
   assert.match(composer, /onDragEnterCapture=\{handleFileDrag\}/);
   assert.match(composer, /onDragOverCapture=\{handleFileDrag\}/);
   assert.match(composer, /onDropCapture=\{handleFileDrop\}/);
+  assert.match(composer, /createPanelFileDropGuard\(/);
 });
 
 test('Composer enables attachment-only sends without changing keyboard resize behavior', () => {

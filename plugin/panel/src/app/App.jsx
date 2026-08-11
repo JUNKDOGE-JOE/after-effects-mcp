@@ -11,11 +11,14 @@ import { ConnectionDrawer } from '../screens/ConnectionDrawer';
 import { ChatScreen } from '../screens/ChatScreen';
 import { ToolsScreen } from '../screens/ToolsScreen';
 import { ToolApprovalDialog } from '../components/tools/ToolApprovalDialog';
+import { QuestionFormDialog } from '../components/tools/QuestionFormDialog';
+import { questionsFromElicitationSchema } from '../lib/questionForm';
+import { createPanelFileDropGuard } from '../lib/panelFileDrop';
 import { createAgentLoop } from '../lib/agentLoop';
 import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
 import { installBeforeUnloadReset } from '../lib/backendLifecycle.js';
-import { containsExactSecret } from '../lib/exactSecretRedaction.js';
+import { containsExactSecret, redactText } from '../lib/exactSecretRedaction.js';
 import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
 import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTierFile';
 import { createToolsApi } from '../cep/toolsApi';
@@ -26,7 +29,7 @@ import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentB
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
 import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
-import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref, codexProviderChannelLock } from '../lib/channels.js';
+import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref } from '../lib/channels.js';
 import { createProviderStore } from '../cep/providerStore';
 import { createProviderSecretService, resolveProviderRequestProfile } from '../cep/providerSecrets';
 import {
@@ -53,7 +56,7 @@ import {
 } from '../lib/attachmentDraft.js';
 import { createAttachmentStore } from '../cep/attachmentStore.js';
 import { DEFAULT_MODEL } from '../lib/anthropic';
-import { descriptorWithCustomModel } from '../lib/backendCapabilities';
+import { descriptorWithCustomModel, resolveEffectiveEffort } from '../lib/backendCapabilities';
 import { selectDescriptor, reconcileModelPref } from '../lib/descriptorSelect';
 import { ZCODE_PROBED_MODELS_CACHE_KEY } from '../lib/zcodeModelCache';
 import { baseDescriptorFor } from '../cep/backends/index.js';
@@ -365,7 +368,21 @@ function Shell({ cs }) {
       tier: permissionModeRef.current,
       plan,
     }),
-    presentGenericForm: () => ({ action: 'decline', content: {} }),
+    // Generic MCP elicitation reaches the visible question form (#219); only
+    // schemas the form cannot faithfully render are declined. Permission tier
+    // is deliberately not consulted: automatic modes never answer questions.
+    presentGenericForm: (request) => {
+      const built = questionsFromElicitationSchema(
+        request && request.message,
+        request && request.requestedSchema,
+      );
+      if (!built.ok) return { action: 'decline', content: {} };
+      return {
+        kind: 'question-form',
+        title: (request && request.message) || '',
+        questions: built.questions,
+      };
+    },
   }), []);
   const [toolApproval, setToolApproval] = React.useState(() => elicitationCoordinator.snapshot());
   React.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
@@ -376,12 +393,19 @@ function Shell({ cs }) {
     elicitationCoordinator.dispose();
     try { approvalTierFile.dispose(); } catch (error) { /* best effort on shutdown */ }
   }, [approvalTierFile, elicitationCoordinator]);
+  // Panel-lifetime navigation guard (#208): file drops must never navigate the
+  // CEP WebView, on any tab. Attaching is handled by the Composer's own guard
+  // while the chat screen is mounted; this one only blocks navigation, and
+  // leaves text/URL drags to their native behavior.
+  React.useEffect(() => {
+    const guard = createPanelFileDropGuard({ target: window });
+    return guard.dispose;
+  }, []);
   const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
   const [backendPref, setBackendPref] = React.useState(() => backendMigration.pref);
-  const [channelLock, setChannelLock] = React.useState(() => codexProviderChannelLock(
-    backendMigration.lockedChannel,
-    readPref('ae_mcp_codex_provider', ''),
-  ));
+  // #229: channels are user-enabled per backend; routing follows the choice
+  // exactly (no auto-pick, no lock, no pinning by provider selection).
+  const [channelChoices, setChannelChoices] = React.useState(() => backendMigration.channelChoices);
   const providerStore = React.useMemo(() => {
     try { return createProviderStore(); } catch (e) { return null; }
   }, []);
@@ -402,13 +426,6 @@ function Shell({ cs }) {
   const [providers, setProviders] = React.useState([]);
   const [claudeProviderId, setClaudeProviderId] = React.useState(() => readPref('ae_mcp_claude_provider', ''));
   const [codexProviderId, setCodexProviderId] = React.useState(() => readPref('ae_mcp_codex_provider', ''));
-  const syncCodexProviderChannelLock = React.useCallback((providerId) => {
-    setChannelLock((current) => {
-      const next = codexProviderChannelLock(current, providerId);
-      writePref('ae_mcp_channel_lock', next);
-      return next;
-    });
-  }, []);
   const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
@@ -433,7 +450,15 @@ function Shell({ cs }) {
     ? requestedModel
     : (descriptor.defaultModelId || (descriptor.models[0] && descriptor.models[0].id) || requestedModel);
   const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
-  const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
+  // Reconcile against the SELECTED model, not just the backend: a session
+  // effort chosen for one model must not survive a switch to a model with a
+  // narrower effort set (#218) — the chip and the dispatched pair both derive
+  // from this single reconciled value.
+  const effectiveEffort = resolveEffectiveEffort({
+    requested: sessionEffort,
+    model: modelMeta,
+    defaultEffort: descriptor.defaultEffort,
+  });
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
   const claudeApiProvider = React.useMemo(() => {
     return providers.find((provider) => provider.id === claudeProviderId) || null;
@@ -525,7 +550,6 @@ function Shell({ cs }) {
         if (codexProviderId === provider.id) {
           setCodexProviderId('');
           writePref('ae_mcp_codex_provider', '');
-          syncCodexProviderChannelLock('');
         }
       }}
       onProbe={async (provider, options = {}) => {
@@ -579,7 +603,7 @@ function Shell({ cs }) {
     codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === 'ready' && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === 'checking', cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
     zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
   }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
-  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock });
+  const effective = pickBackend({ pref: backendPref, channels, channelChoices });
   const claudeSettingsHint = React.useMemo(() => {
     try { return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs }); } catch (e) { return null; }
   }, [platform]);
@@ -804,7 +828,10 @@ function Shell({ cs }) {
       modelId,
     });
     if (!result.ok) {
-      const error = new Error(result.detail || `Provider did not expose a verified API for model ${modelId}`);
+      // #222: this detail reaches chat error events verbatim, so exact-secret
+      // redaction must happen here, the shared choke point for both backends.
+      const detail = redactText(String(result.detail || ''), providerSecretService.getRedactionValues());
+      const error = new Error(detail || `Provider did not expose a verified API for model ${modelId}`);
       error.kind = 'model';
       error.code = 'provider_preflight_failed';
       throw error;
@@ -1628,6 +1655,8 @@ function Shell({ cs }) {
             onSend={sendChat}
             onStop={() => activeBackend.stop()}
             onApprove={(id, decision) => activeBackend.approve(id, decision)}
+            onAnswerQuestion={(id, result) => activeBackend.answerQuestion
+              && activeBackend.answerQuestion(id, result)}
             onNewSession={newChatSession}
             chipState={{
               descriptor,
@@ -1691,13 +1720,19 @@ function Shell({ cs }) {
             pythonVersion={(connInfo && connInfo.pythonVersion) || '-'}
             channels={channels}
             activeChannel={effective.channel || ''}
-            lockedChannel={channelLock}
-            onLockChannel={(channel) => {
-              const next = backendPref === 'codex'
-                ? codexProviderChannelLock(channel, codexProviderId)
-                : channel;
-              setChannelLock(next);
-              writePref('ae_mcp_channel_lock', next);
+            selectedChannel={channelChoices[backendPref === 'codex' ? 'codex' : 'claude'] || ''}
+            onSelectChannel={(channel) => {
+              // #229: enabling a channel is the routing decision and actively
+              // triggers that backend's detection.
+              const group = backendPref === 'codex' ? 'codex' : 'claude';
+              setChannelChoices((current) => ({ ...current, [group]: channel }));
+              writePref('ae_mcp_channel_' + group, channel);
+              if (group === 'codex') {
+                codexBackend.reset();
+                runCodexProbe();
+              } else {
+                runClaudeProbe();
+              }
             }}
             onRecheckBackend={() => {
               if (backendPref === 'codex') runCodexProbe();
@@ -1714,9 +1749,10 @@ function Shell({ cs }) {
             onClaudeProviderChange={(id) => { setClaudeProviderId(id); writePref('ae_mcp_claude_provider', id); }}
             codexProviderId={codexProviderId}
             onCodexProviderChange={(id) => {
+              // #229: picking a provider only configures the custom channel;
+              // routing still follows the user's explicit channel choice.
               setCodexProviderId(id);
               writePref('ae_mcp_codex_provider', id);
-              syncCodexProviderChannelLock(id);
               setCodexProbe(null);
               codexBackend.reset();
             }}
@@ -1819,6 +1855,11 @@ function Shell({ cs }) {
       />
       <ToolApprovalDialog
         record={toolApproval && toolApproval.plan ? toolApproval : null}
+        lang={lang}
+        onResolve={(result) => elicitationCoordinator.resolveVisible(result)}
+      />
+      <QuestionFormDialog
+        record={toolApproval && !toolApproval.plan ? toolApproval : null}
         lang={lang}
         onResolve={(result) => elicitationCoordinator.resolveVisible(result)}
       />

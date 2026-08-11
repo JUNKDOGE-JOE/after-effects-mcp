@@ -4,9 +4,7 @@ import {
   claudeChannels,
   codexChannels,
   zcodeChannels,
-  pickChannel,
   migrateBackendPref,
-  codexProviderChannelLock,
 } from '../src/lib/channels.js';
 
 test('claudeChannels: subscription reflects probe, api reflects provider entry', () => {
@@ -103,7 +101,7 @@ test('codexChannels: cli-config channel is positioned between cli and custom', (
   assert.equal(runtimeNotOk[1].ok, false);
 });
 
-test('codexChannels: custom provider outranks cli-config in pickChannel when both are ok', () => {
+test('codexChannels: display order is fixed regardless of which rows are ok (#229)', () => {
   const list = codexChannels({
     codexProbe: { loggedIn: false, runtimeOk: true },
     customProvider: { baseUrl: 'https://custom.example/v1' },
@@ -112,11 +110,9 @@ test('codexChannels: custom provider outranks cli-config in pickChannel when bot
     cliConfig: { model: 'gpt-5.5', providerId: 'mediastorm_glm', provider: { name: 'MediaStorm GLM', baseUrl: 'https://api.example.com/v1', envKey: 'MEDIASTORM_GLM_API_KEY', wireApi: 'responses' } },
     cliCredentialAvailable: true,
   });
-  const custom = list.find((c) => c.channel === 'custom');
-  const cliConfig = list.find((c) => c.channel === 'cli-config');
-  assert.equal(custom.ok, true);
-  assert.equal(cliConfig.ok, true);
-  assert.equal(pickChannel(list).channel, 'custom', 'explicit custom provider must outrank inherited cli-config when both are ok');
+  assert.deepEqual(list.map((c) => c.channel), ['cli', 'cli-config', 'custom']);
+  assert.equal(list.find((c) => c.channel === 'custom').ok, true);
+  assert.equal(list.find((c) => c.channel === 'cli-config').ok, true);
 });
 
 test('codex custom provider stays unavailable until the credential Helper is ready', () => {
@@ -140,13 +136,6 @@ test('codex custom provider can preflight before its per-model protocol route is
   assert.equal(custom.ok, true);
   assert.equal(custom.canPreflight, true);
   assert.doesNotMatch(JSON.stringify(custom), /dialect/i);
-});
-
-test('codexProviderChannelLock binds a selected provider to custom without clearing unrelated locks', () => {
-  assert.equal(codexProviderChannelLock('', 'provider-1'), 'custom');
-  assert.equal(codexProviderChannelLock('cli', 'provider-1'), 'custom');
-  assert.equal(codexProviderChannelLock('custom', ''), '');
-  assert.equal(codexProviderChannelLock('cli', ''), 'cli');
 });
 
 test('provider channels use non-secret availability and can stay checking during migration', () => {
@@ -206,33 +195,54 @@ test('zcodeChannels: cli-config first, desktop second, start-plan never ok witho
   assert.match(noKey[0].fixHint.en, /MEDIASTORM_GLM_API_KEY/);
 });
 
-test('pickChannel: first ok wins; explicit lock is honored even when not ok', () => {
-  const channels = [
-    { channel: 'a', ok: false },
-    { channel: 'b', ok: true },
-    { channel: 'c', ok: true },
-  ];
-  assert.equal(pickChannel(channels).channel, 'b');
-  assert.equal(pickChannel(channels, 'c').channel, 'c');
-  assert.equal(pickChannel(channels, 'a').channel, 'a');
-  assert.equal(pickChannel([]), null);
-});
 
-test('migrateBackendPref maps non-product and legacy prefs onto the two built-in choices', () => {
+test('migrateBackendPref maps legacy prefs and locks onto explicit per-backend channel choices (#229)', () => {
   function storage(init) {
     const map = new Map(Object.entries(init));
-    return { getItem: (k) => (map.has(k) ? map.get(k) : null), setItem: (k, v) => map.set(k, v), map };
+    return {
+      getItem: (k) => (map.has(k) ? map.get(k) : null),
+      setItem: (k, v) => map.set(k, v),
+      removeItem: (k) => map.delete(k),
+      map,
+    };
   }
   const byok = storage({ ae_mcp_backend: 'byok' });
-  assert.deepEqual(migrateBackendPref(byok), { pref: 'subscription', lockedChannel: 'api' });
+  assert.deepEqual(migrateBackendPref(byok), {
+    pref: 'subscription',
+    channelChoices: { claude: 'api', codex: 'cli' },
+  });
   assert.equal(byok.map.get('ae_mcp_backend'), 'subscription');
-  assert.equal(byok.map.get('ae_mcp_channel_lock'), 'api');
+  assert.equal(byok.map.get('ae_mcp_channel_claude'), 'api');
   const oc = storage({ ae_mcp_backend: 'opencode' });
-  assert.deepEqual(migrateBackendPref(oc), { pref: 'subscription', lockedChannel: '' });
+  assert.deepEqual(migrateBackendPref(oc).channelChoices, { claude: 'subscription', codex: 'cli' });
   const zcode = storage({ ae_mcp_backend: 'zcode' });
-  assert.deepEqual(migrateBackendPref(zcode), { pref: 'subscription', lockedChannel: '' });
+  assert.equal(migrateBackendPref(zcode).pref, 'subscription');
   assert.equal(zcode.map.get('ae_mcp_backend'), 'subscription');
-  const keep = storage({ ae_mcp_backend: 'codex', ae_mcp_channel_lock: 'cli' });
-  assert.deepEqual(migrateBackendPref(keep), { pref: 'codex', lockedChannel: 'cli' });
-  assert.deepEqual(migrateBackendPref(storage({})), { pref: 'subscription', lockedChannel: '' });
+
+  // A legacy custom lock or a previously selected codex provider both migrate
+  // onto the codex custom choice, and the lock key is retired.
+  const lockedCustom = storage({ ae_mcp_backend: 'codex', ae_mcp_channel_lock: 'custom' });
+  assert.deepEqual(migrateBackendPref(lockedCustom), {
+    pref: 'codex',
+    channelChoices: { claude: 'subscription', codex: 'custom' },
+  });
+  assert.equal(lockedCustom.map.has('ae_mcp_channel_lock'), false);
+  assert.equal(lockedCustom.map.get('ae_mcp_channel_codex'), 'custom');
+  const providerSelected = storage({ ae_mcp_backend: 'codex', ae_mcp_codex_provider: 'token-' });
+  assert.equal(migrateBackendPref(providerSelected).channelChoices.codex, 'custom');
+  const lockedApi = storage({ ae_mcp_channel_lock: 'api' });
+  assert.equal(migrateBackendPref(lockedApi).channelChoices.claude, 'api');
+
+  // Already-migrated explicit choices win over any legacy leftovers.
+  const explicit = storage({
+    ae_mcp_backend: 'codex',
+    ae_mcp_channel_codex: 'cli',
+    ae_mcp_codex_provider: 'token-',
+    ae_mcp_channel_claude: 'api',
+  });
+  assert.deepEqual(migrateBackendPref(explicit).channelChoices, { claude: 'api', codex: 'cli' });
+  assert.deepEqual(migrateBackendPref(storage({})), {
+    pref: 'subscription',
+    channelChoices: { claude: 'subscription', codex: 'cli' },
+  });
 });

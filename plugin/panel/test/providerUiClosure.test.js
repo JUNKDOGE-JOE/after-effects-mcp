@@ -137,8 +137,12 @@ test('Codex app-server profile follows effective.channel and cannot inherit a cl
   assert.doesNotMatch(app, /if\s*\(codexCustomProvider\s*&&\s*codexCustomProvider\.baseUrl\)\s*return undefined/);
   assert.match(app, /const facts\s*=\s*\{[\s\S]*effectiveChannel:\s*effective\.channel/);
   assert.match(app, /const facts\s*=\s*\{[\s\S]*customProviderCredentialResolverReady:\s*codexProviderCredentialResolverReady/);
-  assert.match(app, /onCodexProviderChange=\{\(id\)\s*=>\s*\{[\s\S]*syncCodexProviderChannelLock\(id\)/);
-  assert.match(app, /onLockChannel=\{\(channel\)\s*=>\s*\{[\s\S]*codexProviderChannelLock\(channel,\s*codexProviderId\)/);
+  // #229: provider selection is configuration-only; routing follows the
+  // explicit per-backend channel choice and never a lock or provider pin.
+  assert.doesNotMatch(app, /codexProviderChannelLock|syncCodexProviderChannelLock|ae_mcp_channel_lock/);
+  assert.match(app, /onCodexProviderChange=\{\(id\)\s*=>\s*\{[\s\S]*codexBackend\.reset\(\)/);
+  assert.match(app, /onSelectChannel=\{\(channel\)\s*=>\s*\{[\s\S]*writePref\('ae_mcp_channel_'\s*\+\s*group,\s*channel\)/);
+  assert.match(app, /onSelectChannel=\{\(channel\)\s*=>\s*\{[\s\S]*runCodexProbe\(\)/);
 });
 
 test('provider initialization retains the last provider list and renders distinct actionable failure classes', () => {

@@ -1054,7 +1054,7 @@ test('setThoughtLevel rejects an invalid level', async () => {
   assert.equal(ok, false);
 });
 
-test('elicitation/create (AskUserQuestion) surfaces options and replies with action/content', async () => {
+test('elicitation/create (AskUserQuestion) surfaces the question form and replies with action/content', async () => {
   const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
   const { proc } = await startTurn(backend, spawned, 'pick a color');
   // Simulate ZCode sending an elicitation/create REQUEST (mode:form) with a
@@ -1074,21 +1074,29 @@ test('elicitation/create (AskUserQuestion) surfaces options and replies with act
   });
   await flush();
 
-  // The panel should have received an approval-required with the choices.
-  const approval = events.find((e) => e.type === 'approval-required' && e.name === 'AskUserQuestion');
-  assert.ok(approval, 'approval-required emitted for elicitation');
-  assert.deepEqual(approval.input.choices, ['red', 'green', 'blue']);
+  // A dedicated question event carries every option — not an Allow/Deny card.
+  const question = events.find((e) => e.type === 'question-required');
+  assert.ok(question, 'question-required emitted for elicitation');
+  assert.equal(question.source, 'zcode-elicitation');
+  assert.equal(question.title, 'Which color?');
+  assert.deepEqual(question.questions[0].options.map((o) => o.label), ['red', 'green', 'blue']);
+  assert.equal(question.questions[0].allowCustom, false, 'schema enums accept only listed values');
 
-  // User picks "green" — approve() must reply with {action:"accept", content:{color:"green"}}.
-  backend.approve(approval.toolUseId, 'green');
+  // User picks "green" (the SECOND option) — the agent receives exactly it.
+  backend.answerQuestion(question.toolUseId, {
+    action: 'submit',
+    values: { [question.questions[0].id]: 'green' },
+  });
   await flush();
   const reply = parseWrites(proc).find((m) => m.id === 99);
   assert.ok(reply, 'elicitation reply sent');
   assert.equal(reply.result.action, 'accept');
   assert.deepEqual(reply.result.content, { color: 'green' });
+  assert.ok(events.some((e) => e.type === 'question-resolved'
+    && e.toolUseId === question.toolUseId && e.outcome === 'answered'));
 });
 
-test('elicitation auto-accepts in none tier (no blocking)', async () => {
+test('none tier still surfaces the question form instead of answering for the user', async () => {
   const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'none' });
   const { proc } = await startTurn(backend, spawned, 'pick a color');
   proc.pushStdout({
@@ -1105,11 +1113,39 @@ test('elicitation auto-accepts in none tier (no blocking)', async () => {
     },
   });
   await flush();
-  // Should auto-accept with the first option, no approval-required emitted.
-  assert.ok(!events.some((e) => e.type === 'approval-required'));
+  // Automatic permission modes must NOT choose an answer (#219): the request
+  // stays pending until the user submits through the form.
+  assert.ok(events.some((e) => e.type === 'question-required'));
+  assert.equal(parseWrites(proc).find((m) => m.id === 100), undefined, 'no auto-reply sent');
+
+  backend.answerQuestion('elicit_100', { action: 'submit', values: { q0: 'green' } });
+  await flush();
   const reply = parseWrites(proc).find((m) => m.id === 100);
-  assert.equal(reply.result.action, 'accept');
-  assert.equal(reply.result.content.color, 'red');
+  assert.deepEqual(reply.result, { action: 'accept', content: { color: 'green' } });
+});
+
+test('unsupported elicitation schemas decline clearly instead of inventing an answer', async () => {
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
+  const { proc } = await startTurn(backend, spawned, 'configure');
+  proc.pushStdout({
+    id: 101,
+    method: 'elicitation/create',
+    params: {
+      mode: 'form',
+      message: 'Configure the render',
+      requestedSchema: {
+        type: 'object',
+        properties: { budget: { type: 'number' } },
+        required: ['budget'],
+      },
+    },
+  });
+  await flush();
+
+  const reply = parseWrites(proc).find((m) => m.id === 101);
+  assert.deepEqual(reply.result, { action: 'decline' });
+  assert.equal(events.some((e) => e.type === 'question-required'), false);
+  assert.ok(events.some((e) => e.type === 'error' && /unsupported form schema/i.test(e.message)));
 });
 
 test('ZCode none tier still asks for an external artifact plan', async () => {
@@ -1281,41 +1317,180 @@ test('ZCode delegates valid staged ae_toolUse calls without caching the tool nam
   });
 });
 
-test('interaction/requestUserInput (AskUserQuestion) surfaces choices and replies with decision/answers', async () => {
+function pushUserInput(proc, id, questions, prompt = 'Tool AskUserQuestion requires user interaction') {
+  proc.pushStdout({
+    id,
+    method: 'interaction/requestUserInput',
+    params: { prompt, input: { questions } },
+  });
+}
+
+test('interaction/requestUserInput surfaces the question form and replies with decision/answers', async () => {
   const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
   const { proc } = await startTurn(backend, spawned, 'pick a color');
-  // ZCode sends interaction/requestUserInput as a REQUEST (with id).
-  proc.pushStdout({
-    id: 77,
-    method: 'interaction/requestUserInput',
-    params: {
-      prompt: 'Tool AskUserQuestion requires user interaction',
-      input: {
-        questions: [{
-          question: 'Which color do you prefer: red or blue?',
-          header: 'Color choice',
-          multiSelect: false,
-          options: [
-            { label: 'Red', description: 'You prefer the color red.' },
-            { label: 'Blue', description: 'You prefer the color blue.' },
-          ],
-        }],
-      },
-    },
-  });
+  pushUserInput(proc, 77, [{
+    question: 'Which color do you prefer: red or blue?',
+    header: 'Color choice',
+    multiSelect: false,
+    options: [
+      { label: 'Red', description: 'You prefer the color red.' },
+      { label: 'Blue', description: 'You prefer the color blue.' },
+    ],
+  }]);
   await flush();
 
-  const approval = events.find((e) => e.type === 'approval-required' && e.name === 'AskUserQuestion');
-  assert.ok(approval, 'approval-required emitted for AskUserQuestion');
-  assert.deepEqual(approval.input.choices, ['Red', 'Blue']);
+  const question = events.find((e) => e.type === 'question-required');
+  assert.ok(question, 'question-required emitted for AskUserQuestion');
+  assert.equal(question.source, 'zcode-user-input');
+  assert.deepEqual(question.questions[0].options.map((o) => o.label), ['Red', 'Blue']);
+  assert.equal(question.questions[0].allowCustom, true, 'user-input questions accept custom text');
 
-  // User picks "Blue" — approve() must reply {decision:"allow", answers:{...:"Blue"}}.
-  backend.approve(approval.toolUseId, 'Blue');
+  // User picks "Blue" (the SECOND option) — the agent receives exactly it.
+  backend.answerQuestion(question.toolUseId, {
+    action: 'submit',
+    values: { [question.questions[0].id]: 'Blue' },
+  });
   await flush();
   const reply = parseWrites(proc).find((m) => m.id === 77);
   assert.ok(reply, 'requestUserInput reply sent');
   assert.equal(reply.result.decision, 'allow');
   assert.equal(reply.result.answers['Which color do you prefer: red or blue?'], 'Blue');
+  assert.ok(events.some((e) => e.type === 'question-resolved' && e.outcome === 'answered'
+    && e.answers['Which color do you prefer: red or blue?'] === 'Blue'));
+});
+
+test('multi-select, custom text, and independent answers reach the agent exactly', async () => {
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
+  const { proc } = await startTurn(backend, spawned, 'plan the shot');
+  pushUserInput(proc, 78, [
+    {
+      question: 'Which passes should I render?',
+      multiSelect: true,
+      options: [{ label: 'Beauty' }, { label: 'Depth' }, { label: 'Cryptomatte' }],
+    },
+    {
+      question: 'Name the output folder',
+      multiSelect: false,
+      options: [{ label: 'renders' }, { label: 'output' }],
+    },
+  ]);
+  await flush();
+
+  const question = events.find((e) => e.type === 'question-required');
+  const [multi, single] = question.questions;
+  assert.equal(multi.multiSelect, true);
+  backend.answerQuestion(question.toolUseId, {
+    action: 'submit',
+    values: {
+      [multi.id]: ['Beauty', 'Cryptomatte'],
+      // Custom text instead of a listed option: the agent gets the exact text.
+      [single.id]: 'shots/EP01',
+    },
+  });
+  await flush();
+
+  const reply = parseWrites(proc).find((m) => m.id === 78);
+  assert.equal(reply.result.decision, 'allow');
+  assert.deepEqual(reply.result.answers, {
+    'Which passes should I render?': 'Beauty, Cryptomatte',
+    'Name the output folder': 'shots/EP01',
+  });
+});
+
+test('cancelling a question declines it and lets the next turn start', async () => {
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
+  const { proc, pending } = await startTurn(backend, spawned, 'pick');
+  pushUserInput(proc, 79, [{
+    question: 'Pick one',
+    options: [{ label: 'A' }, { label: 'B' }],
+  }]);
+  await flush();
+
+  backend.answerQuestion('ask_79', { action: 'cancel' });
+  await flush();
+  const reply = parseWrites(proc).find((m) => m.id === 79);
+  assert.deepEqual(reply.result, { decision: 'decline', answers: {} });
+  assert.ok(events.some((e) => e.type === 'question-resolved' && e.outcome === 'cancelled'));
+
+  pushEvent(proc, 'turn.completed', { response: 'ok' });
+  await pending;
+});
+
+// --- #220: abnormal backend lifecycle must settle pending interactions ---
+
+test('process exit settles a pending approval and question exactly once', async () => {
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
+  const { proc, pending } = await startTurn(backend, spawned, 'work');
+  pushEvent(proc, 'permission.requested', {
+    toolCallId: 'tc_crash',
+    toolName: 'ae_setProperty',
+    riskLevel: 'medium',
+    input: {},
+    requestId: 'r_crash',
+  });
+  pushUserInput(proc, 80, [{ question: 'Pick one', options: [{ label: 'A' }] }]);
+  await flush();
+  assert.ok(events.some((e) => e.type === 'approval-required' && e.toolUseId === 'tc_crash'));
+  assert.ok(events.some((e) => e.type === 'question-required' && e.toolUseId === 'ask_80'));
+
+  proc.exit(1);
+  await pending;
+  await flush();
+
+  assert.equal(events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'tc_crash').length, 1);
+  assert.equal(events.filter((e) => e.type === 'question-resolved' && e.toolUseId === 'ask_80').length, 1);
+  assert.ok(events.some((e) => e.type === 'error'), 'turn reaches a typed error terminal state');
+
+  // Duplicate lifecycle signals cannot settle anything twice.
+  proc.exit(1);
+  proc.error(new Error('late'));
+  await flush();
+  assert.equal(events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'tc_crash').length, 1);
+  assert.equal(events.filter((e) => e.type === 'question-resolved' && e.toolUseId === 'ask_80').length, 1);
+
+  // Settled interactions are inert and the next turn starts on a fresh process.
+  backend.approve('tc_crash', 'allow');
+  assert.equal(backend.answerQuestion('ask_80', { action: 'submit', values: { q0: 'A' } }), false);
+  const secondPending = backend.sendUser('next');
+  await flush();
+  const secondProc = spawned.procs[1];
+  assert.ok(secondProc, 'a fresh process spawns after cleanup');
+  const createReq = parseWrites(secondProc)[0];
+  respond(secondProc, createReq, { session: { sessionId: 'sess_2' }, settings: { model: { available: [] } } });
+  await flush();
+  const subReq = parseWrites(secondProc).find((m) => m.method === 'session/subscribe');
+  if (subReq) respond(secondProc, subReq, { sessionId: 'sess_2', eventSeq: 0 });
+  await flush();
+  const sendReq = parseWrites(secondProc).find((m) => m.method === 'session/send');
+  respond(secondProc, sendReq, { accepted: true, sessionId: 'sess_2' });
+  await flush();
+  pushEvent(secondProc, 'turn.completed', { response: 'done' }, { seq: 2 });
+  await secondPending;
+});
+
+test('turn.failed declines pending interactions on the still-live peer', async () => {
+  const { backend, events, spawned } = makeBackend({ getPermissionMode: () => 'manual' });
+  const { proc, pending } = await startTurn(backend, spawned, 'work');
+  pushEvent(proc, 'permission.requested', {
+    toolCallId: 'tc_fail',
+    toolName: 'ae_setProperty',
+    riskLevel: 'medium',
+    input: {},
+    requestId: 'r_fail',
+  });
+  pushUserInput(proc, 81, [{ question: 'Pick one', options: [{ label: 'A' }] }]);
+  await flush();
+
+  pushEvent(proc, 'turn.failed', { error: { message: 'model exploded' } });
+  await pending;
+  await flush();
+
+  // Live peer: protocol-correct decline replies are delivered for both kinds.
+  const writes = parseWrites(proc);
+  assert.deepEqual(writes.find((m) => m.id === 'r_fail')?.result, { decision: 'decline' });
+  assert.deepEqual(writes.find((m) => m.id === 81)?.result, { decision: 'decline', answers: {} });
+  assert.equal(events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'tc_fail').length, 1);
+  assert.equal(events.filter((e) => e.type === 'question-resolved' && e.toolUseId === 'ask_81').length, 1);
 });
 
 test('session/create injects the ae MCP server when getMcpSpec is provided', async () => {
