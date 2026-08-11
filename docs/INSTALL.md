@@ -33,6 +33,10 @@ v0.9.5 的发布资产是：
 
 内置/离线 Python、一体化安装器、自动 AEX 部署、Windows RuntimeManager、升级/修复/回滚/卸载生命周期不属于 v0.9.5 Windows 发布范围。
 
+### macOS arm64 补传资产（2026-08-12）
+
+v0.9.5 发布后按 v0.9.4 先例（#214）补传了 macOS arm64 资产：`ae-mcp-platform-bundle-v0.9.5-macos-arm64-unsigned.zip`（完整平台包，未签名，通过 `verify-platform-bundle` 校验）、`AeMcpNative-v0.9.5-macos-arm64.plugin.zip`（原生 AEGP 插件，ad-hoc 签名）与 `SHA256SUMS-v0.9.5-macos-arm64.txt`，均构建自干净 `636d6f6`。本次补传不含 macOS ZXP；自签名 ZXP 待签名环境可用后补传。原生插件安装方式与 v0.9.4 相同：校验 SHA-256 → 完全退出 AE → 解压后把完整的 `AeMcpNative.plugin` 放到 `~/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp/AeMcpNative.plugin` → 重启 AE。平台包面向测试与手动部署（开发者/进阶用户），未经 AE 真机验收，使用前先核对 SHA-256。
+
 ### 可选 AI 通道依赖
 
 核心 MCP/AE 能力不依赖 AI CLI。只有选择相应面板通道时，才需要以下可选依赖：
@@ -136,6 +140,10 @@ Do not substitute a source archive, locally rebuilt package, or public PyPI name
 On Windows, the Panel starts Platform Helper when it opens; the installer does not prestart a resident Helper. Closing and reopening the Panel reconnects within the same AE session. Platform Helper exits when its authenticated AE process exits or crashes. Startup, handshake, or credential-store failures remain fail-closed and never fall back to plaintext provider configuration.
 
 Bundled/offline Python, an integrated installer, automatic AEX deployment, Windows RuntimeManager, and upgrade/repair/rollback/uninstall lifecycle are outside the v0.9.5 Windows release.
+
+### macOS arm64 Supplemental Assets (2026-08-12)
+
+Following the v0.9.4 precedent (#214), macOS arm64 assets were added to the v0.9.5 release after publication: `ae-mcp-platform-bundle-v0.9.5-macos-arm64-unsigned.zip` (full platform bundle, unsigned, `verify-platform-bundle` verified), `AeMcpNative-v0.9.5-macos-arm64.plugin.zip` (native AEGP plug-in, ad-hoc signed), and `SHA256SUMS-v0.9.5-macos-arm64.txt`, all built from clean `636d6f6`. No macOS ZXP is included yet; a self-signed ZXP will follow once the signing environment is available. The native plug-in installs as in v0.9.4: verify the SHA-256, quit AE completely, unzip, place the complete `AeMcpNative.plugin` at `~/Library/Application Support/Adobe/Common/Plug-ins/7.0/MediaCore/ae-mcp/AeMcpNative.plugin`, and restart AE. The platform bundle targets testing and manual deployment (developers/advanced users), has not passed on-host AE acceptance, and should be checksum-verified before use.
 
 ### Optional AI Channel Dependencies
 
