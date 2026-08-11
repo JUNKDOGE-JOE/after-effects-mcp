@@ -121,12 +121,50 @@ if (Test-Path -LiteralPath $cepDir) {
     }
 }
 
+# CEP loads extensions by the manifest's bundle id and scans EVERY directory in
+# the extensions folder — dot-prefixes and renames do not exclude anything. A
+# retained backup inside the scan path therefore registers a second
+# com.aemcp.panel, and the duplicate-id race can deadlock the AE main thread at
+# startup (2026-08-11 incident). All generated artifacts (staging, backups,
+# failed installs) must live OUTSIDE the scan path.
+$vault = Join-Path (Split-Path -Parent $cepParent) 'aemcp-panel-backups'
+$null = New-Item -ItemType Directory -Path $vault -Force
+$vaultItem = Get-Item -LiteralPath $vault -Force
+if (-not $vaultItem.PSIsContainer -or
+    ($vaultItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+    Fail-DevInstall "backup vault must be a regular, non-reparse directory: $vault"
+}
+
+# Sweep legacy artifacts (from script versions that kept them beside the panel)
+# out of the scan path before anything else registers them again.
+foreach ($legacy in @(Get-ChildItem -LiteralPath $cepParent -Force |
+    Where-Object { $_.Name -like '.com.aemcp.panel.*' })) {
+    $destination = Join-Path $vault $legacy.Name
+    if (Test-Path -LiteralPath $destination) {
+        Fail-DevInstall "cannot relocate legacy artifact, vault entry already exists: $destination"
+    }
+    Move-Item -LiteralPath $legacy.FullName -Destination $destination
+    Write-Host "Relocated legacy deployment artifact out of the CEP scan path: $($legacy.Name)"
+}
+
+# Fail closed if any OTHER directory still carries our manifest — a stray copy
+# under any name would race the real panel for the extension id.
+foreach ($entry in @(Get-ChildItem -LiteralPath $cepParent -Force -Directory |
+    Where-Object { $_.Name -ne 'com.aemcp.panel' })) {
+    $manifest = Join-Path $entry.FullName 'CSXS\manifest.xml'
+    if ((Test-Path -LiteralPath $manifest -PathType Leaf) -and
+        (Select-String -LiteralPath $manifest -Pattern 'com\.aemcp\.panel' -Quiet)) {
+        Fail-DevInstall ("another directory in the CEP scan path registers com.aemcp.panel: " +
+            "$($entry.FullName). Move it out of $cepParent and retry.")
+    }
+}
+
 $installId = ([DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ') + '.' +
     [guid]::NewGuid().ToString('N'))
-$staging = Join-Path $cepParent ".com.aemcp.panel.staging.$installId"
-$backup = Join-Path $cepParent ".com.aemcp.panel.backup.$installId"
-$failedInstall = Join-Path $cepParent ".com.aemcp.panel.failed.$installId"
-$restoreReplaced = Join-Path $cepParent ".com.aemcp.panel.replaced.$installId"
+$staging = Join-Path $vault ".com.aemcp.panel.staging.$installId"
+$backup = Join-Path $vault ".com.aemcp.panel.backup.$installId"
+$failedInstall = Join-Path $vault ".com.aemcp.panel.failed.$installId"
+$restoreReplaced = Join-Path $vault ".com.aemcp.panel.replaced.$installId"
 foreach ($generated in @($staging, $backup, $failedInstall, $restoreReplaced)) {
     if (Test-Path -LiteralPath $generated) {
         Fail-DevInstall "generated deployment path already exists: $generated"
@@ -138,7 +176,7 @@ $oldMoved = $false
 $stageMoveStarted = $false
 
 try {
-    Write-Host '[2/6] Staging the complete plugin tree beside the final target...'
+    Write-Host '[2/6] Staging the complete plugin tree in the vault (outside the CEP scan path)...'
     $null = New-Item -ItemType Directory -Path $staging
     foreach ($child in @(Get-ChildItem -LiteralPath $pluginSrc -Force)) {
         Copy-Item -LiteralPath $child.FullName -Destination $staging -Recurse -Force
