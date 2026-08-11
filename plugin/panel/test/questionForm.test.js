@@ -2,8 +2,12 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
+  answersForAskUserQuestion,
+  answersForCodexUserInput,
   answersForUserInput,
   contentForElicitation,
+  questionsFromAskUserQuestion,
+  questionsFromCodexUserInput,
   questionsFromElicitationSchema,
   questionsFromUserInput,
   validateQuestionAnswers,
@@ -40,6 +44,79 @@ test('questionsFromUserInput normalizes options, multiSelect, and custom-answer 
   // No options -> free text question keyed by its header.
   assert.equal(questions[2].key, 'Notes');
   assert.deepEqual(questions[2].options, []);
+});
+
+// --- normalization: codex item/tool/requestUserInput (#228) ---
+
+test('questionsFromCodexUserInput keys by question id and honors isOther', () => {
+  const questions = questionsFromCodexUserInput({
+    threadId: 't', turnId: 'u', itemId: 'call_1',
+    questions: [
+      {
+        id: 'color_choice', header: '颜色', question: '你喜欢哪种颜色？',
+        isOther: true, isSecret: false,
+        options: [{ label: '红色', description: '偏暖' }, { label: '蓝色', description: '偏冷' }],
+      },
+      { id: 'locked', header: 'Locked', question: 'pick one', isOther: false, options: [{ label: 'A', description: '' }] },
+    ],
+  });
+  assert.equal(questions.length, 2);
+  assert.equal(questions[0].key, 'color_choice');
+  assert.equal(questions[0].prompt, '你喜欢哪种颜色？');
+  assert.equal(questions[0].allowCustom, true);
+  assert.equal(questions[0].multiSelect, false);
+  assert.deepEqual(questions[0].options.map((o) => o.label), ['红色', '蓝色']);
+  assert.equal(questions[1].allowCustom, false);
+});
+
+test('answersForCodexUserInput wraps each answer as { answers: [string] } keyed by id', () => {
+  const questions = questionsFromCodexUserInput({
+    questions: [{ id: 'color_choice', question: 'q', options: [{ label: '红色' }] }],
+  });
+  const answers = answersForCodexUserInput(questions, { q0: '红色' });
+  assert.deepEqual(answers, { color_choice: { answers: ['红色'] } });
+  // A custom free-text answer still rides through as a one-element array.
+  assert.deepEqual(
+    answersForCodexUserInput(questions, { q0: 'teal' }),
+    { color_choice: { answers: ['teal'] } },
+  );
+  // An empty answer yields an empty list, not [''].
+  assert.deepEqual(answersForCodexUserInput(questions, {}), { color_choice: { answers: [] } });
+});
+
+// --- normalization: claude AskUserQuestion (#228) ---
+
+test('questionsFromAskUserQuestion keys by question text and carries multiSelect', () => {
+  const questions = questionsFromAskUserQuestion({
+    questions: [
+      {
+        question: 'How should I format the output?', header: 'Format', multiSelect: false,
+        options: [{ label: 'Summary', description: 'Brief' }, { label: 'Detailed', description: 'Full' }],
+      },
+      {
+        question: 'Which sections?', header: 'Sections', multiSelect: true,
+        options: [{ label: 'Intro', description: '' }, { label: 'Conclusion', description: '' }],
+      },
+    ],
+  });
+  assert.equal(questions[0].key, 'How should I format the output?');
+  assert.equal(questions[0].multiSelect, false);
+  assert.equal(questions[0].allowCustom, true);
+  assert.equal(questions[1].multiSelect, true);
+});
+
+test('answersForAskUserQuestion maps question text to label / label[]', () => {
+  const questions = questionsFromAskUserQuestion({
+    questions: [
+      { question: 'Format?', options: [{ label: 'Summary' }], multiSelect: false },
+      { question: 'Sections?', options: [{ label: 'Intro' }, { label: 'Conclusion' }], multiSelect: true },
+    ],
+  });
+  const answers = answersForAskUserQuestion(questions, { q0: 'Summary', q1: ['Intro', 'Conclusion'] });
+  assert.deepEqual(answers, {
+    'Format?': 'Summary',
+    'Sections?': ['Intro', 'Conclusion'],
+  });
 });
 
 // --- normalization: elicitation / MCP schema ---

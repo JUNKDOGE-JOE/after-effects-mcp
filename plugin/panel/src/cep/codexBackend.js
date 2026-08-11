@@ -27,6 +27,10 @@ import {
   normalizeTurnInput,
   withAttachmentManifest,
 } from '../../../shared/chat-attachments.mjs';
+import {
+  answersForCodexUserInput,
+  questionsFromCodexUserInput,
+} from '../lib/questionForm.js';
 
 const RPC_TIMEOUT_MS = 30000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -324,6 +328,7 @@ export function createCodexBackend({
   let activeUserText = '';
   let activeUserRecorded = false;
   const pendingApprovals = new Map();
+  const pendingUserInputs = new Map();
   const sessionAllowedTools = new Set();
   const sessionAllowedPlans = new Set();
 
@@ -444,6 +449,32 @@ export function createCodexBackend({
       pendingApprovals.delete(toolUseId);
       emit({ type: 'tool-denied', toolUseId });
     }
+    // #228/#220: settle any pending agent-to-user question as cancelled so the
+    // card stops being actionable and the question never outlives the backend.
+    for (const [toolUseId, pending] of Array.from(pendingUserInputs.entries())) {
+      pendingUserInputs.delete(toolUseId);
+      if (rpc) rpc.respond(pending.rpcId, { answers: {} });
+      emit({ type: 'question-resolved', toolUseId, outcome: 'cancelled' });
+    }
+  }
+
+  // #228: settle a pending codex question. result:
+  //   { action:'submit', values: { [question.id]: string|string[] } }
+  //   | { action:'cancel' }
+  function answerQuestion(toolUseId, result) {
+    const id = String(toolUseId);
+    const pending = pendingUserInputs.get(id);
+    if (!pending) return false;
+    pendingUserInputs.delete(id);
+    if (!result || result.action !== 'submit') {
+      if (rpc) rpc.respond(pending.rpcId, { answers: {} });
+      emit({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
+      return true;
+    }
+    const answers = answersForCodexUserInput(pending.questions, result.values);
+    if (rpc) rpc.respond(pending.rpcId, { answers });
+    emit({ type: 'question-resolved', toolUseId: id, outcome: 'answered', answers });
+    return true;
   }
 
   function detachRuntimeForProviderRecovery() {
@@ -559,7 +590,36 @@ export function createCodexBackend({
     emit({ type: 'tool-denied', toolUseId });
   }
 
+  // #228: surface an agent-to-user question through the #219 form. The answer
+  // returns via answerQuestion(); teardown settles it as cancelled so a
+  // question never outlives its backend (mirrors zcode / #220).
+  function handleUserInput(message) {
+    const params = message.params || {};
+    const questions = questionsFromCodexUserInput(params);
+    if (!questions.length) {
+      if (rpc) rpc.respond(message.id, { answers: {} });
+      return;
+    }
+    const toolUseId = 'ask_' + String(message.id);
+    pendingUserInputs.set(toolUseId, { rpcId: message.id, questions });
+    emit({
+      type: 'question-required',
+      toolUseId,
+      source: 'codex-user-input',
+      title: '',
+      questions,
+    });
+  }
+
   function handleRequest(message) {
+    // #228: codex asks the user directly via the experimental
+    // item/tool/requestUserInput server request (enabled with
+    // features.default_mode_request_user_input). Bridge it to the #219
+    // question form instead of the old -32601 Method-not-found reply.
+    if (message.method === 'item/tool/requestUserInput') {
+      handleUserInput(message);
+      return;
+    }
     if (message.method !== 'mcpServer/elicitation/request') {
       if (rpc) rpc.respondError(message.id, -32601, 'Method not found');
       return;
@@ -916,7 +976,15 @@ export function createCodexBackend({
       assertCurrentStart();
       let spawnedProc;
       try {
-        spawnedProc = adapter.spawn(executable, codexAppServerArgs(runtimeConfig), {
+        // #228: enable the experimental request_user_input tool for the chat
+        // process only. The probe deliberately stays bare (see probeAccount /
+        // #226), so this flag is appended here rather than in the shared
+        // codexAppServerArgs builder.
+        const appServerArgs = [
+          ...codexAppServerArgs(runtimeConfig),
+          '-c', 'features.default_mode_request_user_input=true',
+        ];
+        spawnedProc = adapter.spawn(executable, appServerArgs, {
           stdio: 'pipe',
           windowsHide: true,
           env: spawnEnvWithCreds,
@@ -1266,6 +1334,7 @@ export function createCodexBackend({
     currentTurnId = null;
     transcript = [];
     pendingApprovals.clear();
+    pendingUserInputs.clear();
     sessionAllowedTools.clear();
     sessionAllowedPlans.clear();
     toolMeta = { allowedTools: [], annotations: {} };
@@ -1390,6 +1459,7 @@ export function createCodexBackend({
   return {
     sendUser,
     approve,
+    answerQuestion,
     stop,
     reset,
     getMessages: () => clone(transcript),

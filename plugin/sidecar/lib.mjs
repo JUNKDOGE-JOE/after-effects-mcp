@@ -120,12 +120,14 @@ export function createSidecar({
   const baseEnv = cleanEnv(env || {}, options.channel)
   const approvals = new Map()
   const pendingElicitations = new Map()
+  const pendingUserInputs = new Map()
   const sessionAllowedTools = new Set()
   const sessionAllowedPlans = new Set()
   const toolUses = []
   const ignoredToolUseIds = new Set()
   let sessionId = null
   let approvalSeq = 0
+  let userInputSeq = 0
   let activeTurn = null
 
   if (!options.probe) {
@@ -161,6 +163,8 @@ export function createSidecar({
       startTurn(message)
     } else if (message.t === 'approve') {
       handleApproval(message)
+    } else if (message.t === 'answer') {
+      handleAnswer(message)
     } else if (message.t === 'stop') {
       stopTurn()
     }
@@ -283,7 +287,10 @@ export function createSidecar({
     const queryOptions = {
       model,
       mcpServers: buildMcpServers(),
-      allowedTools: uniqueToolList([...tiered.allowedTools, ...attachmentTools]),
+      // AskUserQuestion (#228) is part of the surface in every tier. It always
+      // routes to canUseTool (not auto-run), and dontAsk tiers (readonly/none)
+      // deny it there, so listing it never bypasses a gate.
+      allowedTools: uniqueToolList([...tiered.allowedTools, ...attachmentTools, 'AskUserQuestion']),
       disallowedTools: DISALLOWED_TOOLS,
       settingSources: [],
       agents: buildAgents(turn),
@@ -356,7 +363,8 @@ export function createSidecar({
         tools: uniqueToolList([
           ...Object.keys(options.annotations),
           ...options.allowedTools,
-          ...attachmentTools
+          ...attachmentTools,
+          'AskUserQuestion'
         ])
       }
     }
@@ -437,6 +445,13 @@ export function createSidecar({
 
   async function canUseTool(toolName, input, turn) {
     const name = String(toolName || '')
+    // #228: AskUserQuestion always routes here (even under an allow rule). Pass
+    // the raw questions to the panel and block until it answers; the panel owns
+    // question-form normalization (mirrors the codex/zcode split). The SDK
+    // requires the original questions echoed back in updatedInput.
+    if (name === 'AskUserQuestion') {
+      return await handleAskUserQuestion(input, turn)
+    }
     if (name === 'Read') {
       const filePath = input && input.file_path
       if (!turn.attachments.length || typeof filePath !== 'string' || !isAbsolute(filePath)) {
@@ -494,6 +509,36 @@ export function createSidecar({
         input,
         resolve
       })
+    })
+  }
+
+  async function handleAskUserQuestion(input, turn) {
+    const questions = Array.isArray(input && input.questions) ? input.questions : []
+    if (!questions.length) {
+      // Nothing to ask: allow with an empty answers map so the tool settles.
+      return { behavior: 'allow', updatedInput: { questions, answers: {} } }
+    }
+    userInputSeq += 1
+    const toolUseId = `ask-${userInputSeq}`
+    emitEvent({ type: 'question-required-raw', toolUseId, questions })
+    return await new Promise((resolve) => {
+      pendingUserInputs.set(toolUseId, { questions, resolve })
+    })
+  }
+
+  function handleAnswer(message) {
+    const id = String(message.id || '')
+    const pending = pendingUserInputs.get(id)
+    if (!pending) return
+    pendingUserInputs.delete(id)
+    if (message.cancel === true) {
+      pending.resolve({ behavior: 'deny', message: 'User dismissed the question.' })
+      return
+    }
+    const answers = isPlainObject(message.answers) ? message.answers : {}
+    pending.resolve({
+      behavior: 'allow',
+      updatedInput: { questions: pending.questions, answers }
     })
   }
 
@@ -625,6 +670,13 @@ export function createSidecar({
       pendingElicitations.delete(id)
       emitEvent({ type: 'tool-denied', toolUseId: id })
       pending.resolve(approvalResult('deny', pending.policy))
+    }
+    // #228: settle any pending agent-to-user question as a dismissal so the
+    // canUseTool promise never dangles past a stopped turn.
+    for (const [id, pending] of pendingUserInputs) {
+      pendingUserInputs.delete(id)
+      emitEvent({ type: 'question-resolved-raw', toolUseId: id })
+      pending.resolve({ behavior: 'deny', message: 'User dismissed the question.' })
     }
   }
 

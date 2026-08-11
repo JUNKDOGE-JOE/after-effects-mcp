@@ -307,6 +307,8 @@ function expectedLocalProviderArgs({ chatCompatibility = false } = {}) {
       '-c', 'features.remote_plugin=false',
     );
   }
+  // #228: the chat process (not the probe) enables the user-input feature last.
+  args.push('-c', 'features.default_mode_request_user_input=true');
   return args;
 }
 
@@ -444,6 +446,71 @@ function pushElicitation(proc, id, params) {
   });
 }
 
+function pushUserInput(proc, id, params) {
+  proc.pushStdout({
+    jsonrpc: '2.0',
+    id,
+    method: 'item/tool/requestUserInput',
+    params,
+  });
+}
+
+test('codex enables the request_user_input feature on the chat process only (#228)', async () => {
+  const { backend, spawned } = makeBackend();
+  await startTurn(backend, spawned, 'hello');
+  const args = spawned.calls[0].args;
+  assert.equal(args[0], 'app-server');
+  assert.ok(args.includes('features.default_mode_request_user_input=true'),
+    'chat app-server must enable the user-input feature');
+});
+
+test('codex item/tool/requestUserInput becomes a question form and answers reply by id (#228)', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'ask me');
+
+  pushUserInput(proc, 'ui_1', {
+    threadId: 'thread_1', turnId: 'turn_1', itemId: 'call_x',
+    questions: [
+      {
+        id: 'color_choice', header: '颜色', question: '你喜欢哪种颜色？', isOther: true, isSecret: false,
+        options: [{ label: '红色', description: '暖' }, { label: '蓝色', description: '冷' }],
+      },
+    ],
+  });
+  await flush();
+
+  const ask = events.find((e) => e.type === 'question-required');
+  assert.ok(ask, 'a question-required event is emitted');
+  assert.equal(ask.source, 'codex-user-input');
+  assert.equal(ask.toolUseId, 'ask_ui_1');
+  assert.equal(ask.questions[0].key, 'color_choice');
+
+  backend.answerQuestion(ask.toolUseId, { action: 'submit', values: { q0: '蓝色' } });
+  await flush();
+
+  const reply = parseWrites(proc).find((w) => w.id === 'ui_1' && w.result);
+  assert.ok(reply, 'the RPC id is answered');
+  assert.deepEqual(reply.result, { answers: { color_choice: { answers: ['蓝色'] } } });
+  assert.ok(events.some((e) => e.type === 'question-resolved' && e.outcome === 'answered'));
+});
+
+test('codex user-input question is settled as cancelled on reset (#228/#220)', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { proc } = await startTurn(backend, spawned, 'ask me');
+  pushUserInput(proc, 'ui_2', {
+    questions: [{ id: 'q', question: 'pick', options: [{ label: 'A' }] }],
+  });
+  await flush();
+  assert.ok(events.some((e) => e.type === 'question-required'));
+
+  backend.reset();
+  await flush();
+  assert.ok(
+    events.some((e) => e.type === 'question-resolved' && e.outcome === 'cancelled'),
+    'reset settles the pending question as cancelled',
+  );
+});
+
 test('createCodexBackend starts codex app-server and sends thread/start with AE MCP config', async () => {
   const { backend, spawned } = makeBackend();
   const pending = backend.sendUser('hello');
@@ -451,7 +518,7 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
 
   assert.equal(spawned.calls.length, 1);
   assert.equal(spawned.calls[0].command, 'C:\\Tools\\codex.exe');
-  assert.deepEqual(spawned.calls[0].args, ['app-server']);
+  assert.deepEqual(spawned.calls[0].args, ['app-server', '-c', 'features.default_mode_request_user_input=true']);
   assert.equal(spawned.calls[0].options.shell, undefined);
   assert.equal(spawned.calls[0].options.stdio, 'pipe');
   assert.equal(spawned.calls[0].options.windowsHide, true);
@@ -818,8 +885,9 @@ test('createCodexBackend injects cli-config provider env var when no custom prov
   const { pending, proc } = await startTurn(backend, spawned, 'cli-config env');
 
   assert.equal(spawned.calls[0].command, 'C:\\Tools\\codex.exe');
-  // config.toml already declares model_provider; no -c override args.
-  assert.deepEqual(spawned.calls[0].args, ['app-server']);
+  // config.toml already declares model_provider; no provider -c override args,
+  // but the chat process still enables the user-input feature (#228).
+  assert.deepEqual(spawned.calls[0].args, ['app-server', '-c', 'features.default_mode_request_user_input=true']);
   assert.equal(spawned.calls[0].options.env.MEDIASTORM_GLM_API_KEY, 'stored-codex-key');
   assert.equal(Object.hasOwn(spawned.calls[0].sourceOptions.env, 'MEDIASTORM_GLM_API_KEY'), false);
 

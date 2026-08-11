@@ -164,6 +164,75 @@ test('createClaudeAgentBackend writes user only after ready handshake', async ()
   await pending;
 });
 
+test('claude AskUserQuestion round-trips through the #219 question form (#228)', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const pending = backend.sendUser('help me choose');
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+
+  // The sidecar passes the raw AskUserQuestion input through.
+  spawned.procs[0].pushStdout({
+    t: 'event',
+    event: {
+      type: 'question-required-raw',
+      toolUseId: 'ask-1',
+      questions: [
+        {
+          question: 'How should I format the output?', header: 'Format', multiSelect: false,
+          options: [{ label: 'Summary', description: 'Brief' }, { label: 'Detailed', description: 'Full' }],
+        },
+      ],
+    },
+  });
+  await flush();
+
+  const ask = events.find((e) => e.type === 'question-required');
+  assert.ok(ask, 'question-required is emitted');
+  assert.equal(ask.source, 'claude-ask-user-question');
+  assert.equal(ask.questions[0].key, 'How should I format the output?');
+  // The raw pass-through event itself must not leak to the panel.
+  assert.equal(events.some((e) => e.type === 'question-required-raw'), false);
+
+  backend.answerQuestion('ask-1', { action: 'submit', values: { q0: 'Summary' } });
+  await flush();
+
+  const answer = parseWrites(spawned.procs[0]).find((w) => w.t === 'answer');
+  assert.ok(answer, 'an answer line is written back to the sidecar');
+  assert.equal(answer.id, 'ask-1');
+  assert.deepEqual(answer.answers, { 'How should I format the output?': 'Summary' });
+  assert.ok(events.some((e) => e.type === 'question-resolved' && e.outcome === 'answered'));
+
+  spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await pending;
+});
+
+test('claude AskUserQuestion is settled cancelled when the sidecar exits (#228/#220)', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const pending = backend.sendUser('help me choose');
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+  spawned.procs[0].pushStdout({
+    t: 'event',
+    event: {
+      type: 'question-required-raw',
+      toolUseId: 'ask-9',
+      questions: [{ question: 'Pick', options: [{ label: 'A' }], multiSelect: false }],
+    },
+  });
+  await flush();
+  assert.ok(events.some((e) => e.type === 'question-required'));
+
+  spawned.procs[0].exit(1);
+  await pending.catch(() => {});
+  await flush();
+  assert.ok(
+    events.some((e) => e.type === 'question-resolved' && e.outcome === 'cancelled'),
+    'sidecar exit settles the pending question as cancelled',
+  );
+});
+
 test('createClaudeAgentBackend forwards one normalized attachment turn without exposing paths in events', async () => {
   const { backend, events, spawned } = makeBackend();
   const turn = {

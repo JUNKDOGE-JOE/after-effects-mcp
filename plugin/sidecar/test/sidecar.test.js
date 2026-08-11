@@ -173,6 +173,91 @@ test('attachment turns expose only exact canonical selected files through Read',
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 })
 
+test('AskUserQuestion routes to the panel and answers reach the SDK as updatedInput (#228)', async () => {
+  const writes = []
+  let queryInput
+  let releaseQuery
+  const queryGate = new Promise((resolve) => { releaseQuery = resolve })
+  const sidecar = createSidecar({
+    queryFn: async function * (input) {
+      queryInput = input
+      await queryGate
+      yield { type: 'result', subtype: 'success', is_error: false }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'choose', permissionMode: 'manual' }))
+  await waitFor(() => queryInput !== undefined)
+
+  // AskUserQuestion is part of the tool surface in every tier.
+  assert.equal(queryInput.options.allowedTools.includes('AskUserQuestion'), true)
+  assert.equal(queryInput.options.agents.ae.tools.includes('AskUserQuestion'), true)
+
+  const askInput = {
+    questions: [
+      {
+        question: 'How should I format the output?', header: 'Format', multiSelect: false,
+        options: [{ label: 'Summary', description: 'Brief' }, { label: 'Detailed', description: 'Full' }]
+      }
+    ]
+  }
+  const pending = queryInput.options.canUseTool('AskUserQuestion', askInput, {})
+  await waitFor(() => events(writes).some((e) => e.type === 'question-required-raw'))
+
+  const raw = events(writes).find((e) => e.type === 'question-required-raw')
+  assert.deepEqual(raw.questions, askInput.questions)
+
+  // The panel answers with a text-keyed map; the sidecar echoes the original
+  // questions and returns updatedInput per the AskUserQuestion contract.
+  sidecar.handleLine(JSON.stringify({
+    t: 'answer',
+    id: raw.toolUseId,
+    answers: { 'How should I format the output?': 'Summary' }
+  }))
+  const result = await pending
+  assert.deepEqual(result, {
+    behavior: 'allow',
+    updatedInput: {
+      questions: askInput.questions,
+      answers: { 'How should I format the output?': 'Summary' }
+    }
+  })
+
+  releaseQuery()
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+})
+
+test('AskUserQuestion is denied and drained when the turn is stopped (#228)', async () => {
+  const writes = []
+  let queryInput
+  const queryGate = new Promise(() => {})
+  const sidecar = createSidecar({
+    queryFn: async function * (input) {
+      queryInput = input
+      await queryGate
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: defaultOptions,
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'choose', permissionMode: 'manual' }))
+  await waitFor(() => queryInput !== undefined)
+
+  const pending = queryInput.options.canUseTool('AskUserQuestion', {
+    questions: [{ question: 'Pick', options: [{ label: 'A' }], multiSelect: false }]
+  }, {})
+  await waitFor(() => events(writes).some((e) => e.type === 'question-required-raw'))
+
+  sidecar.handleLine(JSON.stringify({ t: 'stop' }))
+  const result = await pending
+  assert.equal(result.behavior, 'deny')
+  assert.ok(events(writes).some((e) => e.type === 'question-resolved-raw'))
+})
+
 test('invalid selected attachment paths fail before query without leaking the path', async () => {
   const writes = []
   let queryCalls = 0
@@ -347,7 +432,8 @@ test('pins turn options to ae agent with annotations and allowed tools whitelist
   assert.deepEqual(seenOptions.agents.ae.tools, [
     'mcp__ae__ae_ping',
     'mcp__ae__ae_write',
-    'mcp__ae__ae_overview'
+    'mcp__ae__ae_overview',
+    'AskUserQuestion'
   ])
   assert.equal(typeof seenOptions.agents.ae.prompt, 'string')
   assert.notEqual(seenOptions.agents.ae.prompt.length, 0)
@@ -814,7 +900,8 @@ test('readonly tier maps to dontAsk with read-only allowlist', async () => {
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
   assert.equal(seen[0].permissionMode, 'dontAsk')
-  assert.deepEqual(seen[0].allowedTools, ['mcp__ae__r'])
+  // AskUserQuestion is on the surface but dontAsk denies it at canUseTool (#228).
+  assert.deepEqual(seen[0].allowedTools, ['mcp__ae__r', 'AskUserQuestion'])
 })
 
 test('none tier maps to dontAsk with full ae allowlist', async () => {
@@ -841,7 +928,7 @@ test('none tier maps to dontAsk with full ae allowlist', async () => {
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
   assert.equal(seen[0].permissionMode, 'dontAsk')
-  assert.deepEqual(seen[0].allowedTools.sort(), ['mcp__ae__r', 'mcp__ae__w', 'mcp__ae__x'])
+  assert.deepEqual(seen[0].allowedTools.sort(), ['AskUserQuestion', 'mcp__ae__r', 'mcp__ae__w', 'mcp__ae__x'])
 })
 
 test('auto tier pre-allows non-destructive and keeps callback for destructive', async () => {
@@ -872,7 +959,7 @@ test('auto tier pre-allows non-destructive and keeps callback for destructive', 
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
   assert.equal(seen[0].permissionMode, undefined)
-  assert.deepEqual(seen[0].allowedTools.sort(), ['mcp__ae__r', 'mcp__ae__w'])
+  assert.deepEqual(seen[0].allowedTools.sort(), ['AskUserQuestion', 'mcp__ae__r', 'mcp__ae__w'])
   assert.equal(eventCount(writes, 'approval-required'), 1)
 })
 

@@ -23889,6 +23889,58 @@
       };
     });
   }
+  function questionsFromCodexUserInput(params) {
+    const list = Array.isArray(params && params.questions) ? params.questions : [];
+    return list.map((q, index) => {
+      const options = normalizedOptions(q && q.options);
+      const id = asText(q && q.id);
+      return {
+        id: `q${index}`,
+        key: id || `question-${index}`,
+        prompt: asText(q && q.question) || asText(q && q.header),
+        header: asText(q && q.header),
+        options,
+        multiSelect: false,
+        allowCustom: q ? q.isOther !== false : true,
+        required: true
+      };
+    });
+  }
+  function answersForCodexUserInput(questions, values) {
+    const answers = {};
+    for (const question of questions) {
+      const value = valueForQuestion(question, values);
+      const list = question.multiSelect ? value : value ? [value] : [];
+      answers[question.key] = { answers: list };
+    }
+    return answers;
+  }
+  function questionsFromAskUserQuestion(params) {
+    const list = Array.isArray(params && params.questions) ? params.questions : [];
+    return list.map((q, index) => {
+      const options = normalizedOptions(q && q.options);
+      return {
+        id: `q${index}`,
+        key: asText(q && q.question) || asText(q && q.header) || `question-${index}`,
+        prompt: asText(q && q.question) || asText(q && q.header),
+        header: asText(q && q.header),
+        options,
+        multiSelect: Boolean(q && q.multiSelect),
+        // AskUserQuestion always offers an implicit free-text "Other"; the panel
+        // form mirrors that so a typed answer maps straight to the label value.
+        allowCustom: true,
+        required: true
+      };
+    });
+  }
+  function answersForAskUserQuestion(questions, values) {
+    const answers = {};
+    for (const question of questions) {
+      const value = valueForQuestion(question, values);
+      answers[question.key] = value;
+    }
+    return answers;
+  }
   function fieldQuestion(name, prop, required, index) {
     const schema = prop && typeof prop === "object" ? prop : {};
     const prompt = asText(schema.title) || asText(schema.description) || name;
@@ -39856,6 +39908,7 @@ data: ${JSON.stringify(payload)}
     let activeTurn = null;
     let activeTurnAccepted = false;
     let activeTurnDispatched = false;
+    const pendingUserInputs = /* @__PURE__ */ new Map();
     function emit(evt) {
       let event = evt;
       if ((event == null ? void 0 : event.type) === "error" && (activeTurn == null ? void 0 : activeTurn.turnId) && !event.turnId) {
@@ -39899,6 +39952,27 @@ data: ${JSON.stringify(payload)}
       if (!proc || !proc.stdin || !proc.stdin.write) return;
       proc.stdin.write(JSON.stringify(message) + "\n");
     }
+    function answerQuestion(toolUseId, result) {
+      const id = String(toolUseId);
+      const pending = pendingUserInputs.get(id);
+      if (!pending) return false;
+      pendingUserInputs.delete(id);
+      if (!result || result.action !== "submit") {
+        writeMessage({ t: "answer", id, cancel: true });
+        emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
+        return true;
+      }
+      const answers = answersForAskUserQuestion(pending.questions, result.values);
+      writeMessage({ t: "answer", id, answers });
+      emit({ type: "question-resolved", toolUseId: id, outcome: "answered", answers });
+      return true;
+    }
+    function drainUserInputs() {
+      for (const id of Array.from(pendingUserInputs.keys())) {
+        pendingUserInputs.delete(id);
+        emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
+      }
+    }
     function finishActive() {
       const resolve = activeResolve;
       activeResolve = null;
@@ -39915,6 +39989,20 @@ data: ${JSON.stringify(payload)}
       if (message.t !== "event") return;
       let event = message.event;
       if (!event) return;
+      if (event.type === "question-required-raw") {
+        const toolUseId = String(event.toolUseId || "");
+        const questions = questionsFromAskUserQuestion(event);
+        pendingUserInputs.set(toolUseId, { questions });
+        emit({ type: "question-required", toolUseId, source: "claude-ask-user-question", title: "", questions });
+        return;
+      }
+      if (event.type === "question-resolved-raw") {
+        const toolUseId = String(event.toolUseId || "");
+        if (pendingUserInputs.delete(toolUseId)) {
+          emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
+        }
+        return;
+      }
       if (processChannel === "api" && event.type === "error") {
         event = { ...event, message: "Provider sidecar request failed." };
       }
@@ -39976,6 +40064,7 @@ data: ${JSON.stringify(payload)}
       if (clearTranscript) transcript = [];
       if (finishRun) finishActive();
       if (clearStderr) stderrTail = "";
+      drainUserInputs();
       clearProviderSensitiveValues();
       await closeProviderRoute();
     }
@@ -39996,6 +40085,7 @@ data: ${JSON.stringify(payload)}
       processCandidateIdentity = null;
       runtimeGeneration += 1;
       void closeProviderRoute();
+      drainUserInputs();
       if (!wasReady && rejectReady) {
         clearReadyWait();
         processChannel = "subscription";
@@ -40023,6 +40113,7 @@ data: ${JSON.stringify(payload)}
       processCandidateIdentity = null;
       runtimeGeneration += 1;
       void closeProviderRoute();
+      drainUserInputs();
       if (rejectReady) {
         clearReadyWait();
         processChannel = "subscription";
@@ -40400,6 +40491,7 @@ data: ${JSON.stringify(payload)}
     return {
       sendUser,
       approve,
+      answerQuestion,
       stop,
       reset,
       getMessages: () => clone3(transcript),
@@ -40826,6 +40918,7 @@ data: ${JSON.stringify(payload)}
     let activeUserText = "";
     let activeUserRecorded = false;
     const pendingApprovals = /* @__PURE__ */ new Map();
+    const pendingUserInputs = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     const sessionAllowedPlans = /* @__PURE__ */ new Set();
     function closeProviderRoute() {
@@ -40934,6 +41027,26 @@ data: ${JSON.stringify(payload)}
         pendingApprovals.delete(toolUseId);
         emit({ type: "tool-denied", toolUseId });
       }
+      for (const [toolUseId, pending] of Array.from(pendingUserInputs.entries())) {
+        pendingUserInputs.delete(toolUseId);
+        if (rpc) rpc.respond(pending.rpcId, { answers: {} });
+        emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
+      }
+    }
+    function answerQuestion(toolUseId, result) {
+      const id = String(toolUseId);
+      const pending = pendingUserInputs.get(id);
+      if (!pending) return false;
+      pendingUserInputs.delete(id);
+      if (!result || result.action !== "submit") {
+        if (rpc) rpc.respond(pending.rpcId, { answers: {} });
+        emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
+        return true;
+      }
+      const answers = answersForCodexUserInput(pending.questions, result.values);
+      if (rpc) rpc.respond(pending.rpcId, { answers });
+      emit({ type: "question-resolved", toolUseId: id, outcome: "answered", answers });
+      return true;
     }
     function detachRuntimeForProviderRecovery() {
       const previousProc = proc;
@@ -41044,7 +41157,28 @@ data: ${JSON.stringify(payload)}
       if (rpc) rpc.respond(rpcId, { action: "decline", content: {} });
       emit({ type: "tool-denied", toolUseId });
     }
+    function handleUserInput(message) {
+      const params = message.params || {};
+      const questions = questionsFromCodexUserInput(params);
+      if (!questions.length) {
+        if (rpc) rpc.respond(message.id, { answers: {} });
+        return;
+      }
+      const toolUseId = "ask_" + String(message.id);
+      pendingUserInputs.set(toolUseId, { rpcId: message.id, questions });
+      emit({
+        type: "question-required",
+        toolUseId,
+        source: "codex-user-input",
+        title: "",
+        questions
+      });
+    }
     function handleRequest(message) {
+      if (message.method === "item/tool/requestUserInput") {
+        handleUserInput(message);
+        return;
+      }
       if (message.method !== "mcpServer/elicitation/request") {
         if (rpc) rpc.respondError(message.id, -32601, "Method not found");
         return;
@@ -41369,7 +41503,12 @@ data: ${JSON.stringify(payload)}
         assertCurrentStart();
         let spawnedProc;
         try {
-          spawnedProc = adapter.spawn(executable, codexAppServerArgs(runtimeConfig), {
+          const appServerArgs = [
+            ...codexAppServerArgs(runtimeConfig),
+            "-c",
+            "features.default_mode_request_user_input=true"
+          ];
+          spawnedProc = adapter.spawn(executable, appServerArgs, {
             stdio: "pipe",
             windowsHide: true,
             env: spawnEnvWithCreds
@@ -41694,6 +41833,7 @@ data: ${JSON.stringify(payload)}
       currentTurnId = null;
       transcript = [];
       pendingApprovals.clear();
+      pendingUserInputs.clear();
       sessionAllowedTools.clear();
       sessionAllowedPlans.clear();
       toolMeta = { allowedTools: [], annotations: {} };
@@ -41813,6 +41953,7 @@ data: ${JSON.stringify(payload)}
     return {
       sendUser,
       approve,
+      answerQuestion,
       stop,
       reset,
       getMessages: () => clone4(transcript),

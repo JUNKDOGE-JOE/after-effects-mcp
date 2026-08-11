@@ -55,6 +55,81 @@ export function questionsFromUserInput(params) {
   });
 }
 
+// Codex app-server item/tool/requestUserInput params (#228):
+//   { questions: [{ id, header, question, options: [{label, description}],
+//                   isOther, isSecret }] }
+// The reply keys answers by the question `id` and wraps each answer as
+// { answers: [<string>] }, so `key` mirrors the question id. `isOther` is the
+// protocol's own free-text affordance; secret questions are declined upstream
+// (the panel never renders a secret input), so they surface here as free text.
+export function questionsFromCodexUserInput(params) {
+  const list = Array.isArray(params && params.questions) ? params.questions : [];
+  return list.map((q, index) => {
+    const options = normalizedOptions(q && q.options);
+    const id = asText(q && q.id);
+    return {
+      id: `q${index}`,
+      key: id || `question-${index}`,
+      prompt: asText(q && q.question) || asText(q && q.header),
+      header: asText(q && q.header),
+      options,
+      multiSelect: false,
+      allowCustom: q ? q.isOther !== false : true,
+      required: true,
+    };
+  });
+}
+
+// Codex reply: { answers: { [question.id]: { answers: [<string>] } } }.
+// Multi-select never occurs (the schema has no multiSelect), but a custom
+// answer is a single free-text string; both go through as a one-element array.
+export function answersForCodexUserInput(questions, values) {
+  const answers = {};
+  for (const question of questions) {
+    const value = valueForQuestion(question, values);
+    const list = question.multiSelect
+      ? value
+      : (value ? [value] : []);
+    answers[question.key] = { answers: list };
+  }
+  return answers;
+}
+
+// Claude Agent SDK AskUserQuestion input (#228): the canUseTool callback
+//   receives { questions: [{ question, header, options: [{label, description,
+//   preview?}], multiSelect }] } and must reply with updatedInput carrying the
+//   ORIGINAL questions array plus an answers map keyed by each question's
+//   `question` text. See code.claude.com/docs/en/agent-sdk/user-input.
+export function questionsFromAskUserQuestion(params) {
+  const list = Array.isArray(params && params.questions) ? params.questions : [];
+  return list.map((q, index) => {
+    const options = normalizedOptions(q && q.options);
+    return {
+      id: `q${index}`,
+      key: asText(q && q.question) || asText(q && q.header) || `question-${index}`,
+      prompt: asText(q && q.question) || asText(q && q.header),
+      header: asText(q && q.header),
+      options,
+      multiSelect: Boolean(q && q.multiSelect),
+      // AskUserQuestion always offers an implicit free-text "Other"; the panel
+      // form mirrors that so a typed answer maps straight to the label value.
+      allowCustom: true,
+      required: true,
+    };
+  });
+}
+
+// Claude reply answers map: { [question text]: <label> | <label>[] }. Multi
+// -select passes an array of labels; single-select a bare string.
+export function answersForAskUserQuestion(questions, values) {
+  const answers = {};
+  for (const question of questions) {
+    const value = valueForQuestion(question, values);
+    answers[question.key] = value;
+  }
+  return answers;
+}
+
 function fieldQuestion(name, prop, required, index) {
   const schema = prop && typeof prop === 'object' ? prop : {};
   const prompt = asText(schema.title) || asText(schema.description) || name;

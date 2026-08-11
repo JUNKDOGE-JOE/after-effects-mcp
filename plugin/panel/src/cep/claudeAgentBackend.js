@@ -5,6 +5,10 @@ import { selectProviderRoute } from '../lib/providerRouteSelection.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { createUniversalProviderRoute } from './universalProviderRoute.js';
 import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
+import {
+  answersForAskUserQuestion,
+  questionsFromAskUserQuestion,
+} from '../lib/questionForm.js';
 
 const READY_TIMEOUT_MS = 15000;
 const STDERR_TAIL_LIMIT = 4096;
@@ -118,6 +122,7 @@ export function createClaudeAgentBackend({
   let activeTurn = null;
   let activeTurnAccepted = false;
   let activeTurnDispatched = false;
+  const pendingUserInputs = new Map();
 
   function emit(evt) {
     let event = evt;
@@ -175,6 +180,34 @@ export function createClaudeAgentBackend({
     proc.stdin.write(JSON.stringify(message) + '\n');
   }
 
+  // #228: settle a pending AskUserQuestion (#219). result:
+  //   { action:'submit', values: { [question.id]: string|string[] } }
+  //   | { action:'cancel' }
+  function answerQuestion(toolUseId, result) {
+    const id = String(toolUseId);
+    const pending = pendingUserInputs.get(id);
+    if (!pending) return false;
+    pendingUserInputs.delete(id);
+    if (!result || result.action !== 'submit') {
+      writeMessage({ t: 'answer', id, cancel: true });
+      emit({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
+      return true;
+    }
+    const answers = answersForAskUserQuestion(pending.questions, result.values);
+    writeMessage({ t: 'answer', id, answers });
+    emit({ type: 'question-resolved', toolUseId: id, outcome: 'answered', answers });
+    return true;
+  }
+
+  // #228/#220: a question never outlives its backend. On teardown, settle each
+  // pending one locally as cancelled — the sidecar drains its own side.
+  function drainUserInputs() {
+    for (const id of Array.from(pendingUserInputs.keys())) {
+      pendingUserInputs.delete(id);
+      emit({ type: 'question-resolved', toolUseId: id, outcome: 'cancelled' });
+    }
+  }
+
   function finishActive() {
     const resolve = activeResolve;
     activeResolve = null;
@@ -193,6 +226,23 @@ export function createClaudeAgentBackend({
 
     let event = message.event;
     if (!event) return;
+    // #228: the sidecar passes AskUserQuestion through raw; the backend owns
+    // question-form normalization (mirrors the codex/zcode split). Translate
+    // the raw pair into the #219 question events and track the round-trip.
+    if (event.type === 'question-required-raw') {
+      const toolUseId = String(event.toolUseId || '');
+      const questions = questionsFromAskUserQuestion(event);
+      pendingUserInputs.set(toolUseId, { questions });
+      emit({ type: 'question-required', toolUseId, source: 'claude-ask-user-question', title: '', questions });
+      return;
+    }
+    if (event.type === 'question-resolved-raw') {
+      const toolUseId = String(event.toolUseId || '');
+      if (pendingUserInputs.delete(toolUseId)) {
+        emit({ type: 'question-resolved', toolUseId, outcome: 'cancelled' });
+      }
+      return;
+    }
     if (processChannel === 'api' && event.type === 'error') {
       event = { ...event, message: 'Provider sidecar request failed.' };
     }
@@ -256,6 +306,7 @@ export function createClaudeAgentBackend({
     if (clearTranscript) transcript = [];
     if (finishRun) finishActive();
     if (clearStderr) stderrTail = '';
+    drainUserInputs();
     clearProviderSensitiveValues();
     await closeProviderRoute();
   }
@@ -278,6 +329,7 @@ export function createClaudeAgentBackend({
     processCandidateIdentity = null;
     runtimeGeneration += 1;
     void closeProviderRoute();
+    drainUserInputs();
     if (!wasReady && rejectReady) {
       clearReadyWait();
       processChannel = 'subscription';
@@ -306,6 +358,7 @@ export function createClaudeAgentBackend({
     processCandidateIdentity = null;
     runtimeGeneration += 1;
     void closeProviderRoute();
+    drainUserInputs();
     if (rejectReady) {
       clearReadyWait();
       processChannel = 'subscription';
@@ -710,6 +763,7 @@ export function createClaudeAgentBackend({
   return {
     sendUser,
     approve,
+    answerQuestion,
     stop,
     reset,
     getMessages: () => clone(transcript),
