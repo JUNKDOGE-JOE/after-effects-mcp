@@ -20450,23 +20450,14 @@
       fixHint: probe && !probe.ok && !probe.checking ? pick(probe.fixHint) : ""
     };
   }
-  var LOCK_TEXTS = {
-    locked: { zh: "\u5DF2\u9501\u5B9A", en: "Locked" },
-    unlocked: { zh: "\u9501\u5B9A", en: "Lock" }
+  var CHOICE_TEXTS = {
+    active: { zh: "\u4F7F\u7528\u4E2D", en: "In use" },
+    choose: { zh: "\u4F7F\u7528\u6B64\u901A\u9053", en: "Use this channel" }
   };
-  var PINNED_HINT = {
-    zh: "\u5DF2\u7531\u81EA\u5B9A\u4E49 provider \u9489\u4F4F\uFF1A\u5728\u4E0B\u65B9\u4E0B\u62C9\u6846\u9009\u300C\uFF08\u672A\u9009\u62E9 provider\uFF09\u300D\u540E\u81EA\u52A8\u89E3\u9501\u3002",
-    en: 'Pinned by the custom provider: pick "(no provider selected)" in the dropdown below to unlock.'
-  };
-  function lockButtonState(channel, { lockedChannel = "", pinnedChannel = "" } = {}, lang = "zh") {
-    const pinnedGroup = Boolean(pinnedChannel);
-    const pinned = pinnedGroup && channel === pinnedChannel;
-    const texts = pinned || channel === lockedChannel ? LOCK_TEXTS.locked : LOCK_TEXTS.unlocked;
-    return {
-      label: texts[lang] || texts.zh,
-      disabled: pinnedGroup,
-      hint: pinned ? PINNED_HINT[lang] || PINNED_HINT.zh : ""
-    };
+  function channelChoiceState(channel, selectedChannel, lang = "zh") {
+    const active = channel === selectedChannel;
+    const texts = active ? CHOICE_TEXTS.active : CHOICE_TEXTS.choose;
+    return { label: texts[lang] || texts.zh, active };
   }
 
   // src/components/settings/ChannelCard.jsx
@@ -20479,9 +20470,8 @@
     lang = "zh",
     channels = [],
     activeChannel = "",
-    lockedChannel = "",
-    pinnedChannel = "",
-    onLockChannel,
+    selectedChannel = "",
+    onSelectChannel,
     onRecheck,
     recheckLabel,
     recheckDisabled = false,
@@ -20492,15 +20482,14 @@
       channels.map((probe) => {
         const texts = channelTexts(probe, lang);
         const isActive = probe.channel === activeChannel;
-        const lock = lockButtonState(probe.channel, { lockedChannel, pinnedChannel }, lang);
+        const choice = channelChoiceState(probe.channel, selectedChannel, lang);
         return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", border: `1px solid ${isActive ? "var(--border-strong)" : "var(--border-subtle)"}`, borderRadius: "var(--radius-md)", background: "var(--bg-well)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(ChannelDot, { token: channelDot(probe) }),
             /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Badge, { status: channelDot(probe), children: texts.source }),
             texts.detail ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 10px/1.35 var(--font-mono)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: texts.detail }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { flex: 1 } }),
-            !readOnly && onLockChannel ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: "ghost", size: "sm", disabled: lock.disabled, onClick: () => onLockChannel(probe.channel === lockedChannel ? "" : probe.channel), children: lock.label }) : null
+            !readOnly && onSelectChannel ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: choice.active ? "secondary" : "ghost", size: "sm", disabled: choice.active, onClick: () => onSelectChannel(probe.channel), children: choice.label }) : null
           ] }),
-          !readOnly && lock.hint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)", whiteSpace: "pre-wrap" }, children: lock.hint }) : null,
           texts.fixHint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)", whiteSpace: "pre-wrap" }, children: texts.fixHint }) : null,
           !readOnly && renderChannelBody ? renderChannelBody(probe.channel) : null
         ] }, probe.channel);
@@ -22326,9 +22315,8 @@
     onExpertGuidance,
     channels = { claude: [], codex: [], zcode: [] },
     activeChannel = "",
-    lockedChannel = "",
-    pinnedChannel = "",
-    onLockChannel,
+    selectedChannel = "",
+    onSelectChannel,
     onRecheckBackend,
     recheckDisabled = false,
     providers = [],
@@ -22411,9 +22399,8 @@
             lang,
             channels: backend === "codex" ? channels.codex : backend === "zcode" ? channels.zcode : channels.claude,
             activeChannel,
-            lockedChannel,
-            pinnedChannel,
-            onLockChannel,
+            selectedChannel,
+            onSelectChannel,
             onRecheck: onRecheckBackend,
             recheckLabel: t.recheck,
             recheckDisabled,
@@ -30740,182 +30727,25 @@
     return entry ? entry.baseDescriptor() : claudeSubDescriptor();
   }
 
-  // src/lib/channels.js
-  function providerHasCredentialPolicy(provider) {
-    var _a, _b, _c;
-    const credential = provider == null ? void 0 : provider.credential;
-    if (credential == null ? void 0 : credential.preferredAuth) {
-      const scheme = credential.preferredAuth.scheme;
-      if (scheme === "auto" || scheme === "none") return true;
-      return Boolean(((_a = credential.valueRef) == null ? void 0 : _a.kind) === "secret");
-    }
-    const policy = (_b = provider == null ? void 0 : provider.auth) == null ? void 0 : _b.model;
-    return Boolean(policy && (policy.kind === "none" || ((_c = policy.valueRef) == null ? void 0 : _c.kind) === "secret"));
-  }
-  function claudeChannels({
-    probe,
-    apiProvider,
-    apiProviderSelected,
-    providerAvailable,
-    providerCredentialResolverReady,
-    providerChecking = false
-  } = {}) {
-    const sub = {
-      channel: "subscription",
-      source: { zh: "\u8BA2\u9605\u767B\u5F55", en: "Subscription login" },
-      checking: probe === null,
-      ok: Boolean(probe && probe.nodeOk !== false && probe.loggedIn),
-      detail: probe && probe.detail || "",
-      fixHint: probe && probe.nodeOk === false ? { zh: "Claude Code \u5185\u5D4C\u5BF9\u8BDD\u4E0E\u81EA\u5B9A\u4E49 Provider \u90FD\u9700\u8981\u53EF\u7528\u7684 Node \u8FD0\u884C\u65F6\uFF1A\u4FEE\u590D\u8FD0\u884C\u65F6\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Embedded Claude Code chat and custom Providers both require an available Node runtime. Repair the runtime, then re-check." } : { zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528\u4E0B\u65B9\u300C\u81EA\u5B9A\u4E49 Provider\u300D\u901A\u9053\u3002", en: "Not logged in: run claude /login in a terminal and re-check, or switch to the custom Provider channel below." }
-    };
-    const selected = apiProviderSelected === void 0 ? Boolean(apiProvider) : Boolean(apiProviderSelected);
-    const resolverReady = providerCredentialResolverReady === void 0 ? providerAvailable === void 0 ? providerHasCredentialPolicy(apiProvider) : providerAvailable : providerCredentialResolverReady;
-    const runtimeReady = !(probe && probe.nodeOk === false);
-    const canPreflight = Boolean(
-      !providerChecking && selected && (apiProvider == null ? void 0 : apiProvider.baseUrl) && resolverReady && runtimeReady
-    );
-    const api = {
-      channel: "api",
-      source: { zh: "\u9762\u677F\u914D\u7F6E \xB7 \u901A\u7528 Provider", en: "Panel config \xB7 Universal Provider" },
-      selected,
-      canPreflight,
-      checking: Boolean(providerChecking),
-      ok: canPreflight,
-      detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : "",
-      fixHint: !runtimeReady ? { zh: "Claude \u81EA\u5B9A\u4E49 Provider \u901A\u8FC7 Agent SDK \u8FD0\u884C\uFF0C\u9700\u8981\u53EF\u7528\u7684 Node \u8FD0\u884C\u65F6\uFF1A\u4FEE\u590D\u8FD0\u884C\u65F6\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Claude custom Providers run through the Agent SDK and require an available Node runtime. Repair the runtime, then re-check." } : apiProvider && resolverReady !== true && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u7CFB\u7EDF\u4F1A\u6309\u6A21\u578B\u81EA\u52A8\u9009\u62E9 Messages\u3001Responses \u6216 Chat \u8DEF\u7531\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model." }
-    };
-    api.directHttp = false;
-    return [sub, api];
-  }
-  function codexChannels({
-    codexProbe,
-    customProvider,
-    customProviderSelected,
-    customProviderAvailable,
-    customProviderCredentialResolverReady = false,
-    providerChecking = false,
-    cliConfig,
-    cliCredentialAvailable
-  } = {}) {
-    const cli = {
-      channel: "cli",
-      source: { zh: "Codex CLI \u767B\u5F55\u6001", en: "Codex CLI login" },
-      checking: codexProbe === null,
-      ok: Boolean(codexProbe && codexProbe.loggedIn),
-      detail: codexProbe ? [codexProbe.email, codexProbe.planType, codexProbe.cliPath, codexProbe.cliVersion].filter(Boolean).join(" \xB7 ") : "",
-      fixHint: { zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002", en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE." }
-    };
-    const runtimeOk = Boolean(!codexProbe || codexProbe.runtimeOk !== false);
-    const hasProvider = Boolean(cliConfig && cliConfig.provider);
-    const hasKey = Boolean(cliCredentialAvailable);
-    const cliConfigChannel = {
-      channel: "cli-config",
-      source: { zh: "\u7EE7\u627F\u81EA Codex CLI \u914D\u7F6E", en: "Inherited from Codex CLI config" },
-      checking: false,
-      ok: hasProvider && hasKey && runtimeOk,
-      detail: hasProvider ? [cliConfig.providerId, cliConfig.model, cliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") : "",
-      fixHint: !hasProvider ? { zh: "\u672A\u627E\u5230 ~/.codex/config.toml \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 Codex CLI \u91CC\u914D\u7F6E model_provider\u3002", en: "No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first." } : !hasKey ? { zh: "\u68C0\u6D4B\u5230 Codex CLI provider\u300C" + cliConfig.providerId + "\u300D\uFF0C\u4F46\u6CA1\u6709\u53EF\u7528\u51ED\u636E\u3002\u8BF7\u8BBE\u7F6E\u5176\u73AF\u5883\u53D8\u91CF\u6216\u5728 Provider \u7BA1\u7406\u4E2D\u914D\u7F6E\u3002", en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable or configure it in Provider Manager.' } : { zh: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u68C0\u67E5 Codex CLI \u5B89\u88C5\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Codex runtime unavailable: check the Codex CLI install and re-check." }
-    };
-    const customCanPreflight = Boolean(
-      !providerChecking && (customProviderSelected === void 0 ? customProvider : customProviderSelected) && (customProvider == null ? void 0 : customProvider.baseUrl) && (customProviderAvailable === void 0 ? providerHasCredentialPolicy(customProvider) : customProviderAvailable) && customProviderCredentialResolverReady === true && (!codexProbe || codexProbe.runtimeOk !== false)
-    );
-    const custom = {
-      channel: "custom",
-      source: { zh: "\u81EA\u5B9A\u4E49 provider", en: "Custom provider" },
-      selected: customProviderSelected === void 0 ? Boolean(customProvider) : Boolean(customProviderSelected),
-      canPreflight: customCanPreflight,
-      checking: Boolean(providerChecking),
-      ok: Boolean(
-        customCanPreflight
-      ),
-      detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : "",
-      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u5C1A\u672A\u5C31\u7EEA\uFF1BHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE \u540E\u68C0\u6D4B\uFF0C\u6301\u7EED\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5B89\u88C5\u3002", en: "The system credential store is not ready. Helper starts with AE; reopen the panel or restart AE, and repair the install only if the failure persists." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u534F\u8BAE\u8DEF\u7531\u4F1A\u5728\u53D1\u9001\u524D\u6309\u5F53\u524D\u6A21\u578B\u9884\u68C0\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending." }
-    };
-    return custom.ok ? [cli, custom, cliConfigChannel] : [cli, cliConfigChannel, custom];
-  }
-  function zcodeChannels({ zcodeProbe, configSummary } = {}) {
-    const summary = configSummary || {};
-    const runtimeOk = Boolean(zcodeProbe && zcodeProbe.runtimeOk !== false);
-    const runtimeHint = { zh: "ZCode \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u5B89\u88C5 ZCode\u3001\u786E\u8BA4\u7CFB\u7EDF Node \u53EF\u7528\uFF0C\u6216\u8BBE\u7F6E AE_MCP_ZCODE_CLI \u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "ZCode runtime unavailable: install ZCode, confirm system Node, or set AE_MCP_ZCODE_CLI, then re-check." };
-    const cli = {
-      channel: "cli-config",
-      source: { zh: "\u7EE7\u627F\u81EA ZCode CLI", en: "Inherited from ZCode CLI" },
-      checking: zcodeProbe === null,
-      ok: Boolean(summary.cli && summary.cli.hasCredential && runtimeOk),
-      detail: summary.cli ? summary.cli.model || summary.cli.providerId : "",
-      fixHint: !runtimeOk && summary.cli ? runtimeHint : summary.cli && !summary.cli.hasCredential ? { zh: "\u68C0\u6D4B\u5230 ZCode CLI provider\u300C" + summary.cli.providerId + "\u300D\uFF0C\u4F46\u5176 API Key \u73AF\u5883\u53D8\u91CF\uFF08" + (summary.cli.apiKeyEnv || "-") + "\uFF09\u6CA1\u6709\u88AB\u9762\u677F\u7EE7\u627F\u3002\u5728\u4E0B\u65B9\u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5230\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF09\u5373\u53EF\u4F7F\u7528\u3002", en: 'Found ZCode CLI provider "' + summary.cli.providerId + '", but its API key env (' + (summary.cli.apiKeyEnv || "-") + ") is not inherited by the panel. Paste the key once below; it will be stored in the protected system credential store." } : { zh: "\u672A\u627E\u5230 ~/.zcode/cli/config.json \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 ZCode CLI \u91CC\u914D\u7F6E provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002", en: "No usable provider in ~/.zcode/cli/config.json: configure a provider and default model in the ZCode CLI first." }
-    };
-    const desktop = {
-      channel: "desktop",
-      source: { zh: "\u7EE7\u627F\u81EA ZCode \u684C\u9762\u7248", en: "Inherited from ZCode desktop" },
-      checking: zcodeProbe === null,
-      ok: Boolean(summary.desktop && runtimeOk),
-      detail: summary.desktop ? summary.desktop.providerId : "",
-      fixHint: !runtimeOk && summary.desktop ? runtimeHint : { zh: "\u6253\u5F00 ZCode \u684C\u9762\u7248\u5E76\u9009\u62E9\u4E00\u4E2A provider/model\uFF0C\u7136\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Open ZCode desktop, pick a provider/model, then re-check." }
-    };
-    const startPlan = {
-      channel: "start-plan",
-      source: { zh: "\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212", en: "Official hosted plan" },
-      checking: false,
-      ok: Boolean(summary.startPlan && summary.startPlan.hasCredential && runtimeOk),
-      detail: summary.startPlan ? summary.startPlan.providerId : "",
-      fixHint: { zh: "\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212\u9700\u8981 ZCode \u684C\u9762\u9A8C\u8BC1\u7801\u6865\u63A5\uFF08\u9762\u677F\u5C1A\u672A\u5B9E\u73B0\uFF09\uFF1A\u68C0\u6D4B\u5230\u6709\u6548\u51ED\u636E\u524D\u4E0D\u53EF\u9009\u3002\u8BF7\u4F7F\u7528 CLI \u914D\u7F6E\u6216\u684C\u9762\u7248\u901A\u9053\u3002", en: "The hosted plan needs the ZCode desktop captcha bridge (not implemented in the panel yet) and stays unavailable until valid credentials are detected. Use the CLI-config or desktop channel instead." }
-    };
-    return [cli, desktop, startPlan];
-  }
-  function pickChannel(channels, lockedChannel = "") {
-    const list = Array.isArray(channels) ? channels : [];
-    if (lockedChannel) {
-      const locked = list.find((c) => c && c.channel === lockedChannel);
-      if (locked) return locked;
-    }
-    return list.find((c) => c && c.ok) || null;
-  }
-  function codexProviderChannelLock(lockedChannel = "", providerId = "") {
-    if (String(providerId || "").trim()) return "custom";
-    return lockedChannel === "custom" ? "" : lockedChannel;
-  }
-  function migrateBackendPref(storage) {
-    let pref = "subscription";
-    let lockedChannel = "";
-    try {
-      const raw = storage.getItem("ae_mcp_backend") || "subscription";
-      lockedChannel = storage.getItem("ae_mcp_channel_lock") || "";
-      if (raw === "byok") {
-        pref = "subscription";
-        lockedChannel = "api";
-        storage.setItem("ae_mcp_backend", pref);
-        storage.setItem("ae_mcp_channel_lock", lockedChannel);
-      } else if (raw === "opencode" || raw === "zcode") {
-        pref = "subscription";
-        storage.setItem("ae_mcp_backend", pref);
-      } else if (raw === "codex" || raw === "subscription") {
-        pref = raw;
-      }
-    } catch (e) {
-    }
-    return { pref, lockedChannel };
-  }
-
   // src/lib/backendSelect.js
-  function pickBackend({ pref, channels = {}, lockedChannel = "" }) {
+  var DEFAULT_CHANNEL = { claude: "subscription", codex: "cli", zcode: "cli-config" };
+  function pickBackend({ pref, channels = {}, channelChoices = {} }) {
     const group = pref === "codex" || pref === "zcode" ? pref : "claude";
     const list = channels[group] || [];
-    const selectedCustom = group === "codex" ? list.find((channel) => (channel == null ? void 0 : channel.channel) === "custom" && channel.selected === true) : null;
-    if (!selectedCustom && list.some((c) => c && c.checking) || (selectedCustom == null ? void 0 : selectedCustom.checking)) {
+    const wanted = channelChoices[group] || DEFAULT_CHANNEL[group];
+    const chosen = list.find((c) => c && c.channel === wanted) || list[0] || null;
+    if (chosen && chosen.checking) {
       return { backend: "none", reason: group + "-probing", channel: null, fixHint: null };
     }
-    const chosen = selectedCustom || pickChannel(list, lockedChannel);
     if (group === "codex" && (chosen == null ? void 0 : chosen.channel) === "custom" && chosen.canPreflight === true && !chosen.ok) {
       return { backend: "codex", reason: "provider-preflight", channel: "custom", fixHint: null };
     }
     if (!chosen || !chosen.ok) {
-      const hintSource = chosen || list.find((c) => c && !c.ok) || list[0] || null;
       return {
         backend: "none",
         reason: group + "-no-channel",
         channel: chosen ? chosen.channel : null,
-        fixHint: hintSource ? hintSource.fixHint || null : null
+        fixHint: chosen ? chosen.fixHint || null : null
       };
     }
     if (group === "claude") {
@@ -42656,6 +42486,163 @@ data: ${JSON.stringify(payload)}
     return { sendUser, approve, stop, reset, getMessages, probeAccount };
   }
 
+  // src/lib/channels.js
+  function providerHasCredentialPolicy(provider) {
+    var _a, _b, _c;
+    const credential = provider == null ? void 0 : provider.credential;
+    if (credential == null ? void 0 : credential.preferredAuth) {
+      const scheme = credential.preferredAuth.scheme;
+      if (scheme === "auto" || scheme === "none") return true;
+      return Boolean(((_a = credential.valueRef) == null ? void 0 : _a.kind) === "secret");
+    }
+    const policy = (_b = provider == null ? void 0 : provider.auth) == null ? void 0 : _b.model;
+    return Boolean(policy && (policy.kind === "none" || ((_c = policy.valueRef) == null ? void 0 : _c.kind) === "secret"));
+  }
+  function claudeChannels({
+    probe,
+    apiProvider,
+    apiProviderSelected,
+    providerAvailable,
+    providerCredentialResolverReady,
+    providerChecking = false
+  } = {}) {
+    const sub = {
+      channel: "subscription",
+      source: { zh: "\u8BA2\u9605\u767B\u5F55", en: "Subscription login" },
+      checking: probe === null,
+      ok: Boolean(probe && probe.nodeOk !== false && probe.loggedIn),
+      detail: probe && probe.detail || "",
+      fixHint: probe && probe.nodeOk === false ? { zh: "Claude Code \u5185\u5D4C\u5BF9\u8BDD\u4E0E\u81EA\u5B9A\u4E49 Provider \u90FD\u9700\u8981\u53EF\u7528\u7684 Node \u8FD0\u884C\u65F6\uFF1A\u4FEE\u590D\u8FD0\u884C\u65F6\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Embedded Claude Code chat and custom Providers both require an available Node runtime. Repair the runtime, then re-check." } : { zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528\u4E0B\u65B9\u300C\u81EA\u5B9A\u4E49 Provider\u300D\u901A\u9053\u3002", en: "Not logged in: run claude /login in a terminal and re-check, or switch to the custom Provider channel below." }
+    };
+    const selected = apiProviderSelected === void 0 ? Boolean(apiProvider) : Boolean(apiProviderSelected);
+    const resolverReady = providerCredentialResolverReady === void 0 ? providerAvailable === void 0 ? providerHasCredentialPolicy(apiProvider) : providerAvailable : providerCredentialResolverReady;
+    const runtimeReady = !(probe && probe.nodeOk === false);
+    const canPreflight = Boolean(
+      !providerChecking && selected && (apiProvider == null ? void 0 : apiProvider.baseUrl) && resolverReady && runtimeReady
+    );
+    const api = {
+      channel: "api",
+      source: { zh: "\u9762\u677F\u914D\u7F6E \xB7 \u901A\u7528 Provider", en: "Panel config \xB7 Universal Provider" },
+      selected,
+      canPreflight,
+      checking: Boolean(providerChecking),
+      ok: canPreflight,
+      detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : "",
+      fixHint: !runtimeReady ? { zh: "Claude \u81EA\u5B9A\u4E49 Provider \u901A\u8FC7 Agent SDK \u8FD0\u884C\uFF0C\u9700\u8981\u53EF\u7528\u7684 Node \u8FD0\u884C\u65F6\uFF1A\u4FEE\u590D\u8FD0\u884C\u65F6\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Claude custom Providers run through the Agent SDK and require an available Node runtime. Repair the runtime, then re-check." } : apiProvider && resolverReady !== true && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u7CFB\u7EDF\u4F1A\u6309\u6A21\u578B\u81EA\u52A8\u9009\u62E9 Messages\u3001Responses \u6216 Chat \u8DEF\u7531\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model." }
+    };
+    api.directHttp = false;
+    return [sub, api];
+  }
+  function codexChannels({
+    codexProbe,
+    customProvider,
+    customProviderSelected,
+    customProviderAvailable,
+    customProviderCredentialResolverReady = false,
+    providerChecking = false,
+    cliConfig,
+    cliCredentialAvailable
+  } = {}) {
+    const cli = {
+      channel: "cli",
+      source: { zh: "Codex CLI \u767B\u5F55\u6001", en: "Codex CLI login" },
+      checking: codexProbe === null,
+      ok: Boolean(codexProbe && codexProbe.loggedIn),
+      detail: codexProbe ? [codexProbe.email, codexProbe.planType, codexProbe.cliPath, codexProbe.cliVersion].filter(Boolean).join(" \xB7 ") : "",
+      fixHint: { zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002", en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE." }
+    };
+    const runtimeOk = Boolean(!codexProbe || codexProbe.runtimeOk !== false);
+    const hasProvider = Boolean(cliConfig && cliConfig.provider);
+    const hasKey = Boolean(cliCredentialAvailable);
+    const cliConfigChannel = {
+      channel: "cli-config",
+      source: { zh: "\u7EE7\u627F\u81EA Codex CLI \u914D\u7F6E", en: "Inherited from Codex CLI config" },
+      checking: false,
+      ok: hasProvider && hasKey && runtimeOk,
+      detail: hasProvider ? [cliConfig.providerId, cliConfig.model, cliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") : "",
+      fixHint: !hasProvider ? { zh: "\u672A\u627E\u5230 ~/.codex/config.toml \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 Codex CLI \u91CC\u914D\u7F6E model_provider\u3002", en: "No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first." } : !hasKey ? { zh: "\u68C0\u6D4B\u5230 Codex CLI provider\u300C" + cliConfig.providerId + "\u300D\uFF0C\u4F46\u6CA1\u6709\u53EF\u7528\u51ED\u636E\u3002\u8BF7\u8BBE\u7F6E\u5176\u73AF\u5883\u53D8\u91CF\u6216\u5728 Provider \u7BA1\u7406\u4E2D\u914D\u7F6E\u3002", en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable or configure it in Provider Manager.' } : { zh: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u68C0\u67E5 Codex CLI \u5B89\u88C5\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Codex runtime unavailable: check the Codex CLI install and re-check." }
+    };
+    const customCanPreflight = Boolean(
+      !providerChecking && (customProviderSelected === void 0 ? customProvider : customProviderSelected) && (customProvider == null ? void 0 : customProvider.baseUrl) && (customProviderAvailable === void 0 ? providerHasCredentialPolicy(customProvider) : customProviderAvailable) && customProviderCredentialResolverReady === true && (!codexProbe || codexProbe.runtimeOk !== false)
+    );
+    const custom = {
+      channel: "custom",
+      source: { zh: "\u81EA\u5B9A\u4E49 provider", en: "Custom provider" },
+      selected: customProviderSelected === void 0 ? Boolean(customProvider) : Boolean(customProviderSelected),
+      canPreflight: customCanPreflight,
+      checking: Boolean(providerChecking),
+      ok: Boolean(
+        customCanPreflight
+      ),
+      detail: customProvider && customProvider.baseUrl ? customProvider.baseUrl : "",
+      fixHint: customProvider && customProviderAvailable === false && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : customProvider && customProviderCredentialResolverReady !== true ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u5C1A\u672A\u5C31\u7EEA\uFF1BHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE \u540E\u68C0\u6D4B\uFF0C\u6301\u7EED\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5B89\u88C5\u3002", en: "The system credential store is not ready. Helper starts with AE; reopen the panel or restart AE, and repair the install only if the failure persists." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u534F\u8BAE\u8DEF\u7531\u4F1A\u5728\u53D1\u9001\u524D\u6309\u5F53\u524D\u6A21\u578B\u9884\u68C0\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending." }
+    };
+    return [cli, cliConfigChannel, custom];
+  }
+  function zcodeChannels({ zcodeProbe, configSummary } = {}) {
+    const summary = configSummary || {};
+    const runtimeOk = Boolean(zcodeProbe && zcodeProbe.runtimeOk !== false);
+    const runtimeHint = { zh: "ZCode \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u5B89\u88C5 ZCode\u3001\u786E\u8BA4\u7CFB\u7EDF Node \u53EF\u7528\uFF0C\u6216\u8BBE\u7F6E AE_MCP_ZCODE_CLI \u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "ZCode runtime unavailable: install ZCode, confirm system Node, or set AE_MCP_ZCODE_CLI, then re-check." };
+    const cli = {
+      channel: "cli-config",
+      source: { zh: "\u7EE7\u627F\u81EA ZCode CLI", en: "Inherited from ZCode CLI" },
+      checking: zcodeProbe === null,
+      ok: Boolean(summary.cli && summary.cli.hasCredential && runtimeOk),
+      detail: summary.cli ? summary.cli.model || summary.cli.providerId : "",
+      fixHint: !runtimeOk && summary.cli ? runtimeHint : summary.cli && !summary.cli.hasCredential ? { zh: "\u68C0\u6D4B\u5230 ZCode CLI provider\u300C" + summary.cli.providerId + "\u300D\uFF0C\u4F46\u5176 API Key \u73AF\u5883\u53D8\u91CF\uFF08" + (summary.cli.apiKeyEnv || "-") + "\uFF09\u6CA1\u6709\u88AB\u9762\u677F\u7EE7\u627F\u3002\u5728\u4E0B\u65B9\u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5230\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF09\u5373\u53EF\u4F7F\u7528\u3002", en: 'Found ZCode CLI provider "' + summary.cli.providerId + '", but its API key env (' + (summary.cli.apiKeyEnv || "-") + ") is not inherited by the panel. Paste the key once below; it will be stored in the protected system credential store." } : { zh: "\u672A\u627E\u5230 ~/.zcode/cli/config.json \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 ZCode CLI \u91CC\u914D\u7F6E provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002", en: "No usable provider in ~/.zcode/cli/config.json: configure a provider and default model in the ZCode CLI first." }
+    };
+    const desktop = {
+      channel: "desktop",
+      source: { zh: "\u7EE7\u627F\u81EA ZCode \u684C\u9762\u7248", en: "Inherited from ZCode desktop" },
+      checking: zcodeProbe === null,
+      ok: Boolean(summary.desktop && runtimeOk),
+      detail: summary.desktop ? summary.desktop.providerId : "",
+      fixHint: !runtimeOk && summary.desktop ? runtimeHint : { zh: "\u6253\u5F00 ZCode \u684C\u9762\u7248\u5E76\u9009\u62E9\u4E00\u4E2A provider/model\uFF0C\u7136\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Open ZCode desktop, pick a provider/model, then re-check." }
+    };
+    const startPlan = {
+      channel: "start-plan",
+      source: { zh: "\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212", en: "Official hosted plan" },
+      checking: false,
+      ok: Boolean(summary.startPlan && summary.startPlan.hasCredential && runtimeOk),
+      detail: summary.startPlan ? summary.startPlan.providerId : "",
+      fixHint: { zh: "\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212\u9700\u8981 ZCode \u684C\u9762\u9A8C\u8BC1\u7801\u6865\u63A5\uFF08\u9762\u677F\u5C1A\u672A\u5B9E\u73B0\uFF09\uFF1A\u68C0\u6D4B\u5230\u6709\u6548\u51ED\u636E\u524D\u4E0D\u53EF\u9009\u3002\u8BF7\u4F7F\u7528 CLI \u914D\u7F6E\u6216\u684C\u9762\u7248\u901A\u9053\u3002", en: "The hosted plan needs the ZCode desktop captcha bridge (not implemented in the panel yet) and stays unavailable until valid credentials are detected. Use the CLI-config or desktop channel instead." }
+    };
+    return [cli, desktop, startPlan];
+  }
+  var CLAUDE_CHANNEL_IDS = ["subscription", "api"];
+  var CODEX_CHANNEL_IDS = ["cli", "cli-config", "custom"];
+  function migrateBackendPref(storage) {
+    let pref = "subscription";
+    const channelChoices = { claude: "subscription", codex: "cli" };
+    try {
+      const raw = storage.getItem("ae_mcp_backend") || "subscription";
+      const legacyLock = storage.getItem("ae_mcp_channel_lock") || "";
+      const storedClaude = storage.getItem("ae_mcp_channel_claude") || "";
+      const storedCodex = storage.getItem("ae_mcp_channel_codex") || "";
+      if (raw === "byok") {
+        pref = "subscription";
+        channelChoices.claude = "api";
+        storage.setItem("ae_mcp_backend", pref);
+      } else if (raw === "opencode" || raw === "zcode") {
+        pref = "subscription";
+        storage.setItem("ae_mcp_backend", pref);
+      } else if (raw === "codex" || raw === "subscription") {
+        pref = raw;
+      }
+      if (CLAUDE_CHANNEL_IDS.includes(storedClaude)) channelChoices.claude = storedClaude;
+      else if (legacyLock === "api") channelChoices.claude = "api";
+      if (CODEX_CHANNEL_IDS.includes(storedCodex)) channelChoices.codex = storedCodex;
+      else if (legacyLock === "custom" || String(storage.getItem("ae_mcp_codex_provider") || "").trim()) {
+        channelChoices.codex = "custom";
+      }
+      storage.setItem("ae_mcp_channel_claude", channelChoices.claude);
+      storage.setItem("ae_mcp_channel_codex", channelChoices.codex);
+      storage.removeItem("ae_mcp_channel_lock");
+    } catch (e) {
+    }
+    return { pref, channelChoices };
+  }
+
   // src/cep/providerStore.js
   var FILE_NAME = "providers.json";
   var STATE_KEYS = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
@@ -50441,10 +50428,7 @@ data: ${JSON.stringify(payload)}
     }, []);
     const backendMigration = import_react48.default.useMemo(() => migrateBackendPref(window.localStorage), []);
     const [backendPref, setBackendPref] = import_react48.default.useState(() => backendMigration.pref);
-    const [channelLock, setChannelLock] = import_react48.default.useState(() => codexProviderChannelLock(
-      backendMigration.lockedChannel,
-      readPref("ae_mcp_codex_provider", "")
-    ));
+    const [channelChoices, setChannelChoices] = import_react48.default.useState(() => backendMigration.channelChoices);
     const providerStore = import_react48.default.useMemo(() => {
       try {
         return createProviderStore();
@@ -50469,13 +50453,6 @@ data: ${JSON.stringify(payload)}
     const [providers, setProviders] = import_react48.default.useState([]);
     const [claudeProviderId, setClaudeProviderId] = import_react48.default.useState(() => readPref("ae_mcp_claude_provider", ""));
     const [codexProviderId, setCodexProviderId] = import_react48.default.useState(() => readPref("ae_mcp_codex_provider", ""));
-    const syncCodexProviderChannelLock = import_react48.default.useCallback((providerId) => {
-      setChannelLock((current) => {
-        const next = codexProviderChannelLock(current, providerId);
-        writePref("ae_mcp_channel_lock", next);
-        return next;
-      });
-    }, []);
     const [expertGuidance, setExpertGuidance] = import_react48.default.useState(() => loadExpertGuidance(window.localStorage));
     const [probe, setProbe] = import_react48.default.useState(null);
     const [codexProbe, setCodexProbe] = import_react48.default.useState(null);
@@ -50604,7 +50581,6 @@ ${baseUrl}`),
           if (codexProviderId === provider.id) {
             setCodexProviderId("");
             writePref("ae_mcp_codex_provider", "");
-            syncCodexProviderChannelLock("");
           }
         },
         onProbe: async (provider, options = {}) => {
@@ -50662,7 +50638,7 @@ ${baseUrl}`),
       codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === "ready" && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === "checking", cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
       zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
     }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
-    const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock });
+    const effective = pickBackend({ pref: backendPref, channels, channelChoices });
     const claudeSettingsHint = import_react48.default.useMemo(() => {
       try {
         return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs });
@@ -51725,12 +51701,17 @@ ${baseUrl}`),
             pythonVersion: connInfo && connInfo.pythonVersion || "-",
             channels,
             activeChannel: effective.channel || "",
-            lockedChannel: channelLock,
-            pinnedChannel: backendPref === "codex" && codexProviderId ? "custom" : "",
-            onLockChannel: (channel) => {
-              const next = backendPref === "codex" ? codexProviderChannelLock(channel, codexProviderId) : channel;
-              setChannelLock(next);
-              writePref("ae_mcp_channel_lock", next);
+            selectedChannel: channelChoices[backendPref === "codex" ? "codex" : "claude"] || "",
+            onSelectChannel: (channel) => {
+              const group = backendPref === "codex" ? "codex" : "claude";
+              setChannelChoices((current) => ({ ...current, [group]: channel }));
+              writePref("ae_mcp_channel_" + group, channel);
+              if (group === "codex") {
+                codexBackend.reset();
+                runCodexProbe();
+              } else {
+                runClaudeProbe();
+              }
             },
             onRecheckBackend: () => {
               if (backendPref === "codex") runCodexProbe();
@@ -51752,7 +51733,6 @@ ${baseUrl}`),
             onCodexProviderChange: (id) => {
               setCodexProviderId(id);
               writePref("ae_mcp_codex_provider", id);
-              syncCodexProviderChannelLock(id);
               setCodexProbe(null);
               codexBackend.reset();
             },

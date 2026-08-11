@@ -29,7 +29,7 @@ import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentB
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
 import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
-import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref, codexProviderChannelLock } from '../lib/channels.js';
+import { claudeChannels, codexChannels, zcodeChannels, migrateBackendPref } from '../lib/channels.js';
 import { createProviderStore } from '../cep/providerStore';
 import { createProviderSecretService, resolveProviderRequestProfile } from '../cep/providerSecrets';
 import {
@@ -403,10 +403,9 @@ function Shell({ cs }) {
   }, []);
   const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
   const [backendPref, setBackendPref] = React.useState(() => backendMigration.pref);
-  const [channelLock, setChannelLock] = React.useState(() => codexProviderChannelLock(
-    backendMigration.lockedChannel,
-    readPref('ae_mcp_codex_provider', ''),
-  ));
+  // #229: channels are user-enabled per backend; routing follows the choice
+  // exactly (no auto-pick, no lock, no pinning by provider selection).
+  const [channelChoices, setChannelChoices] = React.useState(() => backendMigration.channelChoices);
   const providerStore = React.useMemo(() => {
     try { return createProviderStore(); } catch (e) { return null; }
   }, []);
@@ -427,13 +426,6 @@ function Shell({ cs }) {
   const [providers, setProviders] = React.useState([]);
   const [claudeProviderId, setClaudeProviderId] = React.useState(() => readPref('ae_mcp_claude_provider', ''));
   const [codexProviderId, setCodexProviderId] = React.useState(() => readPref('ae_mcp_codex_provider', ''));
-  const syncCodexProviderChannelLock = React.useCallback((providerId) => {
-    setChannelLock((current) => {
-      const next = codexProviderChannelLock(current, providerId);
-      writePref('ae_mcp_channel_lock', next);
-      return next;
-    });
-  }, []);
   const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
@@ -558,7 +550,6 @@ function Shell({ cs }) {
         if (codexProviderId === provider.id) {
           setCodexProviderId('');
           writePref('ae_mcp_codex_provider', '');
-          syncCodexProviderChannelLock('');
         }
       }}
       onProbe={async (provider, options = {}) => {
@@ -612,7 +603,7 @@ function Shell({ cs }) {
     codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === 'ready' && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === 'checking', cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
     zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
   }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
-  const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock });
+  const effective = pickBackend({ pref: backendPref, channels, channelChoices });
   const claudeSettingsHint = React.useMemo(() => {
     try { return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs }); } catch (e) { return null; }
   }, [platform]);
@@ -1729,14 +1720,19 @@ function Shell({ cs }) {
             pythonVersion={(connInfo && connInfo.pythonVersion) || '-'}
             channels={channels}
             activeChannel={effective.channel || ''}
-            lockedChannel={channelLock}
-            pinnedChannel={backendPref === 'codex' && codexProviderId ? 'custom' : ''}
-            onLockChannel={(channel) => {
-              const next = backendPref === 'codex'
-                ? codexProviderChannelLock(channel, codexProviderId)
-                : channel;
-              setChannelLock(next);
-              writePref('ae_mcp_channel_lock', next);
+            selectedChannel={channelChoices[backendPref === 'codex' ? 'codex' : 'claude'] || ''}
+            onSelectChannel={(channel) => {
+              // #229: enabling a channel is the routing decision and actively
+              // triggers that backend's detection.
+              const group = backendPref === 'codex' ? 'codex' : 'claude';
+              setChannelChoices((current) => ({ ...current, [group]: channel }));
+              writePref('ae_mcp_channel_' + group, channel);
+              if (group === 'codex') {
+                codexBackend.reset();
+                runCodexProbe();
+              } else {
+                runClaudeProbe();
+              }
             }}
             onRecheckBackend={() => {
               if (backendPref === 'codex') runCodexProbe();
@@ -1753,9 +1749,10 @@ function Shell({ cs }) {
             onClaudeProviderChange={(id) => { setClaudeProviderId(id); writePref('ae_mcp_claude_provider', id); }}
             codexProviderId={codexProviderId}
             onCodexProviderChange={(id) => {
+              // #229: picking a provider only configures the custom channel;
+              // routing still follows the user's explicit channel choice.
               setCodexProviderId(id);
               writePref('ae_mcp_codex_provider', id);
-              syncCodexProviderChannelLock(id);
               setCodexProbe(null);
               codexBackend.reset();
             }}

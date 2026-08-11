@@ -119,12 +119,9 @@ export function codexChannels({
         ? { zh: '系统凭据库尚未就绪；Helper 会随 AE 自动启动，请重新打开面板或重启 AE 后检测，持续失败时再修复安装。', en: 'The system credential store is not ready. Helper starts with AE; reopen the panel or restart AE, and repair the install only if the failure persists.' }
         : { zh: '在「Provider 管理」新增或选择一个通用 Provider（Base URL + API Key）。协议路由会在发送前按当前模型预检。', en: 'Add or select a universal Provider (base URL + API key) in Provider Manager. Its protocol route is preflighted for the current model before sending.' },
   };
-  // An explicitly-configured custom provider always outranks the inherited
-  // cli-config one when both are simultaneously usable (ok). zcode has no
-  // equivalent "explicit custom provider" channel to conflict with cli-config,
-  // so there's no existing precedent to mirror there; this ordering rule is
-  // specific to codex's cli-config-vs-custom overlap.
-  return custom.ok ? [cli, custom, cliConfigChannel] : [cli, cliConfigChannel, custom];
+  // Display order is fixed (#229): routing never derives from row order —
+  // the user's explicit channel choice decides — so rows stay put in the UI.
+  return [cli, cliConfigChannel, custom];
 }
 
 export function zcodeChannels({ zcodeProbe, configSummary } = {}) {
@@ -162,39 +159,41 @@ export function zcodeChannels({ zcodeProbe, configSummary } = {}) {
   return [cli, desktop, startPlan];
 }
 
-export function pickChannel(channels, lockedChannel = '') {
-  const list = Array.isArray(channels) ? channels : [];
-  if (lockedChannel) {
-    const locked = list.find((c) => c && c.channel === lockedChannel);
-    if (locked) return locked;
-  }
-  return list.find((c) => c && c.ok) || null;
-}
+const CLAUDE_CHANNEL_IDS = ['subscription', 'api'];
+const CODEX_CHANNEL_IDS = ['cli', 'cli-config', 'custom'];
 
-export function codexProviderChannelLock(lockedChannel = '', providerId = '') {
-  if (String(providerId || '').trim()) return 'custom';
-  return lockedChannel === 'custom' ? '' : lockedChannel;
-}
-
-// Legacy pref migration: `byok` collapses into Claude's API channel. OpenCode
-// and ZCode remain internal adapters, not choices in the built-in two-way UI.
+// Legacy pref migration (#229): `byok` collapses into Claude's API channel;
+// OpenCode and ZCode remain internal adapters, not choices in the built-in
+// two-way UI. Channels are user-enabled per backend (no auto-pick, no lock):
+// the old `ae_mcp_channel_lock` value and a previously selected codex custom
+// provider migrate onto the new explicit per-backend choice keys once.
 export function migrateBackendPref(storage) {
   let pref = 'subscription';
-  let lockedChannel = '';
+  const channelChoices = { claude: 'subscription', codex: 'cli' };
   try {
     const raw = storage.getItem('ae_mcp_backend') || 'subscription';
-    lockedChannel = storage.getItem('ae_mcp_channel_lock') || '';
+    const legacyLock = storage.getItem('ae_mcp_channel_lock') || '';
+    const storedClaude = storage.getItem('ae_mcp_channel_claude') || '';
+    const storedCodex = storage.getItem('ae_mcp_channel_codex') || '';
     if (raw === 'byok') {
       pref = 'subscription';
-      lockedChannel = 'api';
+      channelChoices.claude = 'api';
       storage.setItem('ae_mcp_backend', pref);
-      storage.setItem('ae_mcp_channel_lock', lockedChannel);
     } else if (raw === 'opencode' || raw === 'zcode') {
       pref = 'subscription';
       storage.setItem('ae_mcp_backend', pref);
     } else if (raw === 'codex' || raw === 'subscription') {
       pref = raw;
     }
+    if (CLAUDE_CHANNEL_IDS.includes(storedClaude)) channelChoices.claude = storedClaude;
+    else if (legacyLock === 'api') channelChoices.claude = 'api';
+    if (CODEX_CHANNEL_IDS.includes(storedCodex)) channelChoices.codex = storedCodex;
+    else if (legacyLock === 'custom' || String(storage.getItem('ae_mcp_codex_provider') || '').trim()) {
+      channelChoices.codex = 'custom';
+    }
+    storage.setItem('ae_mcp_channel_claude', channelChoices.claude);
+    storage.setItem('ae_mcp_channel_codex', channelChoices.codex);
+    storage.removeItem('ae_mcp_channel_lock');
   } catch (e) { /* storage unavailable -> defaults */ }
-  return { pref, lockedChannel };
+  return { pref, channelChoices };
 }

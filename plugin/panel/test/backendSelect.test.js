@@ -8,23 +8,31 @@ function ch(channel, ok, fixHint = { zh: 'zh-fix', en: 'en-fix' }, checking = fa
   return { channel, ok, checking, detail: '', source: { zh: 's', en: 's' }, fixHint };
 }
 
-test('pickBackend: claude subscription channel wins when ok', () => {
-  const result = pickBackend({ pref: 'subscription', channels: { claude: [ch('subscription', true), ch('api', false)] } });
+test('pickBackend: the claude choice defaults to subscription and never auto-switches (#229)', () => {
+  const channels = { claude: [ch('subscription', true), ch('api', false)] };
+  const result = pickBackend({ pref: 'subscription', channels });
   assert.deepEqual(result, { backend: 'subscription', reason: 'ok', channel: 'subscription', fixHint: null });
+
+  // A usable api sibling never overrides a broken enabled subscription channel.
+  const brokenChoice = pickBackend({
+    pref: 'subscription',
+    channels: { claude: [ch('subscription', false, { zh: '去登录', en: 'log in' }), ch('api', true)] },
+  });
+  assert.equal(brokenChoice.backend, 'none');
+  assert.equal(brokenChoice.channel, 'subscription');
+  assert.equal(brokenChoice.fixHint.zh, '去登录');
 });
 
-test('pickBackend routes every custom Claude API channel through the Claude Agent SDK transport', () => {
+test('pickBackend routes the enabled custom Claude API channel through the Claude Agent SDK transport', () => {
   const channels = { claude: [ch('subscription', false), ch('api', true)] };
-  for (const nodeOk of [true, false]) {
-    const selected = pickBackend({ pref: 'subscription', channels, nodeOk });
-    assert.deepEqual(selected, {
-      backend: 'claude-api',
-      reason: 'ok',
-      channel: 'api',
-      fixHint: null,
-    });
-    assert.equal(BACKENDS[selected.backend].attachmentTransport, 'agent-sdk');
-  }
+  const selected = pickBackend({ pref: 'subscription', channels, channelChoices: { claude: 'api' } });
+  assert.deepEqual(selected, {
+    backend: 'claude-api',
+    reason: 'ok',
+    channel: 'api',
+    fixHint: null,
+  });
+  assert.equal(BACKENDS[selected.backend].attachmentTransport, 'agent-sdk');
 });
 
 test('pickBackend keeps non-official Anthropic-compatible providers on the Claude Agent SDK local route', () => {
@@ -32,7 +40,7 @@ test('pickBackend keeps non-official Anthropic-compatible providers on the Claud
   const selected = pickBackend({
     pref: 'subscription',
     channels: { claude: [ch('subscription', false), direct] },
-    nodeOk: true,
+    channelChoices: { claude: 'api' },
   });
   assert.equal(selected.backend, 'claude-api');
   assert.equal(BACKENDS[selected.backend].attachmentTransport, 'agent-sdk');
@@ -47,19 +55,30 @@ test('pickBackend: probing and no-channel states carry reason + fixHint', () => 
   assert.equal(dead.fixHint.zh, 'zh-fix');
 });
 
-test('pickBackend: locked channel is respected; a locked-but-broken channel surfaces its own fixHint', () => {
+test('pickBackend: the enabled channel is followed exactly; a broken choice surfaces its own fixHint', () => {
   const channels = { codex: [ch('cli', true), ch('custom', true)] };
-  assert.equal(pickBackend({ pref: 'codex', channels, lockedChannel: 'custom' }).channel, 'custom');
-  const brokenLock = pickBackend({ pref: 'codex', channels: { codex: [ch('cli', true), ch('custom', false, { zh: '配 provider', en: 'add provider' })] }, lockedChannel: 'custom' });
-  assert.equal(brokenLock.backend, 'none');
-  assert.equal(brokenLock.fixHint.zh, '配 provider');
+  assert.equal(pickBackend({ pref: 'codex', channels, channelChoices: { codex: 'custom' } }).channel, 'custom');
+  const brokenChoice = pickBackend({
+    pref: 'codex',
+    channels: { codex: [ch('cli', true), ch('custom', false, { zh: '配 provider', en: 'add provider' })] },
+    channelChoices: { codex: 'custom' },
+  });
+  assert.equal(brokenChoice.backend, 'none');
+  assert.equal(brokenChoice.fixHint.zh, '配 provider');
 });
 
-test('pickBackend keeps a selected custom provider on Codex while its exact model needs preflight', () => {
+test('pickBackend: only the enabled channel gates on probing; checking siblings are ignored (#229)', () => {
+  const channels = { codex: [ch('cli', false, undefined, true), ch('cli-config', true), ch('custom', true)] };
+  const result = pickBackend({ pref: 'codex', channels, channelChoices: { codex: 'custom' } });
+  assert.deepEqual(result, { backend: 'codex', reason: 'ok', channel: 'custom', fixHint: null });
+});
+
+test('pickBackend keeps the enabled custom provider on Codex while its exact model needs preflight', () => {
   const custom = { ...ch('custom', false), selected: true, canPreflight: true };
   const result = pickBackend({
     pref: 'codex',
     channels: { codex: [ch('cli', false, undefined, true), ch('cli-config', true), custom] },
+    channelChoices: { codex: 'custom' },
   });
   assert.deepEqual(result, {
     backend: 'codex',
@@ -69,18 +88,19 @@ test('pickBackend keeps a selected custom provider on Codex while its exact mode
   });
 });
 
-test('pickBackend never falls through a selected but unusable custom provider to CLI', () => {
+test('pickBackend never falls through an enabled but unusable custom provider to CLI', () => {
   const custom = { ...ch('custom', false, { zh: '修复 provider', en: 'repair provider' }), selected: true, canPreflight: false };
   const result = pickBackend({
     pref: 'codex',
     channels: { codex: [ch('cli', true), ch('cli-config', true), custom] },
+    channelChoices: { codex: 'custom' },
   });
   assert.equal(result.backend, 'none');
   assert.equal(result.channel, 'custom');
   assert.equal(result.fixHint.en, 'repair provider');
 });
 
-test('pickBackend and codexChannels keep a selected universal Provider ahead of a logged-in CLI', () => {
+test('pickBackend and codexChannels route the enabled custom channel even with a logged-in CLI', () => {
   const list = codexChannels({
     codexProbe: { loggedIn: true, runtimeOk: true },
     customProvider: { id: 'custom-1', baseUrl: 'https://custom.example/v1' },
@@ -88,13 +108,19 @@ test('pickBackend and codexChannels keep a selected universal Provider ahead of 
     customProviderAvailable: true,
     customProviderCredentialResolverReady: true,
   });
-  const result = pickBackend({ pref: 'codex', channels: { codex: list } });
+  const result = pickBackend({ pref: 'codex', channels: { codex: list }, channelChoices: { codex: 'custom' } });
   assert.equal(result.backend, 'codex');
   assert.equal(result.channel, 'custom');
   assert.equal(result.reason, 'ok');
+
+  // A configured provider no longer hijacks routing: with the CLI channel
+  // enabled, the CLI is what runs.
+  const cliResult = pickBackend({ pref: 'codex', channels: { codex: list }, channelChoices: { codex: 'cli' } });
+  assert.equal(cliResult.backend, 'codex');
+  assert.equal(cliResult.channel, 'cli');
 });
 
-test('pickBackend and codexChannels fail closed for a stale selected provider id', () => {
+test('pickBackend and codexChannels fail closed for a stale enabled provider id', () => {
   const list = codexChannels({
     codexProbe: { loggedIn: true, runtimeOk: true },
     customProvider: null,
@@ -102,7 +128,7 @@ test('pickBackend and codexChannels fail closed for a stale selected provider id
     customProviderAvailable: false,
     customProviderCredentialResolverReady: true,
   });
-  const result = pickBackend({ pref: 'codex', channels: { codex: list } });
+  const result = pickBackend({ pref: 'codex', channels: { codex: list }, channelChoices: { codex: 'custom' } });
   assert.equal(result.backend, 'none');
   assert.equal(result.channel, 'custom');
 });
