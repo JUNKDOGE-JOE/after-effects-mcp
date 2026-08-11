@@ -1790,14 +1790,20 @@ async def test_running_job_retries_a_transient_renewal_failure(
     )
     plan = engine.prepare(artifact.id, operation="execute", args={}, target={})
     grant = engine.grants.issue_once(plan)
-    started = await engine.start_job(
-        plan.plan_hash,
-        grant.grant_id,
-        operation_id="operation-renew-after-transient-failure",
-        ctx=None,
-        initiator="first-core",
+    # Bounded awaits: this test once hung CI for 21 minutes when the transient
+    # renewal failure raced the job-start window (2026-08-11, run 31497052274).
+    # A recurrence must fail fast with a stack, not eat the job timeout.
+    started = await asyncio.wait_for(
+        engine.start_job(
+            plan.plan_hash,
+            grant.grant_id,
+            operation_id="operation-renew-after-transient-failure",
+            ctx=None,
+            initiator="first-core",
+        ),
+        timeout=30.0,
     )
-    await backend.started.wait()
+    await asyncio.wait_for(backend.started.wait(), timeout=30.0)
     await asyncio.wait_for(store.renewed.wait(), timeout=1.0)
 
     assert store.renew_attempts >= 2
