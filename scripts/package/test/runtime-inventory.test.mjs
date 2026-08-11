@@ -138,7 +138,7 @@ async function makeInventoryFixture(t) {
       'macos-arm64': { minOsVersion: '14.0', arch: 'arm64', rosetta: false },
       'windows-x64': { minOsVersion: '11.0.26100', arch: 'x64' },
     },
-    afterEffects: { majors: [25, 26], manifestRange: '[25.0,26.9]' },
+    afterEffects: { majors: [23, 24, 25, 26], manifestRange: '[23.0,26.9]' },
   });
   await writeJson(path.join(repoRoot, 'packaging/runtime-lock.json'), {
     schemaVersion: 1,

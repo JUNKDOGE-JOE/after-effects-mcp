@@ -124,15 +124,15 @@ async function verifySupportContract(root, platform) {
       'macos-arm64': { minOsVersion: '14.0', arch: 'arm64', rosetta: false },
       'windows-x64': { minOsVersion: '11.0.26100', arch: 'x64' },
     },
-    afterEffects: { majors: [25, 26], manifestRange: '[25.0,26.9]' },
+    afterEffects: { majors: [23, 24, 25, 26], manifestRange: '[23.0,26.9]' },
   };
   if (canonicalJson(support) !== canonicalJson(expected) || !support.platforms[platform]) {
     throw bundleError('BUNDLE_SUPPORT_MATRIX_INVALID', 'support matrix does not match the release contract');
   }
   const cep = await fs.promises.readFile(path.join(root, 'CSXS', 'manifest.xml'), 'utf8');
   const matches = [...cep.matchAll(/<Host\s+Name="AEFT"\s+Version="([^"]+)"\s*\/>/g)];
-  if (matches.length !== 1 || matches[0][1] !== '[25.0,26.9]') {
-    throw bundleError('BUNDLE_CEP_RANGE_INVALID', 'CEP manifest host range must be exactly [25.0,26.9]');
+  if (matches.length !== 1 || matches[0][1] !== '[23.0,26.9]') {
+    throw bundleError('BUNDLE_CEP_RANGE_INVALID', 'CEP manifest host range must be exactly [23.0,26.9]');
   }
 }
 

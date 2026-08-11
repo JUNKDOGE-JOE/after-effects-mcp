@@ -110,7 +110,7 @@ async function writePlugin(repoRoot) {
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<ExtensionManifest ExtensionBundleId="com.aemcp.panel" ExtensionBundleVersion="0.9.2">',
     '  <ExtensionList><Extension Id="com.aemcp.panel" Version="0.9.2" /></ExtensionList>',
-    '  <ExecutionEnvironment><HostList><Host Name="AEFT" Version="[25.0,26.9]" /></HostList></ExecutionEnvironment>',
+    '  <ExecutionEnvironment><HostList><Host Name="AEFT" Version="[23.0,26.9]" /></HostList></ExecutionEnvironment>',
     '</ExtensionManifest>',
     '',
   ].join('\n'));
@@ -244,7 +244,7 @@ async function writePackaging(repoRoot) {
       'macos-arm64': { minOsVersion: '14.0', arch: 'arm64', rosetta: false },
       'windows-x64': { minOsVersion: '11.0.26100', arch: 'x64' },
     },
-    afterEffects: { majors: [25, 26], manifestRange: '[25.0,26.9]' },
+    afterEffects: { majors: [23, 24, 25, 26], manifestRange: '[23.0,26.9]' },
   }, null, 2)}\n`);
   await writeFixtureFile(
     repoRoot,

@@ -16,15 +16,17 @@ test('support matrix and CEP manifest promise only the verified matrix', () => {
       },
     },
     afterEffects: {
-      majors: [25, 26],
-      manifestRange: '[25.0,26.9]',
+      // #215 code side widened the promise to the AE 2023 baseline together
+      // with the helper major gate and identity policy majors.
+      majors: [23, 24, 25, 26],
+      manifestRange: '[23.0,26.9]',
     },
   });
   const hostList = manifest.match(/<HostList\b[^>]*>([\s\S]*?)<\/HostList>/);
   assert.ok(hostList, 'manifest must contain a HostList');
   assert.equal(
     hostList[1].trim(),
-    '<Host Name="AEFT" Version="[25.0,26.9]" />',
+    '<Host Name="AEFT" Version="[23.0,26.9]" />',
     'HostList must contain only the supported AE host range',
   );
 });

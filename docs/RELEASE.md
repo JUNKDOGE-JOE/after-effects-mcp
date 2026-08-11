@@ -45,7 +45,7 @@ macOS foundation workflow 与两项 RC verifier 实现现已存在。approval �
 ### 3. 候选前检查
 
 1. release coordination PR 按正常评审合入 protected `main`；合入后的 40 位小写 SHA 才是 candidate。
-2. 确认所有 active package、lock、Panel 与 CEP manifest 版本为 `0.9.2`，Host range 精确为 `[25.0,26.9]`。
+2. 确认所有 active package、lock、Panel 与 CEP manifest 版本为 `0.9.2`，Host range 精确为 `[23.0,26.9]`。
 3. 在干净 checkout 运行：
 
    ```bash
@@ -162,7 +162,7 @@ A missing prerequisite may leave unrelated unit work in progress, but it forbids
 ### 3. Candidate Preflight
 
 1. Merge the reviewed release coordination PR into protected `main`; the resulting 40-lowercase-hex commit is the candidate.
-2. Confirm all active package, lock, Panel, and CEP manifest versions are `0.9.2`, with exact host range `[25.0,26.9]`.
+2. Confirm all active package, lock, Panel, and CEP manifest versions are `0.9.2`, with exact host range `[23.0,26.9]`.
 3. Run the version, Python, host, Panel, and sidecar suites from a clean checkout.
 4. Confirm runtime locks, SBOM, license inventory, bundle manifest, signing plan, and Phase 0 evidence are bound to that SHA. Never replace restricted/unknown license approval with a placeholder.
 5. Do not squash, rebase, or mutate the candidate after merge; fixes use a new PR.

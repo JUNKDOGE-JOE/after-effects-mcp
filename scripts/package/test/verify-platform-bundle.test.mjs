@@ -913,7 +913,7 @@ test('verification rejects a widened CEP range after the bundle inventory is ref
   await stagePlatformBundle(h.input);
   const cepPath = path.join(h.outDir, 'CSXS', 'manifest.xml');
   const cep = await fs.promises.readFile(cepPath, 'utf8');
-  await fs.promises.writeFile(cepPath, cep.replace('[25.0,26.9]', '[22.0,99.9]'));
+  await fs.promises.writeFile(cepPath, cep.replace('[23.0,26.9]', '[22.0,99.9]'));
   await rewriteStageManifests(h);
 
   await assert.rejects(

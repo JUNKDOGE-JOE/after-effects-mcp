@@ -13,7 +13,7 @@ The MCP server is the core. Outside the MCP layer, ae-mcp also ships a CEP panel
 The published v0.9.2 asset targets this verified release scope:
 
 - Windows 11 24H2 (11.0.26100) or newer on x64. Windows on ARM is not supported.
-- After Effects 25.x is hardware-validated. The CEP manifest remains `[25.0,26.9]`; complete AE 26 and macOS acceptance is deferred to v0.9.3.
+- After Effects 25.x is hardware-validated. The CEP manifest now spans `[23.0,26.9]` behind AE 2023 baseline gates; the AE 2023/2024 real-host matrix is still being validated (#215).
 
 ## Architecture
 

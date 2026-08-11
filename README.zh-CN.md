@@ -13,7 +13,7 @@ MCP server 是核心。在 MCP 本体之外，ae-mcp 还包装了一套 CEP 面�
 v0.9.2 已发布资产面向以下已验证范围：
 
 - Windows 11 24H2（11.0.26100）或更新版本，运行于 x64；不支持 Windows ARM。
-- After Effects 25.x 已完成实机验证。CEP manifest 仍为 `[25.0,26.9]`；完整 AE 26 与 macOS 验收延后至 v0.9.3。
+- After Effects 25.x 已完成实机验证。CEP manifest 现放宽为 `[23.0,26.9]`（AE 2023 基线门控）；AE 2023/2024 真机矩阵验收进行中（#215）。
 
 ## 架构
 
