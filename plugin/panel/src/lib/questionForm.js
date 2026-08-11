@@ -130,6 +130,21 @@ export function answersForAskUserQuestion(questions, values) {
   return answers;
 }
 
+// Display shape for the question-resolved chat event: QuestionCard renders
+// Object.values(answers).join(' · '), so every value must be a plain string —
+// wire shapes (codex `{answers:[...]}` objects, multi-select arrays) must not
+// leak into the event or the card shows "[object Object]".
+export function displayAnswers(questions, values) {
+  const answers = {};
+  for (const question of questions) {
+    const value = valueForQuestion(question, values);
+    const list = Array.isArray(value) ? value : (value ? [value] : []);
+    if (!list.length) continue;
+    answers[question.key] = list.join(', ');
+  }
+  return answers;
+}
+
 function fieldQuestion(name, prop, required, index) {
   const schema = prop && typeof prop === 'object' ? prop : {};
   const prompt = asText(schema.title) || asText(schema.description) || name;

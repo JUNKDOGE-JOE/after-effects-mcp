@@ -7,6 +7,7 @@ import { createUniversalProviderRoute } from './universalProviderRoute.js';
 import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 import {
   answersForAskUserQuestion,
+  displayAnswers,
   questionsFromAskUserQuestion,
 } from '../lib/questionForm.js';
 
@@ -195,7 +196,14 @@ export function createClaudeAgentBackend({
     }
     const answers = answersForAskUserQuestion(pending.questions, result.values);
     writeMessage({ t: 'answer', id, answers });
-    emit({ type: 'question-resolved', toolUseId: id, outcome: 'answered', answers });
+    // Display shape for the card: multi-select answers are arrays on the wire
+    // but must be joined strings in the chat event.
+    emit({
+      type: 'question-resolved',
+      toolUseId: id,
+      outcome: 'answered',
+      answers: displayAnswers(pending.questions, result.values),
+    });
     return true;
   }
 

@@ -201,7 +201,9 @@ test('claude AskUserQuestion round-trips through the #219 question form (#228)',
   assert.ok(answer, 'an answer line is written back to the sidecar');
   assert.equal(answer.id, 'ask-1');
   assert.deepEqual(answer.answers, { 'How should I format the output?': 'Summary' });
-  assert.ok(events.some((e) => e.type === 'question-resolved' && e.outcome === 'answered'));
+  const resolved = events.find((e) => e.type === 'question-resolved' && e.outcome === 'answered');
+  assert.ok(resolved);
+  assert.deepEqual(resolved.answers, { 'How should I format the output?': 'Summary' });
 
   spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
   await pending;

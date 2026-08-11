@@ -23941,6 +23941,16 @@
     }
     return answers;
   }
+  function displayAnswers(questions, values) {
+    const answers = {};
+    for (const question of questions) {
+      const value = valueForQuestion(question, values);
+      const list = Array.isArray(value) ? value : value ? [value] : [];
+      if (!list.length) continue;
+      answers[question.key] = list.join(", ");
+    }
+    return answers;
+  }
   function fieldQuestion(name, prop, required, index) {
     const schema = prop && typeof prop === "object" ? prop : {};
     const prompt = asText(schema.title) || asText(schema.description) || name;
@@ -39964,7 +39974,12 @@ data: ${JSON.stringify(payload)}
       }
       const answers = answersForAskUserQuestion(pending.questions, result.values);
       writeMessage({ t: "answer", id, answers });
-      emit({ type: "question-resolved", toolUseId: id, outcome: "answered", answers });
+      emit({
+        type: "question-resolved",
+        toolUseId: id,
+        outcome: "answered",
+        answers: displayAnswers(pending.questions, result.values)
+      });
       return true;
     }
     function drainUserInputs() {
@@ -41045,7 +41060,12 @@ data: ${JSON.stringify(payload)}
       }
       const answers = answersForCodexUserInput(pending.questions, result.values);
       if (rpc) rpc.respond(pending.rpcId, { answers });
-      emit({ type: "question-resolved", toolUseId: id, outcome: "answered", answers });
+      emit({
+        type: "question-resolved",
+        toolUseId: id,
+        outcome: "answered",
+        answers: displayAnswers(pending.questions, result.values)
+      });
       return true;
     }
     function detachRuntimeForProviderRecovery() {

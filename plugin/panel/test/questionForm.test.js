@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import {
   answersForAskUserQuestion,
   answersForCodexUserInput,
+  displayAnswers,
   answersForUserInput,
   contentForElicitation,
   questionsFromAskUserQuestion,
@@ -82,6 +83,22 @@ test('answersForCodexUserInput wraps each answer as { answers: [string] } keyed 
   );
   // An empty answer yields an empty list, not [''].
   assert.deepEqual(answersForCodexUserInput(questions, {}), { color_choice: { answers: [] } });
+});
+
+test('displayAnswers renders plain strings for the question-resolved card', () => {
+  const single = questionsFromCodexUserInput({
+    questions: [{ id: 'color_choice', question: 'q', options: [{ label: '蓝色' }] }],
+  });
+  // Codex wire shape is { answers: [...] } objects; the card shape is a string.
+  assert.deepEqual(displayAnswers(single, { q0: '蓝色' }), { color_choice: '蓝色' });
+
+  const multi = questionsFromAskUserQuestion({
+    questions: [{ question: 'Which?', multiSelect: true, options: [{ label: 'A' }, { label: 'B' }] }],
+  });
+  assert.deepEqual(displayAnswers(multi, { q0: ['A', 'B'] }), { 'Which?': 'A, B' });
+
+  // Unanswered questions are omitted instead of rendering an empty entry.
+  assert.deepEqual(displayAnswers(single, {}), {});
 });
 
 // --- normalization: claude AskUserQuestion (#228) ---

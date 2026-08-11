@@ -29,6 +29,7 @@ import {
 } from '../../../shared/chat-attachments.mjs';
 import {
   answersForCodexUserInput,
+  displayAnswers,
   questionsFromCodexUserInput,
 } from '../lib/questionForm.js';
 
@@ -473,7 +474,15 @@ export function createCodexBackend({
     }
     const answers = answersForCodexUserInput(pending.questions, result.values);
     if (rpc) rpc.respond(pending.rpcId, { answers });
-    emit({ type: 'question-resolved', toolUseId: id, outcome: 'answered', answers });
+    // The event carries the display shape (plain strings), not the wire shape —
+    // QuestionCard joins the values, and `{answers:[...]}` objects would render
+    // as "[object Object]".
+    emit({
+      type: 'question-resolved',
+      toolUseId: id,
+      outcome: 'answered',
+      answers: displayAnswers(pending.questions, result.values),
+    });
     return true;
   }
 

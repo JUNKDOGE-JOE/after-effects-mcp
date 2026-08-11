@@ -491,7 +491,11 @@ test('codex item/tool/requestUserInput becomes a question form and answers reply
   const reply = parseWrites(proc).find((w) => w.id === 'ui_1' && w.result);
   assert.ok(reply, 'the RPC id is answered');
   assert.deepEqual(reply.result, { answers: { color_choice: { answers: ['蓝色'] } } });
-  assert.ok(events.some((e) => e.type === 'question-resolved' && e.outcome === 'answered'));
+  const resolved = events.find((e) => e.type === 'question-resolved' && e.outcome === 'answered');
+  assert.ok(resolved);
+  // The chat event carries display strings, not the codex wire objects — the
+  // card renders Object.values(answers), which must never be "[object Object]".
+  assert.deepEqual(resolved.answers, { color_choice: '蓝色' });
 });
 
 test('codex user-input question is settled as cancelled on reset (#228/#220)', async () => {
