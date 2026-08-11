@@ -20,7 +20,7 @@ param(
 
     [string]$CertPath = "",
     [string]$OutputPath = "",
-    [string]$Version = "0.9.4",
+    [string]$Version = "0.9.5",
     # Timestamp server: an untimestamped self-signed ZXP fails validation once
     # the cert expires. Timestamping pins the signature to signing time.
     [string]$Tsa = "http://timestamp.digicert.com"

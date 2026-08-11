@@ -6,7 +6,7 @@ import { createRuntimeManager, hasDevelopmentRuntimeOverride } from './runtimeMa
 const DEFAULT_TIMEOUT_MS = 30000;
 const INITIALIZE_TIMEOUT_MS = 120000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
-export const PANEL_VERSION = '0.9.4';
+export const PANEL_VERSION = '0.9.5';
 
 function defaultRandomBytes(size) {
   const cryptoImpl = globalThis.crypto;

@@ -20262,7 +20262,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.9.4",
+    version: "0.9.5",
     private: true,
     type: "module",
     scripts: {
@@ -32434,7 +32434,7 @@
   var DEFAULT_TIMEOUT_MS2 = 3e4;
   var INITIALIZE_TIMEOUT_MS = 12e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.9.4";
+  var PANEL_VERSION = "0.9.5";
   function defaultRandomBytes2(size) {
     const cryptoImpl = globalThis.crypto;
     if (!cryptoImpl || typeof cryptoImpl.getRandomValues !== "function") {
