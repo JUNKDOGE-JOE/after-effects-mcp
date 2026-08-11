@@ -6,11 +6,11 @@ ae-mcp 是一个**后端无关**的 After Effects 自动化工具，用来让 AE
 
 MCP server 是核心。在 MCP 本体之外，ae-mcp 还包装了一套 CEP 面板插件，提供面板内对话、后端配置、审批、诊断和首跑安装。你可以根据自己的工作流选择：在外部 agent 后端里通过 MCP 使用 ae-mcp，或者直接在 AE 面板内配置 Claude / Codex / ZCode 后端进行对话。
 
-**v0.9.4 是 Windows x64 修复版本。** 签名 ZXP 内含 CEP 面板与 Windows Platform Helper；签名 AEX 仍需单独手动安装。面板首跑向导可以联网安装外部 Python runtime，因此不要求用户预先装好 runtime，但本版不是离线或只装 ZXP 即用的安装包。
+**v0.9.5 是 Windows x64 修复版本。** 签名 ZXP 内含 CEP 面板与 Windows Platform Helper；签名 AEX 仍需单独手动安装。面板首跑向导可以联网安装外部 Python runtime，因此不要求用户预先装好 runtime，但本版不是离线或只装 ZXP 即用的安装包。
 
-## v0.9.4 目标支持矩阵
+## v0.9.5 目标支持矩阵
 
-v0.9.4 发布资产面向以下范围：
+v0.9.5 发布资产面向以下范围：
 
 - Windows 11 24H2（11.0.26100）或更新版本，运行于 x64；不支持 Windows ARM。
 - After Effects 2025 是本次打包验收宿主。CEP manifest 现放宽为 `[23.0,26.9]`（AE 2023 基线门控，AE 2023/2024 真机矩阵 #215 验收中）；本版不包含 macOS 资产。
@@ -29,29 +29,29 @@ v0.9.4 发布资产面向以下范围：
 
 `ae_previewFrame` 仍是 AE 内部的 `CompItem.saveFrameToPng` 路径，用于渲染真实合成像素，viewer snapshot 只作为 fallback。`packages/snapshot-mss` 通过 `mss` backend 提供 Windows `ae_snapshot` 屏幕捕获。
 
-MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与 AE 对话，CEP 面板也可以在 AE 内承载内嵌 agent 对话。现有面板层负责后端配置、审批、诊断和活动历史。v0.9.4 ZXP 恢复 Provider 管理器和 Windows Credential Manager 所需的 Platform Helper，但不内置 Python，也不激活 Windows RuntimeManager。Claude、Codex、ZCode 是面板内置后端；OpenCode 和其他工具仍可以作为外部 MCP 客户端接入。
+MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与 AE 对话，CEP 面板也可以在 AE 内承载内嵌 agent 对话。现有面板层负责后端配置、审批、诊断和活动历史。v0.9.5 ZXP 恢复 Provider 管理器和 Windows Credential Manager 所需的 Platform Helper，但不内置 Python，也不激活 Windows RuntimeManager。Claude、Codex、ZCode 是面板内置后端；OpenCode 和其他工具仍可以作为外部 MCP 客户端接入。
 
-## v0.9.4 发布范围
+## v0.9.5 发布范围
 
 - ZXP 与 AEX 必须来自最终受保护 `main` 的同一个 SHA；源码变化后必须重新生成资产和校验值。
 - ZXP 包含既有 Windows Platform Helper，并在签名前校验其 manifest、文件清单与哈希。
 - ZXP installer 不会把包内文件复制到 AE 原生插件目录，因此 AEX 单独发布并手动安装。
-- 首跑向导会在缺少依赖时联网安装 `uv` 与按 v0.9.4 tag 固定的外部 runtime。内置/离线 Python、一体化安装器、自动 AEX 部署、Windows RuntimeManager、修复/回滚/卸载生命周期、macOS 资产和 Windows ARM 不属于本版范围。
+- 首跑向导会在缺少依赖时联网安装 `uv` 与按 v0.9.5 tag 固定的外部 runtime。内置/离线 Python、一体化安装器、自动 AEX 部署、Windows RuntimeManager、修复/回滚/卸载生命周期、macOS 资产和 Windows ARM 不属于本版范围。
 - 两类签名均使用本次新建的自签名身份，不代表公开可信的软件发布者。
 
 ## 安装和首次启动
 
-从 v0.9.4 GitHub Release 下载以下三个固定文件，不要用源码归档替代签名资产：
+从 v0.9.5 GitHub Release 下载以下三个固定文件，不要用源码归档替代签名资产：
 
 | 用途 | 发布资产 |
 |---|---|
-| CEP 面板 + Windows Platform Helper | `ae-mcp-panel-v0.9.4-windows-x64.zxp` |
-| 原生 AEGP 插件 | `AeMcpNative-v0.9.4-windows-x64.aex` |
-| 完整性校验 | `SHA256SUMS-v0.9.4.txt` |
+| CEP 面板 + Windows Platform Helper | `ae-mcp-panel-v0.9.5-windows-x64.zxp` |
+| 原生 AEGP 插件 | `AeMcpNative-v0.9.5-windows-x64.aex` |
+| 完整性校验 | `SHA256SUMS-v0.9.5.txt` |
 
-用受支持的 ZXP installer 安装 ZXP。关闭 After Effects 后，以管理员权限把 AEX 复制为所选宿主的 `Support Files\Plug-ins\Extensions\AeMcpNative.aex`，再重启 AE 并打开 `Window -> Extensions -> ae-mcp`。如果缺少 `uv` 或 `ae-mcp`，在首跑向导中联网安装；向导会执行固定到 v0.9.4 tag 的 `uv tool install`。已有兼容 launcher 会直接复用。
+用受支持的 ZXP installer 安装 ZXP。关闭 After Effects 后，以管理员权限把 AEX 复制为所选宿主的 `Support Files\Plug-ins\Extensions\AeMcpNative.aex`，再重启 AE 并打开 `Window -> Extensions -> ae-mcp`。如果缺少 `uv` 或 `ae-mcp`，在首跑向导中联网安装；向导会执行固定到 v0.9.5 tag 的 `uv tool install`。已有兼容 launcher 会直接复用。
 
-用 `SHA256SUMS-v0.9.4.txt` 校验两个二进制。详见[安装文档](docs/INSTALL.md)和[发布文档](docs/RELEASE.md)。
+用 `SHA256SUMS-v0.9.5.txt` 校验两个二进制。详见[安装文档](docs/INSTALL.md)和[发布文档](docs/RELEASE.md)。
 
 ## 选择并登录后端
 
@@ -339,7 +339,7 @@ node scripts/live-model-matrix.mjs
 
 ## 打包与发布
 
-维护者先合并发布元数据，再从最终干净的受保护 `main` 提交构建 v0.9.4 Windows Helper、ZXP 与 AEX。校验最小 ZXP 载荷后分别签名、复验并生成 `SHA256SUMS-v0.9.4.txt`，通过 After Effects 2025 Helper/Provider 与公开 MCP 路径 smoke 后原样上传，不重新构建。完整流程见 [docs/RELEASE.md](docs/RELEASE.md)。
+维护者先合并发布元数据，再从最终干净的受保护 `main` 提交构建 v0.9.5 Windows Helper、ZXP 与 AEX。校验最小 ZXP 载荷后分别签名、复验并生成 `SHA256SUMS-v0.9.5.txt`，通过 After Effects 2025 Helper/Provider 与公开 MCP 路径 smoke 后原样上传，不重新构建。完整流程见 [docs/RELEASE.md](docs/RELEASE.md)。
 
 ## 实现说明
 

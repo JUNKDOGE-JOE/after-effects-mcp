@@ -10,6 +10,20 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [0.9.5] — 2026-08-12
+
+#### ✨ 新增
+
+- **代理提问表单全通道可用（#228/#219）**——codex（`request_user_input`）与 claude（`AskUserQuestion`）后端都会弹出结构化提问表单：选项、推荐标记、自定义输入、提交/取消，答案回填进模型上下文；免审与只读档同样可提问——审批档位只约束操作，不再吞掉提问。
+- **渠道选择改为用户显式启用（#229/#60）**——移除自动挑选与锁定机制；Claude 订阅、Codex CLI、自定义 Provider 各通道由用户逐一启用，可并存，模型列表按当前后端切换。
+
+#### 🐛 修复 / 改进
+
+- **AEX 按 AE 2023 套件基线构建（#215 代码侧）**——CompSuite 获取降至 v11（v12 仅为两个本插件不使用的文字创建函数增加参数），单一 `AeMcpNative.aex` 面向 AE 2023–2026；23/24 真机矩阵仍在 #215 验证中。
+- **codex 自定义 Provider 通道配置隔离（#230 部分）**——聊天进程运行于私有 `CODEX_HOME`，用户全局 `~/.codex` 的 MCP 服务器与工具不再进入面板会话；CLI 登录通道保持原状并继续跟踪。
+- **部署与载荷完整性**——CEP 扫描路径去除重复扩展注册（修复 AE 启动主线程死锁），部署产物迁至扫描路径外并自动清扫历史遗留；host/sidecar 的 vendored 依赖纳入部署前门闸，空壳载荷在部署时即失败而非上机后面板装死。
+- **对话体验**——聊天气泡保留换行与空行；已回答的提问卡片显示真实选项文本；探针失败原因如实透出（#222）；渠道诊断显示 codex 实际入口（#225）；probe 与自定义 Provider 配置解耦（#226）。
+
 ### [0.9.4] — 2026-08-04
 
 #### 修复
@@ -259,6 +273,20 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [0.9.5] — 2026-08-12
+
+#### ✨ Added
+
+- **Agent question form on every channel (#228/#219)** — both the codex (`request_user_input`) and claude (`AskUserQuestion`) backends now raise the structured question form: options, recommended markers, custom input, submit/cancel, with answers fed back into the model context. The no-review and read-only tiers can ask too — approval tiers gate operations, not questions.
+- **Explicitly user-enabled channels (#229/#60)** — auto-pick and channel locks are gone; the Claude subscription, Codex CLI, and custom-provider channels are enabled individually, can coexist, and the model list follows the active backend.
+
+#### 🐛 Fixed / Improved
+
+- **AEX built on the AE 2023 suite baseline (#215, code side)** — CompSuite acquisition drops to v11 (v12 only adds a parameter to two text-creation calls this plugin never makes), so one `AeMcpNative.aex` targets AE 2023–2026; the 23/24 real-host matrix stays tracked in #215.
+- **Codex custom-provider channel config isolation (partial #230)** — the chat process runs in a private `CODEX_HOME`, so MCP servers from the user's global `~/.codex` no longer enter panel sessions; the CLI-login channel is unchanged and stays tracked.
+- **Deployment and payload integrity** — duplicate extension registrations are swept out of the CEP scan path (fixing an AE startup main-thread deadlock), deployment artifacts move outside the scan path with automatic legacy cleanup, and the vendored host/sidecar dependencies join the pre-deploy gate so a gutted checkout fails the deploy instead of shipping a dead panel.
+- **Conversation polish** — chat bubbles preserve line breaks; answered question cards show the actual chosen option text; provider probe failures surface their real reason (#222); channel diagnostics show the actual codex entry point (#225); the probe is decoupled from custom-provider configuration (#226).
 
 ### [0.9.4] — 2026-08-04
 

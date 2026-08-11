@@ -7,7 +7,7 @@ import test from 'node:test';
 
 import { verifyWindowsZxpStage } from '../verify-windows-zxp-stage.mjs';
 
-const VERSION = '0.9.4';
+const VERSION = '0.9.5';
 const HELPER_FILES = [
   'bin/ae-mcp-platform-helper.exe',
   'bin/ae-mcp.exe',

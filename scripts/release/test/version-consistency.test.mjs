@@ -5,11 +5,11 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
-const VERSION = '0.9.4';
+const VERSION = '0.9.5';
 const PLATFORM_ASSETS = [
-  'ae-mcp-panel-v0.9.4-windows-x64.zxp',
-  'AeMcpNative-v0.9.4-windows-x64.aex',
-  'SHA256SUMS-v0.9.4.txt',
+  'ae-mcp-panel-v0.9.5-windows-x64.zxp',
+  'AeMcpNative-v0.9.5-windows-x64.aex',
+  'SHA256SUMS-v0.9.5.txt',
 ];
 
 const PYTHON_PROJECTS = [
@@ -69,7 +69,7 @@ function panelVersion(source) {
   return source.match(/PANEL_VERSION\s*=\s*['"]([^'"]+)['"];/)?.[1];
 }
 
-test('all active package and lockfile versions are v0.9.4', async () => {
+test('all active package and lockfile versions are v0.9.5', async () => {
   for (const relativePath of PYTHON_PROJECTS) {
     assert.equal(projectVersion(await text(relativePath), relativePath), VERSION, relativePath);
   }
@@ -147,10 +147,10 @@ test('native product version is injected from the exact repository product manif
   }
 });
 
-test('user docs describe the v0.9.4 platform assets and optional AI channel CLIs', async () => {
+test('user docs describe the v0.9.5 platform assets and optional AI channel CLIs', async () => {
   for (const relativePath of USER_DOCS) {
     const body = await text(relativePath);
-    assert.match(body, /v?0\.9\.4/, `${relativePath} release version`);
+    assert.match(body, /v?0\.9\.5/, `${relativePath} release version`);
     for (const asset of PLATFORM_ASSETS) {
       assert.ok(body.includes(asset), `${relativePath} must name ${asset}`);
     }
@@ -166,12 +166,12 @@ test('normal install docs explain the online tag-pinned runtime wizard', async (
     const body = await text(relativePath);
     assert.match(body, /uv tool install/i, `${relativePath} must name the runtime command`);
     assert.match(body, /online|联网|在线/i, `${relativePath} must disclose network installation`);
-    assert.match(body, /tag-pinned[^\n]*v0\.9\.4|pinned to\s+the `?v0\.9\.4`? tag|v0\.9\.4 tag|v0\.9\.4#subdirectory|固定到\s*`?v0\.9\.4`? tag|按 v0\.9\.4 tag 固定/i,
+    assert.match(body, /tag-pinned[^\n]*v0\.9\.5|pinned to\s+the `?v0\.9\.5`? tag|v0\.9\.5 tag|v0\.9\.5#subdirectory|固定到\s*`?v0\.9\.5`? tag|按 v0\.9\.5 tag 固定/i,
       `${relativePath} must pin the runtime source to this release`);
   }
 });
 
-test('release docs define the approved corrective Windows v0.9.4 contract', async () => {
+test('release docs define the approved corrective Windows v0.9.5 contract', async () => {
   const release = await text('docs/RELEASE.md');
   for (const marker of PLATFORM_ASSETS) {
     assert.ok(release.includes(marker), `docs/RELEASE.md must name ${marker}`);
@@ -185,11 +185,12 @@ test('release docs define the approved corrective Windows v0.9.4 contract', asyn
   const changelog = await text('CHANGELOG.md');
   const firstRelease = changelog.match(/^### \[([^\]]+)\].*$/m)?.[1];
   assert.equal(firstRelease, VERSION);
+  assert.match(changelog, /^### \[0\.9\.5\].*2026-08-12/mi);
   assert.match(changelog, /^### \[0\.9\.4\].*2026-08-04/mi);
   assert.match(changelog, /^### \[0\.9\.3\].*2026-08-03/mi);
 });
 
-test('user docs distinguish the corrective Windows v0.9.4 release from deferred work', async () => {
+test('user docs distinguish the corrective Windows v0.9.5 release from deferred work', async () => {
   const [readme, readmeZh, install, reference, release, workflow] = await Promise.all([
     readFile('README.md', 'utf8'),
     readFile('README.zh-CN.md', 'utf8'),
@@ -199,15 +200,15 @@ test('user docs distinguish the corrective Windows v0.9.4 release from deferred 
     readFile('docs/WORKFLOW.md', 'utf8'),
   ]);
 
-  assert.match(readme, /v0\.9\.4 Target Support Matrix/);
-  assert.match(readmeZh, /v0\.9\.4 目标支持矩阵/);
+  assert.match(readme, /v0\.9\.5 Target Support Matrix/);
+  assert.match(readmeZh, /v0\.9\.5 目标支持矩阵/);
   assert.match(readme, /first-run wizard[\s\S]*online `uv`/i);
   assert.match(readmeZh, /首跑向导[\s\S]*在线安装 `uv`/);
   assert.match(readme, /install-plugin-dev-macos\.sh/);
   assert.match(readmeZh, /install-plugin-dev-macos\.sh/);
 
   for (const value of [install, readme, readmeZh]) {
-    assert.match(value, /Windows[\s\S]{0,500}v0\.9\.4/i);
+    assert.match(value, /Windows[\s\S]{0,500}v0\.9\.5/i);
   }
   assert.doesNotMatch(workflow, /Mac 安装 DMG|install the DMG/i);
   assert.match(workflow, /受支持的 ZXP installer/);
