@@ -411,7 +411,10 @@ export function createHostController({
   async function repairPlatformHelper() {
     const context = helperBindingContext;
     const currentHost = host;
-    if (adapter.id !== 'macos-arm64'
+    // Rebinds the facade on a fresh transport: payload re-verification plus
+    // reconnect/spawn of the CURRENT endpoint generation (#216). macOS also
+    // re-runs helper registration via repairRegistration.
+    if (!['macos-arm64', 'windows-x64'].includes(adapter.id)
         || !context
         || !currentHost
         || context.hostInstance !== currentHost) {
@@ -423,7 +426,7 @@ export function createHostController({
     closeHelperClient(priorClient);
     bindPlatformHelperFacade({
       ...context,
-      repairRegistration: true,
+      repairRegistration: adapter.id === 'macos-arm64',
     });
 
     if (host !== currentHost) {

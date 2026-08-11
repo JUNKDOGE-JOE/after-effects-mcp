@@ -6,7 +6,11 @@ const path = require('node:path');
 const test = require('node:test');
 const { EventEmitter } = require('node:events');
 
-const { createPlatformHelperTransport } = require('./platform-helper-transport');
+const {
+    createPlatformHelperTransport,
+    windowsEndpointGeneration,
+    windowsPipeName,
+} = require('./platform-helper-transport');
 
 function fakeNativeTransport() {
     return {
@@ -126,6 +130,12 @@ test('Windows transport starts the verified Helper once and retries the named pi
                     assert.deepEqual(identity, {
                         expectedServerPath: 'C:\\verified\\ae-mcp-platform-helper.exe',
                         expectedServerSha256: 'a'.repeat(64),
+                        // #216: the endpoint is generation-namespaced from the
+                        // verified payload identity.
+                        pipeName: windowsPipeName({
+                            path: 'C:\\verified\\ae-mcp-platform-helper.exe',
+                            sha256: 'a'.repeat(64),
+                        }),
                     });
                     if (opens < 3) throw new Error('pipe absent');
                     return native;
@@ -450,10 +460,17 @@ test('process launch is isolated to the verified platform Helper JS boundaries',
     assert.match(macSource, /NSXPCConnection/);
     assert.match(windowsSource, /#include <algorithm>/);
     assert.match(windowsSource, /CreateFileW/);
+    // #216: no fixed full endpoint may exist in the addon — only the
+    // generation prefix; the caller supplies the namespaced pipe name.
     assert.equal(
-        windowsSource.includes(String.raw`LR"(\\.\pipe\com.junkdoge.ae-mcp.platform-helper)"`),
+        windowsSource.includes(String.raw`LR"(\\.\pipe\com.junkdoge.ae-mcp.platform-helper.)"`),
         true,
     );
+    assert.equal(
+        windowsSource.includes(String.raw`LR"(\\.\pipe\com.junkdoge.ae-mcp.platform-helper)"`),
+        false,
+    );
+    assert.match(windowsSource, /options\.pipe_name/);
     for (const source of [cmake, commonHeader, commonSource, macSource, windowsSource]) {
         assert.doesNotMatch(
             source,
@@ -483,4 +500,30 @@ test('Windows native transport uses cancellable overlapped I/O with a 10-second 
     );
     assert.match(windowsSource, /request_mutex_/);
     assert.match(windowsSource, /state_mutex_/);
+});
+
+test('endpoint generation namespaces installs and stays deterministic (#216)', () => {
+    const identity = { path: String.raw`C:\A\ext\bin\helper.exe`, sha256: 'a'.repeat(64) };
+    // Deterministic and versioned.
+    assert.equal(windowsEndpointGeneration(identity), windowsEndpointGeneration(identity));
+    assert.match(windowsEndpointGeneration(identity), /^v1-[0-9a-f]{16}$/);
+    assert.equal(
+        windowsPipeName(identity),
+        String.raw`\\.\pipe\com.junkdoge.ae-mcp.platform-helper.` + windowsEndpointGeneration(identity),
+    );
+    // Loose normalization: case, separators, and the long-path prefix collapse.
+    assert.equal(
+        windowsEndpointGeneration({ path: String.raw`\\?\C:/a/EXT/bin/HELPER.exe`, sha256: 'A'.repeat(64) }),
+        windowsEndpointGeneration(identity),
+    );
+    // A different payload hash or install path is a different generation, so an
+    // old install can never occupy the new install's endpoint.
+    assert.notEqual(
+        windowsEndpointGeneration({ ...identity, sha256: 'b'.repeat(64) }),
+        windowsEndpointGeneration(identity),
+    );
+    assert.notEqual(
+        windowsEndpointGeneration({ ...identity, path: String.raw`C:\B\ext\bin\helper.exe` }),
+        windowsEndpointGeneration(identity),
+    );
 });

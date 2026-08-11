@@ -131,6 +131,33 @@ function verifyWindowsPayload(addonPath, input) {
     });
 }
 
+// Endpoint generation (#216): the pipe name is namespaced by the payload
+// identity so an older installed Helper can never occupy or impersonate the
+// current generation's endpoint. The helper computes the identical value from
+// its own image (see native/platform-helper/windows/src/main.cpp); both sides
+// agree without prior communication. Bump the scheme only together with the
+// helper and the packaging identity policy.
+const ENDPOINT_GENERATION_SCHEME = 'v1';
+const WINDOWS_PIPE_NAME_PREFIX = '\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper.';
+const WINDOWS_LEGACY_PIPE_NAME = '\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper';
+
+function normalizedIdentityPath(filePath) {
+    let value = String(filePath);
+    if (value.startsWith('\\\\?\\')) value = value.slice(4);
+    return value.replace(/\//g, '\\').toLowerCase();
+}
+
+function windowsEndpointGeneration(identity) {
+    const material = normalizedIdentityPath(identity.path)
+        + '\n' + identity.sha256.toLowerCase();
+    const digest = crypto.createHash('sha256').update(material, 'utf8').digest('hex');
+    return ENDPOINT_GENERATION_SCHEME + '-' + digest.slice(0, 16);
+}
+
+function windowsPipeName(identity) {
+    return WINDOWS_PIPE_NAME_PREFIX + windowsEndpointGeneration(identity);
+}
+
 function positiveDelay(value, fallback, name) {
     if (value === undefined) return fallback;
     if (!Number.isSafeInteger(value) || value <= 0) {
@@ -224,6 +251,7 @@ function createPlatformHelperTransport(options) {
         const opened = addon.createTransport({
             expectedServerPath: helperIdentity.path,
             expectedServerSha256: helperIdentity.sha256,
+            pipeName: windowsPipeName(helperIdentity),
         });
         if (!validNativeTransport(opened)) {
             try {
@@ -281,7 +309,19 @@ function createPlatformHelperTransport(options) {
             }
         }
         if (closed) throw unavailable('platform helper transport is closed');
-        throw startFailed('platform helper did not become ready before the startup deadline');
+        // Name the generation and whether a legacy (pre-namespacing) helper
+        // still owns the old fixed endpoint, so the failure is actionable
+        // instead of an opaque timeout.
+        let legacyOccupied = false;
+        try {
+            legacyOccupied = (input.fsImpl || require('fs')).existsSync(WINDOWS_LEGACY_PIPE_NAME);
+        } catch (_) {}
+        throw startFailed('platform helper did not become ready before the startup deadline'
+            + ' (endpoint generation ' + windowsEndpointGeneration(helperIdentity)
+            + (legacyOccupied
+                ? '; a legacy pre-upgrade helper still owns the old endpoint and retires when its After Effects exits'
+                : '')
+            + ')');
     }
 
     async function connect() {
@@ -381,4 +421,8 @@ function createPlatformHelperTransport(options) {
     });
 }
 
-module.exports = { createPlatformHelperTransport };
+module.exports = {
+    createPlatformHelperTransport,
+    windowsEndpointGeneration,
+    windowsPipeName,
+};

@@ -48,6 +48,18 @@ std::string StringProperty(napi_env env, napi_value object, const char* name) {
   return std::string(buffer.data(), copied);
 }
 
+std::string OptionalStringProperty(napi_env env, napi_value object, const char* name) {
+  bool present = false;
+  Require(napi_has_named_property(env, object, name, &present), "could not read transport option");
+  if (!present) return {};
+  napi_value value;
+  Require(napi_get_named_property(env, object, name, &value), "could not read transport option");
+  napi_valuetype type;
+  Require(napi_typeof(env, value, &type), "could not inspect transport option");
+  if (type == napi_undefined || type == napi_null) return {};
+  return StringProperty(env, object, name);
+}
+
 PlatformTransportOptions ReadTransportOptions(
     napi_env env,
     napi_callback_info info) {
@@ -63,6 +75,7 @@ PlatformTransportOptions ReadTransportOptions(
   return {
       StringProperty(env, arguments[0], "expectedServerPath"),
       StringProperty(env, arguments[0], "expectedServerSha256"),
+      OptionalStringProperty(env, arguments[0], "pipeName"),
   };
 }
 

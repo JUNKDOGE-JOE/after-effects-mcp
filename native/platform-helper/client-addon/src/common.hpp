@@ -13,6 +13,9 @@ inline constexpr std::size_t kMaxMessageBytes = 65536;
 struct PlatformTransportOptions {
   std::string expected_server_path;
   std::string expected_server_sha256;
+  // Windows only: generation-namespaced endpoint derived from the verified
+  // helper manifest (#216); the macOS transport ignores it.
+  std::string pipe_name;
 };
 
 class PlatformTransport {

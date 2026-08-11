@@ -39,7 +39,16 @@
     "platform": "windows-x64",
     "minimumOsVersion": "11.0.26100",
     "architecture": "x64",
-    "pipeName": "\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper",
+    "pipeNamePrefix": "\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper.",
+    "endpointGeneration": {
+      "scheme": "v1",
+      "material": "sha256(lowercase(strip-\\\\?\\-prefix(image path, / as \\)) + '\\n' + lowercase(image sha256 hex))",
+      "suffixHexChars": 16,
+      "derivedBy": [
+        "native/platform-helper/windows/src/main.cpp (own image at startup)",
+        "plugin/host/platform-helper-transport.js (verified helper manifest)"
+      ]
+    },
     "credentialTargetPrefix": "com.junkdoge.ae-mcp/provider:",
     "authorization": {
       "currentUserOnly": true,
@@ -54,6 +63,8 @@
       "directImage": "CEPHtmlEngine.exe",
       "ancestorImage": "AfterFX.exe",
       "afterEffectsMajors": [
+        23,
+        24,
         25,
         26
       ]

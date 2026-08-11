@@ -59,7 +59,9 @@ test('caller authorization binds user, architecture, Adobe signatures, ancestry,
   assert.match(service, /SignerOrganization\(process\.imagePath\) != L"Adobe Inc\."/);
   assert.match(service, /RequireAdobeProcess\(process, L"CEPHtmlEngine\.exe"\)/);
   assert.match(service, /RequireAdobeProcess\(process, L"AfterFX\.exe"\)/);
-  assert.match(service, /major != 25 && major != 26/);
+  // AE 2023 baseline (#215): keep in sync with the CEP manifest AEFT range
+  // and packaging/helper-identity-policy.json afterEffectsMajors.
+  assert.match(service, /major < 23 \|\| major > 26/);
   assert.match(service, /InspectProcess\(expected\.processId\) == expected/);
 });
 

@@ -686,7 +686,7 @@ test('host controller repair preserves a sanitized replacement failure', async (
   );
 });
 
-test('Windows host controller does not offer macOS helper replacement', async () => {
+test('Windows repair rebinds the current transport generation without macOS registration', async () => {
   const repairModes = [];
   const host = {
     setRuntimeDependencies() {}, setCSInterface() {},
@@ -725,11 +725,11 @@ test('Windows host controller does not offer macOS helper replacement', async ()
   });
 
   controller.start(11488);
-  await assert.rejects(
-    controller.repairPlatformHelper(),
-    { code: 'HELPER_UNAVAILABLE' },
-  );
-  assert.deepEqual(repairModes, [false]);
+  // #216: Windows now exposes the repair action. It rebinds the facade on a
+  // fresh transport of the CURRENT endpoint generation; repairRegistration
+  // stays false because helper registration is a macOS-only concept.
+  await controller.repairPlatformHelper();
+  assert.deepEqual(repairModes, [false, false]);
 });
 
 test('host controller loads the bundled helper client and transport modules by exact extension paths', async () => {

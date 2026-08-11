@@ -19,7 +19,10 @@
 namespace aemcp::platform_helper {
 namespace {
 
-constexpr wchar_t kPipeName[] = LR"(\\.\pipe\com.junkdoge.ae-mcp.platform-helper)";
+// The endpoint is generation-namespaced (#216); the caller derives the pipe
+// name from the verified helper manifest and passes it via options. A fixed
+// fallback would reintroduce the cross-install collision, so none exists.
+constexpr wchar_t kPipeNamePrefix[] = LR"(\\.\pipe\com.junkdoge.ae-mcp.platform-helper.)";
 constexpr DWORD kRequestTimeoutMs = 10000;
 
 using RequestDeadline = std::chrono::steady_clock::time_point;
@@ -322,8 +325,12 @@ void ReadExact(
 class WindowsTransport final : public PlatformTransport {
  public:
   explicit WindowsTransport(const PlatformTransportOptions& options) {
+    const std::wstring pipe_name = FromUtf8(options.pipe_name);
+    if (pipe_name.rfind(kPipeNamePrefix, 0) != 0) {
+      throw std::runtime_error("platform helper pipe name is missing or invalid");
+    }
     handle_ = CreateFileW(
-        kPipeName,
+        pipe_name.c_str(),
         GENERIC_READ | GENERIC_WRITE,
         0,
         nullptr,

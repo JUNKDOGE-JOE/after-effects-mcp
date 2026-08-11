@@ -89,7 +89,9 @@ export function validateHelperIdentityPolicy(policy, platform) {
       && windows?.platform === platform
       && windows.minimumOsVersion === '11.0.26100'
       && windows.architecture === 'x64'
-      && windows.pipeName === '\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper'
+      && windows.pipeNamePrefix === '\\\\.\\pipe\\com.junkdoge.ae-mcp.platform-helper.'
+      && windows.endpointGeneration?.scheme === 'v1'
+      && windows.endpointGeneration?.suffixHexChars === 16
       && windows.credentialTargetPrefix === 'com.junkdoge.ae-mcp/provider:'
       && windows.authorization?.currentUserOnly === true
       && windows.authorization?.nativeExecutionOnly === true
@@ -100,7 +102,7 @@ export function validateHelperIdentityPolicy(policy, platform) {
       && windows.caller?.publisherOrganization === 'Adobe Inc.'
       && windows.caller?.directImage === 'CEPHtmlEngine.exe'
       && windows.caller?.ancestorImage === 'AfterFX.exe'
-      && JSON.stringify(windows.caller?.afterEffectsMajors) === JSON.stringify([25, 26]);
+      && JSON.stringify(windows.caller?.afterEffectsMajors) === JSON.stringify([23, 24, 25, 26]);
   if (!commonValid || (!macValid && !windowsValid)) {
     throw helperError('HELPER_IDENTITY_POLICY_INVALID', 'helper identity policy is invalid');
   }
