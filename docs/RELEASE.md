@@ -47,6 +47,10 @@ v0.9.5 不是离线、零依赖或只装 ZXP 即用的发布。
 升级/修复/回滚/卸载生命周期、macOS 资产或 Windows ARM。ZXP installer 不会把 AEX
 安装到 AE 原生插件目录。自签名只能证明签名后的字节未变化，不建立系统默认信任的公开发布者。
 
+> 补充（2026-08-12）：按 v0.9.4 先例（#214）向 v0.9.5 Release 补传了未签名 macOS arm64
+> 平台包与 ad-hoc 签名原生插件（见 INSTALL）。该补传不改变上述发布契约；macOS ZXP 与
+> 正式签名资产仍在非目标内，待签名环境可用后另行处理。
+
 ## English
 
 ### Fixed assets
@@ -96,3 +100,8 @@ This release adds no bundled/offline runtime, Windows RuntimeManager, integrated
 automatic AEX deployment, upgrade/repair/rollback/uninstall lifecycle, macOS asset, or Windows ARM
 support. A ZXP installer does not install the AEX in AE's native plug-in directory. Self-signing
 does not establish a publicly trusted publisher.
+
+> Supplement (2026-08-12): following the v0.9.4 precedent (#214), an unsigned macOS arm64
+> platform bundle and an ad-hoc-signed native plug-in were added to the v0.9.5 release (see
+> INSTALL). This does not change the release contract above; the macOS ZXP and formally signed
+> assets remain non-goals until a signing environment is available.
