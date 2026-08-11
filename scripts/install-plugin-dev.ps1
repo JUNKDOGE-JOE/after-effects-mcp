@@ -79,6 +79,11 @@ $requiredFiles = @(
     'client\index.html',
     'client\dist\app.js',
     'host\server.js',
+    # The dev-payload host service refuses to start without its vendored
+    # Express (hostBridge HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE); a gutted
+    # node_modules must fail the deploy, not the panel (2026-08-12 incident:
+    # an emptied plugin/host/node_modules shipped and the panel came up dead).
+    'host\node_modules\express\package.json',
     'jsx\runtime.jsx',
     'platform\windows-x64\helper-manifest.json',
     'platform\windows-x64\bin\ae-mcp-platform-helper.exe',
