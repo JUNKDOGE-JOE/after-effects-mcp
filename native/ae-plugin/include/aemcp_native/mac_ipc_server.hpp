@@ -1,6 +1,7 @@
 #pragma once
 
 #include "aemcp_native/endpoint_registry_macos.hpp"
+#include "aemcp_native/ipc_server_types.hpp"
 #include "aemcp_native/peer_identity.hpp"
 #include "aemcp_native/transport_auth.hpp"
 
@@ -14,32 +15,6 @@
 #include <thread>
 
 namespace aemcp::native {
-
-struct AuthenticatedConnection {
-  int socket_fd{-1};
-  PeerBinding peer;
-  std::array<std::uint8_t, 16> client_nonce{};
-  std::string session_id;
-  std::uint32_t session_generation{0};
-};
-
-class AuthenticatedConnectionHandler {
- public:
-  virtual ~AuthenticatedConnectionHandler() = default;
-  // Runs on the single IPC worker. The server retains fd ownership and closes
-  // it after serve() returns. AE suite calls are forbidden here.
-  virtual void serve(const AuthenticatedConnection& connection) noexcept = 0;
-};
-
-class NativeIpcObserver {
- public:
-  virtual ~NativeIpcObserver() = default;
-  // event and decision are closed, non-sensitive identifiers. Implementations
-  // must not log endpoint paths, fingerprints, nonces, tokens, or payloads.
-  virtual void on_ipc_event(
-      std::string_view event,
-      std::string_view decision) noexcept = 0;
-};
 
 struct MacIpcServerConfig {
   std::chrono::milliseconds handshake_timeout{1500};

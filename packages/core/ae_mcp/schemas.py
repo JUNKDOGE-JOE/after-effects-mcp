@@ -348,6 +348,12 @@ class AeValidateExpressionsArgs(_StrictModel):
 SearchScope = Literal["layers", "expressions", "effects", "comps", "items"]
 SkillTemplateType = Literal["jsx", "prompt"]
 SkillName = constr(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+# ae.skillUse also accepts the canonical artifact id form
+# (`builtin:skill:<name>`) that instructions and generated capability
+# metadata point agents at; other verbs keep the strict short-name form.
+SkillUseName = constr(
+    pattern=r"^(?:builtin:skill:)?[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+)
 RigType = Literal["transform_controller", "effect_controls", "puppet_pin_nulls", "apply_preset"]
 RigControlType = Literal["slider", "angle", "checkbox", "color"]
 
@@ -361,7 +367,13 @@ class AeSkillListArgs(_StrictModel):
 
 class AeSkillUseArgs(_StrictModel):
     """ae.skillUse — render a skill, optionally executing JSX skills in AE."""
-    name: SkillName = Field(..., description="Skill name to render/use.")
+    name: SkillUseName = Field(
+        ...,
+        description=(
+            "Skill name to render/use; the canonical `builtin:skill:<name>` "
+            "artifact id is accepted and normalized."
+        ),
+    )
     args: Dict[str, Any] = Field(default_factory=dict, description="Template argument values.")
     execute: bool = Field(False, description="When true, execute rendered JSX in AE.")
 

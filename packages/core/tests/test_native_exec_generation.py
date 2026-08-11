@@ -429,6 +429,92 @@ def test_execution_guide_is_a_generated_projection():
     assert EXECUTION_GUIDE.read_text(encoding="utf-8") == before
 
 
+def _execution_guide_template() -> str:
+    return json.loads(EXECUTION_GUIDE.read_text(encoding="utf-8"))["template"]
+
+
+def _guide_contract_line(template: str, primitive_id: str) -> str:
+    prefix = f"- `{primitive_id}` — "
+    matches = [line for line in template.splitlines() if line.startswith(prefix)]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def _guide_contract_segment(line: str, label: str) -> str:
+    prefix = f"{label} `"
+    matches = [
+        part[len(prefix) : -1]
+        for part in line.removesuffix(".").split("; ")
+        if part.startswith(prefix) and part.endswith("`")
+    ]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def test_execution_guide_contracts_cover_every_literal_property():
+    template = _execution_guide_template()
+    registry = load_primitive_registry(PRIMITIVES)
+
+    for row in registry.rows:
+        line = _guide_contract_line(template, row.id)
+        properties = row.input_schema.get("properties") or {}
+        if not properties:
+            assert "literals `" not in line, row.id
+            continue
+
+        required = set(row.input_schema.get("required") or [])
+        tokens = _guide_contract_segment(line, "literals").split(", ")
+        token_names = [token.split("(", 1)[0] for token in tokens]
+        expected_names = [
+            f"{name}{'' if name in required else '?'}" for name in properties
+        ]
+        assert token_names == expected_names, row.id
+
+        tokens_by_name = {
+            token.split("(", 1)[0].removesuffix("?"): token for token in tokens
+        }
+        if "offset" in properties:
+            marker = "" if "offset" in required else "?"
+            assert tokens_by_name["offset"] == f"offset{marker}(>=0)", row.id
+        if "limit" in properties:
+            marker = "" if "limit" in required else "?"
+            maximum = properties["limit"].get("maximum")
+            assert tokens_by_name["limit"] == f"limit{marker}(1..{maximum})", row.id
+
+    project_items = _guide_contract_line(template, "project.items.list")
+    assert _guide_contract_segment(project_items, "literals") == (
+        "offset(>=0), limit(1..50), projectLocator?"
+    )
+
+
+def test_execution_guide_distinguishes_keyframe_read_and_mutation_refs():
+    template = _execution_guide_template()
+    assert (
+        "keyframe reads use only the `property` ref, while keyframe mutations "
+        "use both `layer` and `property` refs"
+    ) in template
+
+    for primitive_id in (
+        "property.keyframes.list",
+        "property.keyframe.details.read",
+    ):
+        line = _guide_contract_line(template, primitive_id)
+        assert _guide_contract_segment(line, "refs") == "property:PropertyHandle"
+
+    registry = load_primitive_registry(PRIMITIVES)
+    mutation_ids = [
+        row.id
+        for row in registry.rows
+        if row.id.startswith("property.keyframe.") and row.mutability == "write"
+    ]
+    assert mutation_ids
+    for primitive_id in mutation_ids:
+        line = _guide_contract_line(template, primitive_id)
+        assert _guide_contract_segment(line, "refs") == (
+            "layer:LayerHandle, property:PropertyHandle"
+        )
+
+
 def test_generator_check_is_independent_of_the_process_default_encoding():
     environment = os.environ.copy()
     environment.update(

@@ -407,7 +407,12 @@ def _cpp_raw(value: str) -> str:
     delimiter = "NATIVEEXEC"
     if f"){delimiter}\"" in value:
         raise ValueError("generated primitive JSON conflicts with C++ raw delimiter")
-    return f'R"{delimiter}({value}){delimiter}"'
+    # MSVC rejects string literals longer than 16380 characters (C2026);
+    # adjacent literals concatenate, so chunking keeps bytes identical on
+    # every compiler.
+    chunk = 16000
+    parts = [value[index:index + chunk] for index in range(0, len(value), chunk)] or [""]
+    return "\n    ".join(f'R"{delimiter}({part}){delimiter}"' for part in parts)
 
 
 def _model_input_schema(row: PrimitiveRow, root_definitions: dict[str, Any]) -> dict[str, Any]:
@@ -700,12 +705,16 @@ def _replace_root_definition(path: Path, definition: str, expected: dict[str, An
 
 
 def _write(path: Path, text: str, *, check: bool) -> None:
+    # Generated artifacts are byte-identical across platforms: force LF
+    # instead of the platform default (write_text translates to CRLF on
+    # Windows) and compare bytes in drift checks.
     if check:
-        if not path.is_file() or path.read_text(encoding="utf-8") != text:
+        if not path.is_file() or path.read_bytes() != text.encode("utf-8"):
             raise ValueError(f"generated output drift: {path.relative_to(ROOT)}")
         return
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    with path.open("w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
 
 
 def _local_definition_references(value: Any) -> set[str]:
@@ -1132,6 +1141,36 @@ def _require_primitive(registry: PrimitiveRegistry, primitive_id: str) -> Primit
     raise ValueError(f"default execution guide requires primitive {primitive_id}")
 
 
+def _primitive_contract_line(row: PrimitiveRow) -> str:
+    """One per-op contract line: refs (with required marks) and literals."""
+    parts = ["- `{}` — {}".format(row.id, row.mutability)]
+    if row.reference_arguments:
+        refs = ", ".join(
+            "{}{}:{}".format(name, "" if required else "?", kind)
+            for name, kind, required in row.reference_arguments
+        )
+        parts.append("refs `{}`".format(refs))
+    required = set(row.input_schema.get("required") or [])
+    properties = row.input_schema.get("properties") or {}
+    if properties:
+        literals = []
+        for name, schema in properties.items():
+            optional = "" if name in required else "?"
+            if name == "limit" and isinstance(schema.get("maximum"), int):
+                literals.append(
+                    "limit{}(1..{})".format(optional, schema["maximum"])
+                )
+            elif name == "offset":
+                literals.append("offset{}(>=0)".format(optional))
+            else:
+                literals.append("{}{}".format(name, optional))
+        parts.append("literals `{}`".format(", ".join(literals)))
+    parts.append("suite `{}`".format(row.required_suite))
+    parts.append("result {}".format(_primitive_value_kind(row).removeprefix("k")))
+    parts.append("exportable" if row.exportable else "request-local only")
+    return "; ".join(parts) + "."
+
+
 def _generate_execution_guide(registry: PrimitiveRegistry) -> str:
     """Render stable route guidance plus the generated primitive reference."""
     composition_resolve = _require_primitive(registry, "composition.resolve")
@@ -1190,26 +1229,17 @@ def _generate_execution_guide(registry: PrimitiveRegistry) -> str:
             },
         ],
     }
-    reference = "\n".join(
-        "- `{}` — {}; suite `{}`; result {}; {}.".format(
-            row.id,
-            row.mutability,
-            row.required_suite,
-            _primitive_value_kind(row).removeprefix("k"),
-            "exportable" if row.exportable else "request-local only",
-        )
-        for row in registry.rows
-    )
+    reference = "\n".join(_primitive_contract_line(row) for row in registry.rows)
     template = """\
 # AE Execution Guide
 
 ## Route choice
 
-Use `ae_exec` when maintained AE scripting can do the job; do not seek a typed convenience verb. Use `ae_nativeExec` only for listed AEGP-only primitives.
+Use `ae_exec` when maintained AE scripting can do the job; do not seek convenience verbs. Use `ae_nativeExec` only for listed AEGP-only primitives.
 
 ## Program composition
 
-`operations` is a bounded linear array. Use `saveAs` for request-local handles, backward `{{"ref":"name"}}` references, and `returnAs` for JSON-safe values. Reads omit `operationKey` and `undoGroup`; writes require both. Never invent locators: when none is fresh, run a separate read-only `ae_nativeExec` discovery program such as `project.items.list`, then copy its returned locator verbatim into the target program.
+`operations` is bounded. Use `saveAs`/`{{"ref":"name"}}` for local handles and `returnAs` for JSON values. Reads omit `operationKey`/`undoGroup`; writes require both. Never invent locators: run `project.items.list`, copy its returned locator verbatim, then walk `composition.resolve` → `composition.layers.list` → `layer.resolve` → `layer.properties.list` (groups need `parentProperty`) → `property.resolve` with `locator` and refs. Lists need `offset`/`limit`; keyframe reads use only the `property` ref, while keyframe mutations use both `layer` and `property` refs; times are `{{"value","scale"}}` rationals. Per-op contracts: below.
 
 Exact rational-time read (`AeNativeExecArgs`):
 <!-- AE_NATIVE_EXEC_EXAMPLE -->
@@ -1229,23 +1259,23 @@ Exact rational-time write (`AeNativeExecArgs`):
 
 ## Readback
 
-Read the current AE state before a write and run a fresh read after it. Re-resolve locators after graph-changing writes or Undo. Treat the typed terminal, returned state, postcondition, and audit evidence as one result.
+Read state before and after each write. Re-resolve locators after graph-changing writes or Undo. Treat terminal, returned state, postcondition, and audit evidence as one result.
 
 ## Undo
 
-One native write program opens one real AE Undo group, but the program is not atomic and never silently rolls back. `undo.available=true` does not mean Undo was executed or verified. After an explicit Undo, read the state again. For JSX writes, supply `undo_group_name`.
+One native write program opens one real AE Undo group; programs are not atomic and never roll back silently. `undo.available=true` means available, not executed or verified. After an explicit Undo, read state again. JSX writes: supply `undo_group_name`.
 
 ## Uncertain native write
 
-A timeout or disconnect after dispatch may have changed AE. Freeze the full original request and run a new read-only `ae_nativeExec` reconciliation program. Only after conclusive no-effect reconciliation may you submit a canonical-identical replay with the same `operationKey`, `undoGroup`, operations, and program digest. Otherwise stop. Never invent an outcome or audit lookup.
+A timeout or disconnect after dispatch may have changed AE. Freeze the request and run a fresh read-only `ae_nativeExec` reconciliation program. Only after conclusive no-effect reconciliation may you submit a canonical-identical replay with the same `operationKey`, `undoGroup`, operations, and program digest. Otherwise stop. Never invent an outcome.
 
 ## Visual verification
 
-State readback proves data, not appearance. Use `ae_previewFrame` after visual changes; sample at least two times for motion and one frame for a static change. After writing expressions, run `ae_validateExpressions` before preview.
+State readback proves data, not appearance. Use `ae_previewFrame` after visual changes; sample twice for motion, once for static changes. After writing expressions, run `ae_validateExpressions` before preview.
 
 ## ExtendScript essentials
 
-AE uses ECMAScript 3: use `var`, `function`, and traditional loops. End reads with `JSON.stringify(...)`; guard fallible lookups so JSX returns structured errors instead of throwing. Prefer `matchName` paths, use effect-property indices when localized names fail, and reacquire property references after `addProperty`.
+AE uses ECMAScript 3: `var`, `function`, traditional loops. End reads with `JSON.stringify(...)`; guard fallible lookups for structured errors. Prefer `matchName` paths; use effect-property indices when localized names fail; reacquire references after `addProperty`.
 
 Disable and read back a layer (`AeExecArgs`):
 <!-- AE_EXEC_EXAMPLE -->
@@ -1254,6 +1284,8 @@ Disable and read back a layer (`AeExecArgs`):
 ```
 
 ## Native primitive reference
+
+Format: op — mutability; refs (`?` = optional); literals (bounds); suite; result; exportability.
 
 <!-- GENERATED NATIVE REFERENCE -->
 {reference}

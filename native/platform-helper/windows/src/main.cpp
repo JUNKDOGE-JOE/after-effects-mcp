@@ -684,7 +684,7 @@ IJsonValue Capabilities() {
   JsonObject result;
   result.Insert(L"protocolVersion", NumberValue(1));
   result.Insert(L"platform", StringValue("windows-x64"));
-  result.Insert(L"helperVersion", StringValue("0.9.2"));
+  result.Insert(L"helperVersion", StringValue("0.9.4"));
   result.Insert(L"secretBackend", StringValue("credential-manager"));
   result.Insert(L"captureBackend", StringValue("windows-graphics-capture"));
   result.Insert(L"authenticatedCaller", JsonValue::CreateBooleanValue(true));

@@ -1,0 +1,74 @@
+// AeMcpNative_PiPL.win.rc — Windows resource for the AeMcpNative AEGP plug-in.
+//
+// The PiPL byte block below carries exactly the same identity values as
+// resources/AeMcpNative_PiPL.r (Kind AEGP, name "After Effects MCP Native",
+// category "General Plugin", compatibility version 0x00010000, entry point
+// "AeMcpNativeMain"). It was produced by the pinned SDK 25.6.61 PiPLtool
+// pipeline (cl /EP -> PiPLtool -> cl /EP) from those values; do not hand-edit
+// the byte counts or Pascal-string padding.
+//
+// The VERSIONINFO block is the Windows counterpart of the macOS Info.plist
+// product-version and source-revision binding: build-windows.mjs substitutes
+// each unique token below from the locked repository state before rc.exe runs.
+
+16000  PiPL  DISCARDABLE
+BEGIN
+	0x0001,
+	0, 0x0,
+	5, 0x0,
+	"MIB8",
+	"dnik",
+	0, 0x0,
+	4, 0x0,
+	"xgEA",
+
+	"MIB8",
+	"eman",
+	0, 0x0,
+	28, 0x0,
+	"\x18After Effects MCP Native\0\0\0",
+
+	"MIB8",
+	"gtac",
+	0, 0x0,
+	16, 0x0,
+	"\x0EGeneral Plugin\0",
+
+	"MIB8",
+	"srev",
+	0, 0x0,
+	4, 0x0,
+	0, 1,
+
+	"MIB8",
+	"4668",
+	0, 0x0,
+	16, 0x0,
+	"AeMcpNativeMain\0",
+END
+
+1 VERSIONINFO
+FILEVERSION 1,0,0,0
+PRODUCTVERSION 1,0,0,0
+FILEFLAGSMASK 0x3fL
+FILEFLAGS 0x0L
+FILEOS 0x40004L
+FILETYPE 0x2L
+FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "FileDescription", "After Effects MCP Native\0"
+            VALUE "OriginalFilename", "AeMcpNative.aex\0"
+            VALUE "ProductName", "After Effects MCP Native\0"
+            VALUE "ProductVersion", "__AE_MCP_PRODUCT_VERSION__\0"
+            VALUE "SourceCommit", "__AE_MCP_SOURCE_COMMIT__\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END

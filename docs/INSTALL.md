@@ -2,34 +2,36 @@
 
 ## 中文
 
-### v0.9.2 状态与支持矩阵
+### v0.9.4 状态与支持矩阵
 
-v0.9.2 是 Windows x64 正式版本。Provider、Tool Library 与 Platform Helper 已完成实现，并通过 Windows AE 2025 实机验证。macOS、包内 RuntimeManager、正式跨平台签名链和完整 AE 25/26 实机矩阵转入 v0.9.3。
+v0.9.4 是 Windows x64 修复版本。ZXP 内含 CEP 面板与 Windows Platform Helper；原生 AEX 作为独立签名资产手动安装。外部 runtime/launcher 可以由面板首跑向导联网安装；本版不内置离线 Python，也不是只装 ZXP 即用的安装包。
 
 支持范围固定为：
 
 - Windows 11 24H2 或更高版本，x64；不支持 Windows ARM。
-- After Effects 25.x 已完成实机验证；AE 26 完整验收转入 v0.9.3。
+- After Effects 2025 是本次打包验收宿主；CEP manifest 仍允许 `[25.0,26.9]`。
 
-### 普通用户：安装离线发布资产
+### 普通用户：安装签名资产并准备 runtime
 
-v0.9.2 的平台资产是：
+v0.9.4 的发布资产是：
 
-| 平台 | 安装资产 | 同组审计资产 |
-|---|---|---|
-| Windows x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | 同一个 ZXP |
+| 用途 | 发布资产 |
+|---|---|
+| CEP 面板 + Windows Platform Helper | `ae-mcp-panel-v0.9.4-windows-x64.zxp` |
+| 原生 AEGP 插件 | `AeMcpNative-v0.9.4-windows-x64.aex` |
+| 完整性校验 | `SHA256SUMS-v0.9.4.txt` |
 
-GitHub Release 同时给出 Windows ZXP 的 SHA-256。不要用源码归档、本地重建包、公共 PyPI 同名包或在线依赖安装替代它。
+不要用源码归档、本地重建包或公共 PyPI 同名包替代这些固定发布资产。
 
-1. 从 GitHub Release 下载 Windows ZXP，并对照发布说明校验 SHA-256。
-2. 使用受支持的 ZXP installer 安装下载的 ZXP。
-3. 重启 After Effects，打开 `Window -> Extensions -> ae-mcp`。
-4. 继续使用现有外部 runtime/launcher 配置；包内离线 RuntimeManager 转入 v0.9.3。
-5. 先运行 `ae_ping` / `ae_status`，再在测试工程执行只读与预览 smoke。
+1. 下载 ZXP、AEX 与 `SHA256SUMS-v0.9.4.txt`，先校验两个二进制。
+2. 使用受支持的 ZXP installer 安装 ZXP。
+3. 关闭全部 After Effects 实例。以管理员权限把 AEX 复制为所选宿主的 `Support Files\Plug-ins\Extensions\AeMcpNative.aex`。
+4. 重启 AE 并打开面板。若缺少 `uv` 或 `ae-mcp`，使用首跑向导联网安装；Windows 向导通过 winget（失败时使用 uv 官方 PowerShell 安装脚本）安装 `uv`，再执行固定到 `v0.9.4` tag 的 `uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.4#subdirectory=packages/core ...`。已有兼容 runtime/launcher 会被复用。
+5. 重启 After Effects，打开 `Window -> Extensions -> ae-mcp`，先运行 `ae_ping` / `ae_status`，再在测试工程执行只读 smoke。
 
 在 Windows 上，平台 Helper 由 Panel 打开时自动启动，不由安装器预先常驻启动。关闭并重开 Panel 时，同一个 AE 会话可以重新连接现有 Helper；AE 正常退出或闪退后，Helper 随已认证的 AE 进程退出。启动、握手或凭据库失败时 Provider 凭据保持 fail-closed，不回退读取明文配置。
 
-升级会先把新 runtime 安装到独立版本目录并完成校验，成功后才原子切换 `current` pointer。失败时继续使用旧 runtime；回滚只切回已验证的 `previous` pointer，不在线重装依赖。
+内置/离线 Python、一体化安装器、自动 AEX 部署、Windows RuntimeManager、升级/修复/回滚/卸载生命周期不属于 v0.9.4 Windows 发布范围。
 
 ### 可选 AI 通道依赖
 
@@ -60,9 +62,9 @@ GitHub Release 同时给出 Windows ZXP 的 SHA-256。不要用源码归档、�
 }
 ```
 
-macOS 请把 `<USER>` 替换为实际账户名。Windows 请把 `command` 改成 `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe` 展开后的绝对路径。Panel 端口若有修改，也要同步修改 `AE_MCP_PLUGIN_URL`。
+macOS 请把 `<USER>` 替换为实际账户名。Windows 默认 `uv tool install` 的 launcher 位于 `%USERPROFILE%\.local\bin\ae-mcp.exe`；若设置了 `UV_TOOL_BIN_DIR`，请直接复制面板生成的实际路径。Panel 端口若有修改，也要同步修改 `AE_MCP_PLUGIN_URL`。
 
-上例是稳定 launcher 契约。v0.9.3 macOS Panel 会输出展开后的绝对路径，在启动 core 前由 RuntimeManager 离线校验并激活包内 runtime；它不会回退到裸 PATH 或在线 Homebrew/uv。Windows v0.9.2 行为保持不变。
+Windows v0.9.4 继续使用 ZXP 外部的 runtime/launcher，但首跑向导会在缺失时联网安装它；ZXP 本身不携带 Python runtime。
 
 ### 开发安装
 
@@ -96,42 +98,44 @@ Windows 开发机在完成相同依赖同步后运行：
 
 - Panel 不在菜单中：确认安装的是正确平台资产，重启 AE；开发模式才重新运行开发安装脚本。
 - Panel 未监听：检查 Panel 日志及 `127.0.0.1:11488` 端口占用。
-- launcher 不存在：重新运行首跑向导的离线修复，或查看诊断中的 RuntimeManager 错误；不要改用公共 PyPI 或临时系统 Python 旁路。
+- launcher 不存在：重新运行面板首跑向导，联网安装 `uv` 与固定到 v0.9.4 tag 的 `ae-mcp` runtime；若自定义了 `UV_TOOL_BIN_DIR`，复制面板生成的实际路径。
 - CLI 通道不可用：检查对应的 Claude Code、Codex 或 ZCode CLI/app-server；这不应影响 core。
 - macOS 截图权限不足：按系统提示授权签名 helper 的 Screen Recording；`ae_previewFrame` 的 AE 原生路径应独立诊断。
-- 升级失败：保持旧 `current`，保存校验报告与日志，再回滚到 `previous`。
+- 需要回退发布资产：本版没有自动回滚状态；关闭 AE 后仅恢复用户自己保留且校验过的上一版 ZXP/AEX。
 - provider 配置、凭据与 Tool Library 属于用户数据；卸载或回滚不得静默删除它们。
 
 ## English
 
-### v0.9.2 Status and Support Matrix
+### v0.9.4 Status and Support Matrix
 
-v0.9.2 is the Windows x64 release. Provider, Tool Library, and Platform Helper implementation is complete and has passed Windows AE 2025 hardware validation. macOS, bundled RuntimeManager, the production cross-platform signing chain, and the complete AE 25/26 hardware matrix move to v0.9.3.
+v0.9.4 is the corrective Windows x64 release. The ZXP contains the CEP panel and Windows Platform Helper; the separately signed native AEX remains a manual install. The Panel's first-run wizard can install the external runtime/launcher online. Python is not bundled, and installing only the ZXP is not sufficient.
 
 The supported matrix is fixed to:
 
 - Windows 11 24H2 or newer on x64; no Windows ARM support.
-- After Effects 25.x is hardware-validated; complete AE 26 acceptance moves to v0.9.3.
+- After Effects 2025 is the packaged acceptance host; the CEP manifest remains `[25.0,26.9]`.
 
-### Normal Users: Install an Offline Release Asset
+### Normal Users: Install Signed Assets and Prepare the Runtime
 
-The v0.9.2 platform assets are:
+The v0.9.4 release assets are:
 
-| Platform | Install asset | Same-set audit asset |
-|---|---|---|
-| Windows x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | the same ZXP |
+| Role | Release asset |
+|---|---|
+| CEP panel + Windows Platform Helper | `ae-mcp-panel-v0.9.4-windows-x64.zxp` |
+| Native AEGP plug-in | `AeMcpNative-v0.9.4-windows-x64.aex` |
+| Integrity | `SHA256SUMS-v0.9.4.txt` |
 
-The GitHub Release lists the Windows ZXP SHA-256. Do not substitute a source archive, locally rebuilt package, public PyPI namesake, or online dependency install.
+Do not substitute a source archive, locally rebuilt package, or public PyPI namesake for these fixed assets.
 
-1. Download the Windows ZXP and verify its SHA-256 against the GitHub Release notes.
-2. Install it with a supported ZXP installer.
-3. Restart After Effects and open `Window -> Extensions -> ae-mcp`.
-4. Continue using the existing external runtime/launcher setup; bundled offline RuntimeManager moves to v0.9.3.
-5. Run `ae_ping` / `ae_status` first, followed by read-only and preview smoke in a test project.
+1. Download the ZXP, AEX, and `SHA256SUMS-v0.9.4.txt`; verify both binaries first.
+2. Install the ZXP with a supported ZXP installer.
+3. Close every After Effects instance. With administrator permission, copy the AEX to the selected host as `Support Files\Plug-ins\Extensions\AeMcpNative.aex`.
+4. Restart AE and open the Panel. If `uv` or `ae-mcp` is missing, use the first-run wizard. On Windows it installs `uv` through winget (falling back to uv's official PowerShell installer), then runs a tag-pinned `uv tool install --force --from git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.4#subdirectory=packages/core ...`. An existing compatible runtime/launcher is reused.
+5. Restart After Effects, open `Window -> Extensions -> ae-mcp`, and run `ae_ping` / `ae_status` followed by a read-only smoke in a test project.
 
 On Windows, the Panel starts Platform Helper when it opens; the installer does not prestart a resident Helper. Closing and reopening the Panel reconnects within the same AE session. Platform Helper exits when its authenticated AE process exits or crashes. Startup, handshake, or credential-store failures remain fail-closed and never fall back to plaintext provider configuration.
 
-An upgrade installs the new runtime into a separate version directory and verifies it before atomically switching the `current` pointer. Failure leaves the old runtime active; rollback switches to the verified `previous` pointer without downloading dependencies.
+Bundled/offline Python, an integrated installer, automatic AEX deployment, Windows RuntimeManager, and upgrade/repair/rollback/uninstall lifecycle are outside the v0.9.4 Windows release.
 
 ### Optional AI Channel Dependencies
 
@@ -162,9 +166,9 @@ Use the installed stable launcher:
 }
 ```
 
-On macOS, replace `<USER>` with the actual account name. On Windows, replace `command` with the expanded absolute path to `%USERPROFILE%\.ae-mcp\bin\ae-mcp.exe`. If the Panel port changes, update `AE_MCP_PLUGIN_URL` too.
+On macOS, replace `<USER>` with the actual account name. The default Windows `uv tool install` launcher is `%USERPROFILE%\.local\bin\ae-mcp.exe`; when `UV_TOOL_BIN_DIR` is set, copy the actual path generated by the Panel. If the Panel port changes, update `AE_MCP_PLUGIN_URL` too.
 
-This is the stable-launcher contract. The v0.9.3 macOS Panel emits the expanded absolute path and asks RuntimeManager to verify and activate the bundled runtime offline before starting core; it never falls back to bare PATH or online Homebrew/uv. Windows v0.9.2 behavior is unchanged.
+Windows v0.9.4 continues to use a runtime/launcher outside the ZXP, but the first-run wizard installs it online when missing. The ZXP itself does not carry a Python runtime.
 
 ### Developer Install
 
@@ -223,8 +227,8 @@ Retention keeps the newest three migration backups within the 30-day policy wind
 
 - Panel missing: confirm the correct platform asset was installed and restart AE; rerun a dev installer only in development mode.
 - Panel not listening: inspect Panel logs and the process using `127.0.0.1:11488`.
-- Launcher missing: rerun the first-run wizard's offline repair or inspect the RuntimeManager diagnostic; do not bypass it with a public PyPI package or ad-hoc system Python.
+- Launcher missing: rerun the Panel's first-run wizard to install `uv` and the v0.9.4-tagged `ae-mcp` runtime online. If `UV_TOOL_BIN_DIR` is customized, copy the actual path generated by the Panel.
 - Optional channel unavailable: inspect the corresponding Claude Code, Codex, or ZCode CLI/app-server; core should remain usable.
 - macOS capture permission missing: grant Screen Recording to the signed helper when prompted; diagnose the AE-native `ae_previewFrame` path separately.
-- Upgrade failure: keep the old `current`, retain verification evidence and logs, then roll back to `previous`.
+- To revert release assets: this release has no automatic rollback state. Close AE and restore only a user-retained, checksum-verified previous ZXP/AEX.
 - Provider settings, credentials, and Tool Library data are user data; uninstall or rollback must not silently delete them.

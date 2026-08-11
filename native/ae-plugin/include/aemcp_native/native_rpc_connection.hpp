@@ -1,7 +1,7 @@
 #pragma once
 
 #include "aemcp_native/host_dispatcher.hpp"
-#include "aemcp_native/mac_ipc_server.hpp"
+#include "aemcp_native/ipc_server_types.hpp"
 #include "aemcp_native/rpc_codec.hpp"
 
 #include <cstdint>

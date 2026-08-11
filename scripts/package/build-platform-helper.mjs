@@ -245,7 +245,16 @@ async function extractNodeHeaders(archivePath, scratchRoot) {
   const snapshotArchive = await snapshotNodeHeadersArchive({ archivePath, scratchRoot });
   await validateNodeHeadersArchive({ archivePath: snapshotArchive });
   const tar = process.platform === 'win32' ? 'tar.exe' : '/usr/bin/tar';
-  await run(tar, ['-xzf', snapshotArchive, '-C', extractionRoot]);
+  // Windows tar rejects backslash -C targets and some builds do not support
+  // --force-local. POSIX-shaped paths keep drive-letter inputs local without
+  // depending on implementation-specific flags.
+  const tarArgs = [
+    '-xzf',
+    snapshotArchive.replaceAll('\\', '/'),
+    '-C',
+    extractionRoot.replaceAll('\\', '/'),
+  ];
+  await run(tar, tarArgs);
   return validateNodeHeadersArchive({ archivePath: snapshotArchive, extractedRoot: extractionRoot });
 }
 

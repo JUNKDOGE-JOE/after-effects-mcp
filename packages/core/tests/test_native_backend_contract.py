@@ -16,6 +16,7 @@ from ae_mcp.backends.native import (
     NativeCapabilities,
     NativeInvokeBackend,
     NativeProgramInvokeResult,
+    NativeProgramOperationSummary,
     NativeProgramRequest,
     NativeRecovery,
 )
@@ -154,6 +155,23 @@ def test_native_program_request_rejects_operation_specific_capability_alias():
 
     with pytest.raises(ValidationError):
         NativeProgramRequest.model_validate(raw)
+
+
+def test_native_program_operation_summaries_accept_camel_case_primitive_ids():
+    # Regression: every camelCase registry op (selectedLayers.list,
+    # frameRate.set, pixelAspectRatio.set, displayStartTime.set,
+    # temporalEase.set) failed Core validation despite a well-formed result.
+    for op in (
+        "composition.selectedLayers.list",
+        "composition.frameRate.set",
+        "composition.pixelAspectRatio.set",
+        "composition.displayStartTime.set",
+        "property.keyframe.temporalEase.set",
+    ):
+        summary = NativeProgramOperationSummary.model_validate(
+            {"index": 1, "op": op, "status": "completed"}
+        )
+        assert summary.op == op
 
 
 def test_native_program_success_rejects_inconsistent_write_evidence():

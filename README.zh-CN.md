@@ -6,14 +6,14 @@ ae-mcp 是一个**后端无关**的 After Effects 自动化工具，用来让 AE
 
 MCP server 是核心。在 MCP 本体之外，ae-mcp 还包装了一套 CEP 面板插件，提供面板内对话、后端配置、审批、诊断和首跑安装。你可以根据自己的工作流选择：在外部 agent 后端里通过 MCP 使用 ae-mcp，或者直接在 AE 面板内配置 Claude / Codex / ZCode 后端进行对话。
 
-**v0.9.2 是 Windows x64 正式版本。** macOS 兼容、包内 RuntimeManager、正式跨平台签名链以及完整 AE 25/26 实机矩阵转入 v0.9.3。
+**v0.9.4 是 Windows x64 修复版本。** 签名 ZXP 内含 CEP 面板与 Windows Platform Helper；签名 AEX 仍需单独手动安装。面板首跑向导可以联网安装外部 Python runtime，因此不要求用户预先装好 runtime，但本版不是离线或只装 ZXP 即用的安装包。
 
-## v0.9.2 目标支持矩阵
+## v0.9.4 目标支持矩阵
 
-v0.9.2 已发布资产面向以下已验证范围：
+v0.9.4 发布资产面向以下范围：
 
 - Windows 11 24H2（11.0.26100）或更新版本，运行于 x64；不支持 Windows ARM。
-- After Effects 25.x 已完成实机验证。CEP manifest 现放宽为 `[23.0,26.9]`（AE 2023 基线门控）；AE 2023/2024 真机矩阵验收进行中（#215）。
+- After Effects 2025 是本次打包验收宿主。CEP manifest 现放宽为 `[23.0,26.9]`（AE 2023 基线门控，AE 2023/2024 真机矩阵 #215 验收中）；本版不包含 macOS 资产。
 
 ## 架构
 
@@ -29,26 +29,29 @@ v0.9.2 已发布资产面向以下已验证范围：
 
 `ae_previewFrame` 仍是 AE 内部的 `CompItem.saveFrameToPng` 路径，用于渲染真实合成像素，viewer snapshot 只作为 fallback。`packages/snapshot-mss` 通过 `mss` backend 提供 Windows `ae_snapshot` 屏幕捕获。
 
-MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与 AE 对话，CEP 面板也可以在 AE 内承载内嵌 agent 对话。现有面板层负责后端配置、审批、诊断和活动历史。已发布的 v0.9.2 Windows 资产早于包内 runtime 激活能力；当前 v0.9.3 macOS 开发版本已经实现 Panel RuntimeManager，可在不调用在线包管理器的情况下校验、安装、原子激活、修复、回滚和卸载包内 runtime。Claude、Codex、ZCode 是面板内置后端；OpenCode 和其他工具仍可以作为外部 MCP 客户端接入。
+MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与 AE 对话，CEP 面板也可以在 AE 内承载内嵌 agent 对话。现有面板层负责后端配置、审批、诊断和活动历史。v0.9.4 ZXP 恢复 Provider 管理器和 Windows Credential Manager 所需的 Platform Helper，但不内置 Python，也不激活 Windows RuntimeManager。Claude、Codex、ZCode 是面板内置后端；OpenCode 和其他工具仍可以作为外部 MCP 客户端接入。
 
-## v0.9.2 候选范围
+## v0.9.4 发布范围
 
-- protected `main` 上的同一个候选 SHA 同时生成两个平台原生载荷；候选失败或发生任何变化，都必须以新 SHA 重新构建。
-- 核心能力按离线、自包含发布包设计。系统 Python、系统 Node、`uv`、PyPI 和 npm 解析只属于开发环境，不是普通用户安装前提。
-- Provider、Tool Library 与 Platform Helper 已完成实现，并通过 Windows AE 2025 实机验证。v0.9.2 发布使用有效至 2037 年证书的自签名 Windows ZXP；本次资产没有 TSA 时间戳，其中原生 Helper 二进制也尚未做 Authenticode。包内 RuntimeManager、正式原生签名、macOS 和其余实机矩阵转入 v0.9.3。
-- UXP、Intel Mac、Windows ARM、provider 配置导出以及 ZCode 桌面 captcha/runtime-header 桥接不属于 v0.9.2 支持范围。
+- ZXP 与 AEX 必须来自最终受保护 `main` 的同一个 SHA；源码变化后必须重新生成资产和校验值。
+- ZXP 包含既有 Windows Platform Helper，并在签名前校验其 manifest、文件清单与哈希。
+- ZXP installer 不会把包内文件复制到 AE 原生插件目录，因此 AEX 单独发布并手动安装。
+- 首跑向导会在缺少依赖时联网安装 `uv` 与按 v0.9.4 tag 固定的外部 runtime。内置/离线 Python、一体化安装器、自动 AEX 部署、Windows RuntimeManager、修复/回滚/卸载生命周期、macOS 资产和 Windows ARM 不属于本版范围。
+- 两类签名均使用本次新建的自签名身份，不代表公开可信的软件发布者。
 
 ## 安装和首次启动
 
-普通用户只安装 v0.9.2 发布组中的一个不可变平台资产。不要用源码归档或在线 `uv`/PyPI 安装替代签名发布资产：
+从 v0.9.4 GitHub Release 下载以下三个固定文件，不要用源码归档替代签名资产：
 
-| 平台 | 安装资产 | 可审计载荷 |
-|---|---|---|
-| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | 同一个 ZXP |
+| 用途 | 发布资产 |
+|---|---|
+| CEP 面板 + Windows Platform Helper | `ae-mcp-panel-v0.9.4-windows-x64.zxp` |
+| 原生 AEGP 插件 | `AeMcpNative-v0.9.4-windows-x64.aex` |
+| 完整性校验 | `SHA256SUMS-v0.9.4.txt` |
 
-使用受支持的 ZXP installer 安装 `ae-mcp-panel-v0.9.2-windows-x64.zxp`，重启 After Effects，再打开 `Window -> Extensions -> ae-mcp`。本版继续使用现有外部 runtime 配置；包内离线 RuntimeManager 延后至 v0.9.3。
+用受支持的 ZXP installer 安装 ZXP。关闭 After Effects 后，以管理员权限把 AEX 复制为所选宿主的 `Support Files\Plug-ins\Extensions\AeMcpNative.aex`，再重启 AE 并打开 `Window -> Extensions -> ae-mcp`。如果缺少 `uv` 或 `ae-mcp`，在首跑向导中联网安装；向导会执行固定到 v0.9.4 tag 的 `uv tool install`。已有兼容 launcher 会直接复用。
 
-GitHub Release 会发布精确的 Windows 资产及其 SHA-256。详见[安装文档](docs/INSTALL.md)和[发布文档](docs/RELEASE.md)。
+用 `SHA256SUMS-v0.9.4.txt` 校验两个二进制。详见[安装文档](docs/INSTALL.md)和[发布文档](docs/RELEASE.md)。
 
 ## 选择并登录后端
 
@@ -110,7 +113,7 @@ Tools 标签页管理本地生成的 JSX、表达式、提示词 skill、recipe 
 
 <table>
   <tr><td><img src="docs/images/zh-CN/settings-provider-manager-collapsed.png" width="380"><br>设置页：后端通道与收起状态的 Provider 管理器</td><td><img src="docs/images/zh-CN/settings-provider-manager-expanded.png" width="380"><br>设置页：展开编辑 provider，本地保存 API key</td></tr>
-  <tr><td><img src="docs/images/zh-CN/settings-general-language.png" width="380"><br>设置页：通用选项、界面语言、日志与关于</td><td><img src="docs/images/zh-CN/wizard-install.png" width="380"><br>历史 v0.9.0 开发向导：在线 `uv` 与 PATH launcher 安装；不能代表 v0.9.2 包内 runtime UX</td></tr>
+  <tr><td><img src="docs/images/zh-CN/settings-general-language.png" width="380"><br>设置页：通用选项、界面语言、日志与关于</td><td><img src="docs/images/zh-CN/wizard-install.png" width="380"><br>首跑向导：在线安装 `uv` 与按版本固定的外部 runtime</td></tr>
   <tr><td><img src="docs/images/zh-CN/wizard-connect-clients.png" width="380"><br>首跑向导：选择面板内对话或外部 MCP 客户端</td><td><img src="docs/images/zh-CN/chat-home.png" width="380"><br>聊天首页：启动建议与 composer 快捷选择条</td></tr>
   <tr><td><img src="docs/images/zh-CN/chat-approval.png" width="380"><br>工具审批卡片：高风险操作确认</td><td><img src="docs/images/zh-CN/activity-stream.png" width="380"><br>活动流：agent 操作历史</td></tr>
 </table>
@@ -119,13 +122,13 @@ Tools 标签页管理本地生成的 JSX、表达式、提示词 skill、recipe 
 
 面板内对话覆盖 Claude、Codex、ZCode 三类后端。如果你使用 Cursor、Claude Desktop、Claude Code、OpenCode、OpenClaw、AstrBot、Gemini Antigravity、ZCode 等外部客户端，可以通过面板生成的 MCP config 接入。
 
-v0.9.3 macOS Panel 生成的最小配置形态如下：
+使用默认 `uv tool install` 时，把 `<USER>` 替换为实际账户名后的外部 launcher 配置形态如下：
 
 ```json
 {
   "mcpServers": {
     "ae": {
-      "command": "/Users/<USER>/.ae-mcp/bin/ae-mcp",
+      "command": "C:\\Users\\<USER>\\.local\\bin\\ae-mcp.exe",
       "env": {
         "AE_MCP_BACKEND": "ae-mcp",
         "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
@@ -135,7 +138,7 @@ v0.9.3 macOS Panel 生成的最小配置形态如下：
 }
 ```
 
-这是稳定 launcher 契约。macOS Panel 现在会输出展开后的绝对 launcher 路径，且不会再从裸 PATH 解析 `ae-mcp`；RuntimeManager 会在使用 launcher 前校验并激活包内 runtime。本项实现保持 Windows v0.9.2 行为不变。详见 [RuntimeManager](docs/RUNTIME_MANAGER.md)。
+优先复制面板生成的配置，因为 `UV_TOOL_BIN_DIR` 可能改变 launcher 位置。runtime 仍位于 ZXP 外部，但首跑向导可以联网安装它。详见[安装文档](docs/INSTALL.md)。
 
 关键限制：ae-mcp 默认通过 `127.0.0.1:11488` 连到 AE 面板，所以外部客户端必须和 After Effects 在同一台机器上，或者能访问 AE 所在机器的这个端口。OpenClaw、AstrBot 这类常驻或 Docker 化的 IM-bot 框架尤其要注意。
 
@@ -336,7 +339,7 @@ node scripts/live-model-matrix.mjs
 
 ## 打包与发布
 
-维护者只能通过受保护的 `build-rc.yml` 工作流生成 v0.9.2 资产。Mac arm64 与 Windows x64 的精确字节由 `artifact-manifest-v0.9.2.json` 绑定，通过 `macos-rc-attestation` 与 `windows-rc-attestation` 后，再由 `release.yml` 原样提升且不重新构建。签名凭据、再分发批准、AE 25/26 安装和 Windows x64 验证机都是外部前置条件；完整流程见 [docs/RELEASE.md](docs/RELEASE.md)。
+维护者先合并发布元数据，再从最终干净的受保护 `main` 提交构建 v0.9.4 Windows Helper、ZXP 与 AEX。校验最小 ZXP 载荷后分别签名、复验并生成 `SHA256SUMS-v0.9.4.txt`，通过 After Effects 2025 Helper/Provider 与公开 MCP 路径 smoke 后原样上传，不重新构建。完整流程见 [docs/RELEASE.md](docs/RELEASE.md)。
 
 ## 实现说明
 

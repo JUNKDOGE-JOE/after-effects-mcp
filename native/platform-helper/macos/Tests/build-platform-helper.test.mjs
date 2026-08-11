@@ -221,11 +221,24 @@ test('locked archive digest is verified before tar sees attacker-controlled byte
   const start = script.indexOf('async function extractNodeHeaders');
   const end = script.indexOf('function swiftEnvironment', start);
   const block = script.slice(start, end);
-  assert.ok(block.indexOf('snapshotNodeHeadersArchive') < block.indexOf('validateNodeHeadersArchive'));
-  assert.match(block, /validateNodeHeadersArchive\(\{ archivePath: snapshotArchive \}\)/);
-  assert.match(block, /run\(tar, \['-xzf', snapshotArchive/);
-  const tarLine = block.split('\n').find((line) => line.includes('run(tar'));
-  assert.doesNotMatch(tarLine, /\barchivePath\b/);
+  const snapshotStart = block.indexOf(
+    'const snapshotArchive = await snapshotNodeHeadersArchive({ archivePath, scratchRoot });',
+  );
+  const validationStart = block.indexOf(
+    'await validateNodeHeadersArchive({ archivePath: snapshotArchive });',
+  );
+  const tarArgsStart = block.indexOf('const tarArgs');
+  const tarArgsEnd = block.indexOf('await run(tar, tarArgs)', tarArgsStart);
+  assert.ok(snapshotStart !== -1 && snapshotStart < validationStart);
+  assert.ok(validationStart !== -1 && validationStart < tarArgsStart);
+  assert.ok(tarArgsStart !== -1 && tarArgsEnd > tarArgsStart);
+  const tarArgsBlock = block.slice(tarArgsStart, tarArgsEnd);
+  assert.match(
+    tarArgsBlock,
+    /const tarArgs = \[\s*'-xzf',\s*snapshotArchive\.replaceAll\('\\\\', '\/'\),\s*'-C',\s*extractionRoot\.replaceAll\('\\\\', '\/'\),\s*\];/,
+  );
+  assert.doesNotMatch(tarArgsBlock, /\barchivePath\b/);
+  assert.match(block.slice(tarArgsEnd), /^await run\(tar, tarArgs\);/);
 });
 
 test('Node headers are copied to a private build snapshot before validation', async (t) => {

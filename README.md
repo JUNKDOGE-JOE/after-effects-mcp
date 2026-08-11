@@ -6,14 +6,14 @@ ae-mcp is a backend-agnostic automation tool that keeps Adobe After Effects and 
 
 The MCP server is the core. Outside the MCP layer, ae-mcp also ships a CEP panel that wraps built-in agent chat, backend configuration, approval controls, diagnostics, and first-run setup. You can use ae-mcp from an external agent backend through MCP, or configure Claude / Codex / ZCode directly inside the AE panel.
 
-**v0.9.2 is the Windows x64 release.** macOS compatibility, bundled RuntimeManager, the production cross-platform signing chain, and the complete AE 25/26 hardware matrix move to v0.9.3.
+**v0.9.4 is the corrective Windows x64 release.** The signed ZXP contains the CEP panel and Windows Platform Helper; the signed AEX remains a separate manual install. The Panel's first-run wizard can install the external Python runtime online, so a pre-existing runtime is not required, but this is not an offline or ZXP-only installation.
 
-## v0.9.2 Target Support Matrix
+## v0.9.4 Target Support Matrix
 
-The published v0.9.2 asset targets this verified release scope:
+The published v0.9.4 assets target this release scope:
 
 - Windows 11 24H2 (11.0.26100) or newer on x64. Windows on ARM is not supported.
-- After Effects 25.x is hardware-validated. The CEP manifest now spans `[23.0,26.9]` behind AE 2023 baseline gates; the AE 2023/2024 real-host matrix is still being validated (#215).
+- After Effects 2025 is the packaged acceptance host. The CEP manifest now spans `[23.0,26.9]` behind AE 2023 baseline gates while the AE 2023/2024 real-host matrix is validated (#215); this release contains no macOS asset.
 
 ## Architecture
 
@@ -29,26 +29,29 @@ Embedded panel chat or external MCP client
 
 `ae_previewFrame` remains the AE-internal `CompItem.saveFrameToPng` path for rendering real comp pixels, with viewer snapshot only as a fallback. `packages/snapshot-mss` provides Windows `ae_snapshot` screen capture through the `mss` backend.
 
-The MCP core is backend-agnostic: external clients can talk to AE through the stdio server, while the CEP panel can also host built-in agent chat. The existing panel layer handles backend setup, approvals, diagnostics, and activity history. The published v0.9.2 Windows asset predates bundled-runtime activation; current v0.9.3 macOS development includes a panel RuntimeManager that verifies, installs, atomically activates, repairs, rolls back, and uninstalls the packaged runtime without using an online package manager. Claude, Codex, and ZCode are built-in panel backends; OpenCode and other tools can still connect as external MCP clients.
+The MCP core is backend-agnostic: external clients can talk to AE through the stdio server, while the CEP panel can also host built-in agent chat. The existing panel layer handles backend setup, approvals, diagnostics, and activity history. The v0.9.4 ZXP restores the Windows Platform Helper used by Provider Manager and protected Credential Manager storage. It does not bundle Python or activate a Windows RuntimeManager. Claude, Codex, and ZCode are built-in panel backends; OpenCode and other tools can still connect as external MCP clients.
 
-## v0.9.2 Release Candidate Scope
+## v0.9.4 Release Scope
 
-- One protected `main` candidate SHA produces both native platform payloads; a failed or changed candidate must be rebuilt under a new SHA.
-- Core operation is designed to be offline and self-contained in the signed release payload. System Python, system Node, `uv`, PyPI, and npm resolution are development inputs, not normal-user install prerequisites.
-- Provider, Tool Library, and Platform Helper implementation is complete, including Windows AE 2025 hardware validation. v0.9.2 ships a self-signed Windows ZXP whose certificate is valid until 2037; the asset has no TSA timestamp, and its native Helper binaries are not Authenticode-signed. Bundled RuntimeManager, production native signing, macOS, and the remaining hardware cells are v0.9.3 work.
-- UXP, Intel Mac, Windows ARM, provider-config export, and ZCode desktop captcha/runtime-header bridging are outside the v0.9.2 support scope.
+- One final protected-`main` SHA produces the ZXP and AEX; changed source requires new artifacts and checksums.
+- The ZXP includes the existing Windows Platform Helper and validates its manifest and binaries before signing.
+- The AEX is distributed separately because a ZXP installer does not place nested files in After Effects' native plug-in directory.
+- The first-run wizard installs `uv` and the tag-pinned external runtime over the network when they are missing. Bundled/offline Python, an integrated installer, automatic AEX deployment, Windows RuntimeManager, repair/rollback/uninstall lifecycle, macOS assets, and Windows ARM are outside this release.
+- Both signatures use newly created self-signed identities and therefore do not establish a publicly trusted publisher.
 
 ## Install and First Run
 
-Normal users install one immutable asset from the v0.9.2 release set. Do not use source archives or an online `uv`/PyPI install as a substitute for a signed release asset:
+Download the three named files from the v0.9.4 GitHub Release. Do not use source archives as substitutes for the signed assets:
 
-| Platform | Install asset | Auditable payload |
-|---|---|---|
-| Windows 11 24H2+ x64 | `ae-mcp-panel-v0.9.2-windows-x64.zxp` | same ZXP |
+| Role | Release asset |
+|---|---|
+| CEP panel + Windows Platform Helper | `ae-mcp-panel-v0.9.4-windows-x64.zxp` |
+| Native AEGP plug-in | `AeMcpNative-v0.9.4-windows-x64.aex` |
+| Integrity | `SHA256SUMS-v0.9.4.txt` |
 
-Install `ae-mcp-panel-v0.9.2-windows-x64.zxp` with a supported ZXP installer, restart After Effects, and open `Window -> Extensions -> ae-mcp`. This release retains the existing external runtime setup; the bundled offline RuntimeManager is deferred to v0.9.3.
+Install the ZXP with a supported ZXP installer. With After Effects closed, copy the AEX to the selected host's `Support Files\Plug-ins\Extensions\AeMcpNative.aex` path using administrator permission, then restart After Effects and open `Window -> Extensions -> ae-mcp`. If `uv` or `ae-mcp` is missing, use the first-run wizard to install them online; it runs a tag-pinned `uv tool install` for v0.9.4. Existing compatible launchers are reused.
 
-The GitHub Release publishes the exact Windows asset and its SHA-256 digest. See [Install](docs/INSTALL.md) and [Release](docs/RELEASE.md).
+Verify both binaries with `SHA256SUMS-v0.9.4.txt`. See [Install](docs/INSTALL.md) and [Release](docs/RELEASE.md).
 
 ## Built-in Backends
 
@@ -77,20 +80,20 @@ Claude Code CLI is separate from Claude Desktop. Claude Desktop MCP configuratio
 
 <table>
   <tr><td><img src="docs/images/en/settings-provider-manager-collapsed.png" width="380"><br>Settings: backend channels and compact Provider Manager rows</td><td><img src="docs/images/en/settings-provider-manager-expanded.png" width="380"><br>Settings: expanded provider editor with local API key storage</td></tr>
-  <tr><td><img src="docs/images/en/settings-general-language.png" width="380"><br>Settings: general options, language switch, logs, and About</td><td><img src="docs/images/en/wizard-install.png" width="380"><br>Historical v0.9.0 development wizard: online `uv` and PATH launcher setup; not the v0.9.2 bundled-runtime UX</td></tr>
+  <tr><td><img src="docs/images/en/settings-general-language.png" width="380"><br>Settings: general options, language switch, logs, and About</td><td><img src="docs/images/en/wizard-install.png" width="380"><br>First-run wizard: online `uv` and tag-pinned external runtime installation</td></tr>
   <tr><td><img src="docs/images/en/wizard-connect-clients.png" width="380"><br>First-run wizard: built-in chat and external MCP client setup</td><td><img src="docs/images/en/chat-home.png" width="380"><br>Chat home: starter suggestions and composer controls</td></tr>
   <tr><td><img src="docs/images/en/chat-approval.png" width="380"><br>Tool approval card for gated high-risk operations</td><td><img src="docs/images/en/activity-stream.png" width="380"><br>Activity stream: agent operation history</td></tr>
 </table>
 
 ## External MCP Clients
 
-The v0.9.3 macOS panel-generated MCP config for external clients has this shape:
+For a default Windows `uv tool install`, the generated external launcher config has this shape after replacing `<USER>` with the actual account name:
 
 ```json
 {
   "mcpServers": {
     "ae": {
-      "command": "/Users/<USER>/.ae-mcp/bin/ae-mcp",
+      "command": "C:\\Users\\<USER>\\.local\\bin\\ae-mcp.exe",
       "env": {
         "AE_MCP_BACKEND": "ae-mcp",
         "AE_MCP_PLUGIN_URL": "http://127.0.0.1:11488"
@@ -100,7 +103,7 @@ The v0.9.3 macOS panel-generated MCP config for external clients has this shape:
 }
 ```
 
-This is the stable-launcher contract. On macOS the Panel now emits the expanded absolute launcher path and never resolves `ae-mcp` from bare PATH; the RuntimeManager verifies and activates the packaged runtime before the launcher is used. Windows v0.9.2 behavior remains unchanged in this implementation. See [RuntimeManager](docs/RUNTIME_MANAGER.md).
+Copy the config generated by the Panel because `UV_TOOL_BIN_DIR` may change the launcher location. The runtime remains external to the ZXP, but the first-run wizard can install it online. See [Install](docs/INSTALL.md).
 
 External clients must run on the same machine as After Effects, or otherwise be able to reach `127.0.0.1:11488` on the AE machine. This matters for long-running or Dockerized IM-bot frameworks such as OpenClaw and AstrBot.
 
@@ -327,7 +330,7 @@ node scripts/live-model-matrix.mjs
 
 ## Package and Release
 
-Maintainers create v0.9.2 artifacts only through the protected `build-rc.yml` workflow. The exact Mac arm64 and Windows x64 bytes are bound to `artifact-manifest-v0.9.2.json`, validated by `macos-rc-attestation` and `windows-rc-attestation`, then promoted by `release.yml` without rebuilding. Signing credentials, redistribution approvals, AE 25/26 installations, and a Windows x64 verifier are external prerequisites; see [docs/RELEASE.md](docs/RELEASE.md).
+Maintainers merge release metadata first, then build the v0.9.4 Windows Helper, ZXP, and AEX from the final clean protected-`main` commit. They validate the minimal ZXP payload, sign and verify both release assets, generate `SHA256SUMS-v0.9.4.txt`, run the After Effects 2025 Helper/Provider and public-MCP smokes, and upload those exact bytes without rebuilding. See [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Implementation Notes
 

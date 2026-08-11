@@ -1083,9 +1083,24 @@ test('signed RC workflow uses pinned platform, signing, evidence, and finalizati
   assert.doesNotMatch(workflow, /pull_request_target|macos-latest/);
 });
 
-test('fast CI runs the release contract suite without adding a native release matrix', async () => {
+test('fast PR validation keeps contracts on supported AE hosts', async () => {
   const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
-  assert.match(workflow, /node --test scripts\/release\/test\/\*\.test\.mjs/);
+  const foundationWorkflow = await readFile(
+    '.github/workflows/platform-foundation-ci.yml',
+    'utf8',
+  );
+  assert.doesNotMatch(`${workflow}\n${foundationWorkflow}`, /ubuntu-|Linux/);
+  assert.match(workflow, /runs-on:\s*windows-2022/);
+  assert.match(foundationWorkflow, /runs-on:\s*macos-15/);
+  assert.match(
+    foundationWorkflow,
+    /node --test scripts\/package\/test\/\*\.test\.mjs/,
+  );
+  assert.match(
+    foundationWorkflow,
+    /node --test scripts\/release\/test\/\*\.test\.mjs/,
+  );
+  assert.match(foundationWorkflow, /export TMPDIR="\$RUNNER_TEMP"/);
   assert.doesNotMatch(workflow, /macos-15|macos-14-compat|windows-2025/);
 });
 

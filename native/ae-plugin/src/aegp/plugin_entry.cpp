@@ -1,15 +1,10 @@
-#include "aemcp_native/endpoint_registry_macos.hpp"
 #include "aemcp_native/host_dispatcher.hpp"
-#include "aemcp_native/mac_ipc_server.hpp"
+#include "aemcp_native/host_platform.hpp"
 #include "aemcp_native/native_rpc_connection.hpp"
-#include "aemcp_native/peer_identity_macos.hpp"
 #include "aemcp_native/project_epoch.hpp"
 #include "aemcp_native/rpc_codec.hpp"
-#include "aemcp_native/secure_random_macos.hpp"
 #include "aemcp_native/selection_collection.hpp"
 #include "native_program_executor.hpp"
-
-#include <CoreFoundation/CoreFoundation.h>
 
 #include <algorithm>
 #include <array>
@@ -37,11 +32,6 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
-
-#include <fcntl.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <unistd.h>
 
 #include "AEConfig.h"
 #include "AE_GeneralPlug.h"
@@ -88,10 +78,15 @@ using aemcp::native::kProjectGraphInvalidateControl;
 using aemcp::native::LayerPropertyKeyframeChanged;
 using aemcp::native::LayerPropertyKeyframeDetails;
 using aemcp::native::LayerPropertySampleTime;
-using aemcp::native::MacEndpointRegistry;
-using aemcp::native::MacIpcServer;
+using aemcp::native::DiagnosticLog;
+using aemcp::native::effect_text_utf8;
+using aemcp::native::HostIdentity;
 using aemcp::native::NativeEndpointDescriptor;
-using aemcp::native::NativeHandleResolveResult;
+using aemcp::native::PlatformEndpointRegistry;
+using aemcp::native::PlatformIpcServer;
+using aemcp::native::PlatformIpcServerConfig;
+using aemcp::native::positive_integer;
+using aemcp::native::read_host_identity;using aemcp::native::NativeHandleResolveResult;
 using aemcp::native::NativeIpcObserver;
 using aemcp::native::NativeProgram;
 using aemcp::native::NativeProgramDisposition;
@@ -230,166 +225,6 @@ std::int64_t unix_time_ms() {
       .count();
 }
 
-std::string cf_string(CFTypeRef value) {
-  if (value == nullptr || CFGetTypeID(value) != CFStringGetTypeID())
-    return {};
-  const auto string = static_cast<CFStringRef>(value);
-  const CFIndex length = CFStringGetLength(string);
-  const CFIndex maximum =
-      CFStringGetMaximumSizeForEncoding(length, kCFStringEncodingUTF8) + 1;
-  if (maximum <= 1 || maximum > 4096)
-    return {};
-  std::string output(static_cast<std::size_t>(maximum), '\0');
-  if (!CFStringGetCString(string, output.data(), maximum,
-                          kCFStringEncodingUTF8))
-    return {};
-  output.resize(std::char_traits<char>::length(output.c_str()));
-  return output;
-}
-
-template <std::size_t Size>
-std::optional<std::string>
-effect_text_utf8(const std::array<A_char, Size> &buffer,
-                 bool allow_legacy_encoding) {
-  const auto terminator = std::find(buffer.begin(), buffer.end(), '\0');
-  if (terminator == buffer.end())
-    return std::nullopt;
-  const CFIndex length =
-      static_cast<CFIndex>(std::distance(buffer.begin(), terminator));
-  if (length == 0)
-    return std::string{};
-  const auto convert =
-      [&](CFStringEncoding encoding) -> std::optional<std::string> {
-    CFStringRef value = CFStringCreateWithBytes(
-        kCFAllocatorDefault, reinterpret_cast<const UInt8 *>(buffer.data()),
-        length, encoding, false);
-    if (value == nullptr)
-      return std::nullopt;
-    std::string output = cf_string(value);
-    CFRelease(value);
-    if (output.empty())
-      return std::nullopt;
-    return output;
-  };
-  if (auto utf8 = convert(kCFStringEncodingUTF8); utf8.has_value()) {
-    return utf8;
-  }
-  if (!allow_legacy_encoding)
-    return std::nullopt;
-  if (auto system = convert(CFStringGetSystemEncoding()); system.has_value()) {
-    return system;
-  }
-  return convert(kCFStringEncodingMacRoman);
-}
-
-struct HostIdentity {
-  std::string version;
-  std::string build;
-  std::uint64_t build_number{0};
-};
-
-std::uint64_t positive_integer(std::string_view value) {
-  std::uint64_t parsed = 0;
-  const auto [end, error] =
-      std::from_chars(value.data(), value.data() + value.size(), parsed);
-  return error == std::errc{} && end == value.data() + value.size() &&
-                 parsed > 0
-             ? parsed
-             : 0;
-}
-
-HostIdentity read_host_identity() {
-  const CFBundleRef bundle = CFBundleGetMainBundle();
-  if (bundle == nullptr)
-    return {};
-  HostIdentity identity;
-  identity.version = cf_string(CFBundleGetValueForInfoDictionaryKey(
-      bundle, CFSTR("CFBundleShortVersionString")));
-  identity.build = cf_string(CFBundleGetValueForInfoDictionaryKey(
-      bundle, CFSTR("Adobe Product Build")));
-  identity.build_number = positive_integer(identity.build);
-  return identity;
-}
-
-class DiagnosticLog final {
-public:
-  DiagnosticLog() {
-    const char *home = std::getenv("HOME");
-    if (home == nullptr || *home == '\0')
-      return;
-    path_ = std::filesystem::path(home) / "Library" / "Logs" /
-            "AfterEffectsMCP" / "native-plugin-v1.jsonl";
-  }
-
-  void append(std::string_view object) noexcept {
-    try {
-      if (path_.empty() || object.empty() ||
-          object.size() > kMaximumRecordBytes || object.front() != '{' ||
-          object.back() != '}')
-        return;
-      std::lock_guard lock(mutex_);
-      if (!prepare_private_directory())
-        return;
-      const int descriptor =
-          ::open(path_.c_str(),
-                 O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC | O_NOFOLLOW, 0600);
-      if (descriptor < 0)
-        return;
-      struct stat status{};
-      if (::flock(descriptor, LOCK_EX | LOCK_NB) != 0 ||
-          ::fstat(descriptor, &status) != 0 || !S_ISREG(status.st_mode) ||
-          status.st_uid != ::getuid() || status.st_nlink != 1 ||
-          ::fchmod(descriptor, 0600) != 0) {
-        ::close(descriptor);
-        return;
-      }
-      if (status.st_size < 0 ||
-          static_cast<std::uint64_t>(status.st_size) + object.size() + 1 >
-              kMaximumLogBytes) {
-        if (::ftruncate(descriptor, 0) != 0) {
-          ::close(descriptor);
-          return;
-        }
-      }
-      const std::string record = std::string(object) + '\n';
-      std::size_t written = 0;
-      while (written < record.size()) {
-        const ssize_t count = ::write(descriptor, record.data() + written,
-                                      record.size() - written);
-        if (count > 0) {
-          written += static_cast<std::size_t>(count);
-        } else if (count < 0 && errno == EINTR) {
-          continue;
-        } else {
-          break;
-        }
-      }
-      ::close(descriptor);
-    } catch (...) {
-      // Diagnostics must never affect After Effects lifecycle callbacks.
-    }
-  }
-
-private:
-  static constexpr std::size_t kMaximumRecordBytes = 8192;
-  static constexpr std::uint64_t kMaximumLogBytes = 1024 * 1024;
-
-  [[nodiscard]] bool prepare_private_directory() const noexcept {
-    const std::filesystem::path directory = path_.parent_path();
-    if (::mkdir(directory.c_str(), 0700) != 0 && errno != EEXIST)
-      return false;
-    struct stat status{};
-    if (::lstat(directory.c_str(), &status) != 0 || !S_ISDIR(status.st_mode) ||
-        status.st_uid != ::getuid()) {
-      return false;
-    }
-    return ::chmod(directory.c_str(), 0700) == 0;
-  }
-
-  std::filesystem::path path_;
-  std::mutex mutex_;
-};
-
 template <typename Suite> class SuiteLease final {
 public:
   SuiteLease(SPBasicSuite *basic, const char *name, std::int32_t version)
@@ -469,32 +304,7 @@ public:
       if (++scalars > 1024)
         return std::nullopt;
     }
-    CFStringRef value = CFStringCreateWithCharacters(
-        kCFAllocatorDefault, reinterpret_cast<const UniChar *>(characters),
-        static_cast<CFIndex>(length));
-    if (value == nullptr)
-      return std::nullopt;
-    const CFIndex maximum =
-        CFStringGetMaximumSizeForEncoding(static_cast<CFIndex>(length),
-                                          kCFStringEncodingUTF8) +
-        1;
-    if (maximum <= 0 || maximum > 8193) {
-      CFRelease(value);
-      return std::nullopt;
-    }
-    std::string output(static_cast<std::size_t>(maximum), '\0');
-    if (!CFStringGetCString(value, output.data(), maximum,
-                            kCFStringEncodingUTF8)) {
-      CFRelease(value);
-      return std::nullopt;
-    }
-    CFRelease(value);
-    const std::size_t utf8_bytes =
-        std::char_traits<char>::length(output.c_str());
-    if (utf8_bytes > 4096)
-      return std::nullopt;
-    output.resize(utf8_bytes);
-    return output;
+    return aemcp::native::host_utf16_to_utf8(characters, length);
   }
 
 private:
@@ -1084,8 +894,15 @@ private:
                                         std::string_view right) {
   const auto left_value = decimal_value(left);
   const auto right_value = decimal_value(right);
-  return left_value.has_value() && right_value.has_value() &&
-         *left_value == *right_value;
+  if (!left_value.has_value() || !right_value.has_value()) return false;
+  // Percent-scaled and unit-converted streams accumulate sub-1e-14 binary
+  // conversion noise across the write/read round trip (55 -> 0.55 -> 55.000…7),
+  // so exact double equality misreports successful writes as side-effecting
+  // failures. The tolerance stays far below any meaningful user-visible delta.
+  const A_FpLong magnitude = std::max<A_FpLong>(
+      {static_cast<A_FpLong>(1), std::fabs(*left_value),
+       std::fabs(*right_value)});
+  return std::fabs(*left_value - *right_value) <= magnitude * 1e-9;
 }
 
 [[nodiscard]] bool
@@ -2711,6 +2528,8 @@ public:
                                                kAEGPMemorySuiteVersion1);
     SuiteLease<AEGP_UtilitySuite6> utility_suite(basic_, kAEGPUtilitySuite,
                                                  kAEGPUtilitySuiteVersion6);
+    SuiteLease<AEGP_CompSuite12> comp_suite(basic_, kAEGPCompSuite,
+                                            kAEGPCompSuiteVersion12);
     if (project_suite.get() == nullptr || item_suite.get() == nullptr ||
         memory_suite.get() == nullptr || utility_suite.get() == nullptr) {
       return HostCompositionTimeWriteResult::failure(
@@ -2894,7 +2713,30 @@ public:
     after.scale = static_cast<std::uint32_t>(after_sdk.scale);
     after.seconds_rational =
         aemcp::native::canonical_seconds_rational(after.value, after.scale);
-    if (same_time(before, after) || !same_time(after, command.target_time)) {
+    bool transition_verified = same_time(after, command.target_time);
+    if (!transition_verified) {
+      // After Effects quantizes composition time to whole frames; accept the
+      // landed state when it is exactly the frame-aligned quantization of
+      // the requested target (e.g. 2.5 s at 25 fps lands on frame 63).
+      AEGP_CompH comp_for_rate = nullptr;
+      A_FpLong fps = 0.0;
+      if (comp_suite.get() != nullptr &&
+          comp_suite->AEGP_GetCompFromItem(composition_item, &comp_for_rate) ==
+              A_Err_NONE &&
+          comp_for_rate != nullptr &&
+          comp_suite->AEGP_GetCompFramerate(comp_for_rate, &fps) == A_Err_NONE &&
+          fps > 0.0) {
+        const auto frame_index = [fps](std::int64_t value, std::uint64_t scale) {
+          return std::llround((static_cast<double>(value) /
+                               static_cast<double>(scale)) *
+                              static_cast<double>(fps));
+        };
+        transition_verified =
+            frame_index(command.target_time.value, command.target_time.scale) ==
+            frame_index(after.value, after.scale);
+      }
+    }
+    if (same_time(before, after) || !transition_verified) {
       return HostCompositionTimeWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
           "composition time readback did not verify the requested state "
@@ -4083,57 +3925,79 @@ public:
     const bool count_valid = adding     ? count_after == count_before + 1
                              : deleting ? count_after + 1 == count_before
                                         : count_after == count_before;
-    const bool state_valid =
-        deleting ? !after_index.has_value()
-                 : after.has_value() &&
-                       keyframe_time_equal(after->time, command.time);
-    bool requested_state_valid = state_valid;
-    if (requested_state_valid && after.has_value()) {
-      if (adding ||
-          command.kind ==
-              aemcp::native::LayerPropertyKeyframeMutationKind::kSetValue) {
-        requested_state_valid =
-            layer_property_values_equal(after->value, command.value);
-      } else if (command.kind ==
-                 aemcp::native::LayerPropertyKeyframeMutationKind::
-                     kSetInterpolation) {
-        requested_state_valid =
-            after->in_interpolation == command.in_interpolation &&
-            after->out_interpolation == command.out_interpolation;
-      } else if (command.kind ==
-                 aemcp::native::LayerPropertyKeyframeMutationKind::
-                     kSetTemporalEase) {
-        requested_state_valid = requested_state_valid &&
-                                after->in_interpolation == "bezier" &&
-                                after->out_interpolation == "bezier";
-        for (const auto &dimension : command.temporal_ease) {
-          requested_state_valid =
-              requested_state_valid &&
-              keyframe_dimension_ease_equal(
-                  after->temporal_ease[dimension.dimension], dimension);
-        }
-      } else if (command.kind ==
-                 aemcp::native::LayerPropertyKeyframeMutationKind::
-                     kSetBehavior) {
-        const bool actual = command.behavior == "temporal-continuous"
-                                ? after->behavior.temporal_continuous
-                            : command.behavior == "temporal-auto-bezier"
-                                ? after->behavior.temporal_auto_bezier
-                            : command.behavior == "spatial-continuous"
-                                ? after->behavior.spatial_continuous
-                            : command.behavior == "spatial-auto-bezier"
-                                ? after->behavior.spatial_auto_bezier
-                                : after->behavior.roving;
-        requested_state_valid = actual == command.enabled;
+    const char *state_failure = nullptr;
+    if (deleting) {
+      if (after_index.has_value()) {
+        state_failure = "deleted keyframe is still present at the requested time";
+      }
+    } else if (!after_index.has_value() || !after.has_value()) {
+      state_failure = "readback could not find the mutated keyframe";
+    } else if (!keyframe_time_equal(after->time, command.time)) {
+      state_failure = "mutated keyframe landed at an unexpected time";
+    } else if (adding ||
+               command.kind ==
+                   aemcp::native::LayerPropertyKeyframeMutationKind::kSetValue) {
+      if (!layer_property_values_equal(after->value, command.value)) {
+        state_failure = "keyframe value did not match the requested value";
+      }
+    } else if (command.kind ==
+               aemcp::native::LayerPropertyKeyframeMutationKind::
+                   kSetInterpolation) {
+      if (after->in_interpolation != command.in_interpolation ||
+          after->out_interpolation != command.out_interpolation) {
+        state_failure = "keyframe interpolation did not match the request";
+      }
+    } else if (command.kind ==
+               aemcp::native::LayerPropertyKeyframeMutationKind::
+                   kSetTemporalEase) {
+      bool ease_valid = after->in_interpolation == "bezier" &&
+                        after->out_interpolation == "bezier";
+      for (const auto &dimension : command.temporal_ease) {
+        ease_valid = ease_valid &&
+                     keyframe_dimension_ease_equal(
+                         after->temporal_ease[dimension.dimension], dimension);
+      }
+      if (!ease_valid) {
+        state_failure = "keyframe temporal ease did not match the request";
+      }
+    } else if (command.kind ==
+               aemcp::native::LayerPropertyKeyframeMutationKind::
+                   kSetBehavior) {
+      const bool actual = command.behavior == "temporal-continuous"
+                              ? after->behavior.temporal_continuous
+                          : command.behavior == "temporal-auto-bezier"
+                              ? after->behavior.temporal_auto_bezier
+                          : command.behavior == "spatial-continuous"
+                              ? after->behavior.spatial_continuous
+                          : command.behavior == "spatial-auto-bezier"
+                              ? after->behavior.spatial_auto_bezier
+                              : after->behavior.roving;
+      if (actual != command.enabled) {
+        state_failure = "keyframe behavior did not match the request";
       }
     }
-    if (mutation_error != A_Err_NONE || end_error != A_Err_NONE ||
-        !count_valid || !requested_state_valid ||
-        std::chrono::steady_clock::now() >= work_deadline) {
+    const bool requested_state_valid = state_failure == nullptr;
+    if (mutation_error != A_Err_NONE || end_error != A_Err_NONE) {
       return HostLayerPropertyKeyframeWriteResult::failure(
           "POSSIBLY_SIDE_EFFECTING_FAILURE",
-          "keyframe may have changed but native readback or Undo validation "
-          "failed");
+          "keyframe may have changed but the mutation call or its Undo group "
+          "closure failed");
+    }
+    if (!count_valid) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "keyframe count after the mutation (" +
+              std::to_string(count_after) + ") does not match the expected "
+              "transition from " + std::to_string(count_before));
+    }
+    if (!requested_state_valid) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE", state_failure);
+    }
+    if (std::chrono::steady_clock::now() >= work_deadline) {
+      return HostLayerPropertyKeyframeWriteResult::failure(
+          "POSSIBLY_SIDE_EFFECTING_FAILURE",
+          "keyframe may have changed but the validation budget elapsed");
     }
     LayerPropertyKeyframeChanged changed;
     changed.layer_locator = command.layer_locator;
@@ -5105,9 +4969,9 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
       throw std::runtime_error("AEGP utility suite unavailable");
     }
     instance_id = aemcp::native::secure_uuid_v4();
-    peer_backend = aemcp::native::create_macos_peer_identity_backend();
+    peer_backend = aemcp::native::create_host_peer_identity_backend();
     const auto host_process =
-        aemcp::native::current_macos_process(*peer_backend);
+        aemcp::native::current_host_process(*peer_backend);
     if (!host_process.valid())
       throw std::runtime_error("native host identity unavailable");
     std::string endpoint_nonce;
@@ -5115,7 +4979,7 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
       if (character != '-' && endpoint_nonce.size() < 12)
         endpoint_nonce.push_back(character);
     }
-    endpoint = std::make_unique<MacEndpointRegistry>(
+    endpoint = std::make_unique<PlatformEndpointRegistry>(
         *peer_backend,
         aemcp::native::EndpointRegistryConfig{{}, endpoint_nonce, 2, 128});
     rpc_handler = std::make_unique<NativeRpcConnectionHandler>(
@@ -5129,10 +4993,10 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
             instance_id,
         },
         *this, idle_signal);
-    ipc_server = std::make_unique<MacIpcServer>(
+    ipc_server = std::make_unique<PlatformIpcServer>(
         *endpoint, *peer_backend, *rpc_handler, *this,
-        aemcp::native::MacIpcServerConfig{
-            1500ms, 16, aemcp::native::macos_native_cpu_type()});
+        aemcp::native::PlatformIpcServerConfig{
+            1500ms, 16, aemcp::native::host_native_cpu_type()});
   }
 
   [[nodiscard]] bool start_ipc() noexcept;
@@ -5161,9 +5025,9 @@ struct PluginState final : NativeIpcObserver, NativeRpcObserver {
   HostDispatcher dispatcher;
   aemcp::native::rpc::SystemSessionClock session_clock;
   std::unique_ptr<aemcp::native::PeerIdentityBackend> peer_backend;
-  std::unique_ptr<MacEndpointRegistry> endpoint;
+  std::unique_ptr<PlatformEndpointRegistry> endpoint;
   std::unique_ptr<NativeRpcConnectionHandler> rpc_handler;
-  std::unique_ptr<MacIpcServer> ipc_server;
+  std::unique_ptr<PlatformIpcServer> ipc_server;
 };
 
 std::string event_prefix(const PluginState &state, std::string_view event) {
@@ -5269,7 +5133,7 @@ void log_completion(PluginState &state, const Completion &completion,
 bool PluginState::start_ipc() noexcept {
   try {
     const auto host_process =
-        aemcp::native::current_macos_process(*peer_backend);
+        aemcp::native::current_host_process(*peer_backend);
     const auto result = endpoint->start(NativeEndpointDescriptor{
         1,
         instance_id,
@@ -5390,7 +5254,7 @@ A_Err command_hook(AEGP_GlobalRefcon global_refcon, AEGP_CommandRefcon,
 
 } // namespace
 
-extern "C" __attribute__((visibility("default"))) A_Err AeMcpNativeMain(
+extern "C" AE_MCP_PLUGIN_EXPORT A_Err AeMcpNativeMain(
     SPBasicSuite *pica_basic, A_long driver_major, A_long driver_minor,
     AEGP_PluginID plugin_id, AEGP_GlobalRefcon *global_refcon) noexcept {
   try {

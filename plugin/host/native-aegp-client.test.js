@@ -11,10 +11,16 @@ const test = require('node:test');
 const {
     createNativeAegpClient,
     discoverNativeEndpoints,
+    discoverWindowsEndpoints,
     endpointDescriptor,
     parseAuthChallenge,
     parseAuthDecision,
+    validNativeProgramArguments,
 } = require('./native-aegp-client');
+
+const PRIMITIVE_IDS = require(
+    '../../native/ae-plugin/protocol/native-primitives.json'
+).primitives.map((primitive) => primitive.id);
 
 const FULL_REGISTRY = require(
     '../../native/ae-plugin/protocol/fixtures/capability-registry-full.json'
@@ -489,6 +495,102 @@ test('discovery accepts the private descriptor and socket owned by this user', U
     }]);
 });
 
+// Windows endpoint discovery reads the shared descriptor format from the
+// per-user profile and returns the full named-pipe path. Unix uid/mode checks
+// do not apply to this Windows implementation.
+const PIPE = '\\\\.\\pipe\\aemcp-n1-123456abcdef';
+
+async function windowsEndpointFixture(t, options) {
+    const root = await fs.promises.mkdtemp(
+        path.join(os.tmpdir(), 'ae-mcp-win-endpoint-'),
+    );
+    t.after(() => fs.promises.rm(root, { force: true, recursive: true }));
+    const directory = path.join(root, 'aemcp-n1');
+    await fs.promises.mkdir(directory, { recursive: true });
+    await fs.promises.writeFile(
+        path.join(directory, 'd-' + HOST + '.endpoint'),
+        descriptor(PIPE),
+    );
+    for (const stale of options?.stale || []) {
+        await fs.promises.writeFile(path.join(directory, stale.name), stale.text);
+    }
+    return { root, directory };
+}
+
+test('windows discovery parses the pipe descriptor and ignores stale names', async (t) => {
+    const fixture = await windowsEndpointFixture(t, {
+        stale: [
+            // Wrong host instance id in the file name.
+            { name: 'd-99999999-9999-4999-8999-999999999999.endpoint', text: descriptor(PIPE) },
+            // Unparseable descriptor.
+            { name: 'd-88888888-8888-4888-8888-888888888888.endpoint', text: 'garbage\n' },
+            // Not an endpoint file at all.
+            { name: 'notes.txt', text: descriptor(PIPE) },
+        ],
+    });
+    assert.deepEqual(discoverWindowsEndpoints({ runtimeRoot: fixture.root }), [{
+        descriptorPath: path.join(fixture.directory, 'd-' + HOST + '.endpoint'),
+        socketPath: PIPE,
+        pipePath: PIPE,
+        hostInstanceId: HOST,
+        pid: 4242,
+        startSeconds: 1700000000,
+        startMicros: 123456,
+        socketName: PIPE,
+        wireVersion: 1,
+        sourceCommit: SOURCE,
+    }]);
+});
+
+test('windows discovery rejects socket values that are not aemcp pipes', async (t) => {
+    const fixture = await windowsEndpointFixture(t, {
+        stale: [],
+    });
+    await fs.promises.writeFile(
+        path.join(fixture.directory, 'd-' + HOST + '.endpoint'),
+        descriptor('\\\\.\\pipe\\other-prefix-123456abcdef'),
+    );
+    assert.deepEqual(discoverWindowsEndpoints({ runtimeRoot: fixture.root }), []);
+    await fs.promises.writeFile(
+        path.join(fixture.directory, 'd-' + HOST + '.endpoint'),
+        descriptor('s-123456abcdef.sock'),
+    );
+    assert.deepEqual(discoverWindowsEndpoints({ runtimeRoot: fixture.root }), []);
+});
+
+test('client factory accepts windows x64 and still rejects unsupported runtimes', () => {
+    assert.equal(typeof createNativeAegpClient({
+        runtime: { platform: 'win32', arch: 'x64' },
+        runtimeRoot: os.tmpdir(),
+        clientInstanceId: CLIENT,
+    }), 'object');
+    assert.throws(() => createNativeAegpClient({
+        runtime: { platform: 'linux', arch: 'x64' },
+        runtimeRoot: os.tmpdir(),
+        clientInstanceId: CLIENT,
+    }), /supports macOS arm64 and Windows x64 only/u);
+});
+
+test('invoke validation accepts every generated primitive id including camelCase ops', () => {
+    // Regression for the OP_PATTERN lowercase-segment bug that rejected
+    // composition.selectedLayers.list, composition.frameRate.set,
+    // composition.pixelAspectRatio.set, composition.displayStartTime.set,
+    // and property.keyframe.temporalEase.set before dispatch.
+    assert.ok(PRIMITIVE_IDS.length >= 23, 'primitive registry fixture is loaded');
+    for (const op of PRIMITIVE_IDS) {
+        const valid = validNativeProgramArguments({
+            operations: [{ op, args: {} }],
+        });
+        assert.equal(valid, true, `generated op rejected by invoke validation: ${op}`);
+    }
+    assert.equal(validNativeProgramArguments({
+        operations: [
+            { op: 'composition.resolve', args: {}, saveAs: 'comp' },
+            { op: 'composition.selectedLayers.list', args: { composition: { ref: 'comp' } } },
+        ],
+    }), true);
+});
+
 test('client negotiates and validates the sole native program descriptor', UNIX_SOCKET_TEST, async (t) => {
     const { client } = await connectedFixture(t);
     const result = await client.capabilities({ detail: 'full', limit: 100 });
@@ -671,6 +773,36 @@ test('client rejects a response rebound to another native session', UNIX_SOCKET_
         invoke(client, 'native-program-wrong-session', readProgram()),
         function (error) {
             return error.code === 'NATIVE_CONTRACT_MISMATCH';
+        },
+    );
+});
+
+test('client surfaces a duplicate request id as a typed error, not a contract mismatch', UNIX_SOCKET_TEST, async (t) => {
+    // The server answers the first invoke and then returns a details-less
+    // typed DUPLICATE_REQUEST for the repeated request id; the duplicate must
+    // pass through as its typed code instead of tripping the program-failure
+    // validator (which requires the details envelope).
+    const { client } = await connectedFixture(t, {
+        mutateEnvelope: function (response, request) {
+            if (request.method === 'invoke'
+                && request.requestId === 'native-program-dup-0002') {
+                delete response.result;
+                response.ok = false;
+                response.error = {
+                    code: 'DUPLICATE_REQUEST',
+                    message: 'request id was already used in this session',
+                    retryable: false,
+                    sideEffect: 'not-started',
+                    recovery: { action: 'change-arguments', hint: 'Use a fresh request id.' },
+                };
+            }
+        },
+    });
+    await invoke(client, 'native-program-dup-0001', readProgram());
+    await assert.rejects(
+        invoke(client, 'native-program-dup-0002', readProgram()),
+        function (error) {
+            return error.code === 'DUPLICATE_REQUEST';
         },
     );
 });

@@ -64,9 +64,71 @@ jobs:
           node --test \
             plugin/host/platform-helper-registration.test.js \
             plugin/host/platform-helper-transport.test.js \
+            plugin/host/native-aegp-client.test.js \
             plugin/panel/test/runtimeManager.test.js
-          node --test scripts/package/test/verify-final-native-signatures.test.mjs
-          node --test scripts/release/test/verify-product-acceptance-coverage.test.mjs
+
+      - name: Build and run portable native AEGP core tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          native_test_root="$RUNNER_TEMP/ae-mcp-native-tests"
+          mkdir -p "$native_test_root"
+
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread \
+            -I native/ae-plugin/include \
+            native/ae-plugin/src/core/native_program.cpp \
+            native/ae-plugin/src/core/host_dispatcher.cpp \
+            native/ae-plugin/tests/host_dispatcher_test.cpp \
+            -o "$native_test_root/host-dispatcher"
+          "$native_test_root/host-dispatcher"
+
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread \
+            -I native/ae-plugin/include \
+            native/ae-plugin/src/core/native_program.cpp \
+            native/ae-plugin/src/core/rpc_codec.cpp \
+            native/ae-plugin/tests/rpc_codec_test.cpp \
+            -o "$native_test_root/rpc-codec"
+          "$native_test_root/rpc-codec"
+
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread \
+            -I native/ae-plugin/include \
+            native/ae-plugin/src/core/host_dispatcher.cpp \
+            native/ae-plugin/src/core/native_program.cpp \
+            native/ae-plugin/src/core/rpc_codec.cpp \
+            native/ae-plugin/src/aegp/native_program_executor.cpp \
+            native/ae-plugin/tests/native_program_test.cpp \
+            -o "$native_test_root/native-program"
+          "$native_test_root/native-program"
+
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread \
+            -I native/ae-plugin/include \
+            native/ae-plugin/src/core/host_dispatcher.cpp \
+            native/ae-plugin/src/core/native_program.cpp \
+            native/ae-plugin/src/core/rpc_codec.cpp \
+            native/ae-plugin/src/core/native_rpc_connection.cpp \
+            native/ae-plugin/tests/native_rpc_connection_test.cpp \
+            -o "$native_test_root/native-rpc-connection"
+          "$native_test_root/native-rpc-connection"
+
+          c++ -std=c++20 -Wall -Wextra -Wpedantic -Werror -pthread \
+            -I native/ae-plugin/include \
+            native/ae-plugin/src/core/transport_auth.cpp \
+            native/ae-plugin/tests/transport_auth_test.cpp \
+            -o "$native_test_root/transport-auth"
+          "$native_test_root/transport-auth"
+
+      - name: Verify the native SDK remains developer-supplied
+        run: node scripts/package/ae-sdk-input.mjs verify-repository --repo-root .
+
+      - name: Run packaging and release contracts on supported macOS host
+        shell: bash
+        run: |
+          set -euo pipefail
+          export TMPDIR="$RUNNER_TEMP"
+          node --test native/ae-plugin/protocol/protocol.test.mjs
+          node --test scripts/package/test/*.test.mjs
+          node scripts/check-repository-governance.mjs
+          node --test scripts/release/test/*.test.mjs
 
       - name: Download locked Node headers
         shell: bash
