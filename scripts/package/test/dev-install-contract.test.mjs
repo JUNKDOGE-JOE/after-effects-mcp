@@ -20,6 +20,7 @@ async function makeMacFixture(t, {
   pgrepExitCode = 1,
   failSecondMove = false,
   sourceSymlink = false,
+  bundleVerifierExitCode = 0,
 } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), 'ae-mcp-dev-install-'));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -44,6 +45,12 @@ async function makeMacFixture(t, {
   }
   await symlink('client/index.html', path.join(plugin, 'internal-link'));
   if (sourceSymlink) await symlink('/tmp', path.join(plugin, 'external-link'));
+  // The bundle freshness gate (#223) runs `node plugin/panel/verify-bundle.mjs`
+  // from the repo under test; the fixture substitutes a stub with a
+  // controllable verdict so these contracts stay about the install transaction.
+  const verifier = path.join(fixtureRepo, 'plugin/panel/verify-bundle.mjs');
+  await mkdir(path.dirname(verifier), { recursive: true });
+  await writeFile(verifier, `process.exit(${bundleVerifierExitCode});\n`, 'utf8');
   const installer = path.join(fixtureScripts, 'install-plugin-dev-macos.sh');
   await cp(path.join(repoRoot, 'scripts/install-plugin-dev-macos.sh'), installer);
   await chmod(installer, 0o755);
@@ -108,6 +115,15 @@ test('macOS dev install rejects symlinks anywhere in the source tree', async (t)
   await assert.rejects(
     execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
     /symlink escapes plugin tree|regular files and directories/i,
+  );
+  assert.equal(await readFile(path.join(fixture.target, 'old-install.txt'), 'utf8'), 'preserve me\n');
+});
+
+test('macOS dev install fails closed when the bundle freshness gate rejects (#223)', async (t) => {
+  const fixture = await makeMacFixture(t, { bundleVerifierExitCode: 1 });
+  await assert.rejects(
+    execFileAsync(fixture.installer, [], { cwd: fixture.fixtureRepo, env: fixture.env }),
+    /does not match the panel sources/i,
   );
   assert.equal(await readFile(path.join(fixture.target, 'old-install.txt'), 'utf8'), 'preserve me\n');
 });
@@ -230,6 +246,9 @@ test('dev installers encode preflight, isolated macOS state, rollback, and no de
   for (const required of ['CSXS/manifest.xml', 'client/dist/app.js', 'host/server.js']) {
     assert.ok(mac.includes(required));
   }
+  // #223: the bundle freshness gate must stay ahead of any staging work.
+  assert.match(mac, /verify-bundle\.mjs/);
+  assert.ok(mac.indexOf('verify-bundle.mjs') < mac.indexOf('.staging.'));
 
   assert.doesNotMatch(windows, /Remove-Item[^\n]*\$cepDir/i);
   assert.match(windows, /Get-Process[\s\S]*AfterFX/);
@@ -248,6 +267,8 @@ test('dev installers encode preflight, isolated macOS state, rollback, and no de
   for (const required of ['CSXS\\manifest.xml', 'client\\dist\\app.js', 'host\\server.js']) {
     assert.ok(windows.includes(required));
   }
+  assert.match(windows, /verify-bundle\.mjs/);
+  assert.ok(windows.indexOf('verify-bundle.mjs') < windows.indexOf('.staging.'));
 });
 
 test('macOS dev installer is executable as documented', async () => {

@@ -18,7 +18,7 @@ import { createAgentLoop } from '../lib/agentLoop';
 import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
 import { installBeforeUnloadReset } from '../lib/backendLifecycle.js';
-import { containsExactSecret } from '../lib/exactSecretRedaction.js';
+import { containsExactSecret, redactText } from '../lib/exactSecretRedaction.js';
 import { createMcpClient, resolveMcpCommand } from '../cep/mcpClient';
 import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTierFile';
 import { createToolsApi } from '../cep/toolsApi';
@@ -837,7 +837,10 @@ function Shell({ cs }) {
       modelId,
     });
     if (!result.ok) {
-      const error = new Error(result.detail || `Provider did not expose a verified API for model ${modelId}`);
+      // #222: this detail reaches chat error events verbatim, so exact-secret
+      // redaction must happen here, the shared choke point for both backends.
+      const detail = redactText(String(result.detail || ''), providerSecretService.getRedactionValues());
+      const error = new Error(detail || `Provider did not expose a verified API for model ${modelId}`);
       error.kind = 'model';
       error.code = 'provider_preflight_failed';
       throw error;
@@ -1727,6 +1730,7 @@ function Shell({ cs }) {
             channels={channels}
             activeChannel={effective.channel || ''}
             lockedChannel={channelLock}
+            pinnedChannel={backendPref === 'codex' && codexProviderId ? 'custom' : ''}
             onLockChannel={(channel) => {
               const next = backendPref === 'codex'
                 ? codexProviderChannelLock(channel, codexProviderId)

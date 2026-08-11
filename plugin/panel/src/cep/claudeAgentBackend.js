@@ -392,10 +392,13 @@ export function createClaudeAgentBackend({
             { status: null, code: 'provider_preflight_required' },
             model,
           );
-        } catch {
+        } catch (cause) {
+          // #222: only the recovery probe knows why verify failed (auth class,
+          // HTTP status, not agent-ready...); keep its message in the event.
+          const detail = typeof cause?.message === 'string' ? cause.message.trim() : '';
           throw providerModelError(
             'provider_preflight_failed',
-            `Custom provider could not verify model ${model}`,
+            `Custom provider could not verify model ${model}` + (detail ? `: ${detail}` : ''),
           );
         }
         const recoveredProvider = recovery?.provider || recovery;

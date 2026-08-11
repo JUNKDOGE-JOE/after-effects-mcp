@@ -309,6 +309,7 @@ export function SettingsScreen({
   channels = { claude: [], codex: [], zcode: [] },
   activeChannel = '',
   lockedChannel = '',
+  pinnedChannel = '',
   onLockChannel,
   onRecheckBackend,
   recheckDisabled = false,
@@ -395,6 +396,7 @@ export function SettingsScreen({
           channels={backend === 'codex' ? channels.codex : backend === 'zcode' ? channels.zcode : channels.claude}
           activeChannel={activeChannel}
           lockedChannel={lockedChannel}
+          pinnedChannel={pinnedChannel}
           onLockChannel={onLockChannel}
           onRecheck={onRecheckBackend}
           recheckLabel={t.recheck}

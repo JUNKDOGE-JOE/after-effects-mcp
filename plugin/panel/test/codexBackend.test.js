@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCodexBackend } from '../src/cep/codexBackend.js';
+import { createCodexBackend, resolveCodexCli } from '../src/cep/codexBackend.js';
 import { PANEL_VERSION } from '../src/cep/mcpClient.js';
 
 function makeProc() {
@@ -1907,6 +1907,66 @@ test('probeAccount resolves within bounds and kills the process when initialize 
   assert.equal(result.runtimeOk, false);
   assert.match(result.detail, /timeout/i);
   assert.equal(proc.killed, true);
+});
+
+test('probeAccount probes a bare app-server even when the selected custom provider route is stale (#226)', async () => {
+  let routeCreated = 0;
+  // Capabilities recorded at requestProfileRevision 1 while the provider is at
+  // 7: route selection is needs-probe, which used to throw inside the shared
+  // startProcess() before account/read ever ran.
+  const staleProvider = { ...providerFixtureV3(), requestProfileRevision: 7 };
+  const { backend, spawned } = makeBackend({
+    getProviderProfile: () => selectedProvider(staleProvider),
+    getProviderCandidate: () => selectedProvider(staleProvider),
+    resolveRequestProfile: async () => ({ auth: { kind: 'header', name: 'Authorization', value: 'opaque-key' } }),
+    createProviderRoute: () => { routeCreated += 1; return localProviderRoute(); },
+    createResponsesRoute: () => { routeCreated += 1; return localProviderRoute(); },
+  });
+  const probe = backend.probeAccount();
+  await flush();
+  const proc = spawned.procs[0];
+  assert.deepEqual(spawned.calls[0].args, ['app-server'], 'probe must not carry model_provider overrides');
+  assert.equal(
+    Object.keys(spawned.calls[0].options.env).some((key) => /^AE_MCP_PROVIDER_HEADER_/.test(key)),
+    false,
+    'probe env must not carry provider route headers',
+  );
+  respond(proc, parseWrites(proc)[0], {});
+  await flush();
+  assert.equal(parseWrites(proc)[1].method, 'account/read');
+  respond(proc, parseWrites(proc)[1], { account: { type: 'chatgpt', email: 'a@example.com', planType: 'pro' } });
+  await flush();
+  assert.equal(parseWrites(proc)[2].method, 'model/list');
+  respond(proc, parseWrites(proc)[2], { models: [{ id: 'gpt-5.5' }] });
+
+  const result = await probe;
+  assert.equal(result.loggedIn, true);
+  assert.equal(result.runtimeOk, true);
+  assert.equal(result.email, 'a@example.com');
+  assert.equal(routeCreated, 0, 'probe must not start the provider local route');
+  assert.equal(proc.killed, true, 'the probe process is single-use');
+});
+
+test('resolveCodexCli reports the shim displayPath for diagnostics and keeps the spawn truth (#225)', async () => {
+  const cli = await resolveCodexCli({
+    env: {},
+    platform: {
+      id: 'windows-x64',
+      resolveExecutable: async () => ({
+        ok: true,
+        id: 'codex',
+        path: 'C:\\Program Files\\nodejs\\node.exe',
+        displayPath: 'C:\\Users\\t\\AppData\\Roaming\\npm\\codex.cmd',
+        argsPrefix: ['C:\\Users\\t\\AppData\\Roaming\\npm\\node_modules\\@openai\\codex\\bin\\codex.js'],
+        source: 'path',
+        version: '0.144.1',
+        arch: 'x64',
+      }),
+    },
+  });
+  assert.equal(cli.ok, true);
+  assert.equal(cli.cliPath, 'C:\\Users\\t\\AppData\\Roaming\\npm\\codex.cmd');
+  assert.equal(cli.executable.path, 'C:\\Program Files\\nodejs\\node.exe');
 });
 
 // --- #220: abnormal backend lifecycle must settle pending approvals ---

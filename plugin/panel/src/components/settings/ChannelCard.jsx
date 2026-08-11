@@ -1,7 +1,7 @@
 import React from 'react';
 import { Badge } from '../core/Badge';
 import { Button } from '../core/Button';
-import { channelDot, channelTexts, lockLabel } from '../../lib/channelCard';
+import { channelDot, channelTexts, lockButtonState } from '../../lib/channelCard';
 
 const DOT_COLOR = { ok: 'var(--ok)', warn: 'var(--warn)', neutral: 'var(--text-tertiary)' };
 
@@ -18,6 +18,7 @@ export function ChannelCard({
   channels = [],
   activeChannel = '',
   lockedChannel = '',
+  pinnedChannel = '',
   onLockChannel,
   onRecheck,
   recheckLabel,
@@ -30,6 +31,7 @@ export function ChannelCard({
       {channels.map((probe) => {
         const texts = channelTexts(probe, lang);
         const isActive = probe.channel === activeChannel;
+        const lock = lockButtonState(probe.channel, { lockedChannel, pinnedChannel }, lang);
         return (
           <div key={probe.channel} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 10px', border: `1px solid ${isActive ? 'var(--border-strong)' : 'var(--border-subtle)'}`, borderRadius: 'var(--radius-md)', background: 'var(--bg-well)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -37,11 +39,12 @@ export function ChannelCard({
               <Badge status={channelDot(probe)}>{texts.source}</Badge>
               {texts.detail ? <span style={{ flex: 1, minWidth: 0, font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{texts.detail}</span> : <span style={{ flex: 1 }} />}
               {!readOnly && onLockChannel ? (
-                <Button variant="ghost" size="sm" onClick={() => onLockChannel(probe.channel === lockedChannel ? '' : probe.channel)}>
-                  {lockLabel(probe.channel, lockedChannel, lang)}
+                <Button variant="ghost" size="sm" disabled={lock.disabled} onClick={() => onLockChannel(probe.channel === lockedChannel ? '' : probe.channel)}>
+                  {lock.label}
                 </Button>
               ) : null}
             </div>
+            {!readOnly && lock.hint ? <div style={{ font: '400 10px/1.5 var(--font-ui)', color: 'var(--text-tertiary)', whiteSpace: 'pre-wrap' }}>{lock.hint}</div> : null}
             {texts.fixHint ? <div style={{ font: '400 10px/1.5 var(--font-ui)', color: 'var(--text-tertiary)', whiteSpace: 'pre-wrap' }}>{texts.fixHint}</div> : null}
             {!readOnly && renderChannelBody ? renderChannelBody(probe.channel) : null}
           </div>

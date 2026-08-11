@@ -20268,6 +20268,7 @@
     scripts: {
       build: "node build.mjs",
       watch: "node build.mjs --watch",
+      "verify-bundle": "node verify-bundle.mjs",
       test: "node --test"
     },
     dependencies: {
@@ -20453,9 +20454,19 @@
     locked: { zh: "\u5DF2\u9501\u5B9A", en: "Locked" },
     unlocked: { zh: "\u9501\u5B9A", en: "Lock" }
   };
-  function lockLabel(channel, lockedChannel, lang = "zh") {
-    const texts = channel === lockedChannel ? LOCK_TEXTS.locked : LOCK_TEXTS.unlocked;
-    return texts[lang] || texts.zh;
+  var PINNED_HINT = {
+    zh: "\u5DF2\u7531\u81EA\u5B9A\u4E49 provider \u9489\u4F4F\uFF1A\u5728\u4E0B\u65B9\u9009\u62E9\u300C\u65E0 provider\u300D\u540E\u53EF\u89E3\u9501\u3002",
+    en: 'Pinned by the custom provider: select "No provider" below to unlock.'
+  };
+  function lockButtonState(channel, { lockedChannel = "", pinnedChannel = "" } = {}, lang = "zh") {
+    const pinnedGroup = Boolean(pinnedChannel);
+    const pinned = pinnedGroup && channel === pinnedChannel;
+    const texts = pinned || channel === lockedChannel ? LOCK_TEXTS.locked : LOCK_TEXTS.unlocked;
+    return {
+      label: texts[lang] || texts.zh,
+      disabled: pinnedGroup,
+      hint: pinned ? PINNED_HINT[lang] || PINNED_HINT.zh : ""
+    };
   }
 
   // src/components/settings/ChannelCard.jsx
@@ -20469,6 +20480,7 @@
     channels = [],
     activeChannel = "",
     lockedChannel = "",
+    pinnedChannel = "",
     onLockChannel,
     onRecheck,
     recheckLabel,
@@ -20480,13 +20492,15 @@
       channels.map((probe) => {
         const texts = channelTexts(probe, lang);
         const isActive = probe.channel === activeChannel;
+        const lock = lockButtonState(probe.channel, { lockedChannel, pinnedChannel }, lang);
         return /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px 10px", border: `1px solid ${isActive ? "var(--border-strong)" : "var(--border-subtle)"}`, borderRadius: "var(--radius-md)", background: "var(--bg-well)" }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime13.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(ChannelDot, { token: channelDot(probe) }),
             /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Badge, { status: channelDot(probe), children: texts.source }),
             texts.detail ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 10px/1.35 var(--font-mono)", color: "var(--text-secondary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: texts.detail }) : /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("span", { style: { flex: 1 } }),
-            !readOnly && onLockChannel ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => onLockChannel(probe.channel === lockedChannel ? "" : probe.channel), children: lockLabel(probe.channel, lockedChannel, lang) }) : null
+            !readOnly && onLockChannel ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)(Button, { variant: "ghost", size: "sm", disabled: lock.disabled, onClick: () => onLockChannel(probe.channel === lockedChannel ? "" : probe.channel), children: lock.label }) : null
           ] }),
+          !readOnly && lock.hint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)", whiteSpace: "pre-wrap" }, children: lock.hint }) : null,
           texts.fixHint ? /* @__PURE__ */ (0, import_jsx_runtime13.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)", whiteSpace: "pre-wrap" }, children: texts.fixHint }) : null,
           !readOnly && renderChannelBody ? renderChannelBody(probe.channel) : null
         ] }, probe.channel);
@@ -21420,7 +21434,7 @@
     }
     async function probe(candidate, id, options, attempts) {
       var _a, _b;
-      const executable = { ok: true, id, path: candidate.path, argsPrefix: candidate.argsPrefix, source: candidate.source, version: null, arch: null };
+      const executable = { ok: true, id, path: candidate.path, displayPath: candidate.displayPath, argsPrefix: candidate.argsPrefix, source: candidate.source, version: null, arch: null };
       let verifiedArch = candidate.forcedArch || null;
       if (options.requiredArch && ((_a = candidate.nativeArchitectures) == null ? void 0 : _a.length)) {
         if (!candidate.nativeArchitectures.includes(options.requiredArch)) {
@@ -22313,6 +22327,7 @@
     channels = { claude: [], codex: [], zcode: [] },
     activeChannel = "",
     lockedChannel = "",
+    pinnedChannel = "",
     onLockChannel,
     onRecheckBackend,
     recheckDisabled = false,
@@ -22397,6 +22412,7 @@
             channels: backend === "codex" ? channels.codex : backend === "zcode" ? channels.zcode : channels.claude,
             activeChannel,
             lockedChannel,
+            pinnedChannel,
             onLockChannel,
             onRecheck: onRecheckBackend,
             recheckLabel: t.recheck,
@@ -40254,10 +40270,11 @@ data: ${JSON.stringify(payload)}
               { status: null, code: "provider_preflight_required" },
               model
             );
-          } catch {
+          } catch (cause) {
+            const detail = typeof (cause == null ? void 0 : cause.message) === "string" ? cause.message.trim() : "";
             throw providerModelError(
               "provider_preflight_failed",
-              `Custom provider could not verify model ${model}`
+              `Custom provider could not verify model ${model}` + (detail ? `: ${detail}` : "")
             );
           }
           const recoveredProvider = (recovery == null ? void 0 : recovery.provider) || recovery;
@@ -40906,7 +40923,7 @@ data: ${JSON.stringify(payload)}
     if (!resolved.ok) {
       return { ok: false, cliPath: "", version: "", detail: "codex CLI resolution failed: " + resolved.code, resolution: resolved };
     }
-    return { ok: true, cliPath: resolved.path, version: resolved.version || "", executable: resolved };
+    return { ok: true, cliPath: resolved.displayPath || resolved.path, version: resolved.version || "", executable: resolved };
   }
   function createCodexBackend({
     platform,
@@ -41860,9 +41877,9 @@ data: ${JSON.stringify(payload)}
     const PROBE_INITIALIZE_TIMEOUT_MS = 1e4;
     const PROBE_ACCOUNT_READ_TIMEOUT_MS = 1e4;
     const PROBE_MODEL_LIST_TIMEOUT_MS = 4e3;
-    async function boundedProbeRequest(method, params, ms, label) {
+    async function boundedProbeRequest(probeRpc, method, params, ms, label) {
       try {
-        return await rpc.request(method, params, ms);
+        return await probeRpc.request(method, params, ms);
       } catch (error) {
         if (error && /timed out/i.test(String(error.message || ""))) error.probeTimeout = label;
         throw error;
@@ -41877,19 +41894,55 @@ data: ${JSON.stringify(payload)}
       } catch (e) {
       }
       const diag = { cliPath: cliInfo.cliPath || "", cliVersion: cliInfo.version || "" };
-      let probedProc = null;
-      try {
+      const probeSecrets = () => {
+        let secrets = [...providerSensitiveValues];
         try {
-          await initialize(PROBE_INITIALIZE_TIMEOUT_MS);
-        } catch (error) {
-          if (error && /timed out/i.test(String(error.message || ""))) error.probeTimeout = "initialize";
-          throw error;
+          secrets = [...secrets, ...providerRedactionValues()];
+        } catch (e) {
         }
-        probedProc = proc;
-        const accountResult = await boundedProbeRequest("account/read", {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, "account/read");
+        return secrets;
+      };
+      const failure2 = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
+      if (!cliInfo.ok) {
+        return failure2(redactText(cliInfo.detail || "codex CLI is unavailable", probeSecrets()));
+      }
+      const executable = cliInfo.executable || {
+        ok: true,
+        id: "codex",
+        path: cliInfo.cliPath,
+        argsPrefix: [],
+        source: "path",
+        version: cliInfo.version || null,
+        arch: null
+      };
+      let probeProc;
+      try {
+        probeProc = adapter.spawn(executable, codexAppServerArgs(null), {
+          stdio: "pipe",
+          windowsHide: true,
+          env: codexSpawnEnv(null, spawnEnv)
+        });
+      } catch (error) {
+        return failure2(redactText(error && error.message ? error.message : String(error), probeSecrets()));
+      }
+      const probeRpc = createRpc2({ writeLine: (line) => probeProc.stdin.write(line) });
+      const reader = createNdjsonReader((message) => probeRpc.handleMessage(message));
+      if (probeProc.stdout && probeProc.stdout.on) probeProc.stdout.on("data", reader);
+      if (probeProc.stderr && probeProc.stderr.on) probeProc.stderr.on("data", () => {
+      });
+      if (probeProc.on) {
+        probeProc.on("exit", () => probeRpc.close(new Error("codex app-server exited before the probe completed")));
+        probeProc.on("error", (error) => probeRpc.close(error instanceof Error ? error : new Error("codex app-server failed")));
+      }
+      try {
+        await boundedProbeRequest(probeRpc, "initialize", {
+          clientInfo: { name: "ae-mcp-panel", version: PANEL_VERSION },
+          capabilities: { experimentalApi: true }
+        }, PROBE_INITIALIZE_TIMEOUT_MS, "initialize");
+        const accountResult = await boundedProbeRequest(probeRpc, "account/read", {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, "account/read");
         let models = null;
         try {
-          const listed = await boundedProbeRequest("model/list", {}, PROBE_MODEL_LIST_TIMEOUT_MS, "model/list");
+          const listed = await boundedProbeRequest(probeRpc, "model/list", {}, PROBE_MODEL_LIST_TIMEOUT_MS, "model/list");
           models = Array.isArray(listed) ? listed : listed && listed.models;
         } catch (e) {
           models = null;
@@ -41909,32 +41962,22 @@ data: ${JSON.stringify(payload)}
           models,
           ...diag
         };
-        const secrets = [...providerSensitiveValues, ...providerRedactionValues()];
-        if (containsExactSecret(result, secrets)) {
-          return { loggedIn: false, runtimeOk: false, detail: "Provider probe metadata was rejected", ...diag };
+        if (containsExactSecret(result, probeSecrets())) {
+          return failure2("Provider probe metadata was rejected");
         }
         return result;
       } catch (e) {
-        let secrets = [...providerSensitiveValues];
-        try {
-          secrets = [...secrets, ...providerRedactionValues()];
-        } catch {
-        }
-        const detail = redactText(
-          [e && e.message ? e.message : String(e), cliInfo.ok ? "" : cliInfo.detail].filter(Boolean).join(" | "),
-          secrets
-        );
+        const detail = redactText(e && e.message ? e.message : String(e), probeSecrets());
         if (e && e.probeTimeout) {
-          if (probedProc) {
-            try {
-              probedProc.kill();
-            } catch (killErr) {
-            }
-          }
-          reset();
-          return { loggedIn: false, runtimeOk: false, detail: "probe timeout: " + e.probeTimeout + (detail ? " | " + detail : ""), ...diag };
+          return failure2("probe timeout: " + e.probeTimeout + (detail ? " | " + detail : ""));
         }
-        return { loggedIn: false, runtimeOk: false, detail, ...diag };
+        return failure2(detail);
+      } finally {
+        try {
+          probeProc.kill();
+        } catch (killErr) {
+        }
+        probeRpc.close(new Error("codex login probe finished"));
       }
     }
     return {
@@ -49594,7 +49637,7 @@ data: ${JSON.stringify(payload)}
     async function repairPlatformHelper() {
       const context = helperBindingContext;
       const currentHost = host;
-      if (adapter.id !== "macos-arm64" || !context || !currentHost || context.hostInstance !== currentHost) {
+      if (!["macos-arm64", "windows-x64"].includes(adapter.id) || !context || !currentHost || context.hostInstance !== currentHost) {
         throw helperUnavailableError();
       }
       const priorClient = helperClient;
@@ -49602,7 +49645,7 @@ data: ${JSON.stringify(payload)}
       closeHelperClient(priorClient);
       bindPlatformHelperFacade({
         ...context,
-        repairRegistration: true
+        repairRegistration: adapter.id === "macos-arm64"
       });
       if (host !== currentHost) {
         throw helperUnavailableError();
@@ -50832,7 +50875,8 @@ ${baseUrl}`),
         modelId
       });
       if (!result.ok) {
-        const error = new Error(result.detail || `Provider did not expose a verified API for model ${modelId}`);
+        const detail = redactText(String(result.detail || ""), providerSecretService.getRedactionValues());
+        const error = new Error(detail || `Provider did not expose a verified API for model ${modelId}`);
         error.kind = "model";
         error.code = "provider_preflight_failed";
         throw error;
@@ -51682,6 +51726,7 @@ ${baseUrl}`),
             channels,
             activeChannel: effective.channel || "",
             lockedChannel: channelLock,
+            pinnedChannel: backendPref === "codex" && codexProviderId ? "custom" : "",
             onLockChannel: (channel) => {
               const next = backendPref === "codex" ? codexProviderChannelLock(channel, codexProviderId) : channel;
               setChannelLock(next);

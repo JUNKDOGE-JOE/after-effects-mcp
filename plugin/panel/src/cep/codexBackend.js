@@ -248,7 +248,9 @@ export async function resolveCodexCli({ env, platform } = {}) {
   if (!resolved.ok) {
     return { ok: false, cliPath: '', version: '', detail: 'codex CLI resolution failed: ' + resolved.code, resolution: resolved };
   }
-  return { ok: true, cliPath: resolved.path, version: resolved.version || '', executable: resolved };
+  // cliPath is diagnostics-only (#225): show the tool the user installed, not
+  // the node.exe a materialized cmd-shim spawns through.
+  return { ok: true, cliPath: resolved.displayPath || resolved.path, version: resolved.version || '', executable: resolved };
 }
 
 export function createCodexBackend({
@@ -1284,9 +1286,9 @@ export function createCodexBackend({
   const PROBE_ACCOUNT_READ_TIMEOUT_MS = 10000;
   const PROBE_MODEL_LIST_TIMEOUT_MS = 4000;
 
-  async function boundedProbeRequest(method, params, ms, label) {
+  async function boundedProbeRequest(probeRpc, method, params, ms, label) {
     try {
-      return await rpc.request(method, params, ms);
+      return await probeRpc.request(method, params, ms);
     } catch (error) {
       if (error && /timed out/i.test(String(error.message || ''))) error.probeTimeout = label;
       throw error;
@@ -1301,19 +1303,51 @@ export function createCodexBackend({
       lastCliInfo = cliInfo;
     } catch (e) { /* diagnostics only, never blocks the probe */ }
     const diag = { cliPath: cliInfo.cliPath || '', cliVersion: cliInfo.version || '' };
-    let probedProc = null;
+    const probeSecrets = () => {
+      let secrets = [...providerSensitiveValues];
+      try { secrets = [...secrets, ...providerRedactionValues()]; } catch (e) { /* redaction stays best-effort */ }
+      return secrets;
+    };
+    const failure = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
+    if (!cliInfo.ok) {
+      return failure(redactText(cliInfo.detail || 'codex CLI is unavailable', probeSecrets()));
+    }
+
+    // #226: the probe answers "is the codex CLI itself logged in / runtime
+    // ok", so it runs a dedicated bare app-server. Routing it through the chat
+    // process would inherit the custom-provider config — a stale provider
+    // route then throws before account/read and reports a healthy login as
+    // runtimeOk:false — and would interleave probe RPC with an active turn.
+    const executable = cliInfo.executable || {
+      ok: true, id: 'codex', path: cliInfo.cliPath, argsPrefix: [], source: 'path', version: cliInfo.version || null, arch: null,
+    };
+    let probeProc;
     try {
-      try {
-        await initialize(PROBE_INITIALIZE_TIMEOUT_MS);
-      } catch (error) {
-        if (error && /timed out/i.test(String(error.message || ''))) error.probeTimeout = 'initialize';
-        throw error;
-      }
-      probedProc = proc;
-      const accountResult = await boundedProbeRequest('account/read', {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
+      probeProc = adapter.spawn(executable, codexAppServerArgs(null), {
+        stdio: 'pipe',
+        windowsHide: true,
+        env: codexSpawnEnv(null, spawnEnv),
+      });
+    } catch (error) {
+      return failure(redactText(error && error.message ? error.message : String(error), probeSecrets()));
+    }
+    const probeRpc = createRpc({ writeLine: (line) => probeProc.stdin.write(line) });
+    const reader = createNdjsonReader((message) => probeRpc.handleMessage(message));
+    if (probeProc.stdout && probeProc.stdout.on) probeProc.stdout.on('data', reader);
+    if (probeProc.stderr && probeProc.stderr.on) probeProc.stderr.on('data', () => {});
+    if (probeProc.on) {
+      probeProc.on('exit', () => probeRpc.close(new Error('codex app-server exited before the probe completed')));
+      probeProc.on('error', (error) => probeRpc.close(error instanceof Error ? error : new Error('codex app-server failed')));
+    }
+    try {
+      await boundedProbeRequest(probeRpc, 'initialize', {
+        clientInfo: { name: 'ae-mcp-panel', version: PANEL_VERSION },
+        capabilities: { experimentalApi: true },
+      }, PROBE_INITIALIZE_TIMEOUT_MS, 'initialize');
+      const accountResult = await boundedProbeRequest(probeRpc, 'account/read', {}, PROBE_ACCOUNT_READ_TIMEOUT_MS, 'account/read');
       let models = null;
       try {
-        const listed = await boundedProbeRequest('model/list', {}, PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
+        const listed = await boundedProbeRequest(probeRpc, 'model/list', {}, PROBE_MODEL_LIST_TIMEOUT_MS, 'model/list');
         models = Array.isArray(listed) ? listed : listed && listed.models;
       } catch (e) {
         // Non-fatal: a stuck/slow model/list (e.g. a relay whose upstream
@@ -1335,32 +1369,21 @@ export function createCodexBackend({
         models,
         ...diag,
       };
-      const secrets = [...providerSensitiveValues, ...providerRedactionValues()];
-      if (containsExactSecret(result, secrets)) {
-        return { loggedIn: false, runtimeOk: false, detail: 'Provider probe metadata was rejected', ...diag };
+      if (containsExactSecret(result, probeSecrets())) {
+        return failure('Provider probe metadata was rejected');
       }
       return result;
     } catch (e) {
-      let secrets = [...providerSensitiveValues];
-      try { secrets = [...secrets, ...providerRedactionValues()]; } catch {}
-      const detail = redactText(
-        [e && e.message ? e.message : String(e), cliInfo.ok ? '' : cliInfo.detail]
-          .filter(Boolean)
-          .join(' | '),
-        secrets,
-      );
+      const detail = redactText(e && e.message ? e.message : String(e), probeSecrets());
       if (e && e.probeTimeout) {
-        // The app-server process behind this probe is stuck (e.g. hung
-        // upstream RPC). Kill this specific spawned process so it doesn't
-        // leak as a zombie; a fresh probe/turn will spawn a new one via
-        // startProcess()/initialize().
-        if (probedProc) {
-          try { probedProc.kill(); } catch (killErr) { /* best effort */ }
-        }
-        reset();
-        return { loggedIn: false, runtimeOk: false, detail: 'probe timeout: ' + e.probeTimeout + (detail ? ' | ' + detail : ''), ...diag };
+        return failure('probe timeout: ' + e.probeTimeout + (detail ? ' | ' + detail : ''));
       }
-      return { loggedIn: false, runtimeOk: false, detail, ...diag };
+      return failure(detail);
+    } finally {
+      // The probe process is single-use: kill it even on success so a hung
+      // app-server can never leak past its probe.
+      try { probeProc.kill(); } catch (killErr) { /* best effort */ }
+      probeRpc.close(new Error('codex login probe finished'));
     }
   }
 

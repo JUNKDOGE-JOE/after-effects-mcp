@@ -732,6 +732,33 @@ test('api preflight reselects once and fails closed when the recovered route is 
   }]);
 });
 
+test('api preflight recovery failure surfaces the probe detail in the model error (#222)', async () => {
+  const routeFactory = makeProviderRouteFactory();
+  const { backend, events, spawned } = makeBackend({
+    getChannel: () => 'api',
+    resolveApiProvider: async () => makeApiProvider(),
+    resolveCapability: async () => ({ ok: false, reasonCode: 'needs-probe', upstreamProtocol: 'messages' }),
+    recoverProviderProfile: async () => {
+      throw new Error('Provider did not expose a verified agent-ready protocol');
+    },
+    resolveRequestProfile: async () => ({ auth: { kind: 'none' } }),
+    createProviderRoute: routeFactory.create,
+  });
+
+  await backend.sendUser('verify me');
+
+  assert.equal(routeFactory.routes.length, 0);
+  assert.equal(spawned.calls.length, 0);
+  const errors = events.filter((event) => event.type === 'error');
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0].kind, 'model');
+  assert.equal(errors[0].code, 'provider_preflight_failed');
+  assert.equal(
+    errors[0].message,
+    'Custom provider could not verify model claude-test: Provider did not expose a verified agent-ready protocol',
+  );
+});
+
 test('reset prevents a late api preflight recovery from creating a route or sidecar', async () => {
   const pendingRecovery = deferred();
   const routeFactory = makeProviderRouteFactory();

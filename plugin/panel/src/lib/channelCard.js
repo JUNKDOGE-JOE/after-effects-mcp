@@ -18,8 +18,26 @@ const LOCK_TEXTS = {
   locked: { zh: '已锁定', en: 'Locked' },
   unlocked: { zh: '锁定', en: 'Lock' },
 };
+const PINNED_HINT = {
+  zh: '已由自定义 provider 钉住：在下方选择「无 provider」后可解锁。',
+  en: 'Pinned by the custom provider: select "No provider" below to unlock.',
+};
 
 export function lockLabel(channel, lockedChannel, lang = 'zh') {
   const texts = channel === lockedChannel ? LOCK_TEXTS.locked : LOCK_TEXTS.unlocked;
   return texts[lang] || texts.zh;
+}
+
+// #224: while a provider selection pins the group's lock, every lock toggle in
+// the group is ineffective (the App handler re-pins on any click), so all of
+// them disable; the pinned row also explains the way out.
+export function lockButtonState(channel, { lockedChannel = '', pinnedChannel = '' } = {}, lang = 'zh') {
+  const pinnedGroup = Boolean(pinnedChannel);
+  const pinned = pinnedGroup && channel === pinnedChannel;
+  const texts = pinned || channel === lockedChannel ? LOCK_TEXTS.locked : LOCK_TEXTS.unlocked;
+  return {
+    label: texts[lang] || texts.zh,
+    disabled: pinnedGroup,
+    hint: pinned ? (PINNED_HINT[lang] || PINNED_HINT.zh) : '',
+  };
 }

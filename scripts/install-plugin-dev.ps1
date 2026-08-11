@@ -89,6 +89,21 @@ foreach ($relative in $requiredFiles) {
     Assert-RegularFile (Join-Path $pluginSrc $relative) "required plugin source file $relative"
 }
 
+# Bundle freshness gate (#223): this deployment ships the committed dist tree
+# verbatim, so a bundle that no longer matches the panel sources must never
+# reach a real After Effects.
+Write-Host '[1/6] Verifying the committed panel bundle matches the panel sources...'
+$nodeCommand = Get-Command node -ErrorAction SilentlyContinue
+if (-not $nodeCommand) {
+    Fail-DevInstall 'node is required to verify the committed panel bundle before deployment'
+}
+$bundleVerifier = Join-Path $repoRoot 'plugin\panel\verify-bundle.mjs'
+Assert-RegularFile $bundleVerifier 'panel bundle verifier'
+& $nodeCommand.Source $bundleVerifier
+if ($LASTEXITCODE -ne 0) {
+    Fail-DevInstall 'plugin/client/dist does not match the panel sources: run "npm run build" in plugin/panel, then retry'
+}
+
 $cepParent = [IO.Path]::GetFullPath(
     (Join-Path $env:APPDATA 'Adobe\CEP\extensions'))
 $null = New-Item -ItemType Directory -Path $cepParent -Force
@@ -123,19 +138,19 @@ $oldMoved = $false
 $stageMoveStarted = $false
 
 try {
-    Write-Host '[1/5] Staging the complete plugin tree beside the final target...'
+    Write-Host '[2/6] Staging the complete plugin tree beside the final target...'
     $null = New-Item -ItemType Directory -Path $staging
     foreach ($child in @(Get-ChildItem -LiteralPath $pluginSrc -Force)) {
         Copy-Item -LiteralPath $child.FullName -Destination $staging -Recurse -Force
     }
 
-    Write-Host '[2/5] Verifying the staged tree before touching the deployed panel...'
+    Write-Host '[3/6] Verifying the staged tree before touching the deployed panel...'
     foreach ($relative in $requiredFiles) {
         Assert-RegularFile (Join-Path $staging $relative) "staged plugin file $relative"
     }
     Assert-TreeEqual $pluginSrc $staging
 
-    Write-Host '[3/5] Enabling CEP PlayerDebugMode before the atomic swap...'
+    Write-Host '[4/6] Enabling CEP PlayerDebugMode before the atomic swap...'
     10..25 | ForEach-Object {
         $key = "HKCU:\Software\Adobe\CSXS.$_"
         if (-not (Test-Path -LiteralPath $key)) {
@@ -144,7 +159,7 @@ try {
         Set-ItemProperty -LiteralPath $key -Name 'PlayerDebugMode' -Value '1' -Type String
     }
 
-    Write-Host '[4/5] Atomically replacing the CEP panel while retaining the old install...'
+    Write-Host '[5/6] Atomically replacing the CEP panel while retaining the old install...'
     try {
         $installedHelper = Join-Path $cepDir 'platform\windows-x64\bin\ae-mcp-platform-helper.exe'
         foreach ($process in @(Get-Process | Where-Object {
@@ -187,7 +202,7 @@ try {
     }
 
     $completed = $true
-    Write-Host "[5/5] Installed and verified: $cepDir"
+    Write-Host "[6/6] Installed and verified: $cepDir"
     Write-Host 'Restart After Effects, then open Window -> Extensions -> ae-mcp. The panel starts Platform Helper automatically.'
     if ($oldMoved) {
         Write-Host "Backup retained at: $backup"
