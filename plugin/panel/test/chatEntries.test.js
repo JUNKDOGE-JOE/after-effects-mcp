@@ -109,6 +109,50 @@ test('external approvals render as high risk without session allowance', () => {
   assert.equal(entries[0].risk, 'external');
 });
 
+test('question events fold into one question entry with answered state', () => {
+  const questions = [{ id: 'q0', key: 'Pick', prompt: 'Pick', options: [{ label: 'A', description: '' }], multiSelect: false, allowCustom: true, required: true }];
+  let entries = reduceEvent([], { type: 'question-required', toolUseId: 'ask_1', source: 'zcode-user-input', title: 'Need input', questions });
+  assert.equal(entries.length, 1);
+  assert.equal(entries[0].type, 'question');
+  assert.equal(entries[0].state, 'pending');
+  assert.deepEqual(entries[0].questions, questions);
+
+  // Re-emission for the same id replaces rather than duplicates.
+  entries = reduceEvent(entries, { type: 'question-required', toolUseId: 'ask_1', source: 'zcode-user-input', title: 'Need input', questions });
+  assert.equal(entries.length, 1);
+
+  entries = reduceEvent(entries, { type: 'question-resolved', toolUseId: 'ask_1', outcome: 'answered', answers: { Pick: 'A' } });
+  assert.equal(entries[0].state, 'answered');
+  assert.deepEqual(entries[0].answers, { Pick: 'A' });
+});
+
+test('question cancellation marks the entry cancelled and unknown ids are ignored', () => {
+  let entries = reduceEvent([], { type: 'question-required', toolUseId: 'ask_2', questions: [] });
+  const untouched = reduceEvent(entries, { type: 'question-resolved', toolUseId: 'other', outcome: 'answered' });
+  assert.equal(untouched[0].state, 'pending');
+  entries = reduceEvent(entries, { type: 'question-resolved', toolUseId: 'ask_2', outcome: 'cancelled' });
+  assert.equal(entries[0].state, 'cancelled');
+});
+
+test('text deltas keep newlines and whitespace verbatim across chunk boundaries', () => {
+  let entries = [];
+  entries = reduceEvent(entries, { type: 'turn-start' });
+  entries = reduceEvent(entries, { type: 'text-delta', text: '第一段\n' });
+  entries = reduceEvent(entries, { type: 'text-delta', text: '\n- item  one\r' });
+  entries = reduceEvent(entries, { type: 'text-delta', text: '\n\tindented' });
+  assert.equal(entries[0].text, '第一段\n\n- item  one\r\n\tindented');
+});
+
+test('chat bubbles preserve supplied whitespace for both roles', () => {
+  const bubble = readFileSync(new URL('../src/components/chat/ChatBubble.jsx', import.meta.url), 'utf8');
+  // Both the user and the AI text containers opt out of white-space collapsing.
+  const preWrapCount = (bubble.match(/whiteSpace: 'pre-wrap'/g) || []).length;
+  assert.equal(preWrapCount, 2, 'user and ai bubbles both need pre-wrap');
+  // CR/CRLF normalizes to LF so pre-wrap renders one break per logical newline.
+  assert.match(bubble, /replace\(\/\\r\\n\?\/g, '\\n'\)/);
+  assert.match(bubble, /overflowWrap: 'break-word'/);
+});
+
 test('user attachment bubbles render display metadata without path-bearing fields', () => {
   const chat = readFileSync(new URL('../src/screens/ChatScreen.jsx', import.meta.url), 'utf8');
   const bubble = readFileSync(new URL('../src/components/chat/ChatBubble.jsx', import.meta.url), 'utf8');

@@ -232,7 +232,7 @@ test('every daily plan preserves zero dependency and release invocations', async
     [
       'smoke',
       '--component', 'core',
-      '--scenario', 'core-native-write-undo@1',
+      '--scenario', 'native-exec-ir@1',
       '--fixture-path', '/fixtures/active/dev.aep',
       '--recovery-archive-root', '/fixtures/recovery',
       '--evidence-dir', '/evidence/hdev',

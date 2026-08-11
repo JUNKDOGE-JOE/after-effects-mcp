@@ -163,8 +163,8 @@ dependencies. Repair failures at T0-T2; they are not hardware attempts.
 
 One ledger must count every public MCP dispatch. Put stress, repeated calls,
 parameter combinations, and the broad error matrix in T2. HDEV uses a frozen
-bounded plan; `core-native-write-undo@1` has exactly seven public calls and
-aborts before call eight. Release T5/T6 own separate frozen aggregate budgets.
+bounded plan; `native-exec-ir@1` has exactly nine public calls and
+aborts before call ten. Release T5/T6 own separate frozen aggregate budgets.
 
 If a write returns `POSSIBLY_SIDE_EFFECTING_FAILURE`, stop retries and reconcile AE state plus audit first.
 

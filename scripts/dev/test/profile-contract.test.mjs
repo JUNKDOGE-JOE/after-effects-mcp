@@ -1,11 +1,28 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
+  HDEV_SCENARIO,
   assertDailyPlanSafe,
   buildDevelopmentPlan,
   parseDevelopmentCommand,
 } from '../profile-contract.mjs';
+
+test('profile scenario matches the driver spec SCENARIO_ID', () => {
+  const spec = readFileSync(
+    new URL('../../hardware/development_smoke_spec.py', import.meta.url),
+    'utf8',
+  );
+  const match = spec.match(/^SCENARIO_ID = "([^"]+)"$/m);
+  assert.ok(match, 'development_smoke_spec.py must declare SCENARIO_ID');
+  assert.equal(
+    HDEV_SCENARIO,
+    match[1],
+    'profile-contract HDEV_SCENARIO must equal the driver spec SCENARIO_ID; '
+      + 'a divergence makes the smoke action unrunnable',
+  );
+});
 
 const DEFAULTS = Object.freeze({
   repoRoot: '/repo',
@@ -58,13 +75,13 @@ test('parseDevelopmentCommand expands all and preserves ordered smoke components
     'smoke',
     '--component', 'core',
     '--component', 'cep',
-    '--scenario', 'core-native-write-undo@1',
+    '--scenario', 'native-exec-ir@1',
     '--fixture-path', '/fixtures/hdev.aep',
     '--recovery-archive-root', '/fixtures/recovery',
     '--evidence-dir', '/evidence/hdev',
   ], DEFAULTS);
   assert.deepEqual(smoke.components, ['core', 'cep']);
-  assert.equal(smoke.scenario, 'core-native-write-undo@1');
+  assert.equal(smoke.scenario, 'native-exec-ir@1');
   assert.equal(smoke.fixturePath, '/fixtures/hdev.aep');
   assert.equal(smoke.recoveryRoot, '/fixtures/recovery');
   assert.equal(smoke.evidenceDir, '/evidence/hdev');
@@ -140,7 +157,7 @@ test('buildDevelopmentPlan passes closed component disposition to HDEV', () => {
     'smoke',
     '--component', 'core',
     '--component', 'cep',
-    '--scenario', 'core-native-write-undo@1',
+    '--scenario', 'native-exec-ir@1',
     '--fixture-path', '/fixtures/hdev.aep',
     '--recovery-archive-root', '/fixtures/recovery',
     '--evidence-dir', '/evidence/hdev',
@@ -150,12 +167,12 @@ test('buildDevelopmentPlan passes closed component disposition to HDEV', () => {
   assert.deepEqual(plan.components, ['core', 'cep']);
   assert.deepEqual(plan.reused, ['native']);
   assert.deepEqual(plan.steps.map((step) => step.id), [
-    'hdev-core-native-write-undo',
+    'hdev-native-exec-ir',
   ]);
   assert.deepEqual(plan.steps[0].args.slice(0, 10), [
     '-B', '-I',
     '/repo/scripts/hardware/development_smoke.py',
-    '--scenario', 'core-native-write-undo@1',
+    '--scenario', 'native-exec-ir@1',
     '--selected-components', 'core,cep',
     '--reused-components', 'native',
     '--checkout',

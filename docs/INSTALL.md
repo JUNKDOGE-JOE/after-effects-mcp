@@ -186,7 +186,7 @@ node scripts/dev/ae-mcp-dev.mjs sync --component core --repo-root "$PWD" \
 node scripts/dev/ae-mcp-dev.mjs launch-ae --repo-root "$PWD" \
   --formal-ae-app "/Applications/Adobe After Effects 2026/Adobe After Effects 2026.app"
 node scripts/dev/ae-mcp-dev.mjs smoke --component core \
-  --scenario core-native-write-undo@1 \
+  --scenario native-exec-ir@1 \
   --repo-root "$PWD" \
   --fixture-path "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/active/hdev-core-native.aep" \
   --recovery-archive-root "$HOME/Library/Application Support/AfterEffectsMCP/fixtures/recovery" \

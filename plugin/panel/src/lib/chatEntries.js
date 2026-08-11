@@ -102,6 +102,36 @@ export function reduceEvent(entries, evt) {
         state: 'running',
       }));
 
+    // Agent-to-user question form (#219): a dedicated entry type, NOT a
+    // tool-call, so it renders as a form instead of an Allow/Deny card.
+    case 'question-required': {
+      const next = {
+        id: evt.toolUseId || nextId(current, 'question'),
+        type: 'question',
+        toolUseId: evt.toolUseId,
+        source: evt.source || '',
+        title: evt.title || '',
+        questions: Array.isArray(evt.questions) ? evt.questions : [],
+        state: 'pending',
+      };
+      if (current.some((entry) => entry.type === 'question' && entry.toolUseId === evt.toolUseId)) {
+        return current.map((entry) => (
+          entry.type === 'question' && entry.toolUseId === evt.toolUseId ? next : entry
+        ));
+      }
+      return current.concat(next);
+    }
+
+    case 'question-resolved':
+      return current.map((entry) => {
+        if (entry.type !== 'question' || entry.toolUseId !== evt.toolUseId) return entry;
+        return {
+          ...entry,
+          state: evt.outcome === 'answered' ? 'answered' : 'cancelled',
+          ...(evt.answers ? { answers: evt.answers } : {}),
+        };
+      });
+
     case 'turn-end':
       return current;
 

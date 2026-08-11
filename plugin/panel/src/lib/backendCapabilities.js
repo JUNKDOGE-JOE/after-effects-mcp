@@ -384,3 +384,30 @@ export function descriptorFromProbedModels(descriptor, probedModels) {
   });
   return { ...descriptor, models, defaultModelId: models[0].id };
 }
+
+// Canonical low-to-high effort ladder across every descriptor. Used to clamp a
+// session effort that survived a model switch (#218): the stale value must
+// never be dispatched when the newly selected model does not support it.
+const EFFORT_ORDER = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+
+// Resolve the effort actually shown and dispatched for the selected model.
+// - model without effort levels -> null (no effort is sent);
+// - requested level the model supports -> requested;
+// - known-but-unsupported request -> nearest supported level at or below its
+//   rank (else the lowest supported), preserving the user's intent;
+// - otherwise the descriptor default when supported, else the lowest level.
+export function resolveEffectiveEffort({ requested, model, defaultEffort }) {
+  const levels = Array.isArray(model && model.effortLevels) ? model.effortLevels : [];
+  if (!levels.length) return null;
+  if (requested && levels.includes(requested)) return requested;
+  if (requested && EFFORT_ORDER.includes(requested)) {
+    const ranked = levels
+      .filter((level) => EFFORT_ORDER.includes(level))
+      .sort((a, b) => EFFORT_ORDER.indexOf(a) - EFFORT_ORDER.indexOf(b));
+    const atOrBelow = ranked.filter((level) => EFFORT_ORDER.indexOf(level) <= EFFORT_ORDER.indexOf(requested));
+    if (atOrBelow.length) return atOrBelow[atOrBelow.length - 1];
+    if (ranked.length) return ranked[0];
+  }
+  if (defaultEffort && levels.includes(defaultEffort)) return defaultEffort;
+  return levels[0];
+}

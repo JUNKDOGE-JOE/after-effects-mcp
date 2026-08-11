@@ -14,6 +14,7 @@ import {
   composerKeyboardRequest,
   createComposerDragSession,
 } from '../../lib/composerResize';
+import { createPanelFileDropGuard } from '../../lib/panelFileDrop';
 
 function ComposerResizeHandle({
   height,
@@ -191,6 +192,24 @@ export function Composer({
     event.stopPropagation();
     attachmentPondRef.current?.addFiles(files);
   };
+  // Full-panel file drops (#208): while the composer is mounted, a file
+  // dropped anywhere in the panel attaches here. Composer-box drops are
+  // handled above in the capture phase and stop propagating, so they never
+  // reach this window-level guard — each file attaches exactly once. Text and
+  // URL drags are untouched (the guard only reacts to file transfers).
+  const dropStateRef = React.useRef(null);
+  dropStateRef.current = { disabled, streaming, pendingTurnId: attachmentDraft.pendingTurnId };
+  React.useEffect(() => {
+    const guard = createPanelFileDropGuard({
+      target: window,
+      canAttach: () => {
+        const state = dropStateRef.current;
+        return !state.disabled && !state.streaming && !state.pendingTurnId;
+      },
+      addFiles: (files) => attachmentPondRef.current?.addFiles(files),
+    });
+    return guard.dispose;
+  }, []);
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-15)', ...style }}>
       {notice}

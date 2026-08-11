@@ -11,6 +11,9 @@ import { ConnectionDrawer } from '../screens/ConnectionDrawer';
 import { ChatScreen } from '../screens/ChatScreen';
 import { ToolsScreen } from '../screens/ToolsScreen';
 import { ToolApprovalDialog } from '../components/tools/ToolApprovalDialog';
+import { QuestionFormDialog } from '../components/tools/QuestionFormDialog';
+import { questionsFromElicitationSchema } from '../lib/questionForm';
+import { createPanelFileDropGuard } from '../lib/panelFileDrop';
 import { createAgentLoop } from '../lib/agentLoop';
 import { revertToPreviousCheckpoint } from '../lib/activityModel';
 import { pickBackend, deriveToolMeta, shouldResetOnBackendChange } from '../lib/backendSelect';
@@ -53,7 +56,7 @@ import {
 } from '../lib/attachmentDraft.js';
 import { createAttachmentStore } from '../cep/attachmentStore.js';
 import { DEFAULT_MODEL } from '../lib/anthropic';
-import { descriptorWithCustomModel } from '../lib/backendCapabilities';
+import { descriptorWithCustomModel, resolveEffectiveEffort } from '../lib/backendCapabilities';
 import { selectDescriptor, reconcileModelPref } from '../lib/descriptorSelect';
 import { ZCODE_PROBED_MODELS_CACHE_KEY } from '../lib/zcodeModelCache';
 import { baseDescriptorFor } from '../cep/backends/index.js';
@@ -365,7 +368,21 @@ function Shell({ cs }) {
       tier: permissionModeRef.current,
       plan,
     }),
-    presentGenericForm: () => ({ action: 'decline', content: {} }),
+    // Generic MCP elicitation reaches the visible question form (#219); only
+    // schemas the form cannot faithfully render are declined. Permission tier
+    // is deliberately not consulted: automatic modes never answer questions.
+    presentGenericForm: (request) => {
+      const built = questionsFromElicitationSchema(
+        request && request.message,
+        request && request.requestedSchema,
+      );
+      if (!built.ok) return { action: 'decline', content: {} };
+      return {
+        kind: 'question-form',
+        title: (request && request.message) || '',
+        questions: built.questions,
+      };
+    },
   }), []);
   const [toolApproval, setToolApproval] = React.useState(() => elicitationCoordinator.snapshot());
   React.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
@@ -376,6 +393,14 @@ function Shell({ cs }) {
     elicitationCoordinator.dispose();
     try { approvalTierFile.dispose(); } catch (error) { /* best effort on shutdown */ }
   }, [approvalTierFile, elicitationCoordinator]);
+  // Panel-lifetime navigation guard (#208): file drops must never navigate the
+  // CEP WebView, on any tab. Attaching is handled by the Composer's own guard
+  // while the chat screen is mounted; this one only blocks navigation, and
+  // leaves text/URL drags to their native behavior.
+  React.useEffect(() => {
+    const guard = createPanelFileDropGuard({ target: window });
+    return guard.dispose;
+  }, []);
   const backendMigration = React.useMemo(() => migrateBackendPref(window.localStorage), []);
   const [backendPref, setBackendPref] = React.useState(() => backendMigration.pref);
   const [channelLock, setChannelLock] = React.useState(() => codexProviderChannelLock(
@@ -433,7 +458,15 @@ function Shell({ cs }) {
     ? requestedModel
     : (descriptor.defaultModelId || (descriptor.models[0] && descriptor.models[0].id) || requestedModel);
   const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
-  const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
+  // Reconcile against the SELECTED model, not just the backend: a session
+  // effort chosen for one model must not survive a switch to a model with a
+  // narrower effort set (#218) — the chip and the dispatched pair both derive
+  // from this single reconciled value.
+  const effectiveEffort = resolveEffectiveEffort({
+    requested: sessionEffort,
+    model: modelMeta,
+    defaultEffort: descriptor.defaultEffort,
+  });
   const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
   const claudeApiProvider = React.useMemo(() => {
     return providers.find((provider) => provider.id === claudeProviderId) || null;
@@ -1628,6 +1661,8 @@ function Shell({ cs }) {
             onSend={sendChat}
             onStop={() => activeBackend.stop()}
             onApprove={(id, decision) => activeBackend.approve(id, decision)}
+            onAnswerQuestion={(id, result) => activeBackend.answerQuestion
+              && activeBackend.answerQuestion(id, result)}
             onNewSession={newChatSession}
             chipState={{
               descriptor,
@@ -1819,6 +1854,11 @@ function Shell({ cs }) {
       />
       <ToolApprovalDialog
         record={toolApproval && toolApproval.plan ? toolApproval : null}
+        lang={lang}
+        onResolve={(result) => elicitationCoordinator.resolveVisible(result)}
+      />
+      <QuestionFormDialog
+        record={toolApproval && !toolApproval.plan ? toolApproval : null}
         lang={lang}
         onResolve={(result) => elicitationCoordinator.resolveVisible(result)}
       />

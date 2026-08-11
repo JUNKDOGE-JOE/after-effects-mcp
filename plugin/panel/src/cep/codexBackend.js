@@ -653,6 +653,10 @@ export function createCodexBackend({
     threadId = null;
     preambleSent = false;
     closeProviderRoute();
+    // Settle pending approvals now that the RPC peer is gone: without this the
+    // awaiting-approval card stays actionable forever (#220). rpc is already
+    // null, so drain releases local state without writing to a dead pipe.
+    drainApprovals();
     if (wasStopping) {
       clearProviderSensitiveValues();
       clearProcessStderrAttachmentPaths();
@@ -682,6 +686,7 @@ export function createCodexBackend({
     threadId = null;
     preambleSent = false;
     closeProviderRoute();
+    drainApprovals();
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message, ...activeTurnFailureFields() });
       finishActive();
@@ -945,6 +950,7 @@ export function createCodexBackend({
       if (startGeneration === runtimeGeneration) {
         closeProviderRoute();
         clearProviderSensitiveValues();
+        drainApprovals();
       }
       throw error;
     });
@@ -1140,6 +1146,10 @@ export function createCodexBackend({
         };
       }
       providerDeltaRedactor.discard();
+      // The turn is reaching its error terminal state; settle any approval that
+      // is still awaiting the user so the card cannot outlive its turn (#220).
+      // The peer may still be alive here, so drain delivers real declines.
+      drainApprovals();
       const message = failure?.message || 'Failed to start Codex turn.';
       const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
       emit({

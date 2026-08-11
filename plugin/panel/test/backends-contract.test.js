@@ -54,6 +54,9 @@ test('contract event vocabulary is the frozen canonical set', () => {
   assert.ok(BACKEND_EVENTS.includes('tool-denied'));
   assert.ok(BACKEND_EVENTS.includes('thinking'));
   assert.ok(BACKEND_EVENTS.includes('turn-accepted'));
+  // #219 agent-to-user question form events.
+  assert.ok(BACKEND_EVENTS.includes('question-required'));
+  assert.ok(BACKEND_EVENTS.includes('question-resolved'));
   for (const e of ['turn-start', 'text-delta', 'tool-start', 'tool-result', 'approval-required', 'turn-end', 'error']) {
     assert.ok(BACKEND_EVENTS.includes(e), 'missing ' + e);
   }

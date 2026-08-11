@@ -1908,3 +1908,65 @@ test('probeAccount resolves within bounds and kills the process when initialize 
   assert.match(result.detail, /timeout/i);
   assert.equal(proc.killed, true);
 });
+
+// --- #220: abnormal backend lifecycle must settle pending approvals ---
+
+test('process exit settles a pending approval exactly once and frees the next turn', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'exec');
+  proc.pushStdout({ method: 'turn/started', params: { threadId: 'thread_1', turn: { id: 'turn_1' } } });
+  pushElicitation(proc, 'ask_crash', realElicitation('ae_exec', { code: 'app.project' }));
+  assert.ok(events.some((e) => e.type === 'approval-required' && e.toolUseId === 'ask_crash'));
+
+  proc.exit(1);
+  await pending;
+  await flush();
+
+  const denied = events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'ask_crash');
+  assert.equal(denied.length, 1, 'pending approval settles exactly once on process exit');
+  assert.ok(events.some((e) => e.type === 'error'), 'turn reaches a typed error terminal state');
+
+  // Duplicate lifecycle signals must not settle the interaction twice.
+  proc.exit(1);
+  proc.error(new Error('late error'));
+  await flush();
+  assert.equal(events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'ask_crash').length, 1);
+
+  // The stale card cannot reach a dead peer, and a new turn can start cleanly.
+  backend.approve('ask_crash', 'allow');
+  assert.equal(events.some((e) => e.type === 'tool-allowed' && e.toolUseId === 'ask_crash'), false);
+  const second = await startTurnRequest(backend, spawned, 'next turn', 1, 'thread_2');
+  assert.ok(second.proc, 'a fresh process starts after cleanup');
+  respond(second.proc, second.turnStart, {});
+  await flush();
+  second.proc.pushStdout({ method: 'turn/completed', params: {} });
+  await second.pending;
+});
+
+test('process error settles a pending approval', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'exec');
+  pushElicitation(proc, 'ask_err', realElicitation('ae_exec', {}));
+
+  proc.error(new Error('spawn failed mid-flight'));
+  await pending;
+  await flush();
+
+  assert.equal(events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'ask_err').length, 1);
+});
+
+test('turn failure declines a pending approval on the still-live peer', async () => {
+  const { backend, events, spawned } = makeBackend();
+  const { pending, proc } = await startTurn(backend, spawned, 'exec');
+  proc.pushStdout({ method: 'turn/started', params: { threadId: 'thread_1', turn: { id: 'turn_1' } } });
+  pushElicitation(proc, 'ask_fail', realElicitation('ae_exec', {}));
+
+  proc.pushStdout({ method: 'error', params: { error: { message: 'model exploded' } } });
+  await pending;
+  await flush();
+
+  // The peer is alive, so the drain sends a protocol-correct decline.
+  const declineReply = parseWrites(proc).find((w) => w.id === 'ask_fail');
+  assert.deepEqual(declineReply.result, { action: 'decline', content: {} });
+  assert.equal(events.filter((e) => e.type === 'tool-denied' && e.toolUseId === 'ask_fail').length, 1);
+});

@@ -84,10 +84,10 @@
       var I = Array.isArray;
       var J = Object.prototype.hasOwnProperty;
       var K = { current: null };
-      var L5 = { key: true, ref: true, __self: true, __source: true };
+      var L6 = { key: true, ref: true, __self: true, __source: true };
       function M(a, b, e) {
         var d, c = {}, k = null, h = null;
-        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L5.hasOwnProperty(d) && (c[d] = b[d]);
+        if (null != b) for (d in void 0 !== b.ref && (h = b.ref), void 0 !== b.key && (k = "" + b.key), b) J.call(b, d) && !L6.hasOwnProperty(d) && (c[d] = b[d]);
         var g = arguments.length - 2;
         if (1 === g) c.children = e;
         else if (1 < g) {
@@ -205,7 +205,7 @@
           void 0 !== b.ref && (k = b.ref, h = K.current);
           void 0 !== b.key && (c = "" + b.key);
           if (a.type && a.type.defaultProps) var g = a.type.defaultProps;
-          for (f in b) J.call(b, f) && !L5.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
+          for (f in b) J.call(b, f) && !L6.hasOwnProperty(f) && (d[f] = void 0 === b[f] && void 0 !== g ? g[f] : b[f]);
         }
         var f = arguments.length - 2;
         if (1 === f) d.children = e;
@@ -389,7 +389,7 @@
       }
       function J(a, b) {
         A2 = false;
-        B && (B = false, E(L5), L5 = -1);
+        B && (B = false, E(L6), L6 = -1);
         z = true;
         var c = y;
         try {
@@ -419,7 +419,7 @@
       }
       var N = false;
       var O = null;
-      var L5 = -1;
+      var L6 = -1;
       var P = 5;
       var Q = -1;
       function M() {
@@ -457,7 +457,7 @@
         N || (N = true, S2());
       }
       function K(a, b) {
-        L5 = D2(function() {
+        L6 = D2(function() {
           a(exports.unstable_now());
         }, b);
       }
@@ -544,7 +544,7 @@
         }
         e = c + e;
         a = { id: u++, callback: b, priorityLevel: a, startTime: c, expirationTime: e, sortIndex: -1 };
-        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L5), L5 = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
+        c > d ? (a.sortIndex = c, f(t, a), null === h(r) && a === h(t) && (B ? (E(L6), L6 = -1) : B = true, K(H, c - d))) : (a.sortIndex = e, f(r, a), A2 || z || (A2 = true, I(J)));
         return a;
       };
       exports.unstable_shouldYield = M;
@@ -3495,7 +3495,7 @@
       function Bh(a) {
         vh.current === a && (E(uh), E(vh));
       }
-      var L5 = Uf(0);
+      var L6 = Uf(0);
       function Ch(a) {
         for (var b = a; null !== b; ) {
           if (13 === b.tag) {
@@ -4285,11 +4285,11 @@
         return { baseLanes: a, cachePool: null, transitions: null };
       }
       function oj(a, b, c) {
-        var d = b.pendingProps, e = L5.current, f = false, g = 0 !== (b.flags & 128), h;
+        var d = b.pendingProps, e = L6.current, f = false, g = 0 !== (b.flags & 128), h;
         (h = g) || (h = null !== a && null === a.memoizedState ? false : 0 !== (e & 2));
         if (h) f = true, b.flags &= -129;
         else if (null === a || null !== a.memoizedState) e |= 1;
-        G(L5, e & 1);
+        G(L6, e & 1);
         if (null === a) {
           Eg(b);
           a = b.memoizedState;
@@ -4443,7 +4443,7 @@
       function xj(a, b, c) {
         var d = b.pendingProps, e = d.revealOrder, f = d.tail;
         Xi(a, b, d.children, c);
-        d = L5.current;
+        d = L6.current;
         if (0 !== (d & 2)) d = d & 1 | 2, b.flags |= 128;
         else {
           if (null !== a && 0 !== (a.flags & 128)) a: for (a = b.child; null !== a; ) {
@@ -4464,7 +4464,7 @@
           }
           d &= 1;
         }
-        G(L5, d);
+        G(L6, d);
         if (0 === (b.mode & 1)) b.memoizedState = null;
         else switch (e) {
           case "forwards":
@@ -4538,13 +4538,13 @@
           case 13:
             d = b.memoizedState;
             if (null !== d) {
-              if (null !== d.dehydrated) return G(L5, L5.current & 1), b.flags |= 128, null;
+              if (null !== d.dehydrated) return G(L6, L6.current & 1), b.flags |= 128, null;
               if (0 !== (c & b.child.childLanes)) return oj(a, b, c);
-              G(L5, L5.current & 1);
+              G(L6, L6.current & 1);
               a = Zi(a, b, c);
               return null !== a ? a.sibling : null;
             }
-            G(L5, L5.current & 1);
+            G(L6, L6.current & 1);
             break;
           case 19:
             d = 0 !== (c & b.childLanes);
@@ -4554,7 +4554,7 @@
             }
             e = b.memoizedState;
             null !== e && (e.rendering = null, e.tail = null, e.lastEffect = null);
-            G(L5, L5.current);
+            G(L6, L6.current);
             if (d) break;
             else return null;
           case 22:
@@ -4916,7 +4916,7 @@
             S2(b);
             return null;
           case 13:
-            E(L5);
+            E(L6);
             d = b.memoizedState;
             if (null === a || null !== a.memoizedState && null !== a.memoizedState.dehydrated) {
               if (I && null !== yg && 0 !== (b.mode & 1) && 0 === (b.flags & 128)) Hg(), Ig(), b.flags |= 98560, f = false;
@@ -4935,7 +4935,7 @@
             }
             if (0 !== (b.flags & 128)) return b.lanes = c, b;
             d = null !== d;
-            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L5.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
+            d !== (null !== a && null !== a.memoizedState) && d && (b.child.flags |= 8192, 0 !== (b.mode & 1) && (null === a || 0 !== (L6.current & 1) ? 0 === T2 && (T2 = 3) : tj()));
             null !== b.updateQueue && (b.flags |= 4);
             S2(b);
             return null;
@@ -4946,7 +4946,7 @@
           case 17:
             return Zf(b.type) && $f(), S2(b), null;
           case 19:
-            E(L5);
+            E(L6);
             f = b.memoizedState;
             if (null === f) return S2(b), null;
             d = 0 !== (b.flags & 128);
@@ -4963,7 +4963,7 @@
                   b.subtreeFlags = 0;
                   d = c;
                   for (c = b.child; null !== c; ) f = c, a = d, f.flags &= 14680066, g = f.alternate, null === g ? (f.childLanes = 0, f.lanes = a, f.child = null, f.subtreeFlags = 0, f.memoizedProps = null, f.memoizedState = null, f.updateQueue = null, f.dependencies = null, f.stateNode = null) : (f.childLanes = g.childLanes, f.lanes = g.lanes, f.child = g.child, f.subtreeFlags = 0, f.deletions = null, f.memoizedProps = g.memoizedProps, f.memoizedState = g.memoizedState, f.updateQueue = g.updateQueue, f.type = g.type, a = g.dependencies, f.dependencies = null === a ? null : { lanes: a.lanes, firstContext: a.firstContext }), c = c.sibling;
-                  G(L5, L5.current & 1 | 2);
+                  G(L6, L6.current & 1 | 2);
                   return b.child;
                 }
                 a = a.sibling;
@@ -4976,7 +4976,7 @@
               } else 2 * B() - f.renderingStartTime > Gj && 1073741824 !== c && (b.flags |= 128, d = true, Dj(f, false), b.lanes = 4194304);
               f.isBackwards ? (g.sibling = b.child, b.child = g) : (c = f.last, null !== c ? c.sibling = g : b.child = g, f.last = g);
             }
-            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L5.current, G(L5, d ? c & 1 | 2 : c & 1), b;
+            if (null !== f.tail) return b = f.tail, f.rendering = b, f.tail = b.sibling, f.renderingStartTime = B(), b.sibling = null, c = L6.current, G(L6, d ? c & 1 | 2 : c & 1), b;
             S2(b);
             return null;
           case 22:
@@ -4999,7 +4999,7 @@
           case 5:
             return Bh(b), null;
           case 13:
-            E(L5);
+            E(L6);
             a = b.memoizedState;
             if (null !== a && null !== a.dehydrated) {
               if (null === b.alternate) throw Error(p(340));
@@ -5008,7 +5008,7 @@
             a = b.flags;
             return a & 65536 ? (b.flags = a & -65537 | 128, b) : null;
           case 19:
-            return E(L5), null;
+            return E(L6), null;
           case 4:
             return zh(), null;
           case 10:
@@ -6049,10 +6049,10 @@
               zh();
               break;
             case 13:
-              E(L5);
+              E(L6);
               break;
             case 19:
-              E(L5);
+              E(L6);
               break;
             case 10:
               ah(d.type._context);
@@ -19264,11 +19264,11 @@
   });
 
   // src/main.jsx
-  var import_react47 = __toESM(require_react(), 1);
+  var import_react49 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
-  var import_react46 = __toESM(require_react(), 1);
+  var import_react48 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
   var import_react = __toESM(require_react(), 1);
@@ -23449,7 +23449,7 @@
   }
 
   // src/screens/ChatScreen.jsx
-  var import_react37 = __toESM(require_react(), 1);
+  var import_react38 = __toESM(require_react(), 1);
 
   // src/components/chat/ChatBubble.jsx
   var import_react29 = __toESM(require_react(), 1);
@@ -23461,14 +23461,18 @@
     if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + " MB";
     return (bytes / (1024 * 1024 * 1024)).toFixed(1) + " GB";
   }
+  function normalizeBreaks(children) {
+    return typeof children === "string" ? children.replace(/\r\n?/g, "\n") : children;
+  }
   function ChatBubble({
     role = "ai",
-    children,
+    children: rawChildren,
     attachments = [],
     streaming = false,
     avatar = true,
     style
   }) {
+    const children = normalizeBreaks(rawChildren);
     if (role === "user") {
       return /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { style: { display: "flex", justifyContent: "flex-end", ...style }, children: /* @__PURE__ */ (0, import_jsx_runtime27.jsxs)(
         "div",
@@ -23482,7 +23486,8 @@
             borderBottomRightRadius: "var(--radius-sm)",
             font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`,
             color: "var(--text-primary)",
-            overflowWrap: "break-word"
+            overflowWrap: "break-word",
+            whiteSpace: "pre-wrap"
           },
           children: [
             children ? /* @__PURE__ */ (0, import_jsx_runtime27.jsx)("div", { children }) : null,
@@ -23518,7 +23523,8 @@
             minWidth: 0,
             font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`,
             color: "var(--text-primary)",
-            overflowWrap: "break-word"
+            overflowWrap: "break-word",
+            whiteSpace: "pre-wrap"
           },
           children: [
             children,
@@ -23846,12 +23852,423 @@
     ] });
   }
 
-  // src/components/chat/PromptCard.jsx
+  // src/components/chat/QuestionCard.jsx
   var import_react32 = __toESM(require_react(), 1);
+
+  // src/lib/questionForm.js
+  function asText(value) {
+    return typeof value === "string" ? value : "";
+  }
+  function normalizedOptions(options) {
+    if (!Array.isArray(options)) return [];
+    return options.map((option2) => {
+      if (typeof option2 === "string") return { label: option2, description: "" };
+      if (!option2 || typeof option2 !== "object") return null;
+      const label = asText(option2.label) || asText(option2.value);
+      if (!label) return null;
+      return { label, description: asText(option2.description) };
+    }).filter(Boolean);
+  }
+  function questionsFromUserInput(params) {
+    const input = params && (params.input || params) || {};
+    const list = Array.isArray(input.questions) ? input.questions : [];
+    return list.map((q, index) => {
+      const options = normalizedOptions(q && q.options);
+      return {
+        id: `q${index}`,
+        key: asText(q && q.question) || asText(q && q.header) || "question",
+        prompt: asText(q && q.question) || asText(q && q.header),
+        header: asText(q && q.header),
+        options,
+        multiSelect: Boolean(q && q.multiSelect),
+        allowCustom: true,
+        required: true
+      };
+    });
+  }
+  function fieldQuestion(name, prop, required, index) {
+    const schema = prop && typeof prop === "object" ? prop : {};
+    const prompt = asText(schema.title) || asText(schema.description) || name;
+    const base = {
+      id: `q${index}`,
+      key: name,
+      prompt,
+      header: "",
+      multiSelect: false,
+      allowCustom: false,
+      required
+    };
+    if (Array.isArray(schema.enum)) {
+      const options = normalizedOptions(schema.enum.map((value) => ({ label: value })));
+      if (!options.length || options.length !== schema.enum.length) return null;
+      return { ...base, options };
+    }
+    if (schema.type === "array") {
+      const itemEnum = schema.items && Array.isArray(schema.items.enum) ? schema.items.enum : null;
+      if (!itemEnum) return null;
+      const options = normalizedOptions(itemEnum.map((value) => ({ label: value })));
+      if (!options.length || options.length !== itemEnum.length) return null;
+      return { ...base, options, multiSelect: true };
+    }
+    if (schema.type === "string" || schema.type === void 0) {
+      return { ...base, options: [] };
+    }
+    return null;
+  }
+  function questionsFromElicitationSchema(message, requestedSchema) {
+    const schema = requestedSchema && typeof requestedSchema === "object" ? requestedSchema : {};
+    const props = schema.properties && typeof schema.properties === "object" ? schema.properties : {};
+    const required = new Set(Array.isArray(schema.required) ? schema.required : []);
+    const names = Object.keys(props);
+    if (!names.length) {
+      return { ok: false, reason: "empty-schema" };
+    }
+    const questions = [];
+    for (let index = 0; index < names.length; index += 1) {
+      const name = names[index];
+      const question = fieldQuestion(name, props[name], required.has(name), index);
+      if (!question) {
+        return { ok: false, reason: `unsupported-field:${name}` };
+      }
+      questions.push(question);
+    }
+    if (questions.length === 1 && !questions[0].prompt) {
+      questions[0].prompt = asText(message);
+    }
+    return { ok: true, questions };
+  }
+  function valueForQuestion(question, values) {
+    const raw = values && typeof values === "object" ? values[question.id] : void 0;
+    if (question.multiSelect) {
+      const list = Array.isArray(raw) ? raw : typeof raw === "string" && raw ? [raw] : [];
+      return list.map((item) => asText(item).trim()).filter(Boolean);
+    }
+    return asText(Array.isArray(raw) ? raw[0] : raw).trim();
+  }
+  function validateQuestionAnswers(questions, values) {
+    const errors = {};
+    for (const question of questions) {
+      const value = valueForQuestion(question, values);
+      const empty = question.multiSelect ? value.length === 0 : value === "";
+      if (question.required && empty) {
+        errors[question.id] = "required";
+        continue;
+      }
+      if (empty || !question.options.length || question.allowCustom) continue;
+      const labels = new Set(question.options.map((option2) => option2.label));
+      const chosen = question.multiSelect ? value : [value];
+      if (chosen.some((item) => !labels.has(item))) {
+        errors[question.id] = "invalid-option";
+      }
+    }
+    return { ok: Object.keys(errors).length === 0, errors };
+  }
+  function answersForUserInput(questions, values) {
+    const answers = {};
+    for (const question of questions) {
+      const value = valueForQuestion(question, values);
+      answers[question.key] = question.multiSelect ? value.join(", ") : value;
+    }
+    return answers;
+  }
+  function contentForElicitation(questions, values) {
+    const content = {};
+    for (const question of questions) {
+      const value = valueForQuestion(question, values);
+      const empty = question.multiSelect ? value.length === 0 : value === "";
+      if (empty && !question.required) continue;
+      content[question.key] = value;
+    }
+    return content;
+  }
+
+  // src/components/chat/QuestionCard.jsx
   var import_jsx_runtime30 = __toESM(require_jsx_runtime(), 1);
-  function PromptCard({ icon = "wand-2", title, caption, onClick, style }) {
+  var L2 = {
+    zh: {
+      needs: "\u9700\u8981\u56DE\u7B54",
+      submit: "\u63D0\u4EA4",
+      cancel: "\u53D6\u6D88",
+      other: "\u5176\u4ED6\uFF08\u81EA\u5B9A\u4E49\uFF09",
+      otherPlaceholder: "\u8F93\u5165\u81EA\u5B9A\u4E49\u56DE\u7B54\u2026",
+      textPlaceholder: "\u8F93\u5165\u56DE\u7B54\u2026",
+      required: "\u6B64\u9879\u5FC5\u586B",
+      invalidOption: "\u8BF7\u9009\u62E9\u5217\u8868\u4E2D\u7684\u9009\u9879",
+      multiHint: "\u53EF\u591A\u9009",
+      answered: "\u5DF2\u56DE\u7B54",
+      cancelled: "\u5DF2\u53D6\u6D88"
+    },
+    en: {
+      needs: "Answer required",
+      submit: "Submit",
+      cancel: "Cancel",
+      other: "Other (custom)",
+      otherPlaceholder: "Type a custom answer\u2026",
+      textPlaceholder: "Type an answer\u2026",
+      required: "This question is required",
+      invalidOption: "Pick an option from the list",
+      multiHint: "Multiple answers allowed",
+      answered: "Answered",
+      cancelled: "Cancelled"
+    }
+  };
+  var OTHER_KEY = "__ae_mcp_other__";
+  function OptionRow({ selected, multiSelect, label, description, onToggle }) {
     const [hover, setHover] = import_react32.default.useState(false);
     return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+      "button",
+      {
+        type: "button",
+        className: "ds-focusable",
+        role: multiSelect ? "checkbox" : "radio",
+        "aria-checked": selected,
+        onClick: onToggle,
+        onMouseEnter: () => setHover(true),
+        onMouseLeave: () => setHover(false),
+        style: {
+          display: "flex",
+          alignItems: "flex-start",
+          gap: "var(--space-15)",
+          width: "100%",
+          textAlign: "left",
+          padding: "5px 8px",
+          background: selected ? "var(--bg-well)" : hover ? "var(--bg-well)" : "transparent",
+          border: `1px solid ${selected ? "var(--accent)" : "var(--border-subtle)"}`,
+          borderRadius: "var(--radius-md)",
+          cursor: "pointer",
+          color: "var(--text-primary)",
+          font: `var(--weight-regular) var(--text-body)/var(--leading-tight) var(--font-ui)`
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+            "span",
+            {
+              "aria-hidden": true,
+              style: {
+                width: 12,
+                height: 12,
+                flex: "none",
+                marginTop: 2,
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                border: `1px solid ${selected ? "var(--accent)" : "var(--border-strong)"}`,
+                borderRadius: multiSelect ? 3 : "50%",
+                background: selected ? "var(--accent)" : "transparent",
+                color: "var(--text-on-solid)"
+              },
+              children: selected ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: "check", size: 9, strokeWidth: 3 }) : null
+            }
+          ),
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("span", { style: { minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: label }),
+            description ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+              "span",
+              {
+                style: {
+                  display: "block",
+                  marginTop: 1,
+                  color: "var(--text-tertiary)",
+                  font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`,
+                  whiteSpace: "pre-wrap",
+                  overflowWrap: "break-word"
+                },
+                children: description
+              }
+            ) : null
+          ] })
+        ]
+      }
+    );
+  }
+  function textInputStyle(hasError) {
+    return {
+      width: "100%",
+      padding: "4px 8px",
+      background: "var(--bg-well)",
+      border: `1px solid ${hasError ? "var(--error-border)" : "var(--border-default)"}`,
+      borderRadius: "var(--radius-md)",
+      outline: "none",
+      resize: "vertical",
+      color: "var(--text-primary)",
+      font: `var(--weight-regular) var(--text-body)/var(--leading-normal) var(--font-ui)`
+    };
+  }
+  function QuestionField({ question, t, selection, customText, error, onSelect, onCustomText }) {
+    const selected = Array.isArray(selection) ? selection : selection ? [selection] : [];
+    const customActive = selected.includes(OTHER_KEY);
+    const freeText = !question.options.length;
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { font: `var(--weight-semibold) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
+        question.prompt || question.header || question.key,
+        question.multiSelect ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { marginLeft: 6, color: "var(--text-tertiary)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: t.multiHint }) : null
+      ] }),
+      freeText ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+        "textarea",
+        {
+          rows: 2,
+          className: "ds-focusable",
+          value: customText,
+          placeholder: t.textPlaceholder,
+          onChange: (event) => onCustomText(event.target.value),
+          style: textInputStyle(Boolean(error))
+        }
+      ) : /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 3 }, role: question.multiSelect ? "group" : "radiogroup", children: [
+        question.options.map((option2) => /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+          OptionRow,
+          {
+            multiSelect: question.multiSelect,
+            selected: selected.includes(option2.label),
+            label: option2.label,
+            description: option2.description,
+            onToggle: () => onSelect(option2.label)
+          },
+          option2.label
+        )),
+        question.allowCustom ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+          OptionRow,
+          {
+            multiSelect: question.multiSelect,
+            selected: customActive,
+            label: t.other,
+            description: "",
+            onToggle: () => onSelect(OTHER_KEY)
+          }
+        ) : null,
+        question.allowCustom && customActive ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+          "textarea",
+          {
+            rows: 1,
+            className: "ds-focusable",
+            value: customText,
+            placeholder: t.otherPlaceholder,
+            onChange: (event) => onCustomText(event.target.value),
+            style: textInputStyle(Boolean(error))
+          }
+        ) : null
+      ] }),
+      error ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { color: "var(--error)", font: `var(--weight-regular) var(--text-caption)/1 var(--font-ui)` }, children: error === "invalid-option" ? t.invalidOption : t.required }) : null
+    ] });
+  }
+  function collectQuestionValues(questions, selections, customTexts) {
+    const values = {};
+    for (const question of questions) {
+      const selection = selections[question.id];
+      const selected = Array.isArray(selection) ? selection : selection ? [selection] : [];
+      const custom = (customTexts[question.id] || "").trim();
+      if (!question.options.length) {
+        values[question.id] = question.multiSelect ? custom ? [custom] : [] : custom;
+        continue;
+      }
+      const labels = selected.filter((item) => item !== OTHER_KEY);
+      const withCustom = selected.includes(OTHER_KEY) && custom ? labels.concat(custom) : labels;
+      values[question.id] = question.multiSelect ? withCustom : withCustom[0] || "";
+    }
+    return values;
+  }
+  function QuestionCard({
+    title,
+    questions = [],
+    lang = "zh",
+    state = "pending",
+    answers,
+    onSubmit,
+    onCancel,
+    style
+  }) {
+    const t = L2[lang] || L2.zh;
+    const [selections, setSelections] = import_react32.default.useState({});
+    const [customTexts, setCustomTexts] = import_react32.default.useState({});
+    const [errors, setErrors] = import_react32.default.useState({});
+    const select = (question, label) => {
+      setSelections((current) => {
+        const previous = current[question.id];
+        if (!question.multiSelect) {
+          return { ...current, [question.id]: previous === label ? "" : label };
+        }
+        const list = Array.isArray(previous) ? previous : previous ? [previous] : [];
+        const next = list.includes(label) ? list.filter((item) => item !== label) : list.concat(label);
+        return { ...current, [question.id]: next };
+      });
+      setErrors((current) => ({ ...current, [question.id]: void 0 }));
+    };
+    const setCustom = (question, text) => {
+      setCustomTexts((current) => ({ ...current, [question.id]: text }));
+      setErrors((current) => ({ ...current, [question.id]: void 0 }));
+    };
+    const submit = () => {
+      const values = collectQuestionValues(questions, selections, customTexts);
+      const checked = validateQuestionAnswers(questions, values);
+      if (!checked.ok) {
+        setErrors(checked.errors);
+        return;
+      }
+      if (onSubmit) onSubmit(values);
+    };
+    return /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+      "div",
+      {
+        style: {
+          background: "var(--bg-raised)",
+          border: "1px solid var(--border-strong)",
+          borderLeft: "2px solid var(--accent)",
+          borderRadius: "var(--radius-md)",
+          overflow: "hidden",
+          ...style
+        },
+        children: [
+          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "var(--space-2)", display: "flex", flexDirection: "column", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { display: "flex", alignItems: "center", gap: "var(--space-15)" }, children: /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Badge, { status: "warn", icon: "message-square", children: t.needs }) }),
+            title ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("div", { style: { font: `var(--weight-regular) var(--text-caption)/var(--leading-normal) var(--font-ui)`, color: "var(--text-secondary)", whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: title }) : null,
+            state === "pending" ? questions.map((question) => /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(
+              QuestionField,
+              {
+                question,
+                t,
+                selection: selections[question.id],
+                customText: customTexts[question.id] || "",
+                error: errors[question.id],
+                onSelect: (label) => select(question, label),
+                onCustomText: (text) => setCustom(question, text)
+              },
+              question.id
+            )) : null
+          ] }),
+          state === "pending" ? /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("div", { style: { padding: "0 var(--space-2) var(--space-2)", display: "flex", gap: "var(--space-15)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "primary", full: true, onClick: submit, children: t.submit }),
+            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Button, { variant: "secondary", full: true, onClick: onCancel, children: t.cancel })
+          ] }) : /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)(
+            "div",
+            {
+              style: {
+                display: "flex",
+                alignItems: "flex-start",
+                gap: "var(--space-15)",
+                padding: "var(--space-15) var(--space-2)",
+                borderTop: "1px solid var(--border-subtle)",
+                font: `var(--weight-medium) var(--text-caption)/var(--leading-normal) var(--font-ui)`,
+                color: state === "answered" ? "var(--ok)" : "var(--text-tertiary)"
+              },
+              children: [
+                /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: state === "answered" ? "check" : "x", size: 12, strokeWidth: 2.5, style: { marginTop: 1 } }),
+                /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("span", { style: { minWidth: 0, whiteSpace: "pre-wrap", overflowWrap: "break-word" }, children: [
+                  state === "answered" ? t.answered : t.cancelled,
+                  state === "answered" && answers && Object.keys(answers).length ? ": " + Object.values(answers).join(" \xB7 ") : ""
+                ] })
+              ]
+            }
+          )
+        ]
+      }
+    );
+  }
+
+  // src/components/chat/PromptCard.jsx
+  var import_react33 = __toESM(require_react(), 1);
+  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
+  function PromptCard({ icon = "wand-2", title, caption, onClick, style }) {
+    const [hover, setHover] = import_react33.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
       "button",
       {
         type: "button",
@@ -23874,10 +24291,10 @@
           ...style
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime30.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
-          /* @__PURE__ */ (0, import_jsx_runtime30.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
-            caption ? /* @__PURE__ */ (0, import_jsx_runtime30.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: icon, size: 14, color: "var(--text-tertiary)", style: { marginTop: 1 } }),
+          /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", font: `var(--weight-medium) var(--text-body)/var(--leading-tight) var(--font-ui)`, color: "var(--text-primary)" }, children: title }),
+            caption ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { style: { display: "block", marginTop: 2, font: `var(--weight-regular) var(--text-caption)/var(--leading-tight) var(--font-ui)`, color: "var(--text-tertiary)" }, children: caption }) : null
           ] })
         ]
       }
@@ -23885,10 +24302,10 @@
   }
 
   // src/components/chat/Composer.jsx
-  var import_react34 = __toESM(require_react(), 1);
+  var import_react35 = __toESM(require_react(), 1);
 
   // src/components/chat/AttachmentPond.jsx
-  var import_react33 = __toESM(require_react(), 1);
+  var import_react34 = __toESM(require_react(), 1);
   var import_react_filepond = __toESM(require_react_filepond(), 1);
   var import_filepond_plugin_image_preview = __toESM(require_filepond_plugin_image_preview(), 1);
 
@@ -24000,7 +24417,7 @@
   }
 
   // src/components/chat/AttachmentPond.jsx
-  var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
   (0, import_react_filepond.registerPlugin)(import_filepond_plugin_image_preview.default);
   var DEFAULT_LABELS = {
     add: "\u6DFB\u52A0\u6587\u4EF6 Add files",
@@ -24020,7 +24437,7 @@
   function findItem(items, fileItem) {
     return items.find((item) => item.pondId === (fileItem == null ? void 0 : fileItem.id) || item.file === (fileItem == null ? void 0 : fileItem.file));
   }
-  var AttachmentPond = import_react33.default.forwardRef(function AttachmentPond2({
+  var AttachmentPond = import_react34.default.forwardRef(function AttachmentPond2({
     items = [],
     disabled = false,
     labels: suppliedLabels,
@@ -24028,11 +24445,11 @@
     onRemoveAttachment,
     onRetryAttachment
   }, forwardedRef) {
-    const pondRef = import_react33.default.useRef(null);
+    const pondRef = import_react34.default.useRef(null);
     const labels = { ...DEFAULT_LABELS, ...suppliedLabels || {} };
     const pondFiles = items.map((item) => item.file).filter(Boolean);
     const labelIdle = labels.drop + ' <span class="filepond--label-action">' + labels.add + "</span>";
-    import_react33.default.useImperativeHandle(forwardedRef, () => ({
+    import_react34.default.useImperativeHandle(forwardedRef, () => ({
       addFiles(files) {
         var _a;
         return (_a = pondRef.current) == null ? void 0 : _a.addFiles(Array.from(files || []));
@@ -24047,8 +24464,8 @@
       const item = findItem(items, fileItem);
       if (item) onRemoveAttachment == null ? void 0 : onRemoveAttachment(item);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)("div", { className: "ae-attachment-pond", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { className: "ae-attachment-pond", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
         import_react_filepond.FilePond,
         {
           ref: pondRef,
@@ -24067,19 +24484,19 @@
           onremovefile: handleRemove
         }
       ),
-      items.length ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("div", { className: "ae-attachment-status-list", "aria-live": "polite", children: items.map((item) => {
+      items.length ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { className: "ae-attachment-status-list", "aria-live": "polite", children: items.map((item) => {
         var _a, _b, _c, _d, _e, _f;
-        return /* @__PURE__ */ (0, import_jsx_runtime31.jsxs)(
+        return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
           "div",
           {
             className: `ae-attachment-status ae-attachment-status--${item.status}`,
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)(Icon2, { name: "paperclip", size: 12 }),
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { className: "ae-attachment-status__name", children: ((_a = item.file) == null ? void 0 : _a.name) || ((_b = item.ref) == null ? void 0 : _b.name) }),
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { className: "ae-attachment-status__size", children: formatBytes((_e = (_c = item.file) == null ? void 0 : _c.size) != null ? _e : (_d = item.ref) == null ? void 0 : _d.size) }),
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("span", { className: "ae-attachment-status__state", children: item.status === "staging" ? labels.staging : item.status === "error" ? ((_f = item.error) == null ? void 0 : _f.message) || labels.retry : labels.ready }),
-              item.status === "error" ? /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: () => onRetryAttachment == null ? void 0 : onRetryAttachment(item), children: labels.retry }) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime31.jsx)("button", { type: "button", onClick: () => onRemoveAttachment == null ? void 0 : onRemoveAttachment(item), children: labels.remove })
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: "paperclip", size: 12 }),
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { className: "ae-attachment-status__name", children: ((_a = item.file) == null ? void 0 : _a.name) || ((_b = item.ref) == null ? void 0 : _b.name) }),
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { className: "ae-attachment-status__size", children: formatBytes((_e = (_c = item.file) == null ? void 0 : _c.size) != null ? _e : (_d = item.ref) == null ? void 0 : _d.size) }),
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("span", { className: "ae-attachment-status__state", children: item.status === "staging" ? labels.staging : item.status === "error" ? ((_f = item.error) == null ? void 0 : _f.message) || labels.retry : labels.ready }),
+              item.status === "error" ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("button", { type: "button", onClick: () => onRetryAttachment == null ? void 0 : onRetryAttachment(item), children: labels.retry }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("button", { type: "button", onClick: () => onRemoveAttachment == null ? void 0 : onRemoveAttachment(item), children: labels.remove })
             ]
           },
           item.pondId
@@ -24317,8 +24734,47 @@
     return Object.freeze({ move, finish, cancel });
   }
 
+  // src/lib/panelFileDrop.js
+  function createPanelFileDropGuard({
+    target,
+    canAttach = () => false,
+    addFiles = null
+  } = {}) {
+    function handleDragOver(event) {
+      if (!isFileTransfer(event.dataTransfer)) return;
+      event.preventDefault();
+      if (event.dataTransfer) {
+        try {
+          event.dataTransfer.dropEffect = addFiles && canAttach() ? "copy" : "none";
+        } catch (e) {
+        }
+      }
+    }
+    function handleDrop(event) {
+      if (!isFileTransfer(event.dataTransfer)) return;
+      event.preventDefault();
+      if (!addFiles || !canAttach()) return;
+      const files = attachmentDropFiles(event.dataTransfer);
+      if (files.length) addFiles(files);
+    }
+    if (target && typeof target.addEventListener === "function") {
+      target.addEventListener("dragover", handleDragOver);
+      target.addEventListener("drop", handleDrop);
+    }
+    return {
+      handleDragOver,
+      handleDrop,
+      dispose() {
+        if (target && typeof target.removeEventListener === "function") {
+          target.removeEventListener("dragover", handleDragOver);
+          target.removeEventListener("drop", handleDrop);
+        }
+      }
+    };
+  }
+
   // src/components/chat/Composer.jsx
-  var import_jsx_runtime32 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
   function ComposerResizeHandle({
     height,
     minHeight,
@@ -24326,10 +24782,10 @@
     onHeightChange,
     onHeightReset
   }) {
-    const [hover, setHover] = import_react34.default.useState(false);
-    const [dragging, setDragging] = import_react34.default.useState(false);
-    const [focused, setFocused] = import_react34.default.useState(false);
-    const dragRef = import_react34.default.useRef(null);
+    const [hover, setHover] = import_react35.default.useState(false);
+    const [dragging, setDragging] = import_react35.default.useState(false);
+    const [focused, setFocused] = import_react35.default.useState(false);
+    const dragRef = import_react35.default.useRef(null);
     const clearDrag = (updateState = true) => {
       const active = dragRef.current;
       if (!active) return;
@@ -24339,7 +24795,7 @@
       dragRef.current = null;
       if (updateState) setDragging(false);
     };
-    import_react34.default.useEffect(() => () => clearDrag(false), []);
+    import_react35.default.useEffect(() => () => clearDrag(false), []);
     const handleMouseDown = (event) => {
       if (event.button !== 0) return;
       event.currentTarget.focus();
@@ -24371,7 +24827,7 @@
       event.preventDefault();
       onHeightChange == null ? void 0 : onHeightChange(nextHeight);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
       "div",
       {
         style: {
@@ -24388,7 +24844,7 @@
           boxShadow: focused ? "0 0 0 1px var(--focus-ring)" : "none"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
             "input",
             {
               type: "text",
@@ -24422,7 +24878,7 @@
               }
             }
           ),
-          /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
             "span",
             {
               role: "separator",
@@ -24463,8 +24919,8 @@
     onRetryAttachment,
     attachmentLabels
   }) {
-    const [focus, setFocus] = import_react34.default.useState(false);
-    const attachmentPondRef = import_react34.default.useRef(null);
+    const [focus, setFocus] = import_react35.default.useState(false);
+    const attachmentPondRef = import_react35.default.useRef(null);
     const readyAttachmentCount = readyAttachments(attachmentDraft).length;
     const attachmentsBusy = draftIsBusy(attachmentDraft) || attachmentDraft.items.some((item) => item.status === "error");
     const canSend = !disabled && !streaming && !attachmentsBusy && (value.trim().length > 0 || readyAttachmentCount > 0);
@@ -24489,10 +24945,26 @@
       event.stopPropagation();
       (_a = attachmentPondRef.current) == null ? void 0 : _a.addFiles(files);
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
+    const dropStateRef = import_react35.default.useRef(null);
+    dropStateRef.current = { disabled, streaming, pendingTurnId: attachmentDraft.pendingTurnId };
+    import_react35.default.useEffect(() => {
+      const guard = createPanelFileDropGuard({
+        target: window,
+        canAttach: () => {
+          const state = dropStateRef.current;
+          return !state.disabled && !state.streaming && !state.pendingTurnId;
+        },
+        addFiles: (files) => {
+          var _a;
+          return (_a = attachmentPondRef.current) == null ? void 0 : _a.addFiles(files);
+        }
+      });
+      return guard.dispose;
+    }, []);
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: "var(--space-15)", ...style }, children: [
       notice,
-      /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { display: "flex", flexDirection: "column", minHeight: 0 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { display: "flex", flexDirection: "column", minHeight: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
           ComposerResizeHandle,
           {
             height,
@@ -24502,7 +24974,7 @@
             onHeightReset
           }
         ),
-        /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)(
+        /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
           "div",
           {
             style: {
@@ -24524,7 +24996,7 @@
             onDragOverCapture: handleFileDrag,
             onDropCapture: handleFileDrop,
             children: [
-              /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
                 AttachmentPond,
                 {
                   ref: attachmentPondRef,
@@ -24536,8 +25008,8 @@
                   onRetryAttachment
                 }
               ),
-              /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { flex: 1, minWidth: 0, minHeight: 0, display: "flex", alignItems: "stretch", gap: "var(--space-15)" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+              /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { flex: 1, minWidth: 0, minHeight: 0, display: "flex", alignItems: "stretch", gap: "var(--space-15)" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
                   "textarea",
                   {
                     rows: 1,
@@ -24563,11 +25035,11 @@
                     }
                   }
                 ),
-                !options ? streaming ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 }) : null
+                !options ? streaming ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 }) : null
               ] }),
-              options ? /* @__PURE__ */ (0, import_jsx_runtime32.jsxs)("div", { style: { flex: "none", display: "flex", alignItems: "center", gap: 2, minWidth: 0, overflow: "visible" }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime32.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
-                streaming ? /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
+              options ? /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)("div", { style: { flex: "none", display: "flex", alignItems: "center", gap: 2, minWidth: 0, overflow: "visible" }, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 2 }, children: options }),
+                streaming ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(SendButton, { icon: "square", title: "\u505C\u6B62 Stop", kind: "stop", onClick: onStop }) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(SendButton, { icon: "arrow-up", title: "\u53D1\u9001 Send", kind: "send", disabled: !canSend, onClick: canSend ? onSend : void 0 })
               ] }) : null
             ]
           }
@@ -24576,9 +25048,9 @@
     ] });
   }
   function SendButton({ icon, title, kind, disabled = false, onClick }) {
-    const [hover, setHover] = import_react34.default.useState(false);
+    const [hover, setHover] = import_react35.default.useState(false);
     const active = kind === "send" && !disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
       "button",
       {
         type: "button",
@@ -24605,19 +25077,19 @@
           cursor: disabled ? "default" : "pointer",
           transition: "background var(--dur-fast) var(--ease-out)"
         },
-        children: /* @__PURE__ */ (0, import_jsx_runtime32.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
+        children: /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: icon, size: 13, strokeWidth: 2.25 })
       }
     );
   }
 
   // src/components/chat/ComposerChip.jsx
-  var import_react36 = __toESM(require_react(), 1);
+  var import_react37 = __toESM(require_react(), 1);
 
   // src/components/core/Menu.jsx
-  var import_react35 = __toESM(require_react(), 1);
-  var import_jsx_runtime33 = __toESM(require_jsx_runtime(), 1);
+  var import_react36 = __toESM(require_react(), 1);
+  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
   function Keycap({ children }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
       "span",
       {
         style: {
@@ -24638,9 +25110,9 @@
     );
   }
   function MenuRow({ item, onClose }) {
-    const [hover, setHover] = import_react35.default.useState(false);
+    const [hover, setHover] = import_react36.default.useState(false);
     const disabled = !!item.disabled;
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
       "button",
       {
         type: "button",
@@ -24669,15 +25141,15 @@
           transition: "background var(--dur-fast) var(--ease-out)"
         },
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
-          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
-          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: item.label }),
+          item.checked ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "check", size: 12, strokeWidth: 2.25, color: "var(--text-primary)" }) : null,
+          item.hint ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { flex: "none", font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: item.hint }) : null
         ]
       }
     );
   }
   function Menu({ header, items = [], footer, onClose, minWidth = 184, style }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
       "div",
       {
         role: "menu",
@@ -24691,7 +25163,7 @@
           ...style
         },
         children: [
-          header ? /* @__PURE__ */ (0, import_jsx_runtime33.jsxs)(
+          header ? /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
             "div",
             {
               style: {
@@ -24704,15 +25176,15 @@
                 marginBottom: "var(--space-1)"
               },
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
-                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(Keycap, { children: k }, i)) }) : null
+                /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { font: "400 var(--text-caption)/1 var(--font-ui)", color: "var(--text-tertiary)" }, children: header.label }),
+                header.keys && header.keys.length ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { display: "inline-flex", gap: 3 }, children: header.keys.map((k, i) => /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Keycap, { children: k }, i)) }) : null
               ]
             }
           ) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
-            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(MenuRow, { item, onClose }, i)
+          /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { display: "flex", flexDirection: "column" }, children: items.map(
+            (item, i) => item.divider ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("div", { style: { height: 1, background: "var(--border-subtle)", margin: "4px 0" } }, i) : /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(MenuRow, { item, onClose }, i)
           ) }),
-          footer ? /* @__PURE__ */ (0, import_jsx_runtime33.jsx)(
+          footer ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
             "div",
             {
               style: {
@@ -24731,7 +25203,7 @@
   }
 
   // src/components/chat/ComposerChip.jsx
-  var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
   function ComposerChip({
     icon,
     label,
@@ -24745,11 +25217,11 @@
     title,
     style
   }) {
-    const [hover, setHover] = import_react36.default.useState(false);
-    const [open, setOpen] = import_react36.default.useState(false);
-    const rootRef = import_react36.default.useRef(null);
+    const [hover, setHover] = import_react37.default.useState(false);
+    const [open, setOpen] = import_react37.default.useState(false);
+    const rootRef = import_react37.default.useRef(null);
     const isMenu = Array.isArray(items) && items.length > 0;
-    import_react36.default.useEffect(() => {
+    import_react37.default.useEffect(() => {
       if (!open) return void 0;
       const onDoc = (e) => {
         if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
@@ -24765,8 +25237,8 @@
       };
     }, [open]);
     const lit = active || open;
-    return /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime34.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { ref: rootRef, style: { position: "relative", flex: "none", ...style }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(
         "button",
         {
           type: "button",
@@ -24799,14 +25271,14 @@
             whiteSpace: "nowrap"
           },
           children: [
-            icon ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: icon, size: 12 }) : null,
-            label ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
-            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
-            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
+            icon ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: icon, size: 12 }) : null,
+            label ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { overflow: "hidden", textOverflow: "ellipsis", maxWidth: 96 }, children: label }) : null,
+            !isMenu && onToggle && active ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: "check", size: 10, strokeWidth: 2.5 }) : null,
+            isMenu ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: "chevron-down", size: 10, strokeWidth: 2, style: { opacity: 0.7 } }) : null
           ]
         }
       ),
-      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(
+      isMenu && open ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
         "div",
         {
           style: {
@@ -24816,7 +25288,7 @@
             zIndex: 30,
             animation: "ds-fade-up var(--dur-base) var(--ease-out)"
           },
-          children: /* @__PURE__ */ (0, import_jsx_runtime34.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
+          children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Menu, { header: menuHeader, items, footer: menuFooter, onClose: () => setOpen(false) })
         }
       ) : null
     ] });
@@ -24866,7 +25338,7 @@
   }
 
   // src/screens/ChatScreen.jsx
-  var import_jsx_runtime35 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
   var C = {
     zh: {
       hello: "\u4F60\u597D\uFF01\u6211\u53EF\u4EE5\u76F4\u63A5\u64CD\u4F5C\u5F53\u524D\u6253\u5F00\u7684 AE \u5DE5\u7A0B\u3002\u8BD5\u8BD5\u8FD9\u4E9B\uFF1A",
@@ -24936,10 +25408,10 @@
     ]
   };
   function Notice({ text, actionLabel, onAction }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
-      onAction ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
+    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, padding: "5px 8px", background: "var(--bg-well)", border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Icon2, { name: "plug", size: 12, color: "var(--text-tertiary)" }),
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { style: { flex: 1, minWidth: 0, font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: text }),
+      onAction ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Button, { size: "sm", variant: "secondary", onClick: onAction, children: actionLabel }) : null
     ] });
   }
   function statusForTool(state) {
@@ -24957,18 +25429,32 @@
   function titleForTool(entry, lang) {
     return eventTitle({ undoGroup: `MCP ${entry.name || ""}` }, lang);
   }
-  function Entry({ entry, lang, onApprove }) {
+  function Entry({ entry, lang, onApprove, onAnswerQuestion }) {
     const t = C[lang] || C.zh;
     if (entry.type === "user-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ChatBubble, { role: "user", attachments: entry.attachments, children: entry.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ChatBubble, { role: "user", attachments: entry.attachments, children: entry.text });
     }
     if (entry.type === "ai-text") {
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ChatBubble, { role: "ai", children: entry.text });
+      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ChatBubble, { role: "ai", children: entry.text });
+    }
+    if (entry.type === "question") {
+      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+        QuestionCard,
+        {
+          lang,
+          title: entry.title,
+          questions: entry.questions,
+          state: entry.state,
+          answers: entry.answers,
+          onSubmit: (values) => onAnswerQuestion && onAnswerQuestion(entry.toolUseId, { action: "submit", values }),
+          onCancel: () => onAnswerQuestion && onAnswerQuestion(entry.toolUseId, { action: "cancel" })
+        }
+      ) });
     }
     if (entry.type === "tool-call") {
       const highRisk = entry.risk === "destructive" || entry.risk === "external";
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { paddingLeft: 28, display: "flex", flexDirection: "column", gap: 6 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
           ToolCallCard,
           {
             verb: titleForTool(entry, lang),
@@ -24978,7 +25464,7 @@
             errorMessage: entry.state === "error" ? entry.text : null
           }
         ),
-        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+        entry.state === "awaiting-approval" ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
           ApprovalCard,
           {
             risk: highRisk ? "high" : "normal",
@@ -24994,7 +25480,7 @@
       ] });
     }
     if (entry.type === "error") {
-      return /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(ToolCallCard, { verb: entry.kind === "model" ? t.modelErrorTitle : t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
+      return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { paddingLeft: 28 }, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(ToolCallCard, { verb: entry.kind === "model" ? t.modelErrorTitle : t.errorTitle, target: entry.kind, status: "error", errorMessage: entry.message }) });
     }
     return null;
   }
@@ -25016,6 +25502,7 @@
     onSend,
     onStop,
     onApprove,
+    onAnswerQuestion,
     onNewSession,
     promptCards,
     noticeActionLabel,
@@ -25033,21 +25520,21 @@
     onRetryAttachment
   }) {
     const t = C[lang] || C.zh;
-    const logRef = import_react37.default.useRef(null);
-    const layoutRef = import_react37.default.useRef(null);
-    const footerRef = import_react37.default.useRef(null);
-    const [composerSize, dispatchComposerSize] = import_react37.default.useReducer(
+    const logRef = import_react38.default.useRef(null);
+    const layoutRef = import_react38.default.useRef(null);
+    const footerRef = import_react38.default.useRef(null);
+    const [composerSize, dispatchComposerSize] = import_react38.default.useReducer(
       reduceComposerHeight,
       void 0,
       () => createComposerHeightState()
     );
-    const composerHeightRef = import_react37.default.useRef(composerSize.height);
+    const composerHeightRef = import_react38.default.useRef(composerSize.height);
     composerHeightRef.current = composerSize.height;
     const hasEntries = entries.length > 0;
     const prompts = promptCards || DEFAULT_PROMPTS[lang] || DEFAULT_PROMPTS.zh;
     const chips = chipState && chipState.descriptor ? buildComposerChips({ ...chipState, lang }) : null;
-    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react37.default.Fragment, { children: [
-      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+    const composerOptions = chips ? /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(import_react38.default.Fragment, { children: [
+      chips.model ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         ComposerChip,
         {
           icon: "box",
@@ -25057,7 +25544,7 @@
           items: menuItems(chips.model.items, chipState.modelId, onChipModel)
         }
       ) : null,
-      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      chips.effort ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         ComposerChip,
         {
           icon: "brain",
@@ -25067,7 +25554,7 @@
           items: menuItems(chips.effort.items, chipState.effort, onChipEffort)
         }
       ) : null,
-      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      chips.fast ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         ComposerChip,
         {
           icon: "zap",
@@ -25077,7 +25564,7 @@
           onToggle: (next) => onChipFast && onChipFast(next)
         }
       ) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         ComposerChip,
         {
           icon: "shield",
@@ -25088,11 +25575,11 @@
         }
       )
     ] }) : null;
-    import_react37.default.useEffect(() => {
+    import_react38.default.useEffect(() => {
       const el = logRef.current;
       if (el) el.scrollTop = el.scrollHeight;
     }, [entries, streaming, thinking]);
-    import_react37.default.useEffect(() => {
+    import_react38.default.useEffect(() => {
       if (typeof ResizeObserver !== "function") return void 0;
       if (!layoutRef.current || !footerRef.current) return void 0;
       const measureComposerBounds = () => {
@@ -25138,19 +25625,19 @@
       retry: t.attachmentRetry,
       remove: t.attachmentRemove
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
-        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(import_react37.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(AIAvatar, { size: 32 }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
+    return /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { ref: layoutRef, style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { ref: logRef, style: { flex: 1, minHeight: 0, overflow: "auto", padding: "var(--space-3)", display: "flex", flexDirection: "column", gap: "var(--space-3)" }, children: [
+        !hasEntries && composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(import_react38.default.Fragment, { children: /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(AIAvatar, { size: 32 }),
+          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { font: "600 12px/1.35 var(--font-ui)", color: "var(--text-primary)", maxWidth: 240 }, children: disabledHint || t.keyTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { font: "400 11px/1.45 var(--font-ui)", color: "var(--text-tertiary)", maxWidth: 250 }, children: t.keyCaption })
         ] }) }) : null,
-        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)(import_react37.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(AIAvatar, { size: 32 }),
-            /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
+        !hasEntries && !composerDisabled ? /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)(import_react38.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, padding: "var(--space-5) 0 var(--space-2)", textAlign: "center" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(AIAvatar, { size: 32 }),
+            /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { style: { font: "400 12px/1.55 var(--font-ui)", color: "var(--text-secondary)", maxWidth: 240 }, children: t.hello })
           ] }),
-          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+          prompts.map((card) => /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
             PromptCard,
             {
               icon: card.icon,
@@ -25164,13 +25651,13 @@
             card.id || card.title
           ))
         ] }) : null,
-        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Entry, { entry, lang, onApprove }, entry.id)),
-        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime35.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Spinner, { size: 12 }),
-          /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("span", { children: t.thinking })
+        entries.map((entry) => /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Entry, { entry, lang, onApprove, onAnswerQuestion }, entry.id)),
+        streaming && thinking ? /* @__PURE__ */ (0, import_jsx_runtime36.jsxs)("div", { style: { paddingLeft: 28, display: "flex", alignItems: "center", gap: 6, font: "400 11px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Spinner, { size: 12 }),
+          /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("span", { children: t.thinking })
         ] }) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime35.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime36.jsx)("div", { ref: footerRef, style: { flex: "none", padding: "var(--space-2) var(--space-3) var(--space-3)", borderTop: "1px solid var(--border-subtle)" }, children: /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
         Composer,
         {
           value: attachmentDraft.text,
@@ -25181,7 +25668,7 @@
           disabled: composerDisabled,
           placeholder: t.placeholder,
           options: composerOptions,
-          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime35.jsx)(
+          notice: disabledHint ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(Notice, { text: disabledHint, actionLabel: noticeActionLabel || t.noticeAction, onAction: onNoticeAction || onNewSession }) : sendError ? /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
             Notice,
             {
               text: attachmentDraft.dispatchState === "uncertain" ? t.uncertainTurn : sendError.message,
@@ -25205,11 +25692,11 @@
   }
 
   // src/screens/ToolsScreen.jsx
-  var import_react41 = __toESM(require_react(), 1);
+  var import_react42 = __toESM(require_react(), 1);
 
   // src/components/forms/Textarea.jsx
-  var import_react38 = __toESM(require_react(), 1);
-  var import_jsx_runtime36 = __toESM(require_jsx_runtime(), 1);
+  var import_react39 = __toESM(require_react(), 1);
+  var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
   function Textarea({
     value,
     onChange,
@@ -25220,8 +25707,8 @@
     rows = 5,
     style
   }) {
-    const [focused, setFocused] = import_react38.default.useState(false);
-    return /* @__PURE__ */ (0, import_jsx_runtime36.jsx)(
+    const [focused, setFocused] = import_react39.default.useState(false);
+    return /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
       "textarea",
       {
         className: "ds-focusable",
@@ -25255,7 +25742,7 @@
   }
 
   // src/components/tools/ToolArtifactEditor.jsx
-  var import_react39 = __toESM(require_react(), 1);
+  var import_react40 = __toESM(require_react(), 1);
 
   // src/lib/toolsState.js
   var EMPTY_SUMMARIES = Object.freeze([]);
@@ -25550,7 +26037,7 @@
   }
 
   // src/components/tools/ToolArtifactEditor.jsx
-  var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime38 = __toESM(require_jsx_runtime(), 1);
   var COPY = {
     zh: {
       titleNew: "\u65B0\u5EFA\u5DE5\u5177",
@@ -25619,9 +26106,9 @@
     const isLegacy = Boolean(
       artifact && (artifact.sourceType || artifact.source && artifact.source.type) === "legacy"
     );
-    const [draft, setDraft] = import_react39.default.useState(() => initialDraft(artifact));
-    const [error, setError] = import_react39.default.useState("");
-    import_react39.default.useEffect(() => {
+    const [draft, setDraft] = import_react40.default.useState(() => initialDraft(artifact));
+    const [error, setError] = import_react40.default.useState("");
+    import_react40.default.useEffect(() => {
       setDraft(initialDraft(artifact));
       setError("");
     }, [artifact]);
@@ -25676,10 +26163,10 @@
         await onSave({ ...editable, status: "saved" });
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { className: "tools-editor", role: "dialog", "aria-label": artifact ? t.titleEdit : t.titleNew, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { className: "tools-editor__title", children: artifact ? t.titleEdit : t.titleNew }),
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { className: "tools-editor__grid", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Field, { label: t.name, caption: isLegacy ? t.legacyName : "", children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-editor", role: "dialog", "aria-label": artifact ? t.titleEdit : t.titleNew, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-editor__title", children: artifact ? t.titleEdit : t.titleNew }),
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-editor__grid", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.name, caption: isLegacy ? t.legacyName : "", children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
           Input,
           {
             value: draft.name,
@@ -25687,26 +26174,26 @@
             disabled: isLegacy
           }
         ) }),
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Field, { label: t.category, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Input, { value: draft.category, onChange: (value) => update("category", value) }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Field, { label: t.kind, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Select, { value: draft.kind, onChange: (value) => update("kind", value), options: KIND_OPTIONS }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Field, { label: t.risk, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Select, { value: draft.declaredRisk, onChange: (value) => update("declaredRisk", value), options: RISK_OPTIONS }) })
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.category, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: draft.category, onChange: (value) => update("category", value) }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.kind, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: draft.kind, onChange: (value) => update("kind", value), options: KIND_OPTIONS }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.risk, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Select, { value: draft.declaredRisk, onChange: (value) => update("declaredRisk", value), options: RISK_OPTIONS }) })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Field, { label: t.description, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Textarea, { value: draft.description, onChange: (value) => update("description", value), rows: 2 }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Field, { label: t.tags, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Input, { value: draft.tags, onChange: (value) => update("tags", value), placeholder: "animation, utility" }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Field, { label: t.content, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Textarea, { mono: true, value: draft.content, onChange: (value) => update("content", value), rows: 9 }) }),
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Field, { label: t.args, children: /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Textarea, { mono: true, value: draft.argsSchema, onChange: (value) => update("argsSchema", value), rows: 6, error: Boolean(error) }) }),
-      error ? /* @__PURE__ */ (0, import_jsx_runtime37.jsx)("div", { className: "tools-inline-error", role: "alert", children: error }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime37.jsxs)("div", { className: "tools-editor__actions", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { variant: "ghost", onClick: onCancel, disabled: busy, children: t.cancel }),
-        /* @__PURE__ */ (0, import_jsx_runtime37.jsx)(Button, { variant: "primary", onClick: save, disabled: busy || !draft.name.trim(), children: t.save })
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.description, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { value: draft.description, onChange: (value) => update("description", value), rows: 2 }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.tags, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Input, { value: draft.tags, onChange: (value) => update("tags", value), placeholder: "animation, utility" }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.content, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { mono: true, value: draft.content, onChange: (value) => update("content", value), rows: 9 }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Field, { label: t.args, children: /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Textarea, { mono: true, value: draft.argsSchema, onChange: (value) => update("argsSchema", value), rows: 6, error: Boolean(error) }) }),
+      error ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("div", { className: "tools-inline-error", role: "alert", children: error }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("div", { className: "tools-editor__actions", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "ghost", onClick: onCancel, disabled: busy, children: t.cancel }),
+        /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Button, { variant: "primary", onClick: save, disabled: busy || !draft.name.trim(), children: t.save })
       ] })
     ] });
   }
 
   // src/components/tools/ToolArtifactRow.jsx
-  var import_react40 = __toESM(require_react(), 1);
-  var import_jsx_runtime38 = __toESM(require_jsx_runtime(), 1);
-  var L2 = {
+  var import_react41 = __toESM(require_react(), 1);
+  var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
+  var L3 = {
     zh: { never: "\u672A\u4F7F\u7528", verified: "\u5DF2\u9A8C\u8BC1", run: "\u8FD0\u884C" },
     en: { never: "Never used", verified: "Verified", run: "Run" }
   };
@@ -25731,16 +26218,16 @@
     runDisabled = false,
     lang = "zh"
   }) {
-    const t = L2[lang] || L2.zh;
+    const t = L3[lang] || L3.zh;
     const directRun = Boolean(
       artifact && artifact.executionCapabilities && artifact.executionCapabilities.directRun && artifact.executionCapabilities.directRun.available
     );
-    return /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(
+    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(
       "div",
       {
         className: `tools-artifact-row ds-focusable${selected ? " is-selected" : ""}`,
         children: [
-          /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)(
+          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(
             "button",
             {
               type: "button",
@@ -25748,24 +26235,24 @@
               "aria-current": selected || void 0,
               onClick: () => onSelect && onSelect(artifact.id),
               children: [
-                /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("span", { className: "tools-artifact-row__top", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { className: "tools-artifact-row__name", children: artifact.name }),
-                  artifact.verified ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { status: "ok", icon: "check", children: t.verified }) : null
+                /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("span", { className: "tools-artifact-row__top", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { className: "tools-artifact-row__name", children: artifact.name }),
+                  artifact.verified ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: "ok", icon: "check", children: t.verified }) : null
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("span", { className: "tools-artifact-row__badges", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { children: artifact.kind }),
-                  /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { children: artifact.category }),
-                  /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { status: riskStatus(artifact.declaredRisk), children: artifact.declaredRisk }),
-                  /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(Badge, { status: artifact.status === "candidate" ? "warn" : artifact.status === "pinned" ? "accent" : "neutral", children: artifact.status })
+                /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("span", { className: "tools-artifact-row__badges", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { children: artifact.kind }),
+                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { children: artifact.category }),
+                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: riskStatus(artifact.declaredRisk), children: artifact.declaredRisk }),
+                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: artifact.status === "candidate" ? "warn" : artifact.status === "pinned" ? "accent" : "neutral", children: artifact.status })
                 ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime38.jsxs)("span", { className: "tools-artifact-row__meta", children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: artifact.sourceType }),
-                  /* @__PURE__ */ (0, import_jsx_runtime38.jsx)("span", { children: lastUsed(artifact.lastUsedAt, t) })
+                /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("span", { className: "tools-artifact-row__meta", children: [
+                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: artifact.sourceType }),
+                  /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: lastUsed(artifact.lastUsedAt, t) })
                 ] })
               ]
             }
           ),
-          directRun ? /* @__PURE__ */ (0, import_jsx_runtime38.jsx)(
+          directRun ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
             "button",
             {
               type: "button",
@@ -26062,7 +26549,7 @@
   }
 
   // src/screens/ToolsScreen.jsx
-  var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
   var TEXT = {
     zh: {
       library: "\u5DE5\u5177\u5E93",
@@ -26221,38 +26708,38 @@
     const t = TEXT[lang] || TEXT.zh;
     const conflicts = preview.conflicts || [];
     const complete = conflicts.every((conflict) => ["keep", "duplicate"].includes(resolutions[conflict.conflictId]));
-    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-modal__scrim" }),
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-import", role: "dialog", "aria-label": t.importTitle, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-import__heading", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: t.importTitle }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: preview.highestRisk === "external" || preview.highestRisk === "destructive" ? "error" : "warn", children: preview.highestRisk })
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-modal__scrim" }),
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import", role: "dialog", "aria-label": t.importTitle, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__heading", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: t.importTitle }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: preview.highestRisk === "external" || preview.highestRisk === "destructive" ? "error" : "warn", children: preview.highestRisk })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-import__body", children: [
-          (preview.artifacts || []).map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-import__item", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("strong", { children: item.summary && item.summary.name }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("span", { children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__body", children: [
+          (preview.artifacts || []).map((item, index) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__item", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("strong", { children: item.summary && item.summary.name }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("span", { children: [
               item.summary && item.summary.kind,
               " \xB7 ",
               item.calculatedRisk
             ] }),
-            item.contentChanged ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: "warn", children: t.contentChanged }) : null,
-            item.metadataChanges && Object.keys(item.metadataChanges).length ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("details", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("summary", { children: t.importChanges }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { children: JSON.stringify(item.metadataChanges, null, 2) })
+            item.contentChanged ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: "warn", children: t.contentChanged }) : null,
+            item.metadataChanges && Object.keys(item.metadataChanges).length ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("details", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("summary", { children: t.importChanges }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { children: JSON.stringify(item.metadataChanges, null, 2) })
             ] }) : null
           ] }, `${item.summary && item.summary.id || "artifact"}:${index}`)),
-          conflicts.map((conflict) => /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-import__conflict", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("strong", { children: t.importConflict }),
+          conflicts.map((conflict) => /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__conflict", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("strong", { children: t.importConflict }),
               " \xB7 ",
               conflict.incomingName
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-import__hashes", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: conflict.existingContentHash }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: conflict.incomingContentHash })
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__hashes", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: conflict.existingContentHash }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: conflict.incomingContentHash })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
               Select,
               {
                 value: resolutions[conflict.conflictId] || "",
@@ -26266,9 +26753,9 @@
             )
           ] }, conflict.conflictId))
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-import__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "ghost", onClick: onCancel, disabled: busy, children: t.cancel }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "primary", onClick: onCommit, disabled: busy || !complete, children: t.commit })
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-import__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", onClick: onCancel, disabled: busy, children: t.cancel }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", onClick: onCommit, disabled: busy || !complete, children: t.commit })
         ] })
       ] })
     ] });
@@ -26280,24 +26767,24 @@
     initialPath = ""
   }) {
     const t = TEXT[lang] || TEXT.zh;
-    const [state, dispatch] = import_react41.default.useReducer(reduceToolsState, INITIAL_TOOLS_STATE);
-    const [busy, setBusy] = import_react41.default.useState(false);
-    const initialRunInputs = import_react41.default.useMemo(() => emptyToolRunInputs(), []);
-    const [runArgs, setRunArgs] = import_react41.default.useState(initialRunInputs.args);
-    const [runForm, setRunForm] = import_react41.default.useState({});
-    const [advancedJson, setAdvancedJson] = import_react41.default.useState(false);
-    const [target, setTarget] = import_react41.default.useState(initialRunInputs.target);
-    const [runResult, setRunResult] = import_react41.default.useState(null);
-    const [runJob, setRunJob] = import_react41.default.useState(null);
-    const [runHistory, setRunHistory] = import_react41.default.useState([]);
-    const [developerMode, setDeveloperMode] = import_react41.default.useState(false);
-    const loadSequence = import_react41.default.useRef(0);
-    const inspectSequence = import_react41.default.useRef(0);
-    const rowRunLock = import_react41.default.useRef(false);
+    const [state, dispatch] = import_react42.default.useReducer(reduceToolsState, INITIAL_TOOLS_STATE);
+    const [busy, setBusy] = import_react42.default.useState(false);
+    const initialRunInputs = import_react42.default.useMemo(() => emptyToolRunInputs(), []);
+    const [runArgs, setRunArgs] = import_react42.default.useState(initialRunInputs.args);
+    const [runForm, setRunForm] = import_react42.default.useState({});
+    const [advancedJson, setAdvancedJson] = import_react42.default.useState(false);
+    const [target, setTarget] = import_react42.default.useState(initialRunInputs.target);
+    const [runResult, setRunResult] = import_react42.default.useState(null);
+    const [runJob, setRunJob] = import_react42.default.useState(null);
+    const [runHistory, setRunHistory] = import_react42.default.useState([]);
+    const [developerMode, setDeveloperMode] = import_react42.default.useState(false);
+    const loadSequence = import_react42.default.useRef(0);
+    const inspectSequence = import_react42.default.useRef(0);
+    const rowRunLock = import_react42.default.useRef(false);
     const selectedSummary = state.summaries.find((row) => row.id === state.selectedId) || null;
     const artifact = state.inspected && state.inspected.artifact || null;
     const runPending = Boolean(runJob && !runJob.terminal);
-    const load = import_react41.default.useCallback(async () => {
+    const load = import_react42.default.useCallback(async () => {
       if (!api) return;
       const sequence = loadSequence.current + 1;
       loadSequence.current = sequence;
@@ -26317,7 +26804,7 @@
         if (sequence === loadSequence.current) dispatch({ type: "load-error", error });
       }
     }, [api, state.query, state.kinds, state.category, state.risk, state.statuses, state.sourceType, developerMode]);
-    import_react41.default.useEffect(() => {
+    import_react42.default.useEffect(() => {
       const timer = setTimeout(load, 120);
       return () => clearTimeout(timer);
     }, [load]);
@@ -26626,24 +27113,24 @@
     const execution = toolExecutionCapabilities(artifact);
     const executable = execution.render || execution.directRun;
     const argFields = toolArgFields(artifact && artifact.argsSchema);
-    return /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-screen", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("header", { className: "tools-header", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-header__title", children: t.library }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-header__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "primary", icon: "plus", onClick: () => dispatch({ type: "edit-start", editor: { mode: "create", artifact: null } }), children: t.new }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "secondary", icon: "download", onClick: previewImport, disabled: busy, children: t.import }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "secondary", icon: "external-link", onClick: exportPackage, disabled: busy || !state.summaries.length, children: t.export }),
-          runPending ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "secondary", onClick: resumeExecution, disabled: busy, children: t.resumeRun }) : null,
-          runPending ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "danger", onClick: cancelExecution, disabled: busy, children: t.cancelRun }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: developerMode ? "danger" : "ghost", onClick: () => setDeveloperMode((value) => !value), disabled: busy, children: t.developerTools })
+    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-screen", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("header", { className: "tools-header", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-header__title", children: t.library }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-header__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "primary", icon: "plus", onClick: () => dispatch({ type: "edit-start", editor: { mode: "create", artifact: null } }), children: t.new }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", icon: "download", onClick: previewImport, disabled: busy, children: t.import }),
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", icon: "external-link", onClick: exportPackage, disabled: busy || !state.summaries.length, children: t.export }),
+          runPending ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: resumeExecution, disabled: busy, children: t.resumeRun }) : null,
+          runPending ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "danger", onClick: cancelExecution, disabled: busy, children: t.cancelRun }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: developerMode ? "danger" : "ghost", onClick: () => setDeveloperMode((value) => !value), disabled: busy, children: t.developerTools })
         ] })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-filters", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Input, { value: state.query, onChange: (value) => dispatch({ type: "set-query", value }), placeholder: t.search }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Select, { value: state.kinds[0] || "", onChange: (value) => dispatch({ type: "set-filter", key: "kinds", value: value ? [value] : [] }), options: KIND_OPTIONS2.filter((value) => developerMode || value !== "system-command").map((value) => ({ value, label: value || t.allKinds })) }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Input, { value: state.category, onChange: (value) => dispatch({ type: "set-filter", key: "category", value }), placeholder: t.category }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Select, { value: state.risk, onChange: (value) => dispatch({ type: "set-filter", key: "risk", value }), options: RISK_OPTIONS2.map((value) => ({ value, label: value || t.allRisk })) }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Select, { value: statusValue, onChange: (value) => dispatch({ type: "set-filter", key: "statuses", value: value.split(",").filter(Boolean) }), options: [
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-filters", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: state.query, onChange: (value) => dispatch({ type: "set-query", value }), placeholder: t.search }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: state.kinds[0] || "", onChange: (value) => dispatch({ type: "set-filter", key: "kinds", value: value ? [value] : [] }), options: KIND_OPTIONS2.filter((value) => developerMode || value !== "system-command").map((value) => ({ value, label: value || t.allKinds })) }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: state.category, onChange: (value) => dispatch({ type: "set-filter", key: "category", value }), placeholder: t.category }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: state.risk, onChange: (value) => dispatch({ type: "set-filter", key: "risk", value }), options: RISK_OPTIONS2.map((value) => ({ value, label: value || t.allRisk })) }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: statusValue, onChange: (value) => dispatch({ type: "set-filter", key: "statuses", value: value.split(",").filter(Boolean) }), options: [
           { value: "saved,pinned", label: t.active },
           { value: "candidate", label: t.candidates },
           { value: "saved", label: t.saved },
@@ -26652,15 +27139,15 @@
           { value: "deprecated", label: t.deprecated },
           { value: "candidate,saved,pinned,archived,deprecated", label: t.allStatuses }
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Select, { value: state.sourceType, onChange: (value) => dispatch({ type: "set-filter", key: "sourceType", value }), options: SOURCE_OPTIONS.map((value) => ({ value, label: value || t.allSource })) })
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Select, { value: state.sourceType, onChange: (value) => dispatch({ type: "set-filter", key: "sourceType", value }), options: SOURCE_OPTIONS.map((value) => ({ value, label: value || t.allSource })) })
       ] }),
-      state.error ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-error", role: "alert", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: state.error }),
-        state.refreshRequired ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "ghost", onClick: load, children: t.refresh }) : null,
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("button", { type: "button", "aria-label": "Dismiss", onClick: () => dispatch({ type: "clear-error" }), children: "\xD7" })
+      state.error ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-error", role: "alert", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: state.error }),
+        state.refreshRequired ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", onClick: load, children: t.refresh }) : null,
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("button", { type: "button", "aria-label": "Dismiss", onClick: () => dispatch({ type: "clear-error" }), children: "\xD7" })
       ] }) : null,
-      /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-split", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("section", { className: "tools-list", "aria-label": "Tool summaries", children: state.summaries.length ? state.summaries.map((row) => /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-split", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-list", "aria-label": "Tool summaries", children: state.summaries.length ? state.summaries.map((row) => /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
           ToolArtifactRow,
           {
             artifact: row,
@@ -26671,63 +27158,63 @@
             lang
           },
           row.id
-        )) : /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(EmptyState, { icon: "box", title: t.empty, caption: t.emptyCap, compact: true }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("section", { className: "tools-detail", children: !selectedSummary ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : !artifact ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(EmptyState, { icon: "rotate-cw", title: state.phase === "error" ? state.error : t.select, compact: true }) : /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(import_react41.default.Fragment, { children: [
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-detail__heading", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h2", { children: artifact.name }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("p", { children: artifact.description })
+        )) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.empty, caption: t.emptyCap, compact: true }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("section", { className: "tools-detail", children: !selectedSummary ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "box", title: t.select, caption: t.selectCap }) : !artifact ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(EmptyState, { icon: "rotate-cw", title: state.phase === "error" ? state.error : t.select, compact: true }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-detail__heading", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h2", { children: artifact.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("p", { children: artifact.description })
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Badge, { status: state.inspected.trust === "signed-bundled" ? "ok" : "warn", children: state.inspected.trust === "signed-bundled" ? t.signed : t.untrusted })
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: state.inspected.trust === "signed-bundled" ? "ok" : "warn", children: state.inspected.trust === "signed-bundled" ? t.signed : t.untrusted })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-detail__actions", children: [
-            editable ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "secondary", onClick: () => dispatch({ type: "edit-start", editor: { mode: "edit", artifact } }), children: t.edit }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "secondary", onClick: duplicate, disabled: busy, children: t.duplicate }),
-            editable && ["saved", "pinned"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "secondary", onClick: () => editStatus(artifact.status === "pinned" ? "saved" : "pinned"), disabled: busy, children: artifact.status === "pinned" ? t.unpin : t.pin }) : null,
-            editable && !artifact.verified && ["saved", "pinned"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "secondary", onClick: verify, disabled: busy, children: t.verify }) : null,
-            canPromoteArtifact(artifact) ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "accent", onClick: promote, disabled: busy, children: t.promote }) : null,
-            editable && !["archived", "deprecated"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "ghost", onClick: archive, disabled: busy, children: t.archive }) : null,
-            source !== "bundled" ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "danger", onClick: remove, disabled: busy, children: t.delete }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "ghost", icon: "copy", onClick: () => copyText(displayArtifactContent(artifact)), children: t.copy })
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-detail__actions", children: [
+            editable ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: () => dispatch({ type: "edit-start", editor: { mode: "edit", artifact } }), children: t.edit }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: duplicate, disabled: busy, children: t.duplicate }),
+            editable && ["saved", "pinned"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: () => editStatus(artifact.status === "pinned" ? "saved" : "pinned"), disabled: busy, children: artifact.status === "pinned" ? t.unpin : t.pin }) : null,
+            editable && !artifact.verified && ["saved", "pinned"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "secondary", onClick: verify, disabled: busy, children: t.verify }) : null,
+            canPromoteArtifact(artifact) ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "accent", onClick: promote, disabled: busy, children: t.promote }) : null,
+            editable && !["archived", "deprecated"].includes(artifact.status) ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", onClick: archive, disabled: busy, children: t.archive }) : null,
+            source !== "bundled" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "danger", onClick: remove, disabled: busy, children: t.delete }) : null,
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", icon: "copy", onClick: () => copyText(displayArtifactContent(artifact)), children: t.copy })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.metadata }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("dl", { className: "tools-kv", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: "ID" }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: artifact.id }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: "Kind" }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: artifact.kind }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: "Category" }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: artifact.category }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: "Risk" }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: artifact.declaredRisk }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: "Status" }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: artifact.status }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: "Source" }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: source }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: "Runtime" }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: execution.runtime || "\u2014" }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dt", { children: "Hash" }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("dd", { children: artifact.contentHash })
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.metadata }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("dl", { className: "tools-kv", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "ID" }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.id }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Kind" }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.kind }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Category" }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.category }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Risk" }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.declaredRisk }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Status" }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.status }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Source" }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: source }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Runtime" }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: execution.runtime || "\u2014" }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: "Hash" }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: artifact.contentHash })
             ] })
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.content }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { className: "tools-content", children: displayArtifactContent(artifact) })
+          /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.content }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: displayArtifactContent(artifact) })
           ] }),
-          executable ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.args }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-runner__actions", children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { size: "sm", variant: "ghost", onClick: () => setAdvancedJson((value) => !value), disabled: busy, children: advancedJson ? t.formView : t.advancedJson }) }),
-            advancedJson ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Textarea, { mono: true, value: runArgs, onChange: setRunArgs, rows: 4 }) : /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-runner__form", children: argFields.length ? argFields.map((field) => {
+          executable ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section tools-runner", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.args }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-runner__actions", children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { size: "sm", variant: "ghost", onClick: () => setAdvancedJson((value) => !value), disabled: busy, children: advancedJson ? t.formView : t.advancedJson }) }),
+            advancedJson ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Textarea, { mono: true, value: runArgs, onChange: setRunArgs, rows: 4 }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-runner__form", children: argFields.length ? argFields.map((field) => {
               var _a;
-              return /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Field, { label: `${field.name}${field.required ? " *" : ""}`, children: field.type === "boolean" ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+              return /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: `${field.name}${field.required ? " *" : ""}`, children: field.type === "boolean" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
                 Select,
                 {
                   value: String(Boolean(runForm[field.name])),
                   onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: value === "true" })),
                   options: [{ value: "false", label: "false" }, { value: "true", label: "true" }]
                 }
-              ) : field.enum ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+              ) : field.enum ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
                 Select,
                 {
                   value: runForm[field.name] === "" ? "" : JSON.stringify(runForm[field.name]),
@@ -26737,7 +27224,7 @@
                     ...field.enum.map((value) => ({ value: JSON.stringify(value), label: String(value) }))
                   ]
                 }
-              ) : /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+              ) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
                 Input,
                 {
                   value: (_a = runForm[field.name]) != null ? _a : "",
@@ -26746,40 +27233,40 @@
                   onChange: (value) => setRunForm((current) => ({ ...current, [field.name]: value }))
                 }
               ) }, field.name);
-            }) : /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("span", { children: "{}" }) }),
-            artifact.kind === "expression" ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-runner__target", children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Field, { label: t.compId, children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Input, { value: target.compId, onChange: (value) => setTarget((current) => ({ ...current, compId: value })) }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Field, { label: t.layerId, children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Input, { value: target.layerId, onChange: (value) => setTarget((current) => ({ ...current, layerId: value })) }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Field, { label: t.propertyPath, children: /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Input, { value: target.path, onChange: (value) => setTarget((current) => ({ ...current, path: value })) }) })
+            }) : /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: "{}" }) }),
+            artifact.kind === "expression" ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-runner__target", children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.compId, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: target.compId, onChange: (value) => setTarget((current) => ({ ...current, compId: value })) }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.layerId, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: target.layerId, onChange: (value) => setTarget((current) => ({ ...current, layerId: value })) }) }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Field, { label: t.propertyPath, children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Input, { value: target.path, onChange: (value) => setTarget((current) => ({ ...current, path: value })) }) })
             ] }) : null,
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-runner__actions", children: [
-              execution.render ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "secondary", onClick: renderAndCopy, disabled: busy, children: t.renderCopy }) : null,
-              execution.directRun ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy || runPending, children: t.run }) : null
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-runner__actions", children: [
+              execution.render ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", onClick: renderAndCopy, disabled: busy, children: t.renderCopy }) : null,
+              execution.directRun ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", onClick: execute, disabled: busy || runPending, children: t.run }) : null
             ] }),
-            runJob ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { children: [
+            runJob ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { children: [
               t.progress,
               ": ",
               runJob.progress,
               "% \xB7 ",
               runJob.status
             ] }) : null,
-            runResult ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(import_react41.default.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.result }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { className: "tools-content", children: JSON.stringify(runResult, null, 2) })
+            runResult ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.result }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: JSON.stringify(runResult, null, 2) })
             ] }) : null,
-            runHistory.length ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)(import_react41.default.Fragment, { children: [
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.history }),
-              /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("pre", { className: "tools-content", children: JSON.stringify(runHistory, null, 2) })
+            runHistory.length ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)(import_react42.default.Fragment, { children: [
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.history }),
+              /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { className: "tools-content", children: JSON.stringify(runHistory, null, 2) })
             ] }) : null
-          ] }) : execution.disabledReason ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("section", { className: "tools-detail__section", children: [
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("h3", { children: t.incompatible }),
-            /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("p", { children: execution.disabledReason.message })
+          ] }) : execution.disabledReason ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("section", { className: "tools-detail__section", children: [
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("h3", { children: t.incompatible }),
+            /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("p", { children: execution.disabledReason.message })
           ] }) : null
         ] }) })
       ] }),
-      state.editor ? /* @__PURE__ */ (0, import_jsx_runtime39.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)("div", { className: "tools-modal__scrim", onClick: () => !busy && dispatch({ type: "edit-cancel" }) }),
-        /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+      state.editor ? /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-modal__scrim", onClick: () => !busy && dispatch({ type: "edit-cancel" }) }),
+        /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
           ToolArtifactEditor,
           {
             artifact: state.editor.artifact,
@@ -26790,7 +27277,7 @@
           }
         )
       ] }) : null,
-      state.importPreview ? /* @__PURE__ */ (0, import_jsx_runtime39.jsx)(
+      state.importPreview ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(
         ImportPreview,
         {
           preview: state.importPreview,
@@ -26806,9 +27293,9 @@
   }
 
   // src/components/tools/ToolApprovalDialog.jsx
-  var import_react42 = __toESM(require_react(), 1);
-  var import_jsx_runtime40 = __toESM(require_jsx_runtime(), 1);
-  var L3 = {
+  var import_react43 = __toESM(require_react(), 1);
+  var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
+  var L4 = {
     zh: {
       title: "\u6279\u51C6\u5DE5\u5177\u6267\u884C\uFF1F",
       once: "\u4EC5\u672C\u6B21\u5141\u8BB8",
@@ -26834,34 +27321,61 @@
   };
   function ToolApprovalDialog({ record, lang = "zh", onResolve }) {
     if (!record) return null;
-    const t = L3[lang] || L3.zh;
+    const t = L4[lang] || L4.zh;
     const plan = record.plan || {};
     const resolve = (decision) => onResolve && onResolve({ id: record.id, decision });
-    return /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve("deny") }),
-      /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-approval", role: "alertdialog", "aria-label": t.title, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-approval__heading", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("span", { children: t.title }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Badge, { status: plan.risk === "destructive" || plan.risk === "external" ? "error" : "warn", children: plan.risk })
+    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve("deny") }),
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-approval", role: "alertdialog", "aria-label": t.title, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-approval__heading", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { children: t.title }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: plan.risk === "destructive" || plan.risk === "external" ? "error" : "warn", children: plan.risk })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("dl", { className: "tools-kv", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.artifact }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: plan.artifactId || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.operation }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: plan.operation || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.risk }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: plan.risk || "-" }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.args }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { children: JSON.stringify(plan.normalizedArgs || {}, null, 2) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dt", { children: t.target }),
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime40.jsx)("pre", { children: JSON.stringify(plan.target || {}, null, 2) }) })
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("dl", { className: "tools-kv", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.artifact }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: plan.artifactId || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.operation }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: plan.operation || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.risk }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: plan.risk || "-" }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.args }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("pre", { children: JSON.stringify(plan.normalizedArgs || {}, null, 2) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dt", { children: t.target }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("dd", { children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("pre", { children: JSON.stringify(plan.target || {}, null, 2) }) })
         ] }),
-        /* @__PURE__ */ (0, import_jsx_runtime40.jsxs)("div", { className: "tools-approval__actions", children: [
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "ghost", onClick: () => resolve("deny"), children: t.deny }),
-          record.policy && record.policy.allowSession ? /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "secondary", onClick: () => resolve("session"), children: t.session }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime40.jsx)(Button, { variant: "primary", onClick: () => resolve("once"), children: t.once })
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { className: "tools-approval__actions", children: [
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", onClick: () => resolve("deny"), children: t.deny }),
+          record.policy && record.policy.allowSession ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", onClick: () => resolve("session"), children: t.session }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "primary", onClick: () => resolve("once"), children: t.once })
         ] })
       ] })
+    ] });
+  }
+
+  // src/components/tools/QuestionFormDialog.jsx
+  var import_react44 = __toESM(require_react(), 1);
+  var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
+  function QuestionFormDialog({ record, lang = "zh", onResolve }) {
+    if (!record) return null;
+    const presentation = record.presentation;
+    if (!presentation || presentation.kind !== "question-form") return null;
+    const questions = Array.isArray(presentation.questions) ? presentation.questions : [];
+    const resolve = (result) => onResolve && onResolve({ id: record.id, ...result });
+    return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { className: "tools-modal", role: "presentation", children: [
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { className: "tools-modal__scrim", onClick: () => resolve({ action: "cancel", content: {} }) }),
+      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)("div", { className: "tools-approval", role: "dialog", "aria-label": presentation.title || "", children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+        QuestionCard,
+        {
+          lang,
+          title: presentation.title,
+          questions,
+          onSubmit: (values) => resolve({
+            action: "accept",
+            content: contentForElicitation(questions, values)
+          }),
+          onCancel: () => resolve({ action: "cancel", content: {} })
+        }
+      ) })
     ] });
   }
 
@@ -29271,12 +29785,16 @@
           rpc.respond(elicit.rpcId, elicit.kind === "tool-plan" ? approvalResult("deny") : { action: "decline" });
         }
         pendingElicitations.delete(toolUseId);
-        emit({ type: "tool-denied", toolUseId });
+        if (elicit.kind === "tool-plan") {
+          emit({ type: "tool-denied", toolUseId });
+        } else {
+          emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
+        }
       }
       for (const [toolUseId, ui] of Array.from(pendingUserInputs.entries())) {
         if (rpc && hasRpcId(ui.rpcId)) rpc.respond(ui.rpcId, { decision: "decline", answers: {} });
         pendingUserInputs.delete(toolUseId);
-        emit({ type: "tool-denied", toolUseId });
+        emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
       }
     }
     function handleRequest(message) {
@@ -29304,33 +29822,19 @@
       if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
     }
     function handleUserInput(params, rpcId) {
-      const input = params.input || params;
-      const questions = input.questions || [];
-      const tier = getPermissionMode ? getPermissionMode() : "manual";
-      if (!questions.length || tier === "none" || tier === "auto") {
-        const answers = {};
-        for (const q2 of questions) {
-          const opts = q2.options || [];
-          answers[q2.question || q2.header || "question"] = opts.length ? opts[0].label : "";
-        }
-        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { decision: "allow", answers });
+      const questions = questionsFromUserInput(params);
+      if (!questions.length) {
+        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { decision: "allow", answers: {} });
         return;
       }
-      const q = questions[0];
-      const choices = (q.options || []).map((o) => o.label);
       const toolUseId = "ask_" + rpcId;
       pendingUserInputs.set(toolUseId, { rpcId, questions });
       emit({
-        type: "approval-required",
+        type: "question-required",
         toolUseId,
-        name: "AskUserQuestion",
-        input: {
-          question: q.question || q.header || "",
-          header: q.header,
-          choices,
-          fields: questions.map((qq) => qq.question || qq.header || "")
-        },
-        risk: "write"
+        source: "zcode-user-input",
+        title: safeText(params && typeof params.prompt === "string" && params.prompt || ""),
+        questions
       });
     }
     function handleElicitation(params, rpcId) {
@@ -29371,34 +29875,28 @@
         });
         return;
       }
-      const props = schema.properties || {};
-      const required = schema.required || [];
-      const fieldNames = Object.keys(props);
-      if (!fieldNames.length) {
+      if (!Object.keys(schema.properties || {}).length) {
         if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: "accept", content: {} });
         return;
       }
-      const tier = getPermissionMode ? getPermissionMode() : "manual";
-      if (tier === "none" || tier === "auto") {
-        const autoContent = {};
-        for (const fn of fieldNames) {
-          const opts = props[fn] && props[fn].enum;
-          autoContent[fn] = opts && opts.length ? opts[0] : "";
-        }
-        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: "accept", content: autoContent });
+      const built = questionsFromElicitationSchema(message, schema);
+      if (!built.ok) {
+        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: "decline" });
+        emit({
+          type: "error",
+          kind: "mcp",
+          message: "Declined an agent question with an unsupported form schema (" + built.reason + ")."
+        });
         return;
       }
-      const primaryField = fieldNames[0];
-      const primaryProp = props[primaryField] || {};
-      const choices = Array.isArray(primaryProp.enum) ? primaryProp.enum : [];
       const toolUseId = "elicit_" + rpcId;
-      pendingElicitations.set(toolUseId, { rpcId, fieldNames, props, required });
+      pendingElicitations.set(toolUseId, { rpcId, questions: built.questions });
       emit({
-        type: "approval-required",
+        type: "question-required",
         toolUseId,
-        name: "AskUserQuestion",
-        input: { question: message, field: primaryField, choices, fields: fieldNames },
-        risk: "write"
+        source: "zcode-elicitation",
+        title: safeText(message),
+        questions: built.questions
       });
     }
     function handleNotification(message) {
@@ -29453,6 +29951,7 @@
       }
       if (type === "turn.failed") {
         assistantDeltaRedactor.discard();
+        drainApprovals();
         const payload = params.payload || {};
         const message2 = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, "ZCode turn failed", lang), activeRuntimeModel);
         emit({ type: "error", kind: zcodeErrorKind(message2), message: message2, ...activeTurnFailureFields() });
@@ -29508,6 +30007,7 @@
       sessionModelRef = null;
       subscribed = false;
       activeRuntimeModel = null;
+      drainApprovals();
       if (wasStopping) {
         clearProcessStderrAttachmentPaths();
         scheduleSecretCleanup();
@@ -29536,6 +30036,7 @@
       sessionModelRef = null;
       subscribed = false;
       activeRuntimeModel = null;
+      drainApprovals();
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: err.message, ...activeTurnFailureFields() });
         finishActive();
@@ -29583,6 +30084,9 @@
       })();
       try {
         return await startPromise;
+      } catch (error) {
+        drainApprovals();
+        throw error;
       } finally {
         startPromise = null;
       }
@@ -29733,47 +30237,20 @@
     }
     function approve(toolUseId, decision) {
       const id = String(toolUseId);
-      const userInput = pendingUserInputs.get(id);
-      if (userInput) {
-        pendingUserInputs.delete(id);
-        if (decision === "deny") {
-          if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: "decline", answers: {} });
-          emit({ type: "tool-denied", toolUseId: id });
-        } else {
-          const answers = {};
-          const chosen = typeof decision === "string" && decision !== "allow" && decision !== "allow-session" ? decision : "";
-          for (const q of userInput.questions) {
-            const key = q.question || q.header || "question";
-            answers[key] = chosen || q.options && q.options[0] && q.options[0].label || "";
-          }
-          if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: "allow", answers });
-          emit({ type: "tool-allowed", toolUseId: id });
-        }
+      if (pendingUserInputs.has(id) || pendingElicitations.has(id) && pendingElicitations.get(id).kind !== "tool-plan") {
+        answerQuestion(id, { action: "cancel" });
         return;
       }
       const elicit = pendingElicitations.get(id);
       if (elicit) {
         pendingElicitations.delete(id);
-        if (elicit.kind === "tool-plan") {
-          const requestedDecision = decision === "allow-session" ? "session" : decision === "allow" ? "once" : "deny";
-          const result = approvalResult(requestedDecision, { allowSession: elicit.allowSession });
-          if (result.action === "accept" && result.content.decision === "session") {
-            sessionAllowedPlans.add(planSessionKey(elicit.plan));
-          }
-          if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, result);
-          emit({ type: result.action === "accept" ? "tool-allowed" : "tool-denied", toolUseId: id });
-          return;
+        const requestedDecision = decision === "allow-session" ? "session" : decision === "allow" ? "once" : "deny";
+        const result = approvalResult(requestedDecision, { allowSession: elicit.allowSession });
+        if (result.action === "accept" && result.content.decision === "session") {
+          sessionAllowedPlans.add(planSessionKey(elicit.plan));
         }
-        if (decision === "deny") {
-          if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: "decline" });
-          emit({ type: "tool-denied", toolUseId: id });
-        } else {
-          const content = {};
-          const fn = elicit.fieldNames[0];
-          content[fn] = typeof decision === "string" && decision !== "allow" && decision !== "allow-session" ? decision : elicit.props[fn] && elicit.props[fn].enum && elicit.props[fn].enum[0] || "";
-          if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: "accept", content });
-          emit({ type: "tool-allowed", toolUseId: id });
-        }
+        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, result);
+        emit({ type: result.action === "accept" ? "tool-allowed" : "tool-denied", toolUseId: id });
         return;
       }
       const approval = pendingApprovals.get(id);
@@ -29783,6 +30260,45 @@
       if (allow && decision === "allow-session") sessionAllowedTools.add(approval.name);
       if (hasRpcId(approval.rpcId) && rpc) rpc.respond(approval.rpcId, { decision: allow ? "allow" : "decline" });
       emit({ type: allow ? "tool-allowed" : "tool-denied", toolUseId: id });
+    }
+    function answerQuestion(toolUseId, result) {
+      const id = String(toolUseId);
+      const submit = result && result.action === "submit";
+      const userInput = pendingUserInputs.get(id);
+      if (userInput) {
+        pendingUserInputs.delete(id);
+        if (!submit) {
+          if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: "decline", answers: {} });
+          emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
+          return true;
+        }
+        const answers = answersForUserInput(userInput.questions, result.values);
+        if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: "allow", answers });
+        emit({ type: "question-resolved", toolUseId: id, outcome: "answered", answers });
+        return true;
+      }
+      const elicit = pendingElicitations.get(id);
+      if (elicit && elicit.kind !== "tool-plan" && Array.isArray(elicit.questions)) {
+        pendingElicitations.delete(id);
+        if (!submit) {
+          if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: "cancel" });
+          emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
+          return true;
+        }
+        const content = contentForElicitation(elicit.questions, result.values);
+        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: "accept", content });
+        emit({
+          type: "question-resolved",
+          toolUseId: id,
+          outcome: "answered",
+          answers: Object.fromEntries(Object.entries(content).map(([key, value]) => [
+            key,
+            Array.isArray(value) ? value.join(", ") : value
+          ]))
+        });
+        return true;
+      }
+      return false;
     }
     function stop() {
       if (rpc && sessionId) {
@@ -29854,6 +30370,7 @@
     return {
       sendUser,
       approve,
+      answerQuestion,
       stop,
       reset,
       setThoughtLevel,
@@ -30123,6 +30640,20 @@
       return { id: m.id, label: m.label || m.id, effortLevels: [], cost: costTier(m.id), adaptive: false };
     });
     return { ...descriptor, models, defaultModelId: models[0].id };
+  }
+  var EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max", "ultra"];
+  function resolveEffectiveEffort({ requested, model, defaultEffort }) {
+    const levels = Array.isArray(model && model.effortLevels) ? model.effortLevels : [];
+    if (!levels.length) return null;
+    if (requested && levels.includes(requested)) return requested;
+    if (requested && EFFORT_ORDER.includes(requested)) {
+      const ranked = levels.filter((level) => EFFORT_ORDER.includes(level)).sort((a, b) => EFFORT_ORDER.indexOf(a) - EFFORT_ORDER.indexOf(b));
+      const atOrBelow = ranked.filter((level) => EFFORT_ORDER.indexOf(level) <= EFFORT_ORDER.indexOf(requested));
+      if (atOrBelow.length) return atOrBelow[atOrBelow.length - 1];
+      if (ranked.length) return ranked[0];
+    }
+    if (defaultEffort && levels.includes(defaultEffort)) return defaultEffort;
+    return levels[0];
   }
 
   // src/cep/backends/index.js
@@ -40754,6 +41285,7 @@ data: ${JSON.stringify(payload)}
       threadId = null;
       preambleSent = false;
       closeProviderRoute();
+      drainApprovals();
       if (wasStopping) {
         clearProviderSensitiveValues();
         clearProcessStderrAttachmentPaths();
@@ -40782,6 +41314,7 @@ data: ${JSON.stringify(payload)}
       threadId = null;
       preambleSent = false;
       closeProviderRoute();
+      drainApprovals();
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: err.message, ...activeTurnFailureFields() });
         finishActive();
@@ -41025,6 +41558,7 @@ data: ${JSON.stringify(payload)}
         if (startGeneration === runtimeGeneration) {
           closeProviderRoute();
           clearProviderSensitiveValues();
+          drainApprovals();
         }
         throw error;
       });
@@ -41204,6 +41738,7 @@ data: ${JSON.stringify(payload)}
           };
         }
         providerDeltaRedactor.discard();
+        drainApprovals();
         const message = (failure2 == null ? void 0 : failure2.message) || "Failed to start Codex turn.";
         const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
         emit({
@@ -46883,7 +47418,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/components/settings/ProviderManagerSection.jsx
-  var import_react43 = __toESM(require_react(), 1);
+  var import_react45 = __toESM(require_react(), 1);
 
   // src/lib/providerManagerState.js
   function defaultProviderModelAuthKind(protocol) {
@@ -47032,8 +47567,8 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/components/settings/ProviderManagerSection.jsx
-  var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
-  var L4 = {
+  var import_jsx_runtime43 = __toESM(require_jsx_runtime(), 1);
+  var L5 = {
     zh: {
       title: "Provider \u7BA1\u7406",
       add: "\u65B0\u589E",
@@ -47108,7 +47643,7 @@ data: ${JSON.stringify(payload)}
     }
   };
   function SecretInput({ name, disabled = false }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(
       "input",
       {
         name,
@@ -47155,9 +47690,9 @@ data: ${JSON.stringify(payload)}
     onImportCcSwitch,
     disabled = false
   }) {
-    const t = L4[lang] || L4.zh;
-    const [draft, setDraft] = import_react43.default.useState(null);
-    const [error, setError] = import_react43.default.useState("");
+    const t = L5[lang] || L5.zh;
+    const [draft, setDraft] = import_react45.default.useState(null);
+    const [error, setError] = import_react45.default.useState("");
     const currentModelId = String(activeModelId || "").trim();
     const save = async (event) => {
       var _a;
@@ -47178,98 +47713,98 @@ data: ${JSON.stringify(payload)}
         (_a = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a.call(formElement);
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: { flex: 1, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (event) => {
+    return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { style: { flex: 1, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (event) => {
           event.preventDefault();
           setDraft(emptyDraft());
         }, children: t.add })
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
-        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
+      /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
+        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
         providers.map((provider) => {
           const modelCount = providerModelCount(provider);
           const selected = provider.id === activeProviderId;
           const routeBadges = ["codex", "claude-code"].map((client) => providerClientRouteBadge(provider, { client, modelId: currentModelId, lang })).filter(Boolean);
           const canRedetectCurrentModel = Boolean(currentModelId && Array.isArray(provider.modelCapabilities));
-          return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { "data-provider-id": provider.id, style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: `1px solid ${selected ? "var(--accent-border)" : "var(--border-default)"}`, borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: { flex: 1, minWidth: 120, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
-              selected ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "accent", children: t.selected }) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "neutral", children: t.perModel }),
-              modelCount ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
+          return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { "data-provider-id": provider.id, style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: `1px solid ${selected ? "var(--accent-border)" : "var(--border-default)"}`, borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { style: { flex: 1, minWidth: 120, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
+              selected ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: "accent", children: t.selected }) : null,
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: "neutral", children: t.perModel }),
+              modelCount ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }, children: routeBadges.map((badge) => /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { title: badge.title, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: badge.status, children: badge.label }) }, badge.label)) }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider), children: probing === provider.id ? t.probing : t.probe }),
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id || !canRedetectCurrentModel, onClick: () => onProbe(provider, { forceDetect: true, modelId: currentModelId }), children: t.redetect }),
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: { display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }, children: routeBadges.map((badge) => /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { title: badge.title, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Badge, { status: badge.status, children: badge.label }) }, badge.label)) }),
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id, onClick: () => onProbe(provider), children: probing === provider.id ? t.probing : t.probe }),
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", disabled: disabled || probing === provider.id || !canRedetectCurrentModel, onClick: () => onProbe(provider, { forceDetect: true, modelId: currentModelId }), children: t.redetect }),
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
                 setDraft(draftFromEntry(provider));
                 setError("");
               }, children: t.edit }),
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
             ] }),
-            probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
+            probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
               t.probeFailed,
               probeErrors[provider.id]
             ] }) : null
           ] }, provider.id);
         }),
-        draft ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (value) => setDraft({ ...draft, baseUrl: value }), placeholder: "https://api.example.com/v1" }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: { display: "flex", gap: 6, alignItems: "center", font: "400 11px/1.35 var(--font-ui)" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("input", { type: "checkbox", checked: draft.allowInsecureHttp, onChange: (event) => setDraft({ ...draft, allowInsecureHttp: event.target.checked }) }),
+        draft ? /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (value) => setDraft({ ...draft, baseUrl: value }), placeholder: "https://api.example.com/v1" }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("label", { style: { display: "flex", gap: 6, alignItems: "center", font: "400 11px/1.35 var(--font-ui)" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("input", { type: "checkbox", checked: draft.allowInsecureHttp, onChange: (event) => setDraft({ ...draft, allowInsecureHttp: event.target.checked }) }),
             t.insecure
           ] }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.apiKey, caption: draft.modelAuthKind === "auto" ? t.autoAuthCap : t.overrideAuthCap, children: draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.noApiKey }) }),
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("details", { "data-provider-advanced-auth": true, style: { border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", padding: "5px 6px" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("summary", { style: { cursor: "pointer", font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.advancedAuth }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(Field, { label: t.authType, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value, modelAuthAutomatic: false }), options: [
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.apiKey, caption: draft.modelAuthKind === "auto" ? t.autoAuthCap : t.overrideAuthCap, children: draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("span", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.noApiKey }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("details", { "data-provider-advanced-auth": true, style: { border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", padding: "5px 6px" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("summary", { style: { cursor: "pointer", font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.advancedAuth }),
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)(Field, { label: t.authType, children: [
+                /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value, modelAuthAutomatic: false }), options: [
                   { value: "auto", label: t.auto },
                   { value: "bearer", label: "Authorization: Bearer" },
                   { value: "x-api-key", label: "x-api-key" },
                   { value: "custom", label: "Custom header" },
                   { value: "none", label: "None" }
                 ] }),
-                draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null
+                draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null
               ] }),
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.probePreference, caption: t.probePreferenceCap, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Select, { value: draft.probePreference, onChange: (value) => setDraft({ ...draft, probePreference: value }), options: [
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.probePreference, caption: t.probePreferenceCap, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Select, { value: draft.probePreference, onChange: (value) => setDraft({ ...draft, probePreference: value }), options: [
                 { value: "", label: t.auto },
                 { value: "responses", label: "Responses" },
                 { value: "chat", label: "Chat Completions" },
                 { value: "messages", label: "Messages" }
               ] }) }),
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
+              /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
                 draft.headers.map((header, index) => {
                   const sensitiveName = isSensitiveProviderHeaderName(header.name);
                   const valueKind = sensitiveName ? "secret" : header.valueKind;
-                  return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
-                    /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, ...isSensitiveProviderHeaderName(value) ? { valueKind: "secret", value: "" } : {} } : item) }), placeholder: t.headerName }),
-                    /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Select, { value: valueKind, onChange: (nextValueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind: nextValueKind, value: nextValueKind === "literal" ? item.value || "" : "" } : item) }), options: sensitiveName ? [{ value: "secret", label: t.secretValue }] : [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
-                    valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
-                    /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
+                  return /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
+                    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, ...isSensitiveProviderHeaderName(value) ? { valueKind: "secret", value: "" } : {} } : item) }), placeholder: t.headerName }),
+                    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Select, { value: valueKind, onChange: (nextValueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind: nextValueKind, value: nextValueKind === "literal" ? item.value || "" : "" } : item) }), options: sensitiveName ? [{ value: "secret", label: t.secretValue }] : [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
+                    valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
+                    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
+                      /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
                       scope === "probe" ? t.scopeProbe : t.scopeModel
                     ] }, scope)) }),
-                    /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
+                    /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
                   ] }, header.id);
                 }),
-                /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "secret", value: "" }] }), children: t.addHeader })
+                /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "secret", value: "" }] }), children: t.addHeader })
               ] }) })
             ] })
           ] }),
-          error ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
-          /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
+          error ? /* @__PURE__ */ (0, import_jsx_runtime43.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime43.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
               setDraft(null);
               setError("");
             }, children: t.cancel }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "primary", size: "sm", disabled, onClick: (event) => {
+            /* @__PURE__ */ (0, import_jsx_runtime43.jsx)(Button, { variant: "primary", size: "sm", disabled, onClick: (event) => {
               var _a;
               return (_a = event.currentTarget.closest("form")) == null ? void 0 : _a.requestSubmit();
             }, children: t.save })
@@ -47830,6 +48365,32 @@ data: ${JSON.stringify(payload)}
           ...entry,
           state: "running"
         }));
+      // Agent-to-user question form (#219): a dedicated entry type, NOT a
+      // tool-call, so it renders as a form instead of an Allow/Deny card.
+      case "question-required": {
+        const next = {
+          id: evt.toolUseId || nextId(current, "question"),
+          type: "question",
+          toolUseId: evt.toolUseId,
+          source: evt.source || "",
+          title: evt.title || "",
+          questions: Array.isArray(evt.questions) ? evt.questions : [],
+          state: "pending"
+        };
+        if (current.some((entry) => entry.type === "question" && entry.toolUseId === evt.toolUseId)) {
+          return current.map((entry) => entry.type === "question" && entry.toolUseId === evt.toolUseId ? next : entry);
+        }
+        return current.concat(next);
+      }
+      case "question-resolved":
+        return current.map((entry) => {
+          if (entry.type !== "question" || entry.toolUseId !== evt.toolUseId) return entry;
+          return {
+            ...entry,
+            state: evt.outcome === "answered" ? "answered" : "cancelled",
+            ...evt.answers ? { answers: evt.answers } : {}
+          };
+        });
       case "turn-end":
         return current;
       case "error":
@@ -48156,10 +48717,10 @@ data: ${JSON.stringify(payload)}
   var ZCODE_PROBED_MODELS_CACHE_MS = 60 * 60 * 1e3;
 
   // src/cep/useActivity.js
-  var import_react44 = __toESM(require_react(), 1);
+  var import_react46 = __toESM(require_react(), 1);
   function useActivity(getHost) {
-    const [events, setEvents] = import_react44.default.useState([]);
-    import_react44.default.useEffect(() => {
+    const [events, setEvents] = import_react46.default.useState([]);
+    import_react46.default.useEffect(() => {
       let unsub = null;
       let retry = null;
       let disposed = false;
@@ -48181,7 +48742,7 @@ data: ${JSON.stringify(payload)}
         if (retry) clearTimeout(retry);
       };
     }, [getHost]);
-    const clear = import_react44.default.useCallback(() => setEvents([]), []);
+    const clear = import_react46.default.useCallback(() => setEvents([]), []);
     return { events, clear };
   }
 
@@ -48208,7 +48769,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/app/wizardWiring.js
-  var import_react45 = __toESM(require_react(), 1);
+  var import_react47 = __toESM(require_react(), 1);
 
   // src/cep/wizardActions.js
   var OUTPUT_TAIL = 8192;
@@ -48312,36 +48873,36 @@ data: ${JSON.stringify(payload)}
     return text.includes("winget") && (text.includes("not recognized") || text.includes("not found") || text.includes("enoent") || text.includes("cannot find"));
   }
   function useWizardWiring({ extRoot, lang, claudeStatus, recheckLogin, platform, runtimeManager, onRuntimeReady } = {}) {
-    const [stepStates, dispatch] = import_react45.default.useReducer(stepReducer, null, initialStepStates);
-    const [useUvFallback, setUseUvFallback] = import_react45.default.useState(false);
-    const repoRoot = import_react45.default.useMemo(() => {
+    const [stepStates, dispatch] = import_react47.default.useReducer(stepReducer, null, initialStepStates);
+    const [useUvFallback, setUseUvFallback] = import_react47.default.useState(false);
+    const repoRoot = import_react47.default.useMemo(() => {
       try {
         return detectRepoRoot({ extRoot });
       } catch (e) {
         return "";
       }
     }, [extRoot]);
-    const cmds = import_react45.default.useMemo(() => buildInstallCommands({
+    const cmds = import_react47.default.useMemo(() => buildInstallCommands({
       panelVersion: PANEL_VERSION,
       repoRoot,
       platform
     }), [platform, repoRoot]);
-    const localSteps = import_react45.default.useMemo(
+    const localSteps = import_react47.default.useMemo(
       () => (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? ["aeMcp"] : LOCAL_STEPS,
       [platform, runtimeManager]
     );
-    const activeCmds = import_react45.default.useMemo(() => ({
+    const activeCmds = import_react47.default.useMemo(() => ({
       ...cmds,
       uv: useUvFallback ? cmds.uvFallback : cmds.uv
     }), [cmds, useUvFallback]);
-    const commandPreviews = import_react45.default.useMemo(() => ({
+    const commandPreviews = import_react47.default.useMemo(() => ({
       uv: commandPreview(activeCmds.uv),
       aeMcp: (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? lang === "zh" ? "\u9A8C\u8BC1\u5E76\u6FC0\u6D3B\u63D2\u4EF6\u5185\u7F6E\u79BB\u7EBF\u8FD0\u884C\u65F6" : "Verify and activate the bundled offline runtime" : commandPreview(activeCmds.aeMcp),
       node: (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager ? lang === "zh" ? "\u4FEE\u590D\u63D2\u4EF6\u5185\u7F6E\u79BB\u7EBF Node \u8FD0\u884C\u65F6" : "Repair the bundled offline Node runtime" : commandPreview(activeCmds.node),
       claude: commandPreview(activeCmds.claude),
       login: "claude"
     }), [activeCmds, lang, platform, runtimeManager]);
-    const detect = import_react45.default.useCallback(async (id) => {
+    const detect = import_react47.default.useCallback(async (id) => {
       dispatch({ type: "detect-start", id });
       if (id === "login") {
         if (recheckLogin) {
@@ -48357,7 +48918,7 @@ data: ${JSON.stringify(payload)}
       dispatch({ type: "detect-result", id, ok: result.ok, version: result.version || "" });
       return result;
     }, [claudeStatus, extRoot, onRuntimeReady, platform, recheckLogin, runtimeManager]);
-    const install = import_react45.default.useCallback(async (id) => {
+    const install = import_react47.default.useCallback(async (id) => {
       if (["aeMcp", "node"].includes(id) && (platform == null ? void 0 : platform.id) === "macos-arm64" && runtimeManager) {
         dispatch({ type: "run-start", id });
         try {
@@ -48400,19 +48961,19 @@ data: ${JSON.stringify(payload)}
       await detect(id);
       return result;
     }, [activeCmds, detect, lang, onRuntimeReady, platform, runtimeManager, useUvFallback]);
-    const openLogin = import_react45.default.useCallback(() => {
+    const openLogin = import_react47.default.useCallback(() => {
       openLoginTerminal({ tool: "claude" });
       dispatch({ type: "detect-result", id: "login", ok: false });
     }, []);
-    const bootDetectRef = import_react45.default.useRef(false);
-    import_react45.default.useEffect(() => {
+    const bootDetectRef = import_react47.default.useRef(false);
+    import_react47.default.useEffect(() => {
       if (bootDetectRef.current) return;
       bootDetectRef.current = true;
       [...localSteps, ...SUBSCRIPTION_STEPS].forEach((id) => {
         detect(id);
       });
     }, [detect, localSteps]);
-    import_react45.default.useEffect(() => {
+    import_react47.default.useEffect(() => {
       if (!claudeStatus) return;
       if (claudeStatus.state === "checking") {
         dispatch({ type: "detect-start", id: "login" });
@@ -49538,7 +50099,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/app/App.jsx
-  var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime44 = __toESM(require_jsx_runtime(), 1);
   var T = {
     zh: {
       connected: "\u670D\u52A1\u8FD0\u884C\u4E2D",
@@ -49741,160 +50302,182 @@ data: ${JSON.stringify(payload)}
   function Shell({ cs: cs2 }) {
     const { lang, setLang } = useLang();
     const t = T[lang];
-    const [tab, setTab] = import_react46.default.useState("chat");
-    const [status, setStatus] = import_react46.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
-    const [paused, setPaused] = import_react46.default.useState(false);
-    const [logs, setLogs] = import_react46.default.useState([]);
-    const ctrl = import_react46.default.useRef(null);
-    const getHost = import_react46.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
-    const [wizardDone, setWizardDone] = import_react46.default.useState(() => isWizardDone(window.localStorage));
-    const [wizStep, setWizStep] = import_react46.default.useState(1);
-    const [wizClient, setWizClient] = import_react46.default.useState("claude-desktop");
-    const [drawerOpen, setDrawerOpen] = import_react46.default.useState(false);
-    const [connInfo, setConnInfo] = import_react46.default.useState(null);
-    const [diagnostics, setDiagnostics] = import_react46.default.useState(null);
+    const [tab, setTab] = import_react48.default.useState("chat");
+    const [status, setStatus] = import_react48.default.useState({ state: "starting", port: DEFAULT_PORT, error: null });
+    const [paused, setPaused] = import_react48.default.useState(false);
+    const [logs, setLogs] = import_react48.default.useState([]);
+    const ctrl = import_react48.default.useRef(null);
+    const getHost = import_react48.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const [wizardDone, setWizardDone] = import_react48.default.useState(() => isWizardDone(window.localStorage));
+    const [wizStep, setWizStep] = import_react48.default.useState(1);
+    const [wizClient, setWizClient] = import_react48.default.useState("claude-desktop");
+    const [drawerOpen, setDrawerOpen] = import_react48.default.useState(false);
+    const [connInfo, setConnInfo] = import_react48.default.useState(null);
+    const [diagnostics, setDiagnostics] = import_react48.default.useState(null);
     const { events, clear } = useActivity(getHost);
-    const [clients, setClients] = import_react46.default.useState([]);
-    const [confirmRegen, setConfirmRegen] = import_react46.default.useState(false);
-    const [tokenEpoch, setTokenEpoch] = import_react46.default.useState(0);
-    const platform = import_react46.default.useMemo(() => createPlatformAdapter(), []);
-    const attachmentStore = import_react46.default.useMemo(() => createAttachmentStore({
+    const [clients, setClients] = import_react48.default.useState([]);
+    const [confirmRegen, setConfirmRegen] = import_react48.default.useState(false);
+    const [tokenEpoch, setTokenEpoch] = import_react48.default.useState(0);
+    const platform = import_react48.default.useMemo(() => createPlatformAdapter(), []);
+    const attachmentStore = import_react48.default.useMemo(() => createAttachmentStore({
       platform,
       randomUUID: randomProviderCredentialId
     }), [platform]);
-    const [attachmentDraft, dispatchAttachmentDraft] = import_react46.default.useReducer(
+    const [attachmentDraft, dispatchAttachmentDraft] = import_react48.default.useReducer(
       reduceAttachmentDraft,
       void 0,
       createAttachmentDraftState
     );
-    const [chatSessionId, setChatSessionId] = import_react46.default.useState("chat-0");
-    const chatSessionIdRef = import_react46.default.useRef(chatSessionId);
+    const [chatSessionId, setChatSessionId] = import_react48.default.useState("chat-0");
+    const chatSessionIdRef = import_react48.default.useRef(chatSessionId);
     chatSessionIdRef.current = chatSessionId;
-    const attachmentOperationsRef = import_react46.default.useRef(/* @__PURE__ */ new Map());
-    const pendingTurnRef = import_react46.default.useRef(null);
-    const acceptedTurnRef = import_react46.default.useRef(null);
-    import_react46.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-    const legacyKeyStore = import_react46.default.useMemo(() => {
+    const attachmentOperationsRef = import_react48.default.useRef(/* @__PURE__ */ new Map());
+    const pendingTurnRef = import_react48.default.useRef(null);
+    const acceptedTurnRef = import_react48.default.useRef(null);
+    import_react48.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
+    const legacyKeyStore = import_react48.default.useMemo(() => {
       try {
         return createLegacyApiKeyStore();
       } catch (e) {
         return null;
       }
     }, []);
-    const [customModel, setCustomModel] = import_react46.default.useState(() => readPref("ae_mcp_custom_model", ""));
-    const [model, setModel] = import_react46.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
-    const [logLevel, setLogLevel] = import_react46.default.useState(() => readPref("ae_mcp_log_level", "info"));
-    const logLevelRef = import_react46.default.useRef(logLevel);
+    const [customModel, setCustomModel] = import_react48.default.useState(() => readPref("ae_mcp_custom_model", ""));
+    const [model, setModel] = import_react48.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
+    const [logLevel, setLogLevel] = import_react48.default.useState(() => readPref("ae_mcp_log_level", "info"));
+    const logLevelRef = import_react48.default.useRef(logLevel);
     logLevelRef.current = logLevel;
-    const [sessionModel, setSessionModel] = import_react46.default.useState(null);
-    const [sessionEffort, setSessionEffort] = import_react46.default.useState(null);
-    const [sessionFast, setSessionFast] = import_react46.default.useState(null);
-    const [permissionMode, setPermissionMode] = import_react46.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
-    const permissionModeRef = import_react46.default.useRef(permissionMode);
+    const [sessionModel, setSessionModel] = import_react48.default.useState(null);
+    const [sessionEffort, setSessionEffort] = import_react48.default.useState(null);
+    const [sessionFast, setSessionFast] = import_react48.default.useState(null);
+    const [permissionMode, setPermissionMode] = import_react48.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
+    const permissionModeRef = import_react48.default.useRef(permissionMode);
     permissionModeRef.current = permissionMode;
-    const approvalTierFile = import_react46.default.useMemo(() => createApprovalTierFile({
+    const approvalTierFile = import_react48.default.useMemo(() => createApprovalTierFile({
       fs: platform.fs,
       paths: platform.paths,
       platformId: platform.id,
       pid: window.cep_node && window.cep_node.process && window.cep_node.process.pid || 0
     }), [platform]);
-    const elicitationCoordinator = import_react46.default.useMemo(() => createElicitationCoordinator({
+    const elicitationCoordinator = import_react48.default.useMemo(() => createElicitationCoordinator({
       resolveApproval: (_request, { plan }) => decideToolPlan({
         tier: permissionModeRef.current,
         plan
       }),
-      presentGenericForm: () => ({ action: "decline", content: {} })
+      // Generic MCP elicitation reaches the visible question form (#219); only
+      // schemas the form cannot faithfully render are declined. Permission tier
+      // is deliberately not consulted: automatic modes never answer questions.
+      presentGenericForm: (request) => {
+        const built = questionsFromElicitationSchema(
+          request && request.message,
+          request && request.requestedSchema
+        );
+        if (!built.ok) return { action: "decline", content: {} };
+        return {
+          kind: "question-form",
+          title: request && request.message || "",
+          questions: built.questions
+        };
+      }
     }), []);
-    const [toolApproval, setToolApproval] = import_react46.default.useState(() => elicitationCoordinator.snapshot());
-    import_react46.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
-    import_react46.default.useEffect(() => {
+    const [toolApproval, setToolApproval] = import_react48.default.useState(() => elicitationCoordinator.snapshot());
+    import_react48.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
+    import_react48.default.useEffect(() => {
       approvalTierFile.write(permissionMode);
     }, [approvalTierFile, permissionMode]);
-    import_react46.default.useEffect(() => () => {
+    import_react48.default.useEffect(() => () => {
       elicitationCoordinator.dispose();
       try {
         approvalTierFile.dispose();
       } catch (error) {
       }
     }, [approvalTierFile, elicitationCoordinator]);
-    const backendMigration = import_react46.default.useMemo(() => migrateBackendPref(window.localStorage), []);
-    const [backendPref, setBackendPref] = import_react46.default.useState(() => backendMigration.pref);
-    const [channelLock, setChannelLock] = import_react46.default.useState(() => codexProviderChannelLock(
+    import_react48.default.useEffect(() => {
+      const guard = createPanelFileDropGuard({ target: window });
+      return guard.dispose;
+    }, []);
+    const backendMigration = import_react48.default.useMemo(() => migrateBackendPref(window.localStorage), []);
+    const [backendPref, setBackendPref] = import_react48.default.useState(() => backendMigration.pref);
+    const [channelLock, setChannelLock] = import_react48.default.useState(() => codexProviderChannelLock(
       backendMigration.lockedChannel,
       readPref("ae_mcp_codex_provider", "")
     ));
-    const providerStore = import_react46.default.useMemo(() => {
+    const providerStore = import_react48.default.useMemo(() => {
       try {
         return createProviderStore();
       } catch (e) {
         return null;
       }
     }, []);
-    const providerSecretService = import_react46.default.useMemo(() => createProviderSecretService({
+    const providerSecretService = import_react48.default.useMemo(() => createProviderSecretService({
       getHost,
       randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
     }), [getHost]);
-    const zcodeCredentialManager = import_react46.default.useMemo(() => createZcodeCredentialManager({
+    const zcodeCredentialManager = import_react48.default.useMemo(() => createZcodeCredentialManager({
       storage: window.localStorage,
       secretService: providerSecretService,
       legacyKeyStore
     }), [legacyKeyStore, providerSecretService]);
-    const zcodeStoredKeyRef = import_react46.default.useRef("");
-    const [zcodeCredentialEpoch, setZcodeCredentialEpoch] = import_react46.default.useState(0);
-    const [providerInit, setProviderInit] = import_react46.default.useState({ state: "checking", error: "" });
-    const [providerRepairing, setProviderRepairing] = import_react46.default.useState(false);
-    const [providerInitEpoch, setProviderInitEpoch] = import_react46.default.useState(0);
-    const [providers, setProviders] = import_react46.default.useState([]);
-    const [claudeProviderId, setClaudeProviderId] = import_react46.default.useState(() => readPref("ae_mcp_claude_provider", ""));
-    const [codexProviderId, setCodexProviderId] = import_react46.default.useState(() => readPref("ae_mcp_codex_provider", ""));
-    const syncCodexProviderChannelLock = import_react46.default.useCallback((providerId) => {
+    const zcodeStoredKeyRef = import_react48.default.useRef("");
+    const [zcodeCredentialEpoch, setZcodeCredentialEpoch] = import_react48.default.useState(0);
+    const [providerInit, setProviderInit] = import_react48.default.useState({ state: "checking", error: "" });
+    const [providerRepairing, setProviderRepairing] = import_react48.default.useState(false);
+    const [providerInitEpoch, setProviderInitEpoch] = import_react48.default.useState(0);
+    const [providers, setProviders] = import_react48.default.useState([]);
+    const [claudeProviderId, setClaudeProviderId] = import_react48.default.useState(() => readPref("ae_mcp_claude_provider", ""));
+    const [codexProviderId, setCodexProviderId] = import_react48.default.useState(() => readPref("ae_mcp_codex_provider", ""));
+    const syncCodexProviderChannelLock = import_react48.default.useCallback((providerId) => {
       setChannelLock((current) => {
         const next = codexProviderChannelLock(current, providerId);
         writePref("ae_mcp_channel_lock", next);
         return next;
       });
     }, []);
-    const [expertGuidance, setExpertGuidance] = import_react46.default.useState(() => loadExpertGuidance(window.localStorage));
-    const [probe, setProbe] = import_react46.default.useState(null);
-    const [codexProbe, setCodexProbe] = import_react46.default.useState(null);
-    const [codexModels, setCodexModels] = import_react46.default.useState(null);
-    const [zcodeProbe, setZcodeProbe] = import_react46.default.useState(null);
-    const [zcodeSessionModels, setZcodeSessionModels] = import_react46.default.useState(null);
-    const [zcodeProbedModels, setZcodeProbedModels] = import_react46.default.useState(null);
-    import_react46.default.useEffect(() => {
+    const [expertGuidance, setExpertGuidance] = import_react48.default.useState(() => loadExpertGuidance(window.localStorage));
+    const [probe, setProbe] = import_react48.default.useState(null);
+    const [codexProbe, setCodexProbe] = import_react48.default.useState(null);
+    const [codexModels, setCodexModels] = import_react48.default.useState(null);
+    const [zcodeProbe, setZcodeProbe] = import_react48.default.useState(null);
+    const [zcodeSessionModels, setZcodeSessionModels] = import_react48.default.useState(null);
+    const [zcodeProbedModels, setZcodeProbedModels] = import_react48.default.useState(null);
+    import_react48.default.useEffect(() => {
       try {
         window.localStorage.removeItem(CODEX_MODELS_CACHE_KEY);
         window.localStorage.removeItem(ZCODE_PROBED_MODELS_CACHE_KEY);
       } catch {
       }
     }, []);
-    const [chatEntries, setChatEntries] = import_react46.default.useState([]);
-    const [chatStreaming, setChatStreaming] = import_react46.default.useState(false);
-    const [thinkingActive, setThinkingActive] = import_react46.default.useState(false);
+    const [chatEntries, setChatEntries] = import_react48.default.useState([]);
+    const [chatStreaming, setChatStreaming] = import_react48.default.useState(false);
+    const [thinkingActive, setThinkingActive] = import_react48.default.useState(false);
     const customModelForBackend = backendPref === "codex" ? customModel : "";
-    const baseDescriptor = import_react46.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, window.cep_node && window.cep_node.process && window.cep_node.process.env || {}), customModelForBackend), [backendPref, customModelForBackend]);
-    const [descriptor, setDescriptor] = import_react46.default.useState(() => baseDescriptor);
+    const baseDescriptor = import_react48.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, window.cep_node && window.cep_node.process && window.cep_node.process.env || {}), customModelForBackend), [backendPref, customModelForBackend]);
+    const [descriptor, setDescriptor] = import_react48.default.useState(() => baseDescriptor);
     const requestedModel = sessionModel || model;
     const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
     const modelMeta = descriptor.models.find((m) => m.id === effectiveModel) || descriptor.models[0] || {};
-    const effectiveEffort = sessionEffort || (modelMeta.effortLevels && modelMeta.effortLevels.length ? descriptor.defaultEffort : null);
+    const effectiveEffort = resolveEffectiveEffort({
+      requested: sessionEffort,
+      model: modelMeta,
+      defaultEffort: descriptor.defaultEffort
+    });
     const effectiveFast = Boolean(sessionFast && descriptor.supportsFast(effectiveModel));
-    const claudeApiProvider = import_react46.default.useMemo(() => {
+    const claudeApiProvider = import_react48.default.useMemo(() => {
       return providers.find((provider) => provider.id === claudeProviderId) || null;
     }, [providers, claudeProviderId]);
-    const codexCustomProvider = import_react46.default.useMemo(() => {
+    const codexCustomProvider = import_react48.default.useMemo(() => {
       return providers.find((provider) => provider.id === codexProviderId) || null;
     }, [providers, codexProviderId]);
-    const [providerProbing, setProviderProbing] = import_react46.default.useState("");
-    const [providerProbeErrors, setProviderProbeErrors] = import_react46.default.useState({});
-    const ccSwitchFound = import_react46.default.useMemo(() => {
+    const [providerProbing, setProviderProbing] = import_react48.default.useState("");
+    const [providerProbeErrors, setProviderProbeErrors] = import_react48.default.useState({});
+    const ccSwitchFound = import_react48.default.useMemo(() => {
       try {
         return detectCcSwitch({ platform, fsImpl: platform.fs });
       } catch (e) {
         return null;
       }
     }, [platform]);
-    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+    const providerManager = /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
       ProviderManagerSection,
       {
         lang,
@@ -50008,15 +50591,15 @@ ${baseUrl}`),
         }
       }
     );
-    const zcodeConfigSummary = import_react46.default.useMemo(() => {
+    const zcodeConfigSummary = import_react48.default.useMemo(() => {
       try {
         return summarizeZcodeConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {}, storedKey: zcodeStoredKeyRef.current });
       } catch (e) {
         return null;
       }
     }, [zcodeCredentialEpoch, zcodeProbe]);
-    const codexCliConfigStableRef = import_react46.default.useRef(null);
-    const codexCliConfig = import_react46.default.useMemo(() => {
+    const codexCliConfigStableRef = import_react48.default.useRef(null);
+    const codexCliConfig = import_react48.default.useMemo(() => {
       let next;
       try {
         next = readCodexCliConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
@@ -50026,53 +50609,53 @@ ${baseUrl}`),
       codexCliConfigStableRef.current = reconcileStableJsonValue(codexCliConfigStableRef.current, next);
       return codexCliConfigStableRef.current.value;
     }, [codexProbe]);
-    const codexCliCredentialReady = import_react46.default.useMemo(() => {
+    const codexCliCredentialReady = import_react48.default.useMemo(() => {
       const env = window.cep_node && window.cep_node.process && window.cep_node.process.env || {};
       return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
     }, [codexCliConfig]);
     const codexProviderCredentialResolverReady = providerInit.state === "ready";
-    const channels = import_react46.default.useMemo(() => ({
+    const channels = import_react48.default.useMemo(() => ({
       claude: claudeChannels({ probe, apiProvider: claudeApiProvider, apiProviderSelected: Boolean(claudeProviderId), providerAvailable: providerInit.state === "ready" && Boolean(claudeApiProvider), providerCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === "checking" }),
       codex: codexChannels({ codexProbe, customProvider: codexCustomProvider, customProviderSelected: Boolean(codexProviderId), customProviderAvailable: providerInit.state === "ready" && Boolean(codexCustomProvider), customProviderCredentialResolverReady: codexProviderCredentialResolverReady, providerChecking: providerInit.state === "checking", cliConfig: codexCliConfig, cliCredentialAvailable: codexCliCredentialReady }),
       zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
     }), [probe, claudeApiProvider, claudeProviderId, codexProbe, codexCustomProvider, codexProviderCredentialResolverReady, codexProviderId, zcodeProbe, zcodeConfigSummary, codexCliConfig, codexCliCredentialReady, providerInit.state]);
     const effective = pickBackend({ pref: backendPref, channels, lockedChannel: channelLock });
-    const claudeSettingsHint = import_react46.default.useMemo(() => {
+    const claudeSettingsHint = import_react48.default.useMemo(() => {
       try {
         return inspectClaudeSettingsEnv({ platform, fsImpl: platform.fs });
       } catch (e) {
         return null;
       }
     }, [platform]);
-    const providerProfile = import_react46.default.useMemo(() => codexRuntimeProviderProfile({
+    const providerProfile = import_react48.default.useMemo(() => codexRuntimeProviderProfile({
       effectiveChannel: effective.channel,
       customProvider: codexCustomProvider,
       customProviderCredentialResolverReady: codexProviderCredentialResolverReady,
       modelId: effectiveModel
     }), [effective.channel, codexCustomProvider, codexProviderCredentialResolverReady, effectiveModel]);
-    const runtimeRef = import_react46.default.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
-    const previousCodexProviderProfileRef = import_react46.default.useRef(providerProfile);
-    const extRoot = import_react46.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
-    const developmentRuntimeFallback = import_react46.default.useMemo(() => {
+    const runtimeRef = import_react48.default.useRef({ providerProfile, providerCandidate: null, model: effectiveModel, permissionMode, effort: effectiveEffort, thinking: null, fast: effectiveFast, claudeChannel: "subscription", claudeApiProvider: null });
+    const previousCodexProviderProfileRef = import_react48.default.useRef(providerProfile);
+    const extRoot = import_react48.default.useMemo(() => readCepSystemPath({ cs: cs2, platform }), [cs2, platform]);
+    const developmentRuntimeFallback = import_react48.default.useMemo(() => {
       if (platform.id !== "macos-arm64") return false;
       const debugMarker = platform.paths.join([extRoot, ".debug"]);
       const bundleManifest = platform.paths.join([extRoot, "bundle-manifest.json"]);
       return platform.fs.existsSync(debugMarker) && !platform.fs.existsSync(bundleManifest);
     }, [extRoot, platform]);
-    const developmentRuntimeOverride = import_react46.default.useMemo(
+    const developmentRuntimeOverride = import_react48.default.useMemo(
       () => hasDevelopmentRuntimeOverride(platform.env),
       [platform]
     );
-    const runtimeManager = import_react46.default.useMemo(() => platform.id === "macos-arm64" && (!developmentRuntimeFallback || developmentRuntimeOverride) ? createRuntimeManager({ platform, extensionRoot: extRoot }) : null, [developmentRuntimeFallback, developmentRuntimeOverride, extRoot, platform]);
-    const [runtimeActivation, setRuntimeActivation] = import_react46.default.useState(() => ({
+    const runtimeManager = import_react48.default.useMemo(() => platform.id === "macos-arm64" && (!developmentRuntimeFallback || developmentRuntimeOverride) ? createRuntimeManager({ platform, extensionRoot: extRoot }) : null, [developmentRuntimeFallback, developmentRuntimeOverride, extRoot, platform]);
+    const [runtimeActivation, setRuntimeActivation] = import_react48.default.useState(() => ({
       state: runtimeManager ? "starting" : "ready",
       result: null,
       error: null
     }));
-    const markRuntimeReady = import_react46.default.useCallback((result) => {
+    const markRuntimeReady = import_react48.default.useCallback((result) => {
       setRuntimeActivation({ state: "ready", result: result || null, error: null });
     }, []);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (!runtimeManager) {
         setRuntimeActivation({ state: "ready", result: null, error: null });
         return void 0;
@@ -50099,7 +50682,7 @@ ${baseUrl}`),
     }, [markRuntimeReady, runtimeManager]);
     const runtimeReady = runtimeActivation.state === "ready";
     const mcpCommand = runtimeManager ? platform.paths.launcher : "ae-mcp";
-    const resolvePanelNode = import_react46.default.useCallback(
+    const resolvePanelNode = import_react48.default.useCallback(
       ({ platform: requestedPlatform } = {}) => runtimeManager ? resolveNodeForSidecarSelection({
         resolveNode: () => runtimeManager.resolveNode(),
         runtimeSelection: runtimeActivation.result,
@@ -50107,13 +50690,13 @@ ${baseUrl}`),
       }) : resolveSystemNode({ platform: requestedPlatform || platform }),
       [platform, runtimeActivation.result, runtimeManager]
     );
-    const sidecarSelection = import_react46.default.useMemo(() => resolveSidecarSelection({
+    const sidecarSelection = import_react48.default.useMemo(() => resolveSidecarSelection({
       extRoot,
       platform,
       runtimeActivation
     }), [extRoot, platform, runtimeActivation]);
     const sidecarPath = sidecarSelection.path;
-    const getMcpSpec = import_react46.default.useCallback(async () => {
+    const getMcpSpec = import_react48.default.useCallback(async () => {
       try {
         const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
         if (runtimeManager && spec.runtime) markRuntimeReady(spec.runtime);
@@ -50123,7 +50706,7 @@ ${baseUrl}`),
         throw error;
       }
     }, [approvalTierFile, extRoot, markRuntimeReady, platform, runtimeManager]);
-    const mcp = import_react46.default.useMemo(() => createMcpClient({
+    const mcp = import_react48.default.useMemo(() => createMcpClient({
       platform,
       extRoot,
       resolveCommand: getMcpSpec,
@@ -50132,14 +50715,14 @@ ${baseUrl}`),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
     }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
-    const toolsApi = import_react46.default.useMemo(() => createToolsApi(mcp), [mcp]);
-    import_react46.default.useEffect(() => () => mcp.stop(), [mcp]);
-    const releaseTurnAttachments = import_react46.default.useCallback((turn) => {
+    const toolsApi = import_react48.default.useMemo(() => createToolsApi(mcp), [mcp]);
+    import_react48.default.useEffect(() => () => mcp.stop(), [mcp]);
+    const releaseTurnAttachments = import_react48.default.useCallback((turn) => {
       for (const attachment of (turn == null ? void 0 : turn.attachments) || []) {
         attachmentStore.release(attachment.id);
       }
     }, [attachmentStore]);
-    const resetAttachmentDraftSession = import_react46.default.useCallback(() => {
+    const resetAttachmentDraftSession = import_react48.default.useCallback(() => {
       attachmentStore.releaseSession(chatSessionIdRef.current);
       attachmentOperationsRef.current.clear();
       pendingTurnRef.current = null;
@@ -50149,7 +50732,7 @@ ${baseUrl}`),
       chatSessionIdRef.current = nextSessionId;
       setChatSessionId(nextSessionId);
     }, [attachmentStore]);
-    const addAttachment = import_react46.default.useCallback(async ({ pondId, file }) => {
+    const addAttachment = import_react48.default.useCallback(async ({ pondId, file }) => {
       const operation = {};
       const sessionId = chatSessionId;
       attachmentOperationsRef.current.set(pondId, operation);
@@ -50175,16 +50758,16 @@ ${baseUrl}`),
         });
       }
     }, [attachmentStore, chatSessionId]);
-    const removeAttachment = import_react46.default.useCallback((item) => {
+    const removeAttachment = import_react48.default.useCallback((item) => {
       attachmentOperationsRef.current.delete(item.pondId);
       if (item.ref) attachmentStore.release(item.ref.id);
       dispatchAttachmentDraft({ type: "remove", pondId: item.pondId });
     }, [attachmentStore]);
-    const retryAttachment = import_react46.default.useCallback((item) => {
+    const retryAttachment = import_react48.default.useCallback((item) => {
       addAttachment({ pondId: item.pondId, file: item.file });
     }, [addAttachment]);
-    const providerAcceptanceEventsRef = import_react46.default.useRef([]);
-    const handleChatEvent = import_react46.default.useCallback((evt) => {
+    const providerAcceptanceEventsRef = import_react48.default.useRef([]);
+    const handleChatEvent = import_react48.default.useCallback((evt) => {
       if (evt && typeof evt.type === "string") {
         providerAcceptanceEventsRef.current.push({
           type: evt.type,
@@ -50235,7 +50818,7 @@ ${baseUrl}`),
       if (evt.type === "zcode-session-created") setZcodeSessionModels(evt.result || null);
       setChatEntries((entries) => reduceEvent(entries, evt));
     }, [releaseTurnAttachments]);
-    const recoverRuntimeProvider = import_react46.default.useCallback(async (provider, _failureFacts, requestedModelId) => {
+    const recoverRuntimeProvider = import_react48.default.useCallback(async (provider, _failureFacts, requestedModelId) => {
       if (!providerStore) return null;
       const modelId = String(requestedModelId || "").trim();
       if (!modelId) return null;
@@ -50256,10 +50839,10 @@ ${baseUrl}`),
       }
       return { provider: result.entry, modelId };
     }, [providerSecretService, providerStore]);
-    const refreshRuntimeProviders = import_react46.default.useCallback(() => {
+    const refreshRuntimeProviders = import_react48.default.useCallback(() => {
       if (providerStore) setProviders(providerStore.list());
     }, [providerStore]);
-    const byokLoop = import_react46.default.useMemo(() => {
+    const byokLoop = import_react48.default.useMemo(() => {
       return createAgentLoop({
         resolveRequestProfile: () => {
           const provider = runtimeRef.current.claudeApiProvider;
@@ -50275,7 +50858,7 @@ ${baseUrl}`),
         onEvent: handleChatEvent
       });
     }, [mcp, handleChatEvent, providerSecretService]);
-    const claudeBackend = import_react46.default.useMemo(() => createClaudeAgentBackend({
+    const claudeBackend = import_react48.default.useMemo(() => createClaudeAgentBackend({
       platform,
       resolveNode: resolvePanelNode,
       sidecarPath,
@@ -50301,7 +50884,7 @@ ${baseUrl}`),
       lang,
       onEvent: handleChatEvent
     }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders, resolvePanelNode]);
-    const codexBackend = import_react46.default.useMemo(() => createCodexBackend({
+    const codexBackend = import_react48.default.useMemo(() => createCodexBackend({
       platform,
       getMcpSpec,
       getModel: () => runtimeRef.current.model,
@@ -50325,7 +50908,7 @@ ${baseUrl}`),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (providerInit.state !== "ready" || !providerStore) return void 0;
       let debugMarker = false;
       try {
@@ -50442,16 +51025,16 @@ ${baseUrl}`),
         });
       };
     }, [claudeBackend, codexBackend, extRoot, platform, providerInit.state, providerSecretService, providerStore, refreshRuntimeProviders]);
-    import_react46.default.useEffect(
+    import_react48.default.useEffect(
       () => installBeforeUnloadReset(window, codexBackend),
       [codexBackend]
     );
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (previousCodexProviderProfileRef.current === providerProfile) return;
       previousCodexProviderProfileRef.current = providerProfile;
       codexBackend.reset();
     }, [codexBackend, providerProfile]);
-    const openCodeBackend = import_react46.default.useMemo(() => createOpenCodeBackend({
+    const openCodeBackend = import_react48.default.useMemo(() => createOpenCodeBackend({
       platform,
       getMcpSpec,
       getModel: () => runtimeRef.current.model,
@@ -50461,7 +51044,7 @@ ${baseUrl}`),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
-    const zcodeBackend = import_react46.default.useMemo(() => createZcodeBackend({
+    const zcodeBackend = import_react48.default.useMemo(() => createZcodeBackend({
       platform,
       getMcpSpec,
       getModel: () => runtimeRef.current.model,
@@ -50474,7 +51057,7 @@ ${baseUrl}`),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
-    import_react46.default.useEffect(() => () => {
+    import_react48.default.useEffect(() => () => {
       zcodeStoredKeyRef.current = "";
       zcodeBackend.reset();
     }, [zcodeBackend]);
@@ -50491,7 +51074,7 @@ ${baseUrl}`),
     };
     const backendInstances = { subscription: claudeBackend, "claude-api": claudeBackend, byok: byokLoop, codex: codexBackend, opencode: openCodeBackend, zcode: zcodeBackend };
     const activeBackend = backendInstances[effective.backend] || byokLoop;
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       const facts = {
         effectiveBackend: effective.backend,
         effectiveChannel: effective.channel,
@@ -50519,8 +51102,8 @@ ${baseUrl}`),
         writePref("ae_mcp_model", reconciled);
       }
     }, [effective.backend, effective.channel, backendPref, baseDescriptor, customModel, claudeApiProvider, codexCustomProvider, codexModels, zcodeSessionModels, zcodeProbedModels, providerSecretService, codexProviderCredentialResolverReady, codexProviderId, providerInit.state]);
-    const activeBackendRef = import_react46.default.useRef(null);
-    import_react46.default.useEffect(() => {
+    const activeBackendRef = import_react48.default.useRef(null);
+    import_react48.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;
       const sessionAvailable = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available) ? zcodeSessionModels.settings.model.available : [];
       if (sessionAvailable.length > 1) return void 0;
@@ -50545,7 +51128,7 @@ ${baseUrl}`),
         alive = false;
       };
     }, [backendPref, zcodeCredentialEpoch, zcodeSessionModels, zcodeConfigSummary]);
-    const runClaudeProbe = import_react46.default.useCallback(() => {
+    const runClaudeProbe = import_react48.default.useCallback(() => {
       let alive = true;
       setProbe(null);
       if (sidecarSelection.state !== "ready") {
@@ -50574,11 +51157,11 @@ ${baseUrl}`),
         alive = false;
       };
     }, [platform, resolvePanelNode, sidecarPath, sidecarSelection]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
     }, [backendPref, runClaudeProbe]);
-    const runCodexProbe = import_react46.default.useCallback(() => {
+    const runCodexProbe = import_react48.default.useCallback(() => {
       let alive = true;
       setCodexProbe(null);
       codexBackend.probeAccount().then((result) => {
@@ -50600,11 +51183,11 @@ ${baseUrl}`),
         alive = false;
       };
     }, [codexBackend, providerSecretService]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       return runCodexProbe();
     }, [backendPref, runCodexProbe]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (backendPref !== "codex") return void 0;
       if (!codexCliConfig || !codexCliConfig.provider || !codexCliCredentialReady) return void 0;
       if (effective.channel === "custom" && codexCustomProvider && codexCustomProvider.baseUrl) return void 0;
@@ -50638,7 +51221,7 @@ ${baseUrl}`),
         alive = false;
       };
     }, [backendPref, effective.channel, codexCliConfig, codexCliCredentialReady, codexCustomProvider, codexModels, providerSecretService]);
-    const runZcodeProbe = import_react46.default.useCallback(() => {
+    const runZcodeProbe = import_react48.default.useCallback(() => {
       let alive = true;
       setZcodeProbe(null);
       zcodeBackend.probeAccount().then((result) => {
@@ -50650,15 +51233,15 @@ ${baseUrl}`),
         alive = false;
       };
     }, [zcodeBackend]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (backendPref !== "zcode") return void 0;
       return runZcodeProbe();
     }, [backendPref, runZcodeProbe]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (effective.backend !== "zcode" || !effectiveEffort) return;
       zcodeBackend.setThoughtLevel(effectiveEffort);
     }, [effective.backend, effectiveEffort, zcodeBackend]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;
       if (!decision.reset) return;
@@ -50723,11 +51306,11 @@ ${baseUrl}`),
       setThinkingActive(false);
       setChatEntries([]);
     };
-    const pushLog = import_react46.default.useCallback((m) => {
+    const pushLog = import_react48.default.useCallback((m) => {
       if (!keepLogLine(logLevelRef.current, m)) return;
       setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
     }, []);
-    const repairPlatformHelper = import_react46.default.useCallback(async () => {
+    const repairPlatformHelper = import_react48.default.useCallback(async () => {
       if (providerRepairing) return;
       setProviderRepairing(true);
       try {
@@ -50745,7 +51328,7 @@ ${baseUrl}`),
         setProviderRepairing(false);
       }
     }, [providerRepairing, pushLog]);
-    const exportLogs = import_react46.default.useCallback(() => {
+    const exportLogs = import_react48.default.useCallback(() => {
       try {
         const exactSecrets = providerSecretService.getRedactionValues();
         if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
@@ -50768,7 +51351,7 @@ ${baseUrl}`),
         pushLog("Log export failed: " + (e && e.message ? e.message : String(e)));
       }
     }, [logs, connInfo, claudeBackend, providerSecretService, pushLog, attachmentDraft]);
-    const undoToPreviousCheckpoint = import_react46.default.useCallback(async () => {
+    const undoToPreviousCheckpoint = import_react48.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);
         pushLog("Reverted to previous checkpoint");
@@ -50776,7 +51359,7 @@ ${baseUrl}`),
         pushLog("Checkpoint revert failed: " + (e && e.message ? e.message : String(e)));
       }
     }, [mcp, pushLog]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       const port = loadSavedPort(window.localStorage) || DEFAULT_PORT;
       ctrl.current = createHostController({
         cs: cs2,
@@ -50794,7 +51377,7 @@ ${baseUrl}`),
       });
       ctrl.current.start(port);
     }, [cs2, extRoot, platform, pushLog]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (status.state !== "ok") return void 0;
       let alive = true;
       setProviderInit({ state: "checking", error: "" });
@@ -50882,7 +51465,7 @@ ${baseUrl}`),
         alive = false;
       };
     }, [status.state, providerStore, providerSecretService, getHost, legacyKeyStore, platform, pushLog, providerInitEpoch, zcodeCredentialManager]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
         const h = getHost();
@@ -50892,7 +51475,7 @@ ${baseUrl}`),
       const i = setInterval(update, 3e3);
       return () => clearInterval(i);
     }, [drawerOpen, getHost]);
-    import_react46.default.useEffect(() => {
+    import_react48.default.useEffect(() => {
       if (tab !== "settings") return void 0;
       const update = () => {
         const h = getHost();
@@ -50903,7 +51486,7 @@ ${baseUrl}`),
       const i = setInterval(update, 4e3);
       return () => clearInterval(i);
     }, [tab, getHost]);
-    const runDiag = import_react46.default.useCallback(async () => {
+    const runDiag = import_react48.default.useCallback(async () => {
       var _a;
       setDiagnostics("running");
       try {
@@ -50963,7 +51546,7 @@ ${baseUrl}`),
       onRuntimeReady: markRuntimeReady
     });
     if (!wizardDone) {
-      return /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      return /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         WizardScreen,
         {
           step: wizStep,
@@ -50998,8 +51581,8 @@ ${baseUrl}`),
     const backendDisabledHint = effective.fixHint && (effective.fixHint[lang] || effective.fixHint.zh) || (effective.reason && effective.reason.endsWith("-probing") ? lang === "zh" ? "\u6B63\u5728\u68C0\u6D4B\u51ED\u636E\u901A\u9053\u2026" : "Checking credential channels\u2026" : "");
     const composerDisabled = paused || effective.backend === "none";
     const modelOptions = descriptor.models.map((m) => ({ value: m.id, label: `${m.label} ${costBadge(m.cost)}` }));
-    return /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)(import_react46.default.Fragment, { children: [
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+    return /* @__PURE__ */ (0, import_jsx_runtime44.jsxs)(import_react48.default.Fragment, { children: [
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         StatusBar,
         {
           status: statusForBar,
@@ -51014,8 +51597,8 @@ ${baseUrl}`),
           settingsTitle: t.settings
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
-        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", position: "relative" }, children: [
+        tab === "chat" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
           ChatScreen,
           {
             lang,
@@ -51029,6 +51612,7 @@ ${baseUrl}`),
             onSend: sendChat,
             onStop: () => activeBackend.stop(),
             onApprove: (id, decision) => activeBackend.approve(id, decision),
+            onAnswerQuestion: (id, result) => activeBackend.answerQuestion && activeBackend.answerQuestion(id, result),
             onNewSession: newChatSession,
             chipState: {
               descriptor,
@@ -51052,7 +51636,7 @@ ${baseUrl}`),
             onRetryAttachment: retryAttachment
           }
         ) : null,
-        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+        tab === "activity" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
           ActivityScreen,
           {
             events,
@@ -51063,7 +51647,7 @@ ${baseUrl}`),
             emptyCaption: t.actEmptyB
           }
         ) : null,
-        tab === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+        tab === "tools" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
           ToolsScreen,
           {
             api: toolsApi,
@@ -51072,7 +51656,7 @@ ${baseUrl}`),
             initialPath: extRoot
           }
         ) : null,
-        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+        tab === "settings" ? /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
           SettingsScreen,
           {
             lang,
@@ -51206,8 +51790,8 @@ ${baseUrl}`),
           tokenEpoch
         ) : null
       ] }),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(TabBar, { tabs, active: tab, onChange: setTab }),
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         ConnectionDrawer,
         {
           open: drawerOpen,
@@ -51221,7 +51805,7 @@ ${baseUrl}`),
           onRestart: () => applyPort(status.port)
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         ConfirmDialog,
         {
           open: confirmRegen,
@@ -51243,10 +51827,18 @@ ${baseUrl}`),
           }
         }
       ),
-      /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
         ToolApprovalDialog,
         {
           record: toolApproval && toolApproval.plan ? toolApproval : null,
+          lang,
+          onResolve: (result) => elicitationCoordinator.resolveVisible(result)
+        }
+      ),
+      /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(
+        QuestionFormDialog,
+        {
+          record: toolApproval && !toolApproval.plan ? toolApproval : null,
           lang,
           onResolve: (result) => elicitationCoordinator.resolveVisible(result)
         }
@@ -51254,13 +51846,13 @@ ${baseUrl}`),
     ] });
   }
   function App({ cs: cs2 }) {
-    return /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime42.jsx)(Shell, { cs: cs2 }) });
+    return /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(LangProvider, { children: /* @__PURE__ */ (0, import_jsx_runtime44.jsx)(Shell, { cs: cs2 }) });
   }
 
   // src/main.jsx
-  var import_jsx_runtime43 = __toESM(require_jsx_runtime(), 1);
+  var import_jsx_runtime45 = __toESM(require_jsx_runtime(), 1);
   var cs = new window.CSInterface();
-  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime43.jsx)(App, { cs }));
+  (0, import_client.createRoot)(document.getElementById("root")).render(/* @__PURE__ */ (0, import_jsx_runtime45.jsx)(App, { cs }));
 })();
 /*! Bundled license information:
 

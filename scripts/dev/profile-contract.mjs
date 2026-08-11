@@ -2,7 +2,9 @@ import path from 'node:path';
 
 export const COMPONENTS = Object.freeze(['core', 'cep', 'native']);
 export const DAILY_ACTIONS = Object.freeze(['doctor', 'launch-ae', 'sync', 'smoke']);
-export const HDEV_SCENARIO = 'core-native-write-undo@1';
+// Must match SCENARIO_ID in scripts/hardware/development_smoke_spec.py; the
+// driver rejects any other value, so a divergence makes `smoke` unrunnable.
+export const HDEV_SCENARIO = 'native-exec-ir@1';
 
 const ACTIONS = new Set(['bootstrap', ...DAILY_ACTIONS]);
 const PATH_OPTIONS = new Map([
@@ -192,7 +194,7 @@ function nativeSteps(paths) {
 
 function smokeStep(command, paths, reused) {
   return processStep(
-    'hdev-core-native-write-undo',
+    'hdev-native-exec-ir',
     'core',
     'public-smoke',
     paths.python,
