@@ -288,8 +288,9 @@ export function createSidecar({
       model,
       mcpServers: buildMcpServers(),
       // AskUserQuestion (#228) is part of the surface in every tier. It always
-      // routes to canUseTool (not auto-run), and dontAsk tiers (readonly/none)
-      // deny it there, so listing it never bypasses a gate.
+      // routes to canUseTool (not auto-run) and opens the panel question form;
+      // readonly/none enforce their gates inside canUseTool instead of SDK
+      // dontAsk mode, which would auto-deny the question before the callback.
       allowedTools: uniqueToolList([...tiered.allowedTools, ...attachmentTools, 'AskUserQuestion']),
       disallowedTools: DISALLOWED_TOOLS,
       settingSources: [],
@@ -319,8 +320,11 @@ export function createSidecar({
     const names = Object.keys(options.annotations)
     const readOnly = names.filter((name) => options.annotations[name].readOnly === true)
     const nonDestructive = names.filter((name) => options.annotations[name].destructive !== true)
-    if (tier === 'readonly') return { allowedTools: readOnly, permissionMode: 'dontAsk' }
-    if (tier === 'none') return { allowedTools: names, permissionMode: 'dontAsk' }
+    // No dontAsk mapping: the SDK would auto-deny AskUserQuestion before the
+    // canUseTool callback, so no-review is not question-free. readonly denies
+    // non-read tools and none allows everything inside canUseTool instead.
+    if (tier === 'readonly') return { allowedTools: readOnly }
+    if (tier === 'none') return { allowedTools: names }
     if (tier === 'auto') return { allowedTools: uniqueToolList([...readOnly, ...nonDestructive]) }
     return { allowedTools: options.allowedTools }
   }
@@ -476,6 +480,17 @@ export function createSidecar({
         behavior: 'deny',
         message: 'Only After Effects (mcp__ae__*) tools are available in this panel.'
       }
+    }
+
+    // Read-only tier gate lives here (not SDK dontAsk) so AskUserQuestion above
+    // still reaches the panel form. Runs before the session-allow checks so a
+    // session approval granted on another tier never leaks a write into readonly.
+    if (turn.permissionMode === 'readonly') {
+      const annotation = options.annotations[name] || {}
+      if (annotation.readOnly !== true) {
+        return { behavior: 'deny', message: 'This tool is unavailable in the read-only tier.' }
+      }
+      return { behavior: 'allow', updatedInput: input }
     }
 
     if (isCoreAuthorizedDynamicCall(name, input)) {

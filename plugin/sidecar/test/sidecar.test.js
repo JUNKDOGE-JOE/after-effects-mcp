@@ -876,12 +876,23 @@ test('effort omitted defaults to high', async () => {
   assert.equal(seen[0].thinking, undefined)
 })
 
-test('readonly tier maps to dontAsk with read-only allowlist', async () => {
+test('readonly tier denies writes in canUseTool and still opens the question form', async () => {
   const writes = []
   const seen = []
+  const results = {}
   const sidecar = createSidecar({
     queryFn: async function * ({ options }) {
       seen.push(options)
+      results.write = await options.canUseTool('mcp__ae__w', {})
+      results.destructive = await options.canUseTool('mcp__ae__x', {})
+      results.read = await options.canUseTool('mcp__ae__r', {})
+      const pending = options.canUseTool('AskUserQuestion', {
+        questions: [{ question: 'Pick', options: [{ label: 'A' }], multiSelect: false }]
+      }, {})
+      await waitFor(() => events(writes).some((e) => e.type === 'question-required-raw'))
+      const raw = events(writes).find((e) => e.type === 'question-required-raw')
+      sidecar.handleLine(JSON.stringify({ t: 'answer', id: raw.toolUseId, answers: { Pick: 'A' } }))
+      results.question = await pending
       yield { type: 'result', subtype: 'success', is_error: false }
     },
     writeLine: (obj) => writes.push(obj),
@@ -899,17 +910,33 @@ test('readonly tier maps to dontAsk with read-only allowlist', async () => {
   sidecar.handleLine(JSON.stringify({ t: 'user', text: 'hi', permissionMode: 'readonly' }))
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
-  assert.equal(seen[0].permissionMode, 'dontAsk')
-  // AskUserQuestion is on the surface but dontAsk denies it at canUseTool (#228).
+  // No dontAsk override: SDK default mode keeps canUseTool (and questions) live.
+  assert.equal(seen[0].permissionMode, undefined)
   assert.deepEqual(seen[0].allowedTools, ['mcp__ae__r', 'AskUserQuestion'])
+  // Writes and destructive tools are denied inline — never an approval prompt.
+  assert.equal(results.write.behavior, 'deny')
+  assert.equal(results.destructive.behavior, 'deny')
+  assert.equal(results.read.behavior, 'allow')
+  assert.equal(eventCount(writes, 'approval-required'), 0)
+  assert.equal(results.question.behavior, 'allow')
+  assert.deepEqual(results.question.updatedInput.answers, { Pick: 'A' })
 })
 
-test('none tier maps to dontAsk with full ae allowlist', async () => {
+test('none tier auto-allows in canUseTool and still opens the question form', async () => {
   const writes = []
   const seen = []
+  const results = {}
   const sidecar = createSidecar({
     queryFn: async function * ({ options }) {
       seen.push(options)
+      results.destructive = await options.canUseTool('mcp__ae__x', {})
+      const pending = options.canUseTool('AskUserQuestion', {
+        questions: [{ question: 'Pick', options: [{ label: 'A' }], multiSelect: false }]
+      }, {})
+      await waitFor(() => events(writes).some((e) => e.type === 'question-required-raw'))
+      const raw = events(writes).find((e) => e.type === 'question-required-raw')
+      sidecar.handleLine(JSON.stringify({ t: 'answer', id: raw.toolUseId, answers: { Pick: 'A' } }))
+      results.question = await pending
       yield { type: 'result', subtype: 'success', is_error: false }
     },
     writeLine: (obj) => writes.push(obj),
@@ -927,8 +954,13 @@ test('none tier maps to dontAsk with full ae allowlist', async () => {
   sidecar.handleLine(JSON.stringify({ t: 'user', text: 'hi', permissionMode: 'none' }))
   await waitFor(() => eventCount(writes, 'turn-end') === 1)
 
-  assert.equal(seen[0].permissionMode, 'dontAsk')
+  assert.equal(seen[0].permissionMode, undefined)
   assert.deepEqual(seen[0].allowedTools.sort(), ['AskUserQuestion', 'mcp__ae__r', 'mcp__ae__w', 'mcp__ae__x'])
+  // No-review means no approval prompts — questions still reach the user.
+  assert.equal(results.destructive.behavior, 'allow')
+  assert.equal(eventCount(writes, 'approval-required'), 0)
+  assert.equal(results.question.behavior, 'allow')
+  assert.deepEqual(results.question.updatedInput.answers, { Pick: 'A' })
 })
 
 test('auto tier pre-allows non-destructive and keeps callback for destructive', async () => {
