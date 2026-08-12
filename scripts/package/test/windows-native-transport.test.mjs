@@ -71,7 +71,10 @@ test(
       '/W4',
       '/WX',
       '/utf-8',
-      '/MD',
+      // Keep the CRT model in lockstep with the shipped AEX (build-windows.mjs
+      // compiles /MT for the AE 2023/2024 host-runtime baseline) so this
+      // lifecycle test exercises the same runtime configuration users receive.
+      '/MT',
       '/permissive-',
       '/DWIN32',
       '/D_WINDOWS',

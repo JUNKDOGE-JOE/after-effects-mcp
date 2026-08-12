@@ -9,6 +9,12 @@ endif()
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+# One Windows CRT policy across every shipped native binary (AEX, helper,
+# launcher, transport addon): static CRT, so nothing binds a host-local or
+# missing MSVCP140/VCRUNTIME140 (AE 2024 ships an older private copy that
+# crashes current /MD binaries in std::mutex internals, and end-user machines
+# may lack the redistributable entirely). Mirrors /MT in build-windows.mjs.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
 
 add_executable(ae-mcp-platform-helper WIN32 src/main.cpp)
 target_compile_definitions(ae-mcp-platform-helper PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)

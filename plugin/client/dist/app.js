@@ -5,6 +5,9 @@
   var __getOwnPropNames = Object.getOwnPropertyNames;
   var __getProtoOf = Object.getPrototypeOf;
   var __hasOwnProp = Object.prototype.hasOwnProperty;
+  var __esm = (fn, res) => function __init() {
+    return fn && (res = (0, fn[__getOwnPropNames(fn)[0]])(fn = 0)), res;
+  };
   var __commonJS = (cb, mod) => function __require() {
     return mod || (0, cb[__getOwnPropNames(cb)[0]])((mod = { exports: {} }).exports, mod), mod.exports;
   };
@@ -25,10 +28,48 @@
     mod
   ));
 
+  // src/cep-runtime-inject.js
+  function defineAt(proto) {
+    if (!proto || typeof proto.at === "function") return;
+    Object.defineProperty(proto, "at", {
+      value: function at(index) {
+        const length = this.length >>> 0;
+        let position = Math.trunc(Number(index) || 0);
+        if (position < 0) position += length;
+        if (position < 0 || position >= length) return void 0;
+        return this[position];
+      },
+      writable: true,
+      configurable: true
+    });
+  }
+  var init_cep_runtime_inject = __esm({
+    "src/cep-runtime-inject.js"() {
+      if (typeof Object.hasOwn !== "function") {
+        Object.defineProperty(Object, "hasOwn", {
+          value: function hasOwn2(target, key) {
+            return Object.prototype.hasOwnProperty.call(Object(target), key);
+          },
+          writable: true,
+          configurable: true
+        });
+      }
+      defineAt(Array.prototype);
+      defineAt(String.prototype);
+      if (typeof globalThis.structuredClone !== "function") {
+        globalThis.structuredClone = function structuredClone(value) {
+          if (value === void 0) return void 0;
+          return JSON.parse(JSON.stringify(value));
+        };
+      }
+    }
+  });
+
   // node_modules/react/cjs/react.production.min.js
   var require_react_production_min = __commonJS({
     "node_modules/react/cjs/react.production.min.js"(exports) {
       "use strict";
+      init_cep_runtime_inject();
       var l = Symbol.for("react.element");
       var n = Symbol.for("react.portal");
       var p = Symbol.for("react.fragment");
@@ -302,6 +343,7 @@
   var require_react = __commonJS({
     "node_modules/react/index.js"(exports, module) {
       "use strict";
+      init_cep_runtime_inject();
       if (true) {
         module.exports = require_react_production_min();
       } else {
@@ -314,6 +356,7 @@
   var require_scheduler_production_min = __commonJS({
     "node_modules/scheduler/cjs/scheduler.production.min.js"(exports) {
       "use strict";
+      init_cep_runtime_inject();
       function f(a, b) {
         var c = a.length;
         a.push(b);
@@ -567,6 +610,7 @@
   var require_scheduler = __commonJS({
     "node_modules/scheduler/index.js"(exports, module) {
       "use strict";
+      init_cep_runtime_inject();
       if (true) {
         module.exports = require_scheduler_production_min();
       } else {
@@ -579,6 +623,7 @@
   var require_react_dom_production_min = __commonJS({
     "node_modules/react-dom/cjs/react-dom.production.min.js"(exports) {
       "use strict";
+      init_cep_runtime_inject();
       var aa = require_react();
       var ca = require_scheduler();
       function p(a) {
@@ -7189,6 +7234,7 @@
   var require_react_dom = __commonJS({
     "node_modules/react-dom/index.js"(exports, module) {
       "use strict";
+      init_cep_runtime_inject();
       function checkDCE() {
         if (typeof __REACT_DEVTOOLS_GLOBAL_HOOK__ === "undefined" || typeof __REACT_DEVTOOLS_GLOBAL_HOOK__.checkDCE !== "function") {
           return;
@@ -7215,6 +7261,7 @@
   var require_client = __commonJS({
     "node_modules/react-dom/client.js"(exports) {
       "use strict";
+      init_cep_runtime_inject();
       var m = require_react_dom();
       if (true) {
         exports.createRoot = m.createRoot;
@@ -7246,6 +7293,7 @@
   var require_react_jsx_runtime_production_min = __commonJS({
     "node_modules/react/cjs/react-jsx-runtime.production.min.js"(exports) {
       "use strict";
+      init_cep_runtime_inject();
       var f = require_react();
       var k = Symbol.for("react.element");
       var l = Symbol.for("react.fragment");
@@ -7271,6 +7319,7 @@
   var require_jsx_runtime = __commonJS({
     "node_modules/react/jsx-runtime.js"(exports, module) {
       "use strict";
+      init_cep_runtime_inject();
       if (true) {
         module.exports = require_react_jsx_runtime_production_min();
       } else {
@@ -7282,6 +7331,7 @@
   // node_modules/filepond/dist/filepond.js
   var require_filepond = __commonJS({
     "node_modules/filepond/dist/filepond.js"(exports, module) {
+      init_cep_runtime_inject();
       (function(global, factory) {
         typeof exports === "object" && typeof module !== "undefined" ? factory(exports) : typeof define === "function" && define.amd ? define(["exports"], factory) : (global = global || self, factory(global.FilePond = {}));
       })(exports, function(exports2) {
@@ -16349,6 +16399,7 @@
   var require_react_filepond = __commonJS({
     "node_modules/react-filepond/dist/react-filepond.js"(exports) {
       "use strict";
+      init_cep_runtime_inject();
       Object.defineProperty(exports, "__esModule", {
         value: true
       });
@@ -16488,6 +16539,7 @@
   // node_modules/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.js
   var require_filepond_plugin_image_preview = __commonJS({
     "node_modules/filepond-plugin-image-preview/dist/filepond-plugin-image-preview.js"(exports, module) {
+      init_cep_runtime_inject();
       (function(global, factory) {
         typeof exports === "object" && typeof module !== "undefined" ? module.exports = factory() : typeof define === "function" && define.amd ? define(factory) : (global = global || self, global.FilePondPluginImagePreview = factory());
       })(exports, function() {
@@ -19264,13 +19316,16 @@
   });
 
   // src/main.jsx
+  init_cep_runtime_inject();
   var import_react49 = __toESM(require_react(), 1);
   var import_client = __toESM(require_client(), 1);
 
   // src/app/App.jsx
+  init_cep_runtime_inject();
   var import_react48 = __toESM(require_react(), 1);
 
   // src/app/i18n.jsx
+  init_cep_runtime_inject();
   var import_react = __toESM(require_react(), 1);
   var import_jsx_runtime = __toESM(require_jsx_runtime(), 1);
   var LangCtx = import_react.default.createContext({ lang: "zh", setLang: () => {
@@ -19297,24 +19352,33 @@
   var useLang = () => import_react.default.useContext(LangCtx);
 
   // src/components/shell/StatusBar.jsx
+  init_cep_runtime_inject();
   var import_react7 = __toESM(require_react(), 1);
 
   // src/components/core/Icon.jsx
+  init_cep_runtime_inject();
   var import_react4 = __toESM(require_react(), 1);
 
+  // node_modules/lucide-react/dist/esm/lucide-react.js
+  init_cep_runtime_inject();
+
   // node_modules/lucide-react/dist/esm/createLucideIcon.js
+  init_cep_runtime_inject();
   var import_react3 = __toESM(require_react());
 
   // node_modules/lucide-react/dist/esm/shared/src/utils.js
+  init_cep_runtime_inject();
   var toKebabCase = (string) => string.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase();
   var mergeClasses = (...classes) => classes.filter((className, index, array) => {
     return Boolean(className) && array.indexOf(className) === index;
   }).join(" ");
 
   // node_modules/lucide-react/dist/esm/Icon.js
+  init_cep_runtime_inject();
   var import_react2 = __toESM(require_react());
 
   // node_modules/lucide-react/dist/esm/defaultAttributes.js
+  init_cep_runtime_inject();
   var defaultAttributes = {
     xmlns: "http://www.w3.org/2000/svg",
     width: 24,
@@ -19374,12 +19438,14 @@
   };
 
   // node_modules/lucide-react/dist/esm/icons/arrow-up.js
+  init_cep_runtime_inject();
   var ArrowUp = createLucideIcon("ArrowUp", [
     ["path", { d: "m5 12 7-7 7 7", key: "hav0vg" }],
     ["path", { d: "M12 19V5", key: "x0mq9r" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/book-open.js
+  init_cep_runtime_inject();
   var BookOpen = createLucideIcon("BookOpen", [
     ["path", { d: "M12 7v14", key: "1akyts" }],
     [
@@ -19392,6 +19458,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/box.js
+  init_cep_runtime_inject();
   var Box = createLucideIcon("Box", [
     [
       "path",
@@ -19405,6 +19472,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/brain.js
+  init_cep_runtime_inject();
   var Brain = createLucideIcon("Brain", [
     [
       "path",
@@ -19430,19 +19498,23 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/check.js
+  init_cep_runtime_inject();
   var Check = createLucideIcon("Check", [["path", { d: "M20 6 9 17l-5-5", key: "1gmf2c" }]]);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-down.js
+  init_cep_runtime_inject();
   var ChevronDown = createLucideIcon("ChevronDown", [
     ["path", { d: "m6 9 6 6 6-6", key: "qrunsl" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/chevron-right.js
+  init_cep_runtime_inject();
   var ChevronRight = createLucideIcon("ChevronRight", [
     ["path", { d: "m9 18 6-6-6-6", key: "mthhwq" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/circle-alert.js
+  init_cep_runtime_inject();
   var CircleAlert = createLucideIcon("CircleAlert", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "12", x2: "12", y1: "8", y2: "12", key: "1pkeuh" }],
@@ -19450,23 +19522,27 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/circle-slash.js
+  init_cep_runtime_inject();
   var CircleSlash = createLucideIcon("CircleSlash", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["line", { x1: "9", x2: "15", y1: "15", y2: "9", key: "1dfufj" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/circle.js
+  init_cep_runtime_inject();
   var Circle = createLucideIcon("Circle", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/copy.js
+  init_cep_runtime_inject();
   var Copy = createLucideIcon("Copy", [
     ["rect", { width: "14", height: "14", x: "8", y: "8", rx: "2", ry: "2", key: "17jyea" }],
     ["path", { d: "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2", key: "zix9uf" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/download.js
+  init_cep_runtime_inject();
   var Download = createLucideIcon("Download", [
     ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", key: "ih7n3h" }],
     ["polyline", { points: "7 10 12 15 17 10", key: "2ggqvy" }],
@@ -19474,6 +19550,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/external-link.js
+  init_cep_runtime_inject();
   var ExternalLink = createLucideIcon("ExternalLink", [
     ["path", { d: "M15 3h6v6", key: "1q9fwt" }],
     ["path", { d: "M10 14 21 3", key: "gplh6r" }],
@@ -19481,6 +19558,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/eye-off.js
+  init_cep_runtime_inject();
   var EyeOff = createLucideIcon("EyeOff", [
     [
       "path",
@@ -19501,6 +19579,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/eye.js
+  init_cep_runtime_inject();
   var Eye = createLucideIcon("Eye", [
     [
       "path",
@@ -19513,6 +19592,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/file-text.js
+  init_cep_runtime_inject();
   var FileText = createLucideIcon("FileText", [
     ["path", { d: "M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", key: "1rqfz7" }],
     ["path", { d: "M14 2v4a2 2 0 0 0 2 2h4", key: "tnqrlb" }],
@@ -19522,6 +19602,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/github.js
+  init_cep_runtime_inject();
   var Github = createLucideIcon("Github", [
     [
       "path",
@@ -19534,6 +19615,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/globe.js
+  init_cep_runtime_inject();
   var Globe = createLucideIcon("Globe", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20", key: "13o1zl" }],
@@ -19541,6 +19623,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/history.js
+  init_cep_runtime_inject();
   var History = createLucideIcon("History", [
     ["path", { d: "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", key: "1357e3" }],
     ["path", { d: "M3 3v5h5", key: "1xhq8a" }],
@@ -19548,6 +19631,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/info.js
+  init_cep_runtime_inject();
   var Info = createLucideIcon("Info", [
     ["circle", { cx: "12", cy: "12", r: "10", key: "1mglay" }],
     ["path", { d: "M12 16v-4", key: "1dtifu" }],
@@ -19555,6 +19639,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/list-checks.js
+  init_cep_runtime_inject();
   var ListChecks = createLucideIcon("ListChecks", [
     ["path", { d: "m3 17 2 2 4-4", key: "1jhpwq" }],
     ["path", { d: "m3 7 2 2 4-4", key: "1obspn" }],
@@ -19564,6 +19649,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/list.js
+  init_cep_runtime_inject();
   var List = createLucideIcon("List", [
     ["path", { d: "M3 12h.01", key: "nlz23k" }],
     ["path", { d: "M3 18h.01", key: "1tta3j" }],
@@ -19574,22 +19660,26 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/message-square.js
+  init_cep_runtime_inject();
   var MessageSquare = createLucideIcon("MessageSquare", [
     ["path", { d: "M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", key: "1lielz" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/pause.js
+  init_cep_runtime_inject();
   var Pause = createLucideIcon("Pause", [
     ["rect", { x: "14", y: "4", width: "4", height: "16", rx: "1", key: "zuxfzm" }],
     ["rect", { x: "6", y: "4", width: "4", height: "16", rx: "1", key: "1okwgv" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/play.js
+  init_cep_runtime_inject();
   var Play = createLucideIcon("Play", [
     ["polygon", { points: "6 3 20 12 6 21 6 3", key: "1oa8hb" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/plug.js
+  init_cep_runtime_inject();
   var Plug = createLucideIcon("Plug", [
     ["path", { d: "M12 22v-5", key: "1ega77" }],
     ["path", { d: "M9 8V2", key: "14iosj" }],
@@ -19598,24 +19688,28 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/plus.js
+  init_cep_runtime_inject();
   var Plus = createLucideIcon("Plus", [
     ["path", { d: "M5 12h14", key: "1ays0h" }],
     ["path", { d: "M12 5v14", key: "s699le" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/rotate-cw.js
+  init_cep_runtime_inject();
   var RotateCw = createLucideIcon("RotateCw", [
     ["path", { d: "M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", key: "1p45f6" }],
     ["path", { d: "M21 3v5h-5", key: "1q7to0" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/search.js
+  init_cep_runtime_inject();
   var Search = createLucideIcon("Search", [
     ["circle", { cx: "11", cy: "11", r: "8", key: "4ej97u" }],
     ["path", { d: "m21 21-4.3-4.3", key: "1qie3q" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/send.js
+  init_cep_runtime_inject();
   var Send = createLucideIcon("Send", [
     [
       "path",
@@ -19628,6 +19722,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/settings.js
+  init_cep_runtime_inject();
   var Settings = createLucideIcon("Settings", [
     [
       "path",
@@ -19640,6 +19735,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/shield-alert.js
+  init_cep_runtime_inject();
   var ShieldAlert = createLucideIcon("ShieldAlert", [
     [
       "path",
@@ -19653,6 +19749,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/shield.js
+  init_cep_runtime_inject();
   var Shield = createLucideIcon("Shield", [
     [
       "path",
@@ -19664,6 +19761,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/sparkles.js
+  init_cep_runtime_inject();
   var Sparkles = createLucideIcon("Sparkles", [
     [
       "path",
@@ -19679,11 +19777,13 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/square.js
+  init_cep_runtime_inject();
   var Square = createLucideIcon("Square", [
     ["rect", { width: "18", height: "18", x: "3", y: "3", rx: "2", key: "afitv7" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/stethoscope.js
+  init_cep_runtime_inject();
   var Stethoscope = createLucideIcon("Stethoscope", [
     ["path", { d: "M11 2v2", key: "1539x4" }],
     ["path", { d: "M5 2v2", key: "1yf1q8" }],
@@ -19693,6 +19793,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/trash-2.js
+  init_cep_runtime_inject();
   var Trash2 = createLucideIcon("Trash2", [
     ["path", { d: "M3 6h18", key: "d0wm0j" }],
     ["path", { d: "M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6", key: "4alrt4" }],
@@ -19702,6 +19803,7 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/triangle-alert.js
+  init_cep_runtime_inject();
   var TriangleAlert = createLucideIcon("TriangleAlert", [
     [
       "path",
@@ -19715,12 +19817,14 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/undo-2.js
+  init_cep_runtime_inject();
   var Undo2 = createLucideIcon("Undo2", [
     ["path", { d: "M9 14 4 9l5-5", key: "102s5s" }],
     ["path", { d: "M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11", key: "f3b9sd" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/wrench.js
+  init_cep_runtime_inject();
   var Wrench = createLucideIcon("Wrench", [
     [
       "path",
@@ -19732,12 +19836,14 @@
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/x.js
+  init_cep_runtime_inject();
   var X = createLucideIcon("X", [
     ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
     ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
   ]);
 
   // node_modules/lucide-react/dist/esm/icons/zap.js
+  init_cep_runtime_inject();
   var Zap = createLucideIcon("Zap", [
     [
       "path",
@@ -19801,6 +19907,7 @@
   }
 
   // src/components/core/StatusDot.jsx
+  init_cep_runtime_inject();
   var import_react5 = __toESM(require_react(), 1);
   var import_jsx_runtime3 = __toESM(require_jsx_runtime(), 1);
   var DOT_COLORS = {
@@ -19831,6 +19938,7 @@
   }
 
   // src/components/core/IconButton.jsx
+  init_cep_runtime_inject();
   var import_react6 = __toESM(require_react(), 1);
   var import_jsx_runtime4 = __toESM(require_jsx_runtime(), 1);
   function IconButton({
@@ -19999,6 +20107,7 @@
   }
 
   // src/components/shell/TabBar.jsx
+  init_cep_runtime_inject();
   var import_react8 = __toESM(require_react(), 1);
   var import_jsx_runtime6 = __toESM(require_jsx_runtime(), 1);
   function TabBar({ tabs = [], active, onChange, style }) {
@@ -20071,6 +20180,7 @@
   }
 
   // src/components/shell/EmptyState.jsx
+  init_cep_runtime_inject();
   var import_react9 = __toESM(require_react(), 1);
   var import_jsx_runtime7 = __toESM(require_jsx_runtime(), 1);
   function EmptyState({ icon = "inbox", title, caption, action, compact = false, style }) {
@@ -20113,9 +20223,11 @@
   }
 
   // src/components/shell/ConfirmDialog.jsx
+  init_cep_runtime_inject();
   var import_react11 = __toESM(require_react(), 1);
 
   // src/components/core/Button.jsx
+  init_cep_runtime_inject();
   var import_react10 = __toESM(require_react(), 1);
   var import_jsx_runtime8 = __toESM(require_jsx_runtime(), 1);
   var BTN_H = { sm: 20, md: 24, lg: 28 };
@@ -20257,6 +20369,7 @@
   }
 
   // src/screens/SettingsScreen.jsx
+  init_cep_runtime_inject();
   var import_react19 = __toESM(require_react(), 1);
 
   // package.json
@@ -20285,6 +20398,7 @@
   };
 
   // src/components/core/Badge.jsx
+  init_cep_runtime_inject();
   var import_react12 = __toESM(require_react(), 1);
   var import_jsx_runtime10 = __toESM(require_jsx_runtime(), 1);
   var BADGE_COLORS = {
@@ -20323,6 +20437,7 @@
   }
 
   // src/components/core/Switch.jsx
+  init_cep_runtime_inject();
   var import_react13 = __toESM(require_react(), 1);
   var import_jsx_runtime11 = __toESM(require_jsx_runtime(), 1);
   function Switch({ checked = false, onChange, disabled = false, title, style }) {
@@ -20374,6 +20489,7 @@
   }
 
   // src/components/core/Segmented.jsx
+  init_cep_runtime_inject();
   var import_react14 = __toESM(require_react(), 1);
   var import_jsx_runtime12 = __toESM(require_jsx_runtime(), 1);
   function Segmented({ options = [], value, onChange, full = false, style }) {
@@ -20435,9 +20551,11 @@
   }
 
   // src/components/settings/ChannelCard.jsx
+  init_cep_runtime_inject();
   var import_react15 = __toESM(require_react(), 1);
 
   // src/lib/channelCard.js
+  init_cep_runtime_inject();
   function channelDot(probe) {
     if (!probe || probe.checking) return "neutral";
     return probe.ok ? "ok" : "warn";
@@ -20499,6 +20617,7 @@
   }
 
   // src/components/forms/Input.jsx
+  init_cep_runtime_inject();
   var import_react16 = __toESM(require_react(), 1);
   var import_jsx_runtime14 = __toESM(require_jsx_runtime(), 1);
   function Input({
@@ -20574,6 +20693,7 @@
   }
 
   // src/components/forms/Select.jsx
+  init_cep_runtime_inject();
   var import_react17 = __toESM(require_react(), 1);
   var import_jsx_runtime15 = __toESM(require_jsx_runtime(), 1);
   function Select({ options = [], value, onChange, disabled = false, full = true, size = "md", style }) {
@@ -20636,6 +20756,7 @@
   }
 
   // src/components/forms/Field.jsx
+  init_cep_runtime_inject();
   var import_react18 = __toESM(require_react(), 1);
   var import_jsx_runtime16 = __toESM(require_jsx_runtime(), 1);
   function Field({ label, hint, caption, layout = "stack", children, style }) {
@@ -20659,6 +20780,7 @@
   }
 
   // src/cep/externalClients.js
+  init_cep_runtime_inject();
   var EXTERNAL_CLIENTS = [
     {
       id: "claude-desktop",
@@ -20765,6 +20887,7 @@
   }
 
   // src/lib/clipboard.js
+  init_cep_runtime_inject();
   function copyTextLegacy(text) {
     const ta = document.createElement("textarea");
     ta.value = text;
@@ -20789,6 +20912,7 @@
   }
 
   // src/lib/settingsState.js
+  init_cep_runtime_inject();
   function zcodeDefaultModelLocked({ backend, models }) {
     if (backend !== "zcode") return false;
     return !Array.isArray(models) || models.length <= 1;
@@ -20802,6 +20926,7 @@
   }
 
   // src/lib/settingsSections.js
+  init_cep_runtime_inject();
   var KEY2 = "ae_mcp_settings_sections";
   var SECTION_IDS = ["ai", "conn", "externalClients", "sec", "gen", "about"];
   function defaultSectionState() {
@@ -20831,7 +20956,14 @@
     return { ...state, [id]: !state[id] };
   }
 
+  // src/cep/platform/index.js
+  init_cep_runtime_inject();
+
+  // src/cep/platform/macos.js
+  init_cep_runtime_inject();
+
   // src/cep/platform/paths.js
+  init_cep_runtime_inject();
   function assertAbsoluteHome(home, separator) {
     const value = String(home || "").trim();
     const absolute = separator === "\\" ? /^(?:[A-Za-z]:\\|\\\\)/.test(value) : value.startsWith("/");
@@ -21006,6 +21138,7 @@
   }
 
   // src/cep/platform/process.js
+  init_cep_runtime_inject();
   var DEFAULT_TIMEOUT_MS = 2500;
   var DEFAULT_OUTPUT_LIMIT = 8192;
   var TERMINATE_GRACE_MS = 50;
@@ -21579,6 +21712,7 @@
   }
 
   // src/cep/platform/windows.js
+  init_cep_runtime_inject();
   function envValue(environment, name) {
     const key = Object.keys(environment || {}).find((candidate) => candidate.toLowerCase() === name.toLowerCase());
     return key === void 0 ? void 0 : environment[key];
@@ -21662,7 +21796,11 @@
     throw new PlatformCapabilityError("UNSUPPORTED_PLATFORM", deps.platform + "-" + deps.arch + " is not supported");
   }
 
+  // src/app/providerInitState.js
+  init_cep_runtime_inject();
+
   // src/lib/exactSecretRedaction.js
+  init_cep_runtime_inject();
   function sensitiveValues(profile) {
     var _a;
     const values = [];
@@ -22538,9 +22676,11 @@
   }
 
   // src/screens/ActivityScreen.jsx
+  init_cep_runtime_inject();
   var import_react22 = __toESM(require_react(), 1);
 
   // src/components/activity/FilterBar.jsx
+  init_cep_runtime_inject();
   var import_react20 = __toESM(require_react(), 1);
   var import_jsx_runtime18 = __toESM(require_jsx_runtime(), 1);
   function FilterBar({
@@ -22566,6 +22706,7 @@
   }
 
   // src/components/activity/ActivityRow.jsx
+  init_cep_runtime_inject();
   var import_react21 = __toESM(require_react(), 1);
   var import_jsx_runtime19 = __toESM(require_jsx_runtime(), 1);
   var RESULT = {
@@ -22666,6 +22807,7 @@
   }
 
   // src/lib/activityModel.js
+  init_cep_runtime_inject();
   function eventTitle(evt, lang) {
     const raw = evt.undoGroup || "";
     const m = /^MCP\s+([^:]+):?\s*(.*)$/.exec(raw);
@@ -22836,9 +22978,11 @@
   }
 
   // src/screens/WizardScreen.jsx
+  init_cep_runtime_inject();
   var import_react25 = __toESM(require_react(), 1);
 
   // src/components/core/Spinner.jsx
+  init_cep_runtime_inject();
   var import_react23 = __toESM(require_react(), 1);
   var import_jsx_runtime21 = __toESM(require_jsx_runtime(), 1);
   function Spinner({ size = 12, style }) {
@@ -22863,6 +23007,7 @@
   }
 
   // src/components/chat/AIAvatar.jsx
+  init_cep_runtime_inject();
   var import_react24 = __toESM(require_react(), 1);
   var import_jsx_runtime22 = __toESM(require_jsx_runtime(), 1);
   function AIAvatar({ size = 20, style }) {
@@ -22888,6 +23033,7 @@
   }
 
   // src/lib/wizardSteps.js
+  init_cep_runtime_inject();
   var LOCAL_STEPS = ["uv", "aeMcp"];
   var SUBSCRIPTION_STEPS = ["node", "claude", "login"];
   var LOG_TAIL = 4096;
@@ -23185,9 +23331,11 @@
   }
 
   // src/screens/ConnectionDrawer.jsx
+  init_cep_runtime_inject();
   var import_react28 = __toESM(require_react(), 1);
 
   // src/components/shell/DiagnosticItem.jsx
+  init_cep_runtime_inject();
   var import_react26 = __toESM(require_react(), 1);
   var import_jsx_runtime24 = __toESM(require_jsx_runtime(), 1);
   var GLYPHS = {
@@ -23236,6 +23384,7 @@
   }
 
   // src/components/shell/Drawer.jsx
+  init_cep_runtime_inject();
   var import_react27 = __toESM(require_react(), 1);
   var import_jsx_runtime25 = __toESM(require_jsx_runtime(), 1);
   function Drawer({ open = false, title, onClose, children, closeTitle = "\u5173\u95ED Close", style }) {
@@ -23452,9 +23601,11 @@
   }
 
   // src/screens/ChatScreen.jsx
+  init_cep_runtime_inject();
   var import_react38 = __toESM(require_react(), 1);
 
   // src/components/chat/ChatBubble.jsx
+  init_cep_runtime_inject();
   var import_react29 = __toESM(require_react(), 1);
   var import_jsx_runtime27 = __toESM(require_jsx_runtime(), 1);
   function formatAttachmentBytes(value) {
@@ -23553,6 +23704,7 @@
   }
 
   // src/components/chat/ToolCallCard.jsx
+  init_cep_runtime_inject();
   var import_react30 = __toESM(require_react(), 1);
   var import_jsx_runtime28 = __toESM(require_jsx_runtime(), 1);
   function StatusGlyph({ status }) {
@@ -23719,6 +23871,7 @@
   }
 
   // src/components/chat/ApprovalCard.jsx
+  init_cep_runtime_inject();
   var import_react31 = __toESM(require_react(), 1);
   var import_jsx_runtime29 = __toESM(require_jsx_runtime(), 1);
   var L = {
@@ -23856,9 +24009,11 @@
   }
 
   // src/components/chat/QuestionCard.jsx
+  init_cep_runtime_inject();
   var import_react32 = __toESM(require_react(), 1);
 
   // src/lib/questionForm.js
+  init_cep_runtime_inject();
   function asText(value) {
     return typeof value === "string" ? value : "";
   }
@@ -24329,6 +24484,7 @@
   }
 
   // src/components/chat/PromptCard.jsx
+  init_cep_runtime_inject();
   var import_react33 = __toESM(require_react(), 1);
   var import_jsx_runtime31 = __toESM(require_jsx_runtime(), 1);
   function PromptCard({ icon = "wand-2", title, caption, onClick, style }) {
@@ -24367,14 +24523,17 @@
   }
 
   // src/components/chat/Composer.jsx
+  init_cep_runtime_inject();
   var import_react35 = __toESM(require_react(), 1);
 
   // src/components/chat/AttachmentPond.jsx
+  init_cep_runtime_inject();
   var import_react34 = __toESM(require_react(), 1);
   var import_react_filepond = __toESM(require_react_filepond(), 1);
   var import_filepond_plugin_image_preview = __toESM(require_filepond_plugin_image_preview(), 1);
 
   // ../shared/chat-attachments.mjs
+  init_cep_runtime_inject();
   var MAX_ATTACHMENTS_PER_TURN = 32;
   var MAX_CLIPBOARD_ITEM_BYTES = 256 * 1024 * 1024;
   var MAX_CLIPBOARD_TURN_BYTES = 512 * 1024 * 1024;
@@ -24571,6 +24730,7 @@
   });
 
   // src/lib/attachmentDraft.js
+  init_cep_runtime_inject();
   function initialState() {
     return {
       text: "",
@@ -24705,6 +24865,7 @@
   }
 
   // src/lib/composerResize.js
+  init_cep_runtime_inject();
   var COMPOSER_MIN_HEIGHT = 72;
   var COMPOSER_DEFAULT_HEIGHT = 96;
   var COMPOSER_KEYBOARD_STEP = 24;
@@ -24800,6 +24961,7 @@
   }
 
   // src/lib/panelFileDrop.js
+  init_cep_runtime_inject();
   function createPanelFileDropGuard({
     target,
     canAttach = () => false,
@@ -25148,9 +25310,11 @@
   }
 
   // src/components/chat/ComposerChip.jsx
+  init_cep_runtime_inject();
   var import_react37 = __toESM(require_react(), 1);
 
   // src/components/core/Menu.jsx
+  init_cep_runtime_inject();
   var import_react36 = __toESM(require_react(), 1);
   var import_jsx_runtime34 = __toESM(require_jsx_runtime(), 1);
   function Keycap({ children }) {
@@ -25360,6 +25524,7 @@
   }
 
   // src/lib/composerOptions.js
+  init_cep_runtime_inject();
   function costBadge(tier) {
     const n = Math.max(1, Math.min(4, Number(tier) || 2));
     return "$".repeat(n);
@@ -25757,9 +25922,11 @@
   }
 
   // src/screens/ToolsScreen.jsx
+  init_cep_runtime_inject();
   var import_react42 = __toESM(require_react(), 1);
 
   // src/components/forms/Textarea.jsx
+  init_cep_runtime_inject();
   var import_react39 = __toESM(require_react(), 1);
   var import_jsx_runtime37 = __toESM(require_jsx_runtime(), 1);
   function Textarea({
@@ -25807,9 +25974,11 @@
   }
 
   // src/components/tools/ToolArtifactEditor.jsx
+  init_cep_runtime_inject();
   var import_react40 = __toESM(require_react(), 1);
 
   // src/lib/toolsState.js
+  init_cep_runtime_inject();
   var EMPTY_SUMMARIES = Object.freeze([]);
   var INITIAL_STATUSES = Object.freeze(["saved", "pinned"]);
   var INITIAL_TOOLS_STATE = Object.freeze({
@@ -26256,6 +26425,7 @@
   }
 
   // src/components/tools/ToolArtifactRow.jsx
+  init_cep_runtime_inject();
   var import_react41 = __toESM(require_react(), 1);
   var import_jsx_runtime39 = __toESM(require_jsx_runtime(), 1);
   var L3 = {
@@ -26333,6 +26503,7 @@
   }
 
   // src/cep/toolFileDialogs.js
+  init_cep_runtime_inject();
   var TOOL_PACKAGE_SUFFIX = ".aemcptools";
   var SYSTEM_COMMAND_SUFFIXES = [".ps1", ".psm1", ".bat", ".cmd", ".sh", ".command"];
   function selectedValue(result) {
@@ -26394,6 +26565,7 @@
   }
 
   // src/cep/toolsApi.js
+  init_cep_runtime_inject();
   function parseMcpPayload(result) {
     const text = Array.isArray(result && result.content) ? result.content.filter((entry) => entry && entry.type === "text").map((entry) => String(entry.text || "")).join("") : "";
     let payload;
@@ -26542,6 +26714,7 @@
   }
 
   // src/lib/toolRunForm.js
+  init_cep_runtime_inject();
   function schemaParts(schema) {
     const value = schema && typeof schema === "object" && !Array.isArray(schema) ? schema : {};
     const canonical = value.type === "object" || value.properties || value.required;
@@ -27358,6 +27531,7 @@
   }
 
   // src/components/tools/ToolApprovalDialog.jsx
+  init_cep_runtime_inject();
   var import_react43 = __toESM(require_react(), 1);
   var import_jsx_runtime41 = __toESM(require_jsx_runtime(), 1);
   var L4 = {
@@ -27418,6 +27592,7 @@
   }
 
   // src/components/tools/QuestionFormDialog.jsx
+  init_cep_runtime_inject();
   var import_react44 = __toESM(require_react(), 1);
   var import_jsx_runtime42 = __toESM(require_jsx_runtime(), 1);
   function QuestionFormDialog({ record, lang = "zh", onResolve }) {
@@ -27444,7 +27619,14 @@
     ] });
   }
 
+  // src/lib/agentLoop.js
+  init_cep_runtime_inject();
+
+  // src/lib/anthropic.js
+  init_cep_runtime_inject();
+
   // src/lib/sse.js
+  init_cep_runtime_inject();
   function createSseParser(onEvent) {
     let buffer = "";
     function parseFrame(frame) {
@@ -27479,7 +27661,11 @@
     return { feed };
   }
 
+  // src/lib/providerProfile.js
+  init_cep_runtime_inject();
+
   // src/cep/platform/secret-reference.js
+  init_cep_runtime_inject();
   var PROVIDER_UUID_SOURCE = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
   var PROVIDER_UUID = new RegExp(`^${PROVIDER_UUID_SOURCE}$`);
   var SLOT = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -27513,6 +27699,7 @@
   }
 
   // src/lib/providerHeaderPolicy.js
+  init_cep_runtime_inject();
   var FORBIDDEN_EXACT = /* @__PURE__ */ new Set([
     "host",
     "content-length",
@@ -28670,6 +28857,7 @@
   }
 
   // ../shared/tool-approval.mjs
+  init_cep_runtime_inject();
   var PLAN_SCHEMA_KEY = "x-ae-mcp-plan";
   var HASH_PATTERN = /^[0-9a-f]{64}$/;
   var OPERATIONS = /* @__PURE__ */ new Set(["render", "execute", "apply"]);
@@ -29203,7 +29391,20 @@
     };
   }
 
+  // src/lib/backendSelect.js
+  init_cep_runtime_inject();
+
+  // src/cep/backends/index.js
+  init_cep_runtime_inject();
+
+  // src/lib/backendCapabilities.js
+  init_cep_runtime_inject();
+
+  // src/cep/zcodeBackend.js
+  init_cep_runtime_inject();
+
   // src/lib/ndjson.js
+  init_cep_runtime_inject();
   function createLineSplitter(onLine) {
     let buffer = "";
     return function push(chunk) {
@@ -29230,6 +29431,7 @@
   }
 
   // src/lib/zcodeErrors.js
+  init_cep_runtime_inject();
   var ZH_RULES = [
     {
       // Provider ids may contain dots (e.g. "mediastorm_glm/glm-5.2"): capture the
@@ -30839,6 +31041,7 @@
   }
 
   // src/lib/backendLifecycle.js
+  init_cep_runtime_inject();
   function installBeforeUnloadReset(target, backend) {
     if (!backend || typeof backend.reset !== "function") {
       throw new TypeError("A backend with reset() is required");
@@ -30858,7 +31061,11 @@
     return dispose;
   }
 
+  // src/cep/mcpClient.js
+  init_cep_runtime_inject();
+
   // src/cep/runtimeManager.js
+  init_cep_runtime_inject();
   var RUNTIME_PLATFORM = "macos-arm64";
   var LOCK_NAME = ".runtime-manager.lock";
   var INSTALL_RECORD = "install-record.json";
@@ -32832,6 +33039,7 @@
   }
 
   // src/cep/approvalTierFile.js
+  init_cep_runtime_inject();
   var TOOL_TIER_ENV = "AE_MCP_TOOL_APPROVAL_TIER_FILE";
   var VALID_TIERS = /* @__PURE__ */ new Set(["readonly", "manual", "auto", "none"]);
   function protect(fs, path, mode, platformId) {
@@ -32912,6 +33120,7 @@
   }
 
   // src/cep/apiKey.js
+  init_cep_runtime_inject();
   var KEY_FILES = {
     anthropic: "anthropic-key",
     codex: "codex-key",
@@ -32966,6 +33175,7 @@
   }
 
   // src/cep/zcodeCredential.js
+  init_cep_runtime_inject();
   var STORAGE_KEY = "ae_mcp_zcode_credential_v1";
   var CREDENTIAL_ID = "6c1d936a-3f93-5b2c-9e15-1a513cdd8a89";
   var VALUE_REF_KEYS = ["kind", "reference", "revision"];
@@ -33090,7 +33300,11 @@
     return Object.freeze({ loadOrMigrate, readValueRef, resolve, save });
   }
 
+  // src/cep/claudeAuth.js
+  init_cep_runtime_inject();
+
   // src/lib/claudeChannel.js
+  init_cep_runtime_inject();
   var UPSTREAM_ENV_KEYS = [
     "ANTHROPIC_API_KEY",
     "ANTHROPIC_BASE_URL",
@@ -33157,7 +33371,11 @@
     return env;
   }
 
+  // src/cep/claudeAgentBackend.js
+  init_cep_runtime_inject();
+
   // src/lib/providerRouteSelection.js
+  init_cep_runtime_inject();
   var CLIENT_PROTOCOLS = Object.freeze({
     codex: "responses",
     "claude-code": "messages"
@@ -33361,7 +33579,11 @@
     return `${names[route.upstreamProtocol]} ${suffix}`;
   }
 
+  // src/cep/universalProviderRoute.js
+  init_cep_runtime_inject();
+
   // src/lib/providerMessagesCodec.js
+  init_cep_runtime_inject();
   var MESSAGE_BODY_FIELDS = /* @__PURE__ */ new Set([
     "model",
     "max_tokens",
@@ -35183,6 +35405,7 @@ ${output}` : output
   }
 
   // src/lib/providerSseCodec.js
+  init_cep_runtime_inject();
   function streamError(code, param) {
     const error = new Error("Provider SSE stream is invalid.");
     error.name = "ProviderStreamError";
@@ -35824,6 +36047,7 @@ ${output}` : output
   }
 
   // src/lib/providerHeaders.js
+  init_cep_runtime_inject();
   var RFC_TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
   var INBOUND_EXACT = /* @__PURE__ */ new Set([
     "accept",
@@ -36023,7 +36247,11 @@ ${output}` : output
     return output;
   }
 
+  // src/cep/codexResponsesRoute.js
+  init_cep_runtime_inject();
+
   // src/lib/codexResponsesCodec.js
+  init_cep_runtime_inject();
   var SUPPORTED_RESPONSE_FIELDS = /* @__PURE__ */ new Set([
     "model",
     "instructions",
@@ -37128,6 +37356,7 @@ ${output}` : output
   }
 
   // src/lib/providerUrl.js
+  init_cep_runtime_inject();
   var RESOURCES = Object.freeze({
     models: "models",
     responses: "responses",
@@ -37277,6 +37506,7 @@ ${output}` : output
   }
 
   // src/lib/providerSseSecretGuard.js
+  init_cep_runtime_inject();
   var STREAM_TEXT_KEYS = /* @__PURE__ */ new Set([
     "arguments",
     "content",
@@ -37456,6 +37686,7 @@ ${output}` : output
   }
 
   // src/cep/providerRouteAuth.js
+  init_cep_runtime_inject();
   function generateRouteToken({ randomBytes } = {}) {
     if (typeof randomBytes !== "function") throw new TypeError("randomBytes is required");
     const bytes = randomBytes(32);
@@ -37504,6 +37735,7 @@ ${output}` : output
   }
 
   // src/cep/reasoningCapsule.js
+  init_cep_runtime_inject();
   var PREFIX = "aemcp-r1";
   var AAD = Buffer.from("ae-mcp/provider-reasoning-capsule/v1", "utf8");
   var MAX_PAYLOAD_BYTES = 1024 * 1024;
@@ -40681,6 +40913,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/codexBackend.js
+  init_cep_runtime_inject();
   var RPC_TIMEOUT_MS2 = 3e4;
   var STDERR_TAIL_LIMIT3 = 4096;
   var APPROVAL_POLICY = {
@@ -41987,6 +42220,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/openCodeBackend.js
+  init_cep_runtime_inject();
   var MCP_TIMEOUT_MS = 12e4;
   var READY_TIMEOUT_MS2 = 3e4;
   var READY_POLL_MS = 250;
@@ -42653,6 +42887,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/lib/channels.js
+  init_cep_runtime_inject();
   function providerHasCredentialPolicy(provider) {
     var _a, _b, _c;
     const credential = provider == null ? void 0 : provider.credential;
@@ -42810,6 +43045,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/providerStore.js
+  init_cep_runtime_inject();
   var FILE_NAME = "providers.json";
   var STATE_KEYS = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
   var VALUE_REF_KEYS2 = ["kind", "reference", "revision"];
@@ -43521,6 +43757,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/providerSecrets.js
+  init_cep_runtime_inject();
   var SLOT_PREFIXES = /* @__PURE__ */ new Set(["auth-model", "auth-probe", "header"]);
   var PUBLIC_ERROR_CODES = /* @__PURE__ */ new Set([
     "INVALID_REFERENCE",
@@ -43877,6 +44114,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/providerAcceptanceBridge.js
+  init_cep_runtime_inject();
   var PROTOCOLS2 = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
   var CAPABILITY_STATUSES = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
   var AGENT_FEATURES = Object.freeze([
@@ -44344,7 +44582,11 @@ data: ${JSON.stringify(payload)}
     return Object.freeze({ snapshot, routes, probeAll, startRoute, stopRoute, dispose });
   }
 
+  // src/cep/providerMigration.js
+  init_cep_runtime_inject();
+
   // src/cep/platform/secret-migration.js
+  init_cep_runtime_inject();
   var PHASES = /* @__PURE__ */ new Set(["pending", "secrets-written", "state-committed", "committed"]);
   var JOURNAL_KEYS = ["entries", "migrationId", "phase", "schemaVersion", "sourceRevision", "updatedAt"];
   var ENTRY_KEYS = ["id", "reference", "revision"];
@@ -45086,6 +45328,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/providerSchemaMigration.js
+  init_cep_runtime_inject();
   var STATE_KEYS3 = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
   var VALUE_REF_KEYS4 = ["kind", "reference", "revision"];
   var MODEL_LIST_TTL_MS = 36e5;
@@ -45276,6 +45519,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/app/providerProfileFlow.js
+  init_cep_runtime_inject();
   function flowError(code) {
     const messages = {
       provider_draft_invalid: "Provider draft is invalid",
@@ -45620,7 +45864,14 @@ data: ${JSON.stringify(payload)}
     return { deleted, pending: store.readState().pendingSecretDeletes.length };
   }
 
+  // src/app/providerProbeFlow.js
+  init_cep_runtime_inject();
+
+  // src/cep/modelProbe.js
+  init_cep_runtime_inject();
+
   // src/lib/providerProbeAuth.js
+  init_cep_runtime_inject();
   var AUTH_NAMES = /* @__PURE__ */ new Set(["authorization", "x-api-key"]);
   function profileError() {
     const error = new Error("Provider probe profile is invalid");
@@ -45965,7 +46216,11 @@ data: ${JSON.stringify(payload)}
     return lastResult || networkFailure();
   }
 
+  // src/cep/providerDetect.js
+  init_cep_runtime_inject();
+
   // src/cep/providerCapabilityProbe.js
+  init_cep_runtime_inject();
   var OUTPUT_BUDGETS = Object.freeze([16, 64, 128]);
   var TOOL_OUTPUT_BUDGETS = Object.freeze([...OUTPUT_BUDGETS, 256, 512]);
   var MAX_RESPONSE_BYTES = 512 * 1024;
@@ -47614,9 +47869,11 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/components/settings/ProviderManagerSection.jsx
+  init_cep_runtime_inject();
   var import_react45 = __toESM(require_react(), 1);
 
   // src/lib/providerManagerState.js
+  init_cep_runtime_inject();
   function defaultProviderModelAuthKind(protocol) {
     return protocol === "anthropic" ? "x-api-key" : "bearer";
   }
@@ -47715,6 +47972,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/lib/providerDialectBadge.js
+  init_cep_runtime_inject();
   var CLIENT_LABELS = Object.freeze({
     codex: "Codex",
     "claude-code": "Claude"
@@ -48011,6 +48269,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/ccSwitch.js
+  init_cep_runtime_inject();
   var CONFIG_NAMES = ["config.json", "providers.json"];
   var API_FORMAT_TO_WIRE_API = {
     openai_responses: "responses",
@@ -48295,6 +48554,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/claudeSettingsImport.js
+  init_cep_runtime_inject();
   function settingsFile(platform) {
     const home = platform.paths.home;
     if (!home) return "";
@@ -48362,6 +48622,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/codexConfig.js
+  init_cep_runtime_inject();
   function stripInlineComment(line) {
     let inString = false;
     for (let i = 0; i < line.length; i++) {
@@ -48470,6 +48731,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/lib/chatEntries.js
+  init_cep_runtime_inject();
   function nextId(entries, prefix) {
     return `${prefix}-${entries.length + 1}`;
   }
@@ -48602,6 +48864,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/attachmentStore.js
+  init_cep_runtime_inject();
   function attachmentError(code, message, cause) {
     const error = new Error(message);
     error.code = code;
@@ -48835,6 +49098,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/lib/descriptorSelect.js
+  init_cep_runtime_inject();
   function isClaudeApiBackend(effectiveBackend) {
     return effectiveBackend === "claude-api" || effectiveBackend === "byok";
   }
@@ -48909,10 +49173,12 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/lib/zcodeModelCache.js
+  init_cep_runtime_inject();
   var ZCODE_PROBED_MODELS_CACHE_KEY = "ae_mcp_zcode_probed_models";
   var ZCODE_PROBED_MODELS_CACHE_MS = 60 * 60 * 1e3;
 
   // src/cep/useActivity.js
+  init_cep_runtime_inject();
   var import_react46 = __toESM(require_react(), 1);
   function useActivity(getHost) {
     const [events, setEvents] = import_react46.default.useState([]);
@@ -48943,6 +49209,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/firstRun.js
+  init_cep_runtime_inject();
   var WIZARD_DONE_KEY = "ae_mcp_wizard_done";
   function isWizardDone(storage) {
     try {
@@ -48965,9 +49232,11 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/app/wizardWiring.js
+  init_cep_runtime_inject();
   var import_react47 = __toESM(require_react(), 1);
 
   // src/cep/wizardActions.js
+  init_cep_runtime_inject();
   var OUTPUT_TAIL = 8192;
   var REPO = "https://github.com/JUNKDOGE-JOE/after-effects-mcp";
   var TOOL_IDS = { aeMcp: "ae-mcp", uv: "uv", node: "node", claude: "claude" };
@@ -49192,6 +49461,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/diagnostics.js
+  init_cep_runtime_inject();
   var HINTS = {
     "host-listening": {
       zh: "\u786E\u8BA4 ae-mcp \u9762\u677F\u5DF2\u6253\u5F00\uFF1B\u5982\u7AEF\u53E3\u88AB\u5360\u7528\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u91CC\u6362\u4E00\u4E2A\u7AEF\u53E3\u5E76\u91CD\u542F\u670D\u52A1\u3002",
@@ -49407,12 +49677,14 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/lib/wizardCopy.js
+  init_cep_runtime_inject();
   function copyWizardConfig(copyText3, fallbackConfig, selectedConfig) {
     const text = selectedConfig || fallbackConfig || "";
     return copyText3 ? copyText3(text) : void 0;
   }
 
   // src/cep/hostBridge.js
+  init_cep_runtime_inject();
   function normalizeCepPath(value, platform) {
     return normalizeCepSystemPath(value, platform);
   }
@@ -49813,6 +50085,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/lib/expertGuidance.js
+  init_cep_runtime_inject();
   var EXPERT_GUIDANCE_KEY = "ae-mcp.expertGuidance";
   function loadExpertGuidance(storage) {
     try {
@@ -49828,7 +50101,11 @@ data: ${JSON.stringify(payload)}
     }
   }
 
+  // src/lib/logExport.js
+  init_cep_runtime_inject();
+
   // src/lib/credentialTextRedaction.js
+  init_cep_runtime_inject();
   var SECRET_REFERENCE = /aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9_-]+\/v1/gi;
   var HEADER_LINE = /^([ \t]*)([!#$%&'*+.^_`|~0-9A-Za-z-]+)([ \t]*:[ \t]*)([^\r\n]+)$/gm;
   var QUOTED_PAIR = /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"'\r\n]+)\4/g;
@@ -49985,6 +50262,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/logExportFs.js
+  init_cep_runtime_inject();
   function writeLogExport({ text, fileName, platform, fsImpl }) {
     const adapter = platform || createPlatformAdapter();
     const fs = fsImpl || adapter.fs;
@@ -50011,6 +50289,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/lib/stableValue.js
+  init_cep_runtime_inject();
   function reconcileStableJsonValue(previous, value) {
     const json = JSON.stringify(value);
     if (previous && previous.json === json) return previous;
@@ -50018,6 +50297,7 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/lib/elicitationCoordinator.js
+  init_cep_runtime_inject();
   function isPlainObject2(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const prototype = Object.getPrototypeOf(value);

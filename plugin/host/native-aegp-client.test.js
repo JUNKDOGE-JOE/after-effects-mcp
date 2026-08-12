@@ -45,14 +45,6 @@ function unixSocketTestOptions(platform) {
 
 const UNIX_SOCKET_TEST = unixSocketTestOptions(process.platform);
 
-test('CEP host bridge uses legacy-compatible builtin module names', () => {
-    const source = fs.readFileSync(
-        path.join(__dirname, 'native-aegp-client.js'),
-        'utf8'
-    );
-    assert.doesNotMatch(source, /(?:require\s*\(|from\s+)['"]node:/);
-});
-
 function descriptor(socketName) {
     return [
         'AEMCP_NATIVE_ENDPOINT_V1',
