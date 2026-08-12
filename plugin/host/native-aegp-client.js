@@ -1,10 +1,13 @@
 'use strict';
 
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const net = require('node:net');
-const os = require('node:os');
-const path = require('node:path');
+// CEP 11 in AE 2024 embeds a Node runtime that predates the `node:` scheme.
+// Bare builtin names also work on current Node, so keep this host bridge
+// compatible with both runtimes.
+const crypto = require('crypto');
+const fs = require('fs');
+const net = require('net');
+const os = require('os');
+const path = require('path');
 
 const MAX_FRAME_BYTES = 524288;
 const MAX_BUFFERED_BYTES = MAX_FRAME_BYTES * 8;
