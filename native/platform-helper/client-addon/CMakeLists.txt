@@ -2,6 +2,14 @@ cmake_minimum_required(VERSION 3.25)
 
 project(ae_mcp_platform_helper_transport VERSION 0.1.0 LANGUAGES CXX)
 
+# This .node addon loads INTO CEPHtmlEngine (an Adobe host process shipping
+# its own older MSVC runtime). Same policy as the AEX and helper: static CRT,
+# so the addon never binds a host-local MSVCP140/VCRUNTIME140 (the AE 2024
+# std::mutex crash class, PR #235). Matches node-gyp's Windows default.
+if(WIN32)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 set(AE_MCP_NODE_VERSION "24.17.0" CACHE STRING "Locked Node.js header version")
 if(NOT AE_MCP_NODE_VERSION STREQUAL "24.17.0")
   message(FATAL_ERROR "AE_MCP_NODE_VERSION must be the locked version 24.17.0")

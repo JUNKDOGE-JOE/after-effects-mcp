@@ -1,4 +1,7 @@
 // HTTP server for the ae-mcp CEP plugin. Exposes /health and /exec.
+// CEP 11 (AE 2023/2024) runtime polyfills MUST load before any other host
+// module — see cep-runtime-compat.js and cep-runtime-contract.test.js.
+require('./cep-runtime-compat');
 const path = require('path');
 const jsxBridge = require('./jsx-bridge');
 const authToken = require('./auth-token');

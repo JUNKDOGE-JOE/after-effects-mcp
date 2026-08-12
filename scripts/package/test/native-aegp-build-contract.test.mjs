@@ -391,6 +391,11 @@ test('native windows build compiles one x64 aex with msvc and records the toolch
   assert.match(script, /\/DMSWindows/u);
   assert.match(script, /\/DAE_MCP_SOURCE_COMMIT=/u);
   assert.match(script, /AeMcpNative\.aex/u);
+  // AE 2023/2024 host-runtime baseline: the AEX must link the static CRT so it
+  // never binds the host-local (older) MSVCP140.dll — a current /MD build
+  // crashes AE 2024 in std::mutex internals (PR #235). Pin /MT and forbid /MD.
+  assert.match(script, /'\/MT'/u);
+  assert.doesNotMatch(script, /'\/MD'/u);
   // The receipt binds the artifact hash to the pinned toolchain identity.
   assert.match(script, /msvcVersion/u);
   assert.match(script, /windowsSdkVersion/u);

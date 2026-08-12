@@ -14,6 +14,10 @@ export function buildOptions() {
     outfile: '../client/dist/app.js',
     format: 'iife',
     target: 'es2019',
+    // CEP 11 (AE 2023/2024, V8 8.8) lacks newer runtime APIs that `target`
+    // cannot lower (Object.hasOwn, Array.prototype.at, structuredClone) — the
+    // inject shim defines them conditionally before any bundled code runs.
+    inject: ['src/cep-runtime-inject.js'],
     jsx: 'automatic',
     define: { 'process.env.NODE_ENV': '"production"' },
     // CEP pages have Node injected; React/lucide are bundled into the panel asset.

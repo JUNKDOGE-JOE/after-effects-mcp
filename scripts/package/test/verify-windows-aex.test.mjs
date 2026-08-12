@@ -256,18 +256,35 @@ function versionBlockOffset(bytes, key) {
   return keyOffset - 6;
 }
 
+const IMPORT_DIRECTORY_OFFSET = 0x80;
+const IMPORT_NAME_OFFSET = 0x100;
+
 function buildPe({
   machine = 0x8664,
   characteristics = 0x2022,
   exportNames = [ENTRY],
   pipl = validPipl(),
   versionInfo = validVersionInfo(),
+  importedDlls = null,
+  textSectionName = '.text',
 } = {}) {
   const dos = Buffer.alloc(0x80);
   dos.writeUInt16LE(0x5a4d, 0);
   dos.writeUInt32LE(0x80, 0x3c);
 
   const textRaw = Buffer.alloc(0x200);
+  if (importedDlls !== null) {
+    // One 20-byte descriptor per DLL plus a null terminator, with each module
+    // name string packed after IMPORT_NAME_OFFSET in the same .text section.
+    let descriptor = IMPORT_DIRECTORY_OFFSET;
+    let nameCursor = IMPORT_NAME_OFFSET;
+    for (const dll of importedDlls) {
+      textRaw.writeUInt32LE(TEXT_RVA + nameCursor, descriptor + 12);
+      textRaw.write(`${dll}\0`, nameCursor, 'ascii');
+      descriptor += 20;
+      nameCursor += dll.length + 1;
+    }
+  }
   if (exportNames !== null) {
     const functionsOffset = EXPORT_FUNCTIONS_OFFSET;
     const namesOffset = functionsOffset + exportNames.length * 4;
@@ -310,11 +327,17 @@ function buildPe({
     bytes.writeUInt32LE(TEXT_RVA, optional + 112);
     bytes.writeUInt32LE(EXPORT_DIRECTORY_SIZE, optional + 116);
   }
+  if (importedDlls !== null) {
+    bytes.writeUInt32LE(TEXT_RVA + IMPORT_DIRECTORY_OFFSET, optional + 112 + 8);
+    bytes.writeUInt32LE((importedDlls.length + 1) * 20, optional + 112 + 12);
+  }
   bytes.writeUInt32LE(0x2000, optional + 112 + 16);
   bytes.writeUInt32LE(rsrcRaw.length, optional + 112 + 20);
 
   let section = optional + optionalSize;
-  bytes.write('.text', section, 'ascii');
+  // textSectionName exercises the fixed-width 8-byte section-name field; the
+  // static-CRT '.fptable' section fills all 8 bytes with no NUL terminator.
+  bytes.write(textSectionName.slice(0, 8), section, 'ascii');
   bytes.writeUInt32LE(0x200, section + 8);
   bytes.writeUInt32LE(TEXT_RVA, section + 12);
   bytes.writeUInt32LE(0x200, section + 16);
@@ -363,6 +386,36 @@ test('windows aex verifier accepts a well-formed x64 plugin fixture', async (t) 
     crypto.createHash('sha256').update(bytes).digest('hex'),
   );
   assert.equal(result.receipt.sdk.claimedVersion, '25.6.61');
+});
+
+test('windows aex verifier accepts OS-only imports (static CRT build)', async (t) => {
+  const artifact = await fixturePath(t, buildPe({
+    importedDlls: ['KERNEL32.dll', 'USER32.dll', 'bcrypt.dll'],
+  }));
+  const result = await verifyWindowsAex({ artifactPath: artifact });
+  assert.equal(result.result, 'PASS');
+});
+
+test('windows aex verifier rejects a dynamic C runtime import (/MD regression)', async (t) => {
+  for (const crt of ['MSVCP140.dll', 'VCRUNTIME140.dll', 'ucrtbase.dll', 'api-ms-win-crt-runtime-l1-1-0.dll']) {
+    const artifact = await fixturePath(t, buildPe({
+      importedDlls: ['KERNEL32.dll', crt],
+    }));
+    await assert.rejects(
+      verifyWindowsAex({ artifactPath: artifact }),
+      (error) => error.code === 'AE_PLUGIN_VERIFY_FAILED' && /static CRT/u.test(error.message),
+      `expected rejection for ${crt}`,
+    );
+  }
+});
+
+test('windows aex verifier accepts a full 8-byte section name (static-CRT .fptable)', async (t) => {
+  // A NUL-terminated read of an 8-char section name would overrun into the
+  // next field and previously failed as "unbounded string" — the /MT link's
+  // '.fptable' section triggers exactly this. Names use up to 8 bytes.
+  const artifact = await fixturePath(t, buildPe({ textSectionName: '.fptable' }));
+  const result = await verifyWindowsAex({ artifactPath: artifact });
+  assert.equal(result.result, 'PASS');
 });
 
 test('windows aex verifier rejects non-x64 architectures', async (t) => {

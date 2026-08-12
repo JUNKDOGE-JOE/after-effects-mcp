@@ -91,6 +91,17 @@ function readAscii(bytes, offset, maximum = 260) {
   return bytes.subarray(offset, end).toString('ascii');
 }
 
+// A PE section name is a fixed 8-byte field that is NOT required to be
+// NUL-terminated when all 8 bytes are used (e.g. the static-CRT '.fptable'
+// section from an /MT link). Read it as fixed-width, trimming at the first NUL
+// if present, rather than as a NUL-terminated string.
+function readSectionName(bytes, offset) {
+  assertRange(bytes, offset, 8, 'PE section name');
+  const raw = bytes.subarray(offset, offset + 8);
+  const nul = raw.indexOf(0);
+  return (nul === -1 ? raw : raw.subarray(0, nul)).toString('ascii');
+}
+
 function parsePeHeaders(bytes) {
   if (bytes.length < 0x40 || bytes.readUInt16LE(0) !== 0x5a4d) {
     fail('not a PE artifact (MZ header missing)');
@@ -111,13 +122,15 @@ function parsePeHeaders(bytes) {
   if (magic !== 0x20b) fail('not a PE32+ (64-bit) optional header');
   const exportRva = bytes.readUInt32LE(optionalStart + 112);
   const exportSize = bytes.readUInt32LE(optionalStart + 116);
+  const importRva = bytes.readUInt32LE(optionalStart + 112 + 8);
+  const importSize = bytes.readUInt32LE(optionalStart + 112 + 12);
   const resourceRva = bytes.readUInt32LE(optionalStart + 112 + 16);
   const resourceSize = bytes.readUInt32LE(optionalStart + 112 + 20);
   const sections = [];
   let cursor = optionalStart + optionalSize;
   for (let index = 0; index < sectionCount; index += 1, cursor += 40) {
     if (cursor + 40 > bytes.length) fail('truncated PE section table');
-    const name = readAscii(bytes, cursor, 8);
+    const name = readSectionName(bytes, cursor);
     sections.push({
       name,
       virtualSize: bytes.readUInt32LE(cursor + 8),
@@ -131,8 +144,43 @@ function parsePeHeaders(bytes) {
     characteristics,
     sections,
     export: { rva: exportRva, size: exportSize },
+    import: { rva: importRva, size: importSize },
     resource: { rva: resourceRva, size: resourceSize },
   };
+}
+
+const MAX_IMPORT_DESCRIPTORS = 64;
+// The AE 2023/2024 baseline forbids dynamic C++/C runtime imports: AE 2024
+// ships an older private MSVCP140.dll that crashes current-toolset /MD code in
+// std::mutex internals, and end-user machines may lack the redistributable.
+// The AEX links the static CRT (/MT in build-windows.mjs), so any of these in
+// the import table means the build regressed.
+const FORBIDDEN_IMPORT_PREFIXES = ['msvcp', 'vcruntime', 'ucrtbase', 'api-ms-win-crt'];
+
+function parseImportedDlls(bytes, headers) {
+  if (headers.import.rva === 0) return [];
+  const names = [];
+  let offset = rvaToOffset(headers, headers.import.rva, 20, 'import directory');
+  for (let index = 0; index < MAX_IMPORT_DESCRIPTORS; index += 1, offset += 20) {
+    assertRange(bytes, offset, 20, 'import descriptor');
+    const originalFirstThunk = bytes.readUInt32LE(offset);
+    const nameRva = bytes.readUInt32LE(offset + 12);
+    const firstThunk = bytes.readUInt32LE(offset + 16);
+    if (originalFirstThunk === 0 && nameRva === 0 && firstThunk === 0) return names;
+    if (nameRva === 0) fail('import descriptor is missing a module name');
+    const nameOffset = rvaToOffset(headers, nameRva, 2, 'import module name');
+    names.push(readAscii(bytes, nameOffset));
+  }
+  fail('import directory is not bounded');
+}
+
+function assertNoDynamicCrtImports(bytes, headers) {
+  for (const dll of parseImportedDlls(bytes, headers)) {
+    const lowered = dll.toLowerCase();
+    if (FORBIDDEN_IMPORT_PREFIXES.some((prefix) => lowered.startsWith(prefix))) {
+      fail(`artifact imports the dynamic C runtime (${dll}); the AEX must link the static CRT (/MT)`);
+    }
+  }
 }
 
 function rvaToOffset(headers, rva, size, label) {
@@ -527,6 +575,7 @@ export async function verifyWindowsAex(input) {
       fail('artifact is not a DLL');
     }
     const entryExport = parseExports(bytes, headers);
+    assertNoDynamicCrtImports(bytes, headers);
     const pipl = findResource(bytes, headers, PIPL_RESOURCE_TYPE, PIPL_RESOURCE_ID);
     if (pipl === null) fail('PiPL resource 16000 is missing');
     assertPiplResource(pipl);
