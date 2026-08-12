@@ -674,7 +674,9 @@ function compileWindowsObjects({
   ];
   const baseFlags = [
     '/nologo', '/c', '/std:c++20', '/EHsc', '/W4', '/WX', '/external:W0',
-    '/utf-8', '/Od', '/MD', '/GS', '/guard:cf', '/permissive-',
+    // AE 2024 loads its own older MSVC runtime from the host directory. A
+    // current /MD build can bind to that copy and crash in std::mutex internals.
+    '/utf-8', '/Od', '/MT', '/GS', '/guard:cf', '/permissive-',
     ...includeFlags, ...defineFlags,
   ];
   const objectFiles = [];
