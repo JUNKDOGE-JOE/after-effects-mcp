@@ -181,6 +181,28 @@ CAS 晋升；没有自动过期或清理。已有 candidates 保持不变。
 两者都必填；同一 key 只能绑定规范化后完全相同的 program。一个写 program 使用
 一个真实 AE Undo group，但不承诺原子性，也不会在部分失败后静默回滚。
 
+### 审批模型
+
+两个工具面，分别把关，**默认方向相反，这是刻意的**。
+
+| | 动词面（`ae_exec`、`ae_previewFrame` 等） | 存储程序面（`ae_toolUse`、`ae_skillUse`） |
+|---|---|---|
+| 环境变量 | `AE_MCP_APPROVAL_TIER_FILE` | `AE_MCP_TOOL_APPROVAL_TIER_FILE` |
+| 变量未设置 | 不设门禁——由客户端自己弹审批 | `manual`——由 ae-mcp 弹审批 |
+| 文件缺失或不可读 | `manual` | `manual` |
+| 档位 | `readonly` / `manual` / `auto` / `none` | 同左 |
+
+档位文件由面板写入，你拨动审批 chip 时面板会改写它。变量未设置时，调用方是别的
+MCP 客户端，把关的是它自己的权限系统——面板对 Codex adapter 就是**故意不设**这个
+变量的，因为 Codex 自己会弹审批。把动词面默认改成 `manual` 反而会让所有不支持
+elicitation 的客户端完全无法写入。
+
+存储程序面默认相反，因为它执行的是调用方当轮没有写的代码，配置缺失是"该问一句"
+的理由，而不是"可以继续"的理由。**风险更高的那一面才是 fail-closed 的那一面。**
+
+两个门禁都不是认证边界。`/exec` 要求 `~/.ae-mcp/auth-token` 里的共享密钥（首次
+运行生成），面板的 kill switch 和 per-client 黑名单也在这两个门禁之前。
+
 ### Readback、失败与 Undo
 
 - 写入前读取基线，写入后用新的独立请求读取结果。
@@ -391,6 +413,32 @@ Read programs omit `operationKey` and `undoGroup`. A program containing any
 write requires both; one key binds one canonical program. A write program uses
 one real AE Undo group, is not atomic, and never silently rolls back partial
 execution.
+
+### Approval model
+
+Two surfaces, gated separately, defaulting in opposite directions on purpose.
+
+| | verbs (`ae_exec`, `ae_previewFrame`, …) | stored programs (`ae_toolUse`, `ae_skillUse`) |
+|---|---|---|
+| env var | `AE_MCP_APPROVAL_TIER_FILE` | `AE_MCP_TOOL_APPROVAL_TIER_FILE` |
+| variable unset | no gate — the client prompts | `manual` — ae-mcp prompts |
+| file missing or unreadable | `manual` | `manual` |
+| tiers | `readonly` / `manual` / `auto` / `none` | same |
+
+The panel writes the tier file and rewrites it when you move the approval chip.
+When the variable is unset, the caller is another MCP client whose own
+permission system is the gate — which is why the panel deliberately leaves it
+unset for its Codex adapter, since Codex prompts on its own. Defaulting the verb
+surface to `manual` instead would leave any client that cannot prompt unable to
+write at all.
+
+Stored programs default the other way because they run code the caller did not
+write in that turn, so an absent configuration is a reason to ask rather than to
+proceed. **The higher-risk surface is the fail-closed one.**
+
+Neither gate is the authentication boundary. `/exec` requires a shared secret at
+`~/.ae-mcp/auth-token`, generated on first run, and the panel's kill switch and
+per-client block list sit in front of both gates.
 
 ### Readback, failures, and Undo
 

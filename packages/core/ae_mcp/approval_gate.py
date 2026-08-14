@@ -1,9 +1,38 @@
-"""Opt-in approval gate driven by a tier file (panel-controlled).
+"""Approval gates for the two tool surfaces.
 
-Activated only when AE_MCP_APPROVAL_TIER_FILE is set: the embedding UI
-(panel Codex adapter) writes one of readonly/manual/auto/none into that
-file and flips it when the user changes the approval chip. Decisions
-come from VERB_ANNOTATIONS (the same source as the Claude backend's
+There are two, with **opposite defaults**, and the difference is deliberate. It
+has been read from the source as a fail-open bug (#243), so it is written down
+here rather than left to be rediscovered.
+
+**Verb surface** -- ae_exec, ae_previewFrame, and the rest. Gated by
+`enforce()`, active only when AE_MCP_APPROVAL_TIER_FILE is set: the embedding
+UI writes one of readonly/manual/auto/none into that file and flips it when the
+user changes the approval chip. With the variable unset the gate is a no-op,
+because the caller is then some other MCP client whose own permission system is
+the gate. The panel deliberately does not set the variable for its Codex
+adapter for exactly that reason -- asserted in
+plugin/panel/test/codexBackend.test.js. Defaulting this to `manual` instead is
+not a safe one-line change: a client with no elicitation capability would hit
+_NO_PROMPT_API on every write and be unable to do anything at all.
+
+**Tool Library and skill surface** -- ae_toolUse, ae_skillUse. These execute
+stored programs rather than a verb the caller just wrote, so they are excluded
+from `enforce()` at the dispatch site and gated by `plan_decision()` /
+`authorize_plan()` instead, which fall back to `manual` when
+AE_MCP_TOOL_APPROVAL_TIER_FILE is absent. **The higher-risk surface is the
+fail-closed one.**
+
+A missing or unreadable tier *file* falls back to `manual` on both surfaces
+(see `read_tier`). Only the absence of the environment variable separates them,
+and it means different things in the two places: "no UI is driving this gate,
+and the client has its own", versus "no UI is driving this gate, so assume
+nothing".
+
+Neither gate is the authentication boundary. /exec requires a shared secret
+(plugin/host/auth-token.js) and the panel has a kill switch and per-client
+block list in front of both.
+
+Decisions come from VERB_ANNOTATIONS (the same source as the Claude backend's
 canUseTool tiers), so semantics match across backends.
 """
 from __future__ import annotations
@@ -98,6 +127,12 @@ def gate_decision(tier: str, verb_name: str) -> Decision:
 
 
 def current_tool_tier() -> Tier:
+    """Tier for the Tool Library surface, which runs stored programs.
+
+    Unset means `manual`, the opposite of `enforce()`. That asymmetry is the
+    point: this surface executes code the caller did not write in this turn, so
+    an absent configuration is a reason to ask, not a reason to proceed.
+    """
     path = os.environ.get("AE_MCP_TOOL_APPROVAL_TIER_FILE")
     if not path:
         return "manual"
@@ -195,7 +230,12 @@ async def authorize_plan(
 
 
 async def enforce(name: str, ctx: Any) -> dict[str, Any] | None:
-    """Apply the configured approval tier before a tool executes."""
+    """Apply the configured approval tier before a verb executes.
+
+    Returns None to allow. See the module docstring for why an unset variable
+    allows here while `current_tool_tier` denies: this gate exists so the panel
+    UI can drive it, and its absence means another client owns the prompt.
+    """
     path = os.environ.get("AE_MCP_APPROVAL_TIER_FILE")
     if not path:
         return None
