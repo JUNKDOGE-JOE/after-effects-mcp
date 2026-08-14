@@ -8,10 +8,17 @@ import time
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
 from ae_mcp import schemas as S
 from ae_mcp.handlers import HANDLERS, load_all
+from ae_mcp.handlers import core as core_handlers
 from ae_mcp.handlers.core import _run_ping
+
+
+async def _never_written(*_args, **_kwargs):
+    """Stand in for a capture whose file never becomes a complete PNG."""
+    return None
 
 
 @pytest.fixture(autouse=True)
@@ -930,3 +937,203 @@ def test_revert_open_template_substitutes_path_and_no_throw():
     # Preserves the missing-file guard and never throws.
     assert "missing" in jsx
     assert "ok: false" in jsx and "ok: true" in jsx
+
+
+# ---------------------------------------------------------------------------
+# ae.previewFrame — real PNG size vs the composition's own size (#242)
+# ---------------------------------------------------------------------------
+
+
+def _chunked_png_writer(path: Path, size: tuple[int, int]):
+    """Write a PNG the way saveFrameToPng does: late, and in pieces.
+
+    The signature lands well before the image is complete, which is what makes
+    a signature-only wait hand Pillow a truncated file. The gap is deliberate
+    and larger than the handler's 50ms poll so the race is not left to luck.
+    """
+    import io as _io
+    import threading
+    from PIL import Image
+
+    buffer = _io.BytesIO()
+    Image.new("RGB", size, (12, 34, 56)).save(buffer, "PNG")
+    payload = buffer.getvalue()
+    split = 32
+
+    def _write() -> None:
+        with open(path, "wb") as handle:
+            handle.write(payload[:split])
+            handle.flush()
+        time.sleep(0.3)
+        with open(path, "ab") as handle:
+            handle.write(payload[split:])
+            handle.flush()
+
+    threading.Timer(0.05, _write).start()
+    return payload
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_reports_written_pixels_not_comp_settings(
+    monkeypatch, mock_backend, tmp_path
+):
+    """A Half-resolution viewer writes half a frame; report what was written.
+
+    saveFrameToPng honours the viewer's Resolution setting, so a 1920x1080 comp
+    at [2,2] produces a 960x540 file. Reporting the composition's size instead
+    is what produced "frame 0 dimensions (960, 540) do not match (1920, 1080)".
+    """
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+
+    def _render_response(code, **kwargs):
+        import re
+
+        match = re.search(r"new File\((\".*?\")\)", code)
+        assert match, code
+        path = Path(json.loads(match.group(1)))
+        _chunked_png_writer(path, (960, 540))
+        return json.dumps({
+            "ok": True,
+            "compId": "7",
+            "compName": "Preview",
+            "time": 0.5,
+            "path": str(path),
+            "compWidth": 1920,
+            "compHeight": 1080,
+            "resolutionFactor": [2, 2],
+            "source": "comp",
+            "method": "saveFrameToPng",
+            "existsImmediately": False,
+        })
+
+    mock_backend.set_response(_render_response)
+
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(
+        S.AePreviewFrameArgs(comp_id="7", time=0.5, out_dir=str(tmp_path)),
+        None,
+    )
+
+    assert result["ok"] is True
+    frame = result["frames"][0]
+    assert (frame["width"], frame["height"]) == (960, 540)
+    assert (frame["compWidth"], frame["compHeight"]) == (1920, 1080)
+    assert frame["resolutionFactor"] == [2, 2]
+    assert frame["downsampled"] is True
+    # The caller reads the text result, not the metadata fields.
+    assert "downsampled" in result["note"]
+
+    # The packaging step is the thing that used to reject this frame. It has to
+    # accept the fixed metadata, or the test proves nothing about the symptom.
+    from ae_mcp.server import _preview_frame_content
+
+    assert len(_preview_frame_content(result)) == 1
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_full_resolution_capture_is_not_marked_downsampled(
+    monkeypatch, mock_backend, tmp_path
+):
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+
+    def _render_response(code, **kwargs):
+        import re
+
+        match = re.search(r"new File\((\".*?\")\)", code)
+        path = Path(json.loads(match.group(1)))
+        _chunked_png_writer(path, (320, 180))
+        return json.dumps({
+            "ok": True,
+            "compId": "7",
+            "compName": "Preview",
+            "time": 0.0,
+            "path": str(path),
+            "compWidth": 320,
+            "compHeight": 180,
+            "resolutionFactor": [1, 1],
+            "source": "comp",
+            "method": "saveFrameToPng",
+        })
+
+    mock_backend.set_response(_render_response)
+
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(
+        S.AePreviewFrameArgs(comp_id="7", out_dir=str(tmp_path)), None
+    )
+
+    frame = result["frames"][0]
+    assert (frame["width"], frame["height"]) == (320, 180)
+    assert "downsampled" not in frame
+    assert "note" not in result
+
+
+def test_preview_frame_metadata_from_comp_settings_still_fails_packaging(tmp_path):
+    """The negative half: without the fix the same capture is still rejected.
+
+    Guards against the pair of tests above passing vacuously -- if the
+    packaging check stopped comparing dimensions at all, they would go green
+    while the original defect was untouched.
+    """
+    from PIL import Image
+    from ae_mcp.server import _preview_frame_content
+
+    path = tmp_path / "half.png"
+    Image.new("RGB", (960, 540), (12, 34, 56)).save(path, "PNG")
+    payload = path.read_bytes()
+
+    stale = {
+        "ok": True,
+        "frames": [{
+            "path": str(path),
+            "width": 1920,
+            "height": 1080,
+            "sha256": hashlib.sha256(payload).hexdigest(),
+        }],
+    }
+    with pytest.raises(ValueError, match=r"do not match"):
+        _preview_frame_content(stale)
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_rejects_a_png_that_never_finishes(
+    monkeypatch, mock_backend, tmp_path
+):
+    """A truncated file is a capture that did not finish, not a broken image."""
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+    monkeypatch.setattr(core_handlers, "_await_written_png", _never_written)
+
+    def _render_response(code, **kwargs):
+        import re
+
+        match = re.search(r"new File\((\".*?\")\)", code)
+        path = Path(json.loads(match.group(1)))
+        path.write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 64)
+        return json.dumps({
+            "ok": True,
+            "compId": "7",
+            "compName": "Preview",
+            "time": 0.0,
+            "path": str(path),
+            "compWidth": 320,
+            "compHeight": 180,
+            "source": "comp",
+            "method": "saveFrameToPng",
+        })
+
+    mock_backend.set_response(_render_response)
+
+    _, run_fn = HANDLERS["ae.previewFrame"]
+    result = await run_fn(
+        S.AePreviewFrameArgs(comp_id="7", out_dir=str(tmp_path)), None
+    )
+
+    assert result["ok"] is False
+    assert "did not finish writing" in result["fallbackReason"]
+
+
+def test_preview_frame_times_are_bounded():
+    """An outer timeout that scales with caller input has no ceiling."""
+    with pytest.raises(ValidationError):
+        S.AePreviewFrameArgs(times=[float(i) for i in range(9)])
+    assert S.AePreviewFrameArgs(times=[float(i) for i in range(8)]).times is not None

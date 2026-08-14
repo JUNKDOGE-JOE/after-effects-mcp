@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import io
 import json
 from pathlib import Path
 
@@ -31,9 +32,31 @@ SETUP_JSX = """
 
 
 def _assert_png(path):
+    """Decode it. A signature check shares the blind spot the handler had.
+
+    saveFrameToPng writes asynchronously, so the first eight bytes are true long
+    before the file is an image -- meaning a signature-only assertion passes on
+    exactly the truncated captures it exists to catch.
+    """
+    from PIL import Image
+
     data = path.read_bytes()
     assert data[:8] == b"\x89PNG\r\n\x1a\n"
-    assert len(data) > 100
+    assert data[-8:] == b"IEND\xaeB`\x82", f"{path} has no IEND trailer"
+    with Image.open(io.BytesIO(data)) as image:
+        image.load()
+        assert image.format == "PNG"
+        return image.size
+
+
+def _assert_frame_matches_file(frame):
+    """Reported size must be the file's size, not the composition's settings."""
+    size = _assert_png(Path(frame["path"]))
+    assert (frame["width"], frame["height"]) == size, (
+        f"frame reports {(frame['width'], frame['height'])} "
+        f"but the written PNG is {size}"
+    )
+    return size
 
 
 @pytest.fixture
@@ -144,3 +167,114 @@ async def test_preview_frame_captures_different_times_distinctly(clean_project, 
         "times — the AE viewer didn't repaint between captures. Likely a "
         "regression of the repaint_delay_ms fix."
     )
+
+
+# ---------------------------------------------------------------------------
+# Real-size capture and the write race (#242)
+#
+# Every test above uses a comp of 320x180 or smaller. Those write fast enough
+# that the signature-only wait never lost the race, which is why this class of
+# failure reached users through a suite that was passing. A full-HD frame at
+# Full resolution takes long enough to reach disk for the race to be real.
+# ---------------------------------------------------------------------------
+
+
+FULL_HD_SETUP_JSX = """
+(function(){
+  try {
+    var comp = app.project.items.addComp("PreviewFullHD", 1920, 1080, 1, 2.0, 24);
+    var solid = comp.layers.addSolid([0.2,0.6,0.9], "Field", 1920, 1080, 1, 2.0);
+    solid.property("ADBE Transform Group").property("ADBE Position").setValue([960, 540, 0]);
+    comp.resolutionFactor = [1, 1];
+    comp.time = 0.25;
+    comp.openInViewer();
+    return JSON.stringify({ok:true, compId: String(comp.id)});
+  } catch (e) { return JSON.stringify({ok:false, error:String(e), line:e.line}); }
+})()
+"""
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_full_hd_capture_is_complete_and_correctly_sized(
+    clean_project, artifact_dir
+):
+    out = await clean_project.exec(code=FULL_HD_SETUP_JSX, timeout_sec=20.0)
+    parsed = json.loads(out)
+    assert parsed["ok"] is True, parsed
+
+    result = await _run_preview_frame(
+        schemas.AePreviewFrameArgs(
+            comp_id=parsed["compId"], out_dir=str(artifact_dir)
+        ),
+        ctx=None,
+    )
+    assert result["ok"] is True, result
+
+    frame = result["frames"][0]
+    assert _assert_frame_matches_file(frame) == (1920, 1080)
+    assert (frame["compWidth"], frame["compHeight"]) == (1920, 1080)
+    assert frame.get("downsampled") is None
+    assert "note" not in result
+
+
+HALF_RES_SETUP_JSX = """
+(function(){
+  try {
+    var comp = app.project.items.addComp("PreviewHalfRes", 1920, 1080, 1, 2.0, 24);
+    comp.layers.addSolid([0.9,0.4,0.1], "Field", 1920, 1080, 1, 2.0);
+    comp.resolutionFactor = [2, 2];
+    comp.time = 0.25;
+    comp.openInViewer();
+    return JSON.stringify({ok:true, compId: String(comp.id)});
+  } catch (e) { return JSON.stringify({ok:false, error:String(e), line:e.line}); }
+})()
+"""
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_half_resolution_reports_the_written_size(
+    clean_project, artifact_dir
+):
+    """The reported failure: comp says 1920x1080, the viewer writes 960x540."""
+    out = await clean_project.exec(code=HALF_RES_SETUP_JSX, timeout_sec=20.0)
+    parsed = json.loads(out)
+    assert parsed["ok"] is True, parsed
+
+    result = await _run_preview_frame(
+        schemas.AePreviewFrameArgs(
+            comp_id=parsed["compId"], out_dir=str(artifact_dir)
+        ),
+        ctx=None,
+    )
+    assert result["ok"] is True, result
+
+    frame = result["frames"][0]
+    assert _assert_frame_matches_file(frame) == (960, 540)
+    assert (frame["compWidth"], frame["compHeight"]) == (1920, 1080)
+    assert frame["resolutionFactor"] == [2, 2]
+    assert frame["downsampled"] is True
+    # The caller reads the text result; a metadata field alone is not a warning.
+    assert "downsampled" in result["note"]
+
+
+@pytest.mark.asyncio
+async def test_preview_frame_multiple_full_hd_frames_fit_the_budget(
+    clean_project, artifact_dir
+):
+    """Three full-HD frames used to exhaust one flat 60s budget while each succeeded."""
+    out = await clean_project.exec(code=FULL_HD_SETUP_JSX, timeout_sec=20.0)
+    parsed = json.loads(out)
+    assert parsed["ok"] is True, parsed
+
+    result = await _run_preview_frame(
+        schemas.AePreviewFrameArgs(
+            comp_id=parsed["compId"],
+            times=[0.0, 0.5, 1.0],
+            out_dir=str(artifact_dir),
+        ),
+        ctx=None,
+    )
+    assert result["ok"] is True, result
+    assert len(result["frames"]) == 3
+    for frame in result["frames"]:
+        assert _assert_frame_matches_file(frame) == (1920, 1080)

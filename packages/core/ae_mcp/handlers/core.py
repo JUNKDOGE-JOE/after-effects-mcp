@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import io
 import json
 import logging
 import os
@@ -49,6 +50,24 @@ _PREVIEW_SESSION_ID = uuid.uuid4().hex[:10]
 _PREVIEW_ROOT = Path(tempfile.gettempdir()) / "ae_mcp_previews"
 _PREVIEW_CLEANUP_DONE = False
 _PREVIEW_CLEANUP_AGE_SEC = 24 * 60 * 60
+
+_PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_PNG_TRAILER = b"IEND\xaeB`\x82"
+
+# One frame costs a 15s JSX round-trip plus the write-completion budget below,
+# so a flat outer timeout fails on frame counts that are each succeeding. The
+# budget grows per frame and still stops: a timeout bounded only by caller input
+# is its own failure mode.
+_PREVIEW_BASE_TIMEOUT_SEC = 45.0
+_PREVIEW_PER_FRAME_TIMEOUT_SEC = 35.0
+_PREVIEW_MAX_TIMEOUT_SEC = 300.0
+
+_DOWNSAMPLED_NOTE = (
+    "One or more frames are marked downsampled: they were captured at the "
+    "viewer's resolution setting, not the composition's full size, so fine "
+    "detail may be missing. Set the viewer to Full resolution before treating "
+    "a preview as proof that a visual change landed."
+)
 
 
 def _load_jsx(name: str) -> Template:
@@ -636,19 +655,51 @@ def _downscale_png(path: Path, scale: float) -> Optional[tuple[int, int]]:
         return None
 
 
-async def _wait_for_png(path: Path, timeout_sec: float = 5.0) -> bool:
-    deadline = asyncio.get_running_loop().time() + timeout_sec
-    png_sig = b"\x89PNG\r\n\x1a\n"
+async def _await_written_png(
+    path: Path, timeout_sec: float = 15.0
+) -> Optional[tuple[int, int]]:
+    """Wait for `path` to become a complete PNG and return its real pixel size.
+
+    `saveFrameToPng` does not block. The file is absent, then empty, then grows,
+    and only the final bytes make it a valid image. Accepting it once the 8-byte
+    signature matches hands Pillow a truncated file — the "frame is not a
+    decodable image" failure, intermittent only because it depends on how long
+    the frame takes to write.
+
+    Three conditions have to hold together: the IEND trailer is present, the
+    size stopped changing between two polls, and the bytes actually decode. The
+    last is not redundant with the first two. It is the same check the caller
+    runs when packaging the image, so failing it here reports a file that never
+    finished rather than an image that cannot be read.
+
+    Returns the decoded (width, height), or None if the deadline passed. The
+    dimensions come from the file because they are the only trustworthy source:
+    `saveFrameToPng` honours the viewer's Resolution setting, so the
+    composition's own width and height describe a different image.
+    """
+    from PIL import Image
+
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout_sec
+    minimum_size = len(_PNG_SIGNATURE) + len(_PNG_TRAILER)
+    previous_size = -1
     while True:
         try:
-            if path.exists() and path.stat().st_size >= len(png_sig):
-                with path.open("rb") as fh:
-                    if fh.read(len(png_sig)) == png_sig:
-                        return True
+            size = path.stat().st_size
+            if size >= minimum_size and size == previous_size:
+                data = path.read_bytes()
+                if data.startswith(_PNG_SIGNATURE) and data.endswith(_PNG_TRAILER):
+                    with Image.open(io.BytesIO(data)) as image:
+                        image.load()
+                        return image.size
+            previous_size = size
         except OSError:
-            pass
-        if asyncio.get_running_loop().time() >= deadline:
-            return False
+            previous_size = -1
+        except Exception:  # noqa: BLE001 - Pillow raises broadly on truncation
+            log.debug("preview PNG at %s not decodable yet", path, exc_info=True)
+            previous_size = -1
+        if loop.time() >= deadline:
+            return None
         await asyncio.sleep(0.05)
 
 
@@ -688,10 +739,14 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
             comp_name = prepared.get("compName")
 
             if prepared.get("source") == "comp" or prepared.get("method") == "saveFrameToPng":
-                frame_w = prepared.get("width")
-                frame_h = prepared.get("height")
                 snap_path = prepared.get("path") or str(frame_request["path"])
-                if snap_path and await _wait_for_png(Path(str(snap_path))):
+                captured = (
+                    await _await_written_png(Path(str(snap_path)))
+                    if snap_path
+                    else None
+                )
+                if captured is not None:
+                    frame_w, frame_h = captured
                     new_dims = _downscale_png(Path(str(snap_path)), args.scale)
                     if new_dims is not None:
                         frame_w, frame_h = new_dims
@@ -707,11 +762,27 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
                         "method": "saveFrameToPng",
                         "compId": comp_id,
                     }
+                    # The composition's own size is reported separately, never
+                    # as width/height: at Half resolution the viewer writes half
+                    # a frame, and a caller comparing a downsampled preview
+                    # against the comp settings would read it as full size.
+                    comp_w = prepared.get("compWidth")
+                    comp_h = prepared.get("compHeight")
+                    if isinstance(comp_w, int) and isinstance(comp_h, int):
+                        frame["compWidth"] = comp_w
+                        frame["compHeight"] = comp_h
+                        if (comp_w, comp_h) != captured:
+                            frame["downsampled"] = True
+                    resolution_factor = prepared.get("resolutionFactor")
+                    if isinstance(resolution_factor, list):
+                        frame["resolutionFactor"] = resolution_factor
                     if args.include_base64:
                         frame["base64"] = base64.b64encode(png_bytes).decode("ascii")
                     frames.append(frame)
                     continue
-                prepared["fallbackReason"] = "saveFrameToPng did not create a PNG file"
+                prepared["fallbackReason"] = (
+                    "saveFrameToPng did not finish writing a decodable PNG"
+                )
 
             if snapper is None:
                 snapper = _snap_discovery.select_snapshotter()
@@ -772,16 +843,26 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
                 frame["base64"] = base64.b64encode(png_bytes).decode("ascii")
             frames.append(frame)
 
-        return {
+        result: dict[str, Any] = {
             "ok": True,
             "compId": comp_id,
             "compName": comp_name,
             "captureId": capture_id,
             "frames": frames,
         }
+        # Say it in the text the caller actually reads. A resolutionFactor field
+        # is only useful to a caller that already knows to look for one.
+        if any(frame.get("downsampled") for frame in frames):
+            result["note"] = _DOWNSAMPLED_NOTE
+        return result
 
+    timeout_sec = min(
+        _PREVIEW_MAX_TIMEOUT_SEC,
+        _PREVIEW_BASE_TIMEOUT_SEC
+        + _PREVIEW_PER_FRAME_TIMEOUT_SEC * (len(frame_requests) - 1),
+    )
     return await progress.run_with_timeout(
-        ctx, _call(), timeout_sec=60.0, start_msg="ae.previewFrame..."
+        ctx, _call(), timeout_sec=timeout_sec, start_msg="ae.previewFrame..."
     )
 
 
