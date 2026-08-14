@@ -9,10 +9,8 @@
 # used to create the self-signed cert (if none exists) and to sign.
 
 param(
-    [Parameter(Mandatory=$true)]
     [string]$ZxpSignCmd,
 
-    [Parameter(Mandatory=$true)]
     [string]$CertPassword,
 
     [Parameter(Mandatory=$true)]
@@ -23,7 +21,10 @@ param(
     [string]$Version = "0.9.5",
     # Timestamp server: an untimestamped self-signed ZXP fails validation once
     # the cert expires. Timestamping pins the signature to signing time.
-    [string]$Tsa = "http://timestamp.digicert.com"
+    [string]$Tsa = "http://timestamp.digicert.com",
+    # Stage and verify only — skip certificate creation and signing. For
+    # payload smokes and CI, where no signer or certificate secret exists.
+    [switch]$SkipSigning
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,8 +34,13 @@ $releaseDir = Join-Path $repoRoot 'release'
 $stageDir = Join-Path $releaseDir 'ae-mcp-panel'
 $pluginSrc = Join-Path $repoRoot 'plugin'
 
-if (-not (Test-Path $ZxpSignCmd)) {
-    throw "ZXPSignCmd not found: $ZxpSignCmd"
+if (-not $SkipSigning) {
+    if (-not $ZxpSignCmd -or -not $CertPassword) {
+        throw "-ZxpSignCmd and -CertPassword are required unless -SkipSigning is set"
+    }
+    if (-not (Test-Path $ZxpSignCmd)) {
+        throw "ZXPSignCmd not found: $ZxpSignCmd"
+    }
 }
 if (-not (Test-Path -LiteralPath $HelperRoot -PathType Container)) {
     throw "Windows Platform Helper root not found: $HelperRoot"
@@ -100,34 +106,28 @@ foreach ($requiredHostFile in @('package.json', 'node_modules\express\package.js
 }
 
 Write-Host "[4/6] Staging the sidecar runtime payload..."
-# #239: production resolveSidecarPath reads runtime\windows-x64\node\sidecar and
-# the .debug development fallback was stripped in [1/6], so the payload must be
-# staged where production actually looks. The stage-root copy is build input
-# only and is removed so the ZXP ships exactly one sidecar.
-$runtimeSidecarDir = Join-Path $stageDir 'runtime\windows-x64\node\sidecar'
-New-Item -ItemType Directory -Force -Path $runtimeSidecarDir | Out-Null
-foreach ($sidecarFile in @('agent-sidecar.mjs', 'lib.mjs', 'package.json', 'package-lock.json')) {
-    Copy-Item -LiteralPath (Join-Path $stageDir "sidecar\$sidecarFile") -Destination $runtimeSidecarDir
+# #239: production resolveSidecarPath reads runtime\windows-x64\node\sidecar
+# with a sibling runtime\windows-x64\node\shared (lib.mjs imports
+# ../shared/tool-approval.mjs and ../shared/chat-attachments.mjs), and the
+# .debug development fallback was stripped in [1/6]. The staging logic lives in
+# stage-sidecar-payload.mjs — one implementation shared with CI's hermetic
+# self-check — which installs production deps, fail-closed verifies the whole
+# import closure incl. the win32-x64 SDK binary, and removes the stage-root
+# sidecar\ and shared\ copies so the ZXP ships exactly one payload.
+& node (Join-Path $repoRoot 'scripts\package\stage-sidecar-payload.mjs') `
+    --stage-root $stageDir --platform windows-x64
+if ($LASTEXITCODE -ne 0) {
+    throw "sidecar payload staging failed"
 }
-Push-Location $runtimeSidecarDir
-try {
-    npm ci --omit=dev
-    if ($LASTEXITCODE -ne 0) {
-        throw "npm failed while installing sidecar production dependencies"
-    }
-} finally {
-    Pop-Location
-}
-foreach ($requiredSidecarFile in @('agent-sidecar.mjs', 'node_modules\@anthropic-ai\claude-agent-sdk\package.json')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $runtimeSidecarDir $requiredSidecarFile) -PathType Leaf)) {
-        throw "Sidecar runtime payload file is missing: $requiredSidecarFile"
-    }
-}
-Remove-Item -Recurse -Force (Join-Path $stageDir 'sidecar')
 
 & node (Join-Path $repoRoot 'scripts\package\verify-windows-zxp-stage.mjs') --stage $stageDir --version $Version
 if ($LASTEXITCODE -ne 0) {
     throw "Windows ZXP stage validation failed"
+}
+
+if ($SkipSigning) {
+    Write-Host "[5/6] Signing skipped (-SkipSigning): staged and verified at $stageDir"
+    return
 }
 
 if (-not (Test-Path $CertPath)) {

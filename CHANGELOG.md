@@ -14,7 +14,10 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 #### 🐛 修复 / 改进
 
-- **ZXP 生产包补齐 Claude sidecar 载荷（#239）**——生产路径解析固定读取 `runtime/windows-x64/node/sidecar`，而 `.debug` 开发回退在打包时被剥离，此前的 ZXP 从未把 sidecar 放进该路径，终端用户装包后 Claude 订阅通道无法启动；打包脚本现将 sidecar 及其依赖落至 runtime 路径并移除舞台根的冗余副本，舞台校验将该载荷列为必查项——缺失即打包失败，不再放行绿灯。
+- **双平台补齐 Claude sidecar 载荷（#239，双平台 P0）**——生产解析读取 `runtime/<平台>/node/sidecar`，且 `lib.mjs` 依赖同级 `runtime/<平台>/node/shared/`（`tool-approval.mjs`、`chat-attachments.mjs`），此前 Windows ZXP 与 macOS 便携 runtime 均未将完整闭包放进该布局，终端用户装包后 Claude 通道必然 ENOENT/ERR_MODULE_NOT_FOUND。现在两条打包管线共用同一载荷 staging 实现，均落齐 sidecar+shared 与 SDK 依赖并移除舞台根冗余副本。
+- **dev-vs-packaged 判据统一（#239 macOS 半）**——`claudeAuth`/`runtimeManager`/`hostBridge`/`mcpClient` 共用同一判据：`.debug` 仅在**无打包证据**（bundle-manifest 或已迁移 host runtime）时才代表开发安装；macOS 生产包被强制携带的 `.debug` 不再把解析路由到无依赖的舞台根 sidecar。
+- **载荷缺失 fail-closed**——解析器在报告 ready 前实检完整导入闭包，缺件返回带缺失清单的 `SIDECAR_PAYLOAD_MISSING`，不再仅凭候选路径非空即报告就绪；舞台校验白名单覆盖 entry、lib、两个 shared、SDK manifest 与平台二进制。
+- **hermetic `--self-check`**——新增离线、无账号、有超时的侧车自检：对真实 staged 产物经生产解析器选路并实际加载完整模块闭包，Windows 与 macOS CI 均强制运行。
 
 ### [0.9.5] — 2026-08-12
 
@@ -284,7 +287,10 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 #### 🐛 Fixed / Improved
 
-- **ZXP production package now ships the Claude sidecar payload (#239)** — production path resolution reads `runtime/windows-x64/node/sidecar`, and the `.debug` development fallback is stripped at packaging time, yet no ZXP ever staged the sidecar there, leaving the Claude subscription channel unable to start on end-user installs; the packaging script now lands the sidecar and its dependencies at the runtime path, removes the redundant stage-root copy, and stage verification treats the payload as required — a missing payload fails the build instead of passing green.
+- **Both platforms now ship the Claude sidecar payload (#239, dual-platform P0)** — production resolution reads `runtime/<platform>/node/sidecar`, and `lib.mjs` needs the sibling `runtime/<platform>/node/shared/` (`tool-approval.mjs`, `chat-attachments.mjs`); neither the Windows ZXP nor the macOS portable runtime ever staged the full closure there, so the Claude channel died with ENOENT/ERR_MODULE_NOT_FOUND on end-user installs. Both pipelines now share one payload-staging implementation that lands sidecar+shared with the SDK dependencies and removes the redundant stage-root copies.
+- **Unified dev-vs-packaged decision (#239 macOS half)** — `claudeAuth`/`runtimeManager`/`hostBridge`/`mcpClient` share one rule: `.debug` means development only when **no packaged evidence** (bundle manifest or relocated host runtime) exists; the `.debug` the macOS bundle is required to carry no longer routes resolution to the dependency-less stage-root sidecar.
+- **Fail-closed on missing payloads** — the resolver verifies the full import closure before reporting ready and returns `SIDECAR_PAYLOAD_MISSING` with the missing-file inventory instead of treating any non-empty candidate path as ready; stage-verification whitelists cover the entry, lib, both shared modules, the SDK manifest, and the platform binary.
+- **Hermetic `--self-check`** — a new offline, account-free, timeout-bounded sidecar check resolves a REAL staged artifact through the production resolver and actually loads the whole module closure; both Windows and macOS CI run it.
 
 ### [0.9.5] — 2026-08-12
 

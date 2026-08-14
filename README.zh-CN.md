@@ -13,7 +13,8 @@ MCP server 是核心。在 MCP 本体之外，ae-mcp 还包装了一套 CEP 面�
 v0.9.5 发布资产面向以下范围：
 
 - Windows 11 24H2（11.0.26100）或更新版本，运行于 x64；不支持 Windows ARM。
-- After Effects 2025 是本次打包验收宿主；AE 2026 已真机验证。AE 2023/2024 为**静态兼容、真机未验**：AEX 的全部 AEGP suite 钉在 AE 2023 基线（#215），CEP manifest 覆盖 `[23.0,26.9]`，但 Adobe Creative Cloud 仅分发当前与前一个大版本，维护者已无法获取 2023/2024 安装器——真机验收开放社区众测（#236）。这是供应商分发限制，不是已知不兼容。本版不包含 macOS 资产。
+- After Effects 2025 是本次打包验收宿主；AE 2026 已在真机 **Windows** 上验证（macOS 尚无任何真机验收）。AE 2023/2024 为**静态兼容、真机未验**：AEX 的全部 AEGP suite 钉在 AE 2023 基线（#215），CEP manifest 覆盖 `[23.0,26.9]`，但 Adobe Creative Cloud 仅分发当前与前一个大版本，维护者已无法获取 2023/2024 安装器——真机验收开放社区众测（#236）。这是供应商分发限制，不是已知不兼容。
+- v0.9.5 的 GitHub Release 页在 Windows 资产之后补充了 macOS arm64 资产：**未签名**平台包（`ae-mcp-platform-bundle-v0.9.5-macos-arm64-unsigned.zip`）、原生插件压缩包与独立校验和文件。它们未签名/未公证，也未经过 macOS 真机验收。
 
 ## 架构
 
@@ -36,7 +37,7 @@ MCP core 本身保持后端无关：外部客户端可以通过 stdio server 与
 - ZXP 与 AEX 必须来自最终受保护 `main` 的同一个 SHA；源码变化后必须重新生成资产和校验值。
 - ZXP 包含既有 Windows Platform Helper，并在签名前校验其 manifest、文件清单与哈希。
 - ZXP installer 不会把包内文件复制到 AE 原生插件目录，因此 AEX 单独发布并手动安装。
-- 首跑向导会在缺少依赖时联网安装 `uv` 与按 v0.9.5 tag 固定的外部 runtime。内置/离线 Python、一体化安装器、自动 AEX 部署、Windows RuntimeManager、修复/回滚/卸载生命周期、macOS 资产和 Windows ARM 不属于本版范围。
+- 首跑向导会在缺少依赖时联网安装 `uv` 与按 v0.9.5 tag 固定的外部 runtime。内置/离线 Python、一体化安装器、自动 AEX 部署、Windows RuntimeManager、修复/回滚/卸载生命周期、**已签名/公证的** macOS 资产和 Windows ARM 不属于本版范围；未签名的 macOS arm64 平台包与原生插件为后补上传，未经 macOS 真机验收。
 - 两类签名均使用本次新建的自签名身份，不代表公开可信的软件发布者。
 
 ## 安装和首次启动

@@ -13,7 +13,8 @@ The MCP server is the core. Outside the MCP layer, ae-mcp also ships a CEP panel
 The published v0.9.5 assets target this release scope:
 
 - Windows 11 24H2 (11.0.26100) or newer on x64. Windows on ARM is not supported.
-- After Effects 2025 is the packaged acceptance host; AE 2026 is verified on a real host. AE 2023/2024 are **statically compatible, runtime-unverified**: the AEX pins every AEGP suite to the AE 2023 baseline (#215) and the CEP manifest spans `[23.0,26.9]`, but Adobe's Creative Cloud only distributes the current and previous major version, so maintainers can no longer obtain 2023/2024 installers — real-host acceptance is open to community testing (#236). This is a vendor distribution constraint, not a known incompatibility. This release contains no macOS asset.
+- After Effects 2025 is the packaged acceptance host; AE 2026 is verified on a real **Windows** host (no macOS real-host run has happened). AE 2023/2024 are **statically compatible, runtime-unverified**: the AEX pins every AEGP suite to the AE 2023 baseline (#215) and the CEP manifest spans `[23.0,26.9]`, but Adobe's Creative Cloud only distributes the current and previous major version, so maintainers can no longer obtain 2023/2024 installers — real-host acceptance is open to community testing (#236). This is a vendor distribution constraint, not a known incompatibility.
+- The v0.9.5 GitHub Release also carries macOS arm64 assets added after the Windows assets: an **unsigned** platform bundle (`ae-mcp-platform-bundle-v0.9.5-macos-arm64-unsigned.zip`), the native plug-in archive, and their own checksums file. They are unsigned/not notarized and did not go through a macOS real-host acceptance.
 
 ## Architecture
 
@@ -36,7 +37,7 @@ The MCP core is backend-agnostic: external clients can talk to AE through the st
 - One final protected-`main` SHA produces the ZXP and AEX; changed source requires new artifacts and checksums.
 - The ZXP includes the existing Windows Platform Helper and validates its manifest and binaries before signing.
 - The AEX is distributed separately because a ZXP installer does not place nested files in After Effects' native plug-in directory.
-- The first-run wizard installs `uv` and the tag-pinned external runtime over the network when they are missing. Bundled/offline Python, an integrated installer, automatic AEX deployment, Windows RuntimeManager, repair/rollback/uninstall lifecycle, macOS assets, and Windows ARM are outside this release.
+- The first-run wizard installs `uv` and the tag-pinned external runtime over the network when they are missing. Bundled/offline Python, an integrated installer, automatic AEX deployment, Windows RuntimeManager, repair/rollback/uninstall lifecycle, **signed/notarized** macOS assets, and Windows ARM are outside this release; the unsigned macOS arm64 bundle and native plug-in were added to the release page later, without a macOS real-host acceptance.
 - Both signatures use newly created self-signed identities and therefore do not establish a publicly trusted publisher.
 
 ## Install and First Run

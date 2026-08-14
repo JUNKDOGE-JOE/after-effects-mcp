@@ -46,11 +46,24 @@ async function fixture(t) {
   await write(root, 'runtime/windows-x64/node/host/package.json', '{}\n');
   await write(root, 'runtime/windows-x64/node/host/node_modules/express/package.json', '{}\n');
   await write(root, 'runtime/windows-x64/node/sidecar/agent-sidecar.mjs', '// sidecar entry\n');
+  await write(root, 'runtime/windows-x64/node/sidecar/lib.mjs', '// sidecar lib\n');
   await write(root, 'runtime/windows-x64/node/sidecar/package.json', '{}\n');
+  await write(root, 'runtime/windows-x64/node/shared/tool-approval.mjs', '// shared\n');
+  await write(root, 'runtime/windows-x64/node/shared/chat-attachments.mjs', '// shared\n');
   await write(
     root,
     'runtime/windows-x64/node/sidecar/node_modules/@anthropic-ai/claude-agent-sdk/package.json',
     '{}\n',
+  );
+  await write(
+    root,
+    'runtime/windows-x64/node/sidecar/node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/package.json',
+    '{}\n',
+  );
+  await write(
+    root,
+    'runtime/windows-x64/node/sidecar/node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe',
+    'MZ',
   );
   await write(root, 'host/platform-helper-transport.js', HELPER_FILES.join('\n'));
   await write(root, 'client/dist/app.js', [
@@ -109,13 +122,25 @@ test('rejects bundled runtime executables and nested AEX files', async (t) => {
   );
 });
 
-test('rejects a stage that ships without the runtime sidecar payload (#239)', async (t) => {
-  const missingEntry = await fixture(t);
-  await fs.rm(path.join(missingEntry.root, 'runtime/windows-x64/node/sidecar/agent-sidecar.mjs'));
-  assert.throws(
-    () => verifyWindowsZxpStage({ stageRoot: missingEntry.root, version: VERSION }),
-    /required ZXP file is missing/,
-  );
+test('rejects a stage missing any single sidecar-closure file (#239)', async (t) => {
+  const closureFiles = [
+    'runtime/windows-x64/node/sidecar/agent-sidecar.mjs',
+    'runtime/windows-x64/node/sidecar/lib.mjs',
+    'runtime/windows-x64/node/shared/tool-approval.mjs',
+    'runtime/windows-x64/node/shared/chat-attachments.mjs',
+    'runtime/windows-x64/node/sidecar/node_modules/@anthropic-ai/claude-agent-sdk/package.json',
+    'runtime/windows-x64/node/sidecar/node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/package.json',
+    'runtime/windows-x64/node/sidecar/node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe',
+  ];
+  for (const missing of closureFiles) {
+    const broken = await fixture(t);
+    await fs.rm(path.join(broken.root, ...missing.split('/')));
+    assert.throws(
+      () => verifyWindowsZxpStage({ stageRoot: broken.root, version: VERSION }),
+      /required ZXP file is missing/,
+      `expected a rejection when ${missing} is absent`,
+    );
+  }
 
   const missingDeps = await fixture(t);
   await fs.rm(
@@ -127,12 +152,14 @@ test('rejects a stage that ships without the runtime sidecar payload (#239)', as
     /required ZXP file is missing/,
   );
 
-  const strayRootCopy = await fixture(t);
-  await write(strayRootCopy.root, 'sidecar/agent-sidecar.mjs', '// stray build input\n');
-  assert.throws(
-    () => verifyWindowsZxpStage({ stageRoot: strayRootCopy.root, version: VERSION }),
-    /not at the stage root/,
-  );
+  for (const stray of ['sidecar/agent-sidecar.mjs', 'shared/tool-approval.mjs']) {
+    const strayRootCopy = await fixture(t);
+    await write(strayRootCopy.root, stray, '// stray build input\n');
+    assert.throws(
+      () => verifyWindowsZxpStage({ stageRoot: strayRootCopy.root, version: VERSION }),
+      /not at the stage root/,
+    );
+  }
 });
 
 test('rejects a compiled Panel without the matching online runtime wizard', async (t) => {

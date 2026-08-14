@@ -65,6 +65,7 @@ ExtendScript scripting pitfalls (must follow):
 export function parseArgv(argv) {
   const options = {
     probe: false,
+    selfCheck: false,
     model: DEFAULT_MODEL,
     lang: 'zh',
     mcp: null,
@@ -77,6 +78,8 @@ export function parseArgv(argv) {
     const arg = argv[i]
     if (arg === '--probe') {
       options.probe = true
+    } else if (arg === '--self-check') {
+      options.selfCheck = true
     } else if (arg === '--mcp') {
       options.mcp = parseJsonArg(argv[++i], '--mcp')
     } else if (arg === '--allowed-tools') {

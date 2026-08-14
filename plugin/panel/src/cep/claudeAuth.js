@@ -3,11 +3,63 @@ import { claudeChannelEnv } from '../lib/claudeChannel.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { resolveSystemNode } from './claudeAgentBackend.js';
 import { normalizeCepSystemPath } from './platform/paths.js';
+import { isDevelopmentInstall } from './installMode.js';
+
+// The sidecar's import closure. lib.mjs imports ../shared/tool-approval.mjs
+// and ../shared/chat-attachments.mjs, so a payload without shared/ spawns and
+// immediately dies with ERR_MODULE_NOT_FOUND (#239, confirmed on live
+// installs). "The path exists" is therefore not "the sidecar can start" —
+// every packaged branch must verify the whole closure before reporting ready.
+const SIDECAR_CLOSURE_FILES = Object.freeze(['agent-sidecar.mjs', 'lib.mjs']);
+const SHARED_CLOSURE_FILES = Object.freeze(['tool-approval.mjs', 'chat-attachments.mjs']);
+const SDK_MANIFEST_SEGMENTS = Object.freeze([
+  'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'package.json',
+]);
 
 function incompatibleSidecarSelection(message) {
   const error = new Error(message);
   error.code = 'RUNTIME_SIDECAR_SELECTION_INCOMPATIBLE';
   return error;
+}
+
+function missingSidecarPayload(missing) {
+  const error = new Error(
+    `The packaged Claude sidecar payload is incomplete: missing ${missing.join(', ')}`,
+  );
+  error.code = 'SIDECAR_PAYLOAD_MISSING';
+  error.missing = missing;
+  return error;
+}
+
+// nodeRoot is the directory holding sibling sidecar/ and shared/ trees:
+// runtime/<platform>/node inside the extension (Windows ZXP), or
+// <componentReceipt.canonicalPath>/node (macOS activated runtime).
+function requireSidecarClosure({ nodeRoot, adapter, fs }) {
+  const missing = [];
+  for (const name of SIDECAR_CLOSURE_FILES) {
+    if (!fs.existsSync(adapter.paths.join([nodeRoot, 'sidecar', name]))) {
+      missing.push(`sidecar/${name}`);
+    }
+  }
+  for (const name of SHARED_CLOSURE_FILES) {
+    if (!fs.existsSync(adapter.paths.join([nodeRoot, 'shared', name]))) {
+      missing.push(`shared/${name}`);
+    }
+  }
+  if (!fs.existsSync(adapter.paths.join([nodeRoot, 'sidecar', ...SDK_MANIFEST_SEGMENTS]))) {
+    missing.push(`sidecar/${SDK_MANIFEST_SEGMENTS.join('/')}`);
+  }
+  if (missing.length > 0) throw missingSidecarPayload(missing);
+  return adapter.paths.join([nodeRoot, 'sidecar', 'agent-sidecar.mjs']);
+}
+
+// Narrow export for packaging self-checks: verify the closure contract at an
+// explicit node root (a staged bundle's runtime/<platform>/node before any
+// runtime activation exists). Shares requireSidecarClosure with production.
+export function verifySidecarClosureAt({ nodeRoot, platform, fsImpl }) {
+  const adapter = platform || createPlatformAdapter();
+  const fs = fsImpl || adapter.fs;
+  return requireSidecarClosure({ nodeRoot, adapter, fs });
 }
 
 export function resolveSidecarPath({
@@ -18,19 +70,25 @@ export function resolveSidecarPath({
 } = {}) {
   const adapter = platform || createPlatformAdapter();
   const root = normalizeCepSystemPath(extRoot || adapter.paths.configRoot, adapter);
-  const developmentMarker = adapter.paths.join([root, '.debug']);
-  const developmentSidecar = adapter.paths.join([root, 'sidecar', 'agent-sidecar.mjs']);
-  const extensionRuntimeSidecar = adapter.paths.join([
-    root, 'runtime', adapter.id, 'node', 'sidecar', 'agent-sidecar.mjs',
-  ]);
   const fs = fsImpl || adapter.fs;
   if (!fs || typeof fs.existsSync !== 'function') {
     throw new Error('platform filesystem is unavailable');
   }
-  if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) {
+
+  // Development wins only when the install actually IS a development checkout.
+  // The macOS platform bundle ships `.debug` by contract, so the marker alone
+  // must never route a production install to the stage-root sidecar (#239).
+  const developmentSidecar = adapter.paths.join([root, 'sidecar', 'agent-sidecar.mjs']);
+  if (isDevelopmentInstall({ extRoot: root, adapter, fsImpl: fs })
+      && fs.existsSync(developmentSidecar)) {
     return developmentSidecar;
   }
-  if (adapter.id !== 'macos-arm64') return extensionRuntimeSidecar;
+
+  if (adapter.id !== 'macos-arm64') {
+    const nodeRoot = adapter.paths.join([root, 'runtime', adapter.id, 'node']);
+    return requireSidecarClosure({ nodeRoot, adapter, fs });
+  }
+
   if (!runtimeSelection) return null;
 
   const receipt = runtimeSelection.componentReceipt;
@@ -44,9 +102,8 @@ export function resolveSidecarPath({
       'The selected runtime does not own a compatible Claude sidecar payload',
     );
   }
-  return adapter.paths.join([
-    canonicalPath, 'node', 'sidecar', 'agent-sidecar.mjs',
-  ]);
+  const nodeRoot = adapter.paths.join([canonicalPath, 'node']);
+  return requireSidecarClosure({ nodeRoot, adapter, fs });
 }
 
 export function resolveSidecarSelection({

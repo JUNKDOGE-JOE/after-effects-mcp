@@ -63,6 +63,30 @@ function macPlatform() {
   return { id: 'macos-arm64', paths: macPaths() };
 }
 
+// The resolver's packaged-payload contract (#239): entry, lib, both shared
+// modules, and the SDK manifest must all exist before a path is reported.
+function windowsClosureHits(root) {
+  const nodeRoot = `${root}\\runtime\\windows-x64\\node`;
+  return [
+    `${nodeRoot}\\sidecar\\agent-sidecar.mjs`,
+    `${nodeRoot}\\sidecar\\lib.mjs`,
+    `${nodeRoot}\\shared\\tool-approval.mjs`,
+    `${nodeRoot}\\shared\\chat-attachments.mjs`,
+    `${nodeRoot}\\sidecar\\node_modules\\@anthropic-ai\\claude-agent-sdk\\package.json`,
+  ];
+}
+
+function macClosureHits(canonicalPath) {
+  const nodeRoot = `${canonicalPath}/node`;
+  return [
+    `${nodeRoot}/sidecar/agent-sidecar.mjs`,
+    `${nodeRoot}/sidecar/lib.mjs`,
+    `${nodeRoot}/shared/tool-approval.mjs`,
+    `${nodeRoot}/shared/chat-attachments.mjs`,
+    `${nodeRoot}/sidecar/node_modules/@anthropic-ai/claude-agent-sdk/package.json`,
+  ];
+}
+
 function selectedRuntime(canonicalPath, action = 'ready') {
   return {
     ok: true,
@@ -124,11 +148,12 @@ test('resolveSidecarPath uses the selected macOS generation for ready retained a
   ];
 
   for (const [action, canonicalPath, expected] of cases) {
+    const hits = new Set(macClosureHits(canonicalPath));
     const result = resolveSidecarPath({
       extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
       platform: macPlatform(),
       runtimeSelection: selectedRuntime(canonicalPath, action),
-      fsImpl: { existsSync: () => false },
+      fsImpl: { existsSync: (p) => hits.has(p) },
     });
     assert.equal(result, expected);
   }
@@ -157,25 +182,81 @@ test('resolveSidecarPath rejects incompatible macOS runtime receipts without an 
 });
 
 test('resolveSidecarPath returns the bundled runtime sidecar in production', () => {
-  const runtime = 'C:\\ext\\runtime\\windows-x64\\node\\sidecar\\agent-sidecar.mjs';
-  const hits = new Set([runtime, 'C:\\ext\\sidecar\\agent-sidecar.mjs']);
+  const hits = new Set([
+    ...windowsClosureHits('C:\\ext'),
+    'C:\\ext\\sidecar\\agent-sidecar.mjs',
+  ]);
   const result = resolveSidecarPath({
     extRoot: 'C:\\ext',
     platform: windowsPlatform(),
     fsImpl: { existsSync: (p) => hits.has(p) },
   });
 
-  assert.equal(result, runtime);
+  assert.equal(result, 'C:\\ext\\runtime\\windows-x64\\node\\sidecar\\agent-sidecar.mjs');
 });
 
-test('resolveSidecarPath returns a diagnostic runtime candidate without throwing when payload is missing', () => {
-  const result = resolveSidecarPath({
-    extRoot: 'C:\\missing',
-    platform: windowsPlatform(),
-    fsImpl: { existsSync: () => false },
-  });
+test('resolveSidecarPath fails closed with the missing-file inventory when the payload is absent (#239)', () => {
+  assert.throws(
+    () => resolveSidecarPath({
+      extRoot: 'C:\\missing',
+      platform: windowsPlatform(),
+      fsImpl: { existsSync: () => false },
+    }),
+    (error) => error?.code === 'SIDECAR_PAYLOAD_MISSING'
+      && Array.isArray(error.missing)
+      && error.missing.length === 5
+      && error.missing.includes('sidecar/agent-sidecar.mjs')
+      && error.missing.includes('shared/tool-approval.mjs')
+      && error.missing.includes('shared/chat-attachments.mjs'),
+  );
+});
 
-  assert.equal(result, 'C:\\missing\\runtime\\windows-x64\\node\\sidecar\\agent-sidecar.mjs');
+test('resolveSidecarPath reports exactly the files that are missing from a partial payload', () => {
+  const hits = new Set(windowsClosureHits('C:\\ext')
+    .filter((p) => !p.endsWith('chat-attachments.mjs')));
+  assert.throws(
+    () => resolveSidecarPath({
+      extRoot: 'C:\\ext',
+      platform: windowsPlatform(),
+      fsImpl: { existsSync: (p) => hits.has(p) },
+    }),
+    (error) => error?.code === 'SIDECAR_PAYLOAD_MISSING'
+      && error.missing.length === 1
+      && error.missing[0] === 'shared/chat-attachments.mjs',
+  );
+});
+
+test('a production bundle carrying .debug never routes to the stage-root sidecar (#239 macOS)', () => {
+  // stage-platform-bundle.mjs REQUIRES .debug inside the macOS bundle, and the
+  // bundle also carries a dependency-less stage-root sidecar copy. Packaged
+  // evidence (bundle-manifest.json) must win over the marker.
+  const root = '/Applications/Adobe/CEP/extensions/ae-mcp';
+  const hits = new Set([
+    `${root}/.debug`,
+    `${root}/bundle-manifest.json`,
+    `${root}/sidecar/agent-sidecar.mjs`,
+  ]);
+  const result = resolveSidecarPath({
+    extRoot: root,
+    platform: macPlatform(),
+    fsImpl: { existsSync: (p) => hits.has(p) },
+  });
+  assert.equal(result, null);
+});
+
+test('a Windows install with a hand-planted .debug still resolves the packaged payload', () => {
+  const hits = new Set([
+    ...windowsClosureHits('C:\\ext'),
+    'C:\\ext\\.debug',
+    'C:\\ext\\sidecar\\agent-sidecar.mjs',
+    'C:\\ext\\runtime\\windows-x64\\node\\host\\package.json',
+  ]);
+  const result = resolveSidecarPath({
+    extRoot: 'C:\\ext',
+    platform: windowsPlatform(),
+    fsImpl: { existsSync: (p) => hits.has(p) },
+  });
+  assert.equal(result, 'C:\\ext\\runtime\\windows-x64\\node\\sidecar\\agent-sidecar.mjs');
 });
 
 test('resolveSidecarSelection keeps macOS pending until runtime activation is ready', () => {
@@ -190,12 +271,14 @@ test('resolveSidecarSelection keeps macOS pending until runtime activation is re
 });
 
 test('resolveSidecarSelection exposes the verified path only after macOS activation', () => {
-  const runtime = selectedRuntime('/Users/test/.ae-mcp/runtime/layers/a/i-active/macos-arm64');
+  const canonicalPath = '/Users/test/.ae-mcp/runtime/layers/a/i-active/macos-arm64';
+  const runtime = selectedRuntime(canonicalPath);
+  const hits = new Set(macClosureHits(canonicalPath));
   const selection = resolveSidecarSelection({
     extRoot: '/Applications/Adobe/CEP/extensions/ae-mcp',
     platform: macPlatform(),
     runtimeActivation: { state: 'ready', result: runtime, error: null },
-    fsImpl: { existsSync: () => false },
+    fsImpl: { existsSync: (p) => hits.has(p) },
   });
 
   assert.deepEqual(selection, {
@@ -232,11 +315,24 @@ test('resolveSidecarSelection preserves RuntimeManager and receipt errors before
 });
 
 test('resolveSidecarSelection keeps Windows and debug paths independent of RuntimeManager', () => {
-  const windows = resolveSidecarSelection({
+  // A Windows install whose payload is absent must surface a typed error —
+  // never report ready off a computed-but-unverified path (#239).
+  const missingPayload = resolveSidecarSelection({
     extRoot: 'C:\\ext',
     platform: windowsPlatform(),
     runtimeActivation: { state: 'ready', result: null, error: null },
     fsImpl: { existsSync: () => false },
+  });
+  assert.equal(missingPayload.state, 'error');
+  assert.equal(missingPayload.path, null);
+  assert.equal(missingPayload.error.code, 'SIDECAR_PAYLOAD_MISSING');
+
+  const hits = new Set(windowsClosureHits('C:\\ext'));
+  const windows = resolveSidecarSelection({
+    extRoot: 'C:\\ext',
+    platform: windowsPlatform(),
+    runtimeActivation: { state: 'ready', result: null, error: null },
+    fsImpl: { existsSync: (p) => hits.has(p) },
   });
   assert.deepEqual(windows, {
     state: 'ready',

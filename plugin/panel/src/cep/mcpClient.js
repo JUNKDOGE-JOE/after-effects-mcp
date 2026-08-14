@@ -2,6 +2,7 @@ import { createNdjsonReader } from '../lib/ndjson.js';
 import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { createRuntimeManager, hasDevelopmentRuntimeOverride } from './runtimeManager.js';
+import { isDevelopmentInstall } from './installMode.js';
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const INITIALIZE_TIMEOUT_MS = 120000;
@@ -47,12 +48,9 @@ export async function resolveMcpCommand({
   const configured = String(explicitPath || '').trim();
   if (configured) return { command: configured, args: [], source: 'explicit' };
   const adapter = platform || createPlatformAdapter();
-  const debugMarker = extRoot && adapter.paths.join([extRoot, '.debug']);
-  const bundleManifest = extRoot && adapter.paths.join([extRoot, 'bundle-manifest.json']);
   const developmentFallback = adapter.id === 'macos-arm64'
-    && debugMarker
-    && adapter.fs.existsSync(debugMarker)
-    && !adapter.fs.existsSync(bundleManifest);
+    && Boolean(extRoot)
+    && isDevelopmentInstall({ extRoot, adapter });
   const developmentRuntimeOverride = hasDevelopmentRuntimeOverride(adapter.env);
   if (adapter.id === 'macos-arm64'
       && (runtimeManager || (extRoot && (!developmentFallback || developmentRuntimeOverride)))) {

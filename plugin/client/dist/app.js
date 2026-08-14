@@ -31071,6 +31071,34 @@
 
   // src/cep/runtimeManager.js
   init_cep_runtime_inject();
+
+  // src/cep/installMode.js
+  init_cep_runtime_inject();
+  function packagedEvidencePaths({ extRoot, adapter }) {
+    return [
+      adapter.paths.join([extRoot, "bundle-manifest.json"]),
+      adapter.paths.join([
+        extRoot,
+        "runtime",
+        adapter.id,
+        "node",
+        "host",
+        "package.json"
+      ])
+    ];
+  }
+  function hasPackagedEvidence({ extRoot, adapter, fsImpl }) {
+    const fs = fsImpl || adapter.fs;
+    return packagedEvidencePaths({ extRoot, adapter }).some((candidate) => fs.existsSync(candidate));
+  }
+  function isDevelopmentInstall({ extRoot, adapter, fsImpl }) {
+    const fs = fsImpl || adapter.fs;
+    const marker = adapter.paths.join([extRoot, ".debug"]);
+    if (!fs.existsSync(marker)) return false;
+    return !hasPackagedEvidence({ extRoot, adapter, fsImpl: fs });
+  }
+
+  // src/cep/runtimeManager.js
   var RUNTIME_PLATFORM = "macos-arm64";
   var LOCK_NAME = ".runtime-manager.lock";
   var INSTALL_RECORD = "install-record.json";
@@ -31204,7 +31232,11 @@
     const developmentMarkerPath = paths.join([extensionRoot, ".debug"]);
     const developmentRuntimeInput = hasDevelopmentRuntimeOverride(environment) ? environment[DEVELOPMENT_RUNTIME_ENV].trim() : "";
     function developmentBuild() {
-      return fs.existsSync(developmentMarkerPath) && !fs.existsSync(packageManifestPath);
+      return isDevelopmentInstall({
+        extRoot: extensionRoot,
+        adapter: { id: platform.id, paths, fs },
+        fsImpl: fs
+      });
     }
     async function selectDevelopmentRuntime() {
       var _a2, _b2, _c2, _d2;
@@ -32682,9 +32714,7 @@
     const configured = String(explicitPath || "").trim();
     if (configured) return { command: configured, args: [], source: "explicit" };
     const adapter = platform || createPlatformAdapter();
-    const debugMarker = extRoot && adapter.paths.join([extRoot, ".debug"]);
-    const bundleManifest = extRoot && adapter.paths.join([extRoot, "bundle-manifest.json"]);
-    const developmentFallback = adapter.id === "macos-arm64" && debugMarker && adapter.fs.existsSync(debugMarker) && !adapter.fs.existsSync(bundleManifest);
+    const developmentFallback = adapter.id === "macos-arm64" && Boolean(extRoot) && isDevelopmentInstall({ extRoot, adapter });
     const developmentRuntimeOverride = hasDevelopmentRuntimeOverride(adapter.env);
     if (adapter.id === "macos-arm64" && (runtimeManager || extRoot && (!developmentFallback || developmentRuntimeOverride))) {
       const manager = runtimeManager || createRuntimeManager({ platform: adapter, extensionRoot: extRoot });
@@ -40752,10 +40782,44 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/claudeAuth.js
+  var SIDECAR_CLOSURE_FILES = Object.freeze(["agent-sidecar.mjs", "lib.mjs"]);
+  var SHARED_CLOSURE_FILES = Object.freeze(["tool-approval.mjs", "chat-attachments.mjs"]);
+  var SDK_MANIFEST_SEGMENTS = Object.freeze([
+    "node_modules",
+    "@anthropic-ai",
+    "claude-agent-sdk",
+    "package.json"
+  ]);
   function incompatibleSidecarSelection(message) {
     const error = new Error(message);
     error.code = "RUNTIME_SIDECAR_SELECTION_INCOMPATIBLE";
     return error;
+  }
+  function missingSidecarPayload(missing) {
+    const error = new Error(
+      `The packaged Claude sidecar payload is incomplete: missing ${missing.join(", ")}`
+    );
+    error.code = "SIDECAR_PAYLOAD_MISSING";
+    error.missing = missing;
+    return error;
+  }
+  function requireSidecarClosure({ nodeRoot, adapter, fs }) {
+    const missing = [];
+    for (const name of SIDECAR_CLOSURE_FILES) {
+      if (!fs.existsSync(adapter.paths.join([nodeRoot, "sidecar", name]))) {
+        missing.push(`sidecar/${name}`);
+      }
+    }
+    for (const name of SHARED_CLOSURE_FILES) {
+      if (!fs.existsSync(adapter.paths.join([nodeRoot, "shared", name]))) {
+        missing.push(`shared/${name}`);
+      }
+    }
+    if (!fs.existsSync(adapter.paths.join([nodeRoot, "sidecar", ...SDK_MANIFEST_SEGMENTS]))) {
+      missing.push(`sidecar/${SDK_MANIFEST_SEGMENTS.join("/")}`);
+    }
+    if (missing.length > 0) throw missingSidecarPayload(missing);
+    return adapter.paths.join([nodeRoot, "sidecar", "agent-sidecar.mjs"]);
   }
   function resolveSidecarPath({
     extRoot,
@@ -40765,24 +40829,18 @@ data: ${JSON.stringify(payload)}
   } = {}) {
     const adapter = platform || createPlatformAdapter();
     const root = normalizeCepSystemPath(extRoot || adapter.paths.configRoot, adapter);
-    const developmentMarker = adapter.paths.join([root, ".debug"]);
-    const developmentSidecar = adapter.paths.join([root, "sidecar", "agent-sidecar.mjs"]);
-    const extensionRuntimeSidecar = adapter.paths.join([
-      root,
-      "runtime",
-      adapter.id,
-      "node",
-      "sidecar",
-      "agent-sidecar.mjs"
-    ]);
     const fs = fsImpl || adapter.fs;
     if (!fs || typeof fs.existsSync !== "function") {
       throw new Error("platform filesystem is unavailable");
     }
-    if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) {
+    const developmentSidecar = adapter.paths.join([root, "sidecar", "agent-sidecar.mjs"]);
+    if (isDevelopmentInstall({ extRoot: root, adapter, fsImpl: fs }) && fs.existsSync(developmentSidecar)) {
       return developmentSidecar;
     }
-    if (adapter.id !== "macos-arm64") return extensionRuntimeSidecar;
+    if (adapter.id !== "macos-arm64") {
+      const nodeRoot2 = adapter.paths.join([root, "runtime", adapter.id, "node"]);
+      return requireSidecarClosure({ nodeRoot: nodeRoot2, adapter, fs });
+    }
     if (!runtimeSelection) return null;
     const receipt = runtimeSelection.componentReceipt;
     const canonicalPath = receipt == null ? void 0 : receipt.canonicalPath;
@@ -40791,12 +40849,8 @@ data: ${JSON.stringify(payload)}
         "The selected runtime does not own a compatible Claude sidecar payload"
       );
     }
-    return adapter.paths.join([
-      canonicalPath,
-      "node",
-      "sidecar",
-      "agent-sidecar.mjs"
-    ]);
+    const nodeRoot = adapter.paths.join([canonicalPath, "node"]);
+    return requireSidecarClosure({ nodeRoot, adapter, fs });
   }
   function resolveSidecarSelection({
     runtimeActivation,
@@ -49788,12 +49842,11 @@ data: ${JSON.stringify(payload)}
         "host",
         "package.json"
       ]);
-      const developmentMarker = adapter.paths.join([extensionRoot, ".debug"]);
       const developmentPackageAnchor = adapter.paths.join([extensionRoot, "host", "package.json"]);
       let packageAnchor = "";
       if (ordinaryAnchor(runtimePackageAnchor)) {
         packageAnchor = runtimePackageAnchor;
-      } else if (fs.existsSync(developmentMarker) && ordinaryAnchor(developmentPackageAnchor)) {
+      } else if (isDevelopmentInstall({ extRoot: extensionRoot, adapter, fsImpl: fs }) && ordinaryAnchor(developmentPackageAnchor)) {
         packageAnchor = developmentPackageAnchor;
       }
       if (!packageAnchor) throw new Error("no selected host package anchor");

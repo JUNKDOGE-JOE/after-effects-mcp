@@ -670,6 +670,18 @@ test('Claude CLI payload requires the locked package, binary hash, mode, and ver
     path.join(sdkRoot, 'package.json'),
     `${JSON.stringify({ name: '@anthropic-ai/claude-agent-sdk', version: '0.3.174' })}\n`,
   );
+  // #239: assertClaudeCliPayload now also requires the sidecar import closure
+  // (entry, lib, and both shared modules) before the SDK identity checks.
+  for (const [tree, name] of [
+    ['sidecar', 'agent-sidecar.mjs'],
+    ['sidecar', 'lib.mjs'],
+    ['shared', 'tool-approval.mjs'],
+    ['shared', 'chat-attachments.mjs'],
+  ]) {
+    const closureFile = path.join(runtimeRoot, 'node', tree, name);
+    await fs.promises.mkdir(path.dirname(closureFile), { recursive: true });
+    await fs.promises.writeFile(closureFile, '// closure fixture\n');
+  }
   await fs.promises.mkdir(path.join(repoRoot, 'plugin/sidecar'), { recursive: true });
   await fs.promises.writeFile(
     path.join(repoRoot, 'plugin/sidecar/package-lock.json'),
@@ -720,11 +732,16 @@ test('portable runtime copies the reviewed sidecar entrypoints beside its locked
   const repoRoot = path.join(root, 'repo');
   const runtimeRoot = path.join(root, 'runtime');
   const sourceRoot = path.join(repoRoot, 'plugin/sidecar');
+  const sharedSourceRoot = path.join(repoRoot, 'plugin/shared');
   const destinationRoot = path.join(runtimeRoot, 'node/sidecar');
+  const sharedDestinationRoot = path.join(runtimeRoot, 'node/shared');
   await fs.promises.mkdir(sourceRoot, { recursive: true });
+  await fs.promises.mkdir(sharedSourceRoot, { recursive: true });
   await fs.promises.mkdir(path.join(destinationRoot, 'node_modules'), { recursive: true });
   await fs.promises.writeFile(path.join(sourceRoot, 'agent-sidecar.mjs'), 'export const agent = true;\n');
   await fs.promises.writeFile(path.join(sourceRoot, 'lib.mjs'), 'export const library = true;\n');
+  await fs.promises.writeFile(path.join(sharedSourceRoot, 'tool-approval.mjs'), 'export const approval = true;\n');
+  await fs.promises.writeFile(path.join(sharedSourceRoot, 'chat-attachments.mjs'), 'export const attachments = true;\n');
 
   await copySidecarEntrypoints({ repoRoot, runtimeRoot });
 
@@ -735,6 +752,15 @@ test('portable runtime copies the reviewed sidecar entrypoints beside its locked
   assert.equal(
     await fs.promises.readFile(path.join(destinationRoot, 'lib.mjs'), 'utf8'),
     'export const library = true;\n',
+  );
+  // #239: the shared import closure ships beside the sidecar entrypoints.
+  assert.equal(
+    await fs.promises.readFile(path.join(sharedDestinationRoot, 'tool-approval.mjs'), 'utf8'),
+    'export const approval = true;\n',
+  );
+  assert.equal(
+    await fs.promises.readFile(path.join(sharedDestinationRoot, 'chat-attachments.mjs'), 'utf8'),
+    'export const attachments = true;\n',
   );
   assert.equal(fs.existsSync(path.join(destinationRoot, 'current')), false);
 });

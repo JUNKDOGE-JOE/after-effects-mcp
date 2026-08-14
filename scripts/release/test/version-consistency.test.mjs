@@ -183,8 +183,13 @@ test('release docs define the approved corrective Windows v0.9.5 contract', asyn
   assert.match(release, /installer|安装器/i);
 
   const changelog = await text('CHANGELOG.md');
-  const firstRelease = changelog.match(/^### \[([^\]]+)\].*$/m)?.[1];
-  assert.equal(firstRelease, VERSION);
+  // During development an Unreleased / 未发布 section may sit above the
+  // released entries; the contract is that the first NUMBERED section is the
+  // approved release version.
+  const firstNumberedRelease = [...changelog.matchAll(/^### \[([^\]]+)\].*$/gm)]
+    .map((match) => match[1])
+    .find((name) => /^\d/.test(name));
+  assert.equal(firstNumberedRelease, VERSION);
   assert.match(changelog, /^### \[0\.9\.5\].*2026-08-12/mi);
   assert.match(changelog, /^### \[0\.9\.4\].*2026-08-04/mi);
   assert.match(changelog, /^### \[0\.9\.3\].*2026-08-03/mi);

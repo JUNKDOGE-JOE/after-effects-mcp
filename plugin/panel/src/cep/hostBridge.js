@@ -3,6 +3,7 @@
 import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { normalizeCepSystemPath } from './platform/paths.js';
+import { isDevelopmentInstall } from './installMode.js';
 
 export function normalizeCepPath(value, platform) {
   return normalizeCepSystemPath(value, platform);
@@ -111,12 +112,14 @@ export function loadBundledHostDependencies({ cepRequire, adapter, extensionRoot
     const runtimePackageAnchor = adapter.paths.join([
       extensionRoot, 'runtime', adapter.id, 'node', 'host', 'package.json',
     ]);
-    const developmentMarker = adapter.paths.join([extensionRoot, '.debug']);
     const developmentPackageAnchor = adapter.paths.join([extensionRoot, 'host', 'package.json']);
     let packageAnchor = '';
     if (ordinaryAnchor(runtimePackageAnchor)) {
       packageAnchor = runtimePackageAnchor;
-    } else if (fs.existsSync(developmentMarker) && ordinaryAnchor(developmentPackageAnchor)) {
+    } else if (
+      isDevelopmentInstall({ extRoot: extensionRoot, adapter, fsImpl: fs })
+      && ordinaryAnchor(developmentPackageAnchor)
+    ) {
       packageAnchor = developmentPackageAnchor;
     }
     if (!packageAnchor) throw new Error('no selected host package anchor');

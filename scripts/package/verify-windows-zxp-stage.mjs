@@ -113,15 +113,31 @@ function validateRuntimeBoundary(stageRoot) {
     'package.json',
   ));
   // #239: production resolveSidecarPath reads runtime/windows-x64/node/sidecar
-  // and the .debug development fallback is stripped from the ZXP, so a stage
-  // without this payload ships a Claude channel that cannot start. The stray
-  // stage-root copy is the build input, not a shippable location.
-  const sidecarRoot = path.join(stageRoot, 'runtime', 'windows-x64', 'node', 'sidecar');
-  regularFile(path.join(sidecarRoot, 'agent-sidecar.mjs'));
-  regularFile(path.join(sidecarRoot, 'package.json'));
-  regularFile(path.join(sidecarRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'package.json'));
-  if (fs.existsSync(path.join(stageRoot, 'sidecar'))) {
-    throw contractError('sidecar must ship under runtime/windows-x64/node/sidecar, not at the stage root');
+  // with a sibling runtime/windows-x64/node/shared (lib.mjs imports
+  // ../shared/tool-approval.mjs and ../shared/chat-attachments.mjs), and the
+  // .debug development fallback is stripped from the ZXP. A stage missing any
+  // closure file — including the win32-x64 SDK platform binary — ships a
+  // Claude channel that cannot start. The stray stage-root copies are build
+  // input, not shippable locations.
+  const sidecarNodeRoot = path.join(stageRoot, 'runtime', 'windows-x64', 'node');
+  for (const relativePath of [
+    'sidecar/agent-sidecar.mjs',
+    'sidecar/lib.mjs',
+    'sidecar/package.json',
+    'shared/tool-approval.mjs',
+    'shared/chat-attachments.mjs',
+    'sidecar/node_modules/@anthropic-ai/claude-agent-sdk/package.json',
+    'sidecar/node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/package.json',
+    'sidecar/node_modules/@anthropic-ai/claude-agent-sdk-win32-x64/claude.exe',
+  ]) {
+    regularFile(path.join(sidecarNodeRoot, ...relativePath.split('/')));
+  }
+  for (const strayRoot of ['sidecar', 'shared']) {
+    if (fs.existsSync(path.join(stageRoot, strayRoot))) {
+      throw contractError(
+        `${strayRoot} must ship under runtime/windows-x64/node/${strayRoot}, not at the stage root`,
+      );
+    }
   }
 }
 

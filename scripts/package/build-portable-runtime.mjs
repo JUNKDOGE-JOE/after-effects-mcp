@@ -520,18 +520,28 @@ function prependPath(environment, value) {
 }
 
 export async function copySidecarEntrypoints({ repoRoot, runtimeRoot }) {
-  const sourceRoot = path.join(path.resolve(repoRoot), 'plugin', 'sidecar');
-  const destinationRoot = path.join(path.resolve(runtimeRoot), 'node', 'sidecar');
-  await fs.promises.mkdir(destinationRoot, { recursive: true });
-  for (const name of ['agent-sidecar.mjs', 'lib.mjs']) {
-    const source = path.join(sourceRoot, name);
-    const destination = path.join(destinationRoot, name);
-    const expectedStats = await fs.promises.lstat(source);
-    const bytes = await readRegularFileSnapshot(source, {
-      expectedStats,
-      maxBytes: 8 * 1024 * 1024,
-    });
-    await writeBytesAtomically(destination, bytes, { mode: 0o644 });
+  // #239: lib.mjs imports ../shared/tool-approval.mjs and
+  // ../shared/chat-attachments.mjs. Shipping the entrypoints without the
+  // sibling shared/ tree produces a payload that spawns and immediately dies
+  // with ERR_MODULE_NOT_FOUND, so both trees are copied together here.
+  const trees = [
+    { source: 'sidecar', names: ['agent-sidecar.mjs', 'lib.mjs'] },
+    { source: 'shared', names: ['tool-approval.mjs', 'chat-attachments.mjs'] },
+  ];
+  for (const tree of trees) {
+    const sourceRoot = path.join(path.resolve(repoRoot), 'plugin', tree.source);
+    const destinationRoot = path.join(path.resolve(runtimeRoot), 'node', tree.source);
+    await fs.promises.mkdir(destinationRoot, { recursive: true });
+    for (const name of tree.names) {
+      const source = path.join(sourceRoot, name);
+      const destination = path.join(destinationRoot, name);
+      const expectedStats = await fs.promises.lstat(source);
+      const bytes = await readRegularFileSnapshot(source, {
+        expectedStats,
+        maxBytes: 8 * 1024 * 1024,
+      });
+      await writeBytesAtomically(destination, bytes, { mode: 0o644 });
+    }
   }
 }
 
@@ -741,6 +751,24 @@ export async function assertClaudeCliPayload({ platform, repoRoot, runtimeRoot, 
       'CLAUDE_CLI_INVALID',
       `required Claude CLI package ${contract.package}@${cliLock.sdkVersion} is missing from lock`,
     );
+  }
+
+  // #239: the production resolver requires the full import closure — entry,
+  // lib, and both shared modules — before it reports the sidecar ready. The
+  // built runtime must satisfy the same contract the resolver enforces.
+  for (const [tree, name] of [
+    ['sidecar', 'agent-sidecar.mjs'],
+    ['sidecar', 'lib.mjs'],
+    ['shared', 'tool-approval.mjs'],
+    ['shared', 'chat-attachments.mjs'],
+  ]) {
+    const closureFile = path.join(runtimeRoot, 'node', tree, name);
+    if (!(await pathExists(closureFile))) {
+      throw codedError(
+        'CLAUDE_CLI_INVALID',
+        `required sidecar closure file is missing from the runtime: ${tree}/${name}`,
+      );
+    }
   }
 
   const sidecarModules = path.join(runtimeRoot, 'node', 'sidecar', 'node_modules');

@@ -93,3 +93,8 @@ jobs:
         run: |
           npm ci
           npm test
+
+      - name: Stage the sidecar payload and run the hermetic self-check (#239)
+        run: |
+          node scripts/package/stage-sidecar-payload.mjs --stage-root "$env:RUNNER_TEMP/sidecar-stage" --platform windows-x64 --from-plugin plugin
+          node scripts/package/sidecar-self-check.mjs --ext-root "$env:RUNNER_TEMP/sidecar-stage" --platform windows-x64

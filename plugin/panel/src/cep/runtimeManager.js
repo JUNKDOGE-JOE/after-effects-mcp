@@ -1,3 +1,5 @@
+import { isDevelopmentInstall } from './installMode.js';
+
 const RUNTIME_PLATFORM = 'macos-arm64';
 const LOCK_NAME = '.runtime-manager.lock';
 const INSTALL_RECORD = 'install-record.json';
@@ -154,7 +156,11 @@ export function createRuntimeManager({
     ? environment[DEVELOPMENT_RUNTIME_ENV].trim() : '';
 
   function developmentBuild() {
-    return fs.existsSync(developmentMarkerPath) && !fs.existsSync(packageManifestPath);
+    return isDevelopmentInstall({
+      extRoot: extensionRoot,
+      adapter: { id: platform.id, paths, fs },
+      fsImpl: fs,
+    });
   }
 
   async function selectDevelopmentRuntime() {

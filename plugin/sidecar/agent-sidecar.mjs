@@ -9,6 +9,25 @@ try {
   process.exit(1)
 }
 
+// Hermetic self-check (#239): reaching this line means the entire import
+// closure loaded — lib.mjs, ../shared/tool-approval.mjs,
+// ../shared/chat-attachments.mjs, and @anthropic-ai/claude-agent-sdk with its
+// platform binary package. No network, no account, no query() call; the
+// packaging pipeline runs this against real staged payloads to prove the
+// sidecar can actually start where production resolves it.
+if (argvOptions.selfCheck) {
+  process.stdout.write(`${JSON.stringify({
+    ok: true,
+    selfCheck: {
+      node: process.version,
+      platform: `${process.platform}-${process.arch}`,
+      entry: import.meta.url,
+      sdkLoaded: typeof query === 'function'
+    }
+  })}\n`)
+  process.exit(0)
+}
+
 const sidecar = createSidecar({
   queryFn: query,
   writeLine: (obj) => {
