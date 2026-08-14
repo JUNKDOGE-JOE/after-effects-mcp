@@ -10,6 +10,12 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [未发布]
+
+#### 🐛 修复 / 改进
+
+- **ZXP 生产包补齐 Claude sidecar 载荷（#239）**——生产路径解析固定读取 `runtime/windows-x64/node/sidecar`，而 `.debug` 开发回退在打包时被剥离，此前的 ZXP 从未把 sidecar 放进该路径，终端用户装包后 Claude 订阅通道无法启动；打包脚本现将 sidecar 及其依赖落至 runtime 路径并移除舞台根的冗余副本，舞台校验将该载荷列为必查项——缺失即打包失败，不再放行绿灯。
+
 ### [0.9.5] — 2026-08-12
 
 #### ✨ 新增
@@ -273,6 +279,12 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [Unreleased]
+
+#### 🐛 Fixed / Improved
+
+- **ZXP production package now ships the Claude sidecar payload (#239)** — production path resolution reads `runtime/windows-x64/node/sidecar`, and the `.debug` development fallback is stripped at packaging time, yet no ZXP ever staged the sidecar there, leaving the Claude subscription channel unable to start on end-user installs; the packaging script now lands the sidecar and its dependencies at the runtime path, removes the redundant stage-root copy, and stage verification treats the payload as required — a missing payload fails the build instead of passing green.
 
 ### [0.9.5] — 2026-08-12
 

@@ -99,8 +99,17 @@ foreach ($requiredHostFile in @('package.json', 'node_modules\express\package.js
     }
 }
 
-Write-Host "[4/6] Installing sidecar production dependencies..."
-Push-Location (Join-Path $stageDir 'sidecar')
+Write-Host "[4/6] Staging the sidecar runtime payload..."
+# #239: production resolveSidecarPath reads runtime\windows-x64\node\sidecar and
+# the .debug development fallback was stripped in [1/6], so the payload must be
+# staged where production actually looks. The stage-root copy is build input
+# only and is removed so the ZXP ships exactly one sidecar.
+$runtimeSidecarDir = Join-Path $stageDir 'runtime\windows-x64\node\sidecar'
+New-Item -ItemType Directory -Force -Path $runtimeSidecarDir | Out-Null
+foreach ($sidecarFile in @('agent-sidecar.mjs', 'lib.mjs', 'package.json', 'package-lock.json')) {
+    Copy-Item -LiteralPath (Join-Path $stageDir "sidecar\$sidecarFile") -Destination $runtimeSidecarDir
+}
+Push-Location $runtimeSidecarDir
 try {
     npm ci --omit=dev
     if ($LASTEXITCODE -ne 0) {
@@ -109,6 +118,12 @@ try {
 } finally {
     Pop-Location
 }
+foreach ($requiredSidecarFile in @('agent-sidecar.mjs', 'node_modules\@anthropic-ai\claude-agent-sdk\package.json')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $runtimeSidecarDir $requiredSidecarFile) -PathType Leaf)) {
+        throw "Sidecar runtime payload file is missing: $requiredSidecarFile"
+    }
+}
+Remove-Item -Recurse -Force (Join-Path $stageDir 'sidecar')
 
 & node (Join-Path $repoRoot 'scripts\package\verify-windows-zxp-stage.mjs') --stage $stageDir --version $Version
 if ($LASTEXITCODE -ne 0) {

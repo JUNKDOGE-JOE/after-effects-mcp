@@ -45,6 +45,13 @@ async function fixture(t) {
   })}\n`);
   await write(root, 'runtime/windows-x64/node/host/package.json', '{}\n');
   await write(root, 'runtime/windows-x64/node/host/node_modules/express/package.json', '{}\n');
+  await write(root, 'runtime/windows-x64/node/sidecar/agent-sidecar.mjs', '// sidecar entry\n');
+  await write(root, 'runtime/windows-x64/node/sidecar/package.json', '{}\n');
+  await write(
+    root,
+    'runtime/windows-x64/node/sidecar/node_modules/@anthropic-ai/claude-agent-sdk/package.json',
+    '{}\n',
+  );
   await write(root, 'host/platform-helper-transport.js', HELPER_FILES.join('\n'));
   await write(root, 'client/dist/app.js', [
     `var PANEL_VERSION = "${VERSION}";`,
@@ -99,6 +106,32 @@ test('rejects bundled runtime executables and nested AEX files', async (t) => {
   assert.throws(
     () => verifyWindowsZxpStage({ stageRoot: aex.root, version: VERSION }),
     /separate release asset/,
+  );
+});
+
+test('rejects a stage that ships without the runtime sidecar payload (#239)', async (t) => {
+  const missingEntry = await fixture(t);
+  await fs.rm(path.join(missingEntry.root, 'runtime/windows-x64/node/sidecar/agent-sidecar.mjs'));
+  assert.throws(
+    () => verifyWindowsZxpStage({ stageRoot: missingEntry.root, version: VERSION }),
+    /required ZXP file is missing/,
+  );
+
+  const missingDeps = await fixture(t);
+  await fs.rm(
+    path.join(missingDeps.root, 'runtime/windows-x64/node/sidecar/node_modules'),
+    { recursive: true },
+  );
+  assert.throws(
+    () => verifyWindowsZxpStage({ stageRoot: missingDeps.root, version: VERSION }),
+    /required ZXP file is missing/,
+  );
+
+  const strayRootCopy = await fixture(t);
+  await write(strayRootCopy.root, 'sidecar/agent-sidecar.mjs', '// stray build input\n');
+  assert.throws(
+    () => verifyWindowsZxpStage({ stageRoot: strayRootCopy.root, version: VERSION }),
+    /not at the stage root/,
   );
 });
 

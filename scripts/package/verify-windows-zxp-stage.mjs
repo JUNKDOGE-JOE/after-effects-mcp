@@ -112,6 +112,17 @@ function validateRuntimeBoundary(stageRoot) {
     'express',
     'package.json',
   ));
+  // #239: production resolveSidecarPath reads runtime/windows-x64/node/sidecar
+  // and the .debug development fallback is stripped from the ZXP, so a stage
+  // without this payload ships a Claude channel that cannot start. The stray
+  // stage-root copy is the build input, not a shippable location.
+  const sidecarRoot = path.join(stageRoot, 'runtime', 'windows-x64', 'node', 'sidecar');
+  regularFile(path.join(sidecarRoot, 'agent-sidecar.mjs'));
+  regularFile(path.join(sidecarRoot, 'package.json'));
+  regularFile(path.join(sidecarRoot, 'node_modules', '@anthropic-ai', 'claude-agent-sdk', 'package.json'));
+  if (fs.existsSync(path.join(stageRoot, 'sidecar'))) {
+    throw contractError('sidecar must ship under runtime/windows-x64/node/sidecar, not at the stage root');
+  }
 }
 
 function validatePanelContracts(stageRoot, version) {
