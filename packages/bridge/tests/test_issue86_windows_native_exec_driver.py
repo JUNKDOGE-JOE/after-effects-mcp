@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ctypes
 import hashlib
 import importlib.util
 import json
@@ -39,6 +40,46 @@ driver = _load(
     "issue86_windows_native_exec_acceptance",
     HARDWARE / "issue86_windows_native_exec_acceptance.py",
 )
+
+
+# The Windows lifecycle probes below fake `os` and `ctypes` so the pure
+# error-handling logic can be exercised on any host. Patching an attribute on
+# `driver.os` / `driver.ctypes` would reach the shared stdlib module objects and
+# leak the fake into every other caller in the process — `os.name = "nt"` alone
+# changes what `pathlib.Path()` instantiates, which on Python 3.10 turns any
+# failure in these tests into a pytest INTERNALERROR because the report
+# formatter builds a Path while the patch is still live. Replacing the module
+# *reference* inside the driver's own namespace keeps the fake local.
+class _WindowsOsProxy:
+    """`os`, seen as Windows, without mutating the real module."""
+
+    name = "nt"
+
+    def __getattr__(self, attribute):
+        return getattr(os, attribute)
+
+
+class _WindowsCtypesProxy:
+    """`ctypes` with a stubbed kernel32 loader; `WinDLL` is absent off Windows."""
+
+    def __init__(self, kernel32, last_error):
+        self._kernel32 = kernel32
+        self._last_error = last_error
+
+    def WinDLL(self, *_args, **_kwargs):  # noqa: N802 - mirrors the ctypes name
+        return self._kernel32
+
+    def get_last_error(self):
+        return self._last_error
+
+    def __getattr__(self, attribute):
+        return getattr(ctypes, attribute)
+
+
+def _fake_windows_host(monkeypatch, *, kernel32, last_error):
+    monkeypatch.setattr(driver, "os", _WindowsOsProxy())
+    monkeypatch.setattr(driver, "ctypes", _WindowsCtypesProxy(kernel32, last_error))
+
 
 OLD_HOST = "11111111-1111-4111-8111-111111111111"
 OLD_SESSION = "22222222-2222-4222-8222-222222222222"
@@ -875,7 +916,7 @@ async def test_formal_ae_launch_argv_contains_only_the_exact_executable(tmp_path
         calls.append((argv, kwargs))
         return type("SpawnedProcess", (), {"pid": 321})()
 
-    monkeypatch.setattr(driver.os, "name", "nt")
+    monkeypatch.setattr(driver, "os", _WindowsOsProxy())
     monkeypatch.setattr(driver.asyncio, "create_subprocess_exec", create_subprocess_exec)
     launch = await driver.launch_formal_after_effects(config.formal_ae_app)
 
@@ -911,9 +952,7 @@ def test_process_image_lookup_treats_access_denied_as_unmatched(monkeypatch, ope
         "GetExitCodeProcess": FakeWindowsFunction(1),
         "CloseHandle": FakeWindowsFunction(1),
     })()
-    monkeypatch.setattr(driver.os, "name", "nt")
-    monkeypatch.setattr(driver.ctypes, "WinDLL", lambda *_args, **_kwargs: kernel32)
-    monkeypatch.setattr(driver.ctypes, "get_last_error", lambda: 5)
+    _fake_windows_host(monkeypatch, kernel32=kernel32, last_error=5)
 
     assert driver.windows_process_image_path(63208) is None
 
@@ -946,9 +985,7 @@ def test_process_image_lookup_reconciles_query_failure_with_exit_state(
         "GetExitCodeProcess": FakeExitCodeFunction(1),
         "CloseHandle": FakeWindowsFunction(1),
     })()
-    monkeypatch.setattr(driver.os, "name", "nt")
-    monkeypatch.setattr(driver.ctypes, "WinDLL", lambda *_args, **_kwargs: kernel32)
-    monkeypatch.setattr(driver.ctypes, "get_last_error", lambda: 31)
+    _fake_windows_host(monkeypatch, kernel32=kernel32, last_error=31)
 
     if expected_stopped:
         assert driver.windows_process_image_path(63208) is None
