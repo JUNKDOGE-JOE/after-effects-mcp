@@ -341,6 +341,10 @@ node scripts/live-model-matrix.mjs
 
 维护者先合并发布元数据，再从最终干净的受保护 `main` 提交构建 v0.9.5 Windows Helper、ZXP 与 AEX。校验最小 ZXP 载荷后分别签名、复验并生成 `SHA256SUMS-v0.9.5.txt`，通过 After Effects 2025 Helper/Provider 与公开 MCP 路径 smoke 后原样上传，不重新构建。完整流程见 [docs/RELEASE.md](docs/RELEASE.md)。
 
+## 贡献者
+
+带着根因一起来的 bug 报告，以及在维护者没有的硬件上做的验收，对这个项目的推动不亚于补丁。两者都记在 [CONTRIBUTORS.md](CONTRIBUTORS.md)。
+
 ## 实现说明
 
 第三方组件：
