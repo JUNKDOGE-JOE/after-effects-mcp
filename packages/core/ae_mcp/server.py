@@ -1358,6 +1358,11 @@ def build_server() -> Server:
         except LookupError:
             ctx = None
 
+        # toolUse and skillUse are excluded here because they are gated harder
+        # elsewhere, not because they are exempt: they run stored programs, so
+        # they go through plan_decision/authorize_plan, which falls back to
+        # `manual` when unconfigured. See the approval_gate module docstring —
+        # the two surfaces default in opposite directions on purpose.
         if not panel_private and canonical not in {"ae.toolUse", "ae.skillUse"}:
             gated = await approval_gate.enforce(canonical, ctx)
             if gated is not None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -335,3 +336,54 @@ async def test_server_gate_allows_execution_in_none_tier(monkeypatch, tmp_path):
 
     assert result.isError is False
     assert json.loads(result.content[0].text) == {"ok": True, "ran": True}
+
+
+# ---------------------------------------------------------------------------
+# The two surfaces default in opposite directions (#243)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_the_two_surfaces_default_in_opposite_directions_on_purpose(monkeypatch):
+    """Pins the asymmetry that reads as a fail-open bug from the source.
+
+    Both behaviours are covered individually above, which is exactly the
+    problem: nothing said they disagree, or why, so an audit reasonably
+    concluded one of them was wrong. If a later change "fixes" the
+    inconsistency, this is the test that should stop it and explain the cost.
+
+    The verb surface allows when unconfigured because the caller is then an MCP
+    client with its own permission prompt, and denying would leave clients that
+    cannot elicit unable to write at all. The Tool Library surface denies when
+    unconfigured because it executes stored programs -- code the caller did not
+    write this turn -- so an absent configuration is a reason to ask.
+    """
+    monkeypatch.delenv("AE_MCP_APPROVAL_TIER_FILE", raising=False)
+    monkeypatch.delenv("AE_MCP_TOOL_APPROVAL_TIER_FILE", raising=False)
+
+    assert await approval_gate.enforce("ae.exec", None) is None
+    assert current_tool_tier() == "manual"
+    assert plan_decision(current_tool_tier(), "write") == "elicit"
+    assert plan_decision(current_tool_tier(), "destructive") == "elicit"
+
+
+def test_a_missing_tier_file_fails_closed_on_both_surfaces(monkeypatch, tmp_path):
+    """Only the *variable* differs. An unreadable file is manual everywhere."""
+    missing = tmp_path / "gone.tier"
+    assert read_tier(str(missing)) == "manual"
+
+    monkeypatch.setenv("AE_MCP_TOOL_APPROVAL_TIER_FILE", str(missing))
+    assert current_tool_tier() == "manual"
+
+
+def test_stored_program_surfaces_skip_the_verb_gate_by_name():
+    """The exclusion at dispatch is what makes the model coherent.
+
+    ae.toolUse and ae.skillUse bypass enforce() because plan authorization
+    covers them harder. Adding a third stored-program verb without adding it
+    here would leave it on the weaker gate.
+    """
+    source = (
+        Path(approval_gate.__file__).resolve().parent / "server.py"
+    ).read_text(encoding="utf-8")
+    assert 'canonical not in {"ae.toolUse", "ae.skillUse"}' in source
