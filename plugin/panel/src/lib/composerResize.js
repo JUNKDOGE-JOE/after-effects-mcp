@@ -1,9 +1,20 @@
-export const COMPOSER_MIN_HEIGHT = 72;
+// The composer is three stacked rows -- attachment pond, chips/status, textarea.
+// The first two plus padding and gaps occupy about 64px, so a 72px floor left
+// the textarea roughly 8px tall: present, and impossible to type in. 96 is the
+// smallest height that leaves the textarea a full line. That makes the floor
+// equal to the default, so the composer can be dragged taller, never shorter.
+export const COMPOSER_MIN_HEIGHT = 96;
 export const COMPOSER_DEFAULT_HEIGHT = 96;
 export const COMPOSER_KEYBOARD_STEP = 24;
 export const MIN_TRANSCRIPT_HEIGHT = 120;
 export const MAX_COMPOSER_RATIO = 0.6;
 export const FALLBACK_MAX_HEIGHT = 320;
+
+// Below this the layout cannot seat a usable composer and a readable transcript
+// at the same time. The CSXS manifest's MinSize keeps the panel above it, so a
+// measurement under this is not a small panel -- it is a measurement taken
+// before layout settled. Believing one is what used to pin the composer shut.
+export const MIN_LAYOUT_HEIGHT = MIN_TRANSCRIPT_HEIGHT + COMPOSER_MIN_HEIGHT;
 
 function finitePositive(value) {
   return Number.isFinite(value) && value > 0;
@@ -50,8 +61,19 @@ export function createComposerHeightState(availableHeight) {
   };
 }
 
+// A measured shrink is honoured and does not spring back when the panel grows
+// again -- resurrecting a height the user last saw at a different size is worse
+// than leaving it where they left it. That only holds for measurements the
+// layout could actually produce, though. Anything under MIN_LAYOUT_HEIGHT is
+// startup noise, and clamping to it is permanent precisely because of the
+// no-resurrect rule, so those are dropped before they can reach state.
+export function isMeasurableLayout(availableHeight) {
+  return Number.isFinite(availableHeight) && availableHeight >= MIN_LAYOUT_HEIGHT;
+}
+
 export function reduceComposerHeight(state, action) {
   if (action?.type === 'measure') {
+    if (!isMeasurableLayout(action.availableHeight)) return state;
     const maxHeight = composerMaxHeight(action.availableHeight);
     return { height: clampComposerHeight(state.height, maxHeight), maxHeight };
   }
