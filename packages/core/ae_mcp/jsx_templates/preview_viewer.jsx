@@ -30,13 +30,19 @@
     if (typeof comp.saveFrameToPng === "function") {
       try {
         comp.saveFrameToPng(comp.time, outFile);
+        // No width/height here on purpose. saveFrameToPng honours the viewer's
+        // Resolution setting, so the composition's own size describes a
+        // different image than the one just written -- at Half it is exactly
+        // twice as large. The caller reads the real size back off the file and
+        // uses these two only to report that a preview was downsampled.
         return JSON.stringify({
           ok: true,
           compId: String(comp.id),
           compName: comp.name,
           time: comp.time,
-          width: comp.width,
-          height: comp.height,
+          compWidth: comp.width,
+          compHeight: comp.height,
+          resolutionFactor: comp.resolutionFactor,
           path: outFile.fsName,
           source: "comp",
           method: "saveFrameToPng",
@@ -54,8 +60,9 @@
       compId: String(comp.id),
       compName: comp.name,
       time: comp.time,
-      width: comp.width,
-      height: comp.height,
+      compWidth: comp.width,
+      compHeight: comp.height,
+      resolutionFactor: comp.resolutionFactor,
       source: "viewer",
       method: "ViewerCapture",
       fallbackReason: fallbackReason

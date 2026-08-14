@@ -293,7 +293,13 @@ class AePreviewFrameArgs(_StrictModel):
         None, ge=0, description="Single frame time in seconds. Ignored when times is set."
     )
     times: Optional[List[NonNegativeFloat]] = Field(
-        None, description="Render multiple frame times in seconds."
+        None,
+        max_length=8,
+        description=(
+            "Render multiple frame times in seconds. At most 8 — each frame "
+            "costs a round-trip to After Effects plus the time the render "
+            "takes to reach disk. Sample a motion range in more than one call."
+        ),
     )
     out_dir: Optional[str] = Field(
         None, description="Output directory. Default: temp ae_mcp_previews session directory."

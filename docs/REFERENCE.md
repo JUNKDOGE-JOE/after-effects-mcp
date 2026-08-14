@@ -137,6 +137,19 @@ CAS 晋升；没有自动过期或清理。已有 candidates 保持不变。
 随后使用独立读取验证状态。需要画面判断时再调用 `ae_previewFrame`；写入表达式
 后先调用 `ae_validateExpressions`。
 
+### `ae_previewFrame` 的帧元数据
+
+`width` / `height` 永远是**写出的 PNG 的真实像素尺寸**，从文件读回。
+`saveFrameToPng` 遵循视图的 Resolution 设置，所以 Half 分辨率下写出的是半张帧；
+合成自身的尺寸单独报为 `compWidth` / `compHeight`，并附带 `resolutionFactor`。
+
+抓到的画面小于合成时，该帧带 `downsampled: true`，结果里带一条 `note` 说明。
+降采样的预览只能当作"看一眼"，不能当作证据——细节已经丢了。要用某一帧证明视觉
+改动生效，先把视图切回 Full 分辨率。
+
+`times` 最多 8 个。每一帧都要一次 After Effects 往返，加上渲染落盘的时间，
+采样较长的区间请分多次调用。
+
 ### `ae_nativeExec`
 
 原生入口接受一个最多 64 个 operation 的线性 program：
@@ -330,6 +343,23 @@ expiration or cleanup. Existing candidates are unchanged.
 End reads with `JSON.stringify(...)`. Give writes a recognizable Undo label
 and verify them with an independent read. Use `ae_previewFrame` when visual
 correctness matters, and validate expressions before preview.
+
+### `ae_previewFrame` frame metadata
+
+`width` and `height` are always the **written PNG's real pixel size**, read back
+from the file. `saveFrameToPng` honours the viewer's Resolution setting, so a
+Half-resolution viewer writes half a frame; the composition's own size is
+reported separately as `compWidth` and `compHeight`, with `resolutionFactor`
+alongside it.
+
+When the capture is smaller than the composition, the frame carries
+`downsampled: true` and the result carries a `note` saying so. Treat a
+downsampled preview as a look, not as proof: fine detail is gone. Set the viewer
+to Full resolution before using a frame as evidence that a visual change landed.
+
+`times` accepts at most 8 entries. Each frame costs a round-trip to After
+Effects plus however long the render takes to reach disk, so sample a longer
+range across more than one call.
 
 ### `ae_nativeExec`
 
