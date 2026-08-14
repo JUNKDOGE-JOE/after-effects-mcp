@@ -24866,12 +24866,13 @@
 
   // src/lib/composerResize.js
   init_cep_runtime_inject();
-  var COMPOSER_MIN_HEIGHT = 72;
+  var COMPOSER_MIN_HEIGHT = 96;
   var COMPOSER_DEFAULT_HEIGHT = 96;
   var COMPOSER_KEYBOARD_STEP = 24;
   var MIN_TRANSCRIPT_HEIGHT = 120;
   var MAX_COMPOSER_RATIO = 0.6;
   var FALLBACK_MAX_HEIGHT = 320;
+  var MIN_LAYOUT_HEIGHT = MIN_TRANSCRIPT_HEIGHT + COMPOSER_MIN_HEIGHT;
   function finitePositive(value) {
     return Number.isFinite(value) && value > 0;
   }
@@ -24912,8 +24913,12 @@
       maxHeight
     };
   }
+  function isMeasurableLayout(availableHeight) {
+    return Number.isFinite(availableHeight) && availableHeight >= MIN_LAYOUT_HEIGHT;
+  }
   function reduceComposerHeight(state, action) {
     if ((action == null ? void 0 : action.type) === "measure") {
+      if (!isMeasurableLayout(action.availableHeight)) return state;
       const maxHeight = composerMaxHeight(action.availableHeight);
       return { height: clampComposerHeight(state.height, maxHeight), maxHeight };
     }
