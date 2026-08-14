@@ -332,6 +332,10 @@ node scripts/live-model-matrix.mjs
 
 Maintainers merge release metadata first, then build the v0.9.5 Windows Helper, ZXP, and AEX from the final clean protected-`main` commit. They validate the minimal ZXP payload, sign and verify both release assets, generate `SHA256SUMS-v0.9.5.txt`, run the After Effects 2025 Helper/Provider and public-MCP smokes, and upload those exact bytes without rebuilding. See [docs/RELEASE.md](docs/RELEASE.md).
 
+## Contributors
+
+A bug report that arrives with a root cause, and validation on hardware the maintainers do not have, carry this project as much as patches do. Both are credited in [CONTRIBUTORS.md](CONTRIBUTORS.md).
+
 ## Implementation Notes
 
 Third-party components:
