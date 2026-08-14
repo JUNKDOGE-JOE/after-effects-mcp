@@ -185,6 +185,22 @@ test('anthropicEndpoint appends API paths without dropping a proxy prefix', () =
   );
 });
 
+test('anthropicEndpoint collapses a duplicated /v1 boundary from an over-specified base (#257)', () => {
+  assert.equal(
+    anthropicEndpoint('https://relay.example/v1', '/v1/messages'),
+    'https://relay.example/v1/messages'
+  );
+  assert.equal(
+    anthropicEndpoint('https://relay.example/v1/', '/v1/messages/count_tokens'),
+    'https://relay.example/v1/messages/count_tokens'
+  );
+  // a prefix that merely ends in something else keeps its path untouched
+  assert.equal(
+    anthropicEndpoint('https://proxy.example/anthropic/v1', '/v1/messages'),
+    'https://proxy.example/anthropic/v1/messages'
+  );
+});
+
 test('validateProviderBaseUrl rejects raw and percent-decoded credential-like path material', () => {
   for (const baseUrl of [
     'https://relay.example/proxy/sk-secret-token-123456',

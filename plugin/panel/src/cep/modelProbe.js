@@ -102,7 +102,11 @@ function resultFromResponse(status, body, sensitiveValues = []) {
       ? { ok: true, status: 200, models, inventory, detail: '' }
       : { ok: false, status: 200, models: [], detail: 'Empty model list' };
   } catch {
-    return { ok: false, status: 200, models: [], detail: 'Response was not valid JSON' };
+    // unparseable marks "an HTTP endpoint answered, but not with an API body"
+    // — typical of gateways that serve 200+HTML for unknown paths. The
+    // endpoint-candidate loop treats it as retryable so the plus-v1 candidate
+    // still gets its turn (#257).
+    return { ok: false, status: 200, models: [], detail: 'Response was not valid JSON', unparseable: true };
   }
 }
 
@@ -292,6 +296,7 @@ export async function probeProviderModels({
     if (
       ![0, 401, 403, 404, 405].includes(lastResult?.status)
       && lastResult?.redirected !== true
+      && lastResult?.unparseable !== true
     ) return lastResult;
   }
   return lastResult || networkFailure();

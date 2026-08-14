@@ -80,6 +80,27 @@ test('probeProviderModels returns ok with parsed models on 200', async () => {
   assert.deepEqual(result.models, [{ id: 'glm-5.2', label: 'glm-5.2' }]);
 });
 
+test('probeProviderModels falls through 200+HTML gateways to the plus-v1 candidate (#257)', async () => {
+  const seen = [];
+  const requestImpl = async ({ url }) => {
+    seen.push(url);
+    if (new URL(url).pathname === '/models') {
+      return { status: 200, body: '<!doctype html><html>welcome</html>' };
+    }
+    return { status: 200, body: JSON.stringify({ data: [{ id: 'claude-haiku-4-5-20251001' }] }) };
+  };
+  const result = await probeProviderModels({
+    baseUrl: 'https://relay.example',
+    apiKey: 'sk-x',
+    protocol: 'anthropic',
+    requestImpl,
+  });
+  assert.equal(result.ok, true);
+  assert.deepEqual(result.models, [{ id: 'claude-haiku-4-5-20251001', label: 'claude-haiku-4-5-20251001' }]);
+  assert.equal(seen.length >= 2, true, 'expected the probe to try a second endpoint candidate');
+  assert.equal(new URL(seen[seen.length - 1]).pathname, '/v1/models');
+});
+
 test('probeProviderModels preserves UTF-8 model metadata split across response chunks', async () => {
   const body = Buffer.from(JSON.stringify({ data: [{ id: '模型-😀' }] }), 'utf8');
   const emojiOffset = body.indexOf(Buffer.from('😀', 'utf8'));

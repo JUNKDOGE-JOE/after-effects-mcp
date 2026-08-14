@@ -28648,7 +28648,10 @@
   function anthropicEndpoint(baseUrl, apiPath) {
     const base = normalizeBaseUrl(baseUrl) || DEFAULT_ANTHROPIC_BASE_URL;
     const url = new URL(base);
-    const prefix = url.pathname.replace(/\/+$/, "");
+    let prefix = url.pathname.replace(/\/+$/, "");
+    if (prefix.endsWith("/v1") && String(apiPath || "").startsWith("/v1/")) {
+      prefix = prefix.slice(0, -3);
+    }
     const rawPath = String(apiPath || "");
     const queryIndex = rawPath.indexOf("?");
     const pathPart = queryIndex === -1 ? rawPath : rawPath.slice(0, queryIndex);
@@ -46082,7 +46085,7 @@ data: ${JSON.stringify(payload)}
       }
       return models.length ? { ok: true, status: 200, models, inventory, detail: "" } : { ok: false, status: 200, models: [], detail: "Empty model list" };
     } catch {
-      return { ok: false, status: 200, models: [], detail: "Response was not valid JSON" };
+      return { ok: false, status: 200, models: [], detail: "Response was not valid JSON", unparseable: true };
     }
   }
   function requestWithTransport({
@@ -46270,7 +46273,7 @@ data: ${JSON.stringify(payload)}
         }
         break;
       }
-      if (![0, 401, 403, 404, 405].includes(lastResult == null ? void 0 : lastResult.status) && (lastResult == null ? void 0 : lastResult.redirected) !== true) return lastResult;
+      if (![0, 401, 403, 404, 405].includes(lastResult == null ? void 0 : lastResult.status) && (lastResult == null ? void 0 : lastResult.redirected) !== true && (lastResult == null ? void 0 : lastResult.unparseable) !== true) return lastResult;
     }
     return lastResult || networkFailure();
   }

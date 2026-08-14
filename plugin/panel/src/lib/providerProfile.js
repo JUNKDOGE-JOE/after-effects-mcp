@@ -1006,7 +1006,14 @@ export function codexSpawnEnv(runtimeConfig = null, baseEnv = {}) {
 export function anthropicEndpoint(baseUrl, apiPath) {
   const base = normalizeBaseUrl(baseUrl) || DEFAULT_ANTHROPIC_BASE_URL;
   const url = new URL(base);
-  const prefix = url.pathname.replace(/\/+$/, '');
+  let prefix = url.pathname.replace(/\/+$/, '');
+  // #257: a base configured with a trailing /v1 (which the model probe used
+  // to require against 200+HTML gateways) would produce /v1/v1/... here.
+  // Collapse the duplicated boundary so an over-specified base degrades
+  // gracefully instead of 404ing upstream.
+  if (prefix.endsWith('/v1') && String(apiPath || '').startsWith('/v1/')) {
+    prefix = prefix.slice(0, -3);
+  }
   const rawPath = String(apiPath || '');
   const queryIndex = rawPath.indexOf('?');
   const pathPart = queryIndex === -1 ? rawPath : rawPath.slice(0, queryIndex);
