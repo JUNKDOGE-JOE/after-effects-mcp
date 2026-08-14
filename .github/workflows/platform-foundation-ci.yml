@@ -67,6 +67,30 @@ jobs:
             plugin/host/native-aegp-client.test.js \
             plugin/panel/test/runtimeManager.test.js
 
+      # ci.yml is the Windows gate by contract (asserted in
+      # scripts/release/test/signing-plan.test.mjs), so the macOS run of the same
+      # suites belongs here. Until this existed, nothing in any merge gate ran
+      # pytest or the full host/panel/sidecar suites on macOS, and a
+      # macOS-breaking change could merge green. Kept ahead of the native C++
+      # builds below so the cheap failures surface first.
+      - name: Run the full Python and JS suites on macOS
+        shell: bash
+        run: |
+          set -euo pipefail
+          export TMPDIR="$RUNNER_TEMP"
+
+          uv sync --frozen --group dev --python 3.13.13
+          uv run --frozen --python 3.13.13 pytest -v
+
+          for workspace in plugin/host plugin/panel plugin/sidecar; do
+            npm --prefix "$workspace" ci
+            npm --prefix "$workspace" test
+          done
+
+          # The committed panel bundle must be reproducible from either host.
+          npm --prefix plugin/panel run build
+          git diff --exit-code --stat -- plugin/client/dist
+
       - name: Build and run portable native AEGP core tests
         shell: bash
         run: |
