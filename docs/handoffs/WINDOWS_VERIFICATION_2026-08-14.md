@@ -184,15 +184,59 @@ make Windows different.
 
 ---
 
-## Results — verified 2026-08-15 on the owner's Windows machine
+# Verification archive — 2026-08-15
 
-| # | Item | Verdict |
+The document above is preserved verbatim as **Part 1: the historical preflight**. It was written on 2026-08-14 against `main @ 0c554ff` plus the then-unmerged #249/#250 (handoff branch `0b98320`) and reflects what was believed *before* the machine run. Everything below records what actually happened, what the preflight got wrong, and where the public evidence lives.
+
+## Part 2 — Windows real-machine results (2026-08-15, owner's machine)
+
+| # | Item | Result |
 |---|---|---|
-| 1 | `ae.snapshot` default path | **Fixed, verified, merged (#249).** Errno 13 reproduced byte-for-byte on `main` with the server started from `C:\Windows\System32`; the branch build landed in `%TEMP%\ae_mcp_snapshots\` with UUID names, concurrent ×2 clean. New finding filed separately: the first capture in a process returns pre-DPI-aware coordinates and a possibly stale DWM frame (`mss` flips process DPI awareness on first instantiation). |
-| 2 | previewFrame under Windows file semantics | **Pass.** Full HD ×5 consecutive, three-frame batch in 1.3 s (old flat 60 s budget would have died), Half-resolution metadata exact (`960×540`, `resolutionFactor [2,2]`, `downsampled: true`, note present). Defender real-time protection on throughout. Active handle contention was not injected — that specific race remains unexercised. |
-| 3 | Live suite | **16/16 green on the first run ever** (8.28 s). The documented command worked exactly as written, including the `--python 3.13.13` venv rebuild. Expected test-fault breakage: none. |
-| 4 | Composer floor & panel MinSize | **Pass.** CDP measurement against the live panel: 96 px floor, range 96–447 px, non-ASCII input + backspace survive without collapse. Owner approved the 300×280 MinSize in his real workspace layout. |
-| 5 | AE 2023/2024 real hosts | **Blocked by vendor distribution; merged combination verified on AE 2026 instead.** AE 2023 GUI dies on this machine inside `drawbotagm` initialization — environmental, ae-mcp exonerated by elimination (safe mode with third-party effects disabled, panel isolation, full user-font deregistration, hidden CUDA devices: all still die); `aerender 23.5x52` works. AE 2024 is uninstalled and Adobe ships only current+previous major, so no channel exists. The merged `/MT` + original `AEGP_DeathHook` + original synchronous logger combination was instead verified end-to-end on real AE 2026: load event with `sourceCommit 0b98320` → native list/read with live locators → undoable write via `composition.duration.set` under `operationKey` + `undoGroup` → `ipc.listener stopped` → `death` event written by the synchronous logger inside the death hook → endpoint file self-cleaned, **zero new minidumps** (#236). Idempotency (`DUPLICATE_REQUEST` on same key, different args) and frame-alignment validation observed live as a bonus. Community call-for-testing drafted for 2023/2024. |
-| 6 | ZXP sidecar payload | **Confirmed missing, then actually fixed.** The three-file interlock (production resolver path / packager that never stages it / verifier that never checks it) is documented above; the real fix ships in PR #251 — payload staged to `runtime/windows-x64/node/sidecar`, stage verification fails closed, stray stage-root copy rejected. |
+| 1 | `ae.snapshot` default path | **Verified and merged (#249).** Errno 13 reproduced byte-for-byte on `main` with the server started from `C:\Windows\System32`; the fix landed captures in `%TEMP%\ae_mcp_snapshots\` with UUID names; concurrent ×2 clean. New finding: first-capture DPI/stale-frame behaviour, now tracked as #255. |
+| 2 | previewFrame under Windows file semantics | **Pass under live antivirus** (Defender real-time on). Full HD ×5 consecutive clean; `times [0,7,14]` completed in 1.3 s under the per-frame budget; Half-resolution metadata exact (`960×540`, `compWidth/Height 1920×1080`, `resolutionFactor [2,2]`, `downsampled: true`, note present). Active handle contention was not injected. |
+| 3 | Live suite | **16/16 green on the first run ever** (8.28 s), including the documented `uv run --frozen --python 3.13.13` invocation exactly as written. |
+| 4 | Composer floor & panel MinSize | **Pass.** CDP measurement against the live panel: 96 px floor, range 96–447 px, non-ASCII input and backspace survive without collapse. Owner approved the new MinSize in his real workspace. Manifest value: **Width 280 × Height 300** (see correction 6). |
+| 5 | AE 2023/2024 | **Not runtime-verifiable on this machine.** AE 2023's GUI dies during `drawbotagm` initialization — environmental, ae-mcp exonerated by elimination (safe mode with third-party effects disabled, panel isolation, full user-font deregistration, hidden CUDA devices: all still die); `aerender 23.5x52` works. AE 2024 is uninstalled and Adobe distributes only current+previous major. Separately, the merged `/MT` + original `AEGP_DeathHook` + original synchronous logger combination ran end-to-end on real AE **2026** (Windows): `load` event with `sourceCommit 0b98320` → native list/read with live locators → undoable write (`composition.duration.set` under `operationKey` + `undoGroup`) → `ipc.listener stopped` → `death` event written by the synchronous logger inside the death hook → endpoint self-cleaned, **zero new minidumps**. Bonus contract observations: idempotency (`DUPLICATE_REQUEST` on same key with different args) and frame-alignment validation, live. |
+| 6 | ZXP sidecar payload | **Confirmed missing** by three-file interlock (production resolver path / packager that never stages it / verifier that never checks it). Fix is **PR #251 (open)** — see Part 4 for what "fixed" will require. |
 
-Merged from this batch: #249, #250. Open follow-ups: PR #251 (the #239 fix), the AE 2023/2024 call-for-testing issue, and the clean-machine bootstrap gap — the Claude channel's sidecar requires a system Node ≥ 18 that the first-run wizard neither detects nor installs, while the failure copy points at an "offline runtime" that does not exist on Windows.
+## Part 3 — cross-review corrections
+
+Errors in the first write-up of these results, corrected here so the archive does not propagate them:
+
+1. **"Fixed for real in PR #251" was premature.** At the time of writing, #251 was open and covered only the Windows half. The complete fix (both platforms, shared closure, unified dev-vs-packaged rule, hermetic self-check) is the current #251; even after it merges, #239 stays open and no "v0.9.6 fixes it" claim is made until the immutable v0.9.6 release passes a logged-in `--probe` on real Windows and macOS installs.
+2. **"The wizard neither detects nor installs Node" was half wrong.** The diagnostics page DOES detect Node — with the wrong threshold (24.17.0 vs the sidecar's actual 18.0.0 floor) and, on Windows, a fixHint pointing at a repair flow that only exists on macOS (documented in #239). The accurate statement: the first-run wizard has no Node install step; detection exists but its threshold and guidance are wrong.
+3. **"New finding filed separately" overstated the DPI discovery.** It existed only as a session chip at the time. It is now genuinely filed: #255.
+4. **"Three-frame batch in 1.3 s (old flat 60 s budget would have died)" does not follow.** 1.3 s is far under 60 s; this machine renders fast and cannot reproduce the original failure mode (slow renders × multiple frames exhausting a flat budget). The 1.3 s run proves the per-frame-budget code path works, not that the old budget must fail here. The old failure stands on the original reports (#242/#243), not on this measurement.
+5. **AE 2026 does not substitute for AE 2023/2024.** Teardown behaviour is host-version-specific — the entire reason #236 exists. The 2026 run proves the merged combination is clean **on 2026**; 2023/2024 remain statically compatible, runtime-unverified, pending community testing.
+6. **"MinSize 300×280" had the axes backwards.** The CSXS manifest writes `<MinSize><Height>300</Height><Width>280</Width></MinSize>`: the panel minimum is **280 wide × 300 tall**. Earlier notes quoted it height-first as if it were width-first.
+
+## Part 4 — open items
+
+- **PR #251** (dual-platform #239 fix): awaiting CI on both platforms and owner merge.
+- **v0.9.6**: not released. Required before #239 can close: immutable v0.9.6 artifacts under new names (Windows ZXP, macOS bundle/native artifact, checksums, release notes — v0.9.5 assets are never overwritten), and a logged-in sidecar `--probe` on real Windows and macOS installs of the RC. The networked `--probe` stays out of normal CI by design.
+- **macOS**: zero real-host acceptance to date, for anything. The v0.9.5 macOS assets are unsigned and post-hoc; the support matrix and READMEs now say so explicitly.
+- **AE 2023/2024 community testing**: #236 tracks real-host acceptance; a call-for-testing draft (with an endpoint-file load-proof procedure and a report template) is prepared and pending owner review.
+- **Timeout / uncertain-execution contract (JSX plane)**: #253 (P0; a community patch is reported at 11/11 — coordinate, do not parallelize).
+- **Non-string `ae_exec` results destroyed by `String(v)`**: #254.
+- **Snapshot first-capture DPI/stale frame**: #255.
+- **Clean-machine Node gap**: the Claude sidecar needs a system Node ≥ 18 that nothing installs or correctly guides toward on Windows (documented inside #239; wizard/diagnostics follow-up work).
+
+## Part 5 — public evidence index
+
+**Source SHAs**
+- Preflight baseline: `main @ 0c554ff`; handoff branch `0b98320` (= 0c554ff + #249 + #250 cherry-picks + this document's first version).
+- Post-merge main at archive time: `254a24f` (#249 = `dc764d2`, #250 = `254a24f`).
+- #251: first pass `3ebe268` (Windows-only), dual-platform completion `8d31500`.
+
+**Artifacts and hashes**
+- Acceptance AEX (merged combination, #236 run): sha256 `57c6ef9b59e074fb…` — build receipt records `sourceCommit 0b98320`, MSVC `14.44.35207`, Windows SDK `10.0.26100.0`, AE SDK `25.6.61`.
+- v0.9.5 release asset digests (GitHub release, for cross-reference): Windows ZXP `2bdac694…`, Windows AEX `479c8808…`, macOS bundle (unsigned) `13ae5692…`, macOS native plugin `41c4587c…`.
+
+**Machine and run context (redacted receipts)**
+- Windows 11 build 26200 (kernel 26100.9168), NVIDIA RTX 5080 + AMD integrated, 125 % display scale, Node v24.14.0, Defender real-time ON throughout.
+- AE 2026 v26.3 (`26.3x87`), zh-CN UI. AEX install receipt at `%LOCALAPPDATA%\Temp\aemcp-aex\install-receipt-ae2026.json` on the owner's machine (records the pre-swap backup `AeMcpNative.aex.pre-0b98320.bak`).
+- Native plugin log evidence (`%LOCALAPPDATA%\AfterEffectsMCP\Logs\native-plugin-v1.jsonl`): `load` (instanceId `c00785b1…`, `sourceCommit 0b98320…`) → `ipc.listener started` → `ipc.listener stopped` → `death`, with the endpoint file `aemcp-n1\d-<uuid>.endpoint` present during the session and removed at teardown.
+- Minidump check: `%LOCALAPPDATA%\CrashDumps` + `%LOCALAPPDATA%\Temp` inventories identical before/after (10 pre-existing dumps, 0 new).
+
+**Trackers**: #239 (dual-platform P0, open until v0.9.6 evidence completes), #236 (AE 2023/2024 real-host), #253 (timeout contract), #254 (non-string results), #255 (snapshot DPI), PR #249/#250 (merged), PR #251 (fix), PR #252 (this archive).
+
