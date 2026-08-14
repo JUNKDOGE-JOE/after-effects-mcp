@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import sys
-import time
 from pathlib import Path
 from typing import Optional
 
@@ -27,11 +26,7 @@ class MssSnapshotter(Snapshotter):
         main_window: bool = False,
         method: str = "auto",
     ) -> dict:
-        if out_path is None:
-            ts = int(time.time() * 1000)
-            out_path = Path(f"ae_viewer_{ts}.png")
-        out_path = Path(out_path)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path = self.resolve_out_path(out_path)
 
         # Resolve target rect. An explicit hwnd wins; otherwise we always
         # locate the real After Effects window (by owning AfterFX.exe process)
