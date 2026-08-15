@@ -2,6 +2,9 @@
 
 [English](README.md) | 简体中文
 
+> [!IMPORTANT]
+> **面板内对话功能正在整体重构。** 在重构落地前，请把 ae-mcp 作为纯粹的 MCP server 注册到你自己的 agent 客户端使用（Claude Code / Claude Desktop / Cursor / Codex / OpenCode 等）。
+
 ae-mcp 是一个**后端无关**的 After Effects 自动化工具，用来让 AE 与 AI agent 保持同一个工作上下文。它通过 MCP server 暴露 AE 工程状态、工具调用、预览、截图和检查点，让 agent 能在对话中理解并操作当前 AE 项目。
 
 MCP server 是核心。在 MCP 本体之外，ae-mcp 还包装了一套 CEP 面板插件，提供面板内对话、后端配置、审批、诊断和首跑安装。你可以根据自己的工作流选择：在外部 agent 后端里通过 MCP 使用 ae-mcp，或者直接在 AE 面板内配置 Claude / Codex / ZCode 后端进行对话。

@@ -2,6 +2,21 @@
 
 These rules apply to human developers and coding agents working in this repository. They exist to keep engineering effort aligned with observable After Effects functionality. When an issue plan, reviewer suggestion, or local preference conflicts with these rules, stop and resolve the conflict in favor of the user-visible acceptance outcome unless the user explicitly changes the priority.
 
+## 0.0 Read the current architecture direction first
+
+**Read [`docs/ARCHITECTURE_DIRECTION.md`](docs/ARCHITECTURE_DIRECTION.md) before planning any work.** It was approved 2026-08-15 and it changes what work is worth doing. The delivery discipline in the rest of this file — evidence, acceptance tiers, stop conditions, `.aep` lifecycle — remains fully in force. Only the *direction* moved.
+
+Three standing decisions constrain new work until the direction document says otherwise:
+
+- **The native AEGP plane is frozen.** Keep the `.aex` and its 23 primitives; add none. Do not open a new native capability package, do not extend `native-primitives.json`, and do not run the capability-package codegen pipeline. The two properties that justify the plane — exact rational time and generation-bound locators — are already built.
+- **The Python server plane is being retired this quarter.** Do not add handlers, backends, schemas, or entry points under `packages/`. Fixes to keep it working are fine; new surface there is not. The MCP server is moving into the CEP Node context (`plugin/host/`).
+- **The provider layer is collapsing to three channels** — claude CLI, codex CLI, opencode. Do not add a fourth backend adapter or extend `universalProviderRoute` / `providerCapabilityProbe` / `codexResponsesRoute`; those are scheduled for deletion.
+
+Two things are known-broken and already assigned; do not re-diagnose them from scratch:
+
+- `plugin/host/jsx-bridge.js` releases the serialization queue on timeout without cancelling the ExtendScript, opening the overlap window the queue exists to prevent. `plugin/host/jsx-bridge.test.js:59-83` currently enshrines that behavior as intended.
+- The first-run wizard detects Node but never installs it, so the built-in Claude chat cannot start on a clean Windows machine. The Python server itself installs fine there via `uv`.
+
 ## 0. User authorization is the scope boundary
 
 - The current user's explicit requested outcome and named deliverables are the authorization boundary. An Issue, Epic, milestone, checklist, review comment, repository rule, prior plan, branch, worktree, or sunk implementation is context or evidence only; none authorizes additional product work or delivery mechanisms.
@@ -32,6 +47,8 @@ These rules apply to human developers and coding agents working in this reposito
 - Workflow infrastructure must remove a measured repeated cost from the active acceptance path and is timeboxed to one working day unless the user explicitly promotes it. Otherwise record it as a follow-up and continue the capability package.
 
 ## 3. Define the public vertical-slice acceptance test first
+
+> **Scope note (2026-08-15).** The AEGP chain below now describes acceptance for the **frozen** native plane only — use it when touching existing native primitives. New capability work runs on the ExtendScript plane, where the equivalent chain is: public MCP tool -> `plugin/host/mcp` handler -> `/exec` -> `jsx-bridge` -> ExtendScript -> After Effects state -> typed result -> audit evidence. The evidence requirements are identical; only the middle layers differ. See [`docs/ARCHITECTURE_DIRECTION.md`](docs/ARCHITECTURE_DIRECTION.md).
 
 For AE-native work, write the executable acceptance path before expanding the implementation:
 
