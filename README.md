@@ -2,6 +2,9 @@
 
 English | [简体中文](README.zh-CN.md)
 
+> [!IMPORTANT]
+> **The panel's built-in chat is being rebuilt.** Until that work lands, use ae-mcp as a plain MCP server registered with your own agent client (Claude Code, Claude Desktop, Cursor, Codex, OpenCode, and similar).
+
 ae-mcp is a backend-agnostic automation tool that keeps Adobe After Effects and AI agents in the same working context. Its MCP server exposes AE project state, tool execution, previews, screenshots, and checkpoints so an agent can understand and operate the current AE project during a conversation.
 
 The MCP server is the core. Outside the MCP layer, ae-mcp also ships a CEP panel that wraps built-in agent chat, backend configuration, approval controls, diagnostics, and first-run setup. You can use ae-mcp from an external agent backend through MCP, or configure Claude / Codex / ZCode directly inside the AE panel.
