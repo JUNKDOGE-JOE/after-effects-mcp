@@ -2,6 +2,15 @@
 
 English | [简体中文](README.zh-CN.md)
 
+**One-line install — paste this into your AI agent (Claude Code, Codex, Cursor, or any MCP client) and it sets up the ae-mcp runtime and MCP server entry for you:**
+
+```text
+Install ae-mcp for me: install uv if it is missing, then run uv tool install --force --from "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.5#subdirectory=packages/core" ae-mcp --with "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.5#subdirectory=packages/bridge" --with "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.5#subdirectory=packages/snapshot-mss" and register an MCP server named "ae" in this client's MCP config whose command is the ae-mcp launcher inside `uv tool dir --bin`, with env AE_MCP_BACKEND=ae-mcp and AE_MCP_PLUGIN_URL=http://127.0.0.1:11488 (full guide: https://github.com/JUNKDOGE-JOE/after-effects-mcp/blob/main/docs/INSTALL.md). Then tell me to install the v0.9.5 ZXP and AEX from https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.9.5 and open Window > Extensions > ae-mcp inside After Effects; only after I confirm, call ae_ping to verify.
+```
+
+> [!IMPORTANT]
+> The prompt installs only the runtime and the MCP client entry. **ae-mcp cannot do anything until the panel is installed and open**: install `ae-mcp-panel-v0.9.5-windows-x64.zxp` into After Effects with a ZXP installer (plus `AeMcpNative-v0.9.5-windows-x64.aex` for `ae_nativeExec`), then keep `Window -> Extensions -> ae-mcp` open while you work — the panel is what listens on `127.0.0.1:11488`, and every tool call fails while it is closed. Steps: [Install and First Run](#install-and-first-run).
+
 > [!IMPORTANT]
 > **The panel's built-in chat is being rebuilt.** Until that work lands, use ae-mcp as a plain MCP server registered with your own agent client (Claude Code, Claude Desktop, Cursor, Codex, OpenCode, and similar).
 
