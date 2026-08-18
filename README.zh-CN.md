@@ -2,6 +2,15 @@
 
 [English](README.md) | 简体中文
 
+**一行安装——把下面这条提示词粘贴给你的 AI agent（Claude Code、Codex、Cursor 或任何 MCP 客户端），它会替你装好 ae-mcp runtime 并写好 MCP server 配置：**
+
+```text
+帮我安装 ae-mcp：如果没有 uv 就先安装它，然后运行 uv tool install --force --from "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.5#subdirectory=packages/core" ae-mcp --with "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.5#subdirectory=packages/bridge" --with "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.5#subdirectory=packages/snapshot-mss"，再在你所在客户端的 MCP 配置里注册一个名为 "ae" 的 MCP server：command 用 `uv tool dir --bin` 目录里的 ae-mcp 启动器，env 设 AE_MCP_BACKEND=ae-mcp 和 AE_MCP_PLUGIN_URL=http://127.0.0.1:11488（完整指南：https://github.com/JUNKDOGE-JOE/after-effects-mcp/blob/main/docs/INSTALL.md）。之后提醒我去 https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.9.5 安装 v0.9.5 的 ZXP 和 AEX，并在 After Effects 里打开 Window > Extensions > ae-mcp 面板；等我确认后再调用 ae_ping 验证。
+```
+
+> [!IMPORTANT]
+> 这条提示词只负责 runtime 和 MCP 客户端配置。**ZXP 没装、面板没开，ae-mcp 什么也做不了**：先用 ZXP installer 把 `ae-mcp-panel-v0.9.5-windows-x64.zxp` 装进 After Effects（`ae_nativeExec` 还需要 `AeMcpNative-v0.9.5-windows-x64.aex`），使用时保持 `Window -> Extensions -> ae-mcp` 面板打开——监听 `127.0.0.1:11488` 的就是这个面板，面板关着时所有工具调用都会失败。步骤见[安装和首次启动](#安装和首次启动)。
+
 > [!IMPORTANT]
 > **面板内对话功能正在整体重构。** 在重构落地前，请把 ae-mcp 作为纯粹的 MCP server 注册到你自己的 agent 客户端使用（Claude Code / Claude Desktop / Cursor / Codex / OpenCode 等）。
 
