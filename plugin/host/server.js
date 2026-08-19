@@ -508,31 +508,58 @@ function buildApp() {
     const express = expressFactory();
     const a = express();
     a.use(express.json({ limit: '5mb' }));
+    async function nativeNegotiate(deadlineUnixMs) {
+        const client = await connectedNativeClient(deadlineUnixMs);
+        const hello = await client.negotiate({ deadlineUnixMs });
+        return {
+            selectedWireVersion: hello.selectedWireVersion,
+            pluginVersion: hello.pluginVersion,
+            compiledSdkVersion: hello.compiledSdk.version,
+            sourceCommit: hello.sourceCommit,
+            hostInstanceId: hello.host.instanceId,
+            hostPlatform: hello.host.platform,
+            sessionId: hello.sessionId,
+            sessionGeneration: hello.sessionGeneration,
+            capabilitiesDigest: hello.capabilitiesDigest,
+        };
+    }
+    async function nativeInvoke(body) {
+        const client = await connectedNativeClient(body.deadlineUnixMs);
+        return client.invoke(body);
+    }
+    const getStatus = function (requestPort) {
+        return {
+            ok: true,
+            pluginVersion: PKG_VERSION,
+            port: currentPort || requestPort || null,
+            jsxBridge: typeof jsxBridge.getState === 'function' ? jsxBridge.getState() : null,
+            pythonVersion: lastPythonVersion || null,
+            pythonLastSeenAt: lastHealthAt || null,
+            paused: isPaused(),
+            clients: getClients(),
+            nativeExecutionPlane: (function () {
+                try {
+                    const nativeStatus = makeNativeAegpClient().status();
+                    return nativeStatus && nativeStatus.state === 'connected'
+                        ? { available: true, adapter: 'native-aegp', engine: 'native-aegp' }
+                        : { available: false, adapter: null, engine: null };
+                } catch (_) {
+                    return { available: false, adapter: null, engine: null };
+                }
+            }()),
+        };
+    };
+    // mcp/index.js currently forwards getStatus while its dependency object is
+    // being shared with the panel work. Keep a private fallback there until
+    // that owner forwards the two explicit native fields directly.
+    getStatus.nativeNegotiate = nativeNegotiate;
+    getStatus.nativeInvoke = nativeInvoke;
     module.exports.mcp = mountMcp(a, {
         version: PKG_VERSION,
-        getStatus: function (requestPort) {
-            return {
-                ok: true,
-                pluginVersion: PKG_VERSION,
-                port: currentPort || requestPort || null,
-                jsxBridge: typeof jsxBridge.getState === 'function' ? jsxBridge.getState() : null,
-                pythonVersion: lastPythonVersion || null,
-                pythonLastSeenAt: lastHealthAt || null,
-                paused: isPaused(),
-                clients: getClients(),
-                nativeExecutionPlane: (function () {
-                    try {
-                        const nativeStatus = makeNativeAegpClient().status();
-                        return nativeStatus && nativeStatus.state === 'connected'
-                            ? { available: true, adapter: 'native-aegp', engine: 'native-aegp' }
-                            : { available: false, adapter: null, engine: null };
-                    } catch (_) {
-                        return { available: false, adapter: null, engine: null };
-                    }
-                }()),
-            };
-        },
+        getStatus,
         executeJsx,
+        nativeNegotiate,
+        nativeInvoke,
         hostLog,
         getNativeStatus: function () { return makeNativeAegpClient().status(); },
         getClients,

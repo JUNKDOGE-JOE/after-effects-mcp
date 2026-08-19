@@ -14,6 +14,7 @@ const TOOL_MODULES = [
     require('./tools/exec'),
     require('./tools/preview-frame'),
     require('./tools/read'),
+    require('./tools/native-exec'),
 ];
 
 function buildTools(deps) {
