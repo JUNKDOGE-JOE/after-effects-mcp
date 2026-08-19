@@ -40,6 +40,8 @@ const CEP_EXECUTED_FILES = [
     // listed here so the node:-specifier and require-graph guards cover it.
     'mcp/tools/status.js',
     'mcp/tools/exec.js',
+    'mcp/tools/preview-frame.js',
+    'mcp/png.js',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',

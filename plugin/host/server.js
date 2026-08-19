@@ -518,9 +518,25 @@ function buildApp() {
                 jsxBridge: typeof jsxBridge.getState === 'function' ? jsxBridge.getState() : null,
                 pythonVersion: lastPythonVersion || null,
                 pythonLastSeenAt: lastHealthAt || null,
+                paused: isPaused(),
+                clients: getClients(),
+                nativeExecutionPlane: (function () {
+                    try {
+                        const nativeStatus = makeNativeAegpClient().status();
+                        return nativeStatus && nativeStatus.state === 'connected'
+                            ? { available: true, adapter: 'native-aegp', engine: 'native-aegp' }
+                            : { available: false, adapter: null, engine: null };
+                    } catch (_) {
+                        return { available: false, adapter: null, engine: null };
+                    }
+                }()),
             };
         },
         executeJsx,
+        hostLog,
+        getNativeStatus: function () { return makeNativeAegpClient().status(); },
+        getClients,
+        isPaused,
     });
 
     a.get('/health', (req, res) => {
