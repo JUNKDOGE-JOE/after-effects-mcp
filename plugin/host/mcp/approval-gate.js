@@ -38,7 +38,20 @@ Decisions come from VERB_ANNOTATIONS (the same source as the Claude backend's
 canUseTool tiers), so semantics match across backends.
 */
 
-// Tool Library 门尚未移植到宿主。
+// Host adaptation (Phase 1, see docs/platform/mcp-in-panel-phase1.md): the
+// record above is the Python module docstring verbatim and still describes the
+// *semantics*. In the CEP host the verb-gate tier does not come from
+// AE_MCP_APPROVAL_TIER_FILE; it is the approvalTier of the MCP session's
+// conversation policy (plugin/host/mcp/conversations.js), re-read on every
+// tools/call. `null` plays the role of "the variable is unset": the caller is
+// an external MCP client whose own permission system is the gate. Panel-spawned
+// conversations carry readonly/manual/auto/none and `elicit` goes to the
+// in-process ApprovalQueue (plugin/host/mcp/approvals.js) that the panel
+// drives, instead of an MCP elicitation round trip. readTier() is kept as the
+// faithful port of the file reader for the panel-side transition.
+//
+// The Tool Library gate (plan_decision / authorize_plan) is not ported to the
+// host yet.
 
 const fs = require('fs');
 const { VERB_ANNOTATIONS } = require('./annotations');
