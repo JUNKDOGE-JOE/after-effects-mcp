@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "test": "node --test",
-    "test:node15": "node test-node15/run.js"
+    "test:node15": "node tests/node15-spike.js"
   },
   "dependencies": {
     "express": "4.22.1"

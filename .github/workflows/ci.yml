@@ -129,4 +129,4 @@ jobs:
           if (-not ((node --version) -like 'v15.*')) { throw "Expected Node 15.x, got $(node --version)" }
 
       - name: Run the real long-call MCP spike
-        run: node plugin/host/test-node15/run.js
+        run: node plugin/host/tests/node15-spike.js
