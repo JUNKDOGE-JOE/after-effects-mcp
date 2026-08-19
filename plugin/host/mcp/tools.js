@@ -14,6 +14,9 @@ const TOOL_MODULES = [
     require('./tools/exec'),
     require('./tools/preview-frame'),
     require('./tools/read'),
+    require('./tools/checkpoint'),
+    require('./tools/revert'),
+    require('./tools/validate-expressions'),
 ];
 
 function buildTools(deps) {

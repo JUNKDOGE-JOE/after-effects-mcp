@@ -7,6 +7,8 @@ const { buildTools } = require('./tools');
 const { ConversationStore } = require('./conversations');
 const { ApprovalQueue } = require('./approvals');
 const { CheckpointStore } = require('./checkpoint-store');
+const { buildInstructions } = require('./instructions');
+const { TOOL_MODULES } = require('./tools');
 
 const PROTOCOLS = ['2025-06-18', '2025-03-26'];
 const DEFAULT_PROTOCOL = '2025-03-26';
@@ -130,7 +132,10 @@ function mountMcp(app, deps) {
                 protocolVersion,
                 capabilities: { tools: { listChanged: false }, logging: {} },
                 serverInfo: { name: 'ae-mcp-host', version: deps.version },
-                instructions: 'Experimental CEP-hosted MCP spike. The panel must remain open.',
+                instructions: buildInstructions({
+                    expertGuidance: conversation ? conversation.policy.expertGuidance : EXTERNAL_POLICY.expertGuidance,
+                    tools: TOOL_MODULES.map(function (tool) { return tool.definition.name; }),
+                }),
             };
             return { status: 200, session, response: jsonrpc.result(message, value) };
         }
