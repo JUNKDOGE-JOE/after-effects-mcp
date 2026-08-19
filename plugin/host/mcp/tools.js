@@ -17,6 +17,7 @@ const TOOL_MODULES = [
     require('./tools/checkpoint'),
     require('./tools/revert'),
     require('./tools/validate-expressions'),
+    require('./tools/native-exec'),
 ];
 
 function buildTools(deps) {

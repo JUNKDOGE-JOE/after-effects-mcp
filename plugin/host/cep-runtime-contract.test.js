@@ -41,6 +41,8 @@ const CEP_EXECUTED_FILES = [
     'mcp/checkpoint-store.js',
     'mcp/checkpoint-ops.js',
     'mcp/instructions.js',
+    'mcp/json-schema-lite.js',
+    'mcp/native-program.js',
     'mcp/error-hints.js',
     'mcp/jsx-result.js',
     'mcp/template.js',
@@ -56,6 +58,9 @@ const CEP_EXECUTED_FILES = [
     'mcp/tools/checkpoint.js',
     'mcp/tools/revert.js',
     'mcp/tools/validate-expressions.js',
+    'mcp/tools/native-exec.js',
+    '../../native/ae-plugin/protocol/native_exec.generated.json',
+    '../../native/ae-plugin/protocol/aegp-rpc.schema.json',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',
@@ -73,7 +78,9 @@ function stripComments(source) {
 }
 
 function read(name) {
-    return fs.readFileSync(path.join(__dirname, name), 'utf8');
+    const local = path.join(__dirname, name);
+    if (fs.existsSync(local)) return fs.readFileSync(local, 'utf8');
+    return fs.readFileSync(path.join(__dirname, '..', '..', name), 'utf8');
 }
 
 function readCode(name) {
@@ -96,7 +103,7 @@ test('the CEP manifest stays in sync with what the host actually requires', () =
         for (const match of source.matchAll(local)) {
             const target = path.posix.normalize(path.posix.join(path.posix.dirname(name), match[1]));
             if (target === 'package' || target === 'package.json') continue;
-            const candidates = [target + '.js', target + '/index.js'];
+            const candidates = [target + '.js', target + '/index.js', target];
             assert.ok(
                 candidates.some((candidate) => known.has(candidate)),
                 `${name} requires ${match[1]} which is missing from CEP_EXECUTED_FILES`,
