@@ -1,6 +1,6 @@
-// Tests for the JSX bridge: sentinel rejection, normal resolve, serialization
-// (mutex), and that a timeout releases the lock. Uses Node's built-in test
-// runner (node --test) with a fake csInterface — no external deps.
+// Tests for the JSX bridge: sentinel rejection, normal resolve, serialization,
+// and timeout drain recovery. Uses Node's built-in test runner (node --test)
+// with a fake csInterface and injectable timers — no external deps.
 const test = require('node:test');
 const assert = require('node:assert');
 
@@ -8,6 +8,57 @@ const assert = require('node:assert');
 function freshBridge() {
     delete require.cache[require.resolve('./jsx-bridge')];
     return require('./jsx-bridge');
+}
+
+function fakeClock() {
+    let now = 0;
+    let nextId = 1;
+    const tasks = new Map();
+    return {
+        now: function () { return now; },
+        setTimeout: function (fn, delay) {
+            const id = nextId++;
+            tasks.set(id, { at: now + delay, fn });
+            return id;
+        },
+        clearTimeout: function (id) { tasks.delete(id); },
+        flush: async function () {
+            await Promise.resolve();
+            await Promise.resolve();
+        },
+        advance: async function (delta) {
+            const target = now + delta;
+            while (true) {
+                let selectedId = null;
+                let selected = null;
+                tasks.forEach(function (task, id) {
+                    if (task.at <= target && (!selected || task.at < selected.at)) {
+                        selectedId = id;
+                        selected = task;
+                    }
+                });
+                if (!selected) break;
+                now = selected.at;
+                tasks.delete(selectedId);
+                selected.fn();
+                await this.flush();
+            }
+            now = target;
+            await this.flush();
+        },
+    };
+}
+
+function useFakeClock(bridge) {
+    const clock = fakeClock();
+    bridge._setTimingForTest({
+        now: clock.now,
+        setTimeout: clock.setTimeout,
+        clearTimeout: clock.clearTimeout,
+        sentinelTimeoutMs: 1000,
+        sentinelRetryDelayMs: 10,
+    });
+    return clock;
 }
 
 test('normal result resolves', async () => {
@@ -24,10 +75,11 @@ test('"EvalScript error." sentinel (with period) rejects', async () => {
     bridge.setCSInterface({
         evalScript: function (jsx, cb) { cb('EvalScript error.'); },
     });
-    await assert.rejects(
-        () => bridge.evalScript('boom', 1000),
-        /EvalScript error\./
-    );
+    await assert.rejects(() => bridge.evalScript('boom', 1000), function (error) {
+        assert.match(error.message, /EvalScript error\./);
+        assert.strictEqual(error.disposition, 'failed');
+        return true;
+    });
 });
 
 test('legitimate string beginning with EvalScript errors resolves', async () => {
@@ -50,36 +102,113 @@ test('EvalScript error colon variant resolves because only the exact sentinel re
 
 test('missing CSInterface rejects', async () => {
     const bridge = freshBridge();
-    await assert.rejects(
-        () => bridge.evalScript('1', 1000),
-        /CSInterface not initialized/
-    );
+    await assert.rejects(() => bridge.evalScript('1', 1000), function (error) {
+        assert.match(error.message, /CSInterface not initialized/);
+        assert.strictEqual(error.disposition, 'not_dispatched');
+        return true;
+    });
 });
 
-test('timeout rejects and releases the lock for the next call', async () => {
+test('timeout keeps the lock and a queued call expires as not_dispatched', async () => {
     const bridge = freshBridge();
-    let firstCb = null;
-    let secondCalled = false;
+    const clock = useFakeClock(bridge);
+    const calls = [];
     bridge.setCSInterface({
         evalScript: function (jsx, cb) {
-            if (firstCb === null) {
-                // Never invoke the callback for the first call -> it times out.
-                firstCb = cb;
-            } else {
-                secondCalled = true;
-                cb('second-ok');
-            }
+            calls.push({ jsx, cb });
+            // Neither the real callback nor the sentinel callback returns.
         },
     });
 
     const first = bridge.evalScript('slow', 20);
-    const second = bridge.evalScript('fast', 1000);
+    const second = bridge.evalScript('fast', 50);
+    const firstRejected = assert.rejects(first, function (error) {
+        assert.match(error.message, /^JSX timeout after 20ms/);
+        assert.strictEqual(error.disposition, 'uncertain');
+        return true;
+    });
+    const secondRejected = assert.rejects(second, function (error) {
+        assert.strictEqual(
+            error.message,
+            'JSX not dispatched: engine still draining a timed-out script'
+        );
+        assert.strictEqual(error.disposition, 'not_dispatched');
+        return true;
+    });
 
-    await assert.rejects(() => first, /JSX timeout after 20ms/);
-    // The lock must have been released so the second call can run and resolve.
-    const r = await second;
-    assert.strictEqual(r, 'second-ok');
-    assert.strictEqual(secondCalled, true);
+    await clock.flush();
+    assert.deepStrictEqual(calls.map(function (call) { return call.jsx; }), ['slow']);
+    await clock.advance(20);
+    await firstRejected;
+    assert.strictEqual(calls.length, 2, 'one drain sentinel should be sent');
+    assert.doesNotMatch(calls[1].jsx, /beginUndoGroup/);
+    await clock.advance(30);
+    await secondRejected;
+    assert.strictEqual(calls.length, 2, 'the queued real script must not be dispatched');
+    assert.strictEqual(bridge.getState().state, 'degraded');
+    assert.strictEqual(bridge.getState().pendingCalls, 0);
+    assert.strictEqual(bridge.getState().sentinelInFlight, true);
+});
+
+test('a late real callback drains the engine and releases the next call', async () => {
+    const bridge = freshBridge();
+    const clock = useFakeClock(bridge);
+    const calls = [];
+    bridge.setCSInterface({
+        evalScript: function (jsx, cb) {
+            calls.push({ jsx, cb });
+            if (jsx === 'fast') cb('second-ok');
+        },
+    });
+
+    const first = bridge.evalScript('slow', 20);
+    const second = bridge.evalScript('fast', 100);
+    const firstRejected = assert.rejects(first, function (error) {
+        return error.disposition === 'uncertain';
+    });
+    await clock.flush();
+    await clock.advance(20);
+    await firstRejected;
+    assert.strictEqual(bridge.getState().state, 'degraded');
+
+    calls[0].cb('late-result');
+    await clock.flush();
+    assert.strictEqual(await second, 'second-ok');
+    assert.deepStrictEqual(
+        calls.map(function (call) { return call.jsx === 'fast' ? 'fast' : call.jsx === 'slow' ? 'slow' : 'sentinel'; }),
+        ['slow', 'sentinel', 'fast']
+    );
+    assert.strictEqual(bridge.getState().state, 'ok');
+    assert.strictEqual(bridge.getState().degradedSinceMs, null);
+});
+
+test('a sentinel callback drains the engine when the real callback never arrives', async () => {
+    const bridge = freshBridge();
+    const clock = useFakeClock(bridge);
+    const calls = [];
+    bridge.setCSInterface({
+        evalScript: function (jsx, cb) {
+            calls.push({ jsx, cb });
+            if (jsx === 'fast') cb('second-ok');
+        },
+    });
+
+    const first = bridge.evalScript('slow', 20);
+    const second = bridge.evalScript('fast', 100);
+    const firstRejected = assert.rejects(first, function (error) {
+        return error.disposition === 'uncertain';
+    });
+    await clock.flush();
+    await clock.advance(20);
+    await firstRejected;
+    assert.strictEqual(calls.length, 2);
+    assert.doesNotMatch(calls[1].jsx, /beginUndoGroup/);
+    assert.match(calls[1].jsx, /endUndoGroup/);
+
+    calls[1].cb('ignored-sentinel-result');
+    await clock.flush();
+    assert.strictEqual(await second, 'second-ok');
+    assert.strictEqual(bridge.getState().state, 'ok');
 });
 
 test('mutex serializes: two concurrent calls do not overlap', async () => {

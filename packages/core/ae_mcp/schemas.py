@@ -128,6 +128,14 @@ class AeExecArgs(_StrictModel):
 
 NativeProgramOperation = Dict[str, Any]
 _NATIVE_EXEC_VALIDATOR = Draft202012Validator(NATIVE_EXEC_INPUT_SCHEMA)
+_MCP_TOP_LEVEL_SCHEMA_COMBINATORS = frozenset(
+    {"allOf", "anyOf", "else", "if", "not", "oneOf", "then"}
+)
+NATIVE_EXEC_ADVERTISED_INPUT_SCHEMA: dict[str, Any] = deepcopy(
+    NATIVE_EXEC_INPUT_SCHEMA
+)
+for _key in _MCP_TOP_LEVEL_SCHEMA_COMBINATORS:
+    NATIVE_EXEC_ADVERTISED_INPUT_SCHEMA.pop(_key, None)
 _NATIVE_EXEC_PRIMITIVE_BY_ID = {
     row["id"]: row for row in NATIVE_EXEC_PRIMITIVES
 }
@@ -139,7 +147,8 @@ class AeNativeExecArgs(_StrictModel):
     Use ae.exec for operations supported by the maintained AE scripting object
     model. Native programs allow at most 64 ordered operations and may reference
     only earlier request-local values. Programs containing writes require one
-    stable operationKey and one real AE undoGroup.
+    stable operationKey and one real AE undoGroup; read-only programs must omit
+    both fields.
     """
 
     model_config = ConfigDict(
@@ -221,7 +230,7 @@ class AeNativeExecArgs(_StrictModel):
 
     @classmethod
     def __get_pydantic_json_schema__(cls, _core_schema, _handler):
-        schema = deepcopy(NATIVE_EXEC_INPUT_SCHEMA)
+        schema = deepcopy(NATIVE_EXEC_ADVERTISED_INPUT_SCHEMA)
         schema["title"] = cls.__name__
         schema["description"] = (cls.__doc__ or "").strip()
         return schema

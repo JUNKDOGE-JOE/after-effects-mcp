@@ -1,10 +1,11 @@
 {
   "name": "ae-mcp-host",
-  "version": "0.9.5",
+  "version": "0.9.6",
   "private": true,
   "main": "server.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:node15": "node tests/node15-spike.js"
   },
   "dependencies": {
     "express": "4.22.1"

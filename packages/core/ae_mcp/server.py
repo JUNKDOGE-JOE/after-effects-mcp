@@ -20,7 +20,9 @@ import json
 import logging
 import os
 import re
+import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List
 
@@ -56,6 +58,44 @@ _PANEL_DEVELOPER_SCHEMAS = {
     "ae.toolSearch": schemas._AePanelToolSearchArgs,
     "ae.toolInspect": schemas.AeToolInspectArgs,
 }
+_FILE_LOG_HANDLER: logging.Handler | None = None
+
+
+def _server_log_dir(log_dir: str | Path | None = None) -> Path:
+    return Path(log_dir or os.environ.get("AE_MCP_LOG_DIR") or (Path.home() / ".ae-mcp" / "logs"))
+
+
+def _cleanup_server_logs(directory: Path, now: datetime | None = None) -> None:
+    cutoff = (now or datetime.now()).date() - timedelta(days=14)
+    for path in directory.glob("server-*.log"):
+        try:
+            date = datetime.strptime(path.stem.removeprefix("server-"), "%Y-%m-%d").date()
+            if date < cutoff:
+                path.unlink()
+        except (ValueError, OSError):
+            log.debug("server log cleanup skipped %s", path, exc_info=True)
+
+
+def _configure_file_logging(log_dir: str | Path | None = None, now: datetime | None = None) -> logging.Handler | None:
+    """Add the append-only server file handler without making startup fragile."""
+    global _FILE_LOG_HANDLER
+    directory = _server_log_dir(log_dir)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        _cleanup_server_logs(directory, now)
+        stamp = (now or datetime.now()).strftime("%Y-%m-%d")
+        file_path = directory / f"server-{stamp}.log"
+        if _FILE_LOG_HANDLER is not None and getattr(_FILE_LOG_HANDLER, "_ae_mcp_log_path", None) == str(file_path):
+            return _FILE_LOG_HANDLER
+        handler = logging.FileHandler(file_path, mode="a", encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s pid=%(process)d %(name)s %(levelname)s %(message)s"))
+        handler._ae_mcp_log_path = str(file_path)  # type: ignore[attr-defined]
+        logging.getLogger().addHandler(handler)
+        _FILE_LOG_HANDLER = handler
+        return handler
+    except Exception as error:  # noqa: BLE001 - diagnostics must not block startup
+        log.warning("server file logging unavailable at %s: %s", directory, error)
+        return None
 
 # Matches a leading dotted verb token at the very start of a docstring, e.g.
 # "ae.init — bootstrap …". Only the leading token is rewritten so the rest of
@@ -1151,10 +1191,9 @@ def build_server() -> Server:
 
     server: Server = Server("ae", instructions=build_server_instructions())
 
-    # Runtime JSON Schema validation must use the exact schema advertised by
-    # tools/list. The MCP SDK still populates its tool cache before invoking
-    # our call handler even when its own pre-validation is disabled; this map
-    # lets the handler apply the same schema without reaching into SDK internals.
+    # The MCP SDK still populates its tool cache before invoking our call handler
+    # even when its own pre-validation is disabled. Keep the advertised schemas
+    # here so the handler can apply them without reaching into SDK internals.
     advertised_input_schemas: dict[str, dict[str, Any]] = {}
 
     @server.list_tools()
@@ -1241,14 +1280,17 @@ def build_server() -> Server:
 
         # The SDK's default validation happens before this handler and reduces
         # every schema failure to unstructured text. Reapply the same
-        # jsonschema validation here using the exact tools/list schema: the
-        # native layer-property tool can then expose its structured recovery
-        # contract, while established tools keep the SDK's original text error.
-        input_schema = (
-            schema_cls.model_json_schema()
-            if panel_developer
-            else advertised_input_schemas.get(expose_tool_name(name))
-        )
+        # jsonschema validation here so native tools can expose their structured
+        # recovery contract, while established tools keep the SDK's original
+        # text error. nativeExec uses the complete generated contract because
+        # its MCP advertisement omits top-level combinators rejected by strict
+        # Anthropic-compatible tool-schema endpoints.
+        if name == "ae.nativeExec":
+            input_schema = schemas.NATIVE_EXEC_INPUT_SCHEMA
+        elif panel_developer:
+            input_schema = schema_cls.model_json_schema()
+        else:
+            input_schema = advertised_input_schemas.get(expose_tool_name(name))
         if input_schema is not None:
             try:
                 validate_json_schema(
@@ -1505,6 +1547,17 @@ def run() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+    logging.getLogger().setLevel(logging.INFO)
+    _configure_file_logging()
+    from ae_mcp import __version__
+
+    log.info(
+        "ae-mcp startup version=%s python=%s backend=%s pluginUrl=%s",
+        __version__,
+        sys.version.split()[0],
+        os.environ.get("AE_MCP_BACKEND") or "auto",
+        os.environ.get("AE_MCP_PLUGIN_URL") or "-",
     )
     asyncio.run(_run_async())
 

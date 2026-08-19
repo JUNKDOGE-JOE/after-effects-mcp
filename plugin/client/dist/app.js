@@ -13378,20 +13378,20 @@
                 styles: ["translateY"]
               }
             }
-          ].forEach(function(section) {
-            createSection(root2, section, props.name);
+          ].forEach(function(section2) {
+            createSection(root2, section2, props.name);
           });
           root2.element.classList.add("filepond--" + props.name);
           root2.ref.scalable = null;
         };
-        var createSection = function createSection2(root2, section, className) {
+        var createSection = function createSection2(root2, section2, className) {
           var viewConstructor = createView({
-            name: "panel-" + section.name + " filepond--" + className,
-            mixins: section.mixins,
+            name: "panel-" + section2.name + " filepond--" + className,
+            mixins: section2.mixins,
             ignoreRectUpdate: true
           });
-          var view = root2.createChildView(viewConstructor, section.props);
-          root2.ref[section.name] = root2.appendChildView(view);
+          var view = root2.createChildView(viewConstructor, section2.props);
+          root2.ref[section2.name] = root2.appendChildView(view);
         };
         var write$3 = function write2(_ref2) {
           var root2 = _ref2.root, props = _ref2.props;
@@ -17807,10 +17807,10 @@
           return { x, y };
         };
         var getMarkupValue = function getMarkupValue2(value, size) {
-          var scalar = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : 1;
+          var scalar2 = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : 1;
           var axis = arguments.length > 3 ? arguments[3] : void 0;
           if (typeof value === "string") {
-            return parseFloat(value) * scalar;
+            return parseFloat(value) * scalar2;
           }
           if (typeof value === "number") {
             return value * (axis ? size[axis] : Math.min(size.width, size.height));
@@ -17846,13 +17846,13 @@
           return value != null;
         };
         var getMarkupRect = function getMarkupRect2(rect, size) {
-          var scalar = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : 1;
-          var left = getMarkupValue(rect.x, size, scalar, "width") || getMarkupValue(rect.left, size, scalar, "width");
-          var top = getMarkupValue(rect.y, size, scalar, "height") || getMarkupValue(rect.top, size, scalar, "height");
-          var width = getMarkupValue(rect.width, size, scalar, "width");
-          var height = getMarkupValue(rect.height, size, scalar, "height");
-          var right = getMarkupValue(rect.right, size, scalar, "width");
-          var bottom = getMarkupValue(rect.bottom, size, scalar, "height");
+          var scalar2 = arguments.length > 2 && arguments[2] !== void 0 ? arguments[2] : 1;
+          var left = getMarkupValue(rect.x, size, scalar2, "width") || getMarkupValue(rect.left, size, scalar2, "width");
+          var top = getMarkupValue(rect.y, size, scalar2, "height") || getMarkupValue(rect.top, size, scalar2, "height");
+          var width = getMarkupValue(rect.width, size, scalar2, "width");
+          var height = getMarkupValue(rect.height, size, scalar2, "height");
+          var right = getMarkupValue(rect.right, size, scalar2, "width");
+          var bottom = getMarkupValue(rect.bottom, size, scalar2, "height");
           if (!isDefined(top)) {
             if (isDefined(height) && isDefined(bottom)) {
               top = size.height - height - bottom;
@@ -18166,14 +18166,14 @@
                     cropWidth = outputWidth;
                     cropHeight = outputHeight;
                   } else {
-                    var scalar;
+                    var scalar2;
                     if (outputFit === "cover") {
-                      scalar = Math.max(scalarWidth, scalarHeight);
+                      scalar2 = Math.max(scalarWidth, scalarHeight);
                     } else if (outputFit === "contain") {
-                      scalar = Math.min(scalarWidth, scalarHeight);
+                      scalar2 = Math.min(scalarWidth, scalarHeight);
                     }
-                    cropWidth = cropWidth * scalar;
-                    cropHeight = cropHeight * scalar;
+                    cropWidth = cropWidth * scalar2;
+                    cropHeight = cropHeight * scalar2;
                   }
                 }
               }
@@ -18254,8 +18254,8 @@
             imgHeight = canvasHeight;
             imgWidth = imgHeight / imageAspectRatio;
           }
-          var scalar = Math.max(canvasWidth / imgWidth, canvasHeight / imgHeight);
-          var width = image.width / (zoom * scalar * imgWidth);
+          var scalar2 = Math.max(canvasWidth / imgWidth, canvasHeight / imgHeight);
+          var width = image.width / (zoom * scalar2 * imgWidth);
           var height = width * canvasAspectRatio;
           return {
             width,
@@ -18745,11 +18745,11 @@
         var MAX_WIDTH = 10;
         var MAX_HEIGHT = 10;
         var calculateAverageColor = function calculateAverageColor2(image) {
-          var scalar = Math.min(MAX_WIDTH / image.width, MAX_HEIGHT / image.height);
+          var scalar2 = Math.min(MAX_WIDTH / image.width, MAX_HEIGHT / image.height);
           var canvas = document.createElement("canvas");
           var ctx = canvas.getContext("2d");
-          var width = canvas.width = Math.ceil(image.width * scalar);
-          var height = canvas.height = Math.ceil(image.height * scalar);
+          var width = canvas.width = Math.ceil(image.width * scalar2);
+          var height = canvas.height = Math.ceil(image.height * scalar2);
           ctx.drawImage(image, 0, 0, width, height);
           var data2 = null;
           try {
@@ -19195,9 +19195,9 @@
                 imageHeight = _ref2[1];
               }
               if (!isBitmap(item.file) || root.query("GET_IMAGE_PREVIEW_UPSCALE")) {
-                var scalar = 2048 / imageWidth;
-                imageWidth *= scalar;
-                imageHeight *= scalar;
+                var scalar2 = 2048 / imageWidth;
+                imageWidth *= scalar2;
+                imageHeight *= scalar2;
               }
               var imageAspectRatio = imageHeight / imageWidth;
               var previewAspectRatio = (item.getMetadata("crop") || {}).aspectRatio || imageAspectRatio;
@@ -20375,7 +20375,7 @@
   // package.json
   var package_default = {
     name: "ae-mcp-panel",
-    version: "0.9.5",
+    version: "0.9.6",
     private: true,
     type: "module",
     scripts: {
@@ -32646,7 +32646,7 @@
   var DEFAULT_TIMEOUT_MS2 = 3e4;
   var INITIALIZE_TIMEOUT_MS = 12e4;
   var MCP_PROTOCOL_VERSION = "2025-06-18";
-  var PANEL_VERSION = "0.9.5";
+  var PANEL_VERSION = "0.9.6";
   function defaultRandomBytes2(size) {
     const cryptoImpl = globalThis.crypto;
     if (!cryptoImpl || typeof cryptoImpl.getRandomValues !== "function") {
@@ -42220,6 +42220,7 @@ data: ${JSON.stringify(payload)}
       stop,
       reset,
       getMessages: () => clone4(transcript),
+      getStderrTail: () => stderrTail,
       probeAccount
     };
   }
@@ -42888,7 +42889,7 @@ data: ${JSON.stringify(payload)}
     function getMessages() {
       return transcript.slice();
     }
-    return { sendUser, approve, stop, reset, getMessages, probeAccount };
+    return { sendUser, approve, stop, reset, getMessages, getStderrTail: () => stderrTail, probeAccount };
   }
 
   // src/lib/channels.js
@@ -48693,13 +48694,13 @@ data: ${JSON.stringify(payload)}
     if (!model && !providerId) return null;
     const result = { model, providerId, provider: null };
     if (providerId) {
-      const section = parsed.sections["model_providers." + providerId];
-      if (section) {
+      const section2 = parsed.sections["model_providers." + providerId];
+      if (section2) {
         result.provider = {
-          name: String(section.name || "").trim(),
-          baseUrl: String(section.base_url || "").trim(),
-          envKey: String(section.env_key || "").trim(),
-          wireApi: String(section.wire_api || "").trim()
+          name: String(section2.name || "").trim(),
+          baseUrl: String(section2.base_url || "").trim(),
+          envKey: String(section2.env_key || "").trim(),
+          wireApi: String(section2.wire_api || "").trim()
         };
       }
     }
@@ -49754,7 +49755,7 @@ data: ${JSON.stringify(payload)}
     if (!fs || typeof fs.existsSync !== "function" || typeof fs.lstatSync !== "function" || typeof fs.realpathSync !== "function" || typeof fs.statSync !== "function" || typeof fs.readFileSync !== "function") {
       throw new Error("CEP Node filesystem is unavailable");
     }
-    const unavailable = (cause) => {
+    const unavailable2 = (cause) => {
       if ((cause == null ? void 0 : cause.code) === "HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE") return cause;
       const error = new Error("host runtime dependencies are unavailable");
       error.code = "HOST_RUNTIME_DEPENDENCIES_UNAVAILABLE";
@@ -49875,7 +49876,7 @@ data: ${JSON.stringify(payload)}
         moduleApi._resolveFilename = originalResolveFilename;
       }
     } catch (cause) {
-      throw unavailable(cause);
+      throw unavailable2(cause);
     }
   }
   function helperUnavailableError() {
@@ -50226,36 +50227,229 @@ data: ${JSON.stringify(payload)}
 
   // src/lib/logExport.js
   function redactSecrets(text, exactSecrets = []) {
-    return redactCredentialText(text, exactSecrets);
+    return redactCredentialText(String(text != null ? text : ""), exactSecrets);
   }
   function attachmentPathSecrets({ draft, pendingTurn } = {}) {
     var _a;
     const paths = [];
     for (const item of (draft == null ? void 0 : draft.items) || []) {
-      if (typeof ((_a = item == null ? void 0 : item.ref) == null ? void 0 : _a.localPath) === "string" && item.ref.localPath) {
-        paths.push(item.ref.localPath);
-      }
+      if (typeof ((_a = item == null ? void 0 : item.ref) == null ? void 0 : _a.localPath) === "string" && item.ref.localPath) paths.push(item.ref.localPath);
     }
     for (const attachment of (pendingTurn == null ? void 0 : pendingTurn.attachments) || []) {
-      if (typeof (attachment == null ? void 0 : attachment.localPath) === "string" && attachment.localPath) {
-        paths.push(attachment.localPath);
-      }
+      if (typeof (attachment == null ? void 0 : attachment.localPath) === "string" && attachment.localPath) paths.push(attachment.localPath);
     }
     return [...new Set(paths)];
   }
-  function buildLogExport({ panelLogs = [], hostInfo = {}, sidecarTail = "", version = "", now = /* @__PURE__ */ new Date(), exactSecrets = [] } = {}) {
+  function scalar(value) {
+    if (value === void 0 || value === null || value === "") return "-";
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value);
+      } catch (error) {
+        return "[unserializable]";
+      }
+    }
+    const text = String(value);
+    return /\s/.test(text) ? JSON.stringify(text) : text;
+  }
+  function iso(value) {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? "-" : date.toISOString();
+  }
+  function unavailable(reason) {
+    return "(unavailable: " + String(reason || "source unavailable") + ")";
+  }
+  function formatObject(value) {
+    if (!value || typeof value !== "object") return "-";
+    return Object.entries(value).map(([key, item]) => key + "=" + scalar(item)).join(" ") || "-";
+  }
+  function appendRedacted(lines, value, exactSecrets) {
+    lines.push(redactSecrets(value, exactSecrets));
+  }
+  function formatActivity(event) {
+    if (!event || typeof event !== "object") return "-";
+    return [
+      "#" + scalar(event.id),
+      iso(event.ts),
+      "client=" + scalar(event.client),
+      "engine=" + scalar(event.engine),
+      "ok=" + scalar(event.ok),
+      event.denied !== void 0 ? "denied=" + scalar(event.denied) : null,
+      event.disposition !== void 0 ? "disposition=" + scalar(event.disposition) : null,
+      event.error !== void 0 ? "error=" + scalar(event.error) : null,
+      event.durationMs !== void 0 ? "durationMs=" + scalar(event.durationMs) : null,
+      event.undoGroup !== void 0 ? "undoGroup=" + scalar(event.undoGroup) : null
+    ].filter(Boolean).join(" ");
+  }
+  function formatHostLog(event) {
+    if (!event || typeof event !== "object") return "-";
+    const known = /* @__PURE__ */ new Set(["id", "ts", "pid", "level", "source", "message"]);
+    const extra = {};
+    for (const [key, value] of Object.entries(event)) if (!known.has(key)) extra[key] = value;
+    const suffix = Object.keys(extra).length ? " " + JSON.stringify(extra) : "";
+    return [iso(event.ts), "pid=" + scalar(event.pid), scalar(event.level), scalar(event.source), scalar(event.message) + suffix].join(" ");
+  }
+  function section(lines, title, producer, exactSecrets) {
+    lines.push(title);
+    try {
+      const value = producer();
+      if (Array.isArray(value)) {
+        if (!value.length) appendRedacted(lines, "(empty)", exactSecrets);
+        else value.forEach((item) => appendRedacted(lines, item, exactSecrets));
+      } else appendRedacted(lines, value, exactSecrets);
+    } catch (error) {
+      appendRedacted(lines, unavailable((error == null ? void 0 : error.message) || String(error)), exactSecrets);
+    }
+    lines.push("");
+  }
+  function parseKeyValueTokens(text) {
+    const fields = {};
+    const token = /(\w+)=(?:"((?:\\.|[^"])*)"|(\S+))/g;
+    let match;
+    while (match = token.exec(text)) {
+      if (match[2] !== void 0) {
+        try {
+          fields[match[1]] = JSON.parse('"' + match[2] + '"');
+        } catch {
+          fields[match[1]] = match[2];
+        }
+      } else fields[match[1]] = match[3];
+    }
+    return fields;
+  }
+  function parsePreviewFrameBranch(line) {
+    const match = /previewFrame\.branch\b(.*)$/.exec(String(line || ""));
+    if (!match) return null;
+    const fields = parseKeyValueTokens(match[1]);
+    if (!fields.source || !fields.method || fields.ok === void 0) return null;
+    return { ...fields, ok: fields.ok === "true" };
+  }
+  function summarizePreviewFrameBranches(text = "") {
+    const branches = [];
+    for (const line of String(text || "").split(/\r?\n/)) {
+      const branch = parsePreviewFrameBranch(line);
+      if (branch) branches.push({ ...branch, raw: line });
+    }
+    const viewer = /* @__PURE__ */ new Map();
+    let comp = 0;
+    let failed = 0;
+    const fallbackReasons = /* @__PURE__ */ new Map();
+    for (const branch of branches) {
+      if (branch.source === "comp" && branch.method === "saveFrameToPng") comp += 1;
+      if (branch.source === "viewer") viewer.set(branch.method, (viewer.get(branch.method) || 0) + 1);
+      if (!branch.ok) failed += 1;
+      if (branch.fallbackReason && branch.fallbackReason !== "-") {
+        fallbackReasons.set(branch.fallbackReason, (fallbackReasons.get(branch.fallbackReason) || 0) + 1);
+      }
+    }
+    const counts = ["comp/saveFrameToPng=" + comp];
+    for (const [method, count] of viewer) counts.push("viewer/" + method + "=" + count);
+    counts.push("failed=" + failed);
+    return {
+      branches,
+      summary: counts.join("  "),
+      fallbackReasons: [...fallbackReasons.entries()].map(([reason, count]) => ({ reason, count })),
+      recent: branches.slice(-20).map((branch) => branch.raw)
+    };
+  }
+  function readDatedLogTail({ fsImpl, pathJoin, dir, prefix, suffix, now = /* @__PURE__ */ new Date(), days = 2, lines = 300 } = {}) {
+    if (!fsImpl || typeof fsImpl.readFileSync !== "function" || typeof pathJoin !== "function") {
+      throw new Error("filesystem is unavailable");
+    }
+    const result = [];
+    const count = Math.max(1, Math.floor(Number(days) || 2));
+    const limit = Math.max(0, Math.floor(Number(lines) || 300));
+    for (let offset = count - 1; offset >= 0; offset -= 1) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - offset);
+      const key = date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+      const file = pathJoin([dir, prefix + key + suffix]);
+      try {
+        result.push(String(fsImpl.readFileSync(file, "utf8")));
+      } catch (error) {
+        if ((error == null ? void 0 : error.code) !== "ENOENT") throw error;
+      }
+    }
+    return result.join("\n").split(/\r?\n/).filter(Boolean).slice(-limit).join("\n");
+  }
+  function buildLogExport({
+    panelLogs = [],
+    hostInfo = {},
+    sidecarTail = "",
+    backendStderrTails = null,
+    hostActivity,
+    hostLogMemory,
+    hostLogDisk,
+    diagnostics,
+    diagnosticsError,
+    pythonServerLog,
+    pythonLogPath,
+    version = "",
+    now = /* @__PURE__ */ new Date(),
+    exactSecrets = []
+  } = {}) {
     const lines = [];
-    lines.push("# ae-mcp panel log export");
-    lines.push("exported-at: " + now.toISOString());
-    lines.push("panel-version: " + (version || "-"));
-    lines.push("host-version: " + (hostInfo.hostVersion || "-"));
-    lines.push("python-version: " + (hostInfo.pythonVersion || "-"));
+    appendRedacted(lines, "# ae-mcp diagnostics bundle", exactSecrets);
+    const header = [
+      ["exported-at", now.toISOString()],
+      ["panel-version", version || "-"],
+      ["host-version", hostInfo.hostVersion || "-"],
+      ["python-version", hostInfo.pythonVersion || "-"],
+      ["ae-app", formatObject(hostInfo.aeApp)],
+      ["cep", hostInfo.cepVersion || "-"],
+      ["os", formatObject(hostInfo.os)],
+      ["host-node", hostInfo.hostNode || "-"],
+      ["chromium-ua", hostInfo.chromiumUa || "-"],
+      ["plugin-port", hostInfo.pluginPort || "-"],
+      ["logs-dir", hostInfo.logsDir || "-"],
+      ["log-level", hostInfo.logLevel || "-"]
+    ];
+    for (const [key, value] of header) appendRedacted(lines, key + ": " + value, exactSecrets);
     lines.push("");
-    lines.push("## panel logs (" + panelLogs.length + ")");
-    for (const line of panelLogs) lines.push(redactSecrets(line, exactSecrets));
-    lines.push("");
-    lines.push("## sidecar stderr tail");
-    lines.push(sidecarTail ? redactSecrets(sidecarTail, exactSecrets) : "(empty)");
+    section(lines, "## diagnostics", () => {
+      if (diagnosticsError) return unavailable(diagnosticsError);
+      if (!Array.isArray(diagnostics)) return unavailable("diagnostics were not collected");
+      return diagnostics.map((item) => [(item == null ? void 0 : item.id) || "-", (item == null ? void 0 : item.ok) === true ? "ok=true" : "ok=false", (item == null ? void 0 : item.detail) || "-"].join(" "));
+    }, exactSecrets);
+    section(lines, "## host activity (last N)", () => {
+      if (!Array.isArray(hostActivity)) return unavailable("host activity is unavailable");
+      return hostActivity.slice(-500).map(formatActivity);
+    }, exactSecrets);
+    section(lines, "## host log (memory, last 500)", () => {
+      if (!Array.isArray(hostLogMemory)) return unavailable("host memory log is unavailable");
+      return hostLogMemory.slice(-500).map(formatHostLog);
+    }, exactSecrets);
+    section(lines, "## host log (disk tail, 2 days, last 500)", () => {
+      if (!Array.isArray(hostLogDisk)) return unavailable("host disk log is unavailable");
+      return hostLogDisk.slice(-500).map(formatHostLog);
+    }, exactSecrets);
+    section(lines, "## panel log (" + panelLogs.length + ")", () => panelLogs.map(String), exactSecrets);
+    section(lines, "## backend stderr tails", () => {
+      const tails = backendStderrTails || (sidecarTail ? { claude: sidecarTail } : null);
+      if (!tails || typeof tails !== "object" || !Object.keys(tails).length) return unavailable("no backend stderr tail is available");
+      const result = [];
+      for (const [name, tail] of Object.entries(tails)) {
+        result.push("### " + name);
+        result.push(tail ? String(tail) : "(empty)");
+      }
+      return result;
+    }, exactSecrets);
+    section(lines, "## python server log (tail)", () => {
+      if (pythonServerLog === void 0 || pythonServerLog === null) {
+        return pythonLogPath ? "(no file: " + pythonLogPath + ")" : unavailable("python server log is unavailable");
+      }
+      return pythonServerLog ? String(pythonServerLog) : "(empty)";
+    }, exactSecrets);
+    section(lines, "## previewFrame branches", () => {
+      const summary = summarizePreviewFrameBranches(pythonServerLog || "");
+      const result = ["summary: " + summary.summary];
+      result.push("fallbackReason counts:");
+      if (!summary.fallbackReasons.length) result.push("(none)");
+      else summary.fallbackReasons.forEach((item) => result.push(item.reason + "=" + item.count));
+      result.push("recent events:");
+      result.push(...summary.recent.length ? summary.recent : ["(none)"]);
+      return result;
+    }, exactSecrets);
     return lines.join("\n") + "\n";
   }
   function exportFileName(now = /* @__PURE__ */ new Date()) {
@@ -50695,9 +50889,9 @@ data: ${JSON.stringify(payload)}
             fs.unlinkSync(tmp);
           } catch {
           }
-          const unavailable = new Error("Provider migration journal is unavailable");
-          unavailable.code = "INVALID_MIGRATION_JOURNAL";
-          throw unavailable;
+          const unavailable2 = new Error("Provider migration journal is unavailable");
+          unavailable2.code = "INVALID_MIGRATION_JOURNAL";
+          throw unavailable2;
         }
       }
     };
@@ -51778,9 +51972,18 @@ ${baseUrl}`),
       setChatEntries([]);
     };
     const pushLog = import_react48.default.useCallback((m) => {
-      if (!keepLogLine(logLevelRef.current, m)) return;
-      setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${m}`]);
-    }, []);
+      const message = String(m != null ? m : "");
+      const host = getHost();
+      try {
+        if (host && host.hostLog && typeof host.hostLog.record === "function") {
+          const level = /error|failed|exception/i.test(message) ? "error" : /warn|timeout|unavailable/i.test(message) ? "warn" : "info";
+          host.hostLog.record({ source: "panel", level, message });
+        }
+      } catch (error) {
+      }
+      if (!keepLogLine(logLevelRef.current, message)) return;
+      setLogs((xs) => [...xs.slice(-199), `[${(/* @__PURE__ */ new Date()).toLocaleTimeString()}] ${message}`]);
+    }, [getHost]);
     const repairPlatformHelper = import_react48.default.useCallback(async () => {
       if (providerRepairing) return;
       setProviderRepairing(true);
@@ -51799,19 +52002,127 @@ ${baseUrl}`),
         setProviderRepairing(false);
       }
     }, [providerRepairing, pushLog]);
-    const exportLogs = import_react48.default.useCallback(() => {
+    const exportLogs = import_react48.default.useCallback(async () => {
+      var _a;
       try {
-        const exactSecrets = providerSecretService.getRedactionValues();
+        let exactSecrets = [];
+        try {
+          exactSecrets = providerSecretService.getRedactionValues() || [];
+        } catch (error) {
+          exactSecrets = [];
+        }
         if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
         const attachmentSecrets = attachmentPathSecrets({
           draft: attachmentDraft,
           pendingTurn: pendingTurnRef.current
         });
         exactSecrets.push(...attachmentSecrets);
+        const host = getHost();
+        let diagnosticItems;
+        let diagnosticsError = null;
+        try {
+          diagnosticItems = await runDiagnostics({
+            getHost,
+            port: status.port,
+            fs: cepRequire4("fs"),
+            fetchImpl: window.fetch.bind(window),
+            platform,
+            runtimeManager,
+            allowDevelopmentPath: developmentRuntimeFallback
+          });
+        } catch (error) {
+          diagnosticsError = (error == null ? void 0 : error.message) || String(error);
+        }
+        const safeValue = (read, fallback = void 0) => {
+          try {
+            return read();
+          } catch (error) {
+            return fallback;
+          }
+        };
+        const connection = host && typeof host.getConnectionInfo === "function" ? safeValue(() => host.getConnectionInfo(), {}) : connInfo || {};
+        const hostLog = host && host.hostLog;
+        const hostLogStats = hostLog && typeof hostLog.stats === "function" ? safeValue(() => hostLog.stats(), {}) || {} : {};
+        const logsDir = hostLogStats.dir || platform.paths.logsRoot;
+        const processApi = ((_a = window.cep_node) == null ? void 0 : _a.process) || globalThis.process || {};
+        let aeApp = {};
+        try {
+          const env = cs2.getHostEnvironment ? cs2.getHostEnvironment() || {} : {};
+          for (const key of ["appName", "appId", "appVersion", "appLocale", "appUILocale", "isAppOnline"]) {
+            if (env[key] !== void 0) aeApp[key] = env[key];
+          }
+        } catch (error) {
+          aeApp = {};
+        }
+        let cepVersion = "-";
+        try {
+          const apiVersion = cs2.getCurrentApiVersion ? cs2.getCurrentApiVersion() : null;
+          const parts = [apiVersion == null ? void 0 : apiVersion.major, apiVersion == null ? void 0 : apiVersion.minor, apiVersion == null ? void 0 : apiVersion.micro];
+          if (parts.every((part) => part !== void 0 && part !== null && part !== "")) cepVersion = parts.join(".");
+        } catch (error) {
+        }
+        const osInfo = { platform: platform.id || "-" };
+        const versions = processApi.versions || {};
+        const today = /* @__PURE__ */ new Date();
+        const dateKey = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");
+        const pythonLogPath = platform.paths.join([logsDir, "server-" + dateKey + ".log"]);
+        let pythonServerLog;
+        try {
+          const hasFile = [0, 1].some((offset) => {
+            const date = new Date(today);
+            date.setDate(date.getDate() - offset);
+            const key = date.getFullYear() + "-" + String(date.getMonth() + 1).padStart(2, "0") + "-" + String(date.getDate()).padStart(2, "0");
+            return platform.fs.existsSync(platform.paths.join([logsDir, "server-" + key + ".log"]));
+          });
+          pythonServerLog = hasFile ? readDatedLogTail({
+            fsImpl: platform.fs,
+            pathJoin: platform.paths.join,
+            dir: logsDir,
+            prefix: "server-",
+            suffix: ".log",
+            now: today,
+            days: 2,
+            lines: 300
+          }) : void 0;
+        } catch (error) {
+          pythonServerLog = void 0;
+        }
+        const backendStderrTails = {};
+        for (const [name, backend] of [
+          ["claude", claudeBackend],
+          ["codex", codexBackend],
+          ["opencode", openCodeBackend],
+          ["zcode", zcodeBackend]
+        ]) {
+          if (!backend || typeof backend.getStderrTail !== "function") continue;
+          try {
+            backendStderrTails[name] = backend.getStderrTail();
+          } catch (error) {
+            backendStderrTails[name] = "(unavailable: " + ((error == null ? void 0 : error.message) || String(error)) + ")";
+          }
+        }
         const text = buildLogExport({
           panelLogs: logs,
-          hostInfo: { hostVersion: connInfo && connInfo.hostVersion || "-", pythonVersion: connInfo && connInfo.pythonVersion || "-" },
-          sidecarTail: claudeBackend.getStderrTail ? claudeBackend.getStderrTail() : "",
+          hostInfo: {
+            hostVersion: connection.hostVersion || "-",
+            pythonVersion: connection.pythonVersion || "-",
+            aeApp,
+            cepVersion,
+            os: osInfo,
+            hostNode: hostLogStats.nodeVersion || processApi.version || "-",
+            chromiumUa: navigator.userAgent || "-",
+            pluginPort: connection.port || status.port,
+            logsDir,
+            logLevel: logLevelRef.current
+          },
+          hostActivity: host && host.activity && typeof host.activity.list === "function" ? safeValue(() => host.activity.list()) : void 0,
+          hostLogMemory: hostLog && typeof hostLog.tail === "function" ? safeValue(() => hostLog.tail(500)) : void 0,
+          hostLogDisk: hostLog && typeof hostLog.readFileTail === "function" ? safeValue(() => hostLog.readFileTail({ days: 2, lines: 500 })) : void 0,
+          diagnostics: diagnosticItems,
+          diagnosticsError,
+          backendStderrTails,
+          pythonServerLog,
+          pythonLogPath,
           version: pkgVersion,
           exactSecrets
         });
@@ -51821,7 +52132,7 @@ ${baseUrl}`),
       } catch (e) {
         pushLog("Log export failed: " + (e && e.message ? e.message : String(e)));
       }
-    }, [logs, connInfo, claudeBackend, providerSecretService, pushLog, attachmentDraft]);
+    }, [logs, connInfo, claudeBackend, codexBackend, openCodeBackend, zcodeBackend, providerSecretService, pushLog, attachmentDraft, getHost, platform, runtimeManager, developmentRuntimeFallback, status.port, cs2]);
     const undoToPreviousCheckpoint = import_react48.default.useCallback(async () => {
       try {
         await revertToPreviousCheckpoint(mcp);

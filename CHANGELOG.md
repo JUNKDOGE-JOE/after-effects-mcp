@@ -10,6 +10,31 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### Unreleased
+
+#### ✨ 新增
+
+- **可用于排障的诊断包**——设置里的「导出日志」现在真正持久化面板与 CEP 宿主事件（`~/.ae-mcp/logs/host-YYYY-MM-DD.jsonl`，面板重载后仍可导出），导出包按段独立容错并全段脱敏：环境（AE/CEP/OS/Node/Chromium）、现跑一次的 diagnostics、`/exec` `/native/*` activity、宿主日志内存与磁盘尾部、面板日志、claude/codex/opencode 后端 stderr、Python server 日志（新增 `server-YYYY-MM-DD.log` 文件日志，含启动信息）以及 `previewFrame` 的 comp PNG / viewer 回落分支统计（Phase 0 §6.3 取证）。
+- **实验性 CEP 内嵌 MCP Streamable HTTP spike（#261）**——宿主新增本机免口令 `/mcp`（Origin/Host 白名单）的 `ae_status` / `ae_exec` 最小闭环、会话 SSE 与长调用 progress 通知，`ae_exec` 与 `/exec` 共用同一条执行链；用真实 31 秒调用的 Node 15（CEP 11 同级）CI 门槛验证。**尚未接入 approval gate，不应视为完整迁移或发布承诺**。
+
+#### 🐛 修复 / 改进
+
+- **ExtendScript 超时不再提前放行串行锁（#260）**——调用方仍会按原期限收到超时，但 Bridge 会等迟到回调或排空哨兵返回后才继续，期间 `/health`、`/exec`、`ae.status` 与 `ae.diagnose` 报告 `degraded`；错误 disposition 收敛为三值：从未进入 AE、可安全重试的 `not_dispatched`，已派发但结果未知的 `uncertain`，以及已执行并明确报错的 `failed`。
+
+
+### [0.9.6] — 2026-08-19
+
+#### 🐛 修复 / 改进
+
+- **兼容 Anthropic / AWS Bedrock 的工具 schema 限制**——`ae_nativeExec` 广告给 MCP 客户端的 `inputSchema` 不再在顶层带 `allOf`（Anthropic 直连与 Bedrock 会以 `input_schema does not support oneOf, allOf, or anyOf at the top level` 拒绝整个请求，经中转站接 Bedrock 的 Claude Code 用户首当其冲）；23 个原语的嵌套判别 schema、服务端完整的读/写程序校验与结构化错误契约保持不变，并新增守卫测试禁止任何工具在 schema 顶层出现组合子。
+- **README 一行安装提示词重写**——按真实安装回报的卡点补齐：刚装的 `uv` 要用完整路径调用、启动器用绝对路径、MCP server 注册到用户级作用域（附 Claude Code 的 `claude mcp add -s user …` 原句）、不动其他 MCP 条目并回显最终配置、明确 MCP 工具只在新会话加载（调不到 `ae_ping` 时新开会话再验）。
+- **AE 2023/2024 Windows 运行时补完（#235）**——CEP 11（Node 15 / V8 8.8）缺 `Object.hasOwn` / `Array.prototype.at` / `structuredClone`，Host 与面板各注入无依赖 polyfill shim；`node:` 裸 specifier 禁用改为清单式合约测试；AEX、Platform Helper 与传输 .node 插件统一静态 CRT（/MT）链接并由 PE 导入表校验强制（顺带修正 8 字节节名 `.fptable` 的验证器误报）。AE 2023/2024 真机矩阵仍在 #215 验证。
+- **`ae_previewFrame` 如实汇报写出的像素（#242）**——尺寸从写出的 PNG 回读（查看器半分辨率不再报 "dimensions do not match"）；帧文件等到 IEND + 大小稳定 + 可解码才算写完（不再间歇 "not a decodable image"）；预算按帧增长、`times` 上限 8；降采样捕获接受并在正文给出警告。
+- **`ae_snapshot` 默认落盘路径（#243）**——无 `out_path` 时落到系统临时目录下的绝对路径（UUID 命名），不再解析到 MCP 进程的工作目录（`[Errno 13] Permission denied: 'ae_viewer_….png'`）。
+- **面板输入框不再被锁死成 8px（#243）**——composer 下限 72→96px、启动期非法测量值丢弃；CSXS MinSize 300×280、默认尺寸 480×420（@tomaszteee 在 Windows 11 / AE 2026 定位并验证）。
+- **审批两道门的默认方向写成文档（#243）**——verb 面未配置时放行（客户端自带权限系统），Tool Library / skill 面回落 `manual`；写进模块 docstring、调用点与 `docs/REFERENCE.md`（环境变量首次成文），三条测试钉住，行为不变。
+- **工程**——macOS 合并门跑完整 Python/JS 套件、bridge 的 Windows 生命周期探针测试不再改写共享 stdlib 模块（#244）；新增 `CONTRIBUTORS.md` 记录 git 记不下来的贡献（#245）；`docs/ARCHITECTURE_DIRECTION.md` 记录两进程方向与 2026-08-19 的 owner 决策（#266 / #272）。
+
 ### [0.9.5] — 2026-08-12
 
 #### ✨ 新增
@@ -273,6 +298,30 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### Unreleased
+
+#### ✨ Added
+
+- **A diagnostics bundle that can actually diagnose something** — Settings → "Export log" now persists panel and CEP-host events (`~/.ae-mcp/logs/host-YYYY-MM-DD.jsonl`, still exportable after a panel reload) and writes independently fault-tolerant, fully redacted sections: environment (AE/CEP/OS/Node/Chromium), a fresh diagnostics run, `/exec` and `/native/*` activity, host log memory + disk tail, panel log, claude/codex/opencode backend stderr, the Python server log (new `server-YYYY-MM-DD.log` file log with a startup line) and a `previewFrame` comp-PNG vs viewer-fallback branch summary (the Phase 0 §6.3 evidence).
+- **Experimental CEP-hosted MCP Streamable HTTP spike (#261)** — the host now mounts a local, token-free `/mcp` (Origin/Host allowlist) with a minimal `ae_status` / `ae_exec` loop, session-bound SSE and progress notifications for long calls; `ae_exec` shares the `/exec` execution chain. Gated by a new Node 15 (CEP 11 peer-engine) CI job that runs a real 31-second call. **No approval gate yet — not a finished migration or a release commitment.**
+
+#### 🐛 Fixes / Improvements
+
+- **ExtendScript timeouts no longer release the serialization lock early (#260)** — Callers still receive a timeout on schedule, while the bridge waits for a late callback or drain sentinel before proceeding and reports `degraded` through `/health`, `/exec`, `ae.status`, and `ae.diagnose`. Error dispositions are a closed three-value set: `not_dispatched` for scripts that never entered AE and are safe to retry, `uncertain` for dispatched scripts whose result is unknown, and `failed` for scripts that executed and returned a definite error.
+
+### [0.9.6] — 2026-08-19
+
+#### 🐛 Fixed / Improved
+
+- **Anthropic / AWS Bedrock tool-schema compatibility** — the `inputSchema` that `ae_nativeExec` advertises to MCP clients no longer carries a top-level `allOf` (the Anthropic API and Bedrock reject the whole request with `input_schema does not support oneOf, allOf, or anyOf at the top level`; Claude Code users routed to Bedrock through a relay hit it first). The nested discriminated schemas for all 23 primitives, full server-side read/write program validation, and the structured error contract are unchanged, and a guard test now forbids top-level combinators on every advertised tool.
+- **README one-line install prompt rewritten** — it now covers the snags seen in real installs: call a freshly installed `uv` by full path, use the launcher's absolute path, register the MCP server at user scope (with the exact Claude Code `claude mcp add -s user …` line), leave other MCP entries alone and echo the final entry, and state that MCP tools only load in a new session (open one before verifying with `ae_ping`).
+- **AE 2023/2024 Windows runtime compatibility completed (#235)** — CEP 11 (Node 15 / V8 8.8) lacks `Object.hasOwn` / `Array.prototype.at` / `structuredClone`, so the host and the panel each load a dependency-free polyfill shim; the bare `node:` specifier ban became a manifest-driven contract test; the AEX, Platform Helper and transport `.node` addon all link the static CRT (/MT), enforced by a PE import-table verifier (which also fixes a false positive on the 8-byte `.fptable` section name). The AE 2023/2024 real-host matrix is still tracked in #215.
+- **`ae_previewFrame` reports the pixels that were written (#242)** — dimensions are read back from the PNG on disk (a viewer at half resolution no longer fails "dimensions do not match"); a frame counts as written only after IEND + a stable size + a successful decode (no more intermittent "not a decodable image"); the budget grows per frame and `times` is capped at 8; downsampled captures are accepted with a warning in the text.
+- **`ae_snapshot` default output path (#243)** — without `out_path` the capture lands at an absolute, UUID-named path under the system temp directory instead of the MCP process's working directory (`[Errno 13] Permission denied: 'ae_viewer_….png'`).
+- **Panel composer no longer latches shut at 8px (#243)** — composer floor 72→96px, bogus startup measurements rejected; CSXS MinSize 300×280, default size 480×420 (diagnosed and verified on Windows 11 / AE 2026 by @tomaszteee).
+- **Approval gates documented (#243)** — the verb surface allows when unconfigured (the MCP client's own permission system is the gate) while the Tool Library / skill surfaces fall back to `manual`; written into the module docstring, both call sites and `docs/REFERENCE.md` (the environment variables appear there for the first time), pinned by three tests, no behaviour change.
+- **Engineering** — the macOS merge gate runs the full Python/JS suites and the bridge Windows-lifecycle probe tests stop mutating shared stdlib modules (#244); `CONTRIBUTORS.md` credits the contributions git cannot record (#245); `docs/ARCHITECTURE_DIRECTION.md` records the two-process direction and the 2026-08-19 owner decisions (#266 / #272).
 
 ### [0.9.5] — 2026-08-12
 

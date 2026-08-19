@@ -83,7 +83,8 @@ class _FakeSnapshotter:
 
 
 @pytest.mark.asyncio
-async def test_preview_frame_saves_comp_frame_without_snapshotter(monkeypatch, mock_backend, tmp_path):
+async def test_preview_frame_saves_comp_frame_without_snapshotter(monkeypatch, mock_backend, tmp_path, caplog):
+    caplog.set_level("INFO", logger="ae_mcp.handlers.core")
     monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
 
     def _render_response(code, **kwargs):
@@ -129,6 +130,7 @@ async def test_preview_frame_saves_comp_frame_without_snapshotter(monkeypatch, m
     assert "saveFrameToPng" in jsx
     assert "openInViewer" in jsx
     assert "AEMCP.compById(7)" in jsx
+    assert "previewFrame.branch source=comp method=saveFrameToPng ok=true" in caplog.text
 
 
 def test_preview_cleanup_prunes_only_stale_session_dirs(tmp_path):
@@ -211,7 +213,8 @@ async def test_preview_frame_waits_for_async_save_frame(monkeypatch, mock_backen
 
 
 @pytest.mark.asyncio
-async def test_preview_frame_falls_back_to_viewer_snapshot(monkeypatch, mock_backend, tmp_path):
+async def test_preview_frame_falls_back_to_viewer_snapshot(monkeypatch, mock_backend, tmp_path, caplog):
+    caplog.set_level("INFO", logger="ae_mcp.handlers.core")
     monkeypatch.setattr(
         "ae_mcp.snapshot.discovery.select_snapshotter",
         lambda: _FakeSnapshotter(),
@@ -241,6 +244,7 @@ async def test_preview_frame_falls_back_to_viewer_snapshot(monkeypatch, mock_bac
     assert "saveFrameToPng" in jsx
     assert "openInViewer" in jsx
     assert "AEMCP.compById(7)" in jsx
+    assert "previewFrame.branch source=viewer method=ViewerCapture ok=true" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -279,7 +283,8 @@ async def test_preview_frame_can_attach_base64(monkeypatch, mock_backend, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_preview_frame_errors_without_snapshotter(monkeypatch, mock_backend, tmp_path):
+async def test_preview_frame_errors_without_snapshotter(monkeypatch, mock_backend, tmp_path, caplog):
+    caplog.set_level("INFO", logger="ae_mcp.handlers.core")
     monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
     mock_backend.set_response(json.dumps({
         "ok": True,
@@ -294,6 +299,7 @@ async def test_preview_frame_errors_without_snapshotter(monkeypatch, mock_backen
     result = await run_fn(S.AePreviewFrameArgs(out_dir=str(tmp_path)), None)
     assert result["ok"] is False
     assert "snapshotter" in result["error"]
+    assert "previewFrame.branch source=none method=- ok=false" in caplog.text
 
 
 class _RealPngSnapshotter:

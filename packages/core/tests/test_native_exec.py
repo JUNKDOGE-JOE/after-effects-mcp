@@ -120,6 +120,9 @@ def _write_program() -> dict[str, Any]:
 
 def test_native_exec_schema_is_generated_closed_and_discriminated():
     schema = S.AeNativeExecArgs.model_json_schema()
+    forbidden = {"allOf", "anyOf", "else", "if", "not", "oneOf", "then"}
+    assert not forbidden.intersection(schema)
+    assert "allOf" in S.NATIVE_EXEC_INPUT_SCHEMA
     operation_union = schema["properties"]["operations"]["items"]["oneOf"]
     assert len(operation_union) == 23
     assert {
