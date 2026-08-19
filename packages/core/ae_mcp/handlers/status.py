@@ -50,6 +50,7 @@ async def _run_status(args: schemas.AeStatusArgs, ctx: Any) -> dict[str, Any]:
             "adapter": None,
             "engine": None,
         },
+        "jsxBridge": None,
         "snapshotter": None,
     }
 
@@ -75,6 +76,11 @@ async def _run_status(args: schemas.AeStatusArgs, ctx: Any) -> dict[str, Any]:
                 "adapter": backend.__class__.__name__,
                 "engine": "native-aegp",
             }
+        url = getattr(backend, "url", None)
+        if url:
+            host = await _probe_host(url, timeout_sec=2.0)
+            if host.get("reachable"):
+                result["jsxBridge"] = host.get("jsxBridge")
 
     try:
         snapshotter = _snapshot_discovery.select_snapshotter()
@@ -93,8 +99,9 @@ register("ae.status", schemas.AeStatusArgs, _run_status)
 # ---------------------------------------------------------------------------
 # ae.diagnose — end-to-end connection self-check for external MCP clients.
 #
-# ae.status only inspects the Python install (no network). ae.diagnose proves
-# the full chain a remote client cares about: host reachable, Python bridge
+# ae.status primarily inspects the Python install and adds one best-effort host
+# state read. ae.diagnose proves the full chain a remote client cares about:
+# host reachable, Python bridge
 # handshake seen via /health, auth token readable, AE
 # responsive + a project open. Each step is independent — one failure does not
 # abort the rest, so a half-wired install gets a full report in one call.
@@ -110,10 +117,10 @@ def _diagnose_template() -> Template:
     return Template(_DIAGNOSE_TEMPLATE_PATH.read_text(encoding="utf-8"))
 
 
-async def _probe_host(url: str) -> dict[str, Any]:
+async def _probe_host(url: str, *, timeout_sec: float = 5.0) -> dict[str, Any]:
     """Raw GET /health to capture the echoed python handshake fields."""
     try:
-        async with httpx.AsyncClient(timeout=5.0) as http:
+        async with httpx.AsyncClient(timeout=timeout_sec) as http:
             r = await http.get(
                 f"{url}/health",
                 headers={_PY_VERSION_HEADER: _PY_VERSION},
@@ -129,6 +136,7 @@ async def _probe_host(url: str) -> dict[str, Any]:
             "port": body.get("port"),
             "pythonVersion": body.get("pythonVersion"),
             "pythonLastSeenAt": body.get("pythonLastSeenAt"),
+            "jsxBridge": body.get("jsxBridge"),
         }
     except Exception as e:  # noqa: BLE001
         return {"reachable": False, "error": str(e)}

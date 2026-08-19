@@ -10,6 +10,12 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [Unreleased]
+
+#### 🐛 修复 / 改进
+
+- **ExtendScript 超时不再提前放行串行锁（#260）**——调用方仍会按原期限收到超时，但 Bridge 会等迟到回调或排空哨兵返回后才继续，期间 `/health`、`/exec`、`ae.status` 与 `ae.diagnose` 报告 `degraded`；错误 disposition 收敛为三值：从未进入 AE、可安全重试的 `not_dispatched`，已派发但结果未知的 `uncertain`，以及已执行并明确报错的 `failed`。
+
 ### [0.9.6] — 2026-08-19
 
 #### 🐛 修复 / 改进
@@ -286,6 +292,12 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [Unreleased]
+
+#### 🐛 Fixes / Improvements
+
+- **ExtendScript timeouts no longer release the serialization lock early (#260)** — Callers still receive a timeout on schedule, while the bridge waits for a late callback or drain sentinel before proceeding and reports `degraded` through `/health`, `/exec`, `ae.status`, and `ae.diagnose`. Error dispositions are a closed three-value set: `not_dispatched` for scripts that never entered AE and are safe to retry, `uncertain` for dispatched scripts whose result is unknown, and `failed` for scripts that executed and returned a definite error.
 
 ### [0.9.6] — 2026-08-19
 
