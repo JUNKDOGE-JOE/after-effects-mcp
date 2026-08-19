@@ -11,7 +11,7 @@ test('tools/list uses top-level JSON-schema object forms only', () => {
         sessionCount: function () { return 1; },
     });
     const tools = registry.list();
-    assert.deepEqual(tools.map(function (tool) { return tool.name; }), ['ae_status', 'ae_exec']);
+assert.deepEqual(tools.map(function (tool) { return tool.name; }), ['ae_status', 'ae_exec', 'ae_read']);
     tools.forEach(function (tool) {
         assert.equal(tool.inputSchema.type, 'object');
         assert.equal(noTopLevelCombinator(tool.inputSchema), true);

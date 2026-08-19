@@ -12,6 +12,7 @@ const { textResult, noTopLevelCombinator } = require('./tool-result');
 const TOOL_MODULES = [
     require('./tools/status'),
     require('./tools/exec'),
+    require('./tools/read'),
 ];
 
 function buildTools(deps) {
