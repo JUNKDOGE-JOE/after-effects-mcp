@@ -52050,12 +52050,7 @@ ${baseUrl}`),
           if (parts.every((part) => part !== void 0 && part !== null && part !== "")) cepVersion = parts.join(".");
         } catch (error) {
         }
-        let osInfo = { platform: processApi.platform || "-", release: "-" };
-        try {
-          const osApi = cepRequire4("os");
-          osInfo.release = typeof osApi.release === "function" ? osApi.release() : "-";
-        } catch (error) {
-        }
+        const osInfo = { platform: platform.id || "-" };
         const versions = processApi.versions || {};
         const today = /* @__PURE__ */ new Date();
         const dateKey = today.getFullYear() + "-" + String(today.getMonth() + 1).padStart(2, "0") + "-" + String(today.getDate()).padStart(2, "0");

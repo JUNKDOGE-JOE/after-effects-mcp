@@ -1423,11 +1423,10 @@ function Shell({ cs }) {
         const parts = [apiVersion?.major, apiVersion?.minor, apiVersion?.micro];
         if (parts.every((part) => part !== undefined && part !== null && part !== '')) cepVersion = parts.join('.');
       } catch (error) { /* best effort */ }
-      let osInfo = { platform: processApi.platform || '-', release: '-' };
-      try {
-        const osApi = cepRequire('os');
-        osInfo.release = typeof osApi.release === 'function' ? osApi.release() : '-';
-      } catch (error) { /* best effort */ }
+      // OS identity comes from the platform adapter (no direct `os` module in
+      // business code — see scripts/package/test/no-platform-leaks.test.mjs);
+      // the Chromium UA line in the same header carries the OS release.
+      const osInfo = { platform: platform.id || '-' };
       const versions = processApi.versions || {};
       const today = new Date();
       const dateKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');

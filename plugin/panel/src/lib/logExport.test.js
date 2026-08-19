@@ -12,7 +12,7 @@ test('buildLogExport includes all diagnostic sections and sources', () => {
       aeApp: { appName: 'After Effects', appVersion: '25.0', appLocale: 'en_US', appUILocale: 'en_US' },
       cepVersion: '11.0', os: { platform: 'win32', release: '10.0' },
       hostNode: 'v15.14.0', chromiumUa: 'Chrome/88', pluginPort: 11488,
-      logsDir: 'C:\\Users\\A\\.ae-mcp\\logs', logLevel: 'info',
+      logsDir: '/home/user/.ae-mcp/logs', logLevel: 'info',
     },
     diagnostics: [{ id: 'host-listening', ok: true, detail: 'Host is ready' }],
     hostActivity: [{ id: 4, ts: Date.parse('2026-08-19T10:00:00Z'), client: 'claude', engine: 'jsx', ok: true }],
