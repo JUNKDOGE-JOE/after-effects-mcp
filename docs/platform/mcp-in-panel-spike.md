@@ -23,4 +23,6 @@ CI 不能证明的真机事项（须 AE 2023/2024 众测）：
 
 ## Phase 1 的下一步
 
+> 2026-08-19 起 Phase 1 的落地记录在 [mcp-in-panel-phase1.md](mcp-in-panel-phase1.md)（批 1：每会话配置 + 审批门 + checkpoint + `ae_exec` 完整语义、`ae_status` depth、`ae_previewFrame`、新 `ae_read`）。下面一段保留为当时的计划原文。
+
 在这个注册表、会话表和 SSE writer 之上，先把每会话配置和既有 approval gate 接入 `ae_exec`，再按方向文档顺序迁移 `ae.previewFrame`、结构化 `ae.read`、checkpoint/revert、表达式校验和独立的 `ae.nativeExec`。本 spike 故意未实现 approval、checkpoint、elicitation、会话持久化或其余工具。

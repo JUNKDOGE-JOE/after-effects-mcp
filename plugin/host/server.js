@@ -508,7 +508,7 @@ function buildApp() {
     const express = expressFactory();
     const a = express();
     a.use(express.json({ limit: '5mb' }));
-    mountMcp(a, {
+    module.exports.mcp = mountMcp(a, {
         version: PKG_VERSION,
         getStatus: function (requestPort) {
             return {
@@ -518,9 +518,25 @@ function buildApp() {
                 jsxBridge: typeof jsxBridge.getState === 'function' ? jsxBridge.getState() : null,
                 pythonVersion: lastPythonVersion || null,
                 pythonLastSeenAt: lastHealthAt || null,
+                paused: isPaused(),
+                clients: getClients(),
+                nativeExecutionPlane: (function () {
+                    try {
+                        const nativeStatus = makeNativeAegpClient().status();
+                        return nativeStatus && nativeStatus.state === 'connected'
+                            ? { available: true, adapter: 'native-aegp', engine: 'native-aegp' }
+                            : { available: false, adapter: null, engine: null };
+                    } catch (_) {
+                        return { available: false, adapter: null, engine: null };
+                    }
+                }()),
             };
         },
         executeJsx,
+        hostLog,
+        getNativeStatus: function () { return makeNativeAegpClient().status(); },
+        getClients,
+        isPaused,
     });
 
     a.get('/health', (req, res) => {
@@ -869,6 +885,7 @@ module.exports = {
     wrapForEvalScriptTransport,
     decodeEvalScriptTransportResult,
     executeJsx,
+    mcp: null,
     // Exported so tests can build the app and inject a known token without
     // touching the real token file.
     buildApp,

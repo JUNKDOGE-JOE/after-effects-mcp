@@ -11,12 +11,13 @@ class SessionStore {
         this.sessions = new Map();
     }
 
-    create(protocolVersion, clientName) {
+    create(protocolVersion, clientName, conversationId) {
         const id = createSessionId();
         const session = {
             id,
             protocolVersion,
             clientName,
+            conversationId: conversationId || null,
             initialized: false,
             writers: new Set(),
         };
@@ -34,6 +35,15 @@ class SessionStore {
         session.writers.forEach(function (writer) { writer.close(); });
         this.sessions.delete(id);
         return true;
+    }
+
+    deleteByConversationId(conversationId) {
+        const removed = [];
+        this.sessions.forEach(function (session) {
+            if (session.conversationId === conversationId) removed.push(session.id);
+        });
+        for (let i = 0; i < removed.length; i += 1) this.delete(removed[i]);
+        return removed.length;
     }
 
     addWriter(session, writer) {

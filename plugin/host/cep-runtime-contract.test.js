@@ -34,12 +34,23 @@ const CEP_EXECUTED_FILES = [
     'mcp/jsonrpc.js',
     'mcp/session.js',
     'mcp/sse.js',
+    'mcp/conversations.js',
+    'mcp/approvals.js',
+    'mcp/annotations.js',
+    'mcp/approval-gate.js',
+    'mcp/checkpoint-store.js',
+    'mcp/error-hints.js',
+    'mcp/jsx-result.js',
+    'mcp/template.js',
     'mcp/tools.js',
     'mcp/tool-result.js',
     // One file per /mcp tool (see mcp/tools.js). Every new tool module must be
     // listed here so the node:-specifier and require-graph guards cover it.
     'mcp/tools/status.js',
     'mcp/tools/exec.js',
+    'mcp/tools/preview-frame.js',
+    'mcp/png.js',
+    'mcp/tools/read.js',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',
