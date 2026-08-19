@@ -18,6 +18,7 @@ import io
 import json
 import logging
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -68,6 +69,30 @@ _DOWNSAMPLED_NOTE = (
     "detail may be missing. Set the viewer to Full resolution before treating "
     "a preview as proof that a visual change landed."
 )
+
+_PREVIEW_BRANCH_SAFE = re.compile(r"^[A-Za-z0-9_./:-]+$")
+
+
+def _preview_branch_value(value: Any) -> str:
+    text = "-" if value is None or value == "" else str(value)
+    return text if _PREVIEW_BRANCH_SAFE.fullmatch(text) else json.dumps(text, ensure_ascii=False)
+
+
+def _record_preview_branch(branch: dict[str, Any], started_at: float) -> None:
+    values = {
+        "source": branch.get("source", "none"),
+        "method": branch.get("method", "-"),
+        "ok": "true" if branch.get("ok") is True else "false",
+        "fallbackReason": branch.get("fallbackReason", "-"),
+        "compId": branch.get("compId", "-"),
+        "durationMs": max(0, int((time.monotonic() - started_at) * 1000)),
+    }
+    message = "previewFrame.branch " + " ".join(
+        f"{key}={_preview_branch_value(value)}" for key, value in values.items()
+    )
+    if branch.get("error"):
+        message += " error=" + _preview_branch_value(branch["error"])
+    log.info(message)
 
 
 def _load_jsx(name: str) -> Template:
@@ -725,123 +750,150 @@ async def _run_preview_frame(args: schemas.AePreviewFrameArgs, ctx: Any) -> Any:
         comp_name: str | None = None
 
         for frame_request in frame_requests:
-            jsx = with_prelude(tmpl.substitute(
-                comp_expr=_comp_expr(args.comp_id),
-                time=json.dumps(frame_request["time"]),
-                path=json.dumps(str(frame_request["path"])),
-            ))
-            out = await _backend().exec(code=jsx, timeout_sec=15.0)
-            prepared = _try_json(out)
-            if not isinstance(prepared, dict) or not prepared.get("ok"):
-                return prepared
+            branch_started = time.monotonic()
+            branch = {
+                "source": "none",
+                "method": "-",
+                "ok": False,
+                "fallbackReason": "-",
+                "compId": "-",
+            }
+            try:
+                jsx = with_prelude(tmpl.substitute(
+                    comp_expr=_comp_expr(args.comp_id),
+                    time=json.dumps(frame_request["time"]),
+                    path=json.dumps(str(frame_request["path"])),
+                ))
+                out = await _backend().exec(code=jsx, timeout_sec=15.0)
+                prepared = _try_json(out)
+                if not isinstance(prepared, dict) or not prepared.get("ok"):
+                    branch["error"] = (prepared or {}).get("error") if isinstance(prepared, dict) else "frame preparation failed"
+                    return prepared
 
-            comp_id = str(prepared.get("compId"))
-            comp_name = prepared.get("compName")
+                comp_id = str(prepared.get("compId"))
+                branch["compId"] = prepared.get("compId") or "-"
+                comp_name = prepared.get("compName")
 
-            if prepared.get("source") == "comp" or prepared.get("method") == "saveFrameToPng":
-                snap_path = prepared.get("path") or str(frame_request["path"])
-                captured = (
-                    await _await_written_png(Path(str(snap_path)))
-                    if snap_path
-                    else None
+                if prepared.get("source") == "comp" or prepared.get("method") == "saveFrameToPng":
+                    branch["source"] = "comp"
+                    branch["method"] = "saveFrameToPng"
+                    snap_path = prepared.get("path") or str(frame_request["path"])
+                    captured = (
+                        await _await_written_png(Path(str(snap_path)))
+                        if snap_path
+                        else None
+                    )
+                    if captured is not None:
+                        frame_w, frame_h = captured
+                        new_dims = _downscale_png(Path(str(snap_path)), args.scale)
+                        if new_dims is not None:
+                            frame_w, frame_h = new_dims
+                        png_bytes = Path(str(snap_path)).read_bytes()
+                        frame = {
+                            "time": prepared.get("time"),
+                            "path": snap_path,
+                            "width": frame_w,
+                            "height": frame_h,
+                            "sizeBytes": len(png_bytes),
+                            "sha256": hashlib.sha256(png_bytes).hexdigest(),
+                            "source": "comp",
+                            "method": "saveFrameToPng",
+                            "compId": comp_id,
+                        }
+                        # The composition's own size is reported separately, never
+                        # as width/height: at Half resolution the viewer writes half
+                        # a frame, and a caller comparing a downsampled preview
+                        # against the comp settings would read it as full size.
+                        comp_w = prepared.get("compWidth")
+                        comp_h = prepared.get("compHeight")
+                        if isinstance(comp_w, int) and isinstance(comp_h, int):
+                            frame["compWidth"] = comp_w
+                            frame["compHeight"] = comp_h
+                            if (comp_w, comp_h) != captured:
+                                frame["downsampled"] = True
+                        resolution_factor = prepared.get("resolutionFactor")
+                        if isinstance(resolution_factor, list):
+                            frame["resolutionFactor"] = resolution_factor
+                        if args.include_base64:
+                            frame["base64"] = base64.b64encode(png_bytes).decode("ascii")
+                        branch["ok"] = True
+                        frames.append(frame)
+                        continue
+                    prepared["fallbackReason"] = (
+                        "saveFrameToPng did not finish writing a decodable PNG"
+                    )
+                    branch["fallbackReason"] = prepared["fallbackReason"]
+
+                if snapper is None:
+                    snapper = _snap_discovery.select_snapshotter()
+                if snapper is None:
+                    branch["source"] = "none"
+                    branch["method"] = "-"
+                    branch["error"] = "no snapshotter installed"
+                    return {
+                        "ok": False,
+                        "error": "no snapshotter installed (try `pip install ae-mcp-snapshot-mss`)",
+                        "fallbackReason": prepared.get("fallbackReason"),
+                    }
+
+                # Yield to AE's main thread so the viewer can repaint at the new
+                # comp.time before the screen-grab fallback.
+                if args.repaint_delay_ms > 0:
+                    await asyncio.sleep(args.repaint_delay_ms / 1000.0)
+
+                branch["source"] = "viewer"
+                snap = await snapper.capture(
+                    Path(frame_request["path"]),
+                    main_window=True,
+                    method="ViewerCapture",
                 )
-                if captured is not None:
-                    frame_w, frame_h = captured
+                branch["method"] = snap.get("method") or "ViewerCapture"
+                if not snap.get("ok"):
+                    branch["error"] = snap.get("error") or "snapshotter returned ok=false"
+                    return snap
+
+                frame_w = snap.get("width")
+                frame_h = snap.get("height")
+                snap_path = snap.get("path")
+                if snap_path:
                     new_dims = _downscale_png(Path(str(snap_path)), args.scale)
                     if new_dims is not None:
                         frame_w, frame_h = new_dims
-                    png_bytes = Path(str(snap_path)).read_bytes()
-                    frame = {
-                        "time": prepared.get("time"),
-                        "path": snap_path,
-                        "width": frame_w,
-                        "height": frame_h,
-                        "sizeBytes": len(png_bytes),
-                        "sha256": hashlib.sha256(png_bytes).hexdigest(),
-                        "source": "comp",
-                        "method": "saveFrameToPng",
-                        "compId": comp_id,
-                    }
-                    # The composition's own size is reported separately, never
-                    # as width/height: at Half resolution the viewer writes half
-                    # a frame, and a caller comparing a downsampled preview
-                    # against the comp settings would read it as full size.
-                    comp_w = prepared.get("compWidth")
-                    comp_h = prepared.get("compHeight")
-                    if isinstance(comp_w, int) and isinstance(comp_h, int):
-                        frame["compWidth"] = comp_w
-                        frame["compHeight"] = comp_h
-                        if (comp_w, comp_h) != captured:
-                            frame["downsampled"] = True
-                    resolution_factor = prepared.get("resolutionFactor")
-                    if isinstance(resolution_factor, list):
-                        frame["resolutionFactor"] = resolution_factor
-                    if args.include_base64:
-                        frame["base64"] = base64.b64encode(png_bytes).decode("ascii")
-                    frames.append(frame)
-                    continue
-                prepared["fallbackReason"] = (
-                    "saveFrameToPng did not finish writing a decodable PNG"
-                )
-
-            if snapper is None:
-                snapper = _snap_discovery.select_snapshotter()
-            if snapper is None:
-                return {
-                    "ok": False,
-                    "error": "no snapshotter installed (try `pip install ae-mcp-snapshot-mss`)",
-                    "fallbackReason": prepared.get("fallbackReason"),
-                }
-
-            # Yield to AE's main thread so the viewer can repaint at the new
-            # comp.time before the screen-grab fallback.
-            if args.repaint_delay_ms > 0:
-                await asyncio.sleep(args.repaint_delay_ms / 1000.0)
-
-            snap = await snapper.capture(
-                Path(frame_request["path"]),
-                main_window=True,
-                method="ViewerCapture",
-            )
-            if not snap.get("ok"):
-                return snap
-
-            frame_w = snap.get("width")
-            frame_h = snap.get("height")
-            snap_path = snap.get("path")
-            if snap_path:
-                new_dims = _downscale_png(Path(str(snap_path)), args.scale)
-                if new_dims is not None:
-                    frame_w, frame_h = new_dims
-            png_bytes = (
-                Path(str(snap_path)).read_bytes()
-                if snap_path and Path(str(snap_path)).exists()
-                else None
-            )
-            frame = {
-                "time": prepared.get("time"),
-                "path": snap_path,
-                "width": frame_w,
-                "height": frame_h,
-                "sizeBytes": (
-                    len(png_bytes)
-                    if png_bytes is not None
-                    else snap.get("bytes")
-                ),
-                "sha256": (
-                    hashlib.sha256(png_bytes).hexdigest()
-                    if png_bytes is not None
+                png_bytes = (
+                    Path(str(snap_path)).read_bytes()
+                    if snap_path and Path(str(snap_path)).exists()
                     else None
-                ),
-                "source": "viewer",
-                "method": snap.get("method"),
-                "compId": comp_id,
-            }
-            if prepared.get("fallbackReason"):
-                frame["fallbackReason"] = prepared.get("fallbackReason")
-            if args.include_base64 and png_bytes is not None:
-                frame["base64"] = base64.b64encode(png_bytes).decode("ascii")
-            frames.append(frame)
+                )
+                frame = {
+                    "time": prepared.get("time"),
+                    "path": snap_path,
+                    "width": frame_w,
+                    "height": frame_h,
+                    "sizeBytes": (
+                        len(png_bytes)
+                        if png_bytes is not None
+                        else snap.get("bytes")
+                    ),
+                    "sha256": (
+                        hashlib.sha256(png_bytes).hexdigest()
+                        if png_bytes is not None
+                        else None
+                    ),
+                    "source": "viewer",
+                    "method": snap.get("method"),
+                    "compId": comp_id,
+                }
+                if prepared.get("fallbackReason"):
+                    frame["fallbackReason"] = prepared.get("fallbackReason")
+                if args.include_base64 and png_bytes is not None:
+                    frame["base64"] = base64.b64encode(png_bytes).decode("ascii")
+                branch["ok"] = True
+                frames.append(frame)
+            except BaseException as error:
+                branch["error"] = str(error) or type(error).__name__
+                raise
+            finally:
+                _record_preview_branch(branch, branch_started)
 
         result: dict[str, Any] = {
             "ok": True,

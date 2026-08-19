@@ -741,5 +741,5 @@ export function createOpenCodeBackend({
     return transcript.slice();
   }
 
-  return { sendUser, approve, stop, reset, getMessages, probeAccount };
+  return { sendUser, approve, stop, reset, getMessages, getStderrTail: () => stderrTail, probeAccount };
 }

@@ -72,7 +72,7 @@ import { copyWizardConfig } from '../lib/wizardCopy.js';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
 import pkg from '../../package.json';
-import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
+import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine, readDatedLogTail } from '../lib/logExport.js';
 import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
 import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
@@ -1340,9 +1340,21 @@ function Shell({ cs }) {
 
   // Note: the log-level filter is intentionally applied at append time only; existing buffered lines are unaffected by later level changes.
   const pushLog = React.useCallback((m) => {
-    if (!keepLogLine(logLevelRef.current, m)) return;
-    setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${m}`]);
-  }, []);
+    const message = String(m ?? '');
+    const host = getHost();
+    try {
+      if (host && host.hostLog && typeof host.hostLog.record === 'function') {
+        const level = /error|failed|exception/i.test(message)
+          ? 'error'
+          : (/warn|timeout|unavailable/i.test(message) ? 'warn' : 'info');
+        host.hostLog.record({ source: 'panel', level, message });
+      }
+    } catch (error) {
+      // Logging must never change the panel's existing error path.
+    }
+    if (!keepLogLine(logLevelRef.current, message)) return;
+    setLogs((xs) => [...xs.slice(-199), `[${new Date().toLocaleTimeString()}] ${message}`]);
+  }, [getHost]);
 
   const repairPlatformHelper = React.useCallback(async () => {
     if (providerRepairing) return;
@@ -1365,19 +1377,124 @@ function Shell({ cs }) {
     }
   }, [providerRepairing, pushLog]);
 
-  const exportLogs = React.useCallback(() => {
+  const exportLogs = React.useCallback(async () => {
     try {
-      const exactSecrets = providerSecretService.getRedactionValues();
+      let exactSecrets = [];
+      try { exactSecrets = providerSecretService.getRedactionValues() || []; } catch (error) { exactSecrets = []; }
       if (zcodeStoredKeyRef.current) exactSecrets.push(zcodeStoredKeyRef.current);
       const attachmentSecrets = attachmentPathSecrets({
         draft: attachmentDraft,
         pendingTurn: pendingTurnRef.current,
       });
       exactSecrets.push(...attachmentSecrets);
+      const host = getHost();
+      let diagnosticItems;
+      let diagnosticsError = null;
+      try {
+        diagnosticItems = await runDiagnostics({
+          getHost,
+          port: status.port,
+          fs: cepRequire('fs'),
+          fetchImpl: window.fetch.bind(window),
+          platform,
+          runtimeManager,
+          allowDevelopmentPath: developmentRuntimeFallback,
+        });
+      } catch (error) {
+        diagnosticsError = error?.message || String(error);
+      }
+      const safeValue = (read, fallback = undefined) => {
+        try { return read(); } catch (error) { return fallback; }
+      };
+      const connection = (host && typeof host.getConnectionInfo === 'function')
+        ? safeValue(() => host.getConnectionInfo(), {})
+        : (connInfo || {});
+      const hostLog = host && host.hostLog;
+      const hostLogStats = hostLog && typeof hostLog.stats === 'function'
+        ? (safeValue(() => hostLog.stats(), {}) || {})
+        : {};
+      const logsDir = hostLogStats.dir || platform.paths.logsRoot;
+      const processApi = window.cep_node?.process || globalThis.process || {};
+      let aeApp = {};
+      try { aeApp = cs.getHostEnvironment ? (cs.getHostEnvironment() || {}) : {}; } catch (error) { aeApp = {}; }
+      let cepVersion = '-';
+      try {
+        const apiVersion = cs.getCurrentApiVersion ? cs.getCurrentApiVersion() : null;
+        const parts = [apiVersion?.major, apiVersion?.minor, apiVersion?.micro];
+        if (parts.every((part) => part !== undefined && part !== null && part !== '')) cepVersion = parts.join('.');
+      } catch (error) { /* best effort */ }
+      let osInfo = { platform: processApi.platform || '-', release: '-' };
+      try {
+        const osApi = cepRequire('os');
+        osInfo.release = typeof osApi.release === 'function' ? osApi.release() : '-';
+      } catch (error) { /* best effort */ }
+      const versions = processApi.versions || {};
+      const today = new Date();
+      const dateKey = today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0');
+      const pythonLogPath = platform.paths.join([logsDir, 'server-' + dateKey + '.log']);
+      let pythonServerLog;
+      try {
+        const hasFile = [0, 1].some((offset) => {
+          const date = new Date(today);
+          date.setDate(date.getDate() - offset);
+          const key = date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+          return platform.fs.existsSync(platform.paths.join([logsDir, 'server-' + key + '.log']));
+        });
+        pythonServerLog = hasFile ? readDatedLogTail({
+          fsImpl: platform.fs,
+          pathJoin: platform.paths.join,
+          dir: logsDir,
+          prefix: 'server-',
+          suffix: '.log',
+          now: today,
+          days: 2,
+          lines: 300,
+        }) : undefined;
+      } catch (error) {
+        pythonServerLog = undefined;
+      }
+      const backendStderrTails = {};
+      for (const [name, backend] of [
+        ['claude', claudeBackend],
+        ['codex', codexBackend],
+        ['opencode', openCodeBackend],
+        ['zcode', zcodeBackend],
+      ]) {
+        if (!backend || typeof backend.getStderrTail !== 'function') continue;
+        try {
+          backendStderrTails[name] = backend.getStderrTail();
+        } catch (error) {
+          backendStderrTails[name] = '(unavailable: ' + (error?.message || String(error)) + ')';
+        }
+      }
       const text = buildLogExport({
         panelLogs: logs,
-        hostInfo: { hostVersion: (connInfo && connInfo.hostVersion) || '-', pythonVersion: (connInfo && connInfo.pythonVersion) || '-' },
-        sidecarTail: claudeBackend.getStderrTail ? claudeBackend.getStderrTail() : '',
+        hostInfo: {
+          hostVersion: connection.hostVersion || '-',
+          pythonVersion: connection.pythonVersion || '-',
+          aeApp,
+          cepVersion,
+          os: osInfo,
+          hostNode: hostLogStats.nodeVersion || processApi.version || '-',
+          chromiumUa: navigator.userAgent || '-',
+          pluginPort: connection.port || status.port,
+          logsDir,
+          logLevel: logLevelRef.current,
+        },
+        hostActivity: host && host.activity && typeof host.activity.list === 'function'
+          ? safeValue(() => host.activity.list())
+          : undefined,
+        hostLogMemory: hostLog && typeof hostLog.tail === 'function'
+          ? safeValue(() => hostLog.tail(500))
+          : undefined,
+        hostLogDisk: hostLog && typeof hostLog.readFileTail === 'function'
+          ? safeValue(() => hostLog.readFileTail({ days: 2, lines: 500 }))
+          : undefined,
+        diagnostics: diagnosticItems,
+        diagnosticsError,
+        backendStderrTails,
+        pythonServerLog,
+        pythonLogPath,
         version: pkgVersion,
         exactSecrets,
       });
@@ -1387,7 +1504,7 @@ function Shell({ cs }) {
     } catch (e) {
       pushLog('Log export failed: ' + (e && e.message ? e.message : String(e)));
     }
-  }, [logs, connInfo, claudeBackend, providerSecretService, pushLog, attachmentDraft]);
+  }, [logs, connInfo, claudeBackend, codexBackend, openCodeBackend, zcodeBackend, providerSecretService, pushLog, attachmentDraft, getHost, platform, runtimeManager, developmentRuntimeFallback, status.port, cs]);
 
   const undoToPreviousCheckpoint = React.useCallback(async () => {
     try {
