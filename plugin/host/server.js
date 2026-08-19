@@ -508,7 +508,7 @@ function buildApp() {
     const express = expressFactory();
     const a = express();
     a.use(express.json({ limit: '5mb' }));
-    mountMcp(a, {
+    module.exports.mcp = mountMcp(a, {
         version: PKG_VERSION,
         getStatus: function (requestPort) {
             return {
@@ -869,6 +869,7 @@ module.exports = {
     wrapForEvalScriptTransport,
     decodeEvalScriptTransportResult,
     executeJsx,
+    mcp: null,
     // Exported so tests can build the app and inject a known token without
     // touching the real token file.
     buildApp,

@@ -4,9 +4,18 @@ const jsonrpc = require('./jsonrpc');
 const { SessionStore } = require('./session');
 const { SseWriter } = require('./sse');
 const { buildTools } = require('./tools');
+const { ConversationStore } = require('./conversations');
+const { ApprovalQueue } = require('./approvals');
+const { CheckpointStore } = require('./checkpoint-store');
 
 const PROTOCOLS = ['2025-06-18', '2025-03-26'];
 const DEFAULT_PROTOCOL = '2025-03-26';
+const MCP_PATHS = ['/mcp', '/mcp/c/:token'];
+const EXTERNAL_POLICY = Object.freeze({
+    approvalTier: null,
+    expertGuidance: true,
+    label: 'external',
+});
 
 function sessionId(req) {
     return req.get('mcp-session-id');
@@ -27,10 +36,13 @@ function selectProtocol(req) {
     return PROTOCOLS.indexOf(requested) !== -1 ? requested : DEFAULT_PROTOCOL;
 }
 
-function clientName(params, id) {
+function clientName(params, id, conversation) {
     const info = params && params.clientInfo;
-    return info && typeof info.name === 'string' && info.name.trim()
-        ? info.name.trim() : 'mcp:' + id.slice(0, 8);
+    if (!info || typeof info.name !== 'string' || !info.name.trim()) {
+        return 'mcp:' + id.slice(0, 8);
+    }
+    const name = info.name.trim();
+    return conversation ? name + '@' + conversation.policy.label : name;
 }
 
 function gate(req, res, next) {
@@ -60,15 +72,45 @@ function progressMessage(token, startedAt, now) {
 
 function mountMcp(app, deps) {
     const sessions = new SessionStore();
+    const conversations = new ConversationStore(sessions);
+    const approvals = deps.approvals || new ApprovalQueue({ timeoutMs: deps.approvalTimeoutMs });
+    let checkpointStore = deps.checkpointStore || null;
     const sseOptions = deps.sseOptions || null;
     const progressIntervalMs = deps.progressIntervalMs || 5000;
     const tools = buildTools({
         getStatus: deps.getStatus,
         executeJsx: deps.executeJsx,
+        approvals,
+        getCheckpointStore: function () {
+            if (!checkpointStore) checkpointStore = new CheckpointStore(deps.checkpointStoreOptions);
+            return checkpointStore;
+        },
         sessionCount: function () { return sessions.size; },
     });
 
-    async function dispatch(req, message) {
+    function routeConversation(req, res, next) {
+        const token = req.params && req.params.token;
+        if (typeof token !== 'string') {
+            req.mcpConversation = null;
+            next();
+            return;
+        }
+        const conversation = conversations.get(token);
+        if (!conversation) {
+            res.status(404).json({ ok: false, error: 'unknown conversation' });
+            return;
+        }
+        req.mcpConversation = conversation;
+        next();
+    }
+
+    function sessionForRequest(req, conversation) {
+        const session = sessions.get(sessionId(req));
+        const expected = conversation ? conversation.id : null;
+        return session && session.conversationId === expected ? session : null;
+    }
+
+    async function dispatch(req, message, conversation) {
         if (jsonrpc.isResponse(message)) return { status: 202, response: null };
         const problem = jsonrpc.validateMessage(message);
         // MCP SDKs treat a non-2xx response as a transport failure and discard
@@ -78,8 +120,12 @@ function mountMcp(app, deps) {
         if (message.method === 'initialize') {
             if (!jsonrpc.isObject(params)) return { status: 200, response: jsonrpc.invalidParams(message, 'initialize params must be an object') };
             const protocolVersion = selectProtocol(req);
-            const session = sessions.create(protocolVersion, 'pending');
-            session.clientName = clientName(params, session.id);
+            const session = sessions.create(
+                protocolVersion,
+                'pending',
+                conversation ? conversation.id : null,
+            );
+            session.clientName = clientName(params, session.id, conversation);
             const value = {
                 protocolVersion,
                 capabilities: { tools: { listChanged: false }, logging: {} },
@@ -90,7 +136,7 @@ function mountMcp(app, deps) {
         }
         const id = sessionId(req);
         if (!id) return missingSession(message, 400, 'Mcp-Session-Id header is required');
-        const session = sessions.get(id);
+        const session = sessionForRequest(req, conversation);
         if (!session) return missingSession(message, 404, 'Mcp-Session-Id is unknown');
         if (message.method === 'notifications/initialized') {
             session.initialized = true;
@@ -101,7 +147,15 @@ function mountMcp(app, deps) {
             return { status: 200, session, response: jsonrpc.result(message, { tools: tools.list() }) };
         }
         if (message.method === 'tools/call') {
-            const output = await tools.call(params, { session, port: req.socket.localPort });
+            const currentConversation = session.conversationId
+                ? conversations.getById(session.conversationId) : null;
+            const output = await tools.call(params, {
+                session,
+                port: req.socket.localPort,
+                conversation: currentConversation,
+                policy: currentConversation ? currentConversation.policy : EXTERNAL_POLICY,
+                arguments: params.arguments,
+            });
             if (output.invalid) return { status: 200, session, response: jsonrpc.invalidParams(message, output.invalid) };
             return { status: 200, session, response: jsonrpc.result(message, output.result) };
         }
@@ -118,30 +172,32 @@ function mountMcp(app, deps) {
             && Object.prototype.hasOwnProperty.call(body.params._meta, 'progressToken');
     }
 
-    app.get('/mcp', gate, function (req, res) {
+    app.get(MCP_PATHS, gate, routeConversation, function (req, res) {
         if (!String(req.get('accept') || '').toLowerCase().includes('text/event-stream')) {
             return res.status(405).json({ ok: false, error: 'Accept: text/event-stream is required' });
         }
         const id = sessionId(req);
         if (!id) return res.status(400).json({ ok: false, error: 'Mcp-Session-Id header is required' });
-        const session = sessions.get(id);
+        const session = sessionForRequest(req, req.mcpConversation);
         if (!session) return res.status(404).json({ ok: false, error: 'Mcp-Session-Id is unknown' });
         const writer = new SseWriter(res, sseOptions).start();
         sessions.addWriter(session, writer);
     });
 
-    app.delete('/mcp', gate, function (req, res) {
+    app.delete(MCP_PATHS, gate, routeConversation, function (req, res) {
         const id = sessionId(req);
         if (!id) return res.status(400).json({ ok: false, error: 'Mcp-Session-Id header is required' });
-        if (!sessions.delete(id)) return res.status(404).json({ ok: false, error: 'Mcp-Session-Id is unknown' });
+        const session = sessionForRequest(req, req.mcpConversation);
+        if (!session || !sessions.delete(id)) return res.status(404).json({ ok: false, error: 'Mcp-Session-Id is unknown' });
         res.status(204).end();
     });
 
-    app.post('/mcp', gate, async function (req, res) {
+    app.post(MCP_PATHS, gate, routeConversation, async function (req, res) {
         const body = req.body;
         const batch = Array.isArray(body);
         if (batch && body.length === 0) return res.status(200).json(jsonrpc.invalidRequest({}, 'batch must not be empty'));
-        const stream = !batch && wantsProgressStream(body) && sessions.get(sessionId(req));
+        const stream = !batch && wantsProgressStream(body)
+            && sessionForRequest(req, req.mcpConversation);
         if (stream) {
             const writer = new SseWriter(res, sseOptions).start();
             const startedAt = Date.now();
@@ -156,7 +212,7 @@ function mountMcp(app, deps) {
             notify();
             const timer = setInterval(notify, progressIntervalMs);
             try {
-                const output = await dispatch(req, body);
+                const output = await dispatch(req, body, req.mcpConversation);
                 if (output.response) writer.send(output.response);
             } finally {
                 clearInterval(timer);
@@ -169,7 +225,7 @@ function mountMcp(app, deps) {
         let status = 200;
         let initializedSession = null;
         for (let i = 0; i < messages.length; i += 1) {
-            const output = await dispatch(req, messages[i]);
+            const output = await dispatch(req, messages[i], req.mcpConversation);
             status = Math.max(status, output.status);
             if (output.session && output.session.id) initializedSession = output.session;
             if (output.response) responses.push(output.response);
@@ -184,8 +240,8 @@ function mountMcp(app, deps) {
         res.set('Cache-Control', 'no-store');
         res.status(400).json(jsonrpc.error(null, -32700, 'Parse error'));
     });
-    app.all('/mcp', gate, function (req, res) { res.status(405).end(); });
-    return { sessions, dispatch };
+    app.all(MCP_PATHS, gate, routeConversation, function (req, res) { res.status(405).end(); });
+    return { sessions, conversations, approvals, dispatch };
 }
 
 module.exports = mountMcp;

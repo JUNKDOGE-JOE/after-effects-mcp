@@ -38,6 +38,8 @@ async function fixture() {
         evalScript: function (_jsx, callback) { callback('{"ok":true,"result":"bridge-ok"}'); },
     });
     const app = server.buildApp();
+    assert.equal(typeof server.mcp.conversations.create, 'function');
+    assert.equal(typeof server.mcp.approvals.resolve, 'function');
     const listener = await new Promise(function (resolve) {
         const value = app.listen(0, '127.0.0.1', function () { resolve(value); });
     });
@@ -61,7 +63,7 @@ test('MCP ae_exec shares paused/blocked gates and activity records with /exec', 
             jsonrpc: '2.0', id: 2, method: 'tools/call',
             params: { name: 'ae_exec', arguments: { code: '1 + 1', undo_group_name: 'MCP test' } },
         });
-        assert.deepEqual(success.body.result.structuredContent, { ok: true, result: 'bridge-ok' });
+        assert.deepEqual(success.body.result.structuredContent, { ok: true, content: 'bridge-ok' });
         const invalidParams = await request(host.port, headers, {
             jsonrpc: '2.0', id: 21, method: 'tools/call', params: {},
         });
