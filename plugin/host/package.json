@@ -8,6 +8,6 @@
     "test:node15": "node tests/node15-spike.js"
   },
   "dependencies": {
-    "express": "4.22.1"
+    "express": "4.22.2"
   }
 }
