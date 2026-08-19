@@ -25,13 +25,13 @@ test('promotion queues every idempotent retry instead of replacing an older pend
   );
 });
 
-test('v0.9.5 release docs describe only the approved corrective Windows publication', async () => {
+test('v0.9.6 release docs describe only the approved corrective Windows publication', async () => {
   const docs = await readFile('docs/RELEASE.md', 'utf8');
 
   for (const asset of [
-    'ae-mcp-panel-v0.9.5-windows-x64.zxp',
-    'AeMcpNative-v0.9.5-windows-x64.aex',
-    'SHA256SUMS-v0.9.5.txt',
+    'ae-mcp-panel-v0.9.6-windows-x64.zxp',
+    'AeMcpNative-v0.9.6-windows-x64.aex',
+    'SHA256SUMS-v0.9.6.txt',
   ]) {
     assert.match(docs, new RegExp(asset.replaceAll('.', '\\.')));
   }

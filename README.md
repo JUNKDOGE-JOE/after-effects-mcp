@@ -2,14 +2,14 @@
 
 English | [简体中文](README.zh-CN.md)
 
-**One-line install — paste this into your AI agent (Claude Code, Codex, Cursor, or any MCP client) and it sets up the ae-mcp runtime and MCP server entry for you:**
+**One-line install — paste this into your AI agent (Claude Code, Codex, Cursor, or any MCP client): it installs the ae-mcp runtime, registers the `ae` MCP server at user scope, and then hands you the remaining manual steps (ZXP/AEX, panel, new session):**
 
 ```text
-Install ae-mcp for me: install uv if it is missing, then run uv tool install --force --from "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.5#subdirectory=packages/core" ae-mcp --with "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.5#subdirectory=packages/bridge" --with "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.5#subdirectory=packages/snapshot-mss" and register an MCP server named "ae" in this client's MCP config whose command is the ae-mcp launcher inside `uv tool dir --bin`, with env AE_MCP_BACKEND=ae-mcp and AE_MCP_PLUGIN_URL=http://127.0.0.1:11488 (full guide: https://github.com/JUNKDOGE-JOE/after-effects-mcp/blob/main/docs/INSTALL.md). Then tell me to install the v0.9.5 ZXP and AEX from https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.9.5 and open Window > Extensions > ae-mcp inside After Effects; only after I confirm, call ae_ping to verify.
+Install ae-mcp (the After Effects MCP server) for me, step by step, reporting each result: 1) Install uv if it is missing; if you had to install it, call uv by its full path for the rest of this session (PATH only refreshes in new shells). 2) Run: uv tool install --force --from "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.6#subdirectory=packages/core" ae-mcp --with "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.6#subdirectory=packages/bridge" --with "git+https://github.com/JUNKDOGE-JOE/after-effects-mcp@v0.9.6#subdirectory=packages/snapshot-mss" and confirm that `uv tool list` shows ae-mcp v0.9.6. 3) Resolve the ABSOLUTE path of the ae-mcp launcher inside `uv tool dir --bin` (Windows: usually %USERPROFILE%\.local\bin\ae-mcp.exe; macOS/Linux: ~/.local/bin/ae-mcp). 4) Register an MCP server named "ae" at USER scope (available in every project, not project-local) in this client's MCP config: command = that absolute path, env AE_MCP_BACKEND=ae-mcp and AE_MCP_PLUGIN_URL=http://127.0.0.1:11488. In Claude Code that is: claude mcp add -s user ae -e AE_MCP_BACKEND=ae-mcp -e AE_MCP_PLUGIN_URL=http://127.0.0.1:11488 -- <absolute launcher path>; in other clients edit their MCP config the same way. Do not touch other MCP entries, and show me the final entry. Full guide: https://github.com/JUNKDOGE-JOE/after-effects-mcp/blob/main/docs/INSTALL.md 5) Then stop and tell me to (a) install the v0.9.6 ZXP and AEX from https://github.com/JUNKDOGE-JOE/after-effects-mcp/releases/tag/v0.9.6, (b) open Window > Extensions > ae-mcp inside After Effects and keep that panel open, and (c) if ae_ping is not available to you in this session, start a NEW session of this client (MCP tools only load at session start) and ask for ae_ping there. Verify with ae_ping only after I confirm the panel is open.
 ```
 
 > [!IMPORTANT]
-> The prompt installs only the runtime and the MCP client entry. **ae-mcp cannot do anything until the panel is installed and open**: install `ae-mcp-panel-v0.9.5-windows-x64.zxp` into After Effects with a ZXP installer (plus `AeMcpNative-v0.9.5-windows-x64.aex` for `ae_nativeExec`), then keep `Window -> Extensions -> ae-mcp` open while you work — the panel is what listens on `127.0.0.1:11488`, and every tool call fails while it is closed. Steps: [Install and First Run](#install-and-first-run).
+> The prompt installs only the runtime and the MCP client entry. **ae-mcp cannot do anything until the panel is installed and open**: install `ae-mcp-panel-v0.9.6-windows-x64.zxp` into After Effects with a ZXP installer (plus `AeMcpNative-v0.9.6-windows-x64.aex` for `ae_nativeExec`), then keep `Window -> Extensions -> ae-mcp` open while you work — the panel is what listens on `127.0.0.1:11488`, and every tool call fails while it is closed. Steps: [Install and First Run](#install-and-first-run).
 
 > [!IMPORTANT]
 > **The panel's built-in chat is being rebuilt.** Until that work lands, use ae-mcp as a plain MCP server registered with your own agent client (Claude Code, Claude Desktop, Cursor, Codex, OpenCode, and similar).
@@ -18,11 +18,11 @@ ae-mcp is a backend-agnostic automation tool that keeps Adobe After Effects and 
 
 The MCP server is the core. Outside the MCP layer, ae-mcp also ships a CEP panel that wraps built-in agent chat, backend configuration, approval controls, diagnostics, and first-run setup. You can use ae-mcp from an external agent backend through MCP, or configure Claude / Codex / ZCode directly inside the AE panel.
 
-**v0.9.5 is the corrective Windows x64 release.** The signed ZXP contains the CEP panel and Windows Platform Helper; the signed AEX remains a separate manual install. The Panel's first-run wizard can install the external Python runtime online, so a pre-existing runtime is not required, but this is not an offline or ZXP-only installation.
+**v0.9.6 is the corrective Windows x64 release.** The signed ZXP contains the CEP panel and Windows Platform Helper; the signed AEX remains a separate manual install. The Panel's first-run wizard can install the external Python runtime online, so a pre-existing runtime is not required, but this is not an offline or ZXP-only installation.
 
-## v0.9.5 Target Support Matrix
+## v0.9.6 Target Support Matrix
 
-The published v0.9.5 assets target this release scope:
+The published v0.9.6 assets target this release scope:
 
 - Windows 11 24H2 (11.0.26100) or newer on x64. Windows on ARM is not supported.
 - After Effects 2025 is the packaged acceptance host. The CEP manifest now spans `[23.0,26.9]` behind AE 2023 baseline gates while the AE 2023/2024 real-host matrix is validated (#215); this release contains no macOS asset.
@@ -41,9 +41,9 @@ Embedded panel chat or external MCP client
 
 `ae_previewFrame` remains the AE-internal `CompItem.saveFrameToPng` path for rendering real comp pixels, with viewer snapshot only as a fallback. `packages/snapshot-mss` provides Windows `ae_snapshot` screen capture through the `mss` backend.
 
-The MCP core is backend-agnostic: external clients can talk to AE through the stdio server, while the CEP panel can also host built-in agent chat. The existing panel layer handles backend setup, approvals, diagnostics, and activity history. The v0.9.5 ZXP restores the Windows Platform Helper used by Provider Manager and protected Credential Manager storage. It does not bundle Python or activate a Windows RuntimeManager. Claude, Codex, and ZCode are built-in panel backends; OpenCode and other tools can still connect as external MCP clients.
+The MCP core is backend-agnostic: external clients can talk to AE through the stdio server, while the CEP panel can also host built-in agent chat. The existing panel layer handles backend setup, approvals, diagnostics, and activity history. The v0.9.6 ZXP restores the Windows Platform Helper used by Provider Manager and protected Credential Manager storage. It does not bundle Python or activate a Windows RuntimeManager. Claude, Codex, and ZCode are built-in panel backends; OpenCode and other tools can still connect as external MCP clients.
 
-## v0.9.5 Release Scope
+## v0.9.6 Release Scope
 
 - One final protected-`main` SHA produces the ZXP and AEX; changed source requires new artifacts and checksums.
 - The ZXP includes the existing Windows Platform Helper and validates its manifest and binaries before signing.
@@ -53,17 +53,17 @@ The MCP core is backend-agnostic: external clients can talk to AE through the st
 
 ## Install and First Run
 
-Download the three named files from the v0.9.5 GitHub Release. Do not use source archives as substitutes for the signed assets:
+Download the three named files from the v0.9.6 GitHub Release. Do not use source archives as substitutes for the signed assets:
 
 | Role | Release asset |
 |---|---|
-| CEP panel + Windows Platform Helper | `ae-mcp-panel-v0.9.5-windows-x64.zxp` |
-| Native AEGP plug-in | `AeMcpNative-v0.9.5-windows-x64.aex` |
-| Integrity | `SHA256SUMS-v0.9.5.txt` |
+| CEP panel + Windows Platform Helper | `ae-mcp-panel-v0.9.6-windows-x64.zxp` |
+| Native AEGP plug-in | `AeMcpNative-v0.9.6-windows-x64.aex` |
+| Integrity | `SHA256SUMS-v0.9.6.txt` |
 
-Install the ZXP with a supported ZXP installer. With After Effects closed, copy the AEX to the selected host's `Support Files\Plug-ins\Extensions\AeMcpNative.aex` path using administrator permission, then restart After Effects and open `Window -> Extensions -> ae-mcp`. If `uv` or `ae-mcp` is missing, use the first-run wizard to install them online; it runs a tag-pinned `uv tool install` for v0.9.5. Existing compatible launchers are reused.
+Install the ZXP with a supported ZXP installer. With After Effects closed, copy the AEX to the selected host's `Support Files\Plug-ins\Extensions\AeMcpNative.aex` path using administrator permission, then restart After Effects and open `Window -> Extensions -> ae-mcp`. If `uv` or `ae-mcp` is missing, use the first-run wizard to install them online; it runs a tag-pinned `uv tool install` for v0.9.6. Existing compatible launchers are reused.
 
-Verify both binaries with `SHA256SUMS-v0.9.5.txt`. See [Install](docs/INSTALL.md) and [Release](docs/RELEASE.md).
+Verify both binaries with `SHA256SUMS-v0.9.6.txt`. See [Install](docs/INSTALL.md) and [Release](docs/RELEASE.md).
 
 ## Built-in Backends
 
@@ -342,7 +342,7 @@ node scripts/live-model-matrix.mjs
 
 ## Package and Release
 
-Maintainers merge release metadata first, then build the v0.9.5 Windows Helper, ZXP, and AEX from the final clean protected-`main` commit. They validate the minimal ZXP payload, sign and verify both release assets, generate `SHA256SUMS-v0.9.5.txt`, run the After Effects 2025 Helper/Provider and public-MCP smokes, and upload those exact bytes without rebuilding. See [docs/RELEASE.md](docs/RELEASE.md).
+Maintainers merge release metadata first, then build the v0.9.6 Windows Helper, ZXP, and AEX from the final clean protected-`main` commit. They validate the minimal ZXP payload, sign and verify both release assets, generate `SHA256SUMS-v0.9.6.txt`, run the After Effects 2025 Helper/Provider and public-MCP smokes, and upload those exact bytes without rebuilding. See [docs/RELEASE.md](docs/RELEASE.md).
 
 ## Contributors
 

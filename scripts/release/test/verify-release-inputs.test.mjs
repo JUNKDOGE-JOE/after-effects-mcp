@@ -540,9 +540,9 @@ test('legacy attestation Check provenance stays constrained without governing v0
   assert.doesNotMatch(docs, /GitHub Actions App[^\n]*(?:共享|shared)/i);
   assert.doesNotMatch(docs, /checks:write/);
   assert.doesNotMatch(docs, /外部前置|external prerequisite/i);
-  assert.match(docs, /ae-mcp-panel-v0\.9\.5-windows-x64\.zxp/);
-  assert.match(docs, /AeMcpNative-v0\.9\.5-windows-x64\.aex/);
-  assert.match(docs, /SHA256SUMS-v0\.9\.5\.txt/);
+  assert.match(docs, /ae-mcp-panel-v0\.9\.6-windows-x64\.zxp/);
+  assert.match(docs, /AeMcpNative-v0\.9\.6-windows-x64\.aex/);
+  assert.match(docs, /SHA256SUMS-v0\.9\.6\.txt/);
 });
 
 test('attestation workflow does not interpolate or log untrusted comment bodies', async () => {

@@ -10,13 +10,13 @@
 | Preview 输出 | 默认位于操作系统临时目录的 `ae_mcp_previews/<session>/...png`，可用 `out_dir` 覆盖 |
 | Checkpoint 存储 | 操作系统临时目录下的 `ae_mcp_checkpoints/<basename>/<id>.aep + .json` |
 
-### v0.9.5 平台与分发契约
+### v0.9.6 平台与分发契约
 
-v0.9.5 是 Windows x64 修复版本。固定发布资产为
-`ae-mcp-panel-v0.9.5-windows-x64.zxp`、
-`AeMcpNative-v0.9.5-windows-x64.aex` 与 `SHA256SUMS-v0.9.5.txt`。
+v0.9.6 是 Windows x64 修复版本。固定发布资产为
+`ae-mcp-panel-v0.9.6-windows-x64.zxp`、
+`AeMcpNative-v0.9.6-windows-x64.aex` 与 `SHA256SUMS-v0.9.6.txt`。
 ZXP 内含 Windows Platform Helper；AEX 需手动复制到所选 AE 插件目录。外部 runtime/launcher
-可由面板首跑向导通过固定到 v0.9.5 tag 的 `uv tool install` 联网安装。本版不提供
+可由面板首跑向导通过固定到 v0.9.6 tag 的 `uv tool install` 联网安装。本版不提供
 bundled/offline runtime、一体化安装器或 Windows RuntimeManager。
 
 Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都只是对应 AI 通道的
@@ -239,14 +239,14 @@ uv run python scripts/generate_native_exec.py --check
 | Preview output | `ae_mcp_previews/<session>/...png` in the operating-system temporary directory unless `out_dir` is set |
 | Checkpoint store | `ae_mcp_checkpoints/<basename>/<id>.aep + .json` under the operating-system temporary directory |
 
-### v0.9.5 platform and distribution contract
+### v0.9.6 platform and distribution contract
 
-v0.9.5 is the corrective Windows x64 release. Its fixed assets are
-`ae-mcp-panel-v0.9.5-windows-x64.zxp`,
-`AeMcpNative-v0.9.5-windows-x64.aex`, and `SHA256SUMS-v0.9.5.txt`.
+v0.9.6 is the corrective Windows x64 release. Its fixed assets are
+`ae-mcp-panel-v0.9.6-windows-x64.zxp`,
+`AeMcpNative-v0.9.6-windows-x64.aex`, and `SHA256SUMS-v0.9.6.txt`.
 The ZXP contains Windows Platform Helper. Install the AEX manually in the selected AE plug-in
 directory. The Panel's first-run wizard can install the external runtime/launcher online through
-a `uv tool install` pinned to the v0.9.5 tag. This release has no bundled/offline runtime,
+a `uv tool install` pinned to the v0.9.6 tag. This release has no bundled/offline runtime,
 integrated installer, or Windows RuntimeManager.
 
 Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional**

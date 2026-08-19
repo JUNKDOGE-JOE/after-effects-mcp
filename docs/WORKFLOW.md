@@ -2,15 +2,15 @@
 
 ## 中文
 
-这份文档描述 v0.9.5 的执行工作流。Windows x64 发布资产是
-`ae-mcp-panel-v0.9.5-windows-x64.zxp`、
-`AeMcpNative-v0.9.5-windows-x64.aex` 与 `SHA256SUMS-v0.9.5.txt`。
+这份文档描述 v0.9.6 的执行工作流。Windows x64 发布资产是
+`ae-mcp-panel-v0.9.6-windows-x64.zxp`、
+`AeMcpNative-v0.9.6-windows-x64.aex` 与 `SHA256SUMS-v0.9.6.txt`。
 使用受支持的 ZXP installer 安装面板，并手动把 AEX 复制到所选 AE 插件目录。
 Claude Code CLI、Codex CLI 与 ZCode CLI/app-server 都是相应 AI 通道的
 **可选**依赖，不是 Core 或 AE 执行的前置条件。
 
-Windows v0.9.5 的 ZXP 包含 Platform Helper；外部 runtime/launcher 可由首跑向导通过
-固定到 v0.9.5 tag 的 `uv tool install` 联网安装。本版不提供 bundled/offline runtime、
+Windows v0.9.6 的 ZXP 包含 Platform Helper；外部 runtime/launcher 可由首跑向导通过
+固定到 v0.9.6 tag 的 `uv tool install` 联网安装。本版不提供 bundled/offline runtime、
 Windows RuntimeManager 或一体化安装器。macOS 的稳定 launcher 配置使用展开后的绝对路径
 `/Users/<USER>/.ae-mcp/bin/ae-mcp`，不会回退到裸 PATH。
 
@@ -102,18 +102,18 @@ uv run python scripts/generate_native_exec.py --check
 
 ## English
 
-This document describes the v0.9.5 execution workflow. The Windows x64 assets
-are `ae-mcp-panel-v0.9.5-windows-x64.zxp`,
-`AeMcpNative-v0.9.5-windows-x64.aex`, and `SHA256SUMS-v0.9.5.txt`.
+This document describes the v0.9.6 execution workflow. The Windows x64 assets
+are `ae-mcp-panel-v0.9.6-windows-x64.zxp`,
+`AeMcpNative-v0.9.6-windows-x64.aex`, and `SHA256SUMS-v0.9.6.txt`.
 Install the panel with a supported ZXP installer and copy the AEX manually to
 the selected AE plug-in directory.
 Claude Code CLI, Codex CLI, and the ZCode CLI/app-server are **optional**
 dependencies for their corresponding AI channels, not prerequisites for Core
 or AE execution.
 
-The v0.9.5 Windows ZXP contains Platform Helper. Its external runtime/launcher can
+The v0.9.6 Windows ZXP contains Platform Helper. Its external runtime/launcher can
 be installed online by the first-run wizard through a `uv tool install` pinned to
-the v0.9.5 tag. This release has no bundled/offline runtime, Windows RuntimeManager,
+the v0.9.6 tag. This release has no bundled/offline runtime, Windows RuntimeManager,
 or integrated installer. The macOS
 stable launcher uses the expanded absolute path `/Users/<USER>/.ae-mcp/bin/ae-mcp`
 and never falls back to bare PATH.
