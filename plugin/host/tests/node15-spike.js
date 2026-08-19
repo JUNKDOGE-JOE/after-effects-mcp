@@ -101,7 +101,7 @@ async function main() {
             jsonrpc: '2.0', id: 2, method: 'tools/list', params: {},
         });
         const tools = JSON.parse(listed.text).result.tools;
-        assert.deepStrictEqual(tools.map(function (tool) { return tool.name; }), ['ae_status', 'ae_exec', 'ae_previewFrame', 'ae_read']);
+        assert.deepStrictEqual(tools.map(function (tool) { return tool.name; }), ['ae_status', 'ae_exec', 'ae_previewFrame', 'ae_read', 'ae_checkpoint', 'ae_revert', 'ae_validateExpressions']);
         tools.forEach(function (tool) {
             assert.strictEqual(Object.prototype.hasOwnProperty.call(tool.inputSchema, 'oneOf'), false);
             assert.strictEqual(Object.prototype.hasOwnProperty.call(tool.inputSchema, 'allOf'), false);

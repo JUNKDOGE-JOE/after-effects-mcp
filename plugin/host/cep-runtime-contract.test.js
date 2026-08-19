@@ -39,6 +39,8 @@ const CEP_EXECUTED_FILES = [
     'mcp/annotations.js',
     'mcp/approval-gate.js',
     'mcp/checkpoint-store.js',
+    'mcp/checkpoint-ops.js',
+    'mcp/instructions.js',
     'mcp/error-hints.js',
     'mcp/jsx-result.js',
     'mcp/template.js',
@@ -51,6 +53,9 @@ const CEP_EXECUTED_FILES = [
     'mcp/tools/preview-frame.js',
     'mcp/png.js',
     'mcp/tools/read.js',
+    'mcp/tools/checkpoint.js',
+    'mcp/tools/revert.js',
+    'mcp/tools/validate-expressions.js',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',

@@ -74,3 +74,14 @@ Python `ae.previewFrame` 的 **`saveFrameToPng` 分支**移植：`comp_id` / `ti
 - 外部客户端的 `elicitation/create`（外部会话目前 tier null 放行）；Tool Library 的 `plan_decision` / `authorize_plan` 门。
 - `packages/core/tests/live` 的等价用例改打 `/mcp`（退出条件）。
 - 真机：AE 2026 上跑一遍四个工具 + `read.perf.jsx`；AE 2023/2024 众测。
+## 运行 live MCP 验收套件
+
+此套件不在 CI 运行，需要真实 AE 和已打开的面板。先在 AE 关闭时运行
+`install-plugin-dev.ps1` 安装面板，启动 AE（面板会启动 `:11488`），然后执行：
+
+```powershell
+cd plugin/host
+npm run test:live-mcp
+```
+
+可用 `--only status` 选择段落、`--no-cdp` 跳过面板 CDP 段、`--keep-ae` 在结束时保留 AE。
