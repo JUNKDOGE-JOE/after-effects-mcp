@@ -120,7 +120,7 @@ def _diagnose_template() -> Template:
 async def _probe_host(url: str, *, timeout_sec: float = 5.0) -> dict[str, Any]:
     """Raw GET /health to capture the echoed python handshake fields."""
     try:
-        async with httpx.AsyncClient(timeout=timeout_sec) as http:
+        async with httpx.AsyncClient(timeout=timeout_sec, trust_env=False) as http:
             r = await http.get(
                 f"{url}/health",
                 headers={_PY_VERSION_HEADER: _PY_VERSION},

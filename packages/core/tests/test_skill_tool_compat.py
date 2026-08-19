@@ -55,6 +55,100 @@ async def test_skill_use_execute_false_keeps_legacy_payload(monkeypatch, tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_skill_use_executes_legacy_args_schema_with_description(
+    monkeypatch, tmp_path, mock_backend
+):
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path / "skills"))
+    monkeypatch.setenv("AE_MCP_TOOL_DIR", str(tmp_path / "tools"))
+    tier = tmp_path / "tier"
+    tier.write_text("none\n", encoding="utf-8")
+    monkeypatch.setenv("AE_MCP_TOOL_APPROVAL_TIER_FILE", str(tier))
+    SkillStore().create(
+        Skill(
+            name="described-amount",
+            description="",
+            template_type="jsx",
+            template="JSON.stringify({ ok: true, amount: ${amount} })",
+            args_schema={
+                "amount": {
+                    "type": "number",
+                    "description": "Amount to report",
+                    "default": 50,
+                }
+            },
+        )
+    )
+    mock_backend.set_response('{"ok":true,"amount":50}')
+
+    result = await _run_skill_use(
+        S.AeSkillUseArgs(name="described-amount", execute=True),
+        None,
+    )
+
+    assert result["ok"] is True
+    assert len(mock_backend.calls) == 1
+    assert "amount: 50" in mock_backend.calls[0]["code"]
+
+
+@pytest.mark.asyncio
+async def test_skill_use_execute_true_returns_failure_payload_at_top_level(
+    monkeypatch, tmp_path, mock_backend
+):
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path / "skills"))
+    monkeypatch.setenv("AE_MCP_TOOL_DIR", str(tmp_path / "tools"))
+    tier = tmp_path / "tier"
+    tier.write_text("none\n", encoding="utf-8")
+    monkeypatch.setenv("AE_MCP_TOOL_APPROVAL_TIER_FILE", str(tier))
+    SkillStore().create(
+        Skill(
+            name="failure-payload",
+            description="",
+            template_type="jsx",
+            template='JSON.stringify({ ok: false, error: "example failure", changed: false })',
+            args_schema={},
+        )
+    )
+    mock_backend.set_response(
+        '{"ok":false,"error":"example failure","changed":false}'
+    )
+
+    result = await _run_skill_use(
+        S.AeSkillUseArgs(name="failure-payload", execute=True),
+        None,
+    )
+
+    assert result == {"ok": False, "error": "example failure", "changed": False}
+
+
+@pytest.mark.asyncio
+async def test_skill_use_execute_true_returns_success_payload_at_top_level(
+    monkeypatch, tmp_path, mock_backend
+):
+    monkeypatch.setenv("AE_MCP_SKILL_DIR", str(tmp_path / "skills"))
+    monkeypatch.setenv("AE_MCP_TOOL_DIR", str(tmp_path / "tools"))
+    tier = tmp_path / "tier"
+    tier.write_text("none\n", encoding="utf-8")
+    monkeypatch.setenv("AE_MCP_TOOL_APPROVAL_TIER_FILE", str(tier))
+    SkillStore().create(
+        Skill(
+            name="success-payload",
+            description="",
+            template_type="jsx",
+            template='JSON.stringify({ ok: true, changed: true, layers: ["a"] })',
+            args_schema={},
+        )
+    )
+    mock_backend.set_response('{"ok":true,"changed":true,"layers":["a"]}')
+
+    result = await _run_skill_use(
+        S.AeSkillUseArgs(name="success-payload", execute=True),
+        None,
+    )
+
+    assert result == {"ok": True, "changed": True, "layers": ["a"]}
+
+
+@pytest.mark.asyncio
 async def test_skill_use_execute_true_none_still_elicits_destructive_jsx(
     monkeypatch, tmp_path, mock_backend
 ):

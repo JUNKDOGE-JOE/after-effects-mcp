@@ -2206,12 +2206,7 @@ class ToolExecutionEngine:
             started_at=started_at,
         )
         self._record_successful_use(plan)
-        return {
-            "ok": True,
-            "name": record.skill.name,
-            "template_type": record.skill.template_type,
-            "result": cast(JsonValue, dict(parsed)),
-        }
+        return parsed
 
 
 __all__ = [

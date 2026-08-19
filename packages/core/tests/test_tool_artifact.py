@@ -16,6 +16,7 @@ from ae_mcp.tool_artifact import (
     legacy_artifact_id,
     max_risk,
     new_user_artifact_id,
+    validate_args_schema,
 )
 
 
@@ -90,6 +91,32 @@ def test_content_hash_binds_kind_content_and_args_schema():
     assert base != compute_content_hash(
         "expression", "return 1;", {"x": {"type": "number"}}
     )
+
+
+def test_args_schema_property_accepts_bounded_description():
+    schema = {"amount": {"type": "number", "description": "Cafe\u0301", "default": 50}}
+
+    assert validate_args_schema(schema) == {
+        "amount": {"type": "number", "description": "Caf\u00e9", "default": 50}
+    }
+
+
+def test_args_schema_property_rejects_non_string_description():
+    with pytest.raises(
+        ValueError,
+        match="argsSchema property amount description must be a string",
+    ):
+        validate_args_schema({"amount": {"type": "number", "description": 1}})
+
+
+def test_args_schema_property_rejects_description_over_1024_characters():
+    with pytest.raises(
+        ValueError,
+        match="argsSchema property amount description exceeds 1024 characters",
+    ):
+        validate_args_schema(
+            {"amount": {"type": "number", "description": "x" * 1025}}
+        )
 
 
 def test_namespaced_ids_are_stable_and_non_overlapping(tmp_path: Path):
