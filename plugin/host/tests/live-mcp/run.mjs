@@ -158,9 +158,9 @@ async function main() {
             ],
             [
                 'layers',
-                { target: 'layers', comp: { id: compId }, page: { offset: 1, limit: 1 } },
+                { target: 'layers', comp: { id: compId }, page: { offset: 0, limit: 1 } },
                 function (v) {
-                    return v.returned === 1 && v.hasMore;
+                    return v.total === 2 && v.returned === 1 && v.hasMore === true && v.nextOffset === 1;
                 },
             ],
             [
@@ -241,7 +241,7 @@ async function main() {
         check('save disposable project', saved && saved.ok && saved.file, saved);
         const cp = value(await call('ae_checkpoint', { action: 'create', label: 'live' }));
         check('explicit checkpoint creates disk file', cp && cp.ok && fs.existsSync(cp.path), cp);
-        await call('ae_exec', { code: 'app.project.item(1).name="mutated"; JSON.stringify({ok:true})' });
+        await call('ae_exec', { code: 'AEMCP.compById(' + JSON.stringify(Number(compId)) + ').name="mutated"; JSON.stringify({ok:true})' });
         const reverted = value(await call('ae_revert', { checkpoint_id: cp.id }));
         check('revert succeeds', reverted && reverted.ok && reverted.reverted, reverted);
         const listed = value(await call('ae_checkpoint', { action: 'list', limit: 20 }));
@@ -266,7 +266,7 @@ async function main() {
     await section('validateExpressions', async function () {
         const setup = value(
             await call('ae_exec', {
-                code: 'var c=app.project.item(1); var bad=c.layers.addSolid([1,1,1],"bad",10,10,1); bad.property("ADBE Transform Group").property("ADBE Opacity").expression="thisIsNotDefined"; var good=c.layers.addSolid([1,1,1],"good",10,10,1); good.property("ADBE Transform Group").property("ADBE Opacity").expression="time*0+100"; JSON.stringify({ok:true})',
+                code: 'var c=AEMCP.compById(' + JSON.stringify(Number(compId)) + '); var bad=c.layers.addSolid([1,1,1],"bad",10,10,1); bad.property("ADBE Transform Group").property("ADBE Opacity").expression="thisIsNotDefined"; var good=c.layers.addSolid([1,1,1],"good",10,10,1); good.property("ADBE Transform Group").property("ADBE Opacity").expression="time*0+100"; JSON.stringify({ok:true})',
             }),
         );
         const checked = value(
@@ -401,11 +401,15 @@ async function main() {
         const script = fs.readFileSync(new URL('../../mcp/tools/read.perf.jsx', import.meta.url), 'utf8');
         const perf = value(await call('ae_exec', { code: script, timeout_sec: 300 }));
         check('perf fixture', perf && perf.ok, perf);
+        const perfComps = value(await call('ae_read', { target: 'comps', filter: { nameContains: 'ae_read_perf' } }));
+        const perfComp = perfComps && perfComps.items && perfComps.items[0] ? perfComps.items[0].itemId : null;
+        check('perf comp found via ae_read comps', Boolean(perfComp), perfComps);
         const begin = Date.now();
         const out = value(
-            await call('ae_read', { target: 'layers', comp: { name: 'ae_read_perf' }, page: { limit: 200 } }),
+            await call('ae_read', { target: 'layers', comp: { id: perfComp }, page: { limit: 200 } }),
         );
-        check('perf ae_read under 5s', out && Date.now() - begin < 5000, { ms: Date.now() - begin, out });
+        const ms = Date.now() - begin;
+        check('perf ae_read layers ok and under 5s', out && out.total === 300 && out.returned === 200 && ms < 5000, { ms, total: out && out.total, returned: out && out.returned });
     });
 }
 main()
