@@ -9,7 +9,12 @@ import {
 } from './native_exec.generated.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const outputPath = path.join(here, 'native_exec.generated.json');
+// The CEP host cannot reach native/ at runtime (only plugin/ ships), so the JSON
+// twin and a byte-identical copy of the RPC schema live under plugin/host/mcp/generated/.
+const outputDir = path.join(here, '..', '..', '..', 'plugin', 'host', 'mcp', 'generated');
+const outputPath = path.join(outputDir, 'native_exec.generated.json');
+const schemaSource = path.join(here, 'aegp-rpc.schema.json');
+const schemaOutput = path.join(outputDir, 'aegp-rpc.schema.json');
 
 // CEP 11 cannot require the generated .mjs module. Keep only the generated
 // fields needed by the host-side admission and result-contract checks; the
@@ -28,4 +33,6 @@ const output = {
   })),
 };
 
+fs.mkdirSync(outputDir, { recursive: true });
 fs.writeFileSync(outputPath, JSON.stringify(output, null, 2) + '\n', 'utf8');
+fs.copyFileSync(schemaSource, schemaOutput);

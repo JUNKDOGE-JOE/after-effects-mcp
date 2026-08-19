@@ -59,8 +59,10 @@ const CEP_EXECUTED_FILES = [
     'mcp/tools/revert.js',
     'mcp/tools/validate-expressions.js',
     'mcp/tools/native-exec.js',
-    '../../native/ae-plugin/protocol/native_exec.generated.json',
-    '../../native/ae-plugin/protocol/aegp-rpc.schema.json',
+    // Generated twins the host requires at runtime. They live under plugin/host because
+    // only plugin/ ships to the CEP extension directory (native/ does not).
+    'mcp/generated/native_exec.generated.json',
+    'mcp/generated/aegp-rpc.schema.json',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',
@@ -78,9 +80,7 @@ function stripComments(source) {
 }
 
 function read(name) {
-    const local = path.join(__dirname, name);
-    if (fs.existsSync(local)) return fs.readFileSync(local, 'utf8');
-    return fs.readFileSync(path.join(__dirname, '..', '..', name), 'utf8');
+    return fs.readFileSync(path.join(__dirname, name), 'utf8');
 }
 
 function readCode(name) {
@@ -103,6 +103,13 @@ test('the CEP manifest stays in sync with what the host actually requires', () =
         for (const match of source.matchAll(local)) {
             const target = path.posix.normalize(path.posix.join(path.posix.dirname(name), match[1]));
             if (target === 'package' || target === 'package.json') continue;
+            // The deployed extension contains plugin/ only: a require that escapes
+            // plugin/host (for example into native/) loads in the repo and dies on the
+            // real machine (2026-08-20 batch-2 live acceptance: the host never started).
+            assert.ok(
+                !target.startsWith('..'),
+                `${name} requires ${match[1]} which resolves outside plugin/host`,
+            );
             const candidates = [target + '.js', target + '/index.js', target];
             assert.ok(
                 candidates.some((candidate) => known.has(candidate)),

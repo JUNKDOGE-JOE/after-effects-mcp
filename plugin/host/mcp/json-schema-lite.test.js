@@ -2,8 +2,8 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const generated = require('../../../native/ae-plugin/protocol/native_exec.generated.json');
-const rpcSchema = require('../../../native/ae-plugin/protocol/aegp-rpc.schema.json');
+const generated = require('./generated/native_exec.generated.json');
+const rpcSchema = require('./generated/aegp-rpc.schema.json');
 const {
     SCHEMA_KEYWORDS,
     createValidator,

@@ -1,8 +1,8 @@
 'use strict';
 
 const crypto = require('crypto');
-const generated = require('../../../native/ae-plugin/protocol/native_exec.generated.json');
-const rpcSchema = require('../../../native/ae-plugin/protocol/aegp-rpc.schema.json');
+const generated = require('./generated/native_exec.generated.json');
+const rpcSchema = require('./generated/aegp-rpc.schema.json');
 const { createValidator, isPlainObject } = require('./json-schema-lite');
 
 const CAPABILITY_ID = 'ae.native.exec';

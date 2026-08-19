@@ -1,0 +1,6046 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ae-mcp.invalid/schemas/aegp-rpc-v1.json",
+  "title": "AeMcpNativeAegpRpcV1",
+  "x-framing": {
+    "lengthPrefixBytes": 4,
+    "byteOrder": "big-endian",
+    "encoding": "utf-8",
+    "maxFrameBytes": 524288,
+    "maxJsonDepth": 32,
+    "maxJsonNodes": 32768,
+    "maxStringLength": 8192,
+    "stringLengthUnit": "unicode-scalar-values",
+    "duplicateObjectKeys": "reject"
+  },
+  "x-bootstrap": {
+    "framingVersion": 1,
+    "helloEnvelopeVersion": 1,
+    "permanent": true,
+    "futureImplementations": "must-parse-v1-framing-and-hello-before-negotiation"
+  },
+  "x-lifecycle": {
+    "defaultDeadlineMs": 5000,
+    "maximumDeadlineMs": 30000,
+    "duplicateRequest": "reject-in-flight-or-nonidentical",
+    "terminalResponsesPerRequest": 1,
+    "pagination": "capability-owned-offset-limit-v1",
+    "defaultTerminalCacheEntries": 128,
+    "defaultTerminalCacheTtlMs": 60000,
+    "terminalObservationClockToleranceMs": 0,
+    "cancelDecision": "atomic-one-use-controller-receipt",
+    "graphInvalidation": "authenticated-internal-cep-jsx-boundary"
+  },
+  "x-digests": {
+    "algorithm": "sha256",
+    "canonicalization": "rfc8785-jcs",
+    "propertyNameSort": "utf-16-code-units",
+    "contractScope": "normalized-self-contained-input-and-result-schemas",
+    "capabilitiesScope": "ordered-full-capability-descriptors",
+    "requestScope": "complete-request-envelope",
+    "postconditionScope": "capability-id-version-and-result-value"
+  },
+  "oneOf": [
+    {
+      "$ref": "#/$defs/request"
+    },
+    {
+      "$ref": "#/$defs/response"
+    },
+    {
+      "$ref": "#/$defs/progressEvent"
+    }
+  ],
+  "$defs": {
+    "cancelParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetRequestId"
+      ],
+      "properties": {
+        "targetRequestId": {
+          "$ref": "#/$defs/requestId"
+        }
+      }
+    },
+    "cancelRequest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requestBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "sessionId"
+          ],
+          "properties": {
+            "method": {
+              "const": "cancel"
+            },
+            "params": {
+              "$ref": "#/$defs/cancelParams"
+            }
+          }
+        }
+      ]
+    },
+    "cancelResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "targetRequestId",
+        "state",
+        "terminalResponseExpected"
+      ],
+      "properties": {
+        "targetRequestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "state": {
+          "enum": [
+            "queued-cancelled",
+            "running-cancel-requested",
+            "running-not-cancellable",
+            "already-terminal",
+            "not-found"
+          ]
+        },
+        "terminalResponseExpected": {
+          "type": "boolean"
+        }
+      }
+    },
+    "cancelSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireVersion",
+        "kind",
+        "sessionId",
+        "requestId",
+        "method",
+        "ok",
+        "replayed",
+        "result"
+      ],
+      "properties": {
+        "wireVersion": {
+          "$ref": "#/$defs/wireVersion"
+        },
+        "kind": {
+          "const": "response"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "const": "cancel"
+        },
+        "ok": {
+          "const": true
+        },
+        "replayed": {
+          "const": false
+        },
+        "result": {
+          "$ref": "#/$defs/cancelResult"
+        }
+      }
+    },
+    "capabilitiesFullResult": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/capabilitiesResultBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "const": "full"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "$ref": "#/$defs/capabilityFullItem"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "capabilitiesParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ids": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/capabilityId"
+          }
+        },
+        "detail": {
+          "enum": [
+            "summary",
+            "full"
+          ],
+          "default": "summary",
+          "x-omissionBehavior": "summary"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50,
+          "x-omissionBehavior": 50
+        }
+      }
+    },
+    "capabilitiesRequest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requestBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "sessionId"
+          ],
+          "properties": {
+            "method": {
+              "const": "capabilities"
+            },
+            "params": {
+              "$ref": "#/$defs/capabilitiesParams"
+            }
+          }
+        }
+      ]
+    },
+    "capabilitiesResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/capabilitiesSummaryResult"
+        },
+        {
+          "$ref": "#/$defs/capabilitiesFullResult"
+        }
+      ]
+    },
+    "capabilitiesResultBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detail",
+        "items",
+        "nextCursor",
+        "queryDigest",
+        "capabilitiesDigest"
+      ],
+      "properties": {
+        "detail": {
+          "enum": [
+            "summary",
+            "full"
+          ]
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 100,
+          "items": {
+            "$ref": "#/$defs/capabilityResultItem"
+          }
+        },
+        "nextCursor": {
+          "type": "null"
+        },
+        "queryDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "capabilitiesDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "capabilitiesSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireVersion",
+        "kind",
+        "sessionId",
+        "requestId",
+        "method",
+        "ok",
+        "replayed",
+        "result"
+      ],
+      "properties": {
+        "wireVersion": {
+          "$ref": "#/$defs/wireVersion"
+        },
+        "kind": {
+          "const": "response"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "const": "capabilities"
+        },
+        "ok": {
+          "const": true
+        },
+        "replayed": {
+          "const": false
+        },
+        "result": {
+          "$ref": "#/$defs/capabilitiesResult"
+        }
+      }
+    },
+    "capabilitiesSummaryResult": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/capabilitiesResultBase"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "detail": {
+              "const": "summary"
+            },
+            "items": {
+              "type": "array",
+              "maxItems": 100,
+              "items": {
+                "$ref": "#/$defs/capabilitySummaryItem"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "capabilityFullItem": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nativePrimitiveDescriptor"
+        },
+        {
+          "properties": {
+            "detail": {
+              "const": "full"
+            }
+          }
+        }
+      ]
+    },
+    "capabilityId": {
+      "const": "ae.native.exec"
+    },
+    "capabilityResultItem": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/capabilitySummaryItem"
+        },
+        {
+          "$ref": "#/$defs/capabilityFullItem"
+        }
+      ]
+    },
+    "capabilitySummaryItem": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nativePrimitiveDescriptor"
+        },
+        {
+          "properties": {
+            "detail": {
+              "const": "summary"
+            }
+          }
+        }
+      ]
+    },
+    "clientIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "component",
+        "version",
+        "instanceId"
+      ],
+      "properties": {
+        "component": {
+          "enum": [
+            "core-broker",
+            "development-smoke"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "instanceId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "compatibility": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/compatibilityUnverified"
+        },
+        {
+          "$ref": "#/$defs/compatibilityVerified"
+        }
+      ]
+    },
+    "compatibilityUnverified": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "intendedPlatforms"
+      ],
+      "properties": {
+        "status": {
+          "const": "unverified"
+        },
+        "intendedPlatforms": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/platform"
+          }
+        }
+      }
+    },
+    "compatibilityVerified": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "intendedPlatforms",
+        "minimumHostMajor",
+        "maximumHostMajor"
+      ],
+      "properties": {
+        "status": {
+          "const": "verified"
+        },
+        "intendedPlatforms": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/platform"
+          }
+        },
+        "minimumHostMajor": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maximumHostMajor": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "x-invariant": "minimumHostMajor-must-not-exceed-maximumHostMajor"
+    },
+    "compiledSdk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "build",
+        "architecture"
+      ],
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "build": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "architecture": {
+          "enum": [
+            "arm64",
+            "x86_64"
+          ]
+        }
+      }
+    },
+    "compositionCurrentTime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "scale",
+        "secondsRational"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        },
+        "secondsRational": {
+          "$ref": "#/$defs/secondsRational"
+        }
+      },
+      "x-invariant": "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
+    },
+    "compositionLayerValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locator",
+        "stackIndex",
+        "name",
+        "type",
+        "videoEnabled",
+        "isThreeD",
+        "locked",
+        "parentLocator",
+        "sourceItemLocator"
+      ],
+      "properties": {
+        "locator": {
+          "$ref": "#/$defs/layerLocator"
+        },
+        "stackIndex": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "type": {
+          "enum": [
+            "av",
+            "camera",
+            "light",
+            "text",
+            "shape",
+            "model3d",
+            "null",
+            "adjustment",
+            "unknown"
+          ]
+        },
+        "videoEnabled": {
+          "type": "boolean"
+        },
+        "isThreeD": {
+          "type": "boolean"
+        },
+        "locked": {
+          "type": "boolean"
+        },
+        "parentLocator": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/layerLocator"
+            }
+          ]
+        },
+        "sourceItemLocator": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/sourceItemLocator"
+            }
+          ]
+        }
+      }
+    },
+    "compositionLayersListValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compositionLocator",
+        "compositionName",
+        "total",
+        "offset",
+        "limit",
+        "returned",
+        "hasMore",
+        "nextOffset",
+        "layers"
+      ],
+      "properties": {
+        "compositionLocator": {
+          "$ref": "#/$defs/compositionLocator"
+        },
+        "compositionName": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "total": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "offset": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "returned": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "nextOffset": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/safeNonnegativeInteger"
+            }
+          ]
+        },
+        "layers": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/compositionLayerValue"
+          }
+        }
+      },
+      "x-invariant": "returned-equals-layers-length-and-page-metadata-is-self-consistent"
+    },
+    "compositionLocator": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/locator"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "composition"
+            }
+          }
+        }
+      ]
+    },
+    "compositionSettingsChangedValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "compositionLocator",
+        "before",
+        "after"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "compositionLocator": {
+          "$ref": "#/$defs/compositionLocator"
+        },
+        "before": {
+          "$ref": "#/$defs/compositionSettingsReadValue"
+        },
+        "after": {
+          "$ref": "#/$defs/compositionSettingsReadValue"
+        }
+      }
+    },
+    "compositionSettingsReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compositionLocator",
+        "name",
+        "width",
+        "height",
+        "duration",
+        "frameDuration",
+        "frameRate",
+        "pixelAspectRatio",
+        "backgroundColor",
+        "workArea",
+        "displayStartTime",
+        "layerCount"
+      ],
+      "properties": {
+        "compositionLocator": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "hostInstanceId",
+            "sessionId",
+            "projectId",
+            "generation",
+            "objectId"
+          ],
+          "properties": {
+            "kind": {
+              "const": "composition"
+            },
+            "hostInstanceId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "sessionId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "projectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            },
+            "generation": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 9007199254740991
+            },
+            "objectId": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+            }
+          }
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000
+        },
+        "duration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "scale",
+            "secondsRational"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            "secondsRational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+            }
+          }
+        },
+        "frameDuration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "scale",
+            "secondsRational"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            "secondsRational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+            }
+          }
+        },
+        "frameRate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "numerator",
+            "denominator",
+            "rational"
+          ],
+          "properties": {
+            "numerator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "denominator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "rational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+            }
+          }
+        },
+        "pixelAspectRatio": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "numerator",
+            "denominator",
+            "rational"
+          ],
+          "properties": {
+            "numerator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "denominator": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2147483647
+            },
+            "rational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^[1-9][0-9]*(?:/[1-9][0-9]*)?$"
+            }
+          }
+        },
+        "backgroundColor": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "red",
+            "green",
+            "blue",
+            "alpha"
+          ],
+          "properties": {
+            "red": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "green": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "blue": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 255
+            },
+            "alpha": {
+              "const": 255
+            }
+          }
+        },
+        "workArea": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "start",
+            "duration"
+          ],
+          "properties": {
+            "start": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            },
+            "duration": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "value",
+                "scale",
+                "secondsRational"
+              ],
+              "properties": {
+                "value": {
+                  "type": "integer",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "scale": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4294967295
+                },
+                "secondsRational": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 28,
+                  "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+                }
+              }
+            }
+          }
+        },
+        "displayStartTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "scale",
+            "secondsRational"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            "secondsRational": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 28,
+              "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+            }
+          }
+        },
+        "layerCount": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "compositionTimeReadValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compositionLocator",
+        "currentTime"
+      ],
+      "properties": {
+        "compositionLocator": {
+          "$ref": "#/$defs/compositionLocator"
+        },
+        "currentTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "scale",
+            "secondsRational"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -2147483648,
+              "maximum": 2147483647
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 4294967295
+            },
+            "secondsRational": {
+              "$ref": "#/$defs/secondsRational"
+            }
+          }
+        }
+      },
+      "x-invariant": "secondsRational-is-the-reduced-canonical-form-of-value-over-scale"
+    },
+    "compositionTimeSetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "compositionLocator",
+        "beforeTime",
+        "afterTime"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "compositionLocator": {
+          "$ref": "#/$defs/compositionLocator"
+        },
+        "beforeTime": {
+          "$ref": "#/$defs/compositionCurrentTime"
+        },
+        "afterTime": {
+          "$ref": "#/$defs/compositionCurrentTime"
+        }
+      },
+      "x-invariant": "beforeTime-must-differ-from-afterTime-and-afterTime-must-equal-targetTime"
+    },
+    "decimalString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+    },
+    "errorCode": {
+      "enum": [
+        "NATIVE_UNAVAILABLE",
+        "NATIVE_UNSUPPORTED",
+        "WIRE_VERSION_MISMATCH",
+        "INVALID_REQUEST",
+        "INVALID_ARGUMENT",
+        "TRACK_MATTE_COMPOSITION_MISMATCH",
+        "LAYER_HAS_NO_AUDIO",
+        "LAYER_HAS_NO_VIDEO",
+        "DUPLICATE_REQUEST",
+        "PRECONDITION_FAILED",
+        "STALE_LOCATOR",
+        "DEADLINE_EXCEEDED",
+        "CANCELLED",
+        "QUEUE_FULL",
+        "AE_SHUTTING_DOWN",
+        "SESSION_STALE",
+        "CAPABILITY_FAILED",
+        "POSSIBLY_SIDE_EFFECTING_FAILURE"
+      ]
+    },
+    "errorDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        },
+        "capabilityId": {
+          "$ref": "#/$defs/capabilityId"
+        },
+        "idempotencyKey": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "supportedWireVersions": {
+          "$ref": "#/$defs/wireRange"
+        },
+        "currentGeneration": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        }
+      }
+    },
+    "errorPolicy": {
+      "oneOf": [
+        {
+          "properties": {
+            "code": {
+              "enum": [
+                "NATIVE_UNAVAILABLE",
+                "AE_SHUTTING_DOWN",
+                "SESSION_STALE"
+              ]
+            },
+            "retryable": {
+              "const": true
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "reconnect"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "NATIVE_UNSUPPORTED"
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "refresh-capabilities"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "WIRE_VERSION_MISMATCH"
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "reconnect"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "INVALID_REQUEST"
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "none"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "enum": [
+                "INVALID_ARGUMENT",
+                "TRACK_MATTE_COMPOSITION_MISMATCH",
+                "LAYER_HAS_NO_AUDIO",
+                "LAYER_HAS_NO_VIDEO"
+              ]
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "change-arguments"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "DUPLICATE_REQUEST"
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "inspect-state"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "PRECONDITION_FAILED"
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "enum": [
+                    "open-project",
+                    "change-arguments"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "STALE_LOCATOR"
+            },
+            "retryable": {
+              "const": true
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "refresh-locator"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "DEADLINE_EXCEEDED"
+            },
+            "retryable": {
+              "const": true
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "retry"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "CANCELLED"
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "none"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "QUEUE_FULL"
+            },
+            "retryable": {
+              "const": true
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "required": [
+                "retryAfterMs"
+              ],
+              "properties": {
+                "action": {
+                  "const": "retry"
+                }
+              }
+            }
+          }
+        },
+        {
+          "required": [
+            "details"
+          ],
+          "properties": {
+            "code": {
+              "enum": [
+                "NATIVE_UNAVAILABLE",
+                "NATIVE_UNSUPPORTED",
+                "INVALID_REQUEST",
+                "INVALID_ARGUMENT",
+                "TRACK_MATTE_COMPOSITION_MISMATCH",
+                "LAYER_HAS_NO_AUDIO",
+                "LAYER_HAS_NO_VIDEO",
+                "PRECONDITION_FAILED",
+                "STALE_LOCATOR",
+                "DEADLINE_EXCEEDED",
+                "CANCELLED",
+                "AE_SHUTTING_DOWN",
+                "SESSION_STALE",
+                "CAPABILITY_FAILED"
+              ]
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "completed"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "inspect-state"
+                }
+              }
+            },
+            "details": {
+              "allOf": [
+                {
+                  "$ref": "#/$defs/nativeProgramFailureDetails"
+                },
+                {
+                  "properties": {
+                    "disposition": {
+                      "const": "completed"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "CAPABILITY_FAILED"
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "not-started"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "inspect-state"
+                }
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "code": {
+              "const": "POSSIBLY_SIDE_EFFECTING_FAILURE"
+            },
+            "retryable": {
+              "const": false
+            },
+            "sideEffect": {
+              "const": "may-have-occurred"
+            },
+            "recovery": {
+              "properties": {
+                "action": {
+                  "const": "inspect-state"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "failureBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireVersion",
+        "kind",
+        "requestId",
+        "method",
+        "ok",
+        "replayed",
+        "error"
+      ],
+      "properties": {
+        "wireVersion": {
+          "$ref": "#/$defs/wireVersion"
+        },
+        "kind": {
+          "const": "response"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "$ref": "#/$defs/method"
+        },
+        "ok": {
+          "const": false
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "error": {
+          "$ref": "#/$defs/rpcError"
+        }
+      }
+    },
+    "helloFailure": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/failureBase"
+        },
+        {
+          "type": "object",
+          "not": {
+            "required": [
+              "sessionId"
+            ]
+          },
+          "properties": {
+            "replayed": {
+              "const": false
+            },
+            "method": {
+              "const": "hello"
+            },
+            "error": {
+              "properties": {
+                "code": {
+                  "enum": [
+                    "NATIVE_UNAVAILABLE",
+                    "WIRE_VERSION_MISMATCH",
+                    "INVALID_REQUEST",
+                    "INVALID_ARGUMENT"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "helloParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "supportedWireVersions",
+        "client",
+        "nonce"
+      ],
+      "properties": {
+        "supportedWireVersions": {
+          "$ref": "#/$defs/wireRange"
+        },
+        "client": {
+          "$ref": "#/$defs/clientIdentity"
+        },
+        "nonce": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      }
+    },
+    "helloRequest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requestBase"
+        },
+        {
+          "type": "object",
+          "not": {
+            "required": [
+              "sessionId"
+            ]
+          },
+          "properties": {
+            "method": {
+              "const": "hello"
+            },
+            "params": {
+              "$ref": "#/$defs/helloParams"
+            }
+          }
+        }
+      ]
+    },
+    "helloResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "selectedWireVersion",
+        "pluginVersion",
+        "compiledSdk",
+        "host",
+        "sessionId",
+        "sessionGeneration",
+        "limits",
+        "capabilitiesDigest",
+        "clientNonce"
+      ],
+      "properties": {
+        "selectedWireVersion": {
+          "$ref": "#/$defs/wireVersion"
+        },
+        "pluginVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "compiledSdk": {
+          "$ref": "#/$defs/compiledSdk"
+        },
+        "host": {
+          "$ref": "#/$defs/hostIdentity"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sessionGeneration": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "limits": {
+          "$ref": "#/$defs/negotiatedLimits"
+        },
+        "capabilitiesDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "clientNonce": {
+          "type": "string",
+          "minLength": 32,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9_-]+$"
+        }
+      },
+      "x-invariant": "selected-version-must-overlap-offer; outer-and-result-session-and-nonce-must-match; platform-and-architecture-must-agree"
+    },
+    "helloSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireVersion",
+        "kind",
+        "sessionId",
+        "requestId",
+        "method",
+        "ok",
+        "replayed",
+        "result"
+      ],
+      "properties": {
+        "wireVersion": {
+          "$ref": "#/$defs/wireVersion"
+        },
+        "kind": {
+          "const": "response"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "const": "hello"
+        },
+        "ok": {
+          "const": true
+        },
+        "replayed": {
+          "const": false
+        },
+        "result": {
+          "$ref": "#/$defs/helloResult"
+        }
+      }
+    },
+    "hostIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "application",
+        "version",
+        "build",
+        "platform",
+        "instanceId"
+      ],
+      "properties": {
+        "application": {
+          "const": "after-effects"
+        },
+        "version": {
+          "type": "string",
+          "pattern": "^[0-9]+\\.[0-9]+(?:\\.[0-9]+)?$"
+        },
+        "build": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "platform": {
+          "$ref": "#/$defs/platform"
+        },
+        "instanceId": {
+          "$ref": "#/$defs/uuid"
+        }
+      }
+    },
+    "idempotencyKey": {
+      "type": "string",
+      "minLength": 16,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "invalidateGraphParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reason"
+      ],
+      "properties": {
+        "reason": {
+          "const": "cep-jsx"
+        }
+      }
+    },
+    "invalidateGraphRequest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requestBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "sessionId"
+          ],
+          "properties": {
+            "method": {
+              "const": "invalidateGraph"
+            },
+            "params": {
+              "$ref": "#/$defs/invalidateGraphParams"
+            }
+          }
+        }
+      ]
+    },
+    "invalidateGraphResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "generation",
+        "invalidated"
+      ],
+      "properties": {
+        "generation": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "invalidated": {
+          "type": "boolean"
+        }
+      },
+      "x-invariant": "invalidated-implies-positive-generation;not-invalidated-implies-zero-generation"
+    },
+    "invalidateGraphSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireVersion",
+        "kind",
+        "sessionId",
+        "requestId",
+        "method",
+        "ok",
+        "replayed",
+        "result"
+      ],
+      "properties": {
+        "wireVersion": {
+          "$ref": "#/$defs/wireVersion"
+        },
+        "kind": {
+          "const": "response"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "const": "invalidateGraph"
+        },
+        "ok": {
+          "const": true
+        },
+        "replayed": {
+          "const": false
+        },
+        "result": {
+          "$ref": "#/$defs/invalidateGraphResult"
+        }
+      }
+    },
+    "invokeRequest": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/requestBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "sessionId"
+          ],
+          "properties": {
+            "method": {
+              "const": "invoke"
+            },
+            "params": {
+              "$ref": "#/$defs/nativeProgramInvokeParams"
+            }
+          }
+        }
+      ]
+    },
+    "invokeResult": {
+      "$ref": "#/$defs/nativeProgramInvokeResult"
+    },
+    "invokeSuccess": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireVersion",
+        "kind",
+        "sessionId",
+        "requestId",
+        "method",
+        "ok",
+        "replayed",
+        "result"
+      ],
+      "properties": {
+        "wireVersion": {
+          "$ref": "#/$defs/wireVersion"
+        },
+        "kind": {
+          "const": "response"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "const": "invoke"
+        },
+        "ok": {
+          "const": true
+        },
+        "replayed": {
+          "type": "boolean"
+        },
+        "result": {
+          "$ref": "#/$defs/invokeResult"
+        }
+      }
+    },
+    "keyframeBehaviors": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "temporalContinuous",
+        "temporalAutoBezier",
+        "spatialContinuous",
+        "spatialAutoBezier",
+        "roving"
+      ],
+      "properties": {
+        "temporalContinuous": {
+          "type": "boolean"
+        },
+        "temporalAutoBezier": {
+          "type": "boolean"
+        },
+        "spatialContinuous": {
+          "type": "boolean"
+        },
+        "spatialAutoBezier": {
+          "type": "boolean"
+        },
+        "roving": {
+          "type": "boolean"
+        }
+      }
+    },
+    "keyframeDetailsValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "propertyLocator",
+        "time",
+        "temporalDimensionality",
+        "valueType",
+        "value",
+        "inInterpolation",
+        "outInterpolation",
+        "temporalEaseDimensions",
+        "behaviors"
+      ],
+      "properties": {
+        "propertyLocator": {
+          "$ref": "#/$defs/streamLocator"
+        },
+        "time": {
+          "$ref": "#/$defs/keyframeExactTime"
+        },
+        "temporalDimensionality": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4
+        },
+        "valueType": {
+          "enum": [
+            "one-d",
+            "two-d",
+            "two-d-spatial",
+            "three-d",
+            "three-d-spatial",
+            "color"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/layerPropertyPrimitiveValue"
+        },
+        "inInterpolation": {
+          "enum": [
+            "none",
+            "linear",
+            "bezier",
+            "hold"
+          ]
+        },
+        "outInterpolation": {
+          "enum": [
+            "none",
+            "linear",
+            "bezier",
+            "hold"
+          ]
+        },
+        "temporalEaseDimensions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {
+            "$ref": "#/$defs/keyframeEaseDimension"
+          }
+        },
+        "behaviors": {
+          "$ref": "#/$defs/keyframeBehaviors"
+        }
+      },
+      "x-invariant": "value-matches-valueType-and-temporal-ease-dimensions-match-temporalDimensionality"
+    },
+    "keyframeEase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "speed",
+        "influence"
+      ],
+      "properties": {
+        "speed": {
+          "$ref": "#/$defs/decimalString"
+        },
+        "influence": {
+          "$ref": "#/$defs/decimalString"
+        }
+      },
+      "x-invariant": "speed-and-influence-are-finite-and-influence-is-within-0-to-100"
+    },
+    "keyframeEaseDimension": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dimension",
+        "inEase",
+        "outEase"
+      ],
+      "properties": {
+        "dimension": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3
+        },
+        "inEase": {
+          "$ref": "#/$defs/keyframeEase"
+        },
+        "outEase": {
+          "$ref": "#/$defs/keyframeEase"
+        }
+      }
+    },
+    "keyframeExactTime": {
+      "$ref": "#/$defs/compositionCurrentTime"
+    },
+    "keyframeMutationValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "layerLocator",
+        "propertyLocator",
+        "time",
+        "keyframeCountBefore",
+        "keyframeCountAfter",
+        "beforeKeyframe",
+        "afterKeyframe"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "layerLocator": {
+          "$ref": "#/$defs/layerLocator"
+        },
+        "propertyLocator": {
+          "$ref": "#/$defs/streamLocator"
+        },
+        "time": {
+          "$ref": "#/$defs/keyframeExactTime"
+        },
+        "keyframeCountBefore": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "keyframeCountAfter": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "beforeKeyframe": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/keyframeDetailsValue"
+            }
+          ]
+        },
+        "afterKeyframe": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/keyframeDetailsValue"
+            }
+          ]
+        }
+      },
+      "x-invariant": "before-and-after-keyframes-are-bound-to-propertyLocator-and-time"
+    },
+    "keyframeTimeInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "scale"
+      ],
+      "properties": {
+        "value": {
+          "type": "integer",
+          "minimum": -2147483648,
+          "maximum": 2147483647
+        },
+        "scale": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4294967295
+        }
+      }
+    },
+    "layerLocator": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/locator"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "layer"
+            }
+          }
+        }
+      ]
+    },
+    "layerPropertiesListValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "layerLocator",
+        "parentPropertyLocator",
+        "layerName",
+        "sampleTime",
+        "total",
+        "offset",
+        "limit",
+        "returned",
+        "hasMore",
+        "nextOffset",
+        "properties"
+      ],
+      "properties": {
+        "layerLocator": {
+          "$ref": "#/$defs/layerLocator"
+        },
+        "parentPropertyLocator": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/streamLocator"
+            }
+          ]
+        },
+        "layerName": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "sampleTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "scale",
+            "mode"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "scale": {
+              "$ref": "#/$defs/safePositiveInteger"
+            },
+            "mode": {
+              "const": "comp-time"
+            }
+          }
+        },
+        "total": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "offset": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25
+        },
+        "returned": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 25
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "nextOffset": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/safeNonnegativeInteger"
+            }
+          ]
+        },
+        "properties": {
+          "type": "array",
+          "maxItems": 25,
+          "items": {
+            "$ref": "#/$defs/layerPropertyEntryValue"
+          }
+        }
+      },
+      "x-invariant": "returned-equals-properties-length-and-page-metadata-and-value-types-are-self-consistent"
+    },
+    "layerPropertyEntryValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "propertyLocator",
+        "propertyIndex",
+        "name",
+        "matchName",
+        "groupingType",
+        "childCount",
+        "hidden",
+        "disabled",
+        "modified",
+        "canVaryOverTime",
+        "timeVarying",
+        "valueType",
+        "valueStatus",
+        "value"
+      ],
+      "properties": {
+        "propertyLocator": {
+          "$ref": "#/$defs/streamLocator"
+        },
+        "propertyIndex": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "matchName": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "groupingType": {
+          "enum": [
+            "leaf",
+            "named-group",
+            "indexed-group"
+          ]
+        },
+        "childCount": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "disabled": {
+          "type": "boolean"
+        },
+        "modified": {
+          "type": "boolean"
+        },
+        "canVaryOverTime": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "timeVarying": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "boolean"
+            }
+          ]
+        },
+        "valueType": {
+          "enum": [
+            "none",
+            "one-d",
+            "two-d",
+            "two-d-spatial",
+            "three-d",
+            "three-d-spatial",
+            "color",
+            "arb",
+            "marker",
+            "layer-id",
+            "mask-id",
+            "mask",
+            "text-document",
+            "unknown"
+          ]
+        },
+        "valueStatus": {
+          "enum": [
+            "group",
+            "sampled",
+            "no-data",
+            "unsupported"
+          ]
+        },
+        "value": {
+          "$ref": "#/$defs/layerPropertyValue"
+        }
+      }
+    },
+    "layerPropertyKeyframeValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "keyframeIndex",
+        "time",
+        "value",
+        "inInterpolation",
+        "outInterpolation"
+      ],
+      "properties": {
+        "keyframeIndex": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "time": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value",
+            "scale",
+            "mode"
+          ],
+          "properties": {
+            "value": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "scale": {
+              "$ref": "#/$defs/safePositiveInteger"
+            },
+            "mode": {
+              "const": "comp-time"
+            }
+          }
+        },
+        "value": {
+          "$ref": "#/$defs/layerPropertyPrimitiveValue"
+        },
+        "inInterpolation": {
+          "enum": [
+            "none",
+            "linear",
+            "bezier",
+            "hold"
+          ]
+        },
+        "outInterpolation": {
+          "enum": [
+            "none",
+            "linear",
+            "bezier",
+            "hold"
+          ]
+        }
+      }
+    },
+    "layerPropertyKeyframesListValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "propertyLocator",
+        "valueType",
+        "total",
+        "offset",
+        "limit",
+        "returned",
+        "hasMore",
+        "nextOffset",
+        "keyframes"
+      ],
+      "properties": {
+        "propertyLocator": {
+          "$ref": "#/$defs/streamLocator"
+        },
+        "valueType": {
+          "enum": [
+            "one-d",
+            "two-d",
+            "two-d-spatial",
+            "three-d",
+            "three-d-spatial",
+            "color"
+          ]
+        },
+        "total": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "offset": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 25
+        },
+        "returned": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 25
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "nextOffset": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/safeNonnegativeInteger"
+            }
+          ]
+        },
+        "keyframes": {
+          "type": "array",
+          "maxItems": 25,
+          "items": {
+            "$ref": "#/$defs/layerPropertyKeyframeValue"
+          }
+        }
+      },
+      "x-invariant": "returned-equals-keyframes-length-and-index-page-time-order-and-value-types-are-self-consistent"
+    },
+    "layerPropertyPrimitiveValue": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "scalar"
+            },
+            "value": {
+              "$ref": "#/$defs/decimalString"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "components"
+          ],
+          "properties": {
+            "kind": {
+              "const": "vector"
+            },
+            "components": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 3,
+              "items": {
+                "$ref": "#/$defs/decimalString"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "alpha",
+            "red",
+            "green",
+            "blue"
+          ],
+          "properties": {
+            "kind": {
+              "const": "color"
+            },
+            "alpha": {
+              "$ref": "#/$defs/decimalString"
+            },
+            "red": {
+              "$ref": "#/$defs/decimalString"
+            },
+            "green": {
+              "$ref": "#/$defs/decimalString"
+            },
+            "blue": {
+              "$ref": "#/$defs/decimalString"
+            }
+          }
+        }
+      ]
+    },
+    "layerPropertySetValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "changed",
+        "layerLocator",
+        "propertyLocator",
+        "valueType",
+        "beforeValue",
+        "afterValue"
+      ],
+      "properties": {
+        "changed": {
+          "const": true
+        },
+        "layerLocator": {
+          "$ref": "#/$defs/layerLocator"
+        },
+        "propertyLocator": {
+          "$ref": "#/$defs/streamLocator"
+        },
+        "valueType": {
+          "enum": [
+            "one-d",
+            "two-d",
+            "two-d-spatial",
+            "three-d",
+            "three-d-spatial",
+            "color"
+          ]
+        },
+        "beforeValue": {
+          "$ref": "#/$defs/layerPropertyPrimitiveValue"
+        },
+        "afterValue": {
+          "$ref": "#/$defs/layerPropertyPrimitiveValue"
+        }
+      },
+      "x-invariant": "beforeValue-must-differ-from-afterValue-and-values-must-match-valueType"
+    },
+    "layerPropertyValue": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ],
+          "properties": {
+            "kind": {
+              "const": "scalar"
+            },
+            "value": {
+              "$ref": "#/$defs/decimalString"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "components"
+          ],
+          "properties": {
+            "kind": {
+              "const": "vector"
+            },
+            "components": {
+              "type": "array",
+              "minItems": 2,
+              "maxItems": 3,
+              "items": {
+                "$ref": "#/$defs/decimalString"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "alpha",
+            "red",
+            "green",
+            "blue"
+          ],
+          "properties": {
+            "kind": {
+              "const": "color"
+            },
+            "alpha": {
+              "$ref": "#/$defs/decimalString"
+            },
+            "red": {
+              "$ref": "#/$defs/decimalString"
+            },
+            "green": {
+              "$ref": "#/$defs/decimalString"
+            },
+            "blue": {
+              "$ref": "#/$defs/decimalString"
+            }
+          }
+        }
+      ]
+    },
+    "locator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "hostInstanceId",
+        "sessionId",
+        "projectId",
+        "generation",
+        "objectId"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "project",
+            "item",
+            "composition",
+            "layer",
+            "stream"
+          ]
+        },
+        "hostInstanceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "projectId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "generation": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "objectId": {
+          "$ref": "#/$defs/uuid"
+        }
+      },
+      "x-invariant": "server-issued-opaque-identifiers-bound-to-host-session-project-generation"
+    },
+    "method": {
+      "enum": [
+        "hello",
+        "capabilities",
+        "invoke",
+        "invalidateGraph",
+        "cancel"
+      ]
+    },
+    "nativePrimitiveDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "detail",
+        "id",
+        "version",
+        "schemaVersion",
+        "summary",
+        "risk",
+        "mutability",
+        "idempotency",
+        "cancellation",
+        "undo",
+        "sideEffectSummary",
+        "preconditions",
+        "compatibility",
+        "requiredSuite",
+        "valueKind",
+        "requiredSkill",
+        "primitiveCount"
+      ],
+      "properties": {
+        "detail": {
+          "enum": [
+            "summary",
+            "full"
+          ]
+        },
+        "id": {
+          "const": "ae.native.exec"
+        },
+        "version": {
+          "const": 1
+        },
+        "schemaVersion": {
+          "const": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "risk": {
+          "const": "write"
+        },
+        "mutability": {
+          "const": "mutating"
+        },
+        "idempotency": {
+          "const": "idempotency-key"
+        },
+        "cancellation": {
+          "const": "before-dispatch"
+        },
+        "undo": {
+          "const": "ae-undo-group"
+        },
+        "sideEffectSummary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "preconditions": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        },
+        "compatibility": {
+          "$ref": "#/$defs/compatibility"
+        },
+        "requiredSuite": {
+          "const": "generated-primitive-union"
+        },
+        "valueKind": {
+          "const": "Json"
+        },
+        "requiredSkill": {
+          "const": "builtin:skill:ae-execution-guide"
+        },
+        "primitiveCount": {
+          "const": 23
+        },
+        "contractDigest": {
+          "$ref": "#/$defs/sha256"
+        },
+        "inputSchema": {
+          "type": "object"
+        },
+        "resultSchema": {
+          "type": "object"
+        },
+        "primitives": {
+          "type": "array",
+          "minItems": 23,
+          "maxItems": 23,
+          "items": {
+            "type": "object"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "detail": {
+                "const": "full"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "contractDigest",
+              "inputSchema",
+              "resultSchema",
+              "primitives"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "contractDigest"
+                  ]
+                },
+                {
+                  "required": [
+                    "inputSchema"
+                  ]
+                },
+                {
+                  "required": [
+                    "resultSchema"
+                  ]
+                },
+                {
+                  "required": [
+                    "primitives"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nativeProgramEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "engine",
+        "hostInstanceId",
+        "sessionId",
+        "requestId",
+        "capabilityId",
+        "capabilityVersion",
+        "startedAtUnixMs",
+        "completedAtUnixMs",
+        "effect",
+        "postcondition",
+        "requestDigest"
+      ],
+      "properties": {
+        "engine": {
+          "const": "native-aegp"
+        },
+        "hostInstanceId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "capabilityId": {
+          "const": "ae.native.exec"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "startedAtUnixMs": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "completedAtUnixMs": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "effect": {
+          "enum": [
+            "none",
+            "committed",
+            "may-have-occurred"
+          ]
+        },
+        "postcondition": {
+          "$ref": "#/$defs/nativeProgramPostconditionEvidence"
+        },
+        "requestDigest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "nativeProgramFailureDetails": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "disposition",
+        "completedOperations",
+        "outputs",
+        "evidence",
+        "undo"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.native.exec"
+        },
+        "operationKey": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "disposition": {
+          "enum": [
+            "not-started",
+            "completed",
+            "possibly-side-effecting"
+          ]
+        },
+        "completedOperations": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/nativeProgramOperationSummary"
+              },
+              {
+                "properties": {
+                  "status": {
+                    "const": "completed"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "failedOperation": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/nativeProgramOperationSummary"
+            },
+            {
+              "properties": {
+                "status": {
+                  "const": "failed"
+                }
+              }
+            }
+          ]
+        },
+        "outputs": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": true
+        },
+        "evidence": {
+          "$ref": "#/$defs/nativeProgramEvidence"
+        },
+        "undo": {
+          "$ref": "#/$defs/nativeProgramUndoEvidence"
+        }
+      },
+      "allOf": [
+        {
+          "properties": {
+            "evidence": {
+              "properties": {
+                "postcondition": {
+                  "properties": {
+                    "verified": {
+                      "const": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "possibly-side-effecting"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "operationKey"
+            ],
+            "properties": {
+              "evidence": {
+                "properties": {
+                  "effect": {
+                    "const": "may-have-occurred"
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "evidence": {
+                "properties": {
+                  "effect": {
+                    "const": "none"
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "not-started"
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "failedOperation"
+              ]
+            },
+            "properties": {
+              "completedOperations": {
+                "maxItems": 0
+              },
+              "outputs": {
+                "maxProperties": 0
+              },
+              "undo": {
+                "properties": {
+                  "available": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "nativeProgramInvokeParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "capabilityVersion",
+        "arguments"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.native.exec"
+        },
+        "capabilityVersion": {
+          "const": 1
+        },
+        "arguments": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "operations"
+          ],
+          "allOf": [
+            {
+              "if": {
+                "required": [
+                  "operations"
+                ],
+                "properties": {
+                  "operations": {
+                    "items": {
+                      "required": [
+                        "op"
+                      ],
+                      "properties": {
+                        "op": {
+                          "enum": [
+                            "composition.resolve",
+                            "layer.resolve",
+                            "property.resolve",
+                            "project.items.list",
+                            "composition.layers.list",
+                            "composition.selectedLayers.list",
+                            "composition.time.read",
+                            "composition.settings.read",
+                            "layer.properties.list",
+                            "property.keyframes.list",
+                            "property.keyframe.details.read"
+                          ]
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "then": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "operationKey"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "undoGroup"
+                      ]
+                    }
+                  ]
+                }
+              },
+              "else": {
+                "required": [
+                  "operationKey",
+                  "undoGroup"
+                ]
+              }
+            }
+          ],
+          "properties": {
+            "operationKey": {
+              "type": "string",
+              "minLength": 16,
+              "maxLength": 64,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "undoGroup": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "operations": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.resolve"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "locator"
+                        ],
+                        "properties": {
+                          "locator": {
+                            "allOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "hostInstanceId",
+                                  "sessionId",
+                                  "projectId",
+                                  "generation",
+                                  "objectId"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "enum": [
+                                      "project",
+                                      "item",
+                                      "composition",
+                                      "layer",
+                                      "stream"
+                                    ]
+                                  },
+                                  "hostInstanceId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "sessionId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "projectId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "generation": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "objectId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  }
+                                },
+                                "x-invariant": "server-issued-opaque-identifiers-bound-to-host-session-project-generation"
+                              },
+                              {
+                                "properties": {
+                                  "kind": {
+                                    "const": "composition"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "layer.resolve"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition",
+                          "locator"
+                        ],
+                        "properties": {
+                          "locator": {
+                            "allOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "hostInstanceId",
+                                  "sessionId",
+                                  "projectId",
+                                  "generation",
+                                  "objectId"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "enum": [
+                                      "project",
+                                      "item",
+                                      "composition",
+                                      "layer",
+                                      "stream"
+                                    ]
+                                  },
+                                  "hostInstanceId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "sessionId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "projectId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "generation": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "objectId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  }
+                                },
+                                "x-invariant": "server-issued-opaque-identifiers-bound-to-host-session-project-generation"
+                              },
+                              {
+                                "properties": {
+                                  "kind": {
+                                    "const": "layer"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.resolve"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "layer",
+                          "locator"
+                        ],
+                        "properties": {
+                          "locator": {
+                            "allOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "hostInstanceId",
+                                  "sessionId",
+                                  "projectId",
+                                  "generation",
+                                  "objectId"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "enum": [
+                                      "project",
+                                      "item",
+                                      "composition",
+                                      "layer",
+                                      "stream"
+                                    ]
+                                  },
+                                  "hostInstanceId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "sessionId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "projectId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "generation": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "objectId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  }
+                                },
+                                "x-invariant": "server-issued-opaque-identifiers-bound-to-host-session-project-generation"
+                              },
+                              {
+                                "properties": {
+                                  "kind": {
+                                    "const": "stream"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "layer": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "project.items.list"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "limit",
+                          "offset"
+                        ],
+                        "properties": {
+                          "offset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "default": 0,
+                            "x-omissionBehavior": 0
+                          },
+                          "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 50
+                          },
+                          "projectLocator": {
+                            "allOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "hostInstanceId",
+                                  "sessionId",
+                                  "projectId",
+                                  "generation",
+                                  "objectId"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "enum": [
+                                      "project",
+                                      "item",
+                                      "composition",
+                                      "layer",
+                                      "stream"
+                                    ]
+                                  },
+                                  "hostInstanceId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "sessionId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "projectId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  },
+                                  "generation": {
+                                    "type": "integer",
+                                    "minimum": 1,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "objectId": {
+                                    "type": "string",
+                                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+                                  }
+                                },
+                                "x-invariant": "server-issued-opaque-identifiers-bound-to-host-session-project-generation"
+                              },
+                              {
+                                "properties": {
+                                  "kind": {
+                                    "const": "project"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.layers.list"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition",
+                          "limit",
+                          "offset"
+                        ],
+                        "properties": {
+                          "offset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "default": 0,
+                            "x-omissionBehavior": 0
+                          },
+                          "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 25
+                          },
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.selectedLayers.list"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition",
+                          "limit",
+                          "offset"
+                        ],
+                        "properties": {
+                          "offset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "default": 0,
+                            "x-omissionBehavior": 0
+                          },
+                          "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 25
+                          },
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.time.read"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition"
+                        ],
+                        "properties": {
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.time.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition",
+                          "targetTime"
+                        ],
+                        "properties": {
+                          "targetTime": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.settings.read"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition"
+                        ],
+                        "properties": {
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.duration.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition",
+                          "duration"
+                        ],
+                        "properties": {
+                          "duration": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.frameRate.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition",
+                          "frameRate"
+                        ],
+                        "properties": {
+                          "frameRate": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "numerator",
+                              "denominator"
+                            ],
+                            "properties": {
+                              "numerator": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
+                              },
+                              "denominator": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
+                              }
+                            }
+                          },
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.pixelAspectRatio.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition",
+                          "pixelAspectRatio"
+                        ],
+                        "properties": {
+                          "pixelAspectRatio": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "numerator",
+                              "denominator"
+                            ],
+                            "properties": {
+                              "numerator": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
+                              },
+                              "denominator": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2147483647
+                              }
+                            }
+                          },
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "composition.displayStartTime.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "composition",
+                          "displayStartTime"
+                        ],
+                        "properties": {
+                          "displayStartTime": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "composition": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "layer.properties.list"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "layer",
+                          "limit",
+                          "offset"
+                        ],
+                        "properties": {
+                          "offset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "default": 0,
+                            "x-omissionBehavior": 0
+                          },
+                          "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 25
+                          },
+                          "layer": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "parentProperty": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.keyframes.list"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "limit",
+                          "offset",
+                          "property"
+                        ],
+                        "properties": {
+                          "offset": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991,
+                            "default": 0,
+                            "x-omissionBehavior": 0
+                          },
+                          "limit": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 25
+                          },
+                          "property": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.value.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "layer",
+                          "property",
+                          "value"
+                        ],
+                        "properties": {
+                          "value": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "value"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "scalar"
+                                  },
+                                  "value": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "components"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "vector"
+                                  },
+                                  "components": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 3,
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 32,
+                                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "alpha",
+                                  "red",
+                                  "green",
+                                  "blue"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "color"
+                                  },
+                                  "alpha": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  },
+                                  "red": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  },
+                                  "green": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  },
+                                  "blue": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "layer": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "property": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.keyframe.details.read"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "property",
+                          "time"
+                        ],
+                        "properties": {
+                          "time": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "property": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.keyframe.add"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "layer",
+                          "property",
+                          "time",
+                          "value"
+                        ],
+                        "properties": {
+                          "time": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "value": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "value"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "scalar"
+                                  },
+                                  "value": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "components"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "vector"
+                                  },
+                                  "components": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 3,
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 32,
+                                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "alpha",
+                                  "red",
+                                  "green",
+                                  "blue"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "color"
+                                  },
+                                  "alpha": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  },
+                                  "red": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  },
+                                  "green": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  },
+                                  "blue": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "layer": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "property": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.keyframe.value.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "layer",
+                          "property",
+                          "time",
+                          "value"
+                        ],
+                        "properties": {
+                          "time": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "value": {
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "value"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "scalar"
+                                  },
+                                  "value": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "components"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "vector"
+                                  },
+                                  "components": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 3,
+                                    "items": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 32,
+                                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                    }
+                                  }
+                                }
+                              },
+                              {
+                                "type": "object",
+                                "additionalProperties": false,
+                                "required": [
+                                  "kind",
+                                  "alpha",
+                                  "red",
+                                  "green",
+                                  "blue"
+                                ],
+                                "properties": {
+                                  "kind": {
+                                    "const": "color"
+                                  },
+                                  "alpha": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  },
+                                  "red": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  },
+                                  "green": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  },
+                                  "blue": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 32,
+                                    "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                  }
+                                }
+                              }
+                            ]
+                          },
+                          "layer": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "property": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.keyframe.interpolation.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "inInterpolation",
+                          "layer",
+                          "outInterpolation",
+                          "property",
+                          "time"
+                        ],
+                        "properties": {
+                          "time": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "inInterpolation": {
+                            "enum": [
+                              "linear",
+                              "bezier",
+                              "hold"
+                            ]
+                          },
+                          "outInterpolation": {
+                            "enum": [
+                              "linear",
+                              "bezier",
+                              "hold"
+                            ]
+                          },
+                          "layer": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "property": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.keyframe.temporalEase.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "dimensions",
+                          "layer",
+                          "property",
+                          "time"
+                        ],
+                        "properties": {
+                          "time": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "dimensions": {
+                            "type": "array",
+                            "minItems": 1,
+                            "maxItems": 4,
+                            "items": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                "dimension",
+                                "inEase",
+                                "outEase"
+                              ],
+                              "properties": {
+                                "dimension": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 3
+                                },
+                                "inEase": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "speed",
+                                    "influence"
+                                  ],
+                                  "properties": {
+                                    "speed": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 32,
+                                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                    },
+                                    "influence": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 32,
+                                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                    }
+                                  },
+                                  "x-invariant": "speed-and-influence-are-finite-and-influence-is-within-0-to-100"
+                                },
+                                "outEase": {
+                                  "type": "object",
+                                  "additionalProperties": false,
+                                  "required": [
+                                    "speed",
+                                    "influence"
+                                  ],
+                                  "properties": {
+                                    "speed": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 32,
+                                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                    },
+                                    "influence": {
+                                      "type": "string",
+                                      "minLength": 1,
+                                      "maxLength": 32,
+                                      "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?$"
+                                    }
+                                  },
+                                  "x-invariant": "speed-and-influence-are-finite-and-influence-is-within-0-to-100"
+                                }
+                              }
+                            }
+                          },
+                          "layer": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "property": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.keyframe.behavior.set"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "behavior",
+                          "enabled",
+                          "layer",
+                          "property",
+                          "time"
+                        ],
+                        "properties": {
+                          "time": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "behavior": {
+                            "enum": [
+                              "temporal-continuous",
+                              "temporal-auto-bezier",
+                              "spatial-continuous",
+                              "spatial-auto-bezier",
+                              "roving"
+                            ]
+                          },
+                          "enabled": {
+                            "type": "boolean"
+                          },
+                          "layer": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "property": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "op",
+                      "args"
+                    ],
+                    "properties": {
+                      "op": {
+                        "const": "property.keyframe.delete"
+                      },
+                      "args": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "layer",
+                          "property",
+                          "time"
+                        ],
+                        "properties": {
+                          "time": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "value",
+                              "scale"
+                            ],
+                            "properties": {
+                              "value": {
+                                "type": "integer",
+                                "minimum": -2147483648,
+                                "maximum": 2147483647
+                              },
+                              "scale": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 4294967295
+                              }
+                            }
+                          },
+                          "layer": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "property": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "ref"
+                            ],
+                            "properties": {
+                              "ref": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "saveAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      },
+                      "returnAs": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 64
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "nativeProgramInvokeResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "capabilityId",
+        "outputs",
+        "operations",
+        "evidence",
+        "undo"
+      ],
+      "properties": {
+        "capabilityId": {
+          "const": "ae.native.exec"
+        },
+        "operationKey": {
+          "$ref": "#/$defs/idempotencyKey"
+        },
+        "outputs": {
+          "type": "object",
+          "maxProperties": 64,
+          "additionalProperties": true
+        },
+        "operations": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "allOf": [
+              {
+                "$ref": "#/$defs/nativeProgramOperationSummary"
+              },
+              {
+                "properties": {
+                  "status": {
+                    "const": "completed"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "evidence": {
+          "$ref": "#/$defs/nativeProgramEvidence"
+        },
+        "undo": {
+          "$ref": "#/$defs/nativeProgramUndoEvidence"
+        }
+      },
+      "allOf": [
+        {
+          "properties": {
+            "evidence": {
+              "properties": {
+                "postcondition": {
+                  "properties": {
+                    "verified": {
+                      "const": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "evidence": {
+                "properties": {
+                  "effect": {
+                    "const": "committed"
+                  }
+                }
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "operationKey"
+            ],
+            "properties": {
+              "undo": {
+                "properties": {
+                  "available": {
+                    "const": true
+                  }
+                }
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "operationKey"
+              ]
+            },
+            "properties": {
+              "evidence": {
+                "properties": {
+                  "effect": {
+                    "const": "none"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "nativeProgramOperationSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "op",
+        "status"
+      ],
+      "properties": {
+        "index": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "op": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 96,
+          "pattern": "^[a-zA-Z][a-zA-Z0-9_-]*(?:\\.[a-zA-Z][a-zA-Z0-9_-]*)+$"
+        },
+        "status": {
+          "enum": [
+            "completed",
+            "failed"
+          ]
+        }
+      }
+    },
+    "nativeProgramPostconditionEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified",
+        "kind",
+        "algorithm",
+        "digest"
+      ],
+      "properties": {
+        "verified": {
+          "type": "boolean"
+        },
+        "kind": {
+          "const": "native-program"
+        },
+        "algorithm": {
+          "const": "sha256-rfc8785-jcs-v1"
+        },
+        "digest": {
+          "$ref": "#/$defs/sha256"
+        }
+      }
+    },
+    "nativeProgramUndoEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "available",
+        "verified"
+      ],
+      "properties": {
+        "available": {
+          "type": "boolean"
+        },
+        "verified": {
+          "const": false
+        },
+        "groupLabel": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "available": {
+                "const": true
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "groupLabel"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "groupLabel"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "negotiatedLimits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxFrameBytes",
+        "maxInFlight",
+        "maxQueueDepth",
+        "maxDeadlineMs",
+        "maxRequestsPerSecond",
+        "maxBurst",
+        "maxControlInFlight",
+        "maxControlRequestsPerSecond",
+        "maxControlBurst",
+        "maxTerminalCacheEntries",
+        "terminalCacheTtlMs"
+      ],
+      "properties": {
+        "maxFrameBytes": {
+          "type": "integer",
+          "minimum": 4096,
+          "maximum": 524288
+        },
+        "maxInFlight": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 64
+        },
+        "maxQueueDepth": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256
+        },
+        "maxDeadlineMs": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 30000
+        },
+        "maxRequestsPerSecond": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maxBurst": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maxControlInFlight": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
+        },
+        "maxControlRequestsPerSecond": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maxControlBurst": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100
+        },
+        "maxTerminalCacheEntries": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 4096
+        },
+        "terminalCacheTtlMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 300000
+        }
+      }
+    },
+    "pageOffset": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991,
+      "default": 0,
+      "x-omissionBehavior": 0
+    },
+    "platform": {
+      "enum": [
+        "macos-arm64",
+        "windows-x64"
+      ]
+    },
+    "progressEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireVersion",
+        "kind",
+        "sessionId",
+        "requestId",
+        "event",
+        "sequence",
+        "progress"
+      ],
+      "properties": {
+        "wireVersion": {
+          "$ref": "#/$defs/wireVersion"
+        },
+        "kind": {
+          "const": "event"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "event": {
+          "const": "progress"
+        },
+        "sequence": {
+          "$ref": "#/$defs/safePositiveInteger"
+        },
+        "progress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "phase",
+            "fraction",
+            "message"
+          ],
+          "properties": {
+            "phase": {
+              "enum": [
+                "queued",
+                "dispatched",
+                "running",
+                "validating"
+              ]
+            },
+            "fraction": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "message": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 160
+            }
+          }
+        }
+      }
+    },
+    "projectItemLocator": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/locator"
+        },
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "item",
+                "composition"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "projectItemValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "locator",
+        "name",
+        "type",
+        "parentLocator"
+      ],
+      "properties": {
+        "locator": {
+          "$ref": "#/$defs/projectItemLocator"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 1024
+        },
+        "type": {
+          "enum": [
+            "folder",
+            "composition",
+            "footage",
+            "unknown"
+          ]
+        },
+        "parentLocator": {
+          "$ref": "#/$defs/projectParentLocator"
+        }
+      }
+    },
+    "projectItemsListValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "projectLocator",
+        "total",
+        "offset",
+        "limit",
+        "returned",
+        "hasMore",
+        "nextOffset",
+        "items"
+      ],
+      "properties": {
+        "projectLocator": {
+          "$ref": "#/$defs/projectLocator"
+        },
+        "total": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "offset": {
+          "$ref": "#/$defs/safeNonnegativeInteger"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "returned": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 50
+        },
+        "hasMore": {
+          "type": "boolean"
+        },
+        "nextOffset": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/safeNonnegativeInteger"
+            }
+          ]
+        },
+        "items": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/projectItemValue"
+          }
+        }
+      },
+      "x-invariant": "returned-equals-items-length-and-page-metadata-is-self-consistent"
+    },
+    "projectLocator": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/locator"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "project"
+            }
+          }
+        }
+      ]
+    },
+    "projectParentLocator": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/locator"
+        },
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "project",
+                "item"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "recovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "action",
+        "hint"
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "retry",
+            "refresh-capabilities",
+            "refresh-locator",
+            "reconnect",
+            "open-project",
+            "change-arguments",
+            "inspect-state",
+            "none"
+          ]
+        },
+        "hint": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 256
+        },
+        "retryAfterMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30000
+        }
+      }
+    },
+    "request": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/helloRequest"
+        },
+        {
+          "$ref": "#/$defs/capabilitiesRequest"
+        },
+        {
+          "$ref": "#/$defs/invokeRequest"
+        },
+        {
+          "$ref": "#/$defs/invalidateGraphRequest"
+        },
+        {
+          "$ref": "#/$defs/cancelRequest"
+        }
+      ]
+    },
+    "requestBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "wireVersion",
+        "kind",
+        "requestId",
+        "method",
+        "params"
+      ],
+      "properties": {
+        "wireVersion": {
+          "$ref": "#/$defs/wireVersion"
+        },
+        "kind": {
+          "const": "request"
+        },
+        "sessionId": {
+          "$ref": "#/$defs/uuid"
+        },
+        "requestId": {
+          "$ref": "#/$defs/requestId"
+        },
+        "method": {
+          "$ref": "#/$defs/method"
+        },
+        "deadlineUnixMs": {
+          "$ref": "#/$defs/safePositiveInteger",
+          "x-omissionBehavior": "broker-send-time-plus-5000ms"
+        },
+        "params": {
+          "type": "object"
+        }
+      }
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "response": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/helloSuccess"
+        },
+        {
+          "$ref": "#/$defs/capabilitiesSuccess"
+        },
+        {
+          "$ref": "#/$defs/invokeSuccess"
+        },
+        {
+          "$ref": "#/$defs/invalidateGraphSuccess"
+        },
+        {
+          "$ref": "#/$defs/cancelSuccess"
+        },
+        {
+          "$ref": "#/$defs/helloFailure"
+        },
+        {
+          "$ref": "#/$defs/sessionFailure"
+        }
+      ]
+    },
+    "rpcError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "message",
+        "retryable",
+        "sideEffect",
+        "recovery"
+      ],
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/errorCode"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "sideEffect": {
+          "enum": [
+            "not-started",
+            "may-have-occurred",
+            "completed"
+          ]
+        },
+        "recovery": {
+          "$ref": "#/$defs/recovery"
+        },
+        "details": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/errorDetails"
+            },
+            {
+              "$ref": "#/$defs/nativeProgramFailureDetails"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "$ref": "#/$defs/errorPolicy"
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "QUEUE_FULL"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "recovery": {
+                "required": [
+                  "retryAfterMs"
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "recovery": {
+                "not": {
+                  "required": [
+                    "retryAfterMs"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "WIRE_VERSION_MISMATCH"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ],
+            "properties": {
+              "details": {
+                "required": [
+                  "supportedWireVersions"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "enum": [
+                  "NATIVE_UNSUPPORTED",
+                  "PRECONDITION_FAILED",
+                  "STALE_LOCATOR",
+                  "CAPABILITY_FAILED",
+                  "POSSIBLY_SIDE_EFFECTING_FAILURE"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ],
+            "properties": {
+              "details": {
+                "required": [
+                  "capabilityId"
+                ]
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "code": {
+                "const": "POSSIBLY_SIDE_EFFECTING_FAILURE"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "details"
+            ],
+            "properties": {
+              "details": {
+                "oneOf": [
+                  {
+                    "allOf": [
+                      {
+                        "$ref": "#/$defs/errorDetails"
+                      },
+                      {
+                        "required": [
+                          "idempotencyKey"
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "allOf": [
+                      {
+                        "$ref": "#/$defs/nativeProgramFailureDetails"
+                      },
+                      {
+                        "properties": {
+                          "disposition": {
+                            "const": "possibly-side-effecting"
+                          }
+                        }
+                      }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "details": {
+                "not": {
+                  "required": [
+                    "idempotencyKey"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "safeNonnegativeInteger": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "safePositiveInteger": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "secondsRational": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 28,
+      "pattern": "^(?:0|-?[1-9][0-9]*(?:/[1-9][0-9]*)?)$"
+    },
+    "sessionFailure": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/failureBase"
+        },
+        {
+          "type": "object",
+          "required": [
+            "sessionId"
+          ],
+          "properties": {
+            "method": {
+              "enum": [
+                "capabilities",
+                "invoke",
+                "invalidateGraph",
+                "cancel"
+              ]
+            },
+            "error": {
+              "properties": {
+                "code": {
+                  "not": {
+                    "const": "WIRE_VERSION_MISMATCH"
+                  }
+                }
+              }
+            },
+            "replayed": {
+              "type": "boolean"
+            }
+          },
+          "allOf": [
+            {
+              "if": {
+                "properties": {
+                  "error": {
+                    "required": [
+                      "details"
+                    ],
+                    "properties": {
+                      "details": {
+                        "properties": {
+                          "capabilityId": {
+                            "const": "ae.native.exec"
+                          },
+                          "disposition": {
+                            "enum": [
+                              "not-started",
+                              "completed",
+                              "possibly-side-effecting"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "capabilityId",
+                          "disposition"
+                        ]
+                      }
+                    }
+                  }
+                }
+              },
+              "else": {
+                "properties": {
+                  "replayed": {
+                    "const": false
+                  }
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "sourceItemLocator": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/locator"
+        },
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "item",
+                "composition"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "streamLocator": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/locator"
+        },
+        {
+          "properties": {
+            "kind": {
+              "const": "stream"
+            }
+          }
+        }
+      ]
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+    },
+    "wireRange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum",
+        "maximum"
+      ],
+      "properties": {
+        "minimum": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "maximum": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535
+        }
+      },
+      "x-invariant": "minimum-must-not-exceed-maximum"
+    },
+    "wireVersion": {
+      "const": 1
+    }
+  }
+}
