@@ -10,7 +10,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
-### [Unreleased]
+### Unreleased
 
 #### ✨ 新增
 
@@ -299,7 +299,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 ## English
 
-### [Unreleased]
+### Unreleased
 
 #### ✨ Added
 
