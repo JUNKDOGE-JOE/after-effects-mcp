@@ -408,7 +408,13 @@ function decodeEvalScriptTransportResult(text) {
         throw new Error('invalid evalScript transport envelope: ' + String(text || '').slice(0, 120));
     }
     if (payload && payload.ok === false && typeof payload.error === 'string') {
-        throw new Error('ExtendScript error: ' + payload.error);
+        // The envelope ran to completion and reported a definite ExtendScript
+        // error: the script executed, so this is `failed`, not `uncertain`
+        // (#260 real-machine check). Undecodable / empty output stays untagged
+        // and is classified as uncertain by the caller.
+        const error = new Error('ExtendScript error: ' + payload.error);
+        error.disposition = 'failed';
+        throw error;
     }
     if (!payload || payload.ok !== true || typeof payload.result !== 'string') {
         throw new Error('invalid evalScript transport envelope shape');

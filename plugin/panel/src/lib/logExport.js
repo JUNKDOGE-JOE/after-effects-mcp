@@ -17,6 +17,9 @@ export function attachmentPathSecrets({ draft, pendingTurn } = {}) {
 
 function scalar(value) {
   if (value === undefined || value === null || value === '') return '-';
+  if (typeof value === 'object') {
+    try { return JSON.stringify(value); } catch (error) { return '[unserializable]'; }
+  }
   const text = String(value);
   return /\s/.test(text) ? JSON.stringify(text) : text;
 }

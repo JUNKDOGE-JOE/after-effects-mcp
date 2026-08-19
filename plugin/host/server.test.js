@@ -592,6 +592,25 @@ test('health and activity expose only authenticated operational state', async ()
     }
 });
 
+test('/exec reports a completed ExtendScript error as failed, not uncertain', async () => {
+    const fixture = await startApp({
+        evalScript: function (jsx, callback) {
+            // The transport envelope catches the JSX exception itself and
+            // returns a well-formed ok:false payload (what real AE does).
+            callback('{"ok":false,"error":"Error: boom (line 1)"}');
+        },
+    });
+    try {
+        const response = await post(fixture.port, '/exec', HEADERS, { code: 'throw new Error("boom")' });
+        assert.equal(response.body.ok, false);
+        assert.match(response.body.error, /^ExtendScript error: Error: boom/);
+        assert.equal(response.body.disposition, 'failed');
+        assert.equal(response.body.jsxBridge.state, 'ok');
+    } finally {
+        await closeFixture(fixture);
+    }
+});
+
 test('/exec distinguishes uncertain timeout from a queued not_dispatched call', async () => {
     const evalCalls = [];
     let sentinelCallback = null;

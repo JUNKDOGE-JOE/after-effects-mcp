@@ -50242,6 +50242,13 @@ data: ${JSON.stringify(payload)}
   }
   function scalar(value) {
     if (value === void 0 || value === null || value === "") return "-";
+    if (typeof value === "object") {
+      try {
+        return JSON.stringify(value);
+      } catch (error) {
+        return "[unserializable]";
+      }
+    }
     const text = String(value);
     return /\s/.test(text) ? JSON.stringify(text) : text;
   }

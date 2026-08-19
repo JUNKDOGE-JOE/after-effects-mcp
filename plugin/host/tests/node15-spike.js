@@ -129,7 +129,10 @@ async function main() {
         assert((longCall.text.match(/notifications\/progress/g) || []).length >= 3);
         assert(/"id":4/.test(longCall.text));
         assert(/long-result/.test(longCall.text));
-        assert(/notifications\/progress/.test(stream.text()));
+        // The standalone GET stream must stay alive (keepalives) but must not
+        // echo another request's progress notifications.
+        assert(/keepalive/.test(stream.text()));
+        assert.strictEqual(/notifications\/progress/.test(stream.text()), false);
 
         const unknown = await request(port, 'POST', '/mcp', { 'Mcp-Session-Id': 'not-a-session' }, {
             jsonrpc: '2.0', id: 5, method: 'ping',

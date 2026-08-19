@@ -146,10 +146,12 @@ function mountMcp(app, deps) {
             const writer = new SseWriter(res, sseOptions).start();
             const startedAt = Date.now();
             const token = body.params._meta.progressToken;
+            // Progress for an in-flight request travels only on that request's
+            // own SSE response; publishing it on the standalone GET stream too
+            // makes official clients deliver every notification twice
+            // (observed live with the TS SDK against AE 2026).
             const notify = function () {
-                const note = progressMessage(token, startedAt);
-                sessions.publish(stream, note);
-                writer.send(note);
+                writer.send(progressMessage(token, startedAt));
             };
             notify();
             const timer = setInterval(notify, progressIntervalMs);
