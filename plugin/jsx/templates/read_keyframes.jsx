@@ -52,11 +52,12 @@
         return null;
     }
     function interpolation(value) {
-        var text = String(value);
-        if (text.indexOf("HOLD") !== -1) return "hold";
-        if (text.indexOf("BEZIER") !== -1) return "bezier";
-        if (text.indexOf("LINEAR") !== -1) return "linear";
-        return "none";
+        try {
+            if (value === KeyframeInterpolationType.LINEAR) return "linear";
+            if (value === KeyframeInterpolationType.BEZIER) return "bezier";
+            if (value === KeyframeInterpolationType.HOLD) return "hold";
+        } catch (eInterpolation) {}
+        return "unknown";
     }
     var comp = resolveComp(o.comp);
     if (!comp) return JSON.stringify({ok: false, error: "Composition not found for " + selectorText(o.comp)});

@@ -40,20 +40,28 @@
         return "group";
     }
     function valueType(property) {
-        var raw = "";
-        try { raw = String(property.propertyValueType); } catch (eRaw) {}
-        if (raw.indexOf("OneD") !== -1) return "one-d";
-        if (raw.indexOf("TwoD_SPATIAL") !== -1) return "two-d-spatial";
-        if (raw.indexOf("TwoD") !== -1) return "two-d";
-        if (raw.indexOf("ThreeD_SPATIAL") !== -1) return "three-d-spatial";
-        if (raw.indexOf("ThreeD") !== -1) return "three-d";
-        if (raw.indexOf("COLOR") !== -1 || raw.indexOf("Color") !== -1) return "color";
-        if (raw.indexOf("TEXT") !== -1 || raw.indexOf("Text") !== -1) return "text-document";
-        if (raw.indexOf("NO_VALUE") !== -1) return "none";
-        if (raw.indexOf("MARKER") !== -1) return "marker";
-        return raw ? "arb" : "unknown";
+        try {
+            var raw = property.propertyValueType;
+            if (raw === PropertyValueType.OneD) return "one-d";
+            if (raw === PropertyValueType.TwoD_SPATIAL) return "two-d-spatial";
+            if (raw === PropertyValueType.TwoD) return "two-d";
+            if (raw === PropertyValueType.ThreeD_SPATIAL) return "three-d-spatial";
+            if (raw === PropertyValueType.ThreeD) return "three-d";
+            if (raw === PropertyValueType.COLOR) return "color";
+            if (raw === PropertyValueType.TEXT_DOCUMENT) return "text-document";
+            if (raw === PropertyValueType.NO_VALUE) return "none";
+            if (raw === PropertyValueType.MARKER) return "marker";
+            if (raw === PropertyValueType.SHAPE) return "shape";
+            if (raw === PropertyValueType.LAYER_INDEX) return "layer-index";
+            if (raw === PropertyValueType.MASK_INDEX) return "mask-index";
+            if (raw === PropertyValueType.CUSTOM_VALUE) return "custom";
+        } catch (eRaw) {}
+        return "unknown";
     }
     function readValue(property, sampleTime, type) {
+        if (type !== "one-d" && type !== "two-d" && type !== "two-d-spatial"
+            && type !== "three-d" && type !== "three-d-spatial" && type !== "color"
+            && type !== "text-document") return {status: "unsupported", value: null};
         var value;
         try { value = sampleTime === null ? property.value : property.valueAtTime(sampleTime, false); } catch (eValue) { return {status: "unsupported", value: null}; }
         if (type === "text-document") {

@@ -4,10 +4,15 @@
     var layerCount = 300;
     var effectsPerLayer = 16;
     var comp = app.project.items.addComp("ae_read_perf_" + new Date().getTime(), 1920, 1080, 1, 20, 24);
-    var source = app.project.items.addSolid([0.2, 0.4, 0.8], "ae_read_perf_solid", 1920, 1080, 1);
+    var source = null;
     var i, j, layer, effects, effect, position;
     for (i = 1; i <= layerCount; i++) {
-        layer = comp.layers.add(source);
+        if (i === 1) {
+            layer = comp.layers.addSolid([0.2, 0.4, 0.8], "ae_read_perf_solid", 1920, 1080, 1);
+            source = layer.source;
+        } else {
+            layer = comp.layers.add(source);
+        }
         layer.name = "Perf Layer " + i;
         effects = layer.property("ADBE Effect Parade");
         for (j = 1; j <= effectsPerLayer; j++) {
