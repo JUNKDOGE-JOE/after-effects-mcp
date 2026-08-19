@@ -50,6 +50,7 @@ const CEP_EXECUTED_FILES = [
     'mcp/tools/exec.js',
     'mcp/tools/preview-frame.js',
     'mcp/png.js',
+    'mcp/tools/read.js',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',
