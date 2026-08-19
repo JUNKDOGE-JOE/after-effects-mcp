@@ -51,6 +51,7 @@ function formatActivity(event) {
     'engine=' + scalar(event.engine),
     'ok=' + scalar(event.ok),
     event.denied !== undefined ? 'denied=' + scalar(event.denied) : null,
+    event.disposition !== undefined ? 'disposition=' + scalar(event.disposition) : null,
     event.error !== undefined ? 'error=' + scalar(event.error) : null,
     event.durationMs !== undefined ? 'durationMs=' + scalar(event.durationMs) : null,
     event.undoGroup !== undefined ? 'undoGroup=' + scalar(event.undoGroup) : null,

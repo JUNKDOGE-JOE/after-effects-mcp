@@ -1416,7 +1416,13 @@ function Shell({ cs }) {
       const logsDir = hostLogStats.dir || platform.paths.logsRoot;
       const processApi = window.cep_node?.process || globalThis.process || {};
       let aeApp = {};
-      try { aeApp = cs.getHostEnvironment ? (cs.getHostEnvironment() || {}) : {}; } catch (error) { aeApp = {}; }
+      try {
+        const env = cs.getHostEnvironment ? (cs.getHostEnvironment() || {}) : {};
+        // Identity fields only; appSkinInfo is a UI palette and just noise here.
+        for (const key of ['appName', 'appId', 'appVersion', 'appLocale', 'appUILocale', 'isAppOnline']) {
+          if (env[key] !== undefined) aeApp[key] = env[key];
+        }
+      } catch (error) { aeApp = {}; }
       let cepVersion = '-';
       try {
         const apiVersion = cs.getCurrentApiVersion ? cs.getCurrentApiVersion() : null;

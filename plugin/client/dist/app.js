@@ -50275,6 +50275,7 @@ data: ${JSON.stringify(payload)}
       "engine=" + scalar(event.engine),
       "ok=" + scalar(event.ok),
       event.denied !== void 0 ? "denied=" + scalar(event.denied) : null,
+      event.disposition !== void 0 ? "disposition=" + scalar(event.disposition) : null,
       event.error !== void 0 ? "error=" + scalar(event.error) : null,
       event.durationMs !== void 0 ? "durationMs=" + scalar(event.durationMs) : null,
       event.undoGroup !== void 0 ? "undoGroup=" + scalar(event.undoGroup) : null
@@ -52046,7 +52047,10 @@ ${baseUrl}`),
         const processApi = ((_a = window.cep_node) == null ? void 0 : _a.process) || globalThis.process || {};
         let aeApp = {};
         try {
-          aeApp = cs2.getHostEnvironment ? cs2.getHostEnvironment() || {} : {};
+          const env = cs2.getHostEnvironment ? cs2.getHostEnvironment() || {} : {};
+          for (const key of ["appName", "appId", "appVersion", "appLocale", "appUILocale", "isAppOnline"]) {
+            if (env[key] !== void 0) aeApp[key] = env[key];
+          }
         } catch (error) {
           aeApp = {};
         }
