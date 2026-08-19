@@ -35,6 +35,11 @@ const CEP_EXECUTED_FILES = [
     'mcp/session.js',
     'mcp/sse.js',
     'mcp/tools.js',
+    'mcp/tool-result.js',
+    // One file per /mcp tool (see mcp/tools.js). Every new tool module must be
+    // listed here so the node:-specifier and require-graph guards cover it.
+    'mcp/tools/status.js',
+    'mcp/tools/exec.js',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',
@@ -68,7 +73,7 @@ test('every CEP-executed host file avoids node:-prefixed specifiers', () => {
 test('the CEP manifest stays in sync with what the host actually requires', () => {
     // Fail closed when a new local require appears in a CEP-executed file
     // without being added to the manifest above.
-    const local = /require\s*\(\s*['"`](\.\/[\w/-]+)(?:\.js)?['"`]\s*\)/g;
+    const local = /require\s*\(\s*['"`](\.\.?\/[\w/.-]+?)(?:\.js)?['"`]\s*\)/g;
     const known = new Set(CEP_EXECUTED_FILES);
     for (const name of CEP_EXECUTED_FILES) {
         const source = readCode(name);
