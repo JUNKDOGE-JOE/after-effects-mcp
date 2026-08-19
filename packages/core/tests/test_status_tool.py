@@ -189,6 +189,32 @@ async def test_probe_host_sends_python_identity_header(respx_mock):
 
 
 @pytest.mark.asyncio
+async def test_probe_host_ignores_proxy_environment(monkeypatch, respx_mock):
+    import ae_mcp.handlers.status as status
+
+    real_client = status.httpx.AsyncClient
+    captured = {}
+
+    class RecordingAsyncClient(real_client):
+        def __init__(self, *args, **kwargs):
+            captured["trust_env"] = kwargs.get("trust_env")
+            super().__init__(*args, **kwargs)
+
+    monkeypatch.setenv("HTTP_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("HTTPS_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setenv("ALL_PROXY", "http://127.0.0.1:9")
+    monkeypatch.setattr(status.httpx, "AsyncClient", RecordingAsyncClient)
+    respx_mock.get("http://127.0.0.1:11488/health").mock(
+        return_value=httpx.Response(200, json={"ok": True})
+    )
+
+    result = await status._probe_host("http://127.0.0.1:11488")
+
+    assert captured["trust_env"] is False
+    assert result["reachable"] is True
+
+
+@pytest.mark.asyncio
 async def test_status_best_effort_reads_jsx_bridge_from_backend_health(monkeypatch, respx_mock):
     backend = MockBackend()
     backend.url = "http://127.0.0.1:11488"

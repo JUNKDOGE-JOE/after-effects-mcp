@@ -19,6 +19,9 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 #### 🐛 修复 / 改进
 
+- **`ae.diagnose` 本机探针忽略代理环境变量**——本机 `/health` 探针不再继承 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`，代理返回的 502 不再被当成本机宿主不可达。（#267）
+- **Tool Library `argsSchema` 接受属性描述**——每个属性现在可带不超过 1024 字符的字符串 `description`，legacy skill 不再“能列出、不能执行”。（#268）
+- **`ae.skillUse(execute=true)` 恢复 v0.9.0 透传返回形状**——技能脚本自己的 JSON 结果原样放在顶层，不再包 `{ok,name,template_type,result}`，也不再出现外层 `ok:true` 包住内层 `ok:false` 的矛盾；v0.9.2–v0.9.6 期间按 `result.*` 读取的调用方需改回顶层字段。执行仍走审批引擎，`execute=false` 不变。（#269）
 - **ExtendScript 超时不再提前放行串行锁（#260）**——调用方仍会按原期限收到超时，但 Bridge 会等迟到回调或排空哨兵返回后才继续，期间 `/health`、`/exec`、`ae.status` 与 `ae.diagnose` 报告 `degraded`；错误 disposition 收敛为三值：从未进入 AE、可安全重试的 `not_dispatched`，已派发但结果未知的 `uncertain`，以及已执行并明确报错的 `failed`。
 - **依赖清扫：`npm audit` 归零**——`plugin/sidecar` 锁文件把 `fast-uri` 升到 3.1.5（修 CVE-2026-13676 / GHSA-4c8g-83qw-93j6 以及其后的 GHSA-v2hh-gcrm-f6hx、GHSA-7p8r-x3mc-p8w7，仍在 ajv 声明的 `^3.0.1` 范围内，不引入 `overrides`），同批升级 `ip-address` 10.5.0、`hono` 4.13.3、`@hono/node-server` 1.19.17、`body-parser` 2.3.0；`plugin/host` 的 `express` 4.22.1→4.22.2（连带 `qs` 6.15.3、`body-parser` 1.20.6）。两个工作区 `npm audit` 均为 0；这些包只在本机回环路径上工作，属扫描器噪音清理而非已确认可达的漏洞。由 #271（@anupamme / OrbisAI 扫描报告）触发。
 
@@ -309,6 +312,9 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 
 #### 🐛 Fixes / Improvements
 
+- **`ae.diagnose` local probe ignores proxy environment variables** — The local `/health` probe no longer inherits `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`, so a proxy-generated 502 is no longer mistaken for an unreachable local host. (#267)
+- **Tool Library `argsSchema` accepts property descriptions** — Each property may now include a string `description` of at most 1024 characters, so legacy skills no longer “list successfully but fail to execute.” (#268)
+- **`ae.skillUse(execute=true)` restores the v0.9.0 pass-through response shape** — The skill script's own JSON result is returned unchanged at the top level instead of being wrapped in `{ok,name,template_type,result}`, eliminating contradictory outer `ok:true` / inner `ok:false` responses. Callers that read `result.*` in v0.9.2–v0.9.6 must switch back to top-level fields. Execution still uses the approval engine, and `execute=false` is unchanged. (#269)
 - **ExtendScript timeouts no longer release the serialization lock early (#260)** — Callers still receive a timeout on schedule, while the bridge waits for a late callback or drain sentinel before proceeding and reports `degraded` through `/health`, `/exec`, `ae.status`, and `ae.diagnose`. Error dispositions are a closed three-value set: `not_dispatched` for scripts that never entered AE and are safe to retry, `uncertain` for dispatched scripts whose result is unknown, and `failed` for scripts that executed and returned a definite error.
 - **Dependency sweep: `npm audit` clean** — the `plugin/sidecar` lockfile moves `fast-uri` to 3.1.5 (fixes CVE-2026-13676 / GHSA-4c8g-83qw-93j6 plus the later GHSA-v2hh-gcrm-f6hx and GHSA-7p8r-x3mc-p8w7, staying inside ajv's declared `^3.0.1` range with no `overrides`), alongside `ip-address` 10.5.0, `hono` 4.13.3, `@hono/node-server` 1.19.17 and `body-parser` 2.3.0; `plugin/host` bumps `express` 4.22.1→4.22.2 (with `qs` 6.15.3 and `body-parser` 1.20.6). Both workspaces now audit at 0. These packages only ever see loopback traffic here, so this is scanner-noise cleanup rather than a confirmed reachable vulnerability. Prompted by #271 (@anupamme / OrbisAI scan report).
 
