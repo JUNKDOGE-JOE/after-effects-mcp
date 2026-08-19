@@ -434,6 +434,7 @@ function buildApp() {
             port: currentPort,
             pythonVersion: lastPythonVersion || null,
             pythonLastSeenAt: lastHealthAt || null,
+            jsxBridge: jsxBridge.getState(),
         });
     });
 
@@ -695,6 +696,7 @@ function buildApp() {
         const transported = wrapForEvalScriptTransport(wrapped);
 
         const startedAt = Date.now();
+        let dispatched = false;
         try {
             const invalidationDeadlineUnixMs = Math.min(
                 Number.MAX_SAFE_INTEGER,
@@ -703,6 +705,7 @@ function buildApp() {
             if (nativeProjectGraphEffect === 'invalidate') {
                 await invalidateConnectedNativeProjectGraph(invalidationDeadlineUnixMs);
             }
+            dispatched = true;
             const encoded = await jsxBridge.evalScript(transported, t);
             const result = decodeEvalScriptTransportResult(encoded);
             activity.record({
@@ -714,8 +717,24 @@ function buildApp() {
             });
             res.json({ ok: true, result: result || '' });
         } catch (e) {
-            activity.record({ client, undoGroup: undoGroup || null, ok: false, error: e.message, durationMs: Date.now() - startedAt });
-            res.json({ ok: false, error: e.message });
+            const disposition = ['not_dispatched', 'uncertain', 'failed'].includes(e.disposition)
+                ? e.disposition
+                : (dispatched ? 'uncertain' : 'not_dispatched');
+            const bridgeState = jsxBridge.getState();
+            activity.record({
+                client,
+                undoGroup: undoGroup || null,
+                ok: false,
+                error: e.message,
+                disposition,
+                durationMs: Date.now() - startedAt,
+            });
+            res.json({
+                ok: false,
+                error: e.message,
+                disposition,
+                jsxBridge: bridgeState,
+            });
         }
     });
 
