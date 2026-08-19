@@ -381,6 +381,25 @@ test('createClaudeAgentBackend strips Anthropic key and passes sidecar args', as
   await pending;
 });
 
+test('createClaudeAgentBackend translates cep-host MCP spec for the Agent SDK sidecar', async () => {
+  const url = 'http://127.0.0.1:11488/mcp/c/claude-token';
+  const { backend, spawned } = makeBackend({
+    getMcpSpec: async () => ({ kind: 'http', url, name: 'ae' }),
+  });
+
+  const pending = backend.sendUser('http mcp');
+  await flush();
+  const call = spawned.calls[0];
+  const argValue = (flag) => call.args[call.args.indexOf(flag) + 1];
+  assert.deepEqual(JSON.parse(argValue('--mcp')), { type: 'http', url });
+  assert.match(JSON.parse(argValue('--mcp')).url, /\/mcp\/c\//);
+
+  spawned.procs[0].pushStdout({ t: 'ready' });
+  await flush();
+  spawned.procs[0].pushStdout({ t: 'event', event: { type: 'turn-end', stopReason: 'end_turn' } });
+  await pending;
+});
+
 test('createClaudeAgentBackend forwards all sidecar event shapes unchanged', async () => {
   const { backend, events, spawned } = makeBackend();
   const pending = backend.sendUser('events');

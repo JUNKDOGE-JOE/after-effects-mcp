@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { EXTERNAL_CLIENTS, mcpConfigFor, expertGuidanceEnv } from '../src/cep/externalClients.js';
+import {
+  EXTERNAL_CLIENTS,
+  expertGuidanceEnv,
+  externalClientConfigText,
+  httpConfigFor,
+  mcpConfigFor,
+} from '../src/cep/externalClients.js';
 
 test('external client registry covers seeded clients with required fields', () => {
   const expectedIds = [
@@ -110,4 +116,30 @@ test('mcpConfigFor omits guidance var when enabled (default + explicit), sets 0 
   // the disabled var sits next to AE_MCP_BACKEND in the ae server env
   assert.equal(off.mcpServers.ae.env.AE_MCP_BACKEND, 'ae-mcp');
   assert.equal(off.mcpServers.ae.env.AE_MCP_EXPERT_GUIDANCE, '0');
+});
+
+test('httpConfigFor emits the required HTTP form for every external client id', () => {
+  const url = 'http://127.0.0.1:12000/mcp';
+  for (const client of EXTERNAL_CLIENTS) {
+    const config = httpConfigFor(client, 12000);
+    if (client.id === 'claude-code') {
+      assert.equal(config, `claude mcp add --transport http ae ${url}`);
+    } else if (client.id === 'cursor') {
+      assert.deepEqual(config, { mcpServers: { ae: { url } } });
+    } else {
+      assert.deepEqual(config, { mcpServers: { ae: { type: 'http', url } } });
+    }
+  }
+});
+
+test('externalClientConfigText switches snippets without changing python config', () => {
+  const client = EXTERNAL_CLIENTS.find((item) => item.id === 'claude-desktop');
+  assert.equal(
+    externalClientConfigText({ client, engine: 'python', port: 11488 }),
+    JSON.stringify(mcpConfigFor(client, 11488), null, 2),
+  );
+  assert.match(
+    externalClientConfigText({ client, engine: 'cep-host', port: 11488 }),
+    /"url": "http:\/\/127\.0\.0\.1:11488\/mcp"/,
+  );
 });

@@ -313,19 +313,22 @@ export function createOpenCodeBackend({
     configHome = adapter.paths.join([adapter.paths.tempRoot, tempDirName()]);
     const configDir = adapter.paths.join([configHome, 'opencode']);
     fs.mkdirSync(configDir, { recursive: true });
+    const mcpEntry = mcpSpec && mcpSpec.kind === 'http'
+      ? { type: 'remote', url: mcpSpec.url, enabled: true }
+      : {
+        type: 'local',
+        command: asCommandArray(mcpSpec),
+        enabled: true,
+        timeout: MCP_TIMEOUT_MS,
+        environment: Object.assign({}, (mcpSpec && mcpSpec.env) || {}, {
+          AE_MCP_BACKEND: 'ae-mcp',
+          ...expertGuidanceEnv(getExpertGuidance()),
+        }),
+      };
     const config = {
       $schema: 'https://opencode.ai/config.json',
       mcp: {
-        ae: {
-          type: 'local',
-          command: asCommandArray(mcpSpec),
-          enabled: true,
-          timeout: MCP_TIMEOUT_MS,
-          environment: Object.assign({}, (mcpSpec && mcpSpec.env) || {}, {
-            AE_MCP_BACKEND: 'ae-mcp',
-            ...expertGuidanceEnv(getExpertGuidance()),
-          }),
-        },
+        ae: mcpEntry,
       },
     };
     fs.writeFileSync(adapter.paths.join([configDir, 'opencode.json']), JSON.stringify(config, null, 2));

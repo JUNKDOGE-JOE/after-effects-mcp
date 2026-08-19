@@ -583,6 +583,19 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   await pending;
 });
 
+test('createCodexBackend writes a streamable HTTP MCP URL for cep-host mode', async () => {
+  const url = 'http://127.0.0.1:11488/mcp/c/codex-token';
+  const { backend, spawned } = makeBackend({
+    getMcpSpec: async () => ({ kind: 'http', url, name: 'ae' }),
+  });
+  const { pending, threadStart } = await startTurn(backend, spawned, 'http mcp');
+
+  assert.deepEqual(threadStart.params.config.mcp_servers.ae, { url });
+  assert.match(threadStart.params.config.mcp_servers.ae.url, /\/mcp\/c\//);
+  backend.reset();
+  await pending;
+});
+
 test('native Responses providers also use the local universal route and keep upstream secrets lazy', async () => {
   const routeCalls = [];
   let resolveCalls = 0;

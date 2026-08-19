@@ -9,7 +9,7 @@ import { ChannelCard } from '../components/settings/ChannelCard';
 import { Input } from '../components/forms/Input';
 import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
-import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
+import { EXTERNAL_CLIENTS, externalClientConfigText } from '../cep/externalClients';
 import { copyText } from '../lib/clipboard';
 import { zcodeDefaultModelLocked as shouldLockZcodeDefaultModel, zcodeManagedModelLabel } from '../lib/settingsState';
 import { Icon } from '../components/core/Icon';
@@ -37,7 +37,9 @@ const S = {
     externalClients: '外接客户端',
     externalClientsCap: '给常见 MCP 客户端复制配置；文档型框架按其接入方式配置。',
     mcpStdio: 'MCP stdio',
+    mcpHttp: 'MCP HTTP',
     mcpDoc: '文档接入',
+    panelOpenNote: '面板开着才能连接；关闭或重载面板后客户端需要重连。',
     openDocs: '打开文档',
     sec: '安全',
     gen: '通用',
@@ -69,6 +71,10 @@ const S = {
     zcodeModelManaged: '由 ZCode 当前会话管理',
     port: '端口',
     portHint: '默认 11488',
+    mcpEngine: 'MCP server engine',
+    mcpEnginePython: 'Python（默认）',
+    mcpEngineCepHost: 'CEP host（实验性）',
+    mcpEngineCap: '对新会话生效；外部客户端配置见下方。',
     apply: '应用',
     token: '访问 Token',
     regen: '重新生成',
@@ -102,7 +108,9 @@ const S = {
     externalClients: 'External clients',
     externalClientsCap: 'Copy config for common MCP clients; configure documentation-driven frameworks with their own flow.',
     mcpStdio: 'MCP stdio',
+    mcpHttp: 'MCP HTTP',
     mcpDoc: 'Docs',
+    panelOpenNote: 'The panel must stay open. Clients reconnect after the panel closes or reloads.',
     openDocs: 'Open docs',
     sec: 'Security',
     gen: 'General',
@@ -134,6 +142,10 @@ const S = {
     zcodeModelManaged: 'Managed by the current ZCode session',
     port: 'Port',
     portHint: 'Default 11488',
+    mcpEngine: 'MCP server engine',
+    mcpEnginePython: 'Python (default)',
+    mcpEngineCepHost: 'CEP host (experimental)',
+    mcpEngineCap: 'Applies to new sessions; external client config is shown below.',
     apply: 'Apply',
     token: 'Access token',
     regen: 'Regenerate',
@@ -224,23 +236,25 @@ function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
   );
 }
 
-function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false }) {
+function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false, http = false }) {
   const isStdio = client.kind === 'mcp-stdio';
+  const hasConfig = http || isStdio;
   return (
     <details style={{ border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', padding: '7px 8px' }}>
       <summary style={{ cursor: 'pointer', listStyle: 'none', display: 'flex', alignItems: 'center', gap: 8 }}>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span style={{ display: 'block', font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)' }}>{client.name}</span>
-          <span style={{ display: 'block', font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{isStdio ? t.mcpStdio : t.mcpDoc}</span>
+          <span style={{ display: 'block', font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{http ? t.mcpHttp : isStdio ? t.mcpStdio : t.mcpDoc}</span>
         </span>
-        {isStdio ? <Button variant="secondary" size="sm" icon="copy" disabled={copyDisabled} onClick={(e) => { e.preventDefault(); if (!copyDisabled) onCopy(); }}>{copied && !copyDisabled ? t.copied : t.copy}</Button> : null}
+        {hasConfig ? <Button variant="secondary" size="sm" icon="copy" disabled={copyDisabled} onClick={(e) => { e.preventDefault(); if (!copyDisabled) onCopy(); }}>{copied && !copyDisabled ? t.copied : t.copy}</Button> : null}
       </summary>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 8 }}>
         {client.installHint ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-secondary)' }}>{client.installHint}</div> : null}
         {client.loginHint ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{client.loginHint}</div> : null}
-        {isStdio ? (
+        {hasConfig ? (
           <pre style={{ margin: 0, maxHeight: 128, overflow: 'auto', padding: 8, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-sm)', background: 'var(--gray-0)', color: 'var(--text-secondary)', font: '400 10px/1.4 var(--font-mono)', whiteSpace: 'pre' }}>{configText}</pre>
         ) : null}
+        {http ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{t.panelOpenNote}</div> : null}
         {client.networkNote ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{client.networkNote}</div> : null}
         <a href={client.docsUrl} target="_blank" rel="noreferrer" style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--accent)' }}>{t.openDocs}</a>
       </div>
@@ -290,6 +304,8 @@ export function SettingsScreen({
   mcpConfig,
   mcpCommand = 'ae-mcp',
   mcpReady = true,
+  mcpEngine = 'python',
+  onMcpEngineChange,
   logs = [],
   clients = [],
   onBlockClient,
@@ -479,6 +495,12 @@ export function SettingsScreen({
       </Section>
 
       <Section id="conn" title={t.conn} expanded={sections.conn} onToggle={onToggleSection}>
+        <Field label={t.mcpEngine} caption={t.mcpEngineCap}>
+          <Segmented full value={mcpEngine} onChange={onMcpEngineChange} options={[
+            { value: 'python', label: t.mcpEnginePython },
+            { value: 'cep-host', label: t.mcpEngineCepHost },
+          ]} />
+        </Field>
         <Field label={t.port} hint={t.portHint}>
           <div style={{ display: 'flex', gap: 6 }}>
             <Input mono value={draftPort} onChange={setDraftPort} style={{ flex: 1 }} />
@@ -501,12 +523,13 @@ export function SettingsScreen({
 
       <Section id="externalClients" title={t.externalClients} caption={t.externalClientsCap} expanded={sections.externalClients} onToggle={onToggleSection}>
         {EXTERNAL_CLIENTS.map((externalClient) => {
-          const configText = mcpReady ? JSON.stringify(mcpConfigFor(
-            externalClient,
-            Number(draftPort) || port || 11488,
+          const configText = mcpReady ? externalClientConfigText({
+            client: externalClient,
+            engine: mcpEngine,
+            port: Number(draftPort) || port || 11488,
             expertGuidance,
-            mcpCommand,
-          ), null, 2) : '';
+            command: mcpCommand,
+          }) : '';
           return (
             <ExternalClientRow
               key={externalClient.id}
@@ -515,6 +538,7 @@ export function SettingsScreen({
               configText={configText}
               copied={copied === externalClient.id}
               copyDisabled={!mcpReady}
+              http={mcpEngine === 'cep-host'}
               onCopy={() => copy(externalClient.id, configText)}
             />
           );

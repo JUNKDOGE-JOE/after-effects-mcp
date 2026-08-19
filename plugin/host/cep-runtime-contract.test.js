@@ -39,6 +39,10 @@ const CEP_EXECUTED_FILES = [
     'mcp/annotations.js',
     'mcp/approval-gate.js',
     'mcp/checkpoint-store.js',
+    'mcp/checkpoint-ops.js',
+    'mcp/instructions.js',
+    'mcp/json-schema-lite.js',
+    'mcp/native-program.js',
     'mcp/error-hints.js',
     'mcp/jsx-result.js',
     'mcp/template.js',
@@ -51,6 +55,14 @@ const CEP_EXECUTED_FILES = [
     'mcp/tools/preview-frame.js',
     'mcp/png.js',
     'mcp/tools/read.js',
+    'mcp/tools/checkpoint.js',
+    'mcp/tools/revert.js',
+    'mcp/tools/validate-expressions.js',
+    'mcp/tools/native-exec.js',
+    // Generated twins the host requires at runtime. They live under plugin/host because
+    // only plugin/ ships to the CEP extension directory (native/ does not).
+    'mcp/generated/native_exec.generated.json',
+    'mcp/generated/aegp-rpc.schema.json',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',
@@ -91,7 +103,14 @@ test('the CEP manifest stays in sync with what the host actually requires', () =
         for (const match of source.matchAll(local)) {
             const target = path.posix.normalize(path.posix.join(path.posix.dirname(name), match[1]));
             if (target === 'package' || target === 'package.json') continue;
-            const candidates = [target + '.js', target + '/index.js'];
+            // The deployed extension contains plugin/ only: a require that escapes
+            // plugin/host (for example into native/) loads in the repo and dies on the
+            // real machine (2026-08-20 batch-2 live acceptance: the host never started).
+            assert.ok(
+                !target.startsWith('..'),
+                `${name} requires ${match[1]} which resolves outside plugin/host`,
+            );
+            const candidates = [target + '.js', target + '/index.js', target];
             assert.ok(
                 candidates.some((candidate) => known.has(candidate)),
                 `${name} requires ${match[1]} which is missing from CEP_EXECUTED_FILES`,

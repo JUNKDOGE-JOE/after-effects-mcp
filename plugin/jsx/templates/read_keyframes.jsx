@@ -27,14 +27,18 @@
         return null;
     }
     function propertyType(property) {
-        var raw = "";
-        try { raw = String(property.propertyValueType); } catch (eRaw) {}
-        if (raw.indexOf("OneD") !== -1) return "one-d";
-        if (raw.indexOf("TwoD_SPATIAL") !== -1) return "two-d-spatial";
-        if (raw.indexOf("TwoD") !== -1) return "two-d";
-        if (raw.indexOf("ThreeD_SPATIAL") !== -1) return "three-d-spatial";
-        if (raw.indexOf("ThreeD") !== -1) return "three-d";
-        if (raw.indexOf("COLOR") !== -1 || raw.indexOf("Color") !== -1) return "color";
+        try {
+            var raw = property.propertyValueType;
+            if (raw === PropertyValueType.OneD) return "one-d";
+            if (raw === PropertyValueType.TwoD_SPATIAL) return "two-d-spatial";
+            if (raw === PropertyValueType.TwoD) return "two-d";
+            if (raw === PropertyValueType.ThreeD_SPATIAL) return "three-d-spatial";
+            if (raw === PropertyValueType.ThreeD) return "three-d";
+            if (raw === PropertyValueType.COLOR) return "color";
+            if (raw === PropertyValueType.TEXT_DOCUMENT) return "text-document";
+            if (raw === PropertyValueType.MARKER) return "marker";
+            if (raw === PropertyValueType.SHAPE) return "shape";
+        } catch (eRaw) {}
         return "unknown";
     }
     function value(property, time) {

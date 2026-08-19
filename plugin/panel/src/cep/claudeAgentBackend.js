@@ -536,6 +536,9 @@ export function createClaudeAgentBackend({
       }
 
       const mcpSpec = await getMcpSpec();
+      const sidecarMcpSpec = mcpSpec && mcpSpec.kind === 'http'
+        ? { type: 'http', url: mcpSpec.url }
+        : mcpSpec;
       assertCurrentStart();
       const meta = await getToolMeta();
       assertCurrentStart();
@@ -593,7 +596,7 @@ export function createClaudeAgentBackend({
         const executable = node.executable || { ok: true, id: 'node', path: node.nodePath, argsPrefix: [], source: 'runtime', version: node.version || null, arch: null };
         spawnedProc = adapter.spawn(executable, [
           sidecarPath,
-          '--mcp', JSON.stringify(mcpSpec),
+          '--mcp', JSON.stringify(sidecarMcpSpec),
           '--allowed-tools', JSON.stringify(meta.allowedTools),
           '--annotations', JSON.stringify(meta.annotations),
           '--model', session.model,

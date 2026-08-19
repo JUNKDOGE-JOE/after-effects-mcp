@@ -74,3 +74,39 @@ Python `ae.previewFrame` 的 **`saveFrameToPng` 分支**移植：`comp_id` / `ti
 - 外部客户端的 `elicitation/create`（外部会话目前 tier null 放行）；Tool Library 的 `plan_decision` / `authorize_plan` 门。
 - `packages/core/tests/live` 的等价用例改打 `/mcp`（退出条件）。
 - 真机：AE 2026 上跑一遍四个工具 + `read.perf.jsx`；AE 2023/2024 众测。
+## 批 2（2026-08-20）
+
+三路并行：`codex/sol-p1b2-panel-wiring`（面板接线）、`codex/terra-p1b2-checkpoint-revert-validate`（`ae_checkpoint` / `ae_revert` / `ae_validateExpressions` + instructions + live 套件）、`codex/luna-p1b2-native-exec`（`ae_nativeExec`）。`tools/list` 现在是：`ae_status`、`ae_exec`、`ae_previewFrame`、`ae_read`、`ae_checkpoint`、`ae_revert`、`ae_validateExpressions`、`ae_nativeExec`。
+
+### 面板接线
+
+- 设置 → 连接 → **MCP server engine**：`Python`（默认）/ `CEP host（实验性）`，pref `ae_mcp_mcp_engine`，对新会话生效。
+- `cep-host` 模式：`plugin/panel/src/lib/hostConversation.js` 为每个聊天会话 `conversations.create`（label = 会话 id，policy = 审批芯片 + 专家指导），芯片 / 指导变化 `update`，新建会话 `close` 旧的；`plugin/panel/src/lib/mcpEngine.js` 的 `getMcpSpec` 返回 `{ kind: 'http', url: 'http://127.0.0.1:<port>/mcp/c/<token>' }`；codex → `mcp_servers.ae = { url }`，opencode → `{ type: 'remote', url, enabled }`，claude sidecar → `--mcp { type: 'http', url }`。
+- `plugin/panel/src/lib/hostApprovalBridge.js`：`server.mcp.approvals` 的 `request` → 现有 `elicitationCoordinator` 卡片（Python 那份 `approve: boolean` schema）→ `approvals.resolve(accept|decline)`，按 `conversationId` 投递；非 `cep-host` 模式不挂。
+- 外部客户端页（`externalClients.httpConfigFor`）在 `cep-host` 模式显示 HTTP 片段（Claude Code：`claude mcp add --transport http ae http://127.0.0.1:<port>/mcp`），并说明面板必须开着。
+- **仍走 Python stdio**：面板自己的 Tools UI / Tool Library / 工具搜索客户端（`createMcpClient`）。
+
+### `ae_checkpoint` / `ae_revert` / `ae_validateExpressions` / instructions
+
+- checkpoint 流程抽到 `plugin/host/mcp/checkpoint-ops.js`（`createCheckpoint` / `autoCheckpoint` / `atomicReplace` / `resolveProjectPath`），`ae_exec` 自动建档、`ae_checkpoint create`、`ae_revert` 共用。显式 `create` 在未命名工程上是错误（自动建档才是 best-effort）。
+- `ae_revert`：`revert_close.jsx` 关工程 → 同目录临时文件 + rename 原子替换 .aep → `revert_open.jsx` 重开；`branch_before_revert` 先建分支存档；失败返回 `{ok:false, stage: close|replace|reopen, ...}`，替换失败会重开原工程；过审批门（destructive）。
+- `ae_validateExpressions`：`validate_expressions.jsx` 移植，只读。
+- `plugin/host/mcp/instructions.js`：`instructions.py` 的两段文案逐字移植；`initialize.instructions` 按会话策略的 `expertGuidance` 决定是否带专家附录，末尾动态列出宿主工具。
+
+### `ae_nativeExec`
+
+- `plugin/host/mcp/tools/native-exec.js` + `native-program.js`：广告 API-safe schema（顶层无组合子），`tools/call` 用完整生成契约校验（错误带 `errors[{path, message}]`），过审批门，然后与 Python `invoke_native_program` 同流程：`nativeNegotiate` → `nativeInvoke`（`server.js` 挂载处新增的两个依赖，走 `/native/*` 路由同一条 `connectedNativeClient`）→ 请求摘要 / 后置摘要 / 操作序列 / 输出契约 / undo 证据 11 项核对 → Python 同形响应；native 错误统一 `{ok:false, error, code, retryable, sideEffect, recovery, details?}`。
+- canonical JSON = Python `json.dumps(sort_keys=True, separators=(',',':'), ensure_ascii=False)`（已与 Python 交叉核对含 sha256）；`json-schema-lite.js` 只实现生成契约用到的关键字，其它 fail-closed（测试钉死关键字集合）。
+- `native/ae-plugin/protocol/native_exec.generated.json`（CJS 可 `require` 的生成物孪生，`emit-native-exec-cjs.mjs` 产出，有一致性测试）。native 平面本身仍冻结：没有新增 primitive。
+
+## 运行 live MCP 验收套件
+
+此套件不在 CI 运行，需要真实 AE 和已打开的面板。先在 AE 关闭时运行
+`install-plugin-dev.ps1` 安装面板，启动 AE（面板会启动 `:11488`），然后执行：
+
+```powershell
+cd plugin/host
+npm run test:live-mcp
+```
+
+可用 `--only status` 选择段落、`--no-cdp` 跳过面板 CDP 段、`--keep-ae` 在结束时保留 AE。
