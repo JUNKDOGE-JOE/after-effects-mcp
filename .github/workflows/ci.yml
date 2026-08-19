@@ -76,6 +76,10 @@ jobs:
           npm ci
           npm test
 
+      - name: Run CEP Node 15 MCP spike on the development runtime
+        working-directory: plugin/host
+        run: npm run test:node15
+
       - name: Run panel tests
         working-directory: plugin/panel
         run: |
@@ -93,3 +97,36 @@ jobs:
         run: |
           npm ci
           npm test
+
+  node15-cep-contract:
+    name: CEP 11 peer-engine MCP contract (Node 15)
+    runs-on: windows-2022
+    timeout-minutes: 10
+    steps:
+      - name: Checkout the candidate
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - name: Select Node 24 to install the lockfile
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 24.17.0
+
+      - name: Install host dependencies with Node 24
+        working-directory: plugin/host
+        run: npm ci
+
+      # CEP 11 peer-engine gate: npm 7 from Node 15 may not read lockfile v3,
+      # so Node 24 installs first and this step only executes the spike.
+      - name: Select exact CEP 11 peer Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 15.14.0
+
+      - name: Assert Node 15 is active
+        run: |
+          if (-not ((node --version) -like 'v15.*')) { throw "Expected Node 15.x, got $(node --version)" }
+
+      - name: Run the real long-call MCP spike
+        run: node plugin/host/test-node15/run.js

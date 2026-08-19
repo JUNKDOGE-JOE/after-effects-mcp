@@ -10,6 +10,12 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### Unreleased
+
+#### ✨ 新增
+
+- **实验性 CEP 内嵌 MCP Streamable HTTP spike（#261）**——宿主新增本机 `/mcp` 的 `ae_status` / `ae_exec` 最小闭环、会话 SSE 与长调用 progress 通知，并用真实 31 秒调用的 Node 15（CEP 11 同级）CI 门槛验证；**尚未接入 approval gate，不应视为完整迁移或发布承诺**。
+
 ### [0.9.6] — 2026-08-19
 
 #### 🐛 修复 / 改进
