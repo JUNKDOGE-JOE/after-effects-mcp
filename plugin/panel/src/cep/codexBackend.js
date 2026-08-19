@@ -1105,14 +1105,16 @@ export function createCodexBackend({
       sandboxPolicy: SANDBOX_POLICY,
       config: {
         mcp_servers: {
-          ae: {
-            command: mcpSpec.command,
-            args: mcpSpec.args || [],
-            env: Object.assign({}, mcpSpec.env || {}, {
-              AE_MCP_BACKEND: 'ae-mcp',
-              ...expertGuidanceEnv(getExpertGuidance()),
-            }),
-          },
+          ae: mcpSpec && mcpSpec.kind === 'http'
+            ? { url: mcpSpec.url }
+            : {
+              command: mcpSpec.command,
+              args: mcpSpec.args || [],
+              env: Object.assign({}, mcpSpec.env || {}, {
+                AE_MCP_BACKEND: 'ae-mcp',
+                ...expertGuidanceEnv(getExpertGuidance()),
+              }),
+            },
         },
       },
     });

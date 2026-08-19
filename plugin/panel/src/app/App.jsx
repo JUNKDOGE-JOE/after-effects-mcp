@@ -70,6 +70,7 @@ import { runDiagnostics } from '../cep/diagnostics';
 import { copyText } from '../lib/clipboard';
 import { copyWizardConfig } from '../lib/wizardCopy.js';
 import { createHostController, loadSavedPort, savePort, DEFAULT_PORT, buildMcpConfig, isValidPort } from '../cep/hostBridge';
+import { httpConfigFor } from '../cep/externalClients.js';
 import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js';
 import pkg from '../../package.json';
 import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine, readDatedLogTail } from '../lib/logExport.js';
@@ -79,6 +80,14 @@ import { createPlatformAdapter } from '../cep/platform/index.js';
 import { readCepSystemPath } from '../cep/platform/paths.js';
 import { createRuntimeManager, hasDevelopmentRuntimeOverride } from '../cep/runtimeManager.js';
 import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
+import { createHostConversation } from '../lib/hostConversation.js';
+import { createHostApprovalBridge } from '../lib/hostApprovalBridge.js';
+import {
+  MCP_ENGINE_CEP_HOST,
+  getMcpSpec as resolveChatMcpSpec,
+  loadMcpEngine,
+  saveMcpEngine,
+} from '../lib/mcpEngine.js';
 import { decideToolPlan } from '../../../shared/tool-approval.mjs';
 import { normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
@@ -305,6 +314,8 @@ function Shell({ cs }) {
   const [logs, setLogs] = React.useState([]);
   const ctrl = React.useRef(null);
   const getHost = React.useCallback(() => (ctrl.current ? ctrl.current.getHost() : null), []);
+  const hostConversation = React.useMemo(() => createHostConversation({ getHost }), [getHost]);
+  const hostApprovalBridge = React.useMemo(() => createHostApprovalBridge(), []);
 
   // First-run wizard
   const [wizardDone, setWizardDone] = React.useState(() => isWizardDone(window.localStorage));
@@ -354,6 +365,9 @@ function Shell({ cs }) {
   const [sessionModel, setSessionModel] = React.useState(null);
   const [sessionEffort, setSessionEffort] = React.useState(null);
   const [sessionFast, setSessionFast] = React.useState(null);
+  const [mcpEngine, setMcpEngine] = React.useState(() => loadMcpEngine(window.localStorage));
+  const mcpEngineRef = React.useRef(mcpEngine);
+  mcpEngineRef.current = mcpEngine;
   const [permissionMode, setPermissionMode] = React.useState(() => readPref('ae_mcp_perm_mode', 'manual'));
   const permissionModeRef = React.useRef(permissionMode);
   permissionModeRef.current = permissionMode;
@@ -388,7 +402,10 @@ function Shell({ cs }) {
   React.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
   React.useEffect(() => {
     approvalTierFile.write(permissionMode);
-  }, [approvalTierFile, permissionMode]);
+    if (mcpEngine === MCP_ENGINE_CEP_HOST) {
+      hostConversation.updatePolicy({ approvalTier: permissionMode });
+    }
+  }, [approvalTierFile, hostConversation, mcpEngine, permissionMode]);
   React.useEffect(() => () => {
     elicitationCoordinator.dispose();
     try { approvalTierFile.dispose(); } catch (error) { /* best effort on shutdown */ }
@@ -427,6 +444,47 @@ function Shell({ cs }) {
   const [claudeProviderId, setClaudeProviderId] = React.useState(() => readPref('ae_mcp_claude_provider', ''));
   const [codexProviderId, setCodexProviderId] = React.useState(() => readPref('ae_mcp_codex_provider', ''));
   const [expertGuidance, setExpertGuidance] = React.useState(() => loadExpertGuidance(window.localStorage));
+  const expertGuidanceRef = React.useRef(expertGuidance);
+  expertGuidanceRef.current = expertGuidance;
+  React.useEffect(() => {
+    if (mcpEngine === MCP_ENGINE_CEP_HOST) {
+      hostConversation.updatePolicy({ expertGuidance });
+    }
+  }, [expertGuidance, hostConversation, mcpEngine]);
+  React.useEffect(() => {
+    if (mcpEngine !== MCP_ENGINE_CEP_HOST) {
+      hostConversation.closeConversation();
+      return;
+    }
+    if (status.state !== 'ok') return;
+    hostConversation.ensureConversation({
+      label: chatSessionIdRef.current,
+      approvalTier: permissionModeRef.current,
+      expertGuidance: expertGuidanceRef.current,
+    });
+  }, [hostConversation, mcpEngine, status.state]);
+  const resolveHostConversationContext = React.useCallback((conversationId) => {
+    const current = hostConversation.currentConversation();
+    if (!current || current.id !== conversationId) return null;
+    return {
+      conversationId,
+      conversationLabel: current.label || chatSessionIdRef.current,
+    };
+  }, [hostConversation]);
+  React.useEffect(() => {
+    if (mcpEngine !== MCP_ENGINE_CEP_HOST || status.state !== 'ok') {
+      hostApprovalBridge.detach();
+      return undefined;
+    }
+    const host = getHost();
+    const approvals = host && host.mcp && host.mcp.approvals;
+    hostApprovalBridge.attach({
+      approvals,
+      coordinator: elicitationCoordinator,
+      resolveConversationContext: resolveHostConversationContext,
+    });
+    return () => hostApprovalBridge.detach();
+  }, [elicitationCoordinator, getHost, hostApprovalBridge, mcpEngine, resolveHostConversationContext, status.state]);
   const [probe, setProbe] = React.useState(null);
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(null);
@@ -685,7 +743,7 @@ function Shell({ cs }) {
     runtimeActivation,
   }), [extRoot, platform, runtimeActivation]);
   const sidecarPath = sidecarSelection.path;
-  const getMcpSpec = React.useCallback(async () => {
+  const getPythonMcpSpec = React.useCallback(async () => {
     try {
       const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
       if (runtimeManager && spec.runtime) markRuntimeReady(spec.runtime);
@@ -695,15 +753,28 @@ function Shell({ cs }) {
       throw error;
     }
   }, [approvalTierFile, extRoot, markRuntimeReady, platform, runtimeManager]);
+  const hostPortRef = React.useRef(status.port);
+  hostPortRef.current = status.port;
+  const getMcpSpec = React.useCallback(() => resolveChatMcpSpec({
+    engine: mcpEngineRef.current,
+    port: hostPortRef.current,
+    label: chatSessionIdRef.current,
+    approvalTier: permissionModeRef.current,
+    expertGuidance: expertGuidanceRef.current,
+    hostConversation,
+    resolvePythonSpec: getPythonMcpSpec,
+  }), [getPythonMcpSpec, hostConversation]);
   const mcp = React.useMemo(() => createMcpClient({
     platform,
     extRoot,
-    resolveCommand: getMcpSpec,
+    // Tool Library and the panel's own Tools UI stay on Python stdio until
+    // their server-side implementation moves into the CEP host.
+    resolveCommand: getPythonMcpSpec,
     env: approvalTierFile.env(),
     onElicitation: elicitationCoordinator.handle,
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     randomBytes: (size) => cepRequire('crypto').randomBytes(size),
-  }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
+  }), [approvalTierFile, elicitationCoordinator, extRoot, getPythonMcpSpec, platform]);
   const toolsApi = React.useMemo(() => createToolsApi(mcp), [mcp]);
   React.useEffect(() => () => mcp.stop(), [mcp]);
   const releaseTurnAttachments = React.useCallback((turn) => {
@@ -1331,8 +1402,16 @@ function Shell({ cs }) {
   };
 
   const newChatSession = () => {
+    hostConversation.closeConversation();
     activeBackend.reset();
     resetAttachmentDraftSession();
+    if (mcpEngineRef.current === MCP_ENGINE_CEP_HOST && status.state === 'ok') {
+      hostConversation.ensureConversation({
+        label: chatSessionIdRef.current,
+        approvalTier: permissionModeRef.current,
+        expertGuidance: expertGuidanceRef.current,
+      });
+    }
     setChatStreaming(false);
     setThinkingActive(false);
     setChatEntries([]);
@@ -1684,6 +1763,7 @@ function Shell({ cs }) {
       pushLog('Invalid port');
       return;
     }
+    hostConversation.closeConversation();
     if (ctrl.current) ctrl.current.restart(port);
   };
 
@@ -1692,11 +1772,16 @@ function Shell({ cs }) {
     setWizardDone(true);
   };
 
-  const mcpConfigStr = runtimeReady ? JSON.stringify(buildMcpConfig(
-    status.port,
-    expertGuidance,
-    mcpCommand,
-  ), null, 2) : '';
+  const externalMcpReady = mcpEngine === MCP_ENGINE_CEP_HOST
+    ? status.state === 'ok'
+    : runtimeReady;
+  const mcpConfigStr = externalMcpReady ? JSON.stringify(
+    mcpEngine === MCP_ENGINE_CEP_HOST
+      ? httpConfigFor('claude-desktop', status.port)
+      : buildMcpConfig(status.port, expertGuidance, mcpCommand),
+    null,
+    2,
+  ) : '';
   const claudeStatus = probe === null ? { state: 'checking' }
     : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
@@ -1722,7 +1807,8 @@ function Shell({ cs }) {
         clientName={(CLIENT_NAMES[wizClient] || CLIENT_NAMES['claude-desktop'])[lang]}
         mcpConfig={mcpConfigStr}
         mcpCommand={mcpCommand}
-        mcpReady={runtimeReady}
+        mcpReady={externalMcpReady}
+        mcpEngine={mcpEngine}
         port={status.port}
         expertGuidance={expertGuidance}
         channels={channels}
@@ -1826,7 +1912,11 @@ function Shell({ cs }) {
             onApplyPort={applyPort}
             mcpConfig={mcpConfigStr}
             mcpCommand={mcpCommand}
-            mcpReady={runtimeReady}
+            mcpReady={externalMcpReady}
+            mcpEngine={mcpEngine}
+            onMcpEngineChange={(value) => {
+              setMcpEngine(saveMcpEngine(window.localStorage, value));
+            }}
             logs={logs}
             clients={clients}
             onBlockClient={(label, v) => {

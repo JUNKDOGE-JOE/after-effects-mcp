@@ -112,3 +112,28 @@ export function mcpConfigFor(client, port = 11488, expertGuidance = true, comman
     },
   };
 }
+
+export function httpConfigFor(client, port = 11488) {
+  const id = typeof client === 'string' ? client : (client && client.id);
+  const url = `http://127.0.0.1:${port}/mcp`;
+  if (id === 'claude-code') {
+    return `claude mcp add --transport http ae ${url}`;
+  }
+  if (id === 'cursor') {
+    return { mcpServers: { ae: { url } } };
+  }
+  return { mcpServers: { ae: { type: 'http', url } } };
+}
+
+export function externalClientConfigText({
+  client,
+  engine = 'python',
+  port = 11488,
+  expertGuidance = true,
+  command = 'ae-mcp',
+} = {}) {
+  const config = engine === 'cep-host'
+    ? httpConfigFor(client, port)
+    : mcpConfigFor(client, port, expertGuidance, command);
+  return typeof config === 'string' ? config : JSON.stringify(config, null, 2);
+}

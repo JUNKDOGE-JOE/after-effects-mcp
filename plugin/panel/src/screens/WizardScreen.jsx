@@ -6,7 +6,7 @@ import { Segmented } from '../components/core/Segmented';
 import { Spinner } from '../components/core/Spinner';
 import { AIAvatar } from '../components/chat/AIAvatar';
 import { ChannelCard } from '../components/settings/ChannelCard';
-import { EXTERNAL_CLIENTS, mcpConfigFor } from '../cep/externalClients';
+import { EXTERNAL_CLIENTS, externalClientConfigText } from '../cep/externalClients';
 import { initialStepStates, LOCAL_STEPS, SUBSCRIPTION_STEPS } from '../lib/wizardSteps';
 
 const W = {
@@ -26,6 +26,8 @@ const W = {
     builtin: '面板内置对话', builtinNote: '无需配置，开箱即用',
     docClient: '查看接入文档',
     docOnly: '按文档接入',
+    mcpHttp: 'MCP HTTP',
+    panelOpenNote: '面板开着才能连接；关闭或重载面板后客户端需要重连。',
   },
   en: {
     stepOf: (n) => `Step ${n} of 3`,
@@ -43,6 +45,8 @@ const W = {
     builtin: 'Built-in chat', builtinNote: 'No config needed — works out of the box',
     docClient: 'Open integration docs',
     docOnly: 'Use docs',
+    mcpHttp: 'MCP HTTP',
+    panelOpenNote: 'The panel must stay open. Clients reconnect after the panel closes or reloads.',
   },
 };
 
@@ -143,6 +147,7 @@ export function WizardScreen({
   mcpConfig = '',
   mcpCommand = 'ae-mcp',
   mcpReady = true,
+  mcpEngine = 'python',
   port = 11488,
   expertGuidance = true,
   onNext,
@@ -164,8 +169,15 @@ export function WizardScreen({
   const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
   // Prefer the per-client config (so ZCode shows its mcp.servers format, etc.);
   // fall back to the generic connection config passed from App.
-  const selectedMcpConfig = mcpReady && selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio'
-    ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance, mcpCommand), null, 2)
+  const selectedMcpConfig = mcpReady && selectedExternalClient
+    && (mcpEngine === 'cep-host' || selectedExternalClient.kind === 'mcp-stdio')
+    ? externalClientConfigText({
+      client: selectedExternalClient,
+      engine: mcpEngine,
+      port,
+      expertGuidance,
+      command: mcpCommand,
+    })
     : '';
   return (
     <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column', padding: 'var(--space-6) var(--space-5) var(--space-5)' }}>
@@ -224,13 +236,18 @@ export function WizardScreen({
                 <ClientRow
                   key={c.id}
                   name={c.id === 'builtin' ? t.builtin : c.name}
-                  note={c.id === 'builtin' ? t.builtinNote : c.kind === 'mcp-doc' ? t.docOnly : null}
+                  note={c.id === 'builtin' ? t.builtinNote : mcpEngine === 'cep-host' ? t.mcpHttp : c.kind === 'mcp-doc' ? t.docOnly : null}
                   selected={client === c.id}
                   onSelect={() => onClient && onClient(c.id)}
                 />
               ))}
             </div>
-            {selectedExternalClient && selectedExternalClient.kind === 'mcp-stdio' && selectedMcpConfig ? <CodeBlock code={selectedMcpConfig} copyLabel={t.copy} onCopy={() => (onCopy ? onCopy(selectedMcpConfig) : copyText(selectedMcpConfig))} maxHeight={150} /> : null}
+            {selectedExternalClient && selectedMcpConfig ? (
+              <React.Fragment>
+                <CodeBlock code={selectedMcpConfig} copyLabel={t.copy} onCopy={() => (onCopy ? onCopy(selectedMcpConfig) : copyText(selectedMcpConfig))} maxHeight={150} />
+                {mcpEngine === 'cep-host' ? <div style={{ font: '400 10px/1.45 var(--font-ui)', color: 'var(--text-tertiary)' }}>{t.panelOpenNote}</div> : null}
+              </React.Fragment>
+            ) : null}
             {selectedExternalClient && selectedExternalClient.kind === 'mcp-doc' ? (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 10, border: '1px solid var(--border-default)', borderRadius: 'var(--radius-md)', background: 'var(--bg-panel)' }}>
                 <a href={selectedExternalClient.docsUrl} target="_blank" rel="noreferrer" style={{ font: '500 12px/1.35 var(--font-ui)', color: 'var(--accent)' }}>{t.docClient}</a>

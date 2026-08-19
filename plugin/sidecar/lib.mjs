@@ -334,6 +334,15 @@ export function createSidecar({
       return {}
     }
 
+    if (options.mcp.type === 'http') {
+      return {
+        ae: {
+          type: 'http',
+          url: options.mcp.url
+        }
+      }
+    }
+
     const childEnv = {
       ...(isPlainObject(options.mcp.env) ? options.mcp.env : {})
     }

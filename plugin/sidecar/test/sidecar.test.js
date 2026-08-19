@@ -440,6 +440,30 @@ test('pins turn options to ae agent with annotations and allowed tools whitelist
   assert.equal(Object.hasOwn(seenOptions, 'systemPrompt'), false)
 })
 
+test('passes a cep-host HTTP MCP server through to the Agent SDK', async () => {
+  const writes = []
+  let seenOptions
+  const url = 'http://127.0.0.1:11488/mcp/c/sidecar-token'
+  const sidecar = createSidecar({
+    queryFn: async function * ({ options }) {
+      seenOptions = options
+      yield { type: 'result', subtype: 'success', is_error: false, session_id: 'sess-http' }
+    },
+    writeLine: (obj) => writes.push(obj),
+    argvOptions: {
+      ...defaultOptions,
+      mcp: { type: 'http', url }
+    },
+    env: {}
+  })
+
+  sidecar.handleLine(JSON.stringify({ t: 'user', text: 'http', permissionMode: 'none' }))
+  await waitFor(() => eventCount(writes, 'turn-end') === 1)
+
+  assert.deepEqual(seenOptions.mcpServers.ae, { type: 'http', url })
+  assert.match(seenOptions.mcpServers.ae.url, /\/mcp\/c\//)
+})
+
 test('agent prompts include ExtendScript pitfall anchors in both languages', async () => {
   const zhPrompt = await captureAgentPrompt('zh')
   const enPrompt = await captureAgentPrompt('en')

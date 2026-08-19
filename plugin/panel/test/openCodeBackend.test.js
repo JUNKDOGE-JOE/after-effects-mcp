@@ -387,6 +387,24 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   await pending;
 });
 
+test('createOpenCodeBackend writes a remote MCP URL for cep-host mode', async () => {
+  const url = 'http://127.0.0.1:11488/mcp/c/opencode-token';
+  const { backend, fetched, fsImpl } = makeBackend({
+    getMcpSpec: async () => ({ kind: 'http', url, name: 'ae' }),
+  });
+  const pending = backend.sendUser('http mcp');
+  await flush();
+
+  assert.deepEqual(JSON.parse(fsImpl.writes[0].text).mcp.ae, {
+    type: 'remote',
+    url,
+    enabled: true,
+  });
+  assert.match(JSON.parse(fsImpl.writes[0].text).mcp.ae.url, /\/mcp\/c\//);
+  fetched.sse.push({ type: 'session.status', properties: { sessionID: 'session_1', status: { type: 'idle' } } });
+  await pending;
+});
+
 // Fixtures use the real OpenCode wire shape:
 // { type, properties } with dotted types; text via message.part.delta
 // (field:'text'), tools via message.part.updated (part.type:'tool', state),

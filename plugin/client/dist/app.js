@@ -20885,6 +20885,27 @@
       }
     };
   }
+  function httpConfigFor(client, port = 11488) {
+    const id = typeof client === "string" ? client : client && client.id;
+    const url = `http://127.0.0.1:${port}/mcp`;
+    if (id === "claude-code") {
+      return `claude mcp add --transport http ae ${url}`;
+    }
+    if (id === "cursor") {
+      return { mcpServers: { ae: { url } } };
+    }
+    return { mcpServers: { ae: { type: "http", url } } };
+  }
+  function externalClientConfigText({
+    client,
+    engine = "python",
+    port = 11488,
+    expertGuidance = true,
+    command = "ae-mcp"
+  } = {}) {
+    const config = engine === "cep-host" ? httpConfigFor(client, port) : mcpConfigFor(client, port, expertGuidance, command);
+    return typeof config === "string" ? config : JSON.stringify(config, null, 2);
+  }
 
   // src/lib/clipboard.js
   init_cep_runtime_inject();
@@ -22196,7 +22217,9 @@
       externalClients: "\u5916\u63A5\u5BA2\u6237\u7AEF",
       externalClientsCap: "\u7ED9\u5E38\u89C1 MCP \u5BA2\u6237\u7AEF\u590D\u5236\u914D\u7F6E\uFF1B\u6587\u6863\u578B\u6846\u67B6\u6309\u5176\u63A5\u5165\u65B9\u5F0F\u914D\u7F6E\u3002",
       mcpStdio: "MCP stdio",
+      mcpHttp: "MCP HTTP",
       mcpDoc: "\u6587\u6863\u63A5\u5165",
+      panelOpenNote: "\u9762\u677F\u5F00\u7740\u624D\u80FD\u8FDE\u63A5\uFF1B\u5173\u95ED\u6216\u91CD\u8F7D\u9762\u677F\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002",
       openDocs: "\u6253\u5F00\u6587\u6863",
       sec: "\u5B89\u5168",
       gen: "\u901A\u7528",
@@ -22228,6 +22251,10 @@
       zcodeModelManaged: "\u7531 ZCode \u5F53\u524D\u4F1A\u8BDD\u7BA1\u7406",
       port: "\u7AEF\u53E3",
       portHint: "\u9ED8\u8BA4 11488",
+      mcpEngine: "MCP server engine",
+      mcpEnginePython: "Python\uFF08\u9ED8\u8BA4\uFF09",
+      mcpEngineCepHost: "CEP host\uFF08\u5B9E\u9A8C\u6027\uFF09",
+      mcpEngineCap: "\u5BF9\u65B0\u4F1A\u8BDD\u751F\u6548\uFF1B\u5916\u90E8\u5BA2\u6237\u7AEF\u914D\u7F6E\u89C1\u4E0B\u65B9\u3002",
       apply: "\u5E94\u7528",
       token: "\u8BBF\u95EE Token",
       regen: "\u91CD\u65B0\u751F\u6210",
@@ -22261,7 +22288,9 @@
       externalClients: "External clients",
       externalClientsCap: "Copy config for common MCP clients; configure documentation-driven frameworks with their own flow.",
       mcpStdio: "MCP stdio",
+      mcpHttp: "MCP HTTP",
       mcpDoc: "Docs",
+      panelOpenNote: "The panel must stay open. Clients reconnect after the panel closes or reloads.",
       openDocs: "Open docs",
       sec: "Security",
       gen: "General",
@@ -22293,6 +22322,10 @@
       zcodeModelManaged: "Managed by the current ZCode session",
       port: "Port",
       portHint: "Default 11488",
+      mcpEngine: "MCP server engine",
+      mcpEnginePython: "Python (default)",
+      mcpEngineCepHost: "CEP host (experimental)",
+      mcpEngineCap: "Applies to new sessions; external client config is shown below.",
       apply: "Apply",
       token: "Access token",
       regen: "Regenerate",
@@ -22377,15 +22410,16 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: blocked, onChange: onBlock })
     ] });
   }
-  function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false }) {
+  function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false, http = false }) {
     const isStdio = client.kind === "mcp-stdio";
+    const hasConfig = http || isStdio;
     return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: client.name }),
-          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: isStdio ? t.mcpStdio : t.mcpDoc })
+          /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: http ? t.mcpHttp : isStdio ? t.mcpStdio : t.mcpDoc })
         ] }),
-        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: copyDisabled, onClick: (e) => {
+        hasConfig ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", size: "sm", icon: "copy", disabled: copyDisabled, onClick: (e) => {
           e.preventDefault();
           if (!copyDisabled) onCopy();
         }, children: copied && !copyDisabled ? t.copied : t.copy }) : null
@@ -22393,7 +22427,8 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
         client.installHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-secondary)" }, children: client.installHint }) : null,
         client.loginHint ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.loginHint }) : null,
-        isStdio ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--gray-0)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)", whiteSpace: "pre" }, children: configText }) : null,
+        hasConfig ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("pre", { style: { margin: 0, maxHeight: 128, overflow: "auto", padding: 8, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", background: "var(--gray-0)", color: "var(--text-secondary)", font: "400 10px/1.4 var(--font-mono)", whiteSpace: "pre" }, children: configText }) : null,
+        http ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.panelOpenNote }) : null,
         client.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: client.networkNote }) : null,
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("a", { href: client.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.openDocs })
       ] })
@@ -22435,6 +22470,8 @@
     mcpConfig,
     mcpCommand = "ae-mcp",
     mcpReady = true,
+    mcpEngine = "python",
+    onMcpEngineChange,
     logs = [],
     clients = [],
     onBlockClient,
@@ -22598,6 +22635,10 @@
         }, placeholder: backend === "codex" ? "provider/model" : "claude-custom" }) }) : null
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "conn", title: t.conn, expanded: sections.conn, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.mcpEngine, caption: t.mcpEngineCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Segmented, { full: true, value: mcpEngine, onChange: onMcpEngineChange, options: [
+          { value: "python", label: t.mcpEnginePython },
+          { value: "cep-host", label: t.mcpEngineCepHost }
+        ] }) }),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: draftPort, onChange: setDraftPort, style: { flex: 1 } }),
           /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Button, { variant: "secondary", onClick: () => onApplyPort && onApplyPort(draftPort), children: t.apply })
@@ -22612,12 +22653,13 @@
         ] }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Section, { id: "externalClients", title: t.externalClients, caption: t.externalClientsCap, expanded: sections.externalClients, onToggle: onToggleSection, children: EXTERNAL_CLIENTS.map((externalClient) => {
-        const configText = mcpReady ? JSON.stringify(mcpConfigFor(
-          externalClient,
-          Number(draftPort) || port || 11488,
+        const configText = mcpReady ? externalClientConfigText({
+          client: externalClient,
+          engine: mcpEngine,
+          port: Number(draftPort) || port || 11488,
           expertGuidance,
-          mcpCommand
-        ), null, 2) : "";
+          command: mcpCommand
+        }) : "";
         return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ExternalClientRow,
           {
@@ -22626,6 +22668,7 @@
             configText,
             copied: copied === externalClient.id,
             copyDisabled: !mcpReady,
+            http: mcpEngine === "cep-host",
             onCopy: () => copy(externalClient.id, configText)
           },
           externalClient.id
@@ -23111,7 +23154,9 @@
       builtin: "\u9762\u677F\u5185\u7F6E\u5BF9\u8BDD",
       builtinNote: "\u65E0\u9700\u914D\u7F6E\uFF0C\u5F00\u7BB1\u5373\u7528",
       docClient: "\u67E5\u770B\u63A5\u5165\u6587\u6863",
-      docOnly: "\u6309\u6587\u6863\u63A5\u5165"
+      docOnly: "\u6309\u6587\u6863\u63A5\u5165",
+      mcpHttp: "MCP HTTP",
+      panelOpenNote: "\u9762\u677F\u5F00\u7740\u624D\u80FD\u8FDE\u63A5\uFF1B\u5173\u95ED\u6216\u91CD\u8F7D\u9762\u677F\u540E\u5BA2\u6237\u7AEF\u9700\u8981\u91CD\u8FDE\u3002"
     },
     en: {
       stepOf: (n) => `Step ${n} of 3`,
@@ -23137,7 +23182,9 @@
       builtin: "Built-in chat",
       builtinNote: "No config needed \u2014 works out of the box",
       docClient: "Open integration docs",
-      docOnly: "Use docs"
+      docOnly: "Use docs",
+      mcpHttp: "MCP HTTP",
+      panelOpenNote: "The panel must stay open. Clients reconnect after the panel closes or reloads."
     }
   };
   var EMPTY_STEPS = initialStepStates();
@@ -23232,6 +23279,7 @@
     mcpConfig = "",
     mcpCommand = "ae-mcp",
     mcpReady = true,
+    mcpEngine = "python",
     port = 11488,
     expertGuidance = true,
     onNext,
@@ -23251,7 +23299,13 @@
     const t = W[lang] || W.zh;
     const clientOptions = [{ id: "builtin", name: "builtin" }, ...EXTERNAL_CLIENTS];
     const selectedExternalClient = EXTERNAL_CLIENTS.find((item) => item.id === client);
-    const selectedMcpConfig = mcpReady && selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" ? JSON.stringify(mcpConfigFor(selectedExternalClient, port, expertGuidance, mcpCommand), null, 2) : "";
+    const selectedMcpConfig = mcpReady && selectedExternalClient && (mcpEngine === "cep-host" || selectedExternalClient.kind === "mcp-stdio") ? externalClientConfigText({
+      client: selectedExternalClient,
+      engine: mcpEngine,
+      port,
+      expertGuidance,
+      command: mcpCommand
+    }) : "";
     return /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { flex: 1, minHeight: 0, display: "flex", flexDirection: "column", padding: "var(--space-6) var(--space-5) var(--space-5)" }, children: [
       /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8 }, children: [
         /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { display: "flex", gap: 5 }, children: [1, 2, 3].map((n) => /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("span", { style: { width: n === step ? 14 : 5, height: 5, borderRadius: 3, background: n === step ? "var(--gray-11)" : n < step ? "var(--gray-9)" : "var(--gray-6)", transition: "width var(--dur-base) var(--ease-out)" } }, n)) }),
@@ -23292,13 +23346,16 @@
             ClientRow2,
             {
               name: c.id === "builtin" ? t.builtin : c.name,
-              note: c.id === "builtin" ? t.builtinNote : c.kind === "mcp-doc" ? t.docOnly : null,
+              note: c.id === "builtin" ? t.builtinNote : mcpEngine === "cep-host" ? t.mcpHttp : c.kind === "mcp-doc" ? t.docOnly : null,
               selected: client === c.id,
               onSelect: () => onClient && onClient(c.id)
             },
             c.id
           )) }),
-          selectedExternalClient && selectedExternalClient.kind === "mcp-stdio" && selectedMcpConfig ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }) : null,
+          selectedExternalClient && selectedMcpConfig ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)(import_react25.default.Fragment, { children: [
+            /* @__PURE__ */ (0, import_jsx_runtime23.jsx)(CodeBlock, { code: selectedMcpConfig, copyLabel: t.copy, onCopy: () => onCopy ? onCopy(selectedMcpConfig) : copyText2(selectedMcpConfig), maxHeight: 150 }),
+            mcpEngine === "cep-host" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.panelOpenNote }) : null
+          ] }) : null,
           selectedExternalClient && selectedExternalClient.kind === "mcp-doc" ? /* @__PURE__ */ (0, import_jsx_runtime23.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 8, padding: 10, border: "1px solid var(--border-default)", borderRadius: "var(--radius-md)", background: "var(--bg-panel)" }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("a", { href: selectedExternalClient.docsUrl, target: "_blank", rel: "noreferrer", style: { font: "500 12px/1.35 var(--font-ui)", color: "var(--accent)" }, children: t.docClient }),
             selectedExternalClient.networkNote ? /* @__PURE__ */ (0, import_jsx_runtime23.jsx)("div", { style: { font: "400 10px/1.45 var(--font-ui)", color: "var(--text-tertiary)" }, children: selectedExternalClient.networkNote }) : null
@@ -29854,7 +29911,7 @@
     getModel,
     getPermissionMode,
     getEffort = () => null,
-    getMcpSpec,
+    getMcpSpec: getMcpSpec2,
     getToolMeta,
     getExpertGuidance = () => true,
     getServerInstructions = () => "",
@@ -30413,8 +30470,8 @@
         const model = runtimeModel && runtimeModel.model || zcodeProtocolModelFromRef(modelRef);
         if (model) createParams.model = model;
         if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
-        if (getMcpSpec) {
-          const spec = await getMcpSpec();
+        if (getMcpSpec2) {
+          const spec = await getMcpSpec2();
           if (spec && spec.command) {
             const envObj = Object.assign({}, spec.env || {}, {
               AE_MCP_BACKEND: "ae-mcp",
@@ -40105,7 +40162,7 @@ data: ${JSON.stringify(payload)}
     platform,
     resolveNode = resolveSystemNode,
     sidecarPath,
-    getMcpSpec,
+    getMcpSpec: getMcpSpec2,
     getToolMeta,
     getModel,
     getPermissionMode,
@@ -40517,7 +40574,8 @@ data: ${JSON.stringify(payload)}
           emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
           return false;
         }
-        const mcpSpec = await getMcpSpec();
+        const mcpSpec = await getMcpSpec2();
+        const sidecarMcpSpec = mcpSpec && mcpSpec.kind === "http" ? { type: "http", url: mcpSpec.url } : mcpSpec;
         assertCurrentStart();
         const meta = await getToolMeta();
         assertCurrentStart();
@@ -40575,7 +40633,7 @@ data: ${JSON.stringify(payload)}
           spawnedProc = adapter.spawn(executable, [
             sidecarPath,
             "--mcp",
-            JSON.stringify(mcpSpec),
+            JSON.stringify(sidecarMcpSpec),
             "--allowed-tools",
             JSON.stringify(meta.allowedTools),
             "--annotations",
@@ -41106,7 +41164,7 @@ data: ${JSON.stringify(payload)}
     getEffort,
     getFast,
     getPermissionMode,
-    getMcpSpec,
+    getMcpSpec: getMcpSpec2,
     getToolMeta,
     getExpertGuidance = () => true,
     getServerInstructions = () => "",
@@ -41849,7 +41907,7 @@ data: ${JSON.stringify(payload)}
       await initialize();
       const threadRpc = rpc;
       const threadGeneration = runtimeGeneration;
-      const mcpSpec = await getMcpSpec();
+      const mcpSpec = await getMcpSpec2();
       toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
       if (threadGeneration !== runtimeGeneration || rpc !== threadRpc) {
         throw new Error("Codex thread start was cancelled");
@@ -41864,7 +41922,7 @@ data: ${JSON.stringify(payload)}
         sandboxPolicy: SANDBOX_POLICY,
         config: {
           mcp_servers: {
-            ae: {
+            ae: mcpSpec && mcpSpec.kind === "http" ? { url: mcpSpec.url } : {
               command: mcpSpec.command,
               args: mcpSpec.args || [],
               env: Object.assign({}, mcpSpec.env || {}, {
@@ -42344,7 +42402,7 @@ data: ${JSON.stringify(payload)}
     tempDirName = randomTempName,
     getModel,
     getPermissionMode,
-    getMcpSpec,
+    getMcpSpec: getMcpSpec2,
     getToolMeta,
     getExpertGuidance = () => true,
     onEvent,
@@ -42490,19 +42548,20 @@ data: ${JSON.stringify(payload)}
       configHome = adapter.paths.join([adapter.paths.tempRoot, tempDirName()]);
       const configDir = adapter.paths.join([configHome, "opencode"]);
       fs.mkdirSync(configDir, { recursive: true });
+      const mcpEntry = mcpSpec && mcpSpec.kind === "http" ? { type: "remote", url: mcpSpec.url, enabled: true } : {
+        type: "local",
+        command: asCommandArray(mcpSpec),
+        enabled: true,
+        timeout: MCP_TIMEOUT_MS,
+        environment: Object.assign({}, mcpSpec && mcpSpec.env || {}, {
+          AE_MCP_BACKEND: "ae-mcp",
+          ...expertGuidanceEnv(getExpertGuidance())
+        })
+      };
       const config = {
         $schema: "https://opencode.ai/config.json",
         mcp: {
-          ae: {
-            type: "local",
-            command: asCommandArray(mcpSpec),
-            enabled: true,
-            timeout: MCP_TIMEOUT_MS,
-            environment: Object.assign({}, mcpSpec && mcpSpec.env || {}, {
-              AE_MCP_BACKEND: "ae-mcp",
-              ...expertGuidanceEnv(getExpertGuidance())
-            })
-          }
+          ae: mcpEntry
         }
       };
       fs.writeFileSync(adapter.paths.join([configDir, "opencode.json"]), JSON.stringify(config, null, 2));
@@ -42554,7 +42613,7 @@ data: ${JSON.stringify(payload)}
       if (proc && baseUrl) return true;
       if (serverPromise) return serverPromise;
       serverPromise = (async () => {
-        const mcpSpec = getMcpSpec ? await getMcpSpec() : { command: "ae-mcp", args: [] };
+        const mcpSpec = getMcpSpec2 ? await getMcpSpec2() : { command: "ae-mcp", args: [] };
         writeConfig(mcpSpec);
         port = await getPort();
         baseUrl = "http://127.0.0.1:" + port;
@@ -50773,6 +50832,228 @@ data: ${JSON.stringify(payload)}
     return { handle, snapshot, subscribe, resolveVisible, dispose };
   }
 
+  // src/lib/hostConversation.js
+  init_cep_runtime_inject();
+  function conversationApi(getHost) {
+    const host = typeof getHost === "function" ? getHost() : null;
+    const conversations = host && host.mcp && host.mcp.conversations;
+    if (!conversations || typeof conversations.create !== "function") return null;
+    return conversations;
+  }
+  function createHostConversation({ getHost } = {}) {
+    let current = null;
+    let currentApi = null;
+    function ensureConversation({ label, approvalTier, expertGuidance } = {}) {
+      const conversations = conversationApi(getHost);
+      if (!conversations) {
+        current = null;
+        currentApi = null;
+        return null;
+      }
+      if (current && currentApi === conversations) return current;
+      current = null;
+      currentApi = conversations;
+      current = conversations.create({
+        label,
+        policy: {
+          approvalTier,
+          expertGuidance: expertGuidance !== false
+        }
+      }) || null;
+      if (!current) currentApi = null;
+      return current;
+    }
+    function updatePolicy(patch = {}) {
+      if (!current) return null;
+      const conversations = conversationApi(getHost);
+      if (!conversations || conversations !== currentApi || typeof conversations.update !== "function") {
+        current = null;
+        currentApi = null;
+        return null;
+      }
+      const updated = conversations.update(current.id, patch);
+      if (updated) current = updated;
+      else current = {
+        ...current,
+        policy: { ...current.policy || {}, ...patch }
+      };
+      return current;
+    }
+    function closeConversation() {
+      if (!current) return false;
+      const closing = current;
+      current = null;
+      currentApi = null;
+      const conversations = conversationApi(getHost);
+      if (!conversations || typeof conversations.close !== "function") return false;
+      return conversations.close(closing.id);
+    }
+    function currentPath() {
+      return current && current.path ? current.path : null;
+    }
+    function currentId() {
+      return current && current.id ? current.id : null;
+    }
+    function currentConversation() {
+      return current;
+    }
+    return {
+      ensureConversation,
+      updatePolicy,
+      closeConversation,
+      currentPath,
+      currentId,
+      currentConversation
+    };
+  }
+
+  // src/lib/hostApprovalBridge.js
+  init_cep_runtime_inject();
+  var APPROVAL_SCHEMA = Object.freeze({
+    type: "object",
+    properties: Object.freeze({
+      approve: Object.freeze({
+        type: "boolean",
+        title: "Approve",
+        description: "Approve this After Effects action."
+      })
+    }),
+    required: Object.freeze(["approve"])
+  });
+  function summaryLines(summary) {
+    const value = summary && typeof summary === "object" ? summary : {};
+    return [
+      value.code ? `Code: ${String(value.code).slice(0, 200)}` : "",
+      value.undo_group_name ? `Undo group: ${value.undo_group_name}` : "",
+      value.checkpoint_label ? `Checkpoint: ${value.checkpoint_label}` : ""
+    ].filter(Boolean);
+  }
+  function approvalRequestFor(item) {
+    const tool = String(item && item.tool || "unknown");
+    const risk = String(item && item.risk || "unknown");
+    const lines = [
+      `Approve After Effects tool action ${tool} (${risk})?`,
+      ...summaryLines(item && item.summary)
+    ];
+    return {
+      method: "elicitation/create",
+      message: lines.join("\n"),
+      requestedSchema: APPROVAL_SCHEMA
+    };
+  }
+  function removeListener(emitter, listener) {
+    if (typeof emitter.off === "function") emitter.off("request", listener);
+    else if (typeof emitter.removeListener === "function") emitter.removeListener("request", listener);
+  }
+  function createHostApprovalBridge() {
+    let binding = null;
+    function detach() {
+      if (!binding) return;
+      const prior = binding;
+      binding = null;
+      removeListener(prior.approvals, prior.listener);
+      for (const controller of prior.controllers) controller.abort();
+      prior.controllers.clear();
+    }
+    function attach({ approvals, coordinator, resolveConversationContext } = {}) {
+      if (!approvals || typeof approvals.on !== "function" || !coordinator || typeof coordinator.handle !== "function" || typeof resolveConversationContext !== "function") {
+        detach();
+        return detach;
+      }
+      if (binding && binding.approvals === approvals && binding.coordinator === coordinator && binding.resolveConversationContext === resolveConversationContext) return detach;
+      detach();
+      const controllers = /* @__PURE__ */ new Set();
+      const nextBinding = {
+        approvals,
+        coordinator,
+        resolveConversationContext,
+        controllers,
+        listener: null
+      };
+      const listener = (item) => {
+        const context = resolveConversationContext(item && item.conversationId, item);
+        if (!context) return;
+        const controller = new AbortController();
+        controllers.add(controller);
+        Promise.resolve(coordinator.handle(approvalRequestFor(item), {
+          ...context,
+          conversationId: item.conversationId,
+          approvalId: item.id,
+          signal: controller.signal
+        })).then((result) => {
+          if (binding !== nextBinding || controller.signal.aborted) return;
+          const accepted = result && result.action === "accept" && result.content && result.content.approve === true;
+          approvals.resolve(item.id, accepted ? "accept" : "decline");
+        }, () => {
+          if (binding === nextBinding && !controller.signal.aborted) {
+            approvals.resolve(item.id, "decline");
+          }
+        }).finally(() => controllers.delete(controller));
+      };
+      nextBinding.listener = listener;
+      binding = nextBinding;
+      approvals.on("request", listener);
+      return detach;
+    }
+    return { attach, detach };
+  }
+
+  // src/lib/mcpEngine.js
+  init_cep_runtime_inject();
+  var MCP_ENGINE_PREF_KEY = "ae_mcp_mcp_engine";
+  var MCP_ENGINE_PYTHON = "python";
+  var MCP_ENGINE_CEP_HOST = "cep-host";
+  function normalizeMcpEngine(value) {
+    return value === MCP_ENGINE_CEP_HOST ? MCP_ENGINE_CEP_HOST : MCP_ENGINE_PYTHON;
+  }
+  function loadMcpEngine(storage) {
+    try {
+      return normalizeMcpEngine(storage && storage.getItem(MCP_ENGINE_PREF_KEY));
+    } catch (error) {
+      return MCP_ENGINE_PYTHON;
+    }
+  }
+  function saveMcpEngine(storage, value) {
+    const engine = normalizeMcpEngine(value);
+    try {
+      if (storage) storage.setItem(MCP_ENGINE_PREF_KEY, engine);
+    } catch (error) {
+    }
+    return engine;
+  }
+  function cepHostUnavailableError() {
+    const error = new Error("CEP host MCP server is not running");
+    error.code = "CEP_HOST_MCP_NOT_RUNNING";
+    return error;
+  }
+  async function getMcpSpec({
+    engine,
+    port,
+    label,
+    approvalTier,
+    expertGuidance,
+    hostConversation,
+    resolvePythonSpec
+  }) {
+    if (normalizeMcpEngine(engine) === MCP_ENGINE_PYTHON) {
+      if (typeof resolvePythonSpec !== "function") throw new TypeError("resolvePythonSpec is required");
+      return resolvePythonSpec();
+    }
+    const conversation = hostConversation && hostConversation.ensureConversation({
+      label,
+      approvalTier,
+      expertGuidance
+    });
+    if (!conversation || typeof conversation.path !== "string" || !conversation.path) {
+      throw cepHostUnavailableError();
+    }
+    return {
+      kind: "http",
+      url: `http://127.0.0.1:${port}${conversation.path}`,
+      name: "ae"
+    };
+  }
+
   // src/app/App.jsx
   var import_jsx_runtime44 = __toESM(require_jsx_runtime(), 1);
   var T = {
@@ -50983,6 +51264,8 @@ data: ${JSON.stringify(payload)}
     const [logs, setLogs] = import_react48.default.useState([]);
     const ctrl = import_react48.default.useRef(null);
     const getHost = import_react48.default.useCallback(() => ctrl.current ? ctrl.current.getHost() : null, []);
+    const hostConversation = import_react48.default.useMemo(() => createHostConversation({ getHost }), [getHost]);
+    const hostApprovalBridge = import_react48.default.useMemo(() => createHostApprovalBridge(), []);
     const [wizardDone, setWizardDone] = import_react48.default.useState(() => isWizardDone(window.localStorage));
     const [wizStep, setWizStep] = import_react48.default.useState(1);
     const [wizClient, setWizClient] = import_react48.default.useState("claude-desktop");
@@ -51025,6 +51308,9 @@ data: ${JSON.stringify(payload)}
     const [sessionModel, setSessionModel] = import_react48.default.useState(null);
     const [sessionEffort, setSessionEffort] = import_react48.default.useState(null);
     const [sessionFast, setSessionFast] = import_react48.default.useState(null);
+    const [mcpEngine, setMcpEngine] = import_react48.default.useState(() => loadMcpEngine(window.localStorage));
+    const mcpEngineRef = import_react48.default.useRef(mcpEngine);
+    mcpEngineRef.current = mcpEngine;
     const [permissionMode, setPermissionMode] = import_react48.default.useState(() => readPref("ae_mcp_perm_mode", "manual"));
     const permissionModeRef = import_react48.default.useRef(permissionMode);
     permissionModeRef.current = permissionMode;
@@ -51059,7 +51345,10 @@ data: ${JSON.stringify(payload)}
     import_react48.default.useEffect(() => elicitationCoordinator.subscribe(setToolApproval), [elicitationCoordinator]);
     import_react48.default.useEffect(() => {
       approvalTierFile.write(permissionMode);
-    }, [approvalTierFile, permissionMode]);
+      if (mcpEngine === MCP_ENGINE_CEP_HOST) {
+        hostConversation.updatePolicy({ approvalTier: permissionMode });
+      }
+    }, [approvalTierFile, hostConversation, mcpEngine, permissionMode]);
     import_react48.default.useEffect(() => () => {
       elicitationCoordinator.dispose();
       try {
@@ -51099,6 +51388,47 @@ data: ${JSON.stringify(payload)}
     const [claudeProviderId, setClaudeProviderId] = import_react48.default.useState(() => readPref("ae_mcp_claude_provider", ""));
     const [codexProviderId, setCodexProviderId] = import_react48.default.useState(() => readPref("ae_mcp_codex_provider", ""));
     const [expertGuidance, setExpertGuidance] = import_react48.default.useState(() => loadExpertGuidance(window.localStorage));
+    const expertGuidanceRef = import_react48.default.useRef(expertGuidance);
+    expertGuidanceRef.current = expertGuidance;
+    import_react48.default.useEffect(() => {
+      if (mcpEngine === MCP_ENGINE_CEP_HOST) {
+        hostConversation.updatePolicy({ expertGuidance });
+      }
+    }, [expertGuidance, hostConversation, mcpEngine]);
+    import_react48.default.useEffect(() => {
+      if (mcpEngine !== MCP_ENGINE_CEP_HOST) {
+        hostConversation.closeConversation();
+        return;
+      }
+      if (status.state !== "ok") return;
+      hostConversation.ensureConversation({
+        label: chatSessionIdRef.current,
+        approvalTier: permissionModeRef.current,
+        expertGuidance: expertGuidanceRef.current
+      });
+    }, [hostConversation, mcpEngine, status.state]);
+    const resolveHostConversationContext = import_react48.default.useCallback((conversationId) => {
+      const current = hostConversation.currentConversation();
+      if (!current || current.id !== conversationId) return null;
+      return {
+        conversationId,
+        conversationLabel: current.label || chatSessionIdRef.current
+      };
+    }, [hostConversation]);
+    import_react48.default.useEffect(() => {
+      if (mcpEngine !== MCP_ENGINE_CEP_HOST || status.state !== "ok") {
+        hostApprovalBridge.detach();
+        return void 0;
+      }
+      const host = getHost();
+      const approvals = host && host.mcp && host.mcp.approvals;
+      hostApprovalBridge.attach({
+        approvals,
+        coordinator: elicitationCoordinator,
+        resolveConversationContext: resolveHostConversationContext
+      });
+      return () => hostApprovalBridge.detach();
+    }, [elicitationCoordinator, getHost, hostApprovalBridge, mcpEngine, resolveHostConversationContext, status.state]);
     const [probe, setProbe] = import_react48.default.useState(null);
     const [codexProbe, setCodexProbe] = import_react48.default.useState(null);
     const [codexModels, setCodexModels] = import_react48.default.useState(null);
@@ -51360,7 +51690,7 @@ ${baseUrl}`),
       runtimeActivation
     }), [extRoot, platform, runtimeActivation]);
     const sidecarPath = sidecarSelection.path;
-    const getMcpSpec = import_react48.default.useCallback(async () => {
+    const getPythonMcpSpec = import_react48.default.useCallback(async () => {
       try {
         const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
         if (runtimeManager && spec.runtime) markRuntimeReady(spec.runtime);
@@ -51370,15 +51700,28 @@ ${baseUrl}`),
         throw error;
       }
     }, [approvalTierFile, extRoot, markRuntimeReady, platform, runtimeManager]);
+    const hostPortRef = import_react48.default.useRef(status.port);
+    hostPortRef.current = status.port;
+    const getMcpSpec2 = import_react48.default.useCallback(() => getMcpSpec({
+      engine: mcpEngineRef.current,
+      port: hostPortRef.current,
+      label: chatSessionIdRef.current,
+      approvalTier: permissionModeRef.current,
+      expertGuidance: expertGuidanceRef.current,
+      hostConversation,
+      resolvePythonSpec: getPythonMcpSpec
+    }), [getPythonMcpSpec, hostConversation]);
     const mcp = import_react48.default.useMemo(() => createMcpClient({
       platform,
       extRoot,
-      resolveCommand: getMcpSpec,
+      // Tool Library and the panel's own Tools UI stay on Python stdio until
+      // their server-side implementation moves into the CEP host.
+      resolveCommand: getPythonMcpSpec,
       env: approvalTierFile.env(),
       onElicitation: elicitationCoordinator.handle,
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       randomBytes: (size) => cepRequire4("crypto").randomBytes(size)
-    }), [approvalTierFile, elicitationCoordinator, extRoot, getMcpSpec, platform]);
+    }), [approvalTierFile, elicitationCoordinator, extRoot, getPythonMcpSpec, platform]);
     const toolsApi = import_react48.default.useMemo(() => createToolsApi(mcp), [mcp]);
     import_react48.default.useEffect(() => () => mcp.stop(), [mcp]);
     const releaseTurnAttachments = import_react48.default.useCallback((turn) => {
@@ -51527,7 +51870,7 @@ ${baseUrl}`),
       platform,
       resolveNode: resolvePanelNode,
       sidecarPath,
-      getMcpSpec,
+      getMcpSpec: getMcpSpec2,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
@@ -51548,10 +51891,10 @@ ${baseUrl}`),
       onProviderProfileRecovered: refreshRuntimeProviders,
       lang,
       onEvent: handleChatEvent
-    }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders, resolvePanelNode]);
+    }), [getMcpSpec2, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders, resolvePanelNode]);
     const codexBackend = import_react48.default.useMemo(() => createCodexBackend({
       platform,
-      getMcpSpec,
+      getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
@@ -51572,7 +51915,7 @@ ${baseUrl}`),
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
+    }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders]);
     import_react48.default.useEffect(() => {
       if (providerInit.state !== "ready" || !providerStore) return void 0;
       let debugMarker = false;
@@ -51701,17 +52044,17 @@ ${baseUrl}`),
     }, [codexBackend, providerProfile]);
     const openCodeBackend = import_react48.default.useMemo(() => createOpenCodeBackend({
       platform,
-      getMcpSpec,
+      getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
+    }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
     const zcodeBackend = import_react48.default.useMemo(() => createZcodeBackend({
       platform,
-      getMcpSpec,
+      getMcpSpec: getMcpSpec2,
       getModel: () => runtimeRef.current.model,
       getPermissionMode: () => runtimeRef.current.permissionMode,
       getEffort: () => runtimeRef.current.effort,
@@ -51721,7 +52064,7 @@ ${baseUrl}`),
       readStoredZcodeKey: () => zcodeStoredKeyRef.current,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
-    }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
+    }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
     import_react48.default.useEffect(() => () => {
       zcodeStoredKeyRef.current = "";
       zcodeBackend.reset();
@@ -51965,8 +52308,16 @@ ${baseUrl}`),
       }
     };
     const newChatSession = () => {
+      hostConversation.closeConversation();
       activeBackend.reset();
       resetAttachmentDraftSession();
+      if (mcpEngineRef.current === MCP_ENGINE_CEP_HOST && status.state === "ok") {
+        hostConversation.ensureConversation({
+          label: chatSessionIdRef.current,
+          approvalTier: permissionModeRef.current,
+          expertGuidance: expertGuidanceRef.current
+        });
+      }
       setChatStreaming(false);
       setThinkingActive(false);
       setChatEntries([]);
@@ -52306,17 +52657,19 @@ ${baseUrl}`),
         pushLog("Invalid port");
         return;
       }
+      hostConversation.closeConversation();
       if (ctrl.current) ctrl.current.restart(port);
     };
     const finishWizard = () => {
       markWizardDone(window.localStorage);
       setWizardDone(true);
     };
-    const mcpConfigStr = runtimeReady ? JSON.stringify(buildMcpConfig(
-      status.port,
-      expertGuidance,
-      mcpCommand
-    ), null, 2) : "";
+    const externalMcpReady = mcpEngine === MCP_ENGINE_CEP_HOST ? status.state === "ok" : runtimeReady;
+    const mcpConfigStr = externalMcpReady ? JSON.stringify(
+      mcpEngine === MCP_ENGINE_CEP_HOST ? httpConfigFor("claude-desktop", status.port) : buildMcpConfig(status.port, expertGuidance, mcpCommand),
+      null,
+      2
+    ) : "";
     const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
     const wizard = useWizardWiring({
       extRoot,
@@ -52339,7 +52692,8 @@ ${baseUrl}`),
           clientName: (CLIENT_NAMES[wizClient] || CLIENT_NAMES["claude-desktop"])[lang],
           mcpConfig: mcpConfigStr,
           mcpCommand,
-          mcpReady: runtimeReady,
+          mcpReady: externalMcpReady,
+          mcpEngine,
           port: status.port,
           expertGuidance,
           channels,
@@ -52447,7 +52801,11 @@ ${baseUrl}`),
             onApplyPort: applyPort,
             mcpConfig: mcpConfigStr,
             mcpCommand,
-            mcpReady: runtimeReady,
+            mcpReady: externalMcpReady,
+            mcpEngine,
+            onMcpEngineChange: (value) => {
+              setMcpEngine(saveMcpEngine(window.localStorage, value));
+            },
             logs,
             clients,
             onBlockClient: (label, v) => {
