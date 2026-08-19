@@ -155,9 +155,9 @@ test('runtime npm inputs are exact direct pins in manifests and lockfiles', () =
   const sidecarManifest = JSON.parse(fs.readFileSync('plugin/sidecar/package.json', 'utf8'));
   const sidecarLock = JSON.parse(fs.readFileSync('plugin/sidecar/package-lock.json', 'utf8'));
 
-  assert.equal(hostManifest.dependencies.express, '4.22.1');
-  assert.equal(hostLock.packages[''].dependencies.express, '4.22.1');
-  assert.equal(hostLock.packages['node_modules/express'].version, '4.22.1');
+  assert.equal(hostManifest.dependencies.express, '4.22.2');
+  assert.equal(hostLock.packages[''].dependencies.express, '4.22.2');
+  assert.equal(hostLock.packages['node_modules/express'].version, '4.22.2');
   assert.equal(sidecarManifest.dependencies['@anthropic-ai/claude-agent-sdk'], '0.3.174');
   assert.equal(sidecarLock.packages[''].dependencies['@anthropic-ai/claude-agent-sdk'], '0.3.174');
   assert.equal(

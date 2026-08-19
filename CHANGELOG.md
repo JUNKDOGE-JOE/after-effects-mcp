@@ -20,6 +20,7 @@ Format based on Keep a Changelog; versioning follows SemVer.
 #### 🐛 修复 / 改进
 
 - **ExtendScript 超时不再提前放行串行锁（#260）**——调用方仍会按原期限收到超时，但 Bridge 会等迟到回调或排空哨兵返回后才继续，期间 `/health`、`/exec`、`ae.status` 与 `ae.diagnose` 报告 `degraded`；错误 disposition 收敛为三值：从未进入 AE、可安全重试的 `not_dispatched`，已派发但结果未知的 `uncertain`，以及已执行并明确报错的 `failed`。
+- **依赖清扫：`npm audit` 归零**——`plugin/sidecar` 锁文件把 `fast-uri` 升到 3.1.5（修 CVE-2026-13676 / GHSA-4c8g-83qw-93j6 以及其后的 GHSA-v2hh-gcrm-f6hx、GHSA-7p8r-x3mc-p8w7，仍在 ajv 声明的 `^3.0.1` 范围内，不引入 `overrides`），同批升级 `ip-address` 10.5.0、`hono` 4.13.3、`@hono/node-server` 1.19.17、`body-parser` 2.3.0；`plugin/host` 的 `express` 4.22.1→4.22.2（连带 `qs` 6.15.3、`body-parser` 1.20.6）。两个工作区 `npm audit` 均为 0；这些包只在本机回环路径上工作，属扫描器噪音清理而非已确认可达的漏洞。由 #271（@anupamme / OrbisAI 扫描报告）触发。
 
 
 ### [0.9.6] — 2026-08-19
@@ -309,6 +310,7 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 #### 🐛 Fixes / Improvements
 
 - **ExtendScript timeouts no longer release the serialization lock early (#260)** — Callers still receive a timeout on schedule, while the bridge waits for a late callback or drain sentinel before proceeding and reports `degraded` through `/health`, `/exec`, `ae.status`, and `ae.diagnose`. Error dispositions are a closed three-value set: `not_dispatched` for scripts that never entered AE and are safe to retry, `uncertain` for dispatched scripts whose result is unknown, and `failed` for scripts that executed and returned a definite error.
+- **Dependency sweep: `npm audit` clean** — the `plugin/sidecar` lockfile moves `fast-uri` to 3.1.5 (fixes CVE-2026-13676 / GHSA-4c8g-83qw-93j6 plus the later GHSA-v2hh-gcrm-f6hx and GHSA-7p8r-x3mc-p8w7, staying inside ajv's declared `^3.0.1` range with no `overrides`), alongside `ip-address` 10.5.0, `hono` 4.13.3, `@hono/node-server` 1.19.17 and `body-parser` 2.3.0; `plugin/host` bumps `express` 4.22.1→4.22.2 (with `qs` 6.15.3 and `body-parser` 1.20.6). Both workspaces now audit at 0. These packages only ever see loopback traffic here, so this is scanner-noise cleanup rather than a confirmed reachable vulnerability. Prompted by #271 (@anupamme / OrbisAI scan report).
 
 ### [0.9.6] — 2026-08-19
 
