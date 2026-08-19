@@ -101,7 +101,16 @@ _ARGS_SCHEMA_ROOT_KEYS = frozenset(
     {"type", "properties", "required", "additionalProperties"}
 )
 _ARGS_SCHEMA_VALUE_KEYS = frozenset(
-    {"type", "enum", "default", "minimum", "maximum", "minLength", "maxLength"}
+    {
+        "type",
+        "enum",
+        "default",
+        "description",
+        "minimum",
+        "maximum",
+        "minLength",
+        "maxLength",
+    }
 )
 _ARGS_SCHEMA_TYPES = frozenset(
     {"string", "number", "integer", "boolean", "object", "array", "null"}
@@ -247,6 +256,12 @@ def validate_args_schema(
             raise ValueError(
                 f"argsSchema property {name} contains unsupported keywords: "
                 + ", ".join(unknown)
+            )
+        if "description" in raw_rule:
+            cast(dict[str, JsonValue], raw_rule)["description"] = _string(
+                raw_rule["description"],
+                label=f"argsSchema property {name} description",
+                max_length=1024,
             )
         rule_type = raw_rule.get("type")
         if rule_type is not None and rule_type not in _ARGS_SCHEMA_TYPES:
