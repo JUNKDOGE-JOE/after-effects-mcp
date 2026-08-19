@@ -34,6 +34,9 @@ from ae_mcp.server import (
 )
 
 _MCP_TOOL_NAME = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+_TOP_LEVEL_SCHEMA_COMBINATORS = frozenset(
+    {"allOf", "anyOf", "else", "if", "not", "oneOf", "then"}
+)
 _ROOT = Path(__file__).resolve().parents[3]
 _MIGRATION = (
     _ROOT / "native/ae-plugin/protocol/native-exec-migration.json"
@@ -223,6 +226,18 @@ def _full_tool_listing(monkeypatch):
     return build_server()
 
 
+def _assert_safe_advertised_input_schema(tool):
+    schema = tool.inputSchema
+    assert schema.get("type") == "object", (
+        f"{tool.name} inputSchema top-level type must be object"
+    )
+    forbidden = _TOP_LEVEL_SCHEMA_COMBINATORS.intersection(schema)
+    assert not forbidden, (
+        f"{tool.name} inputSchema contains forbidden top-level key(s): "
+        f"{sorted(forbidden)}"
+    )
+
+
 async def test_list_tools_emits_only_mcp_compliant_names(_full_tool_listing):
     """Drive the registered list_tools handler and assert every emitted
     Tool.name is underscore-form (no dots). Fails if _list_tools reverts to
@@ -233,6 +248,15 @@ async def test_list_tools_emits_only_mcp_compliant_names(_full_tool_listing):
     for tool in tools:
         assert _MCP_TOOL_NAME.fullmatch(tool.name), f"{tool.name!r} is not MCP-compliant"
         assert "." not in tool.name
+
+
+async def test_list_tools_advertises_only_plain_top_level_object_schemas(
+    _full_tool_listing,
+):
+    tools = await _full_tool_listing._ae_list_tools()
+    assert len(tools) == 16
+    for tool in tools:
+        _assert_safe_advertised_input_schema(tool)
 
 
 async def test_list_tools_descriptions_lead_with_exposed_name(_full_tool_listing):

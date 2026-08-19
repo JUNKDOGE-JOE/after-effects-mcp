@@ -10,6 +10,12 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### [Unreleased]
+
+#### 🐛 修复 / 改进
+
+- **兼容 Anthropic / AWS Bedrock 的工具 schema 限制**——`ae_nativeExec` 广告给 MCP 客户端的 `inputSchema` 不再在顶层带 `allOf`（Anthropic 直连与 Bedrock 会以 `input_schema does not support oneOf, allOf, or anyOf at the top level` 拒绝整个请求，经中转站接 Bedrock 的 Claude Code 用户首当其冲）；23 个原语的嵌套判别 schema、服务端完整的读/写程序校验与结构化错误契约保持不变，并新增守卫测试禁止任何工具在 schema 顶层出现组合子。
+
 ### [0.9.5] — 2026-08-12
 
 #### ✨ 新增
@@ -273,6 +279,12 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### [Unreleased]
+
+#### 🐛 Fixed / Improved
+
+- **Anthropic / AWS Bedrock tool-schema compatibility** — the `inputSchema` that `ae_nativeExec` advertises to MCP clients no longer carries a top-level `allOf` (the Anthropic API and Bedrock reject the whole request with `input_schema does not support oneOf, allOf, or anyOf at the top level`; Claude Code users routed to Bedrock through a relay hit it first). The nested discriminated schemas for all 23 primitives, full server-side read/write program validation, and the structured error contract are unchanged, and a guard test now forbids top-level combinators on every advertised tool.
 
 ### [0.9.5] — 2026-08-12
 

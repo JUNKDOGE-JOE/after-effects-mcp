@@ -135,10 +135,19 @@ def test_preview_frame_rejects_invalid_ranges():
 
 def test_every_schema_can_generate_json_schema():
     """MCP tools/list will call .model_json_schema() on every verb."""
-    for name, cls in S.SCHEMAS.items():
+    from ae_mcp.server import _PANEL_DEVELOPER_SCHEMAS
+
+    schema_classes = [
+        *((f"public:{name}", cls) for name, cls in S.SCHEMAS.items()),
+        *((f"panel:{name}", cls) for name, cls in _PANEL_DEVELOPER_SCHEMAS.items()),
+    ]
+    forbidden = {"allOf", "anyOf", "else", "if", "not", "oneOf", "then"}
+    for name, cls in schema_classes:
         schema = cls.model_json_schema()
         assert schema["type"] == "object", name
         assert "properties" in schema, name
+        invalid = forbidden.intersection(schema)
+        assert not invalid, f"{name} has forbidden top-level key(s): {sorted(invalid)}"
 
 
 def test_ae_ping_default():

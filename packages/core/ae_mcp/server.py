@@ -1151,10 +1151,9 @@ def build_server() -> Server:
 
     server: Server = Server("ae", instructions=build_server_instructions())
 
-    # Runtime JSON Schema validation must use the exact schema advertised by
-    # tools/list. The MCP SDK still populates its tool cache before invoking
-    # our call handler even when its own pre-validation is disabled; this map
-    # lets the handler apply the same schema without reaching into SDK internals.
+    # The MCP SDK still populates its tool cache before invoking our call handler
+    # even when its own pre-validation is disabled. Keep the advertised schemas
+    # here so the handler can apply them without reaching into SDK internals.
     advertised_input_schemas: dict[str, dict[str, Any]] = {}
 
     @server.list_tools()
@@ -1241,14 +1240,17 @@ def build_server() -> Server:
 
         # The SDK's default validation happens before this handler and reduces
         # every schema failure to unstructured text. Reapply the same
-        # jsonschema validation here using the exact tools/list schema: the
-        # native layer-property tool can then expose its structured recovery
-        # contract, while established tools keep the SDK's original text error.
-        input_schema = (
-            schema_cls.model_json_schema()
-            if panel_developer
-            else advertised_input_schemas.get(expose_tool_name(name))
-        )
+        # jsonschema validation here so native tools can expose their structured
+        # recovery contract, while established tools keep the SDK's original
+        # text error. nativeExec uses the complete generated contract because
+        # its MCP advertisement omits top-level combinators rejected by strict
+        # Anthropic-compatible tool-schema endpoints.
+        if name == "ae.nativeExec":
+            input_schema = schemas.NATIVE_EXEC_INPUT_SCHEMA
+        elif panel_developer:
+            input_schema = schema_cls.model_json_schema()
+        else:
+            input_schema = advertised_input_schemas.get(expose_tool_name(name))
         if input_schema is not None:
             try:
                 validate_json_schema(
