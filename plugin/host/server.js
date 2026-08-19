@@ -6,6 +6,7 @@ const path = require('path');
 const jsxBridge = require('./jsx-bridge');
 const authToken = require('./auth-token');
 const activity = require('./activity');
+const hostLog = require('./host-log');
 const nativeAegp = require('./native-aegp-client');
 const PKG_VERSION = require('./package.json').version;
 
@@ -23,6 +24,8 @@ let lastPythonVersion = null;
 let nativeAegpClient = null;
 let nativeAegpClientFactory = null;
 let nativeAegpRuntime = null;
+let restoreHostConsole = null;
+let unsubscribeHostActivity = null;
 const clients = new Map();
 const blocked = new Set();
 // Self-reported label of the panel's own diagnostic /exec probes. Must match
@@ -726,6 +729,9 @@ function start(port, callback, roots) {
     if (httpServer) {
         return callback(new Error('already started; call restart() to change port'));
     }
+    hostLog.init();
+    restoreHostConsole = hostLog.captureConsole(console);
+    unsubscribeHostActivity = hostLog.subscribeActivity(activity);
     let nextRoots = platformRoots;
     try {
         if (roots !== undefined) nextRoots = normalizePlatformRoots(roots);
@@ -752,6 +758,14 @@ function start(port, callback, roots) {
 }
 
 function stop(callback) {
+    if (restoreHostConsole) {
+        try { restoreHostConsole(); } catch (error) { /* best effort */ }
+        restoreHostConsole = null;
+    }
+    if (unsubscribeHostActivity) {
+        try { unsubscribeHostActivity(); } catch (error) { /* best effort */ }
+        unsubscribeHostActivity = null;
+    }
     closeNativeAegpClient();
     if (!httpServer) return callback ? callback() : null;
     httpServer.close(() => {
@@ -782,6 +796,7 @@ module.exports = {
     setPaused,
     isPaused,
     activity,
+    hostLog,
     getConnectionInfo,
     getClients,
     setClientBlocked,

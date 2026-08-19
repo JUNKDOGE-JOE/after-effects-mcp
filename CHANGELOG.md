@@ -8,6 +8,15 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ---
 
+## [Unreleased]
+
+### ✨ 新增 / Added
+
+- **可用于排障的诊断包**——设置里的「导出日志」现在持久化面板与 CEP 宿主事件，
+  包含 diagnostics、`/exec`/`/native/*` activity、Python server 日志、后端 stderr、
+  AE/CEP/OS/Node 环境，并汇总 `previewFrame` 的 comp PNG / viewer 回落分支数；日志
+  位于 `~/.ae-mcp/logs/`，面板重载后仍可导出。
+
 ## 中文
 
 ### [0.9.6] — 2026-08-19

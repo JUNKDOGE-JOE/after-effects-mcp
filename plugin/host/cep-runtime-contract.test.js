@@ -24,6 +24,7 @@ const CEP_EXECUTED_FILES = [
     'jsx-bridge.js',
     'auth-token.js',
     'activity.js',
+    'host-log.js',
     'native-aegp-client.js',
     'platform-helper-client.js',
     'platform-helper-registration.js',
