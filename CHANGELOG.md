@@ -10,6 +10,18 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 ## 中文
 
+### Unreleased
+
+#### ✨ 新增
+
+- **可用于排障的诊断包**——设置里的「导出日志」现在真正持久化面板与 CEP 宿主事件（`~/.ae-mcp/logs/host-YYYY-MM-DD.jsonl`，面板重载后仍可导出），导出包按段独立容错并全段脱敏：环境（AE/CEP/OS/Node/Chromium）、现跑一次的 diagnostics、`/exec` `/native/*` activity、宿主日志内存与磁盘尾部、面板日志、claude/codex/opencode 后端 stderr、Python server 日志（新增 `server-YYYY-MM-DD.log` 文件日志，含启动信息）以及 `previewFrame` 的 comp PNG / viewer 回落分支统计（Phase 0 §6.3 取证）。
+- **实验性 CEP 内嵌 MCP Streamable HTTP spike（#261）**——宿主新增本机免口令 `/mcp`（Origin/Host 白名单）的 `ae_status` / `ae_exec` 最小闭环、会话 SSE 与长调用 progress 通知，`ae_exec` 与 `/exec` 共用同一条执行链；用真实 31 秒调用的 Node 15（CEP 11 同级）CI 门槛验证。**尚未接入 approval gate，不应视为完整迁移或发布承诺**。
+
+#### 🐛 修复 / 改进
+
+- **ExtendScript 超时不再提前放行串行锁（#260）**——调用方仍会按原期限收到超时，但 Bridge 会等迟到回调或排空哨兵返回后才继续，期间 `/health`、`/exec`、`ae.status` 与 `ae.diagnose` 报告 `degraded`；错误 disposition 收敛为三值：从未进入 AE、可安全重试的 `not_dispatched`，已派发但结果未知的 `uncertain`，以及已执行并明确报错的 `failed`。
+
+
 ### [0.9.6] — 2026-08-19
 
 #### 🐛 修复 / 改进
@@ -286,6 +298,17 @@ Atom 级 After Effects 插件 MVP：30 个 `ae.*` 工具，覆盖 MCP → Python
 ---
 
 ## English
+
+### Unreleased
+
+#### ✨ Added
+
+- **A diagnostics bundle that can actually diagnose something** — Settings → "Export log" now persists panel and CEP-host events (`~/.ae-mcp/logs/host-YYYY-MM-DD.jsonl`, still exportable after a panel reload) and writes independently fault-tolerant, fully redacted sections: environment (AE/CEP/OS/Node/Chromium), a fresh diagnostics run, `/exec` and `/native/*` activity, host log memory + disk tail, panel log, claude/codex/opencode backend stderr, the Python server log (new `server-YYYY-MM-DD.log` file log with a startup line) and a `previewFrame` comp-PNG vs viewer-fallback branch summary (the Phase 0 §6.3 evidence).
+- **Experimental CEP-hosted MCP Streamable HTTP spike (#261)** — the host now mounts a local, token-free `/mcp` (Origin/Host allowlist) with a minimal `ae_status` / `ae_exec` loop, session-bound SSE and progress notifications for long calls; `ae_exec` shares the `/exec` execution chain. Gated by a new Node 15 (CEP 11 peer-engine) CI job that runs a real 31-second call. **No approval gate yet — not a finished migration or a release commitment.**
+
+#### 🐛 Fixes / Improvements
+
+- **ExtendScript timeouts no longer release the serialization lock early (#260)** — Callers still receive a timeout on schedule, while the bridge waits for a late callback or drain sentinel before proceeding and reports `degraded` through `/health`, `/exec`, `ae.status`, and `ae.diagnose`. Error dispositions are a closed three-value set: `not_dispatched` for scripts that never entered AE and are safe to retry, `uncertain` for dispatched scripts whose result is unknown, and `failed` for scripts that executed and returned a definite error.
 
 ### [0.9.6] — 2026-08-19
 

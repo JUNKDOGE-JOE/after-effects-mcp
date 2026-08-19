@@ -89,6 +89,18 @@ Skill 使用 `ae_skillList` / `ae_skillUse`。Tool Library 严格按
 使用 `ae_checkpoint`、`ae_revert`、`ae_snapshot`。这些控制面不能替代
 写入后的真实状态 readback。
 
+#### 导出日志 / Export logs
+
+设置里的「导出日志」会生成一个可直接附给排障人员的诊断包，并写入
+`~/.ae-mcp/logs/export-<iso>.txt`。包内包含导出时重新运行的 diagnostics、宿主
+`/exec` 和 `/native/*` activity、宿主内存与最近两天的持久 JSONL 日志、面板行、各
+后端 stderr、Python server 日志以及 AE/CEP/OS/Node/Chromium 环境。宿主日志和面板
+日志会持续追加到 `host-YYYY-MM-DD.jsonl`，所以面板重载后仍可导出重载前的事件。
+
+包末尾的 `previewFrame branches` 是删 mss 前的分支数：
+`comp/saveFrameToPng=<n>` 表示 comp PNG，`viewer/<method>=<n>` 表示 viewer 回落，
+`failed=<n>` 表示取帧失败；下面还会列出 `fallbackReason` 计数和最近 20 条原始事件。
+
 ### 7. Registry 检查
 
 统一 catalog 位于
@@ -194,6 +206,20 @@ strict order `ae_toolIndex` → `ae_toolSearch` → `ae_toolInspect` →
 Start connection diagnosis with `ae_status`, `ae_diagnose`, and `ae_ping`.
 Use `ae_checkpoint`, `ae_revert`, and `ae_snapshot` for control-plane
 recovery. These tools never replace real state readback after a write.
+
+#### Export logs
+
+Settings → Export logs writes a redacted diagnostics bundle to
+`~/.ae-mcp/logs/export-<iso>.txt`. It contains fresh diagnostics, host `/exec` and
+`/native/*` activity, in-memory and two-day persistent host JSONL logs, panel lines,
+backend stderr tails, the Python server tail, and AE/CEP/OS/Node/Chromium environment
+details. Host and panel events append to `host-YYYY-MM-DD.jsonl`, so a panel reload does
+not erase the events that can be exported.
+
+The `previewFrame branches` section is the number needed before removing mss:
+`comp/saveFrameToPng=<n>` is a composition PNG, `viewer/<method>=<n>` is a viewer
+fallback, and `failed=<n>` is a failed capture. It also lists deduplicated
+`fallbackReason` counts and the 20 most recent raw branch events.
 
 ### 7. Registry check
 

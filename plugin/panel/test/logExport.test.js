@@ -11,13 +11,13 @@ test('buildLogExport aggregates panel logs, host info, and sidecar tail', () => 
     version: '0.9.0',
     now: new Date('2026-07-03T10:00:00Z'),
   });
-  assert.match(text, /# ae-mcp panel log export/);
+  assert.match(text, /# ae-mcp diagnostics bundle/);
   assert.match(text, /exported-at: 2026-07-03T10:00:00/);
   assert.match(text, /panel-version: 0\.9\.0/);
   assert.match(text, /host-version: 0\.9\.0/);
-  assert.match(text, /## panel logs \(2\)/);
+  assert.match(text, /## panel log \(2\)/);
   assert.match(text, /Error: boom/);
-  assert.match(text, /## sidecar stderr tail/);
+  assert.match(text, /## backend stderr tails/);
   assert.match(text, /sidecar stderr line/);
 });
 

@@ -1489,6 +1489,7 @@ export function createCodexBackend({
     stop,
     reset,
     getMessages: () => clone(transcript),
+    getStderrTail: () => stderrTail,
     probeAccount,
   };
 }

@@ -20,7 +20,9 @@ import json
 import logging
 import os
 import re
+import sys
 import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, List
 
@@ -56,6 +58,44 @@ _PANEL_DEVELOPER_SCHEMAS = {
     "ae.toolSearch": schemas._AePanelToolSearchArgs,
     "ae.toolInspect": schemas.AeToolInspectArgs,
 }
+_FILE_LOG_HANDLER: logging.Handler | None = None
+
+
+def _server_log_dir(log_dir: str | Path | None = None) -> Path:
+    return Path(log_dir or os.environ.get("AE_MCP_LOG_DIR") or (Path.home() / ".ae-mcp" / "logs"))
+
+
+def _cleanup_server_logs(directory: Path, now: datetime | None = None) -> None:
+    cutoff = (now or datetime.now()).date() - timedelta(days=14)
+    for path in directory.glob("server-*.log"):
+        try:
+            date = datetime.strptime(path.stem.removeprefix("server-"), "%Y-%m-%d").date()
+            if date < cutoff:
+                path.unlink()
+        except (ValueError, OSError):
+            log.debug("server log cleanup skipped %s", path, exc_info=True)
+
+
+def _configure_file_logging(log_dir: str | Path | None = None, now: datetime | None = None) -> logging.Handler | None:
+    """Add the append-only server file handler without making startup fragile."""
+    global _FILE_LOG_HANDLER
+    directory = _server_log_dir(log_dir)
+    try:
+        directory.mkdir(parents=True, exist_ok=True)
+        _cleanup_server_logs(directory, now)
+        stamp = (now or datetime.now()).strftime("%Y-%m-%d")
+        file_path = directory / f"server-{stamp}.log"
+        if _FILE_LOG_HANDLER is not None and getattr(_FILE_LOG_HANDLER, "_ae_mcp_log_path", None) == str(file_path):
+            return _FILE_LOG_HANDLER
+        handler = logging.FileHandler(file_path, mode="a", encoding="utf-8")
+        handler.setFormatter(logging.Formatter("%(asctime)s pid=%(process)d %(name)s %(levelname)s %(message)s"))
+        handler._ae_mcp_log_path = str(file_path)  # type: ignore[attr-defined]
+        logging.getLogger().addHandler(handler)
+        _FILE_LOG_HANDLER = handler
+        return handler
+    except Exception as error:  # noqa: BLE001 - diagnostics must not block startup
+        log.warning("server file logging unavailable at %s: %s", directory, error)
+        return None
 
 # Matches a leading dotted verb token at the very start of a docstring, e.g.
 # "ae.init — bootstrap …". Only the leading token is rewritten so the rest of
@@ -1507,6 +1547,17 @@ def run() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s %(name)s %(levelname)s %(message)s",
+    )
+    logging.getLogger().setLevel(logging.INFO)
+    _configure_file_logging()
+    from ae_mcp import __version__
+
+    log.info(
+        "ae-mcp startup version=%s python=%s backend=%s pluginUrl=%s",
+        __version__,
+        sys.version.split()[0],
+        os.environ.get("AE_MCP_BACKEND") or "auto",
+        os.environ.get("AE_MCP_PLUGIN_URL") or "-",
     )
     asyncio.run(_run_async())
 

@@ -543,6 +543,7 @@ test('/exec fails closed when connected graph invalidation fails', async () => {
         );
         assert.equal(response.body.ok, false);
         assert.match(response.body.error, /invalidation failed/);
+        assert.equal(response.body.disposition, 'not_dispatched');
         assert.equal(evaluated, false);
     } finally {
         await closeFixture(fixture);
@@ -574,6 +575,9 @@ test('health and activity expose only authenticated operational state', async ()
             'x-ae-mcp-python': '3.13.5',
         });
         assert.equal(health.status, 200);
+        assert.equal(health.body.jsxBridge.state, 'ok');
+        assert.equal(health.body.jsxBridge.degradedSinceMs, null);
+        assert.equal(typeof health.body.jsxBridge.pendingCalls, 'number');
         const denied = await get(fixture.port, '/activity', {});
         assert.equal(denied.status, 401);
         await post(fixture.port, '/exec', HEADERS, { code: '1 + 1' });
@@ -584,6 +588,67 @@ test('health and activity expose only authenticated operational state', async ()
         }), true);
         assert.equal(fixture.server.getConnectionInfo().pythonVersion, '3.13.5');
     } finally {
+        await closeFixture(fixture);
+    }
+});
+
+test('/exec reports a completed ExtendScript error as failed, not uncertain', async () => {
+    const fixture = await startApp({
+        evalScript: function (jsx, callback) {
+            // The transport envelope catches the JSX exception itself and
+            // returns a well-formed ok:false payload (what real AE does).
+            callback('{"ok":false,"error":"Error: boom (line 1)"}');
+        },
+    });
+    try {
+        const response = await post(fixture.port, '/exec', HEADERS, { code: 'throw new Error("boom")' });
+        assert.equal(response.body.ok, false);
+        assert.match(response.body.error, /^ExtendScript error: Error: boom/);
+        assert.equal(response.body.disposition, 'failed');
+        assert.equal(response.body.jsxBridge.state, 'ok');
+    } finally {
+        await closeFixture(fixture);
+    }
+});
+
+test('/exec distinguishes uncertain timeout from a queued not_dispatched call', async () => {
+    const evalCalls = [];
+    let sentinelCallback = null;
+    const fixture = await startApp({
+        evalScript: function (jsx, callback) {
+            evalCalls.push(jsx);
+            if (/endUndoGroup/.test(jsx) && !/beginUndoGroup/.test(jsx)) {
+                sentinelCallback = callback;
+            }
+        },
+    });
+    try {
+        const first = await post(fixture.port, '/exec', HEADERS, {
+            code: 'slowWrite()',
+            timeoutMs: 5,
+        });
+        assert.equal(first.body.ok, false);
+        assert.match(first.body.error, /^JSX timeout after 5ms/);
+        assert.equal(first.body.disposition, 'uncertain');
+        assert.equal(first.body.jsxBridge.state, 'degraded');
+
+        const second = await post(fixture.port, '/exec', HEADERS, {
+            code: 'mustNotRun()',
+            timeoutMs: 10,
+        });
+        assert.equal(second.body.ok, false);
+        assert.equal(second.body.disposition, 'not_dispatched');
+        assert.equal(second.body.jsxBridge.state, 'degraded');
+        assert.equal(evalCalls.length, 2, 'only the first real script and one sentinel are dispatched');
+        assert.equal(evalCalls.some(function (jsx) { return /mustNotRun/.test(jsx); }), false);
+
+        const activityResponse = await get(fixture.port, '/activity', HEADERS);
+        const dispositions = activityResponse.body.events.map(function (event) {
+            return event.disposition;
+        }).filter(Boolean);
+        assert.deepEqual(dispositions, ['uncertain', 'not_dispatched']);
+    } finally {
+        if (sentinelCallback) sentinelCallback('2');
         await closeFixture(fixture);
     }
 });

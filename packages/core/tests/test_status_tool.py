@@ -51,6 +51,7 @@ async def test_status_tool_is_only_exposed_when_backend_selection_fails(monkeypa
         "adapter": None,
         "engine": None,
     }
+    assert result["jsxBridge"] is None
     assert result["knownExecutionEngines"] == [
         "native-aegp",
         "maintained-jsx",
@@ -79,6 +80,7 @@ async def test_status_tool_reports_backend_and_supported_verbs(monkeypatch):
     assert result["selectedAdapter"] == "legacy-extendscript"
     assert result["activeExecutionEngine"] is None
     assert result["nativeExecutionPlane"]["available"] is False
+    assert result["jsxBridge"] is None
     assert result["knownExecutionEngines"] == [
         "native-aegp",
         "maintained-jsx",
@@ -166,6 +168,13 @@ async def test_probe_host_sends_python_identity_header(respx_mock):
                 "port": 11488,
                 "pythonVersion": captured["python"],
                 "pythonLastSeenAt": 1719000000000,
+                "jsxBridge": {
+                    "state": "degraded",
+                    "degradedSinceMs": 1718999999000,
+                    "lastTimeoutAt": 1718999999000,
+                    "pendingCalls": 1,
+                    "sentinelInFlight": True,
+                },
             },
         )
 
@@ -176,6 +185,50 @@ async def test_probe_host_sends_python_identity_header(respx_mock):
     assert result["reachable"] is True
     assert captured["python"]
     assert result["pythonVersion"] == captured["python"]
+    assert result["jsxBridge"]["state"] == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_status_best_effort_reads_jsx_bridge_from_backend_health(monkeypatch, respx_mock):
+    backend = MockBackend()
+    backend.url = "http://127.0.0.1:11488"
+    monkeypatch.setattr("ae_mcp.backends.discovery.select_backend", lambda: backend)
+    monkeypatch.setattr("ae_mcp.backends.discovery.list_installed_backends", lambda: {"mock": MockBackend})
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+    bridge_state = {
+        "state": "degraded",
+        "degradedSinceMs": 1718999999000,
+        "lastTimeoutAt": 1718999999000,
+        "pendingCalls": 2,
+        "sentinelInFlight": True,
+    }
+    respx_mock.get("http://127.0.0.1:11488/health").mock(
+        return_value=httpx.Response(200, json={"ok": True, "jsxBridge": bridge_state})
+    )
+
+    schema_cls, run_fn = _load_status_handler()
+    result = await run_fn(schema_cls(), None)
+
+    assert result["ok"] is True
+    assert result["jsxBridge"] == bridge_state
+
+
+@pytest.mark.asyncio
+async def test_status_health_probe_failure_does_not_change_backend_ok(monkeypatch, respx_mock):
+    backend = MockBackend()
+    backend.url = "http://127.0.0.1:11488"
+    monkeypatch.setattr("ae_mcp.backends.discovery.select_backend", lambda: backend)
+    monkeypatch.setattr("ae_mcp.backends.discovery.list_installed_backends", lambda: {"mock": MockBackend})
+    monkeypatch.setattr("ae_mcp.snapshot.discovery.select_snapshotter", lambda: None)
+    respx_mock.get("http://127.0.0.1:11488/health").mock(
+        return_value=httpx.Response(503, json={"ok": False})
+    )
+
+    schema_cls, run_fn = _load_status_handler()
+    result = await run_fn(schema_cls(), None)
+
+    assert result["ok"] is True
+    assert result["jsxBridge"] is None
 
 
 @pytest.mark.asyncio
