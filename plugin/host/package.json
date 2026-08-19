@@ -4,7 +4,8 @@
   "private": true,
   "main": "server.js",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "test:node15": "node test-node15/run.js"
   },
   "dependencies": {
     "express": "4.22.1"

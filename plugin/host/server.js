@@ -8,6 +8,7 @@ const authToken = require('./auth-token');
 const activity = require('./activity');
 const hostLog = require('./host-log');
 const nativeAegp = require('./native-aegp-client');
+const mountMcp = require('./mcp');
 const PKG_VERSION = require('./package.json').version;
 
 let app = null;
@@ -415,10 +416,106 @@ function decodeEvalScriptTransportResult(text) {
     return payload.result;
 }
 
+// Shared /exec and MCP ae_exec execution path. The HTTP route keeps its
+// existing response shape; MCP maps this internal result into a tool result.
+async function executeJsx(request) {
+    const input = request || {};
+    const code = input.code;
+    const undoGroup = input.undoGroup;
+    const nativeProjectGraphEffect = input.nativeProjectGraphEffect === undefined
+        ? 'invalidate' : input.nativeProjectGraphEffect;
+    const client = input.client || 'unknown';
+    if (client !== INTERNAL_CLIENT) touchClient(client);
+    if (blocked.has(client)) {
+        activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'blocked' });
+        return { status: 403, payload: { ok: false, error: 'blocked: this client is blocked in the panel' } };
+    }
+    if (paused) {
+        activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'paused' });
+        return { status: 503, payload: { ok: false, error: 'paused: AI actions are blocked by the panel kill switch' } };
+    }
+    if (typeof code !== 'string' || code.length === 0) {
+        activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
+        return { status: 400, payload: { ok: false, error: 'missing or empty `code`' } };
+    }
+    if (!['invalidate', 'preserve'].includes(nativeProjectGraphEffect)) {
+        activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
+        return {
+            status: 400,
+            payload: { ok: false, error: '`nativeProjectGraphEffect` must be invalidate or preserve' },
+        };
+    }
+    const t = Number.isFinite(input.timeoutMs) && input.timeoutMs > 0 ? input.timeoutMs : 30000;
+    const wrapped = undoGroup ? wrapWithUndoGroup(code, undoGroup) : code;
+    const transported = wrapForEvalScriptTransport(wrapped);
+    const startedAt = Date.now();
+    let dispatched = false;
+    try {
+        const invalidationDeadlineUnixMs = Math.min(
+            Number.MAX_SAFE_INTEGER,
+            startedAt + Math.min(Math.ceil(t), NATIVE_MAX_REQUEST_WINDOW_MS),
+        );
+        if (nativeProjectGraphEffect === 'invalidate') {
+            await invalidateConnectedNativeProjectGraph(invalidationDeadlineUnixMs);
+        }
+        dispatched = true;
+        const encoded = await jsxBridge.evalScript(transported, t);
+        const result = decodeEvalScriptTransportResult(encoded);
+        activity.record({
+            client,
+            undoGroup: undoGroup || null,
+            ok: true,
+            durationMs: Date.now() - startedAt,
+            ...(result === '' ? { emptyResult: true } : {}),
+        });
+        return { status: 200, payload: { ok: true, result: result || '' } };
+    } catch (e) {
+        // Closed three-value disposition (#260): the bridge tags its own
+        // rejections; anything untagged is classified by whether the script
+        // had been handed to the bridge yet.
+        const disposition = ['not_dispatched', 'uncertain', 'failed'].includes(e.disposition)
+            ? e.disposition
+            : (dispatched ? 'uncertain' : 'not_dispatched');
+        const bridgeState = jsxBridge.getState();
+        activity.record({
+            client,
+            undoGroup: undoGroup || null,
+            ok: false,
+            error: e.message,
+            disposition,
+            durationMs: Date.now() - startedAt,
+        });
+        return {
+            status: 200,
+            payload: {
+                ok: false,
+                error: e.message,
+                disposition,
+                jsxBridge: bridgeState,
+            },
+            disposition,
+        };
+    }
+}
+
 function buildApp() {
     const express = expressFactory();
     const a = express();
     a.use(express.json({ limit: '5mb' }));
+    mountMcp(a, {
+        version: PKG_VERSION,
+        getStatus: function (requestPort) {
+            return {
+                ok: true,
+                pluginVersion: PKG_VERSION,
+                port: currentPort || requestPort || null,
+                jsxBridge: typeof jsxBridge.getState === 'function' ? jsxBridge.getState() : null,
+                pythonVersion: lastPythonVersion || null,
+                pythonLastSeenAt: lastHealthAt || null,
+            };
+        },
+        executeJsx,
+    });
 
     a.get('/health', (req, res) => {
         const pythonVersion = req.get('x-ae-mcp-python');
@@ -666,79 +763,17 @@ function buildApp() {
         const client = req.get('x-ae-mcp-client') || 'unknown';
         const pythonVersion = req.get('x-ae-mcp-python');
         if (pythonVersion) lastPythonVersion = pythonVersion;
-        // Panel-origin diagnostic probes stay out of the client registry so
-        // they cannot bump lastClientSeenAt (wizard/diagnostics would
-        // self-greenlight) or show up as a phantom client in Settings.
-        // Must match the header constant in plugin/panel/src/cep/diagnostics.js.
-        if (client !== INTERNAL_CLIENT) touchClient(client);
-        if (blocked.has(client)) {
-            activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'blocked' });
-            return res.status(403).json({ ok: false, error: 'blocked: this client is blocked in the panel' });
-        }
-        if (paused) {
-            activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'paused' });
-            return res.status(503).json({ ok: false, error: 'paused: AI actions are blocked by the panel kill switch' });
-        }
-        if (typeof code !== 'string' || code.length === 0) {
-            activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
-            return res.status(400).json({ ok: false, error: 'missing or empty `code`' });
-        }
-        if (!['invalidate', 'preserve'].includes(nativeProjectGraphEffect)) {
-            activity.record({ client, undoGroup: undoGroup || null, ok: false, denied: 'invalid_request' });
-            return res.status(400).json({
-                ok: false,
-                error: '`nativeProjectGraphEffect` must be invalidate or preserve',
-            });
-        }
-        const t = Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30000;
-
-        // Wrap user JSX in undo group if requested. checkpointLabel currently
-        // forwarded but unused; later sub-specs will wire it to the checkpoint
-        // store.
-        const wrapped = undoGroup ? wrapWithUndoGroup(code, undoGroup) : code;
-        const transported = wrapForEvalScriptTransport(wrapped);
-
-        const startedAt = Date.now();
-        let dispatched = false;
-        try {
-            const invalidationDeadlineUnixMs = Math.min(
-                Number.MAX_SAFE_INTEGER,
-                startedAt + Math.min(Math.ceil(t), NATIVE_MAX_REQUEST_WINDOW_MS),
-            );
-            if (nativeProjectGraphEffect === 'invalidate') {
-                await invalidateConnectedNativeProjectGraph(invalidationDeadlineUnixMs);
-            }
-            dispatched = true;
-            const encoded = await jsxBridge.evalScript(transported, t);
-            const result = decodeEvalScriptTransportResult(encoded);
-            activity.record({
-                client,
-                undoGroup: undoGroup || null,
-                ok: true,
-                durationMs: Date.now() - startedAt,
-                ...(result === '' ? { emptyResult: true } : {}),
-            });
-            res.json({ ok: true, result: result || '' });
-        } catch (e) {
-            const disposition = ['not_dispatched', 'uncertain', 'failed'].includes(e.disposition)
-                ? e.disposition
-                : (dispatched ? 'uncertain' : 'not_dispatched');
-            const bridgeState = jsxBridge.getState();
-            activity.record({
-                client,
-                undoGroup: undoGroup || null,
-                ok: false,
-                error: e.message,
-                disposition,
-                durationMs: Date.now() - startedAt,
-            });
-            res.json({
-                ok: false,
-                error: e.message,
-                disposition,
-                jsxBridge: bridgeState,
-            });
-        }
+        // checkpointLabel remains accepted but deliberately unused until the
+        // Phase 1 checkpoint store arrives.
+        const output = await executeJsx({
+            code,
+            undoGroup,
+            checkpointLabel,
+            timeoutMs,
+            nativeProjectGraphEffect,
+            client,
+        });
+        res.status(output.status).json(output.payload);
     });
 
     return a;
@@ -827,6 +862,7 @@ module.exports = {
     wrapWithUndoGroup,
     wrapForEvalScriptTransport,
     decodeEvalScriptTransportResult,
+    executeJsx,
     // Exported so tests can build the app and inject a known token without
     // touching the real token file.
     buildApp,

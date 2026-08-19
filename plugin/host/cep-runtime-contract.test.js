@@ -30,6 +30,11 @@ const CEP_EXECUTED_FILES = [
     'platform-helper-registration.js',
     'platform-helper-stdio-transport.js',
     'platform-helper-transport.js',
+    'mcp/index.js',
+    'mcp/jsonrpc.js',
+    'mcp/session.js',
+    'mcp/sse.js',
+    'mcp/tools.js',
 ];
 
 // require('node:x'), require( `node:x` ), import('node:x'), from 'node:x',
@@ -63,16 +68,17 @@ test('every CEP-executed host file avoids node:-prefixed specifiers', () => {
 test('the CEP manifest stays in sync with what the host actually requires', () => {
     // Fail closed when a new local require appears in a CEP-executed file
     // without being added to the manifest above.
-    const local = /require\s*\(\s*['"`]\.\/([\w-]+)(?:\.js)?['"`]\s*\)/g;
-    const known = new Set(CEP_EXECUTED_FILES.map((name) => name.replace(/\.js$/, '')));
+    const local = /require\s*\(\s*['"`](\.\/[\w/-]+)(?:\.js)?['"`]\s*\)/g;
+    const known = new Set(CEP_EXECUTED_FILES);
     for (const name of CEP_EXECUTED_FILES) {
         const source = readCode(name);
         for (const match of source.matchAll(local)) {
-            const target = match[1];
+            const target = path.posix.normalize(path.posix.join(path.posix.dirname(name), match[1]));
             if (target === 'package' || target === 'package.json') continue;
+            const candidates = [target + '.js', target + '/index.js'];
             assert.ok(
-                known.has(target),
-                `${name} requires ./${target} which is missing from CEP_EXECUTED_FILES`,
+                candidates.some((candidate) => known.has(candidate)),
+                `${name} requires ${match[1]} which is missing from CEP_EXECUTED_FILES`,
             );
         }
     }
