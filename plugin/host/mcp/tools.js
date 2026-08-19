@@ -1,48 +1,33 @@
 'use strict';
 
+// /mcp tool registry. Every tool lives in its own module under ./tools/ and
+// exports { definition, call(args, context, deps) }; this file only
+// aggregates, validates the advertised schemas, and dispatches by name.
+// Add a tool = add a file + one entry in TOOL_MODULES (keep list order: it is
+// the tools/list order clients see).
+
 const jsonrpc = require('./jsonrpc');
+const { textResult, noTopLevelCombinator } = require('./tool-result');
 
-function textResult(value, isError) {
-    const result = {
-        content: [{ type: 'text', text: JSON.stringify(value) }],
-        structuredContent: value,
-    };
-    if (isError) result.isError = true;
-    return result;
-}
-
-function noTopLevelCombinator(schema) {
-    return !['oneOf', 'allOf', 'anyOf'].some(function (key) {
-        return Object.prototype.hasOwnProperty.call(schema, key);
-    });
-}
+const TOOL_MODULES = [
+    require('./tools/status'),
+    require('./tools/exec'),
+];
 
 function buildTools(deps) {
-    const tools = [{
-        name: 'ae_status',
-        description: 'Read same-process ae-mcp host status without a network round trip.',
-        inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-        annotations: { readOnlyHint: true, destructiveHint: false, openWorldHint: false },
-    }, {
-        name: 'ae_exec',
-        description: 'Run ExtendScript in After Effects through the host JSX bridge.',
-        inputSchema: {
-            type: 'object',
-            properties: {
-                code: { type: 'string', minLength: 1 },
-                undo_group_name: { type: 'string' },
-                checkpoint_label: { type: 'string' },
-                timeout_sec: { type: 'number', minimum: 1, maximum: 600 },
-            },
-            required: ['code'],
-            additionalProperties: false,
-        },
-        annotations: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
-    }];
-    tools.forEach(function (tool) {
-        if (!noTopLevelCombinator(tool.inputSchema)) {
-            throw new Error('tool schema has a top-level combinator: ' + tool.name);
+    const byName = new Map();
+    const definitions = TOOL_MODULES.map(function (mod) {
+        if (!mod || !mod.definition || typeof mod.definition.name !== 'string' || typeof mod.call !== 'function') {
+            throw new Error('tool module must export { definition, call }');
         }
+        if (!noTopLevelCombinator(mod.definition.inputSchema)) {
+            throw new Error('tool schema has a top-level combinator: ' + mod.definition.name);
+        }
+        if (byName.has(mod.definition.name)) {
+            throw new Error('duplicate tool name: ' + mod.definition.name);
+        }
+        byName.set(mod.definition.name, mod);
+        return mod.definition;
     });
 
     async function call(params, context) {
@@ -51,47 +36,14 @@ function buildTools(deps) {
         }
         const args = params.arguments === undefined ? {} : params.arguments;
         if (!jsonrpc.isObject(args)) return { invalid: 'tools/call arguments must be an object' };
-        if (params.name === 'ae_status') {
-            if (Object.keys(args).length !== 0) {
-                return { result: textResult({ ok: false, error: 'ae_status accepts no arguments' }, true) };
-            }
-            const status = deps.getStatus(context.port);
-            status.mcp = { sessions: deps.sessionCount(), protocolVersion: context.session.protocolVersion };
-            return { result: textResult(status, false) };
-        }
-        if (params.name !== 'ae_exec') {
+        const mod = byName.get(params.name);
+        if (!mod) {
             return { result: textResult({ ok: false, error: 'unknown tool: ' + params.name }, true) };
         }
-        if (typeof args.code !== 'string' || args.code.length === 0) {
-            return { result: textResult({ ok: false, error: 'missing or empty `code`' }, true) };
-        }
-        if (args.undo_group_name !== undefined && typeof args.undo_group_name !== 'string') {
-            return { result: textResult({ ok: false, error: '`undo_group_name` must be a string' }, true) };
-        }
-        if (args.timeout_sec !== undefined
-            && (!Number.isFinite(args.timeout_sec) || args.timeout_sec < 1 || args.timeout_sec > 600)) {
-            return { result: textResult({ ok: false, error: '`timeout_sec` must be between 1 and 600' }, true) };
-        }
-        try {
-            const execution = await deps.executeJsx({
-                code: args.code,
-                undoGroup: args.undo_group_name,
-                checkpointLabel: args.checkpoint_label,
-                timeoutMs: (args.timeout_sec === undefined ? 30 : args.timeout_sec) * 1000,
-                client: context.session.clientName,
-                nativeProjectGraphEffect: 'invalidate',
-            });
-            const payload = execution.payload;
-            if (execution.disposition) payload.disposition = execution.disposition;
-            return { result: textResult(payload, !payload.ok) };
-        } catch (error) {
-            const payload = { ok: false, error: error && error.message ? error.message : String(error) };
-            if (error && typeof error.disposition === 'string') payload.disposition = error.disposition;
-            return { result: textResult(payload, true) };
-        }
+        return mod.call(args, context, deps);
     }
 
-    return { list: function () { return tools; }, call };
+    return { list: function () { return definitions; }, call };
 }
 
-module.exports = { buildTools, noTopLevelCombinator, textResult };
+module.exports = { buildTools, noTopLevelCombinator, textResult, TOOL_MODULES };
