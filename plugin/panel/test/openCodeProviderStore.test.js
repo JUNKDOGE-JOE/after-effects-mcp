@@ -61,25 +61,16 @@ test('OpenCode provider store merge-writes auth.json and preserves existing prov
   }
 });
 
-test('OpenCode provider IDs are stable and legacy providers require a new key', () => {
+test('OpenCode provider IDs are stable and new providers require an API key', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-opencode-provider-'));
   try {
     const store = makeStore(root);
     assert.equal(normalizeOpenCodeProviderId('aemcp-My Relay'), 'aemcp-my-relay');
-    store.importLegacyProviders([{
-      id: 'old-relay',
-      name: 'Old Relay',
-      baseUrl: 'https://old.example/v1',
-      allowInsecureHttp: false,
-      modelList: { models: [{ id: 'old-model' }] },
-    }]);
-
-    assert.equal(store.list()[0].needsApiKey, true);
     assert.throws(() => store.save({
-      id: 'old-relay',
-      name: 'Old Relay',
-      baseUrl: 'https://old.example/v1',
-      modelId: 'old-model',
+      id: 'new-relay',
+      name: 'New Relay',
+      baseUrl: 'https://new.example/v1',
+      modelId: 'new-model',
       allowInsecureHttp: false,
     }), { code: 'OPENCODE_API_KEY_REQUIRED' });
   } finally {

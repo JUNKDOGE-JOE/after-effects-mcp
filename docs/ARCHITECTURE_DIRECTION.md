@@ -206,11 +206,22 @@ HTTP 为一等支持路径（Claude Code / Cursor 原生支持），**无口令*
 
 ---
 
-### Phase 3 — provider 收敛（4 周）
+### Phase 3 — provider 收敛（已落地，2026-08-20）
 
 保留三个适配器：CLI 驱动的 claude、`codexBackend.js`、`openCodeBackend.js`。自定义 provider 全部经 opencode——**从 Phase 2 删 helper 的那一刻起就是这样**（决策 7），Phase 3 只剩删旧代码和收尾。
 
-删除约 8,500 行 + 对应测试：`lib/agentLoop.js`(313, byokLoop)、`lib/anthropic.js`(212)、`zcodeBackend.js`(1,443)、`universalProviderRoute.js`(1,245)、`providerCapabilityProbe.js`(1,265)、`codexResponsesRoute.js`(1,089)、`providerProfile.js`(1,039)、`modelProbe.js`(303) 等。口径注意：这 8,500 行之外还有 codec / store 约 6,000 行同属这条路（`providerMessagesCodec` 1,872、`codexResponsesCodec` 1,186、`providerSseCodec` 646、`providerStore` 758、`providerAcceptanceBridge` 534、`providerMigration` 525、`providerSecrets` 439），退出条件的"< 2,500 行"按**全部**算。zcode / opencode / byok 三个后端今天已经不在 UI 选择器里（只剩 subscription / codex），但仍在模块图里被急切构造——删的时候按调用图删，别按 UI 判断。
+**环境隔离决定（#230）：**Codex 使用预创建的隔离 `CODEX_HOME`，因为 `codex -c`
+的合并语义不能排除全局 MCP 配置；Claude 使用 `--strict-mcp-config` 且不读取设置源。
+两条通道都选择隔离而非继承全局 MCP 配置。
+
+删除约 8,500 行及对应测试：`lib/agentLoop.js`(313, byokLoop)、`lib/anthropic.js`(212)、
+`zcodeBackend.js`(1,443)、`universalProviderRoute.js`(1,245)、
+`providerCapabilityProbe.js`(1,265)、`codexResponsesRoute.js`(1,089)、
+`providerProfile.js`(1,039)、`modelProbe.js`(303) 等。
+
+口径注意：这 8,500 行之外还有 codec / store 约 6,000 行同属这条路；退出条件的
+"< 2,500 行"按**全部**算。zcode / byok 已不在 UI 选择器里（保留 subscription /
+codex / opencode）；删旧代码时仍按调用图，而非仅按 UI 判断。
 
 **两个静默失败必须一起处理：**
 

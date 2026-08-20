@@ -1,56 +1,41 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildComposerChips, costBadge } from '../src/lib/composerOptions.js';
-import { byokStaticDescriptor, claudeSubDescriptor, mergeByokModels, zcodeStaticDescriptor } from '../src/lib/backendCapabilities.js';
+import {
+  claudeSubDescriptor,
+  openCodeStaticDescriptor,
+} from '../src/lib/backendCapabilities.js';
 
 test('costBadge renders $ per tier', () => {
   assert.equal(costBadge(1), '$');
   assert.equal(costBadge(4), '$$$$');
 });
 
-test('chips hide effort for models without levels and fast when unsupported', () => {
-  // 未知动态模型不冒认档位（haiku 自 2026-06-12 真机探针后已有三档）
-  const descriptor = mergeByokModels(byokStaticDescriptor(), [
-    { id: 'claude-next-9', display_name: 'Claude Next 9' },
-  ]);
+test('OpenCode models omit unsupported effort and fast controls', () => {
+  const descriptor = openCodeStaticDescriptor();
   const chips = buildComposerChips({
     descriptor,
-    modelId: 'claude-next-9',
-    effort: null, fast: false, permissionMode: 'manual', lang: 'zh',
+    modelId: descriptor.defaultModelId,
+    effort: null,
+    fast: false,
+    permissionMode: 'manual',
+    lang: 'zh',
   });
   assert.equal(chips.effort, null);
   assert.equal(chips.fast, null);
-  assert.equal(chips.model.current, 'Claude Next 9');
+  assert.equal(chips.model.current, 'North Mini Code Free');
   assert.equal(chips.approval.items.length, 4);
 });
 
-test('haiku shows the probed three-step effort ladder on subscription', () => {
+test('subscription Haiku exposes its three supported effort levels', () => {
   const chips = buildComposerChips({
     descriptor: claudeSubDescriptor(),
     modelId: 'claude-haiku-4-5-20251001',
-    effort: 'high', fast: false, permissionMode: 'manual', lang: 'zh',
+    effort: 'high',
+    fast: false,
+    permissionMode: 'manual',
+    lang: 'zh',
   });
-  assert.deepEqual(chips.effort.items.map((i) => i.id), ['low', 'medium', 'high']);
+  assert.deepEqual(chips.effort.items.map((item) => item.id), ['low', 'medium', 'high']);
   assert.equal(chips.fast, null);
-});
-
-test('byok opus shows fast toggle and full effort ladder', () => {
-  const chips = buildComposerChips({
-    descriptor: byokStaticDescriptor(),
-    modelId: 'claude-opus-4-8',
-    effort: 'high', fast: true, permissionMode: 'auto', lang: 'zh',
-  });
-  assert.deepEqual(chips.effort.items.map((i) => i.id), ['low', 'medium', 'high', 'xhigh', 'max']);
-  assert.equal(chips.fast.active, true);
-});
-
-test('chips omit model selector for descriptors without per-turn model switching', () => {
-  const chips = buildComposerChips({
-    descriptor: { ...zcodeStaticDescriptor(), perTurnModelSwitch: false },
-    modelId: 'builtin:bigmodel-start-plan/GLM-5.2',
-    effort: 'high', fast: false, permissionMode: 'manual', lang: 'zh',
-  });
-  assert.equal(chips.model, null);
-  assert.deepEqual(chips.effort.items.map((i) => i.id), ['nothink', 'high', 'max']);
-  assert.equal(chips.approval.items.length, 4);
 });

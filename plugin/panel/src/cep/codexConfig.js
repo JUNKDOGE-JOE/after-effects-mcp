@@ -1,6 +1,6 @@
 // Read the Codex CLI model_provider so the panel can reuse an existing CLI
 // configuration when it has no explicit provider profile.
-// (claudeSettingsImport.js).
+// The panel no longer routes custom endpoints through Codex.
 //
 // Minimal hand-rolled TOML parser — intentionally NOT a general-purpose
 // TOML implementation. See module-level comment blocks near the parser for

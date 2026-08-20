@@ -182,13 +182,6 @@ function makeHarness(overrides = {}) {
     getEffort: () => state.effort,
     getThinking: () => state.thinking,
     getChannel: () => state.channel,
-    getProviderSensitiveValues: overrides.getProviderSensitiveValues,
-    resolveApiProvider: overrides.resolveApiProvider,
-    resolveRequestProfile: overrides.resolveRequestProfile,
-    resolveCapability: overrides.resolveCapability,
-    createProviderRoute: overrides.createProviderRoute,
-    recoverProviderProfile: overrides.recoverProviderProfile,
-    onProviderProfileRecovered: overrides.onProviderProfileRecovered,
     onEvent: (event) => events.push(event),
     lang: overrides.lang || 'en',
     now: overrides.now || (() => 100),
@@ -653,40 +646,4 @@ test('stop emits one aborted error, drains controls, and kills the process', asy
     1,
   );
   assert.equal(h.events.filter((event) => event.type === 'tool-denied').length, 1);
-});
-
-test('API channel keeps route credentials local and redacts process failures', async () => {
-  let routeClosed = 0;
-  const h = makeHarness({
-    state: { channel: 'api' },
-    resolveApiProvider: async () => ({
-      id: 'provider-1',
-      baseUrl: 'https://provider.example',
-      requestProfileRevision: 1,
-    }),
-    resolveRequestProfile: async () => ({}),
-    resolveCapability: async () => ({ ok: true }),
-    createProviderRoute: () => ({
-      start: async () => ({
-        origin: 'http://127.0.0.1:42100',
-        routeToken: 'route-secret',
-      }),
-      close: async () => { routeClosed += 1; },
-    }),
-    getProviderSensitiveValues: () => ['provider-secret'],
-  });
-  const run = h.backend.sendUser('api turn');
-  await flush();
-  assert.equal(h.spawns[0].options.env.ANTHROPIC_BASE_URL, 'http://127.0.0.1:42100');
-  assert.equal(h.spawns[0].options.env.ANTHROPIC_AUTH_TOKEN, 'route-secret');
-  h.processes[0].stderr.emit('data', 'provider-secret route-secret');
-  h.processes[0].emit('exit', 1, null);
-  await run;
-  await flush();
-
-  const error = h.events.find((event) => event.type === 'error');
-  assert.equal(error.message, 'Provider CLI request failed.');
-  assert.equal(JSON.stringify(h.events).includes('provider-secret'), false);
-  assert.equal(JSON.stringify(h.events).includes('route-secret'), false);
-  assert.equal(routeClosed, 1);
 });

@@ -192,7 +192,7 @@ function menuItems(items, currentId, onSelect) {
   }));
 }
 
-/* Chat tab. entries are folded from agentLoop events by lib/chatEntries.js. */
+/* Chat tab. entries are folded from backend events by lib/chatEntries.js. */
 export function ChatScreen({
   lang = 'zh',
   entries = [],

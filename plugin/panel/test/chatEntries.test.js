@@ -111,14 +111,26 @@ test('external approvals render as high risk without session allowance', () => {
 
 test('question events fold into one question entry with answered state', () => {
   const questions = [{ id: 'q0', key: 'Pick', prompt: 'Pick', options: [{ label: 'A', description: '' }], multiSelect: false, allowCustom: true, required: true }];
-  let entries = reduceEvent([], { type: 'question-required', toolUseId: 'ask_1', source: 'zcode-user-input', title: 'Need input', questions });
+  let entries = reduceEvent([], {
+    type: 'question-required',
+    toolUseId: 'ask_1',
+    source: 'opencode-user-input',
+    title: 'Need input',
+    questions,
+  });
   assert.equal(entries.length, 1);
   assert.equal(entries[0].type, 'question');
   assert.equal(entries[0].state, 'pending');
   assert.deepEqual(entries[0].questions, questions);
 
   // Re-emission for the same id replaces rather than duplicates.
-  entries = reduceEvent(entries, { type: 'question-required', toolUseId: 'ask_1', source: 'zcode-user-input', title: 'Need input', questions });
+  entries = reduceEvent(entries, {
+    type: 'question-required',
+    toolUseId: 'ask_1',
+    source: 'opencode-user-input',
+    title: 'Need input',
+    questions,
+  });
   assert.equal(entries.length, 1);
 
   entries = reduceEvent(entries, { type: 'question-resolved', toolUseId: 'ask_1', outcome: 'answered', answers: { Pick: 'A' } });

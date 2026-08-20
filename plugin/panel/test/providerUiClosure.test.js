@@ -8,16 +8,16 @@ const settings = () => readFileSync(new URL('../src/screens/SettingsScreen.jsx',
 test('Provider Manager is OpenCode-only and has no platform helper entry point', () => {
   const source = app();
   assert.match(source, /createOpenCodeProviderStore/);
-  assert.match(source, /<ProviderManagerSection[\s\S]*opencodeMode/);
+  assert.match(source, /<ProviderManagerSection/);
   assert.doesNotMatch(source, /createHostSecretStore/);
   assert.doesNotMatch(source, /repairPlatformHelper/);
   assert.doesNotMatch(source, /createLegacyApiKeyStore/);
 });
 
-test('old provider definitions can be shown but their helper credential references are not migrated', () => {
+test('Provider Manager does not import or migrate legacy provider credentials', () => {
   const source = app();
-  assert.match(source, /legacyProviderStore \? legacyProviderStore\.list\(\) : \[\]/);
-  assert.match(source, /openCodeProviderStore\.importLegacyProviders\(legacyProviders\)/);
+  assert.doesNotMatch(source, /legacyProviderStore/);
+  assert.doesNotMatch(source, /importLegacyProviders/);
   assert.doesNotMatch(source, /providerSecretService/);
   assert.doesNotMatch(source, /aemcp-secret:\/\/provider/);
 });

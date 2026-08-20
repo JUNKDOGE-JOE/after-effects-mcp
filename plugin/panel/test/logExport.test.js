@@ -50,8 +50,8 @@ test('redactSecrets fully masks credential environment values', () => {
     'ANTHROPIC_AUTH_TOKEN: [redacted]'
   );
   assert.equal(
-    redactSecrets('ZCODE_API_KEY=zc_super_secret_1'),
-    'ZCODE_API_KEY=[redacted]'
+    redactSecrets('OPENAI_API_KEY=sk_super_secret_1'),
+    'OPENAI_API_KEY=[redacted]'
   );
 });
 

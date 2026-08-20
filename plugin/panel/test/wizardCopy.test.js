@@ -6,12 +6,14 @@ test('copyWizardConfig copies selected client config when provided', () => {
   const copied = [];
   const mcpConfigStr = JSON.stringify({ mcpServers: { ae: { command: 'ae-mcp' } } });
   const copyText = (text) => copied.push(text);
-  const selectedZcodeConfig = JSON.stringify({ mcp: { servers: { ae: { command: 'ae-mcp' } } } }, null, 2);
+  const selectedConfig = JSON.stringify({
+    mcp: { servers: { ae: { command: 'ae-mcp' } } },
+  }, null, 2);
 
-  copyWizardConfig(copyText, mcpConfigStr, selectedZcodeConfig);
+  copyWizardConfig(copyText, mcpConfigStr, selectedConfig);
 
   assert.equal(copied.length, 1);
-  assert.equal(copied[0], selectedZcodeConfig);
+  assert.equal(copied[0], selectedConfig);
 });
 
 test('copyWizardConfig falls back to generic config when no selected config is passed', () => {

@@ -1,5 +1,5 @@
 // Normalized question-form model shared by every agent-to-user question route
-// (#219): ZCode interaction/requestUserInput, ZCode elicitation/create forms,
+// (#219): interaction/requestUserInput, elicitation/create forms,
 // and generic MCP elicitation. The UI renders ONLY this model; each backend
 // maps the submitted values back to its own protocol reply.
 //
@@ -32,7 +32,7 @@ function normalizedOptions(options) {
     .filter(Boolean);
 }
 
-// ZCode interaction/requestUserInput params:
+// Generic interaction/requestUserInput params:
 //   { input: { questions: [{ question, header, options, multiSelect }] } }
 // The reply keys answers by the question text, so `key` mirrors the exact
 // fallback chain the protocol reply uses. Answers accept arbitrary strings,

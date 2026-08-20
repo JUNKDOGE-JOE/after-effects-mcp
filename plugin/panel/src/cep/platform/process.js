@@ -3,7 +3,7 @@ const DEFAULT_OUTPUT_LIMIT = 8192;
 const TERMINATE_GRACE_MS = 50;
 const FORCE_CLOSE_GRACE_MS = 250;
 const EXECUTABLE_IDS = new Set([
-  'node', 'claude', 'codex', 'zcode', 'npm', 'opencode', 'brew', 'winget', 'powershell',
+  'node', 'claude', 'codex', 'npm', 'opencode', 'brew', 'winget', 'powershell',
 ]);
 const WINDOWS_COMMAND_SCRIPT = /\.(?:cmd|bat)$/i;
 
@@ -330,7 +330,6 @@ export function createProcessBoundary({ deps, paths, platform }) {
   function standardCandidates(id, env) {
     if (!windows) {
       const values = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'].map((root) => paths.join([root, id]));
-      if (id === 'zcode') values.unshift('/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs');
       return values;
     }
     const values = [];
@@ -339,7 +338,6 @@ export function createProcessBoundary({ deps, paths, platform }) {
     const appData = environmentValue(env, 'APPDATA', true) || paths.join([paths.home, 'AppData', 'Roaming']);
     values.push(paths.join([appData, 'npm', id + '.cmd']));
     const local = environmentValue(env, 'LOCALAPPDATA', true) || paths.join([paths.home, 'AppData', 'Local']);
-    if (id === 'zcode') values.unshift(paths.join([local, 'Programs', 'ZCode', 'resources', 'glm', 'zcode.cjs']));
     if (id === 'winget') values.unshift(paths.join([local, 'Microsoft', 'WindowsApps', 'winget.exe']));
     if (id === 'powershell') values.unshift(paths.join([systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe']));
     values.push(paths.join([local, 'Programs', id, id + '.exe']));
@@ -567,7 +565,7 @@ export function createProcessBoundary({ deps, paths, platform }) {
   }
 
   async function loginShellCandidate(id, env, attempts) {
-    if (windows || !['claude', 'codex', 'zcode', 'npm', 'opencode', 'node'].includes(id)) return null;
+    if (windows || !['claude', 'codex', 'npm', 'opencode', 'node'].includes(id)) return null;
     const shell = fileCandidate('/bin/zsh', 'standard', env);
     if (!shell) return null;
     const begin = '__AE_MCP_PATH_BEGIN__';
@@ -586,7 +584,7 @@ export function createProcessBoundary({ deps, paths, platform }) {
       if (result.stdout || result.stderr) attempts.push({ path: '/bin/zsh', source: 'login-shell', detail: 'login shell output was polluted or empty' });
       return null;
     }
-    return fileCandidate(match[1], 'login-shell', env, id === 'zcode');
+    return fileCandidate(match[1], 'login-shell', env);
   }
 
   async function resolveExecutable(id, options = {}) {

@@ -8435,11 +8435,11 @@
         var isNull = function isNull2(value) {
           return value === null;
         };
-        var isObject4 = function isObject5(value) {
+        var isObject = function isObject2(value) {
           return typeof value === "object" && value !== null;
         };
         var isAPI = function isAPI2(value) {
-          return isObject4(value) && isString(value.url) && isObject4(value.process) && isObject4(value.revert) && isObject4(value.restore) && isObject4(value.fetch);
+          return isObject(value) && isString(value.url) && isObject(value.process) && isObject(value.revert) && isObject(value.restore) && isObject(value.fetch);
         };
         var getType = function getType2(value) {
           if (isArray(value)) {
@@ -10309,7 +10309,7 @@
           return ITEM_READY.includes(item2.status);
         };
         var isAsync = function isAsync2(state2) {
-          return isObject4(state2.options.server) && (isObject4(state2.options.server.process) || isFunction(state2.options.server.process));
+          return isObject(state2.options.server) && (isObject(state2.options.server.process) || isFunction(state2.options.server.process));
         };
         var queries = function queries2(state2) {
           return {
@@ -10889,7 +10889,7 @@
           };
           var requestTransferId = function requestTransferId2(cb) {
             var formData = new FormData();
-            if (isObject4(metadata)) formData.append(name2, JSON.stringify(metadata));
+            if (isObject(metadata)) formData.append(name2, JSON.stringify(metadata));
             var headers = typeof action.headers === "function" ? action.headers(file2, metadata) : Object.assign(
               {},
               action.headers,
@@ -11145,7 +11145,7 @@
               headers
             });
             var formData = new FormData();
-            if (isObject4(metadata)) {
+            if (isObject(metadata)) {
               formData.append(name2, JSON.stringify(metadata));
             }
             (file2 instanceof Blob ? [{ name: null, file: file2 }] : file2).forEach(function(item2) {
@@ -11328,7 +11328,7 @@
               // load expects the body to be a server id if
               // you want to make use of revert
               function(response) {
-                state2.response = isObject4(response) ? response : {
+                state2.response = isObject(response) ? response : {
                   type: "load",
                   code: 200,
                   body: "" + response,
@@ -11346,7 +11346,7 @@
                 state2.perceivedPerformanceUpdater.clear();
                 api.fire(
                   "error",
-                  isObject4(error2) ? error2 : {
+                  isObject(error2) ? error2 : {
                     type: "error",
                     code: 0,
                     body: "" + error2
@@ -11433,12 +11433,12 @@
           return !!(value instanceof File || value instanceof Blob && value.name);
         };
         var deepCloneObject = function deepCloneObject2(src) {
-          if (!isObject4(src)) return src;
+          if (!isObject(src)) return src;
           var target = isArray(src) ? [] : {};
           for (var key in src) {
             if (!src.hasOwnProperty(key)) continue;
             var v = src[key];
-            target[key] = v && isObject4(v) ? deepCloneObject2(v) : v;
+            target[key] = v && isObject(v) ? deepCloneObject2(v) : v;
           }
           return target;
         };
@@ -11745,7 +11745,7 @@
               },
               getMetadata,
               setMetadata: function setMetadata(key, value, silent) {
-                if (isObject4(key)) {
+                if (isObject(key)) {
                   var data3 = key;
                   Object.keys(data3).forEach(function(key2) {
                     _setMetadata(key2, data3[key2], value);
@@ -16031,7 +16031,7 @@
                 return;
               }
               var group = mapping.group;
-              if (isObject4(mapping) && !object[group]) {
+              if (isObject(mapping) && !object[group]) {
                 object[group] = {};
               }
               object[group][lowerCaseFirstLetter(property.replace(selectorRegExp, ""))] = value;
@@ -16097,8 +16097,8 @@
             attributeMapping
           );
           Object.keys(attributeOptions).forEach(function(key) {
-            if (isObject4(attributeOptions[key])) {
-              if (!isObject4(mergedOptions[key])) {
+            if (isObject(attributeOptions[key])) {
+              if (!isObject(mergedOptions[key])) {
                 mergedOptions[key] = {};
               }
               Object.assign(mergedOptions[key], attributeOptions[key]);
@@ -16380,7 +16380,7 @@
             return opts;
           };
           exports2.setOptions = function setOptions$1(opts) {
-            if (isObject4(opts)) {
+            if (isObject(opts)) {
               state.apps.forEach(function(app) {
                 app.setOptions(opts);
               });
@@ -20807,9 +20807,6 @@
       docsUrl: "https://docs.cursor.com/context/model-context-protocol"
     }
   ];
-  function expertGuidanceEnv(on) {
-    return on ? {} : { AE_MCP_EXPERT_GUIDANCE: "0" };
-  }
   function httpConfigFor(client, port = 11488, extensionRoot = "<extension root>") {
     const id = typeof client === "string" ? client : client && client.id;
     const url = `http://127.0.0.1:${port}/mcp`;
@@ -20863,20 +20860,6 @@
       return navigator.clipboard.writeText(text).catch(() => copyTextLegacy(text));
     }
     return copyTextLegacy(text);
-  }
-
-  // src/lib/settingsState.js
-  init_cep_runtime_inject();
-  function zcodeDefaultModelLocked({ backend, models }) {
-    if (backend !== "zcode") return false;
-    return !Array.isArray(models) || models.length <= 1;
-  }
-  function zcodeManagedModelLabel(lang, modelId) {
-    const id = String(modelId || "").trim();
-    if (!id) {
-      return lang === "en" ? "Managed by the current ZCode session" : "\u7531 ZCode \u5F53\u524D\u4F1A\u8BDD\u7BA1\u7406";
-    }
-    return lang === "en" ? "Current model: " + id + " (managed by ZCode configuration)" : "\u5F53\u524D\u6A21\u578B\uFF1A" + id + "\uFF08\u7531 ZCode \u914D\u7F6E\u7BA1\u7406\uFF09";
   }
 
   // src/lib/settingsSections.js
@@ -21094,7 +21077,6 @@
     "node",
     "claude",
     "codex",
-    "zcode",
     "npm",
     "opencode",
     "brew",
@@ -21399,7 +21381,6 @@
     function standardCandidates(id, env) {
       if (!windows) {
         const values2 = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].map((root) => paths.join([root, id]));
-        if (id === "zcode") values2.unshift("/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs");
         return values2;
       }
       const values = [];
@@ -21408,7 +21389,6 @@
       const appData = environmentValue(env, "APPDATA", true) || paths.join([paths.home, "AppData", "Roaming"]);
       values.push(paths.join([appData, "npm", id + ".cmd"]));
       const local = environmentValue(env, "LOCALAPPDATA", true) || paths.join([paths.home, "AppData", "Local"]);
-      if (id === "zcode") values.unshift(paths.join([local, "Programs", "ZCode", "resources", "glm", "zcode.cjs"]));
       if (id === "winget") values.unshift(paths.join([local, "Microsoft", "WindowsApps", "winget.exe"]));
       if (id === "powershell") values.unshift(paths.join([systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"]));
       values.push(paths.join([local, "Programs", id, id + ".exe"]));
@@ -21609,7 +21589,7 @@
       return { success: { ...executable, version, arch } };
     }
     async function loginShellCandidate(id, env, attempts) {
-      if (windows || !["claude", "codex", "zcode", "npm", "opencode", "node"].includes(id)) return null;
+      if (windows || !["claude", "codex", "npm", "opencode", "node"].includes(id)) return null;
       const shell = fileCandidate("/bin/zsh", "standard", env);
       if (!shell) return null;
       const begin = "__AE_MCP_PATH_BEGIN__";
@@ -21629,7 +21609,7 @@
         if (result.stdout || result.stderr) attempts.push({ path: "/bin/zsh", source: "login-shell", detail: "login shell output was polluted or empty" });
         return null;
       }
-      return fileCandidate(match[1], "login-shell", env, id === "zcode");
+      return fileCandidate(match[1], "login-shell", env);
     }
     async function resolveExecutable(id, options = {}) {
       if (!EXECUTABLE_IDS.has(id)) throw new TypeError("Unsupported executable id: " + id);
@@ -21835,14 +21815,10 @@
       backendSub: "Claude",
       backendCodex: "Codex",
       backendOpenCode: "OpenCode",
-      backendZcode: "ZCode",
       recheck: "\u91CD\u65B0\u68C0\u6D4B",
       providerInitializationFailed: "Provider \u521D\u59CB\u5316\u5931\u8D25\uFF1B\u5F53\u524D\u5217\u8868\u5DF2\u4FDD\u7559\u3002\u8BF7\u68C0\u67E5 OpenCode provider \u914D\u7F6E\u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
       save: "\u4FDD\u5B58",
       modelDefault: "\u9ED8\u8BA4\u6A21\u578B\uFF08\u6253\u5F00\u9762\u677F\u65F6\u4F7F\u7528\uFF09",
-      customModel: "\u81EA\u5B9A\u4E49\u6A21\u578B ID",
-      customModelCap: "\u53EF\u9009\uFF1B\u586B\u5199\u540E\u4F18\u5148\u7528\u4E8E Codex",
-      zcodeModelManaged: "\u7531 ZCode \u5F53\u524D\u4F1A\u8BDD\u7BA1\u7406",
       port: "\u7AEF\u53E3",
       portHint: "\u9ED8\u8BA4 11488",
       apply: "\u5E94\u7528",
@@ -21891,14 +21867,10 @@
       backendSub: "Claude",
       backendCodex: "Codex",
       backendOpenCode: "OpenCode",
-      backendZcode: "ZCode",
       recheck: "Re-check",
       providerInitializationFailed: "Provider initialization failed; the current list was retained. Check the OpenCode provider configuration, then re-check.",
       save: "Save",
       modelDefault: "Default model (used when the panel opens)",
-      customModel: "Custom model ID",
-      customModelCap: "Optional; takes priority for Codex",
-      zcodeModelManaged: "Managed by the current ZCode session",
       port: "Port",
       portHint: "Default 11488",
       apply: "Apply",
@@ -22099,19 +22071,16 @@
     modelOptions,
     modelSwitchable = true,
     onModelChange,
-    customModel = "",
-    onCustomModelChange,
     backend = "subscription",
     onBackendChange,
     expertGuidance = true,
     onExpertGuidance,
-    channels = { claude: [], codex: [], opencode: [], zcode: [] },
+    channels = { claude: [], codex: [], opencode: [] },
     activeChannel = "",
     selectedChannel = "",
     onSelectChannel,
     onRecheckBackend,
     recheckDisabled = false,
-    codexCliConfig = null,
     providerManager = null,
     providerInit = { state: "checking", error: "" },
     logLevel = "info",
@@ -22121,8 +22090,6 @@
   }) {
     const t = S[lang] || S.zh;
     const providerInitMessage = t.providerInitializationFailed;
-    const zcodeModelLocked = zcodeDefaultModelLocked({ backend, models: modelOptions });
-    const [customModelDraft, setCustomModelDraft] = import_react19.default.useState(customModel);
     const [draftPort, setDraftPort] = import_react19.default.useState(String(port));
     const [tokenRaw, setTokenRaw] = import_react19.default.useState("");
     const [copied, setCopied] = import_react19.default.useState("");
@@ -22134,7 +22101,6 @@
     });
     import_react19.default.useEffect(() => setDraftPort(String(port)), [port]);
     import_react19.default.useEffect(() => setTokenRaw(readTokenValue()), []);
-    import_react19.default.useEffect(() => setCustomModelDraft(customModel), [customModel]);
     const copy = (label, text) => {
       copyText(text).then(() => {
         setCopied(label);
@@ -22164,19 +22130,13 @@
           ChannelCard,
           {
             lang,
-            channels: backend === "codex" ? channels.codex : backend === "opencode" ? channels.opencode : backend === "zcode" ? channels.zcode : channels.claude,
+            channels: backend === "codex" ? channels.codex : backend === "opencode" ? channels.opencode : channels.claude,
             activeChannel,
             selectedChannel,
             onSelectChannel,
             onRecheck: onRecheckBackend,
             recheckLabel: t.recheck,
-            recheckDisabled,
-            renderChannelBody: (channel) => {
-              if (backend === "codex" && channel === "cli-config") {
-                return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: codexCliConfig && codexCliConfig.provider ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "400 10px/1.5 var(--font-ui)", color: "var(--text-tertiary)" }, children: [codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") }) : null });
-              }
-              return null;
-            }
+            recheckDisabled
           }
         ),
         providerInit.state === "unavailable" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { role: "alert", style: { padding: "7px 8px", border: "1px solid var(--error-border)", borderRadius: "var(--radius-md)", background: "var(--error-bg)", color: "var(--error)", font: "400 10px/1.5 var(--font-ui)" }, children: [
@@ -22184,15 +22144,11 @@
           providerInit.detail || providerInit.error ? ` (${providerInit.detail || providerInit.error})` : ""
         ] }) : null,
         providerManager,
-        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: zcodeModelLocked ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { minHeight: 28, display: "flex", alignItems: "center", padding: "0 8px", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", font: "400 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: zcodeManagedModelLabel(lang, backend === "zcode" ? model : "") }) : /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.modelDefault, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Select, { value: model, onChange: onModelChange, options: modelOptions || [
           { value: "claude-sonnet-5", label: "Claude Sonnet 5" },
           { value: "claude-sonnet-4-6", label: "Claude Sonnet 4.6" },
           { value: "claude-haiku-4-5-20251001", label: "Claude Haiku 4.5" }
-        ] }) }),
-        backend === "codex" ? /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.customModel, caption: t.customModelCap, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Input, { mono: true, value: customModelDraft, onChange: (v) => {
-          setCustomModelDraft(v);
-          if (onCustomModelChange) onCustomModelChange(v);
-        }, placeholder: backend === "codex" ? "provider/model" : "claude-custom" }) }) : null
+        ] }) })
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "conn", title: t.conn, expanded: sections.conn, onToggle: onToggleSection, children: [
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Field, { label: t.port, hint: t.portHint, children: /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", gap: 6 }, children: [
@@ -23782,23 +23738,6 @@
       return { label, description: asText(option2.description) };
     }).filter(Boolean);
   }
-  function questionsFromUserInput(params) {
-    const input = params && (params.input || params) || {};
-    const list = Array.isArray(input.questions) ? input.questions : [];
-    return list.map((q, index) => {
-      const options = normalizedOptions(q && q.options);
-      return {
-        id: `q${index}`,
-        key: asText(q && q.question) || asText(q && q.header) || "question",
-        prompt: asText(q && q.question) || asText(q && q.header),
-        header: asText(q && q.header),
-        options,
-        multiSelect: Boolean(q && q.multiSelect),
-        allowCustom: true,
-        required: true
-      };
-    });
-  }
   function questionsFromCodexUserInput(params) {
     const list = Array.isArray(params && params.questions) ? params.questions : [];
     return list.map((q, index) => {
@@ -23937,14 +23876,6 @@
       }
     }
     return { ok: Object.keys(errors).length === 0, errors };
-  }
-  function answersForUserInput(questions, values) {
-    const answers = {};
-    for (const question of questions) {
-      const value = valueForQuestion(question, values);
-      answers[question.key] = question.multiSelect ? value.join(", ") : value;
-    }
-    return answers;
   }
   function contentForElicitation(questions, values) {
     const content = {};
@@ -26108,67 +26039,406 @@
 
   // src/lib/backendCapabilities.js
   init_cep_runtime_inject();
-
-  // src/cep/zcodeBackend.js
-  init_cep_runtime_inject();
-
-  // src/lib/ndjson.js
-  init_cep_runtime_inject();
-  function createLineSplitter(onLine) {
-    let buffer = "";
-    return function push(chunk) {
-      buffer += String(chunk || "");
-      let index = buffer.indexOf("\n");
-      while (index !== -1) {
-        const line = buffer.slice(0, index).trim();
-        buffer = buffer.slice(index + 1);
-        if (line) onLine(line);
-        index = buffer.indexOf("\n");
-      }
-    };
-  }
-  function createNdjsonReader(onMessage) {
-    return createLineSplitter((line) => {
-      let message;
-      try {
-        message = JSON.parse(line);
-      } catch (e) {
-        return;
-      }
-      onMessage(message);
-    });
-  }
-
-  // src/lib/zcodeErrors.js
-  init_cep_runtime_inject();
-  var ZH_RULES = [
+  var CLAUDE_PRICE_USD_PER_MTOK = {
+    "claude-fable-5": { input: 10, output: 50 },
+    "claude-opus-4-8": { input: 5, output: 25 },
+    "claude-sonnet-5": { input: 3, output: 15 },
+    "claude-sonnet-4-6": { input: 3, output: 15 },
+    "claude-haiku-4-5-20251001": { input: 1, output: 5 }
+  };
+  var CLAUDE_MODELS = [
     {
-      // Provider ids may contain dots (e.g. "mediastorm_glm/glm-5.2"): capture the
-      // whole non-space run, then drop one trailing sentence terminator if present.
-      re: /Model provider is missing an API key:\s*([^\s]+?)[.。]?(?=\s|$)/i,
-      hint: (m) => "ZCode provider\u300C" + m[1] + "\u300D\u7F3A\u5C11 API Key \u2014\u2014 \u5230 \u8BBE\u7F6E \u2192 AI \u670D\u52A1 \u2192 ZCode \u901A\u9053 \u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5728\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF09\uFF0C\u6216\u5728 ~/.zcode/cli/config.json \u91CC\u914D\u7F6E\u3002"
+      id: "claude-fable-5",
+      label: "Fable 5",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      adaptive: true
     },
     {
-      re: /Model config is missing/i,
-      hint: () => "\u672A\u627E\u5230 ZCode \u6A21\u578B\u914D\u7F6E \u2014\u2014 \u6253\u5F00 ZCode \u9009\u62E9 provider/model\uFF0C\u6216\u521B\u5EFA ~/.zcode/cli/config.json \u6307\u5B9A provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002"
+      id: "claude-opus-4-8",
+      label: "Opus 4.8",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      adaptive: true
     },
     {
-      re: /Provider authentication failed/i,
-      hint: () => "ZCode provider \u9274\u6743\u5931\u8D25 \u2014\u2014 \u68C0\u67E5 API Key \u662F\u5426\u6709\u6548\uFF1B\u82E5\u662F\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212\uFF08start-plan\uFF09\uFF0C\u9762\u677F\u5C1A\u4E0D\u652F\u6301\u5176\u684C\u9762\u9A8C\u8BC1\u7801\u6865\u63A5\uFF0C\u8BF7\u6539\u7528 CLI \u914D\u7F6E\u901A\u9053\u3002"
+      id: "claude-sonnet-5",
+      label: "Sonnet 5",
+      effortLevels: ["low", "medium", "high", "xhigh"],
+      adaptive: true
+    },
+    {
+      id: "claude-sonnet-4-6",
+      label: "Sonnet 4.6",
+      effortLevels: ["low", "medium", "high", "max"],
+      adaptive: true
+    },
+    {
+      id: "claude-haiku-4-5-20251001",
+      label: "Haiku 4.5",
+      effortLevels: ["low", "medium", "high"],
+      adaptive: false
     }
   ];
-  function localizeZcodeError(message, lang = "en") {
-    const text = String(message || "");
-    if (lang !== "zh" || !text) return text;
-    for (const rule of ZH_RULES) {
-      const m = rule.re.exec(text);
-      if (m) {
-        const hint = rule.hint(m);
-        if (text.startsWith(hint)) return text;
-        return hint + "\n" + text;
+  var APPROVAL_MODES = [
+    {
+      id: "readonly",
+      zh: "\u53EA\u8BFB",
+      en: "Read-only",
+      anchorZh: "\u4EC5\u653E\u884C\u53EA\u8BFB\u5DE5\u5177 \xB7 dontAsk",
+      anchorEn: "read-only allowlist \xB7 dontAsk"
+    },
+    {
+      id: "manual",
+      zh: "\u624B\u52A8",
+      en: "Manual",
+      anchorZh: "\u6BCF\u4E2A\u5199\u64CD\u4F5C\u5F39\u5361 \xB7 canUseTool",
+      anchorEn: "every write asks \xB7 canUseTool"
+    },
+    {
+      id: "auto",
+      zh: "\u81EA\u52A8",
+      en: "Auto",
+      anchorZh: "\u4EC5\u7834\u574F\u6027\u5F39\u5361 \xB7 \u6CE8\u89E3\u5206\u7EA7",
+      anchorEn: "destructive asks \xB7 annotations"
+    },
+    {
+      id: "none",
+      zh: "\u514D\u5BA1",
+      en: "Bypass",
+      anchorZh: "\u5168\u653E\uFF08\u4EC5 ae \u5DE5\u5177\uFF09\xB7 dontAsk",
+      anchorEn: "allow all ae tools \xB7 dontAsk"
+    }
+  ];
+  var TIER_ORDER = [1, 3, 5, 10];
+  function costTier(modelId) {
+    const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
+    if (!price) return 2;
+    const index = TIER_ORDER.indexOf(price.input);
+    return index === -1 ? 2 : index + 1;
+  }
+  function withCost(models) {
+    return models.map((model) => ({ ...model, cost: costTier(model.id) }));
+  }
+  function claudeSubDescriptor() {
+    return {
+      id: "claude-sub",
+      label: "\u8BA2\u9605",
+      models: withCost(CLAUDE_MODELS),
+      defaultModelId: "claude-sonnet-5",
+      defaultEffort: "high",
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  var CODEX_OFFICIAL_LOGIN_56_MODELS = [
+    {
+      id: "gpt-5.6-sol",
+      label: "GPT-5.6-Sol",
+      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+      cost: 2,
+      adaptive: false
+    },
+    {
+      id: "gpt-5.6-terra",
+      label: "GPT-5.6-Terra",
+      effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"],
+      cost: 2,
+      adaptive: false
+    },
+    {
+      id: "gpt-5.6-luna",
+      label: "GPT-5.6-Luna",
+      effortLevels: ["low", "medium", "high", "xhigh", "max"],
+      cost: 2,
+      adaptive: false
+    }
+  ];
+  var CODEX_OFFICIAL_LOGIN_56_MODEL_IDS = new Set(
+    CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => model.id)
+  );
+  function codexOfficialLogin56Models() {
+    return CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => ({
+      ...model,
+      effortLevels: [...model.effortLevels]
+    }));
+  }
+  function codexStaticDescriptor() {
+    return {
+      id: "codex",
+      label: "Codex",
+      models: [
+        {
+          id: "gpt-5.5",
+          label: "GPT-5.5",
+          effortLevels: ["low", "medium", "high", "xhigh"],
+          cost: 2,
+          adaptive: false
+        },
+        {
+          id: "gpt-5.4",
+          label: "GPT-5.4",
+          effortLevels: ["low", "medium", "high", "xhigh"],
+          cost: 2,
+          adaptive: false
+        },
+        {
+          id: "gpt-5.4-mini",
+          label: "GPT-5.4 mini",
+          effortLevels: ["low", "medium", "high", "xhigh"],
+          cost: 1,
+          adaptive: false
+        }
+      ],
+      defaultModelId: "gpt-5.5",
+      defaultEffort: "medium",
+      supportsFast: (modelId) => modelId === "gpt-5.5",
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function mergeCodexOfficialLoginModels(descriptor) {
+    const models = Array.isArray(descriptor == null ? void 0 : descriptor.models) ? descriptor.models : [];
+    const present = new Set(models.map((model) => model == null ? void 0 : model.id).filter(Boolean));
+    const missing = codexOfficialLogin56Models().filter((model) => !present.has(model.id));
+    const supportsFast = typeof (descriptor == null ? void 0 : descriptor.supportsFast) === "function" ? descriptor.supportsFast : () => false;
+    return {
+      ...descriptor,
+      models: missing.length ? [...models, ...missing] : models,
+      supportsFast: (modelId) => CODEX_OFFICIAL_LOGIN_56_MODEL_IDS.has(String(modelId || "")) || supportsFast(modelId)
+    };
+  }
+  function modelListArray(modelListResult) {
+    if (Array.isArray(modelListResult)) return modelListResult;
+    return Array.isArray(modelListResult == null ? void 0 : modelListResult.models) ? modelListResult.models : [];
+  }
+  function codexDescriptorFromModels(modelListResult) {
+    var _a;
+    const rawModels = modelListArray(modelListResult).filter((model) => (model == null ? void 0 : model.hidden) !== true);
+    if (!rawModels.length) return codexStaticDescriptor();
+    const fastModels = /* @__PURE__ */ new Set();
+    const models = rawModels.map((model) => {
+      const id = String(model.id || "");
+      if (Array.isArray(model.additionalSpeedTiers) && model.additionalSpeedTiers.includes("fast")) {
+        fastModels.add(id);
+      }
+      return {
+        id,
+        label: model.displayName || model.display_name || id,
+        effortLevels: Array.isArray(model.supportedReasoningEfforts) ? model.supportedReasoningEfforts.map((effort) => effort == null ? void 0 : effort.reasoningEffort).filter(Boolean) : [],
+        cost: 2,
+        adaptive: false
+      };
+    }).filter((model) => model.id);
+    if (!models.length) return codexStaticDescriptor();
+    const defaultRaw = rawModels.find((model) => (model == null ? void 0 : model.isDefault) === true) || rawModels[0];
+    const defaultModelId = (defaultRaw == null ? void 0 : defaultRaw.id) ? String(defaultRaw.id) : models[0].id;
+    const defaultEffort = (defaultRaw == null ? void 0 : defaultRaw.defaultReasoningEffort) || ((_a = models.find((model) => model.id === defaultModelId)) == null ? void 0 : _a.effortLevels[0]) || "medium";
+    return {
+      id: "codex",
+      label: "Codex",
+      models,
+      defaultModelId,
+      defaultEffort,
+      supportsFast: (modelId) => fastModels.has(String(modelId || "")),
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function openCodeStaticDescriptor() {
+    return {
+      id: "opencode",
+      label: "OpenCode",
+      models: [
+        {
+          id: "north-mini-code-free",
+          label: "North Mini Code Free",
+          effortLevels: [],
+          cost: 1,
+          adaptive: false
+        }
+      ],
+      defaultModelId: "north-mini-code-free",
+      defaultEffort: null,
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  function providerEntries(providerResult) {
+    if (Array.isArray(providerResult)) {
+      return providerResult.map((provider) => [
+        (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || (provider == null ? void 0 : provider.name),
+        provider
+      ]);
+    }
+    if (Array.isArray(providerResult == null ? void 0 : providerResult.providers)) {
+      return providerResult.providers.map((provider) => [
+        (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || (provider == null ? void 0 : provider.name),
+        provider
+      ]);
+    }
+    return providerResult && typeof providerResult === "object" ? Object.entries(providerResult) : [];
+  }
+  function modelEntries(provider) {
+    if (Array.isArray(provider == null ? void 0 : provider.models)) {
+      return provider.models.map((model) => [
+        (model == null ? void 0 : model.id) || (model == null ? void 0 : model.modelID) || (model == null ? void 0 : model.modelId) || (model == null ? void 0 : model.name),
+        model
+      ]);
+    }
+    return (provider == null ? void 0 : provider.models) && typeof provider.models === "object" ? Object.entries(provider.models) : [];
+  }
+  function openCodeDescriptorFromModels(providerResult) {
+    const models = [];
+    for (const [providerKey, provider] of providerEntries(providerResult)) {
+      const providerId = String(
+        (provider == null ? void 0 : provider.id) || (provider == null ? void 0 : provider.providerID) || (provider == null ? void 0 : provider.providerId) || providerKey || "opencode"
+      );
+      for (const [modelKey, raw] of modelEntries(provider)) {
+        const modelId = String((raw == null ? void 0 : raw.id) || (raw == null ? void 0 : raw.modelID) || (raw == null ? void 0 : raw.modelId) || modelKey || "");
+        if (!modelId) continue;
+        models.push({
+          id: providerId === "opencode" ? modelId : `${providerId}/${modelId}`,
+          label: (raw == null ? void 0 : raw.name) || (raw == null ? void 0 : raw.displayName) || (raw == null ? void 0 : raw.display_name) || modelId,
+          effortLevels: [],
+          cost: modelId.endsWith("-free") ? 1 : 2,
+          adaptive: false
+        });
       }
     }
-    return text;
+    if (!models.length) return openCodeStaticDescriptor();
+    const defaultModel = models.find((model) => model.id === "north-mini-code-free") || models.find((model) => model.id.endsWith("/north-mini-code-free")) || models[0];
+    return {
+      id: "opencode",
+      label: "OpenCode",
+      models,
+      defaultModelId: defaultModel.id,
+      defaultEffort: null,
+      supportsFast: () => false,
+      approvalModes: APPROVAL_MODES,
+      perTurnModelSwitch: true
+    };
+  }
+  var EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max", "ultra"];
+  function resolveEffectiveEffort({ requested, model, defaultEffort }) {
+    const levels = Array.isArray(model == null ? void 0 : model.effortLevels) ? model.effortLevels : [];
+    if (!levels.length) return null;
+    if (requested && levels.includes(requested)) return requested;
+    if (requested && EFFORT_ORDER.includes(requested)) {
+      const ranked = levels.filter((level) => EFFORT_ORDER.includes(level)).sort((left, right) => EFFORT_ORDER.indexOf(left) - EFFORT_ORDER.indexOf(right));
+      const atOrBelow = ranked.filter(
+        (level) => EFFORT_ORDER.indexOf(level) <= EFFORT_ORDER.indexOf(requested)
+      );
+      if (atOrBelow.length) return atOrBelow[atOrBelow.length - 1];
+      if (ranked.length) return ranked[0];
+    }
+    if (defaultEffort && levels.includes(defaultEffort)) return defaultEffort;
+    return levels[0];
+  }
+
+  // src/cep/backends/index.js
+  var BACKENDS = {
+    subscription: {
+      id: "subscription",
+      baseDescriptor: claudeSubDescriptor,
+      attachmentTransport: "manifest+read-rule"
+    },
+    codex: {
+      id: "codex",
+      baseDescriptor: codexStaticDescriptor,
+      attachmentTransport: "native+manifest"
+    },
+    opencode: {
+      id: "opencode",
+      baseDescriptor: openCodeStaticDescriptor,
+      attachmentTransport: "native"
+    }
+  };
+  var ATTACHMENT_TRANSPORTS = /* @__PURE__ */ new Set([
+    "manifest+read-rule",
+    "native",
+    "native+manifest"
+  ]);
+  function assertAttachmentBackendRegistry(registry) {
+    for (const [id, entry] of Object.entries(registry)) {
+      if (!ATTACHMENT_TRANSPORTS.has(entry == null ? void 0 : entry.attachmentTransport)) {
+        throw new TypeError(id + " is missing a valid attachment transport");
+      }
+    }
+    return true;
+  }
+  assertAttachmentBackendRegistry(BACKENDS);
+  var REAL_BACKENDS = Object.keys(BACKENDS);
+  function baseDescriptorFor(backendId) {
+    const entry = BACKENDS[backendId];
+    if (entry) return entry.baseDescriptor();
+    throw new Error(
+      `Unknown backend id "${backendId}". Known backend ids: ${Object.keys(BACKENDS).join(", ")}`
+    );
+  }
+
+  // src/lib/backendSelect.js
+  var DEFAULT_CHANNEL = { claude: "subscription", codex: "cli", opencode: "provider" };
+  function pickBackend({ pref, channels = {}, channelChoices = {} }) {
+    const group = ["codex", "opencode"].includes(pref) ? pref : "claude";
+    const list = channels[group] || [];
+    const wanted = channelChoices[group] || DEFAULT_CHANNEL[group];
+    const chosen = list.find((c) => c && c.channel === wanted) || list[0] || null;
+    if (chosen && chosen.checking) {
+      return { backend: "none", reason: group + "-probing", channel: null, fixHint: null };
+    }
+    if (!chosen || !chosen.ok) {
+      return {
+        backend: "none",
+        reason: group + "-no-channel",
+        channel: chosen ? chosen.channel : null,
+        fixHint: chosen ? chosen.fixHint || null : null
+      };
+    }
+    if (group === "claude") {
+      return { backend: "subscription", reason: "ok", channel: "subscription", fixHint: null };
+    }
+    return { backend: group, reason: "ok", channel: chosen.channel, fixHint: null };
+  }
+  function deriveToolMeta(tools) {
+    const allowedTools = [];
+    const annotations = {};
+    for (const tool of tools || []) {
+      const name = "mcp__ae__" + tool.name;
+      const ann = tool && tool.annotations || {};
+      const readOnly = ann.readOnlyHint === true;
+      const destructive = ann.destructiveHint === true;
+      if (readOnly) allowedTools.push(name);
+      annotations[name] = { readOnly, destructive };
+    }
+    return { allowedTools, annotations };
+  }
+  function shouldResetOnBackendChange(prevReal, next) {
+    if (!REAL_BACKENDS.includes(next)) return { reset: false, nextReal: prevReal || null };
+    if (!prevReal) return { reset: false, nextReal: next };
+    if (prevReal === next) return { reset: false, nextReal: prevReal };
+    return { reset: true, nextReal: next };
+  }
+
+  // src/lib/backendLifecycle.js
+  init_cep_runtime_inject();
+  function installBeforeUnloadReset(target, backend) {
+    if (!backend || typeof backend.reset !== "function") {
+      throw new TypeError("A backend with reset() is required");
+    }
+    let active = true;
+    const dispose = () => {
+      if (!active) return;
+      active = false;
+      if (target && typeof target.removeEventListener === "function") {
+        target.removeEventListener("beforeunload", dispose);
+      }
+      backend.reset();
+    };
+    if (target && typeof target.addEventListener === "function") {
+      target.addEventListener("beforeunload", dispose);
+    }
+    return dispose;
   }
 
   // src/lib/exactSecretRedaction.js
@@ -26279,78 +26549,6 @@
     if (visit(value)) return true;
     return [valueParts, keyParts, keyValueParts, leafKeyValueParts].some((parts) => containsText(parts.join("")));
   }
-  function containsExactSecretAcrossBoundary(seedValues, payload, values = []) {
-    const secrets = normalizedSecrets(values);
-    if (!secrets.length) return false;
-    const valueParts = [];
-    const keyParts = [];
-    const keyValueParts = [];
-    const leafKeyValueParts = [];
-    const visiting = /* @__PURE__ */ new WeakSet();
-    let chars = 0;
-    const append = (parts, value) => {
-      const text = String(value);
-      chars += text.length;
-      if (chars > MAX_STRUCTURE_CHARS) return false;
-      parts.push(text);
-      return true;
-    };
-    const visit = (value) => {
-      if (typeof value === "function") return false;
-      if (typeof value !== "object" || value === null) {
-        return append(valueParts, value) && append(keyValueParts, value);
-      }
-      if (visiting.has(value)) return false;
-      let keys;
-      try {
-        keys = Reflect.ownKeys(value);
-      } catch {
-        return false;
-      }
-      visiting.add(value);
-      try {
-        for (const key of keys) {
-          let item;
-          try {
-            item = Reflect.get(value, key);
-          } catch {
-            return false;
-          }
-          if (!append(keyParts, key) || !append(keyValueParts, key)) return false;
-          if (typeof item !== "function" && (typeof item !== "object" || item === null)) {
-            if (!append(valueParts, item) || !append(keyValueParts, item) || !append(leafKeyValueParts, key) || !append(leafKeyValueParts, item)) return false;
-          } else if (!visit(item)) {
-            return false;
-          }
-        }
-        return true;
-      } finally {
-        visiting.delete(value);
-      }
-    };
-    if (!visit(payload)) return true;
-    const candidates = [
-      ...leafKeyValueParts,
-      valueParts.join(""),
-      keyParts.join(""),
-      keyValueParts.join(""),
-      leafKeyValueParts.join("")
-    ];
-    let seeds;
-    try {
-      seeds = Array.from(seedValues || [], (value) => String(value));
-    } catch {
-      return true;
-    }
-    for (const seed of seeds) {
-      for (const candidate of candidates) {
-        if (textContainsSecret(seed + candidate, secrets) || textContainsSecret(candidate + seed, secrets)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
   function redactText(value, values = []) {
     let text = String(value == null ? "" : value);
     const secrets = normalizedSecrets(values);
@@ -26417,2107 +26615,6 @@
         buffer = "";
       }
     };
-  }
-  function createByteRedactor(values, emitBytes) {
-    const secrets = normalizedSecrets(values).map((value) => Buffer.from(value, "utf8")).filter((value) => value.length > 0).sort((left, right) => right.length - left.length);
-    const displayMarker = Buffer.from("[redacted]", "utf8");
-    const marker = secrets.some((secret) => displayMarker.includes(secret)) ? Buffer.alloc(0) : displayMarker;
-    const maximum = secrets.reduce((length, secret) => Math.max(length, secret.length), 0);
-    let pending = Buffer.alloc(0);
-    function emit(value) {
-      if (value.length > 0) emitBytes(value);
-    }
-    function drain(flush) {
-      if (!secrets.length) {
-        emit(pending);
-        pending = Buffer.alloc(0);
-        return;
-      }
-      while (pending.length > 0) {
-        const boundary = flush ? pending.length : Math.max(0, pending.length - maximum + 1);
-        if (!flush && boundary === 0) return;
-        let matchIndex = -1;
-        let matchSecret = null;
-        for (const secret of secrets) {
-          const index = pending.indexOf(secret);
-          if (index < 0 || !flush && index >= boundary) continue;
-          if (matchIndex < 0 || index < matchIndex || index === matchIndex && secret.length > matchSecret.length) {
-            matchIndex = index;
-            matchSecret = secret;
-          }
-        }
-        if (matchIndex < 0) {
-          emit(pending.subarray(0, boundary));
-          pending = pending.subarray(boundary);
-          if (!flush) return;
-          continue;
-        }
-        emit(pending.subarray(0, matchIndex));
-        emit(marker);
-        pending = pending.subarray(matchIndex + matchSecret.length);
-      }
-    }
-    return {
-      feed(chunk) {
-        const value = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk || "");
-        if (!value.length) return;
-        pending = pending.length ? Buffer.concat([pending, value]) : Buffer.from(value);
-        drain(false);
-      },
-      flush() {
-        drain(true);
-      },
-      discard() {
-        pending = Buffer.alloc(0);
-      }
-    };
-  }
-
-  // src/lib/providerHeaderPolicy.js
-  init_cep_runtime_inject();
-  var FORBIDDEN_EXACT = /* @__PURE__ */ new Set([
-    "host",
-    "content-length",
-    "connection",
-    "transfer-encoding",
-    "upgrade",
-    "keep-alive",
-    "te",
-    "trailer",
-    "expect",
-    "cookie",
-    "set-cookie",
-    "forwarded",
-    "proxy-authorization",
-    "proxy-authenticate"
-  ]);
-  var SENSITIVE_SEGMENTS = /* @__PURE__ */ new Set([
-    "api-key",
-    "apikey",
-    "auth",
-    "authentication",
-    "authorization",
-    "cookie",
-    "credential",
-    "credentials",
-    "key",
-    "oauth",
-    "passwd",
-    "password",
-    "secret",
-    "session",
-    "signature",
-    "token"
-  ]);
-  var STRONG_SENSITIVE_FRAGMENTS = [
-    "apikey",
-    "auth",
-    "cookie",
-    "credential",
-    "oauth",
-    "passwd",
-    "password",
-    "secret",
-    "session",
-    "signature",
-    "token"
-  ];
-  var KEY_SUFFIX_PREFIXES = /* @__PURE__ */ new Set([
-    "api",
-    "access",
-    "client",
-    "credential",
-    "private",
-    "provider",
-    "public",
-    "secret",
-    "x"
-  ]);
-  var SECRET_LIKE_LITERAL = /(?:^|[^A-Za-z0-9_-])(?:Bearer\s+\S+|Basic\s+\S+|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})(?=$|[^A-Za-z0-9_-])/i;
-  var CREDENTIAL_ASSIGNMENT = /(?:^|[^A-Za-z0-9_.-])(["']?)([A-Za-z][A-Za-z0-9_.-]*)(\1)[ \t]*[:=]/g;
-  var MAX_LITERAL_DECODE_LAYERS = 3;
-  function normalizedName(value) {
-    return String(value || "").trim().toLowerCase();
-  }
-  function isSensitiveProviderHeaderName(value) {
-    const raw = String(value || "").trim();
-    if (!raw) return false;
-    const separated = raw.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
-    const segments = separated.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-    if (segments.some((segment) => SENSITIVE_SEGMENTS.has(segment))) return true;
-    const compact = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
-    if (STRONG_SENSITIVE_FRAGMENTS.some((fragment) => compact.includes(fragment))) return true;
-    if (!compact.endsWith("key")) return false;
-    const prefix = compact.slice(0, -3);
-    return KEY_SUFFIX_PREFIXES.has(prefix) || Array.from(KEY_SUFFIX_PREFIXES).some((candidate) => prefix.endsWith(candidate));
-  }
-  function isCredentialShapedProviderLiteral(value) {
-    let text = String(value == null ? "" : value);
-    if (!text) return false;
-    if (text.length > 8192) return true;
-    for (let layer = 0; layer <= MAX_LITERAL_DECODE_LAYERS; layer += 1) {
-      if (literalLayerContainsCredential(text)) return true;
-      const decoded = text.replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
-        try {
-          return decodeURIComponent(run);
-        } catch {
-          return run;
-        }
-      });
-      if (decoded === text) break;
-      text = decoded;
-    }
-    return false;
-  }
-  function literalLayerContainsCredential(text) {
-    if (textContainsCredentialSyntax(text)) return true;
-    let parsed;
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      return false;
-    }
-    return jsonContainsCredential(parsed);
-  }
-  function textContainsCredentialSyntax(text) {
-    if (SECRET_LIKE_LITERAL.test(text)) return true;
-    CREDENTIAL_ASSIGNMENT.lastIndex = 0;
-    let match;
-    while ((match = CREDENTIAL_ASSIGNMENT.exec(text)) !== null) {
-      if (isSensitiveProviderHeaderName(match[2])) return true;
-    }
-    return false;
-  }
-  function jsonHasMaterial(value) {
-    if (typeof value === "string") return value.length > 0;
-    if (Array.isArray(value)) return value.some(jsonHasMaterial);
-    if (value && typeof value === "object") return Object.values(value).some(jsonHasMaterial);
-    return value !== null && value !== void 0;
-  }
-  function jsonContainsCredential(value) {
-    if (typeof value === "string") return textContainsCredentialSyntax(value);
-    if (Array.isArray(value)) return value.some(jsonContainsCredential);
-    if (!value || typeof value !== "object") return false;
-    for (const [key, item] of Object.entries(value)) {
-      if (isSensitiveProviderHeaderName(key) && jsonHasMaterial(item)) return true;
-      if (jsonContainsCredential(item)) return true;
-    }
-    return false;
-  }
-  function isForbiddenProviderHeaderName(value) {
-    const name = normalizedName(value);
-    return FORBIDDEN_EXACT.has(name) || name.startsWith("x-forwarded-") || name.startsWith("proxy-") || name.startsWith("sec-") || name.startsWith("x-ae-mcp-route-");
-  }
-  function isReservedProviderExtraHeaderName(value) {
-    const name = normalizedName(value);
-    return name === "authorization" || name === "x-api-key" || isForbiddenProviderHeaderName(name);
-  }
-
-  // ../shared/tool-approval.mjs
-  init_cep_runtime_inject();
-  var PLAN_SCHEMA_KEY = "x-ae-mcp-plan";
-  var HASH_PATTERN = /^[0-9a-f]{64}$/;
-  var OPERATIONS = /* @__PURE__ */ new Set(["render", "execute", "apply"]);
-  var RISKS = /* @__PURE__ */ new Set(["read", "write", "destructive", "external"]);
-  var TOOL_USE_ACTIONS = /* @__PURE__ */ new Set(["render", "prepare", "grant", "execute", "save"]);
-  function isPlainObject(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
-  }
-  function cloneJson(value, seen = /* @__PURE__ */ new Set()) {
-    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) throw new TypeError("Plan values must be finite JSON");
-      return value;
-    }
-    if (typeof value !== "object" || seen.has(value)) throw new TypeError("Plan values must be acyclic JSON");
-    seen.add(value);
-    let result;
-    if (Array.isArray(value)) {
-      result = value.map((item) => cloneJson(item, seen));
-    } else {
-      if (!isPlainObject(value)) throw new TypeError("Plan values must be plain JSON objects");
-      result = {};
-      for (const [key, item] of Object.entries(value)) {
-        Object.defineProperty(result, key, {
-          value: cloneJson(item, seen),
-          enumerable: true,
-          configurable: true,
-          writable: true
-        });
-      }
-    }
-    seen.delete(value);
-    return result;
-  }
-  function deepFreeze(value) {
-    if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
-    for (const item of Object.values(value)) deepFreeze(item);
-    return Object.freeze(value);
-  }
-  function canonicalize(value) {
-    if (Array.isArray(value)) return value.map(canonicalize);
-    if (!isPlainObject(value)) return value;
-    return Object.fromEntries(
-      Object.keys(value).sort().map((key) => [key, canonicalize(value[key])])
-    );
-  }
-  function rotateRight(value, count) {
-    return value >>> count | value << 32 - count;
-  }
-  function sha256Text(text) {
-    const source = String(text);
-    const bytes = typeof TextEncoder === "function" ? new TextEncoder().encode(source) : Uint8Array.from(unescape(encodeURIComponent(source)), (character) => character.charCodeAt(0));
-    const bitLength = bytes.length * 8;
-    const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
-    const padded = new Uint8Array(paddedLength);
-    padded.set(bytes);
-    padded[bytes.length] = 128;
-    const view = new DataView(padded.buffer);
-    view.setUint32(paddedLength - 8, Math.floor(bitLength / 4294967296));
-    view.setUint32(paddedLength - 4, bitLength >>> 0);
-    const constants = [
-      1116352408,
-      1899447441,
-      3049323471,
-      3921009573,
-      961987163,
-      1508970993,
-      2453635748,
-      2870763221,
-      3624381080,
-      310598401,
-      607225278,
-      1426881987,
-      1925078388,
-      2162078206,
-      2614888103,
-      3248222580,
-      3835390401,
-      4022224774,
-      264347078,
-      604807628,
-      770255983,
-      1249150122,
-      1555081692,
-      1996064986,
-      2554220882,
-      2821834349,
-      2952996808,
-      3210313671,
-      3336571891,
-      3584528711,
-      113926993,
-      338241895,
-      666307205,
-      773529912,
-      1294757372,
-      1396182291,
-      1695183700,
-      1986661051,
-      2177026350,
-      2456956037,
-      2730485921,
-      2820302411,
-      3259730800,
-      3345764771,
-      3516065817,
-      3600352804,
-      4094571909,
-      275423344,
-      430227734,
-      506948616,
-      659060556,
-      883997877,
-      958139571,
-      1322822218,
-      1537002063,
-      1747873779,
-      1955562222,
-      2024104815,
-      2227730452,
-      2361852424,
-      2428436474,
-      2756734187,
-      3204031479,
-      3329325298
-    ];
-    const hash = [
-      1779033703,
-      3144134277,
-      1013904242,
-      2773480762,
-      1359893119,
-      2600822924,
-      528734635,
-      1541459225
-    ];
-    const words = new Uint32Array(64);
-    for (let offset = 0; offset < paddedLength; offset += 64) {
-      for (let index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4);
-      for (let index = 16; index < 64; index += 1) {
-        const x = words[index - 15];
-        const y = words[index - 2];
-        const s0 = rotateRight(x, 7) ^ rotateRight(x, 18) ^ x >>> 3;
-        const s1 = rotateRight(y, 17) ^ rotateRight(y, 19) ^ y >>> 10;
-        words[index] = words[index - 16] + s0 + words[index - 7] + s1 >>> 0;
-      }
-      let [a, b, c, d, e, f, g, h] = hash;
-      for (let index = 0; index < 64; index += 1) {
-        const s1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
-        const choose = e & f ^ ~e & g;
-        const temporary1 = h + s1 + choose + constants[index] + words[index] >>> 0;
-        const s0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
-        const majority = a & b ^ a & c ^ b & c;
-        const temporary2 = s0 + majority >>> 0;
-        h = g;
-        g = f;
-        f = e;
-        e = d + temporary1 >>> 0;
-        d = c;
-        c = b;
-        b = a;
-        a = temporary1 + temporary2 >>> 0;
-      }
-      hash[0] = hash[0] + a >>> 0;
-      hash[1] = hash[1] + b >>> 0;
-      hash[2] = hash[2] + c >>> 0;
-      hash[3] = hash[3] + d >>> 0;
-      hash[4] = hash[4] + e >>> 0;
-      hash[5] = hash[5] + f >>> 0;
-      hash[6] = hash[6] + g >>> 0;
-      hash[7] = hash[7] + h >>> 0;
-    }
-    return hash.map((word) => word.toString(16).padStart(8, "0")).join("");
-  }
-  function normalizeMcpToolName(name) {
-    let normalized = typeof name === "string" ? name : "";
-    if (normalized.startsWith("mcp__ae__")) normalized = normalized.slice("mcp__ae__".length);
-    if (normalized.startsWith("ae_")) normalized = "ae." + normalized.slice(3);
-    return normalized;
-  }
-  function isCoreAuthorizedDynamicCall(name, args) {
-    if (!isPlainObject(args)) return false;
-    const normalized = normalizeMcpToolName(name);
-    try {
-      if (normalized === "ae.toolUse") return TOOL_USE_ACTIONS.has(args.action);
-      if (normalized === "ae.skillUse") return typeof args.execute === "boolean";
-    } catch {
-      return false;
-    }
-    return false;
-  }
-  function extractToolPlan(requestedSchema, now = Date.now()) {
-    if (!isPlainObject(requestedSchema)) return null;
-    let raw;
-    try {
-      raw = requestedSchema[PLAN_SCHEMA_KEY];
-    } catch {
-      return null;
-    }
-    if (!isPlainObject(raw)) return null;
-    try {
-      const current = typeof now === "function" ? now() : now;
-      if (typeof raw.artifactId !== "string" || !raw.artifactId.trim()) return null;
-      if (!HASH_PATTERN.test(raw.contentHash) || !HASH_PATTERN.test(raw.planHash)) return null;
-      if (!OPERATIONS.has(raw.operation) || !RISKS.has(raw.risk)) return null;
-      if (!isPlainObject(raw.normalizedArgs) || !isPlainObject(raw.target)) return null;
-      if (!Number.isSafeInteger(raw.expiresAt) || !Number.isFinite(current) || raw.expiresAt <= current) return null;
-      return deepFreeze(cloneJson(raw));
-    } catch {
-      return null;
-    }
-  }
-  function planSessionKey(plan) {
-    const payload = {
-      artifactId: plan.artifactId,
-      contentHash: plan.contentHash,
-      operation: plan.operation,
-      normalizedTarget: cloneJson(plan.target)
-    };
-    return sha256Text(JSON.stringify(canonicalize(payload)));
-  }
-  function decideToolPlan({ tier, plan, sessionAllowed = false }) {
-    const risk = plan && plan.risk;
-    if (!RISKS.has(risk)) {
-      return { decision: "deny", risk: "unknown", allowSession: false, sessionKey: null };
-    }
-    if (!["readonly", "manual", "auto", "none"].includes(tier)) {
-      return { decision: "deny", risk, allowSession: false, sessionKey: null };
-    }
-    const high = risk === "destructive" || risk === "external";
-    if (risk === "read") {
-      return { decision: "allow", risk, allowSession: false, sessionKey: null };
-    }
-    if (tier === "readonly") {
-      return { decision: "deny", risk, allowSession: false, sessionKey: null };
-    }
-    if (sessionAllowed && risk === "write") {
-      return {
-        decision: "allow",
-        risk,
-        allowSession: true,
-        sessionKey: planSessionKey(plan)
-      };
-    }
-    if (high) {
-      return { decision: "ask", risk, allowSession: false, sessionKey: null };
-    }
-    if (tier === "manual") {
-      return {
-        decision: "ask",
-        risk,
-        allowSession: true,
-        sessionKey: planSessionKey(plan)
-      };
-    }
-    return { decision: "allow", risk, allowSession: false, sessionKey: null };
-  }
-  function approvalResult(decision, policy = {}) {
-    if (decision === "once" || decision === "allow") {
-      return { action: "accept", content: { decision: "once" } };
-    }
-    if (decision === "session" && policy.allowSession === true) {
-      return { action: "accept", content: { decision: "session" } };
-    }
-    return { action: "decline", content: {} };
-  }
-
-  // src/cep/zcodeBackend.js
-  var RPC_TIMEOUT_MS = 3e4;
-  var STDERR_TAIL_LIMIT = 4096;
-  var DELIVERY_KIND = "desktop-continuous";
-  var ZCODE_BUILTIN_DEFAULT_MODEL = "builtin:bigmodel-start-plan/GLM-5.2";
-  var LEGACY_ZCODE_MODEL_REFS = /* @__PURE__ */ new Set(["mediastorm_glm/glm-5.2"]);
-  var ZCODE_THOUGHT_LEVELS = /* @__PURE__ */ new Set(["nothink", "high", "max", "low", "medium"]);
-  var MODE_BY_TIER = {
-    readonly: "plan",
-    manual: "build",
-    auto: "edit",
-    none: "yolo"
-  };
-  function appendTail2(tail, chunk) {
-    const next = tail + String(chunk || "");
-    return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
-  }
-  function clone(value) {
-    return value == null ? value : JSON.parse(JSON.stringify(value));
-  }
-  async function resolveZcodeCli({ env, platform }) {
-    const adapter = platform || createPlatformAdapter();
-    const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
-    const executable = await adapter.resolveExecutable("zcode", { env: env || {}, ...requiredArch ? { requiredArch } : {} });
-    if (!executable.ok) return { ok: false, detail: "ZCode CLI resolution failed: " + executable.code, resolution: executable };
-    return { ok: true, cliPath: executable.path, executable };
-  }
-  function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
-    let nextId2 = 1;
-    const pending = /* @__PURE__ */ new Map();
-    function writeMessage(message) {
-      writeLine(JSON.stringify(message) + "\n");
-    }
-    function rejectPending(id, error) {
-      const entry = pending.get(id);
-      if (!entry) return;
-      pending.delete(id);
-      clearTimeout(entry.timer);
-      entry.reject(error);
-    }
-    function handleMessage(message) {
-      if (!message || typeof message !== "object") return;
-      const hasId = message.id !== void 0 && message.id !== null;
-      if (hasId && !message.method) {
-        const entry = pending.get(message.id);
-        if (!entry) return;
-        pending.delete(message.id);
-        clearTimeout(entry.timer);
-        if (message.error) {
-          const error = new Error(message.error.message || "ZCode request failed");
-          error.code = message.error.code;
-          error.data = message.error.data;
-          entry.reject(error);
-        } else {
-          entry.resolve(message.result);
-        }
-        return;
-      }
-      if (message.method && hasId) {
-        if (onRequest) onRequest(message);
-        return;
-      }
-      if (message.method && onNotification) onNotification(message);
-    }
-    function request(method, params, timeoutOverrideMs) {
-      const id = nextId2++;
-      const message = { id, method };
-      if (params !== void 0) message.params = params;
-      const limit = timeoutOverrideMs || timeoutMs;
-      const promise = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => rejectPending(id, new Error(method + " timed out after " + limit + "ms")), limit);
-        if (timer && timer.unref) timer.unref();
-        pending.set(id, { resolve, reject, timer });
-      });
-      writeMessage(message);
-      return promise;
-    }
-    function fireRequest(method, params) {
-      const id = nextId2++;
-      const message = { id, method };
-      if (params !== void 0) message.params = params;
-      writeMessage(message);
-      return id;
-    }
-    function respond(id, result) {
-      writeMessage({ id, result });
-    }
-    function respondError(id, code, message) {
-      writeMessage({ id, error: { code, message } });
-    }
-    function close(reason = new Error("ZCode app-server closed")) {
-      for (const id of Array.from(pending.keys())) rejectPending(id, reason);
-    }
-    return { request, fireRequest, respond, respondError, close, handleMessage };
-  }
-  function mcpToolName(name) {
-    const text = String(name || "");
-    return text.startsWith("mcp__") ? text : "mcp__ae__" + text;
-  }
-  function hasRpcId(value) {
-    return value !== void 0 && value !== null;
-  }
-  function zcodeProviderId(modelRef) {
-    const text = String(modelRef || "").trim();
-    const slash = text.indexOf("/");
-    return slash > 0 ? text.slice(0, slash).trim() : "";
-  }
-  function zcodeProviderApiKeyEnv(providerId) {
-    const text = String(providerId || "").trim().replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").toUpperCase();
-    return text ? text + "_API_KEY" : "";
-  }
-  function zcodeModelIds(provider) {
-    const models = provider && provider.models;
-    if (Array.isArray(models)) return models.map((m) => m && (m.id || m.modelID || m.modelId || m.name)).filter(Boolean).map(String);
-    if (models && typeof models === "object") return Object.keys(models);
-    return [];
-  }
-  function zcodePreferredModelId(provider) {
-    const ids = zcodeModelIds(provider);
-    if (!ids.length) return "";
-    return ids.find((id) => id === "GLM-5.2") || ids.find((id) => /GLM-5\.2/i.test(id)) || ids[0];
-  }
-  function hasZcodeProviderCredential(provider, env = {}) {
-    const options = provider && provider.options && typeof provider.options === "object" ? provider.options : {};
-    if (options.apiKey || provider && provider.apiKey) return true;
-    const keyEnv = String(options.apiKeyEnv || "").trim();
-    return Boolean(keyEnv && env[keyEnv]);
-  }
-  function zcodeProviderScore(providerId, provider, family, env = {}, { allowEmptyModels = false } = {}) {
-    if (!provider || typeof provider !== "object") return -1;
-    if (provider.enabled === false || provider.systemDisabledReason) return -1;
-    if (!zcodeModelIds(provider).length && !allowEmptyModels) return -1;
-    const id = String(providerId || "");
-    let score = 0;
-    if (provider.enabled === true) score += 100;
-    if (family && id === "builtin:" + family + "-start-plan") score += 80;
-    if (family && id === "builtin:" + family + "-coding-plan") score += 70;
-    if (family && id === "builtin:" + family) score += 40;
-    if (/-start-plan$/.test(id)) score += 30;
-    if (/-coding-plan$/.test(id)) score += 20;
-    if (hasZcodeProviderCredential(provider, env)) score += 300;
-    return score;
-  }
-  function zcodeDesktopProviderEntry({ config, setting, modelRef, env = {} }) {
-    const providers = config && config.provider && typeof config.provider === "object" ? config.provider : {};
-    const entries = Object.entries(providers);
-    if (!entries.length) return null;
-    const family = String(setting && setting.providerFamilyDomain || "").trim();
-    const requested = zcodeProtocolModelFromRef(modelRef);
-    if (requested && providers[requested.providerId]) {
-      const provider = providers[requested.providerId];
-      const score = zcodeProviderScore(requested.providerId, provider, family, env, { allowEmptyModels: true });
-      if (score >= 0) return { providerId: requested.providerId, provider, modelId: requested.modelId, score };
-    }
-    let best = null;
-    for (const [providerId, provider] of entries) {
-      const score = zcodeProviderScore(providerId, provider, family, env);
-      if (score < 0) continue;
-      if (!best || score > best.score) best = { providerId, provider, score };
-    }
-    if (!best) return null;
-    const modelId = zcodePreferredModelId(best.provider);
-    return modelId ? { ...best, modelId } : null;
-  }
-  function zcodeModelFromDesktopConfig({ config, setting, env = {} }) {
-    const entry = zcodeDesktopProviderEntry({ config, setting, env });
-    return entry ? entry.providerId + "/" + entry.modelId : "";
-  }
-  function zcodeProtocolProviderKind(kind) {
-    const text = String(kind || "").trim();
-    if (text === "openai" || text === "openai-compatible") return text;
-    return "anthropic";
-  }
-  function zcodeProtocolApiFormat(provider, kind) {
-    const direct = provider && (provider.apiFormat || provider.api_format);
-    if (direct) return direct;
-    const dialect = provider && provider.dialect && typeof provider.dialect === "object" ? provider.dialect : null;
-    if (kind === "openai-compatible" && dialect && dialect.wireApi === "responses") return "openai-responses";
-    if (kind === "openai-compatible" && dialect && dialect.wireApi === "chat") return "openai-chat-completions";
-    if (kind === "openai") return "openai-responses";
-    if (kind === "openai-compatible") return "openai-chat-completions";
-    return "anthropic-messages";
-  }
-  function positiveNumber(value) {
-    return typeof value === "number" && Number.isFinite(value) && value > 0 ? value : void 0;
-  }
-  function zcodeProtocolModelEntry(modelId, raw) {
-    const model = raw && typeof raw === "object" ? raw : {};
-    const limit = model.limit && typeof model.limit === "object" ? model.limit : {};
-    return {
-      modelId,
-      ...model.label || model.name ? { label: model.label || model.name } : {},
-      ...positiveNumber(model.contextWindow || limit.contextWindow) ? { contextWindow: positiveNumber(model.contextWindow || limit.contextWindow) } : {},
-      ...positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) ? { maxOutputTokens: positiveNumber(model.maxOutputTokens || limit.maxOutputTokens) } : {}
-    };
-  }
-  function zcodeProtocolModels(provider, selectedModelId) {
-    const models = provider && provider.models;
-    const result = [];
-    if (Array.isArray(models)) {
-      for (const raw of models) {
-        const id = raw && (raw.id || raw.modelID || raw.modelId || raw.name);
-        if (id) result.push(zcodeProtocolModelEntry(String(id), raw));
-      }
-    } else if (models && typeof models === "object") {
-      for (const [id, raw] of Object.entries(models)) result.push(zcodeProtocolModelEntry(String(id), raw));
-    }
-    if (selectedModelId && !result.some((m) => m.modelId === selectedModelId)) {
-      result.unshift({ modelId: selectedModelId });
-    }
-    return result;
-  }
-  function resolveZcodeProviderApiKey({ provider, env = {}, storedKey = "" } = {}) {
-    const options = provider && provider.options && typeof provider.options === "object" ? provider.options : {};
-    const inline = options.apiKey || provider && provider.apiKey;
-    if (inline) return { key: String(inline), source: "config" };
-    const keyEnv = String(options.apiKeyEnv || "").trim();
-    if (keyEnv && env[keyEnv]) return { key: String(env[keyEnv]), source: "env" };
-    if (storedKey) return { key: String(storedKey), source: "panel" };
-    return { key: "", source: "" };
-  }
-  function zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef, thoughtLevel, env = {}, storedKey = "" } = {}) {
-    var _a;
-    const entry = zcodeDesktopProviderEntry({ config, setting, modelRef, env });
-    if (!entry) return null;
-    const provider = entry.provider || {};
-    const options = provider.options && typeof provider.options === "object" ? provider.options : {};
-    const kind = zcodeProtocolProviderKind(provider.kind);
-    const apiKey = resolveZcodeProviderApiKey({ provider, env, storedKey }).key;
-    const protocolProvider = {
-      providerId: entry.providerId,
-      kind,
-      apiFormat: zcodeProtocolApiFormat(provider, kind),
-      ...provider.name || provider.label ? { label: provider.name || provider.label } : {},
-      source: provider.source || "custom",
-      ...options.baseURL || provider.baseURL || provider.endpoints && provider.endpoints.baseURL ? { baseURL: options.baseURL || provider.baseURL || provider.endpoints.baseURL } : {},
-      ...apiKey ? { apiKey: { source: "inline", value: String(apiKey) } } : {},
-      ...typeof options.apiKeyRequired === "boolean" || typeof provider.apiKeyRequired === "boolean" ? { apiKeyRequired: (_a = options.apiKeyRequired) != null ? _a : provider.apiKeyRequired } : {},
-      models: zcodeProtocolModels(provider, entry.modelId)
-    };
-    return {
-      revision: "desktop-v2:" + entry.providerId,
-      generatedAt: Date.now(),
-      model: { providerId: entry.providerId, modelId: entry.modelId },
-      provider: protocolProvider,
-      ...thoughtLevel ? { thoughtLevel } : {}
-    };
-  }
-  function readJsonFile(fsImpl, path) {
-    try {
-      return JSON.parse(fsImpl.readFileSync(path, "utf8"));
-    } catch (e) {
-      return null;
-    }
-  }
-  function mergeZcodeConfigs({ cliConfig, desktopConfig } = {}) {
-    const desktopProviders = desktopConfig && desktopConfig.provider && typeof desktopConfig.provider === "object" ? desktopConfig.provider : {};
-    const cliProviders = cliConfig && cliConfig.provider && typeof cliConfig.provider === "object" ? cliConfig.provider : {};
-    const provider = Object.assign({}, desktopProviders, cliProviders);
-    return Object.keys(provider).length ? { provider } : null;
-  }
-  function readZcodeConfigs({ fsImpl, platform } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    const fs = fsImpl || adapter.fs;
-    const desktopBase = adapter.paths.join([adapter.paths.home, ".zcode", "v2"]);
-    const cliBase = adapter.paths.join([adapter.paths.home, ".zcode", "cli"]);
-    const desktopConfig = readJsonFile(fs, adapter.paths.join([desktopBase, "config.json"]));
-    const setting = readJsonFile(fs, adapter.paths.join([desktopBase, "setting.json"]));
-    const cliConfig = readJsonFile(fs, adapter.paths.join([cliBase, "config.json"]));
-    const cliModel = cliConfig && typeof cliConfig.model === "string" ? cliConfig.model.trim() : "";
-    return { config: mergeZcodeConfigs({ cliConfig, desktopConfig }), setting, cliModel, cliConfig, desktopConfig };
-  }
-  function readZcodeDesktopModel({ env, fsImpl, platform } = {}) {
-    const { config, setting, cliModel } = readZcodeConfigs({ fsImpl, platform });
-    if (cliModel) {
-      const requested = zcodeProtocolModelFromRef(cliModel);
-      if (requested && config && config.provider && config.provider[requested.providerId]) return cliModel;
-    }
-    return zcodeModelFromDesktopConfig({ config, setting, env: env || {} });
-  }
-  function readZcodeDesktopRuntimeModel({ env, fsImpl, platform, modelRef, thoughtLevel, storedKey = "" } = {}) {
-    const { config, setting, cliModel } = readZcodeConfigs({ fsImpl, platform });
-    const ref = modelRef || cliModel || "";
-    return zcodeRuntimeModelFromDesktopConfig({ config, setting, modelRef: ref, thoughtLevel, env: env || {}, storedKey });
-  }
-  function summarizeZcodeConfig({ env = {}, fsImpl, platform, storedKey = "" } = {}) {
-    const { cliConfig, desktopConfig, cliModel } = readZcodeConfigs({ fsImpl, platform });
-    const cliProviders = cliConfig && cliConfig.provider || {};
-    const cliProviderId = zcodeProviderId(cliModel) || Object.keys(cliProviders)[0] || "";
-    const cliProvider = cliProviderId ? cliProviders[cliProviderId] : null;
-    const cliResolved = cliProvider ? resolveZcodeProviderApiKey({ provider: cliProvider, env, storedKey }) : { key: "", source: "" };
-    const desktopIds = Object.keys(desktopConfig && desktopConfig.provider || {});
-    const startPlanId = desktopIds.find((id) => /-start-plan$/.test(id)) || "";
-    const startPlanProvider = startPlanId ? desktopConfig.provider[startPlanId] : null;
-    return {
-      cli: cliProvider ? {
-        providerId: cliProviderId,
-        model: cliModel,
-        apiKeyEnv: String(cliProvider.options && cliProvider.options.apiKeyEnv || ""),
-        hasCredential: Boolean(cliResolved.key),
-        keySource: cliResolved.source,
-        // Probe-driven model discovery (spec A2 applied to zcode): baseUrl +
-        // protocol let the panel call probeProviderModels against /v1/models
-        // when session/create's settings.model.available comes back empty.
-        baseUrl: String(cliProvider.options && cliProvider.options.baseURL || cliProvider.baseURL || ""),
-        protocol: zcodeProtocolProviderKind(cliProvider.kind)
-      } : null,
-      desktop: desktopIds.length ? { providerId: desktopIds[0] } : null,
-      startPlan: startPlanId ? {
-        providerId: startPlanId,
-        hasCredential: hasZcodeProviderCredential(startPlanProvider, env)
-      } : null
-    };
-  }
-  function isZcodePlanRuntimeModel(runtimeModel, providerId) {
-    const provider = runtimeModel && runtimeModel.provider ? runtimeModel.provider : {};
-    const id = String(providerId || provider.providerId || "").trim();
-    const baseURL = String(provider.baseURL || "").replace(/\/+$/, "").toLowerCase();
-    return /-start-plan$/i.test(id) || baseURL.endsWith("/zcode-plan") || baseURL.endsWith("/zcode-plan/anthropic");
-  }
-  function zcodePlanRuntimeHeadersMessage() {
-    return "ZCode desktop OAuth plan providers require ZCode desktop captcha/runtime headers before model requests. The AE panel can read the desktop provider config, but the current app-server bridge cannot generate or apply those headers yet. Use ZCode Desktop chat or configure an API-key provider in ZCode for now.";
-  }
-  function isLegacyZcodeModelRef(modelRef) {
-    return LEGACY_ZCODE_MODEL_REFS.has(String(modelRef || "").trim());
-  }
-  function zcodeProtocolModelFromRef(modelRef) {
-    const text = String(modelRef || "").trim();
-    const slash = text.indexOf("/");
-    if (slash <= 0 || slash === text.length - 1) return null;
-    return {
-      providerId: text.slice(0, slash),
-      modelId: text.slice(slash + 1)
-    };
-  }
-  function zcodeMissingApiKeyHint(message) {
-    const text = String(message || "");
-    const match = /Model provider is missing an API key:\s*([^\s.]+)/i.exec(text);
-    if (!match || /AE_MCP_ZCODE_API_KEY|ZCODE_API_KEY/.test(text)) return text;
-    const providerEnv = zcodeProviderApiKeyEnv(match[1]);
-    const vars = ["AE_MCP_ZCODE_API_KEY"];
-    if (providerEnv) vars.push(providerEnv);
-    vars.push("ZCODE_API_KEY");
-    return (text.endsWith(".") ? text : text + ".") + " Set " + vars.join(", ") + " before launching AE.";
-  }
-  function zcodeMissingModelConfigHint(message) {
-    const text = String(message || "");
-    if (!/Model config is missing/i.test(text) || /Open ZCode/.test(text)) return text;
-    return (text.endsWith(".") ? text : text + ".") + " Open ZCode and select a provider/model, or create ~/.zcode/cli/config.json with an explicit provider/model before launching AE.";
-  }
-  function zcodeProviderAuthenticationHint(message) {
-    const text = String(message || "");
-    if (!/Provider authentication failed/i.test(text) || /runtime headers/i.test(text)) return text;
-    return (text.endsWith(".") ? text : text + ".") + " If this is a ZCode desktop OAuth plan provider, the AE panel cannot yet bridge ZCode desktop captcha/runtime headers.";
-  }
-  function zcodePlanRuntimeFailureHint(message, runtimeModel) {
-    const text = String(message || "");
-    if (!/Provider authentication failed|Model request failed/i.test(text)) return text;
-    if (/runtime headers/i.test(text) || !isZcodePlanRuntimeModel(runtimeModel)) return text;
-    return (text.endsWith(".") ? text : text + ".") + " " + zcodePlanRuntimeHeadersMessage();
-  }
-  function zcodeRepairHint(message) {
-    return zcodeProviderAuthenticationHint(zcodeMissingModelConfigHint(zcodeMissingApiKeyHint(message)));
-  }
-  function zcodeErrorMessage(value, fallback = "ZCode turn failed", lang = "en") {
-    if (!value) return localizeZcodeError(zcodeRepairHint(fallback), lang);
-    if (typeof value === "string") return localizeZcodeError(zcodeRepairHint(value), lang);
-    if (typeof value === "object") {
-      const direct = value.message || value.detail || value.reason || value.error;
-      if (direct && direct !== value) return zcodeErrorMessage(direct, fallback, lang);
-      try {
-        const text = JSON.stringify(value);
-        return localizeZcodeError(zcodeRepairHint(text && text !== "{}" ? text : fallback), lang);
-      } catch (e) {
-        return localizeZcodeError(zcodeRepairHint(fallback), lang);
-      }
-    }
-    return localizeZcodeError(zcodeRepairHint(String(value)), lang);
-  }
-  function zcodeErrorKind(message) {
-    return /\b(model|provider|api[-\s_]*key|credential|auth)\b/i.test(String(message || "")) ? "model" : "mcp";
-  }
-  function createZcodeBackend({
-    platform,
-    getModel,
-    getPermissionMode,
-    getEffort = () => null,
-    getMcpSpec: getMcpSpec2,
-    getToolMeta,
-    getExpertGuidance = () => true,
-    getServerInstructions = () => "",
-    onEvent,
-    lang = "zh",
-    env,
-    readDesktopModel = readZcodeDesktopModel,
-    readDesktopRuntimeModel = readZcodeDesktopRuntimeModel,
-    resolveCli = resolveZcodeCli,
-    readStoredZcodeKey = () => ""
-  }) {
-    const adapter = platform || createPlatformAdapter();
-    let proc = null;
-    let rpc = null;
-    let startPromise = null;
-    let sessionPromise = null;
-    let sessionId = null;
-    let sessionModelRef = null;
-    let subscribed = false;
-    let activeRuntimeModel = null;
-    let stopping = false;
-    let stderrTail = "";
-    let transcript = [];
-    let activeRun = null;
-    let activeResolve = null;
-    let activeAssistantText = "";
-    let activeTurn = null;
-    let activeTurnAccepted = false;
-    let sendDispatched = false;
-    let environmentSecretValues = [];
-    let runtimeSecretValues = [];
-    let activeSecretValues = [];
-    let activeAttachmentPaths = [];
-    let processStderrAttachmentPaths = [];
-    let assistantDeltaRedactor = createDeltaRedactor([], () => {
-    });
-    let stderrRedactor = createDeltaRedactor([], () => {
-    });
-    let secretEpoch = 0;
-    let toolMeta = { allowedTools: [], annotations: {} };
-    const pendingApprovals = /* @__PURE__ */ new Map();
-    const pendingElicitations = /* @__PURE__ */ new Map();
-    const pendingUserInputs = /* @__PURE__ */ new Map();
-    const sessionAllowedTools = /* @__PURE__ */ new Set();
-    const sessionAllowedPlans = /* @__PURE__ */ new Set();
-    function activeRedactionValues() {
-      return [...activeSecretValues, ...activeAttachmentPaths];
-    }
-    function stderrRedactionValues() {
-      return [...activeSecretValues, ...processStderrAttachmentPaths];
-    }
-    function emit(evt) {
-      if (onEvent) onEvent(redactValue(evt, activeRedactionValues()));
-    }
-    function safeText(value) {
-      return redactText(value, activeRedactionValues());
-    }
-    function resetAssistantDeltaRedactor() {
-      assistantDeltaRedactor.discard();
-      assistantDeltaRedactor = createDeltaRedactor(activeRedactionValues(), (text) => {
-        activeAssistantText += text;
-        emit({ type: "text-delta", text });
-      });
-    }
-    function resetStderrRedactor() {
-      stderrRedactor.discard();
-      stderrRedactor = createDeltaRedactor(stderrRedactionValues(), (text) => {
-        stderrTail = appendTail2(stderrTail, text);
-      });
-    }
-    function resetOutputRedactors() {
-      resetAssistantDeltaRedactor();
-      resetStderrRedactor();
-    }
-    function setActiveAttachmentPaths(values) {
-      activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
-      if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
-      const previousProcessPathCount = processStderrAttachmentPaths.length;
-      processStderrAttachmentPaths = Array.from(/* @__PURE__ */ new Set([
-        ...processStderrAttachmentPaths,
-        ...activeAttachmentPaths
-      ])).sort((left, right) => right.length - left.length);
-      resetAssistantDeltaRedactor();
-      if (processStderrAttachmentPaths.length !== previousProcessPathCount) {
-        resetStderrRedactor();
-      }
-    }
-    function clearProcessStderrAttachmentPaths() {
-      processStderrAttachmentPaths = [];
-      resetStderrRedactor();
-    }
-    function refreshActiveSecretValues() {
-      const nextSecretValues = Array.from(/* @__PURE__ */ new Set([
-        ...environmentSecretValues,
-        ...runtimeSecretValues
-      ])).sort((left, right) => right.length - left.length);
-      const stderrInventoryChanged = nextSecretValues.length !== activeSecretValues.length || nextSecretValues.some((value, index) => value !== activeSecretValues[index]);
-      activeSecretValues = nextSecretValues;
-      secretEpoch += 1;
-      resetAssistantDeltaRedactor();
-      if (stderrInventoryChanged) resetStderrRedactor();
-    }
-    function clearActiveSecretValues() {
-      environmentSecretValues = [];
-      runtimeSecretValues = [];
-      activeSecretValues = [];
-      secretEpoch += 1;
-      resetOutputRedactors();
-    }
-    function scheduleSecretCleanup() {
-      const scheduledEpoch = secretEpoch;
-      setTimeout(() => {
-        if (secretEpoch === scheduledEpoch) clearActiveSecretValues();
-      }, 0);
-    }
-    function runtimeModelSecrets(runtimeModel) {
-      var _a, _b;
-      const values = [];
-      const apiKey = (_a = runtimeModel == null ? void 0 : runtimeModel.provider) == null ? void 0 : _a.apiKey;
-      if (typeof apiKey === "string" && apiKey) values.push(apiKey);
-      if (typeof (apiKey == null ? void 0 : apiKey.value) === "string" && apiKey.value) values.push(apiKey.value);
-      for (const header of ((_b = runtimeModel == null ? void 0 : runtimeModel.provider) == null ? void 0 : _b.headers) || []) {
-        if (typeof (header == null ? void 0 : header.value) === "string" && header.value) values.push(header.value);
-      }
-      return values;
-    }
-    function currentEnv() {
-      const next = adapter.completeSpawnEnv(env || {});
-      const panelModel = next.AE_MCP_ZCODE_MODEL && String(next.AE_MCP_ZCODE_MODEL).trim();
-      if (!next.ZCODE_MODEL && panelModel) next.ZCODE_MODEL = panelModel;
-      const panelApiKey = next.AE_MCP_ZCODE_API_KEY && String(next.AE_MCP_ZCODE_API_KEY).trim() || String(readStoredZcodeKey() || "").trim();
-      if (panelApiKey) {
-        if (!next.ZCODE_API_KEY) next.ZCODE_API_KEY = panelApiKey;
-        const providerEnv = zcodeProviderApiKeyEnv(zcodeProviderId(next.ZCODE_MODEL));
-        if (providerEnv && !next[providerEnv]) next[providerEnv] = panelApiKey;
-      }
-      environmentSecretValues = Array.from(new Set(Object.entries(next).filter(([name, value]) => isSensitiveProviderHeaderName(name) && typeof value === "string" && value).map(([, value]) => value))).sort((left, right) => right.length - left.length);
-      refreshActiveSecretValues();
-      return next;
-    }
-    function currentModelRef(spawnEnv) {
-      const explicitEnvModel = spawnEnv && spawnEnv.ZCODE_MODEL && String(spawnEnv.ZCODE_MODEL).trim();
-      if (explicitEnvModel) return explicitEnvModel;
-      const selectedModel = getModel ? String(getModel() || "").trim() : "";
-      if (selectedModel.includes("/") && !isLegacyZcodeModelRef(selectedModel)) return selectedModel;
-      let desktopModel = "";
-      try {
-        desktopModel = readDesktopModel ? String(readDesktopModel({ env: spawnEnv, platform: adapter }) || "").trim() : "";
-      } catch (e) {
-      }
-      if (desktopModel) return desktopModel;
-      if (selectedModel.includes("/")) return selectedModel;
-      return ZCODE_BUILTIN_DEFAULT_MODEL;
-    }
-    function currentRuntimeModel(spawnEnv, modelRef, thoughtLevel) {
-      if (!readDesktopRuntimeModel) return null;
-      try {
-        return readDesktopRuntimeModel({ env: spawnEnv, platform: adapter, modelRef, thoughtLevel, storedKey: String(readStoredZcodeKey() || "").trim() }) || null;
-      } catch (e) {
-        return null;
-      }
-    }
-    function finishActive() {
-      if (!activeResolve) {
-        activeRun = null;
-        activeAssistantText = "";
-        activeTurn = null;
-        activeTurnAccepted = false;
-        sendDispatched = false;
-        setActiveAttachmentPaths([]);
-        return;
-      }
-      const resolve = activeResolve;
-      activeResolve = null;
-      activeRun = null;
-      activeAssistantText = "";
-      activeTurn = null;
-      activeTurnAccepted = false;
-      sendDispatched = false;
-      setActiveAttachmentPaths([]);
-      resolve();
-    }
-    function activeTurnFailureFields() {
-      if (!(activeTurn == null ? void 0 : activeTurn.turnId)) return {};
-      return {
-        turnId: activeTurn.turnId,
-        ...!activeTurnAccepted ? {
-          dispatchState: sendDispatched ? "uncertain" : "not-started"
-        } : {}
-      };
-    }
-    function drainApprovals() {
-      for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
-        if (rpc && hasRpcId(approval.rpcId)) rpc.respond(approval.rpcId, { decision: "decline" });
-        pendingApprovals.delete(toolUseId);
-        emit({ type: "tool-denied", toolUseId });
-      }
-      for (const [toolUseId, elicit] of Array.from(pendingElicitations.entries())) {
-        if (rpc && hasRpcId(elicit.rpcId)) {
-          rpc.respond(elicit.rpcId, elicit.kind === "tool-plan" ? approvalResult("deny") : { action: "decline" });
-        }
-        pendingElicitations.delete(toolUseId);
-        if (elicit.kind === "tool-plan") {
-          emit({ type: "tool-denied", toolUseId });
-        } else {
-          emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
-        }
-      }
-      for (const [toolUseId, ui] of Array.from(pendingUserInputs.entries())) {
-        if (rpc && hasRpcId(ui.rpcId)) rpc.respond(ui.rpcId, { decision: "decline", answers: {} });
-        pendingUserInputs.delete(toolUseId);
-        emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
-      }
-    }
-    function handleRequest(message) {
-      const method = message.method;
-      const params = message.params || {};
-      if (method === "interaction/requestUserInput") {
-        handleUserInput(params, message.id);
-        return;
-      }
-      if (method === "interaction/requestProviderRuntimeHeaders") {
-        handleProviderRuntimeHeaders(params, message.id);
-        return;
-      }
-      if (method === "elicitation/create") {
-        handleElicitation(params, message.id);
-        return;
-      }
-      if (method === "permission.requested" || method === "session/permission" || method === "interaction/requestPermission") {
-        handlePermissionRequest(params, message.id);
-        return;
-      }
-      if (rpc) rpc.respondError(message.id, -32601, "Method not found: " + method);
-    }
-    function handleProviderRuntimeHeaders(_params, rpcId) {
-      if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { headersApplied: false, errorMessage: zcodePlanRuntimeHeadersMessage() });
-    }
-    function handleUserInput(params, rpcId) {
-      const questions = questionsFromUserInput(params);
-      if (!questions.length) {
-        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { decision: "allow", answers: {} });
-        return;
-      }
-      const toolUseId = "ask_" + rpcId;
-      pendingUserInputs.set(toolUseId, { rpcId, questions });
-      emit({
-        type: "question-required",
-        toolUseId,
-        source: "zcode-user-input",
-        title: safeText(params && typeof params.prompt === "string" && params.prompt || ""),
-        questions
-      });
-    }
-    function handleElicitation(params, rpcId) {
-      const message = params.message || "";
-      const schema = params.requestedSchema || {};
-      if (Object.prototype.hasOwnProperty.call(schema, PLAN_SCHEMA_KEY)) {
-        const plan = extractToolPlan(schema);
-        if (!plan) {
-          if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, approvalResult("deny"));
-          return;
-        }
-        const policy = decideToolPlan({
-          tier: getPermissionMode ? getPermissionMode() : "manual",
-          plan,
-          sessionAllowed: sessionAllowedPlans.has(planSessionKey(plan))
-        });
-        if (policy.decision === "allow") {
-          if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, approvalResult("once", policy));
-          return;
-        }
-        if (policy.decision === "deny") {
-          if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, approvalResult("deny", policy));
-          return;
-        }
-        const toolUseId2 = "elicit_" + rpcId;
-        pendingElicitations.set(toolUseId2, {
-          kind: "tool-plan",
-          rpcId,
-          plan,
-          allowSession: policy.allowSession
-        });
-        emit({
-          type: "approval-required",
-          toolUseId: toolUseId2,
-          name: "mcp__ae__ae_toolUse",
-          input: plan,
-          risk: policy.risk
-        });
-        return;
-      }
-      if (!Object.keys(schema.properties || {}).length) {
-        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: "accept", content: {} });
-        return;
-      }
-      const built = questionsFromElicitationSchema(message, schema);
-      if (!built.ok) {
-        if (hasRpcId(rpcId) && rpc) rpc.respond(rpcId, { action: "decline" });
-        emit({
-          type: "error",
-          kind: "mcp",
-          message: "Declined an agent question with an unsupported form schema (" + built.reason + ")."
-        });
-        return;
-      }
-      const toolUseId = "elicit_" + rpcId;
-      pendingElicitations.set(toolUseId, { rpcId, questions: built.questions });
-      emit({
-        type: "question-required",
-        toolUseId,
-        source: "zcode-elicitation",
-        title: safeText(message),
-        questions: built.questions
-      });
-    }
-    function handleNotification(message) {
-      const params = message.params || {};
-      const type = params.type || message.method;
-      if (type === "state.updated") {
-        const patch = params.patch || params.payload || {};
-        if (patch.status === "idle" && activeRun) {
-          assistantDeltaRedactor.flush();
-          drainApprovals();
-          emit({ type: "turn-end", stopReason: "end_turn" });
-          transcript.push({ role: "assistant", text: activeAssistantText });
-          finishActive();
-        }
-        return;
-      }
-      if (type === "turn.started") {
-        emit({ type: "turn-start" });
-        return;
-      }
-      if (type === "model.streaming") {
-        const payload = params.payload || {};
-        if (payload.kind === "text_delta" && payload.delta) {
-          assistantDeltaRedactor.feed(String(payload.delta));
-        }
-        return;
-      }
-      if (type === "tool.updated" || type === "part.started" || type === "part.upserted") {
-        const payload = params.payload || {};
-        if (payload.toolName || payload.tool) {
-          emit({
-            type: "tool-start",
-            toolUseId: String(payload.toolCallId || payload.id || ""),
-            name: mcpToolName(payload.toolName || payload.tool),
-            input: payload.input || payload.arguments
-          });
-        }
-        return;
-      }
-      if (type === "permission.requested") {
-        handlePermissionRequest(params, null);
-        return;
-      }
-      if (type === "turn.completed") {
-        assistantDeltaRedactor.flush();
-        drainApprovals();
-        const payload = params.payload || {};
-        emit({ type: "turn-end", stopReason: "end_turn" });
-        transcript.push({ role: "assistant", text: activeAssistantText || safeText(payload.response || "") });
-        finishActive();
-        return;
-      }
-      if (type === "turn.failed") {
-        assistantDeltaRedactor.discard();
-        drainApprovals();
-        const payload = params.payload || {};
-        const message2 = zcodePlanRuntimeFailureHint(zcodeErrorMessage(payload.error || payload.message, "ZCode turn failed", lang), activeRuntimeModel);
-        emit({ type: "error", kind: zcodeErrorKind(message2), message: message2, ...activeTurnFailureFields() });
-        finishActive();
-        return;
-      }
-    }
-    function handlePermissionRequest(params, rpcId) {
-      var _a, _b, _c, _d;
-      const payload = params.payload || params;
-      const toolUseId = String((_c = (_b = (_a = payload.toolCallId) != null ? _a : payload.requestId) != null ? _b : rpcId) != null ? _c : "");
-      const name = mcpToolName(payload.toolName || payload.tool || "");
-      const input = payload.input || payload.arguments || {};
-      const riskLevel = payload.riskLevel || "medium";
-      const annotations = toolMeta && toolMeta.annotations || {};
-      const ann = annotations[name] || {};
-      const tier = getPermissionMode ? getPermissionMode() : "manual";
-      const replyId = hasRpcId(rpcId) ? rpcId : (_d = payload.requestId) != null ? _d : null;
-      if (isCoreAuthorizedDynamicCall(name, input)) {
-        if (hasRpcId(replyId) && rpc) rpc.respond(replyId, { decision: "allow" });
-        emit({ type: "tool-allowed", toolUseId });
-        return;
-      }
-      if (sessionAllowedTools.has(name) || ann.readOnly || tier === "none" || tier === "auto" && !ann.destructive && riskLevel === "low") {
-        if (hasRpcId(replyId) && rpc) rpc.respond(replyId, { decision: "allow" });
-        emit({ type: "tool-allowed", toolUseId });
-        return;
-      }
-      if (tier === "readonly") {
-        if (hasRpcId(replyId) && rpc) rpc.respond(replyId, { decision: "decline" });
-        emit({ type: "tool-denied", toolUseId });
-        return;
-      }
-      pendingApprovals.set(toolUseId, { rpcId: replyId, name, input });
-      emit({
-        type: "approval-required",
-        toolUseId,
-        name,
-        input,
-        risk: ann.destructive ? "destructive" : "write"
-      });
-    }
-    function handleExit(code, signal) {
-      const wasStopping = stopping;
-      stderrRedactor.flush();
-      const detail = stderrTail ? String(code) + (signal ? " " + signal : "") + " " + stderrTail : String(code) + (signal ? " " + signal : "");
-      if (rpc) rpc.close(new Error("ZCode app-server exited: " + detail));
-      proc = null;
-      rpc = null;
-      startPromise = null;
-      sessionPromise = null;
-      sessionId = null;
-      sessionModelRef = null;
-      subscribed = false;
-      activeRuntimeModel = null;
-      drainApprovals();
-      if (wasStopping) {
-        clearProcessStderrAttachmentPaths();
-        scheduleSecretCleanup();
-        return;
-      }
-      if (activeRun) {
-        emit({
-          type: "error",
-          kind: "mcp",
-          message: "ZCode app-server exited: " + detail,
-          ...activeTurnFailureFields()
-        });
-        finishActive();
-      }
-      clearProcessStderrAttachmentPaths();
-      scheduleSecretCleanup();
-    }
-    function handleError(error) {
-      const err = error instanceof Error ? error : new Error("ZCode app-server error");
-      if (rpc) rpc.close(err);
-      proc = null;
-      rpc = null;
-      startPromise = null;
-      sessionPromise = null;
-      sessionId = null;
-      sessionModelRef = null;
-      subscribed = false;
-      activeRuntimeModel = null;
-      drainApprovals();
-      if (activeRun) {
-        emit({ type: "error", kind: "mcp", message: err.message, ...activeTurnFailureFields() });
-        finishActive();
-      }
-      clearProcessStderrAttachmentPaths();
-      scheduleSecretCleanup();
-    }
-    async function startProcess() {
-      if (proc && rpc) return true;
-      if (startPromise) return startPromise;
-      startPromise = (async () => {
-        const spawnEnv = currentEnv();
-        const cli = await resolveCli({ env: spawnEnv, platform: adapter });
-        if (!cli.ok) throw new Error(cli.detail);
-        stderrTail = "";
-        stopping = false;
-        const executable = cli.executable || (cli.isExe ? {
-          ok: true,
-          id: "zcode",
-          path: cli.cliPath,
-          argsPrefix: [],
-          source: "path",
-          version: null,
-          arch: null
-        } : null);
-        if (!executable) throw new Error("ZCode CLI resolver did not return an executable command");
-        proc = adapter.spawn(executable, ["app-server"], {
-          stdio: "pipe",
-          windowsHide: true,
-          env: spawnEnv
-        });
-        rpc = createRpc({
-          writeLine: (line) => proc.stdin.write(line),
-          onNotification: handleNotification,
-          onRequest: handleRequest
-        });
-        const reader = createNdjsonReader((message) => rpc && rpc.handleMessage(message));
-        if (proc.stdout && proc.stdout.on) proc.stdout.on("data", reader);
-        if (proc.stderr && proc.stderr.on) proc.stderr.on("data", (chunk) => {
-          stderrRedactor.feed(chunk);
-        });
-        proc.on("exit", (code, signal) => handleExit(code, signal));
-        proc.on("error", (error) => handleError(error));
-        return true;
-      })();
-      try {
-        return await startPromise;
-      } catch (error) {
-        drainApprovals();
-        throw error;
-      } finally {
-        startPromise = null;
-      }
-    }
-    function workspaceFromEnv(spawnEnv) {
-      const extRoot = spawnEnv && (spawnEnv.AE_MCP_PANEL_EXT_ROOT || spawnEnv.EXTENSION_ROOT);
-      const path = extRoot ? adapter.paths.resolve([extRoot]) : adapter.paths.tempRoot;
-      const key = path;
-      return { workspacePath: path, workspaceKey: key };
-    }
-    function modeFromTier() {
-      const tier = getPermissionMode ? getPermissionMode() : "manual";
-      return MODE_BY_TIER[tier] || "build";
-    }
-    function thoughtLevelFromEffort() {
-      const effort = getEffort ? getEffort() : null;
-      if (!effort) return void 0;
-      return ZCODE_THOUGHT_LEVELS.has(effort) ? effort : void 0;
-    }
-    async function ensureSession() {
-      if (sessionId && !sessionPromise) {
-        const desiredModelRef = currentModelRef(currentEnv());
-        if (desiredModelRef && sessionModelRef && desiredModelRef !== sessionModelRef) {
-          if (rpc && sessionId) {
-            try {
-              rpc.fireRequest("session/stop", { sessionId });
-            } catch (e) {
-            }
-          }
-          sessionId = null;
-          sessionModelRef = null;
-          subscribed = false;
-        }
-      }
-      if (sessionId) return sessionId;
-      if (sessionPromise) return sessionPromise;
-      sessionPromise = (async () => {
-        await startProcess();
-        toolMeta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
-        const spawnEnv = currentEnv();
-        const createParams = {
-          workspace: workspaceFromEnv(spawnEnv),
-          mode: modeFromTier()
-        };
-        const thoughtLevel = thoughtLevelFromEffort();
-        const modelRef = currentModelRef(spawnEnv);
-        const runtimeModel = currentRuntimeModel(spawnEnv, modelRef, thoughtLevel);
-        if (runtimeModel) createParams.runtimeModel = runtimeModel;
-        runtimeSecretValues = runtimeModelSecrets(runtimeModel);
-        refreshActiveSecretValues();
-        activeRuntimeModel = runtimeModel ? redactValue(runtimeModel, runtimeSecretValues) : null;
-        const model = runtimeModel && runtimeModel.model || zcodeProtocolModelFromRef(modelRef);
-        if (model) createParams.model = model;
-        if (thoughtLevel) createParams.thoughtLevel = thoughtLevel;
-        if (getMcpSpec2) {
-          const spec = await getMcpSpec2();
-          if (spec && spec.command) {
-            const envObj = Object.assign({}, spec.env || {}, {
-              AE_MCP_BACKEND: "ae-mcp",
-              ...expertGuidanceEnv(getExpertGuidance())
-            });
-            createParams.mcpServers = [{
-              name: "ae",
-              command: spec.command,
-              args: spec.args || [],
-              env: Object.entries(envObj).map(([name, value]) => ({ name, value: String(value) }))
-            }];
-          }
-        }
-        const result = await rpc.request("session/create", createParams);
-        const nextSessionId = result && result.session && result.session.sessionId || null;
-        if (!nextSessionId) throw new Error("ZCode session/create returned no sessionId");
-        emit({ type: "zcode-session-created", result });
-        if (!subscribed) {
-          await rpc.request("session/subscribe", { sessionId: nextSessionId, deliveryKind: DELIVERY_KIND }, 1e4);
-          subscribed = true;
-        }
-        sessionId = nextSessionId;
-        sessionModelRef = modelRef;
-        return sessionId;
-      })();
-      try {
-        return await sessionPromise;
-      } finally {
-        sessionPromise = null;
-      }
-    }
-    async function sendUser(input) {
-      if (activeRun) return activeRun;
-      let turn;
-      try {
-        turn = normalizeTurnInput(input);
-      } catch (error) {
-        const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
-        emit({
-          type: "error",
-          kind: "attachment",
-          code: "TURN_INPUT_INVALID",
-          message: error.message,
-          ...turnId ? { turnId, dispatchState: "not-started" } : {}
-        });
-        return;
-      }
-      activeAssistantText = "";
-      activeTurn = turn;
-      activeTurnAccepted = false;
-      sendDispatched = false;
-      setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
-      activeRun = new Promise((resolve) => {
-        activeResolve = resolve;
-      });
-      try {
-        await ensureSession();
-        const userText = turn.text;
-        transcript.push({ role: "user", text: userText });
-        let turnText = withAttachmentManifest(userText, turn.attachments);
-        if (transcript.filter((m) => m.role === "user").length === 1) {
-          const instr = (getServerInstructions() || "").trim();
-          if (instr) turnText = instr + "\n\n---\n\n" + turnText;
-        }
-        sendDispatched = true;
-        rpc.request("session/send", { sessionId, content: turnText }, 18e4).then(() => {
-          if (activeTurn === turn && turn.turnId) {
-            activeTurnAccepted = true;
-            emit({ type: "turn-accepted", turnId: turn.turnId, transport: "zcode-manifest" });
-          }
-        }).catch((e) => {
-          const message = zcodeErrorMessage(e, "Failed to start ZCode turn.", lang);
-          emit({
-            type: "error",
-            kind: zcodeErrorKind(message),
-            message,
-            ...activeTurnFailureFields()
-          });
-          finishActive();
-        });
-      } catch (e) {
-        const message = zcodeErrorMessage(e, "Failed to start ZCode turn.", lang);
-        emit({
-          type: "error",
-          kind: zcodeErrorKind(message),
-          message,
-          ...activeTurnFailureFields()
-        });
-        finishActive();
-      }
-      return activeRun;
-    }
-    function approve(toolUseId, decision) {
-      const id = String(toolUseId);
-      if (pendingUserInputs.has(id) || pendingElicitations.has(id) && pendingElicitations.get(id).kind !== "tool-plan") {
-        answerQuestion(id, { action: "cancel" });
-        return;
-      }
-      const elicit = pendingElicitations.get(id);
-      if (elicit) {
-        pendingElicitations.delete(id);
-        const requestedDecision = decision === "allow-session" ? "session" : decision === "allow" ? "once" : "deny";
-        const result = approvalResult(requestedDecision, { allowSession: elicit.allowSession });
-        if (result.action === "accept" && result.content.decision === "session") {
-          sessionAllowedPlans.add(planSessionKey(elicit.plan));
-        }
-        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, result);
-        emit({ type: result.action === "accept" ? "tool-allowed" : "tool-denied", toolUseId: id });
-        return;
-      }
-      const approval = pendingApprovals.get(id);
-      if (!approval) return;
-      pendingApprovals.delete(id);
-      const allow = decision !== "deny";
-      if (allow && decision === "allow-session") sessionAllowedTools.add(approval.name);
-      if (hasRpcId(approval.rpcId) && rpc) rpc.respond(approval.rpcId, { decision: allow ? "allow" : "decline" });
-      emit({ type: allow ? "tool-allowed" : "tool-denied", toolUseId: id });
-    }
-    function answerQuestion(toolUseId, result) {
-      const id = String(toolUseId);
-      const submit = result && result.action === "submit";
-      const userInput = pendingUserInputs.get(id);
-      if (userInput) {
-        pendingUserInputs.delete(id);
-        if (!submit) {
-          if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: "decline", answers: {} });
-          emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
-          return true;
-        }
-        const answers = answersForUserInput(userInput.questions, result.values);
-        if (hasRpcId(userInput.rpcId) && rpc) rpc.respond(userInput.rpcId, { decision: "allow", answers });
-        emit({ type: "question-resolved", toolUseId: id, outcome: "answered", answers });
-        return true;
-      }
-      const elicit = pendingElicitations.get(id);
-      if (elicit && elicit.kind !== "tool-plan" && Array.isArray(elicit.questions)) {
-        pendingElicitations.delete(id);
-        if (!submit) {
-          if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: "cancel" });
-          emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
-          return true;
-        }
-        const content = contentForElicitation(elicit.questions, result.values);
-        if (hasRpcId(elicit.rpcId) && rpc) rpc.respond(elicit.rpcId, { action: "accept", content });
-        emit({
-          type: "question-resolved",
-          toolUseId: id,
-          outcome: "answered",
-          answers: Object.fromEntries(Object.entries(content).map(([key, value]) => [
-            key,
-            Array.isArray(value) ? value.join(", ") : value
-          ]))
-        });
-        return true;
-      }
-      return false;
-    }
-    function stop() {
-      if (rpc && sessionId) {
-        rpc.fireRequest("session/stop", { sessionId });
-      }
-      drainApprovals();
-      if (activeRun) {
-        emit({ type: "error", kind: "aborted", message: "Turn aborted.", ...activeTurnFailureFields() });
-        finishActive();
-      }
-    }
-    function reset() {
-      stopping = true;
-      drainApprovals();
-      if (rpc) rpc.close(new Error("ZCode backend reset"));
-      if (proc) {
-        try {
-          proc.kill();
-        } catch (e) {
-        }
-      }
-      proc = null;
-      rpc = null;
-      startPromise = null;
-      sessionPromise = null;
-      sessionId = null;
-      sessionModelRef = null;
-      subscribed = false;
-      activeRuntimeModel = null;
-      activeTurn = null;
-      activeTurnAccepted = false;
-      sendDispatched = false;
-      transcript = [];
-      pendingApprovals.clear();
-      pendingElicitations.clear();
-      pendingUserInputs.clear();
-      sessionAllowedTools.clear();
-      sessionAllowedPlans.clear();
-      toolMeta = { allowedTools: [], annotations: {} };
-      finishActive();
-      stderrTail = "";
-      clearProcessStderrAttachmentPaths();
-      clearActiveSecretValues();
-      stopping = false;
-    }
-    async function setThoughtLevel(level) {
-      if (!sessionId || !rpc) return false;
-      if (!ZCODE_THOUGHT_LEVELS.has(level)) return false;
-      try {
-        await rpc.request("session/setThoughtLevel", { sessionId, thoughtLevel: level });
-        return true;
-      } catch (e) {
-        return false;
-      }
-    }
-    async function probeAccount() {
-      try {
-        await ensureSession();
-        return { loggedIn: true, runtimeOk: true, provider: "zcode" };
-      } catch (e) {
-        return {
-          loggedIn: true,
-          runtimeOk: false,
-          provider: "zcode",
-          detail: safeText(zcodeErrorMessage(e, "ZCode runtime unavailable.", lang))
-        };
-      }
-    }
-    return {
-      sendUser,
-      approve,
-      answerQuestion,
-      stop,
-      reset,
-      setThoughtLevel,
-      getMessages: () => clone(transcript),
-      probeAccount
-    };
-  }
-
-  // src/lib/backendCapabilities.js
-  var CLAUDE_PRICE_USD_PER_MTOK = {
-    "claude-fable-5": { input: 10, output: 50 },
-    "claude-opus-4-8": { input: 5, output: 25 },
-    "claude-sonnet-5": { input: 3, output: 15 },
-    "claude-sonnet-4-6": { input: 3, output: 15 },
-    "claude-haiku-4-5-20251001": { input: 1, output: 5 }
-  };
-  var CLAUDE_MODELS = [
-    { id: "claude-fable-5", label: "Fable 5", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
-    { id: "claude-opus-4-8", label: "Opus 4.8", effortLevels: ["low", "medium", "high", "xhigh", "max"], adaptive: true },
-    { id: "claude-sonnet-5", label: "Sonnet 5", effortLevels: ["low", "medium", "high", "xhigh"], adaptive: true },
-    { id: "claude-sonnet-4-6", label: "Sonnet 4.6", effortLevels: ["low", "medium", "high", "max"], adaptive: true },
-    { id: "claude-haiku-4-5-20251001", label: "Haiku 4.5", effortLevels: ["low", "medium", "high"], adaptive: false }
-  ];
-  var APPROVAL_MODES = [
-    { id: "readonly", zh: "\u53EA\u8BFB", en: "Read-only", anchorZh: "\u4EC5\u653E\u884C\u53EA\u8BFB\u5DE5\u5177 \xB7 dontAsk", anchorEn: "read-only allowlist \xB7 dontAsk" },
-    { id: "manual", zh: "\u624B\u52A8", en: "Manual", anchorZh: "\u6BCF\u4E2A\u5199\u64CD\u4F5C\u5F39\u5361 \xB7 canUseTool", anchorEn: "every write asks \xB7 canUseTool" },
-    { id: "auto", zh: "\u81EA\u52A8", en: "Auto", anchorZh: "\u4EC5\u7834\u574F\u6027\u5F39\u5361 \xB7 \u6CE8\u89E3\u5206\u7EA7", anchorEn: "destructive asks \xB7 annotations" },
-    { id: "none", zh: "\u514D\u5BA1", en: "Bypass", anchorZh: "\u5168\u653E\uFF08\u4EC5 ae \u5DE5\u5177\uFF09\xB7 dontAsk", anchorEn: "allow all ae tools \xB7 dontAsk" }
-  ];
-  var TIER_ORDER = [1, 3, 5, 10];
-  function costTier(modelId) {
-    const price = CLAUDE_PRICE_USD_PER_MTOK[modelId];
-    if (!price) return 2;
-    const idx = TIER_ORDER.indexOf(price.input);
-    return idx === -1 ? 2 : idx + 1;
-  }
-  function withCost(models) {
-    return models.map((m) => ({ ...m, cost: costTier(m.id) }));
-  }
-  function claudeSubDescriptor() {
-    return {
-      id: "claude-sub",
-      label: "\u8BA2\u9605",
-      models: withCost(CLAUDE_MODELS),
-      defaultModelId: "claude-sonnet-5",
-      defaultEffort: "high",
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  function byokStaticDescriptor() {
-    return {
-      ...claudeSubDescriptor(),
-      id: "byok",
-      label: "BYOK",
-      supportsFast: (modelId) => /claude-opus-4-(6|7|8)/.test(String(modelId || ""))
-    };
-  }
-  function mergeByokModels(descriptor, apiModels) {
-    if (!apiModels) return descriptor;
-    const curated = new Map(descriptor.models.map((m) => [m.id, m]));
-    const models = apiModels.map((m) => {
-      const known = curated.get(m.id);
-      if (known) return known;
-      return { id: m.id, label: m.display_name || m.id, effortLevels: [], cost: costTier(m.id) };
-    });
-    return { ...descriptor, models };
-  }
-  function descriptorWithCustomModel(descriptor, modelId) {
-    const id = String(modelId || "").trim();
-    if (!id) return descriptor;
-    const existing = descriptor.models.find((m) => m.id === id);
-    const custom = existing || { id, label: id, effortLevels: [], cost: 2, adaptive: false };
-    const rest = descriptor.models.filter((m) => m.id !== id);
-    return {
-      ...descriptor,
-      models: [custom, ...rest],
-      defaultModelId: id
-    };
-  }
-  var CODEX_OFFICIAL_LOGIN_56_MODELS = [
-    { id: "gpt-5.6-sol", label: "GPT-5.6-Sol", effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"], cost: 2, adaptive: false },
-    { id: "gpt-5.6-terra", label: "GPT-5.6-Terra", effortLevels: ["low", "medium", "high", "xhigh", "max", "ultra"], cost: 2, adaptive: false },
-    { id: "gpt-5.6-luna", label: "GPT-5.6-Luna", effortLevels: ["low", "medium", "high", "xhigh", "max"], cost: 2, adaptive: false }
-  ];
-  var CODEX_OFFICIAL_LOGIN_56_MODEL_IDS = new Set(CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => model.id));
-  function codexOfficialLogin56Models() {
-    return CODEX_OFFICIAL_LOGIN_56_MODELS.map((model) => ({ ...model, effortLevels: [...model.effortLevels] }));
-  }
-  function codexStaticDescriptor() {
-    const models = [
-      { id: "gpt-5.5", label: "GPT-5.5", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false },
-      { id: "gpt-5.4", label: "GPT-5.4", effortLevels: ["low", "medium", "high", "xhigh"], cost: 2, adaptive: false },
-      { id: "gpt-5.4-mini", label: "GPT-5.4 mini", effortLevels: ["low", "medium", "high", "xhigh"], cost: 1, adaptive: false }
-    ];
-    return {
-      id: "codex",
-      label: "Codex",
-      models,
-      defaultModelId: "gpt-5.5",
-      defaultEffort: "medium",
-      supportsFast: (modelId) => modelId === "gpt-5.5",
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  function mergeCodexOfficialLoginModels(descriptor) {
-    const models = Array.isArray(descriptor && descriptor.models) ? descriptor.models : [];
-    const present = new Set(models.map((model) => model && model.id).filter(Boolean));
-    const missing = codexOfficialLogin56Models().filter((model) => !present.has(model.id));
-    const supportsFast = descriptor && typeof descriptor.supportsFast === "function" ? descriptor.supportsFast : () => false;
-    return {
-      ...descriptor,
-      models: missing.length ? [...models, ...missing] : models,
-      supportsFast: (modelId) => CODEX_OFFICIAL_LOGIN_56_MODEL_IDS.has(String(modelId || "")) || supportsFast(modelId)
-    };
-  }
-  function modelListArray(modelListResult) {
-    if (Array.isArray(modelListResult)) return modelListResult;
-    if (modelListResult && Array.isArray(modelListResult.models)) return modelListResult.models;
-    return [];
-  }
-  function codexDescriptorFromModels(modelListResult) {
-    var _a;
-    const rawModels = modelListArray(modelListResult).filter((m) => m && m.hidden !== true);
-    if (!rawModels.length) return codexStaticDescriptor();
-    const fastModels = /* @__PURE__ */ new Set();
-    const models = rawModels.map((m) => {
-      const id = String(m.id || "");
-      if (Array.isArray(m.additionalSpeedTiers) && m.additionalSpeedTiers.includes("fast")) fastModels.add(id);
-      return {
-        id,
-        label: m.displayName || m.display_name || id,
-        effortLevels: Array.isArray(m.supportedReasoningEfforts) ? m.supportedReasoningEfforts.map((e) => e && e.reasoningEffort).filter(Boolean) : [],
-        cost: 2,
-        adaptive: false
-      };
-    }).filter((m) => m.id);
-    if (!models.length) return codexStaticDescriptor();
-    const defaultRaw = rawModels.find((m) => m && m.hidden !== true && m.isDefault === true) || rawModels[0];
-    const defaultModelId = defaultRaw && defaultRaw.id ? String(defaultRaw.id) : models[0].id;
-    const defaultEffort = defaultRaw && defaultRaw.defaultReasoningEffort ? defaultRaw.defaultReasoningEffort : ((_a = models.find((m) => m.id === defaultModelId)) == null ? void 0 : _a.effortLevels[0]) || "medium";
-    return {
-      id: "codex",
-      label: "Codex",
-      models,
-      defaultModelId,
-      defaultEffort,
-      supportsFast: (modelId) => fastModels.has(String(modelId || "")),
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  function openCodeStaticDescriptor() {
-    const models = [
-      { id: "north-mini-code-free", label: "North Mini Code Free", effortLevels: [], cost: 1, adaptive: false }
-    ];
-    return {
-      id: "opencode",
-      label: "OpenCode",
-      models,
-      defaultModelId: "north-mini-code-free",
-      defaultEffort: null,
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  function providerEntries(providerResult) {
-    if (Array.isArray(providerResult)) return providerResult.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
-    if (providerResult && Array.isArray(providerResult.providers)) {
-      return providerResult.providers.map((p) => [p && (p.id || p.providerID || p.providerId || p.name), p]);
-    }
-    if (providerResult && typeof providerResult === "object") return Object.entries(providerResult);
-    return [];
-  }
-  function modelEntries(provider) {
-    const models = provider && provider.models;
-    if (Array.isArray(models)) return models.map((m) => [m && (m.id || m.modelID || m.modelId || m.name), m]);
-    if (models && typeof models === "object") return Object.entries(models);
-    return [];
-  }
-  function openCodeDescriptorFromModels(providerResult) {
-    const models = [];
-    for (const [providerKey, provider] of providerEntries(providerResult)) {
-      const providerID = String(provider && (provider.id || provider.providerID || provider.providerId) || providerKey || "opencode");
-      for (const [modelKey, raw] of modelEntries(provider)) {
-        const modelId = String(raw && (raw.id || raw.modelID || raw.modelId) || modelKey || "");
-        if (!modelId) continue;
-        models.push({
-          id: providerID === "opencode" ? modelId : providerID + "/" + modelId,
-          label: raw && (raw.name || raw.displayName || raw.display_name) || modelId,
-          effortLevels: [],
-          cost: String(modelId).endsWith("-free") ? 1 : 2,
-          adaptive: false
-        });
-      }
-    }
-    if (!models.length) return openCodeStaticDescriptor();
-    const defaultModel = models.find((m) => m.id === "north-mini-code-free") || models.find((m) => String(m.id).endsWith("/north-mini-code-free")) || models[0];
-    return {
-      id: "opencode",
-      label: "OpenCode",
-      models,
-      defaultModelId: defaultModel.id,
-      defaultEffort: null,
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: true
-    };
-  }
-  var ZCODE_EFFORT_LEVELS = ["nothink", "high", "max"];
-  function zcodeStaticDescriptor() {
-    const models = [
-      { id: "builtin:bigmodel-start-plan/GLM-5.2", label: "GLM-5.2", effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
-      { id: "builtin:bigmodel-start-plan/GLM-5-Turbo", label: "GLM-5 Turbo", effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false }
-    ];
-    return {
-      id: "zcode",
-      label: "ZCode",
-      models,
-      defaultModelId: "builtin:bigmodel-start-plan/GLM-5.2",
-      defaultEffort: "high",
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: false
-    };
-  }
-  function zcodeDynamicDescriptor({ env, fsImpl, platform } = {}) {
-    let cliModel = "";
-    try {
-      cliModel = String(readZcodeDesktopModel({ env, fsImpl, platform }) || "").trim();
-    } catch (e) {
-    }
-    if (!cliModel) return zcodeStaticDescriptor();
-    const label = cliModel.includes("/") ? cliModel.slice(cliModel.indexOf("/") + 1) : cliModel;
-    return {
-      id: "zcode",
-      label: "ZCode",
-      models: [{ id: cliModel, label, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false }],
-      defaultModelId: cliModel,
-      defaultEffort: "high",
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: false
-    };
-  }
-  function zcodeDescriptorFromModels(sessionCreateResult) {
-    const available = sessionCreateResult && sessionCreateResult.settings && sessionCreateResult.settings.model && Array.isArray(sessionCreateResult.settings.model.available) ? sessionCreateResult.settings.model.available : [];
-    const current = sessionCreateResult && sessionCreateResult.settings && sessionCreateResult.settings.model && sessionCreateResult.settings.model.current;
-    const models = available.map((m) => {
-      const ref = m.ref || {};
-      const id = ref.modelId || m.label || "";
-      const providerId = ref.providerId || "";
-      return {
-        id: providerId ? providerId + "/" + id : id,
-        label: m.label || id,
-        effortLevels: ZCODE_EFFORT_LEVELS,
-        cost: 2,
-        adaptive: false
-      };
-    }).filter((m) => m.id);
-    if (!models.length) return zcodeStaticDescriptor();
-    const defaultId = current ? current.providerId ? current.providerId + "/" + current.modelId : current.modelId : models[0].id;
-    return {
-      id: "zcode",
-      label: "ZCode",
-      models,
-      defaultModelId: models.some((m) => m.id === defaultId) ? defaultId : models[0].id,
-      defaultEffort: "medium",
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: false
-    };
-  }
-  function zcodeDescriptorFromProbedModels({ cliModel, providerId, probedModels } = {}) {
-    const cli = String(cliModel || "").trim();
-    if (!cli || !Array.isArray(probedModels) || !probedModels.length) return null;
-    const pid = String(providerId || "").trim();
-    const cliLabel = cli.includes("/") ? cli.slice(cli.indexOf("/") + 1) : cli;
-    const rest = probedModels.map((m) => {
-      const rawId = String(m && m.id || "").trim();
-      if (!rawId) return null;
-      const id = pid ? pid + "/" + rawId : rawId;
-      if (id === cli) return null;
-      return { id, label: m && m.label || rawId, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false };
-    }).filter(Boolean);
-    const models = [
-      { id: cli, label: cliLabel, effortLevels: ZCODE_EFFORT_LEVELS, cost: 2, adaptive: false },
-      ...rest
-    ];
-    return {
-      id: "zcode",
-      label: "ZCode",
-      models,
-      defaultModelId: cli,
-      defaultEffort: "high",
-      supportsFast: () => false,
-      approvalModes: APPROVAL_MODES,
-      perTurnModelSwitch: false
-    };
-  }
-  function descriptorFromProbedModels(descriptor, probedModels) {
-    if (!Array.isArray(probedModels) || !probedModels.length) return descriptor;
-    const curated = new Map(descriptor.models.map((m) => [m.id, m]));
-    const models = probedModels.map((m) => {
-      const known = curated.get(m.id);
-      if (known) return known;
-      return { id: m.id, label: m.label || m.id, effortLevels: [], cost: costTier(m.id), adaptive: false };
-    });
-    return { ...descriptor, models, defaultModelId: models[0].id };
-  }
-  var EFFORT_ORDER = ["low", "medium", "high", "xhigh", "max", "ultra"];
-  function resolveEffectiveEffort({ requested, model, defaultEffort }) {
-    const levels = Array.isArray(model && model.effortLevels) ? model.effortLevels : [];
-    if (!levels.length) return null;
-    if (requested && levels.includes(requested)) return requested;
-    if (requested && EFFORT_ORDER.includes(requested)) {
-      const ranked = levels.filter((level) => EFFORT_ORDER.includes(level)).sort((a, b) => EFFORT_ORDER.indexOf(a) - EFFORT_ORDER.indexOf(b));
-      const atOrBelow = ranked.filter((level) => EFFORT_ORDER.indexOf(level) <= EFFORT_ORDER.indexOf(requested));
-      if (atOrBelow.length) return atOrBelow[atOrBelow.length - 1];
-      if (ranked.length) return ranked[0];
-    }
-    if (defaultEffort && levels.includes(defaultEffort)) return defaultEffort;
-    return levels[0];
-  }
-
-  // src/cep/backends/index.js
-  var BACKENDS = {
-    subscription: {
-      id: "subscription",
-      baseDescriptor: claudeSubDescriptor,
-      attachmentTransport: "manifest+read-rule"
-    },
-    byok: {
-      id: "byok",
-      baseDescriptor: byokStaticDescriptor,
-      attachmentTransport: "reject"
-    },
-    "claude-api": {
-      id: "claude-api",
-      baseDescriptor: byokStaticDescriptor,
-      attachmentTransport: "manifest+read-rule"
-    },
-    codex: {
-      id: "codex",
-      baseDescriptor: codexStaticDescriptor,
-      attachmentTransport: "native+manifest"
-    },
-    opencode: {
-      id: "opencode",
-      baseDescriptor: openCodeStaticDescriptor,
-      attachmentTransport: "native"
-    },
-    // zcode's baseDescriptor is intentionally NOT zcodeStaticDescriptor here:
-    // baseDescriptorFor() special-cases 'zcode' below to build a live,
-    // CLI-config-aware descriptor. zcodeStaticDescriptor remains the ultimate
-    // fallback (used by zcodeDynamicDescriptor itself, and by
-    // zcodeDescriptorFromModels once a session exists) when no CLI config is
-    // readable at all.
-    zcode: {
-      id: "zcode",
-      baseDescriptor: zcodeStaticDescriptor,
-      attachmentTransport: "manifest"
-    }
-  };
-  var ATTACHMENT_TRANSPORTS = /* @__PURE__ */ new Set([
-    "manifest+read-rule",
-    "native",
-    "native+manifest",
-    "manifest",
-    "reject"
-  ]);
-  function assertAttachmentBackendRegistry(registry) {
-    for (const [id, entry] of Object.entries(registry)) {
-      if (!ATTACHMENT_TRANSPORTS.has(entry == null ? void 0 : entry.attachmentTransport)) {
-        throw new TypeError(id + " is missing a valid attachment transport");
-      }
-      if (entry.attachmentTransport === "reject" && id !== "byok") {
-        throw new TypeError(id + " must not reject attachments");
-      }
-      if (id === "byok" && entry.attachmentTransport !== "reject") {
-        throw new TypeError("byok must reject attachments");
-      }
-    }
-    return true;
-  }
-  assertAttachmentBackendRegistry(BACKENDS);
-  var REAL_BACKENDS = Object.keys(BACKENDS);
-  function baseDescriptorFor(backendId, env) {
-    if (backendId === "zcode") return zcodeDynamicDescriptor({ env });
-    const entry = BACKENDS[backendId];
-    return entry ? entry.baseDescriptor() : claudeSubDescriptor();
-  }
-
-  // src/lib/backendSelect.js
-  var DEFAULT_CHANNEL = { claude: "subscription", codex: "cli", opencode: "provider", zcode: "cli-config" };
-  function pickBackend({ pref, channels = {}, channelChoices = {} }) {
-    const group = ["codex", "opencode", "zcode"].includes(pref) ? pref : "claude";
-    const list = channels[group] || [];
-    const wanted = channelChoices[group] || DEFAULT_CHANNEL[group];
-    const chosen = list.find((c) => c && c.channel === wanted) || list[0] || null;
-    if (chosen && chosen.checking) {
-      return { backend: "none", reason: group + "-probing", channel: null, fixHint: null };
-    }
-    if (!chosen || !chosen.ok) {
-      return {
-        backend: "none",
-        reason: group + "-no-channel",
-        channel: chosen ? chosen.channel : null,
-        fixHint: chosen ? chosen.fixHint || null : null
-      };
-    }
-    if (group === "claude") {
-      return { backend: "subscription", reason: "ok", channel: "subscription", fixHint: null };
-    }
-    return { backend: group, reason: "ok", channel: chosen.channel, fixHint: null };
-  }
-  function deriveToolMeta(tools) {
-    const allowedTools = [];
-    const annotations = {};
-    for (const tool of tools || []) {
-      const name = "mcp__ae__" + tool.name;
-      const ann = tool && tool.annotations || {};
-      const readOnly = ann.readOnlyHint === true;
-      const destructive = ann.destructiveHint === true;
-      if (readOnly) allowedTools.push(name);
-      annotations[name] = { readOnly, destructive };
-    }
-    return { allowedTools, annotations };
-  }
-  function shouldResetOnBackendChange(prevReal, next) {
-    if (!REAL_BACKENDS.includes(next)) return { reset: false, nextReal: prevReal || null };
-    if (!prevReal) return { reset: false, nextReal: next };
-    if (prevReal === next) return { reset: false, nextReal: prevReal };
-    return { reset: true, nextReal: next };
-  }
-
-  // src/lib/backendLifecycle.js
-  init_cep_runtime_inject();
-  function installBeforeUnloadReset(target, backend) {
-    if (!backend || typeof backend.reset !== "function") {
-      throw new TypeError("A backend with reset() is required");
-    }
-    let active = true;
-    const dispose = () => {
-      if (!active) return;
-      active = false;
-      if (target && typeof target.removeEventListener === "function") {
-        target.removeEventListener("beforeunload", dispose);
-      }
-      backend.reset();
-    };
-    if (target && typeof target.addEventListener === "function") {
-      target.addEventListener("beforeunload", dispose);
-    }
-    return dispose;
   }
 
   // src/cep/mcpClient.js
@@ -28846,7519 +26943,316 @@
       if (key.toUpperCase() === normalized) delete environment[key];
     }
   }
-  function routeError(code, message) {
-    const error = new Error(message);
-    error.code = code;
-    return error;
-  }
-  function isLoopbackHostname(hostname) {
-    const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
-    if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
-    const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    return /^127(?:\.\d{1,3}){3}$/.test(mapped ? mapped[1] : host);
-  }
-  function normalizeLocalRoute(localRoute) {
-    if (!localRoute || typeof localRoute !== "object" || Array.isArray(localRoute)) {
-      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_REQUIRED", "Claude Agent API channel requires a local route profile.");
-    }
-    const keys = Object.keys(localRoute).sort();
-    if (keys.length !== 2 || keys[0] !== "origin" || keys[1] !== "routeToken") {
-      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_INVALID", "Claude Agent local route profile is invalid.");
-    }
-    if (typeof localRoute.origin !== "string" || typeof localRoute.routeToken !== "string") {
-      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_INVALID", "Claude Agent local route profile is invalid.");
-    }
-    const origin = localRoute.origin.trim();
-    const routeToken = localRoute.routeToken.trim();
-    let url;
-    try {
-      url = new URL(origin);
-    } catch {
-      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_INVALID", "Claude Agent local route profile is invalid.");
-    }
-    if (url.protocol !== "http:" || !isLoopbackHostname(url.hostname) || url.username || url.password || url.search || url.hash || url.pathname !== "" && url.pathname !== "/" || !routeToken || routeToken !== localRoute.routeToken) {
-      throw routeError("CLAUDE_AGENT_LOCAL_ROUTE_INVALID", "Claude Agent local route profile is invalid.");
-    }
-    return { origin: url.origin, routeToken };
-  }
-  function claudeChannelEnv(baseEnv = {}, {
-    channel = "subscription",
-    localRoute = null,
-    requestProfile = null
-  } = {}) {
+  function claudeChannelEnv(baseEnv = {}) {
     const env = { ...baseEnv };
     for (const key of UPSTREAM_ENV_KEYS) deleteEnvironmentKey(env, key);
-    if (channel !== "api") return env;
-    if (requestProfile !== null && requestProfile !== void 0) {
-      throw routeError(
-        "CLAUDE_AGENT_UPSTREAM_PROFILE_FORBIDDEN",
-        "Claude Agent API channel cannot receive an upstream provider request profile."
-      );
-    }
-    const route = normalizeLocalRoute(localRoute);
-    env.ANTHROPIC_BASE_URL = route.origin;
-    env.ANTHROPIC_AUTH_TOKEN = route.routeToken;
     return env;
   }
 
   // src/cep/claudeAgentBackend.js
   init_cep_runtime_inject();
 
-  // src/lib/providerRouteSelection.js
+  // src/lib/ndjson.js
   init_cep_runtime_inject();
-
-  // src/lib/providerProfile.js
-  init_cep_runtime_inject();
-
-  // src/cep/platform/secret-reference.js
-  init_cep_runtime_inject();
-  var PROVIDER_UUID_SOURCE = "[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}";
-  var PROVIDER_UUID = new RegExp(`^${PROVIDER_UUID_SOURCE}$`);
-  var PROVIDER_REFERENCE = new RegExp(
-    `^aemcp-secret://provider/(${PROVIDER_UUID_SOURCE})/([a-z][a-z0-9_-]{0,31})/v1$`
-  );
-  function invalidReference() {
-    const error = new Error("Secret reference is invalid");
-    error.code = "INVALID_REFERENCE";
-    return error;
-  }
-  function parseProviderSecretReference(reference) {
-    if (typeof reference !== "string") throw invalidReference();
-    const match = PROVIDER_REFERENCE.exec(reference);
-    if (!match) throw invalidReference();
-    return {
-      namespace: "provider",
-      providerId: match[1],
-      slot: match[2],
-      version: 1
+  function createLineSplitter(onLine) {
+    let buffer = "";
+    return function push(chunk) {
+      buffer += String(chunk || "");
+      let index = buffer.indexOf("\n");
+      while (index !== -1) {
+        const line = buffer.slice(0, index).trim();
+        buffer = buffer.slice(index + 1);
+        if (line) onLine(line);
+        index = buffer.indexOf("\n");
+      }
     };
   }
-
-  // src/lib/providerProfile.js
-  var DEFAULT_CODEX_PROVIDER_ID = "ae_mcp_custom";
-  var CODEX_PROVIDER_API_KEY_ENV = "AE_MCP_CODEX_API_KEY";
-  var RESERVED_CODEX_PROVIDER_IDS = /* @__PURE__ */ new Set(["openai", "amazon-bedrock", "ollama", "lmstudio"]);
-  var PROVIDER_ENTRY_KEYS = [
-    "allowInsecureHttp",
-    "auth",
-    "authProfileRevision",
-    "baseUrl",
-    "credentialId",
-    "dialect",
-    "headers",
-    "id",
-    "name",
-    "probedAt",
-    "probedModels",
-    "protocol"
-  ];
-  var AUTH_KEYS = ["model", "probe"];
-  var HEADER_KEYS = ["id", "name", "scopes", "valueRef"];
-  var SECRET_VALUE_REF_KEYS = ["kind", "reference", "revision"];
-  var LITERAL_VALUE_REF_KEYS = ["kind", "value"];
-  var DIALECT_KEYS = ["detected", "override"];
-  var DIALECT_OVERRIDE_KEYS = ["source", "updatedAt", "wireApi"];
-  var LEGACY_DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "wireApi"];
-  var DIALECT_DETECTED_KEYS = ["authProfileRevision", "baseUrl", "detectedAt", "evidence", "modelId", "wireApi"];
-  var PROBED_MODEL_KEYS = ["id", "label"];
-  var PROVIDER_SCOPES = /* @__PURE__ */ new Set(["probe", "model"]);
-  var PROVIDER_PROTOCOLS = /* @__PURE__ */ new Set(["openai-compatible", "anthropic"]);
-  var WIRE_APIS = /* @__PURE__ */ new Set(["responses", "chat"]);
-  var PROVIDER_WIRE_PROTOCOLS_V3 = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
-  var PROVIDER_CLIENTS_V3 = /* @__PURE__ */ new Set(["codex", "claude-code"]);
-  var PROVIDER_AUTH_SCHEMES_V3 = /* @__PURE__ */ new Set(["none", "bearer", "x-api-key", "custom"]);
-  var PROVIDER_PREFERRED_AUTH_SCHEMES_V3 = /* @__PURE__ */ new Set(["auto", ...PROVIDER_AUTH_SCHEMES_V3]);
-  var PROVIDER_CAPABILITY_STATUSES_V3 = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
-  var PROVIDER_CAPABILITY_UNSUPPORTED_EVIDENCE_V3 = /* @__PURE__ */ new Set([
-    "endpoint-unsupported",
-    "model-protocol-unsupported",
-    "conversion-unsupported"
-  ]);
-  var PROVIDER_CAPABILITY_SUPPORTED_EVIDENCE_V3 = Object.freeze({
-    responses: /* @__PURE__ */ new Set(["responses-success-schema", "responses-incomplete-schema"]),
-    chat: /* @__PURE__ */ new Set(["chat-success-schema", "chat-length-schema"]),
-    messages: /* @__PURE__ */ new Set(["messages-success-schema", "messages-max-tokens-schema"])
-  });
-  var PROVIDER_ENTRY_KEYS_V3 = [
-    "allowInsecureHttp",
-    "baseUrl",
-    "credential",
-    "credentialId",
-    "headers",
-    "id",
-    "modelCapabilities",
-    "modelList",
-    "name",
-    "probeAuthOverride",
-    "probePreference",
-    "requestProfileRevision",
-    "routeOverrides"
-  ];
-  var PROVIDER_CREDENTIAL_KEYS_V3 = ["preferredAuth", "valueRef"];
-  var PROVIDER_AUTH_CHOICE_KEYS_V3 = ["headerName", "scheme"];
-  var PROVIDER_MODEL_LIST_KEYS_V3 = [
-    "apiRoot",
-    "auth",
-    "checkedAt",
-    "models",
-    "requestProfileRevision",
-    "revision",
-    "status",
-    "validUntil"
-  ];
-  var PROVIDER_MODEL_CAPABILITY_KEYS_V3 = ["chat", "messages", "modelId", "responses"];
-  var PROVIDER_PROTOCOL_CAPABILITY_KEYS_V3 = [
-    "agentFeatures",
-    "apiRoot",
-    "auth",
-    "checkedAt",
-    "compatibility",
-    "evidence",
-    "modelListRevision",
-    "requestProfileRevision",
-    "status",
-    "validUntil"
-  ];
-  var PROVIDER_AGENT_FEATURE_KEYS_V3 = [
-    "compact",
-    "continuation",
-    "countTokens",
-    "namespaceTools",
-    "reasoningReplay",
-    "stream",
-    "terminal",
-    "tools"
-  ];
-  var PROVIDER_AGENT_FEATURE_STATUSES_V3 = /* @__PURE__ */ new Set(["unknown", "supported", "unsupported"]);
-  var PROVIDER_COMPATIBILITY_KEYS_V3 = ["instructionMode", "tokenField"];
-  var PROVIDER_ROUTE_OVERRIDE_KEYS_V3 = ["client", "modelId", "protocol", "updatedAt"];
-  var PROVIDER_MODEL_LIST_MODEL_KEYS_V3 = ["id", "label", "metadata"];
-  var PROVIDER_MODEL_METADATA_KEYS_V3 = [
-    "capabilities",
-    "inputModalities",
-    "outputModalities",
-    "task"
-  ];
-  var DIALECT_SOURCES = /* @__PURE__ */ new Set(["manual", "legacy-v0.9", "ccswitch-import"]);
-  var VERIFIED_DIALECT_EVIDENCE = Object.freeze({
-    responses: "responses-success-schema",
-    chat: "chat-success-schema"
-  });
-  var LEGACY_DIALECT_EVIDENCE = /* @__PURE__ */ new Set([
-    "models-capability",
-    "responses-success-schema",
-    "responses-missing-input",
-    "chat-success-schema",
-    "chat-missing-messages",
-    "chat-missing-messages-500-compat"
-  ]);
-  var SECRET_LIKE_PATH_LITERAL = /(?:Bearer\s+\S{8,}|Basic\s+\S{8,}|sk-[A-Za-z0-9_-]{8,}|[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{8,})/i;
-  var HEADER_NAME = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/;
-  var MAX_PERCENT_DECODE_LAYERS = 3;
-  var CREDENTIAL_PATH_LABELS = /* @__PURE__ */ new Set([
-    "accesstoken",
-    "apikey",
-    "authtoken",
-    "clientsecret",
-    "credential",
-    "credentials",
-    "passwd",
-    "password",
-    "xapikey"
-  ]);
-  function normalizeBaseUrl(value) {
-    return String(value || "").trim().replace(/\/+$/, "");
-  }
-  function isLoopbackProviderHostname(hostname) {
-    const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
-    if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
-    const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    const ipv4 = mapped ? mapped[1] : host;
-    return /^127(?:\.\d{1,3}){3}$/.test(ipv4);
-  }
-  function decodePercentRuns2(value) {
-    return String(value).replace(/(?:%[0-9a-f]{2})+/gi, (run) => {
+  function createNdjsonReader(onMessage) {
+    return createLineSplitter((line) => {
+      let message;
       try {
-        return decodeURIComponent(run);
-      } catch {
-        return run;
+        message = JSON.parse(line);
+      } catch (e) {
+        return;
       }
+      onMessage(message);
     });
   }
-  function pathContainsCredential(value) {
-    let current = String(value || "");
-    for (let layer = 0; layer <= MAX_PERCENT_DECODE_LAYERS; layer += 1) {
-      if (SECRET_LIKE_PATH_LITERAL.test(current) || isCredentialShapedProviderLiteral(current)) return true;
-      const segments = current.split("/").filter(Boolean);
-      for (let index = 0; index + 1 < segments.length; index += 1) {
-        const label = segments[index].toLowerCase().replace(/[^a-z0-9]/g, "");
-        const candidate = segments[index + 1];
-        if (CREDENTIAL_PATH_LABELS.has(label) && !/^v\d+(?:\.\d+)*$/i.test(candidate)) return true;
-      }
-      const decoded = decodePercentRuns2(current);
-      if (decoded === current) break;
-      current = decoded;
-    }
-    return false;
-  }
-  function validateProviderBaseUrl(value, {
-    allowInsecureHttp = false,
-    requireTransportApproval = false
-  } = {}) {
-    const raw = String(value || "").trim();
-    let url;
-    try {
-      url = new URL(raw);
-    } catch {
-      throw providerProfileError();
-    }
-    const schemeMarker = raw.indexOf("://");
-    let hasRawUserInfo = true;
-    if (schemeMarker >= 0) {
-      const authorityStart = schemeMarker + 3;
-      const delimiters = ["/", "?", "#"].map((delimiter) => raw.indexOf(delimiter, authorityStart)).filter((index) => index >= 0);
-      const authorityEnd = delimiters.length ? Math.min(...delimiters) : raw.length;
-      hasRawUserInfo = raw.slice(authorityStart, authorityEnd).includes("@");
-    }
-    if (!["http:", "https:"].includes(url.protocol) || schemeMarker < 0 || raw.includes("?") || raw.includes("#") || hasRawUserInfo || url.username || url.password || url.hash || url.search || pathContainsCredential(url.pathname)) {
-      throw providerProfileError();
-    }
-    if (requireTransportApproval && url.protocol === "http:" && !isLoopbackProviderHostname(url.hostname) && allowInsecureHttp !== true) {
-      throw providerProfileError("provider_insecure_http_forbidden");
-    }
-    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
-    return url.toString().replace(/\/$/, "");
-  }
-  function providerProfileError(code = "provider_profile_invalid") {
-    const error = new Error(
-      code === "provider_header_secret_reference_required" ? "Provider header requires a secret reference" : "Provider profile is invalid"
-    );
-    error.code = code;
-    return error;
-  }
-  function hasExactKeys(value, expected) {
+
+  // ../shared/tool-approval.mjs
+  init_cep_runtime_inject();
+  var PLAN_SCHEMA_KEY = "x-ae-mcp-plan";
+  var HASH_PATTERN = /^[0-9a-f]{64}$/;
+  var OPERATIONS = /* @__PURE__ */ new Set(["render", "execute", "apply"]);
+  var RISKS = /* @__PURE__ */ new Set(["read", "write", "destructive", "external"]);
+  var TOOL_USE_ACTIONS = /* @__PURE__ */ new Set(["render", "prepare", "grant", "execute", "save"]);
+  function isPlainObject(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const keys = Object.keys(value).sort();
-    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
+    const prototype = Object.getPrototypeOf(value);
+    return prototype === Object.prototype || prototype === null;
   }
-  function requireExactObject(value, expected) {
-    if (!hasExactKeys(value, expected)) throw providerProfileError();
-    return value;
-  }
-  function requireText(value) {
-    if (typeof value !== "string") throw providerProfileError();
-    const text = value.trim();
-    if (!text) throw providerProfileError();
-    return text;
-  }
-  function requireTimestamp(value) {
-    if (!Number.isFinite(value) || value < 0) throw providerProfileError();
-    return value;
-  }
-  function requireRevision(value) {
-    if (!Number.isSafeInteger(value) || value <= 0) throw providerProfileError();
-    return value;
-  }
-  function hasVerifiedDialectEvidence(entry) {
-    return VERIFIED_DIALECT_EVIDENCE[entry == null ? void 0 : entry.wireApi] === (entry == null ? void 0 : entry.evidence);
-  }
-  function normalizeCredentialId(value) {
-    if (typeof value !== "string") throw providerProfileError();
-    try {
-      return parseProviderSecretReference(`aemcp-secret://provider/${value}/a/v1`).providerId;
-    } catch {
-      throw providerProfileError();
+  function cloneJson(value, seen = /* @__PURE__ */ new Set()) {
+    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
+    if (typeof value === "number") {
+      if (!Number.isFinite(value)) throw new TypeError("Plan values must be finite JSON");
+      return value;
     }
-  }
-  function normalizeSecretValueRef(value, credentialId) {
-    requireExactObject(value, SECRET_VALUE_REF_KEYS);
-    if (value.kind !== "secret") throw providerProfileError();
-    let parsed;
-    try {
-      parsed = parseProviderSecretReference(value.reference);
-    } catch {
-      throw providerProfileError();
-    }
-    if (parsed.providerId !== credentialId) throw providerProfileError();
-    return {
-      kind: "secret",
-      reference: value.reference,
-      revision: requireRevision(value.revision)
-    };
-  }
-  function normalizeHeaderName(value) {
-    const name = requireText(value);
-    if (!HEADER_NAME.test(name)) throw providerProfileError();
-    return name;
-  }
-  function normalizeAuthPolicy(value, credentialId, allowInherit = false) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerProfileError();
-    if (allowInherit && value.kind === "inherit-model") {
-      requireExactObject(value, ["kind"]);
-      return { kind: "inherit-model" };
-    }
-    if (value.kind === "none") {
-      requireExactObject(value, ["kind"]);
-      return { kind: "none" };
-    }
-    if (value.kind === "bearer" || value.kind === "x-api-key") {
-      requireExactObject(value, ["kind", "valueRef"]);
-      return {
-        kind: value.kind,
-        valueRef: normalizeSecretValueRef(value.valueRef, credentialId)
-      };
-    }
-    if (value.kind === "custom") {
-      requireExactObject(value, ["headerName", "kind", "valueRef"]);
-      return {
-        kind: "custom",
-        headerName: normalizeHeaderName(value.headerName),
-        valueRef: normalizeSecretValueRef(value.valueRef, credentialId)
-      };
-    }
-    throw providerProfileError();
-  }
-  function normalizeHeaderValueRef(value, credentialId) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw providerProfileError();
-    if (value.kind === "literal") {
-      requireExactObject(value, LITERAL_VALUE_REF_KEYS);
-      if (typeof value.value !== "string") throw providerProfileError();
-      return { kind: "literal", value: value.value };
-    }
-    return normalizeSecretValueRef(value, credentialId);
-  }
-  function normalizeExtraHeader(value, credentialId) {
-    requireExactObject(value, HEADER_KEYS);
-    const id = requireText(value.id);
-    const name = normalizeHeaderName(value.name);
-    if (!Array.isArray(value.scopes) || value.scopes.length === 0) throw providerProfileError();
-    const scopes = value.scopes.map((scope) => {
-      if (typeof scope !== "string" || !PROVIDER_SCOPES.has(scope)) throw providerProfileError();
-      return scope;
-    });
-    if (new Set(scopes).size !== scopes.length) throw providerProfileError();
-    const valueRef = normalizeHeaderValueRef(value.valueRef, credentialId);
-    if (isReservedProviderExtraHeaderName(name)) {
-      throw providerProfileError("provider_header_forbidden");
-    }
-    if (valueRef.kind === "literal" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(valueRef.value))) {
-      throw providerProfileError("provider_header_secret_reference_required");
-    }
-    return { id, name, scopes, valueRef };
-  }
-  function normalizeDialect(value) {
-    requireExactObject(value, DIALECT_KEYS);
-    let override = null;
-    if (value.override !== null) {
-      requireExactObject(value.override, DIALECT_OVERRIDE_KEYS);
-      if (!WIRE_APIS.has(value.override.wireApi) || !DIALECT_SOURCES.has(value.override.source)) {
-        throw providerProfileError();
+    if (typeof value !== "object" || seen.has(value)) throw new TypeError("Plan values must be acyclic JSON");
+    seen.add(value);
+    let result;
+    if (Array.isArray(value)) {
+      result = value.map((item) => cloneJson(item, seen));
+    } else {
+      if (!isPlainObject(value)) throw new TypeError("Plan values must be plain JSON objects");
+      result = {};
+      for (const [key, item] of Object.entries(value)) {
+        Object.defineProperty(result, key, {
+          value: cloneJson(item, seen),
+          enumerable: true,
+          configurable: true,
+          writable: true
+        });
       }
-      override = {
-        wireApi: value.override.wireApi,
-        source: value.override.source,
-        updatedAt: requireTimestamp(value.override.updatedAt)
-      };
     }
-    const normalizeDetected = (entry, { includeModelId = true } = {}) => {
-      const keys = includeModelId ? DIALECT_DETECTED_KEYS : LEGACY_DIALECT_DETECTED_KEYS;
-      requireExactObject(entry, keys);
-      if (!WIRE_APIS.has(entry.wireApi) || (includeModelId ? !hasVerifiedDialectEvidence(entry) : !LEGACY_DIALECT_EVIDENCE.has(entry.evidence))) {
-        throw providerProfileError();
+    seen.delete(value);
+    return result;
+  }
+  function deepFreeze(value) {
+    if (!value || typeof value !== "object" || Object.isFrozen(value)) return value;
+    for (const item of Object.values(value)) deepFreeze(item);
+    return Object.freeze(value);
+  }
+  function canonicalize(value) {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (!isPlainObject(value)) return value;
+    return Object.fromEntries(
+      Object.keys(value).sort().map((key) => [key, canonicalize(value[key])])
+    );
+  }
+  function rotateRight(value, count) {
+    return value >>> count | value << 32 - count;
+  }
+  function sha256Text(text) {
+    const source = String(text);
+    const bytes = typeof TextEncoder === "function" ? new TextEncoder().encode(source) : Uint8Array.from(unescape(encodeURIComponent(source)), (character) => character.charCodeAt(0));
+    const bitLength = bytes.length * 8;
+    const paddedLength = Math.ceil((bytes.length + 9) / 64) * 64;
+    const padded = new Uint8Array(paddedLength);
+    padded.set(bytes);
+    padded[bytes.length] = 128;
+    const view = new DataView(padded.buffer);
+    view.setUint32(paddedLength - 8, Math.floor(bitLength / 4294967296));
+    view.setUint32(paddedLength - 4, bitLength >>> 0);
+    const constants = [
+      1116352408,
+      1899447441,
+      3049323471,
+      3921009573,
+      961987163,
+      1508970993,
+      2453635748,
+      2870763221,
+      3624381080,
+      310598401,
+      607225278,
+      1426881987,
+      1925078388,
+      2162078206,
+      2614888103,
+      3248222580,
+      3835390401,
+      4022224774,
+      264347078,
+      604807628,
+      770255983,
+      1249150122,
+      1555081692,
+      1996064986,
+      2554220882,
+      2821834349,
+      2952996808,
+      3210313671,
+      3336571891,
+      3584528711,
+      113926993,
+      338241895,
+      666307205,
+      773529912,
+      1294757372,
+      1396182291,
+      1695183700,
+      1986661051,
+      2177026350,
+      2456956037,
+      2730485921,
+      2820302411,
+      3259730800,
+      3345764771,
+      3516065817,
+      3600352804,
+      4094571909,
+      275423344,
+      430227734,
+      506948616,
+      659060556,
+      883997877,
+      958139571,
+      1322822218,
+      1537002063,
+      1747873779,
+      1955562222,
+      2024104815,
+      2227730452,
+      2361852424,
+      2428436474,
+      2756734187,
+      3204031479,
+      3329325298
+    ];
+    const hash = [
+      1779033703,
+      3144134277,
+      1013904242,
+      2773480762,
+      1359893119,
+      2600822924,
+      528734635,
+      1541459225
+    ];
+    const words = new Uint32Array(64);
+    for (let offset = 0; offset < paddedLength; offset += 64) {
+      for (let index = 0; index < 16; index += 1) words[index] = view.getUint32(offset + index * 4);
+      for (let index = 16; index < 64; index += 1) {
+        const x = words[index - 15];
+        const y = words[index - 2];
+        const s0 = rotateRight(x, 7) ^ rotateRight(x, 18) ^ x >>> 3;
+        const s1 = rotateRight(y, 17) ^ rotateRight(y, 19) ^ y >>> 10;
+        words[index] = words[index - 16] + s0 + words[index - 7] + s1 >>> 0;
       }
-      return {
-        ...includeModelId ? { modelId: requireText(entry.modelId) } : {},
-        wireApi: entry.wireApi,
-        baseUrl: validateProviderBaseUrl(requireText(entry.baseUrl)),
-        authProfileRevision: requireRevision(entry.authProfileRevision),
-        detectedAt: requireTimestamp(entry.detectedAt),
-        evidence: entry.evidence
-      };
-    };
-    let detected = [];
-    if (Array.isArray(value.detected)) {
-      detected = value.detected.map((entry) => normalizeDetected(entry));
-      const modelIds = /* @__PURE__ */ new Set();
-      for (const entry of detected) {
-        if (modelIds.has(entry.modelId)) throw providerProfileError();
-        modelIds.add(entry.modelId);
+      let [a, b, c, d, e, f, g, h] = hash;
+      for (let index = 0; index < 64; index += 1) {
+        const s1 = rotateRight(e, 6) ^ rotateRight(e, 11) ^ rotateRight(e, 25);
+        const choose = e & f ^ ~e & g;
+        const temporary1 = h + s1 + choose + constants[index] + words[index] >>> 0;
+        const s0 = rotateRight(a, 2) ^ rotateRight(a, 13) ^ rotateRight(a, 22);
+        const majority = a & b ^ a & c ^ b & c;
+        const temporary2 = s0 + majority >>> 0;
+        h = g;
+        g = f;
+        f = e;
+        e = d + temporary1 >>> 0;
+        d = c;
+        c = b;
+        b = a;
+        a = temporary1 + temporary2 >>> 0;
       }
-      detected.sort((left, right) => left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
-    } else if (value.detected !== null) {
-      normalizeDetected(value.detected, { includeModelId: false });
+      hash[0] = hash[0] + a >>> 0;
+      hash[1] = hash[1] + b >>> 0;
+      hash[2] = hash[2] + c >>> 0;
+      hash[3] = hash[3] + d >>> 0;
+      hash[4] = hash[4] + e >>> 0;
+      hash[5] = hash[5] + f >>> 0;
+      hash[6] = hash[6] + g >>> 0;
+      hash[7] = hash[7] + h >>> 0;
     }
-    return { override, detected };
+    return hash.map((word) => word.toString(16).padStart(8, "0")).join("");
   }
-  function normalizeProbedModel(value) {
-    requireExactObject(value, PROBED_MODEL_KEYS);
-    return { id: requireText(value.id), label: requireText(value.label) };
-  }
-  function normalizeProviderEntryV2(input) {
-    requireExactObject(input, PROVIDER_ENTRY_KEYS);
-    const id = requireText(input.id);
-    const credentialId = normalizeCredentialId(input.credentialId);
-    if (!PROVIDER_PROTOCOLS.has(input.protocol)) throw providerProfileError();
-    if (typeof input.allowInsecureHttp !== "boolean") throw providerProfileError();
-    requireExactObject(input.auth, AUTH_KEYS);
-    if (!Array.isArray(input.headers) || !Array.isArray(input.probedModels)) throw providerProfileError();
-    return {
-      id,
-      credentialId,
-      name: requireText(input.name),
-      protocol: input.protocol,
-      baseUrl: validateProviderBaseUrl(requireText(input.baseUrl), {
-        allowInsecureHttp: input.allowInsecureHttp,
-        requireTransportApproval: true
-      }),
-      allowInsecureHttp: input.allowInsecureHttp,
-      authProfileRevision: requireRevision(input.authProfileRevision),
-      auth: {
-        model: normalizeAuthPolicy(input.auth.model, credentialId),
-        probe: normalizeAuthPolicy(input.auth.probe, credentialId, true)
-      },
-      headers: input.headers.map((header) => normalizeExtraHeader(header, credentialId)),
-      dialect: normalizeDialect(input.dialect),
-      probedModels: input.probedModels.map(normalizeProbedModel),
-      probedAt: requireTimestamp(input.probedAt)
-    };
-  }
-  function requireNonnegativeRevision(value) {
-    if (!Number.isSafeInteger(value) || value < 0) throw providerProfileError();
-    return value;
-  }
-  function normalizeAuthChoiceV3(value, { allowAuto = false } = {}) {
-    requireExactObject(value, PROVIDER_AUTH_CHOICE_KEYS_V3);
-    const allowed = allowAuto ? PROVIDER_PREFERRED_AUTH_SCHEMES_V3 : PROVIDER_AUTH_SCHEMES_V3;
-    if (!allowed.has(value.scheme)) throw providerProfileError();
-    const headerName = value.headerName === null ? null : normalizeHeaderName(value.headerName);
-    if (value.scheme === "custom" !== (headerName !== null)) throw providerProfileError();
-    return { scheme: value.scheme, headerName };
-  }
-  function authChoiceMatchesPreference(choice, preferred) {
-    if (preferred.scheme === "auto") return true;
-    if (preferred.scheme === "none") return choice.scheme === "none";
-    if (preferred.scheme === "custom") {
-      return choice.scheme === "custom" && String(choice.headerName || "").toLowerCase() === String(preferred.headerName || "").toLowerCase();
-    }
-    return choice.scheme === "bearer" || choice.scheme === "x-api-key";
-  }
-  function normalizeCredentialV3(value, credentialId) {
-    requireExactObject(value, PROVIDER_CREDENTIAL_KEYS_V3);
-    const valueRef = value.valueRef === null ? null : normalizeSecretValueRef(value.valueRef, credentialId);
-    const preferredAuth = normalizeAuthChoiceV3(value.preferredAuth, { allowAuto: true });
-    if (preferredAuth.scheme === "none" && valueRef !== null) throw providerProfileError();
-    if (!["auto", "none"].includes(preferredAuth.scheme) && valueRef === null) throw providerProfileError();
-    return { valueRef, preferredAuth };
-  }
-  function normalizeProbeAuthOverrideV3(value, credentialId) {
-    if (value === null) return null;
-    const normalized = normalizeAuthPolicy(value, credentialId);
-    if (normalized.kind === "inherit-model") throw providerProfileError();
+  function normalizeMcpToolName(name) {
+    let normalized = typeof name === "string" ? name : "";
+    if (normalized.startsWith("mcp__ae__")) normalized = normalized.slice("mcp__ae__".length);
+    if (normalized.startsWith("ae_")) normalized = "ae." + normalized.slice(3);
     return normalized;
   }
-  function authChoiceFromPolicyV3(policy) {
-    if (!policy || policy.kind === "none") return { scheme: "none", headerName: null };
-    return {
-      scheme: policy.kind,
-      headerName: policy.kind === "custom" ? policy.headerName : null
-    };
-  }
-  function normalizeApiRootV3(value, { baseUrl, allowInsecureHttp }) {
-    if (value === null) return null;
-    const apiRoot = validateProviderBaseUrl(requireText(value), {
-      allowInsecureHttp,
-      requireTransportApproval: true
-    });
-    if (new URL(apiRoot).origin !== new URL(baseUrl).origin) throw providerProfileError();
-    return apiRoot;
-  }
-  function normalizeMetadataStringListV3(value) {
-    if (!Array.isArray(value)) throw providerProfileError();
-    const output = value.map((entry) => requireText(entry));
-    if (new Set(output).size !== output.length) throw providerProfileError();
-    output.sort();
-    return output;
-  }
-  function normalizeModelMetadataV3(value) {
-    requireExactObject(value, PROVIDER_MODEL_METADATA_KEYS_V3);
-    return {
-      task: value.task === null ? null : requireText(value.task),
-      inputModalities: normalizeMetadataStringListV3(value.inputModalities),
-      outputModalities: normalizeMetadataStringListV3(value.outputModalities),
-      capabilities: normalizeMetadataStringListV3(value.capabilities)
-    };
-  }
-  function normalizeModelListEntryV3(value) {
-    requireExactObject(value, PROVIDER_MODEL_LIST_MODEL_KEYS_V3);
-    return {
-      id: requireText(value.id),
-      label: requireText(value.label),
-      metadata: normalizeModelMetadataV3(value.metadata)
-    };
-  }
-  function normalizeModelsV3(value) {
-    if (!Array.isArray(value)) throw providerProfileError();
-    const models = value.map(normalizeModelListEntryV3);
-    const ids = /* @__PURE__ */ new Set();
-    for (const model of models) {
-      if (ids.has(model.id)) throw providerProfileError();
-      ids.add(model.id);
-    }
-    models.sort((left, right) => left.id < right.id ? -1 : left.id > right.id ? 1 : 0);
-    return models;
-  }
-  function normalizeAgentFeaturesV3(value, protocolStatus) {
-    requireExactObject(value, PROVIDER_AGENT_FEATURE_KEYS_V3);
-    const output = {};
-    for (const key of PROVIDER_AGENT_FEATURE_KEYS_V3) {
-      if (!PROVIDER_AGENT_FEATURE_STATUSES_V3.has(value[key])) throw providerProfileError();
-      output[key] = value[key];
-    }
-    if (protocolStatus === "unknown" && Object.values(output).some((status) => status !== "unknown")) {
-      throw providerProfileError();
-    }
-    if (protocolStatus === "unsupported" && Object.values(output).some((status) => status === "supported")) {
-      throw providerProfileError();
-    }
-    return output;
-  }
-  function normalizeModelListV3(value, provider) {
-    requireExactObject(value, PROVIDER_MODEL_LIST_KEYS_V3);
-    if (value.status !== "unknown" && value.status !== "supported") throw providerProfileError();
-    const revision = requireNonnegativeRevision(value.revision);
-    const requestProfileRevision = requireRevision(value.requestProfileRevision);
-    const checkedAt = requireTimestamp(value.checkedAt);
-    const validUntil = requireTimestamp(value.validUntil);
-    const models = normalizeModelsV3(value.models);
-    const apiRoot = normalizeApiRootV3(value.apiRoot, provider);
-    const auth = value.auth === null ? null : normalizeAuthChoiceV3(value.auth);
-    if (value.status === "unknown") {
-      if (apiRoot !== null || auth !== null || checkedAt !== 0 || validUntil !== 0 || models.length !== 0) {
-        throw providerProfileError();
-      }
-    } else {
-      if (revision <= 0 || apiRoot === null || auth === null || checkedAt <= 0 || validUntil < checkedAt || models.length === 0) {
-        throw providerProfileError();
-      }
-      const configuredProbeAuth = provider.probeAuthOverride ? authChoiceFromPolicyV3(provider.probeAuthOverride) : provider.credential.preferredAuth;
-      if (!authChoiceMatchesPreference(auth, configuredProbeAuth)) throw providerProfileError();
-      if (auth.scheme !== "none" && provider.probeAuthOverride === null && provider.credential.valueRef === null) {
-        throw providerProfileError();
-      }
-    }
-    return {
-      revision,
-      status: value.status,
-      apiRoot,
-      auth,
-      models,
-      checkedAt,
-      validUntil,
-      requestProfileRevision
-    };
-  }
-  function normalizeCompatibilityV3(value, protocol) {
-    requireExactObject(value, PROVIDER_COMPATIBILITY_KEYS_V3);
-    const instructionMode = value.instructionMode;
-    const tokenField = value.tokenField;
-    const valid = protocol === "responses" ? instructionMode === "responses-instructions" && tokenField === "max_output_tokens" : protocol === "chat" ? ["chat-developer", "chat-system"].includes(instructionMode) && ["max_tokens", "max_completion_tokens"].includes(tokenField) : instructionMode === "messages-system" && tokenField === "max_tokens";
-    if (!valid) throw providerProfileError();
-    return { instructionMode, tokenField };
-  }
-  function normalizeProtocolCapabilityV3(value, protocol, provider) {
-    requireExactObject(value, PROVIDER_PROTOCOL_CAPABILITY_KEYS_V3);
-    if (!PROVIDER_CAPABILITY_STATUSES_V3.has(value.status)) throw providerProfileError();
-    const agentFeatures = normalizeAgentFeaturesV3(value.agentFeatures, value.status);
-    const apiRoot = normalizeApiRootV3(value.apiRoot, provider);
-    const auth = value.auth === null ? null : normalizeAuthChoiceV3(value.auth);
-    const compatibility = value.compatibility === null ? null : normalizeCompatibilityV3(value.compatibility, protocol);
-    const checkedAt = requireTimestamp(value.checkedAt);
-    const validUntil = value.validUntil === null ? null : requireTimestamp(value.validUntil);
-    const requestProfileRevision = requireRevision(value.requestProfileRevision);
-    const modelListRevision = requireNonnegativeRevision(value.modelListRevision);
-    const evidence = value.evidence === null ? null : requireText(value.evidence);
-    if (value.status === "unknown") {
-      if (apiRoot !== null || auth !== null || compatibility !== null || evidence !== null || checkedAt !== 0 || validUntil !== 0) {
-        throw providerProfileError();
-      }
-    } else {
-      if (apiRoot === null || auth === null || checkedAt <= 0 || value.status === "supported" && (validUntil === null || validUntil < checkedAt) || value.status === "unsupported" && validUntil !== null || provider.credential.valueRef === null && auth.scheme !== "none") {
-        throw providerProfileError();
-      }
-      if (!authChoiceMatchesPreference(auth, provider.credential.preferredAuth)) {
-        throw providerProfileError();
-      }
-      if (value.status === "supported") {
-        if (compatibility === null || !PROVIDER_CAPABILITY_SUPPORTED_EVIDENCE_V3[protocol].has(evidence)) {
-          throw providerProfileError();
-        }
-      } else if (compatibility !== null || !PROVIDER_CAPABILITY_UNSUPPORTED_EVIDENCE_V3.has(evidence)) {
-        throw providerProfileError();
-      }
-    }
-    return {
-      status: value.status,
-      apiRoot,
-      auth,
-      compatibility,
-      agentFeatures,
-      checkedAt,
-      validUntil,
-      requestProfileRevision,
-      modelListRevision,
-      evidence
-    };
-  }
-  function normalizeModelCapabilityV3(value, provider) {
-    requireExactObject(value, PROVIDER_MODEL_CAPABILITY_KEYS_V3);
-    return {
-      modelId: requireText(value.modelId),
-      responses: normalizeProtocolCapabilityV3(value.responses, "responses", provider),
-      chat: normalizeProtocolCapabilityV3(value.chat, "chat", provider),
-      messages: normalizeProtocolCapabilityV3(value.messages, "messages", provider)
-    };
-  }
-  function normalizeRouteOverrideV3(value) {
-    requireExactObject(value, PROVIDER_ROUTE_OVERRIDE_KEYS_V3);
-    if (!PROVIDER_CLIENTS_V3.has(value.client) || !PROVIDER_WIRE_PROTOCOLS_V3.has(value.protocol)) {
-      throw providerProfileError();
-    }
-    const updatedAt = requireTimestamp(value.updatedAt);
-    if (updatedAt <= 0) throw providerProfileError();
-    return {
-      client: value.client,
-      modelId: requireText(value.modelId),
-      protocol: value.protocol,
-      updatedAt
-    };
-  }
-  function normalizeProviderEntryV3(input) {
-    requireExactObject(input, PROVIDER_ENTRY_KEYS_V3);
-    const id = requireText(input.id);
-    const credentialId = normalizeCredentialId(input.credentialId);
-    const baseUrl = validateProviderBaseUrl(requireText(input.baseUrl), {
-      allowInsecureHttp: input.allowInsecureHttp,
-      requireTransportApproval: true
-    });
-    if (typeof input.allowInsecureHttp !== "boolean") throw providerProfileError();
-    if (!Array.isArray(input.headers) || !Array.isArray(input.modelCapabilities) || !Array.isArray(input.routeOverrides)) {
-      throw providerProfileError();
-    }
-    if (input.probePreference !== null && !PROVIDER_WIRE_PROTOCOLS_V3.has(input.probePreference)) {
-      throw providerProfileError();
-    }
-    const credential = normalizeCredentialV3(input.credential, credentialId);
-    const probeAuthOverride = normalizeProbeAuthOverrideV3(input.probeAuthOverride, credentialId);
-    const provider = {
-      id,
-      credentialId,
-      name: requireText(input.name),
-      baseUrl,
-      allowInsecureHttp: input.allowInsecureHttp,
-      requestProfileRevision: requireRevision(input.requestProfileRevision),
-      credential,
-      probeAuthOverride,
-      headers: input.headers.map((header) => normalizeExtraHeader(header, credentialId)),
-      probePreference: input.probePreference
-    };
-    const modelList = normalizeModelListV3(input.modelList, provider);
-    const modelCapabilities = input.modelCapabilities.map((entry) => normalizeModelCapabilityV3(entry, provider));
-    const modelIds = /* @__PURE__ */ new Set();
-    for (const entry of modelCapabilities) {
-      if (modelIds.has(entry.modelId)) throw providerProfileError();
-      modelIds.add(entry.modelId);
-    }
-    modelCapabilities.sort((left, right) => left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
-    const routeOverrides = input.routeOverrides.map(normalizeRouteOverrideV3);
-    const overrideKeys = /* @__PURE__ */ new Set();
-    for (const entry of routeOverrides) {
-      const key = `${entry.client}\0${entry.modelId}`;
-      if (overrideKeys.has(key)) throw providerProfileError();
-      overrideKeys.add(key);
-    }
-    routeOverrides.sort((left, right) => left.client < right.client ? -1 : left.client > right.client ? 1 : left.modelId < right.modelId ? -1 : left.modelId > right.modelId ? 1 : 0);
-    return {
-      ...provider,
-      modelList,
-      modelCapabilities,
-      routeOverrides
-    };
-  }
-  function normalizeProviderId(value) {
-    const raw = String(value || "").trim() || DEFAULT_CODEX_PROVIDER_ID;
-    const safe = raw.replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || DEFAULT_CODEX_PROVIDER_ID;
-    return RESERVED_CODEX_PROVIDER_IDS.has(safe) ? safe + "-custom" : safe;
-  }
-  function tomlString(value) {
-    return JSON.stringify(String(value || ""));
-  }
-  function normalizeCodexRuntimeConfig(runtimeConfig) {
-    if (!runtimeConfig || !runtimeConfig.baseUrl) return null;
-    if (runtimeConfig.chatCompatibility !== void 0 && typeof runtimeConfig.chatCompatibility !== "boolean") {
-      throw providerProfileError();
-    }
-    if (!Array.isArray(runtimeConfig.envHeaders) || runtimeConfig.envHeaders.length > 64) {
-      throw providerProfileError();
-    }
-    const names = /* @__PURE__ */ new Set();
-    const envNames = /* @__PURE__ */ new Set();
-    const apiKey = runtimeConfig.apiKey === void 0 ? void 0 : requireText(runtimeConfig.apiKey);
-    const envHeaders = runtimeConfig.envHeaders.map((entry) => {
-      if (!entry || typeof entry !== "object" || Array.isArray(entry)) throw providerProfileError();
-      const name = normalizeHeaderName(entry.name);
-      const envName = requireText(entry.envName);
-      if (!/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(envName)) throw providerProfileError();
-      const lower = name.toLowerCase();
-      if (names.has(lower) || envNames.has(envName)) throw providerProfileError();
-      names.add(lower);
-      envNames.add(envName);
-      return {
-        name,
-        envName,
-        value: entry.value === void 0 ? void 0 : String(entry.value)
-      };
-    });
-    return {
-      providerId: normalizeProviderId(runtimeConfig.providerId),
-      baseUrl: normalizeBaseUrl(requireText(runtimeConfig.baseUrl)),
-      apiKey,
-      envHeaders,
-      chatCompatibility: runtimeConfig.chatCompatibility === true
-    };
-  }
-  function codexAppServerArgs(runtimeConfig = null) {
-    const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
-    if (!runtime) return ["app-server"];
-    const provider = runtime.providerId;
-    const args = [
-      "app-server",
-      "-c",
-      `model_provider=${tomlString(provider)}`,
-      "-c",
-      `model_providers.${provider}.name="AE MCP Custom"`,
-      "-c",
-      `model_providers.${provider}.base_url=${tomlString(runtime.baseUrl)}`
-    ];
-    if (runtime.apiKey !== void 0) {
-      args.push("-c", `model_providers.${provider}.env_key=${tomlString(CODEX_PROVIDER_API_KEY_ENV)}`);
-    }
-    if (runtime.envHeaders.length > 0) {
-      const table = runtime.envHeaders.map((header) => `${tomlString(header.name)} = ${tomlString(header.envName)}`).join(", ");
-      args.push("-c", `model_providers.${provider}.env_http_headers={ ${table} }`);
-    }
-    args.push(
-      "-c",
-      `model_providers.${provider}.wire_api="responses"`,
-      "-c",
-      `model_providers.${provider}.requires_openai_auth=false`,
-      "-c",
-      "features.multi_agent=false",
-      "-c",
-      "features.multi_agent_v2=false",
-      "-c",
-      "features.multi_agent_v2.non_code_mode_only=false"
-    );
-    if (runtime.chatCompatibility) {
-      args.push(
-        "-c",
-        'web_search="disabled"',
-        "-c",
-        "features.apps=false",
-        "-c",
-        "features.plugins=false",
-        "-c",
-        "features.remote_plugin=false"
-      );
-    }
-    return args;
-  }
-  function codexSpawnEnv(runtimeConfig = null, baseEnv = {}) {
-    const runtime = normalizeCodexRuntimeConfig(runtimeConfig);
-    const env = { ...baseEnv || {} };
-    if (!runtime) return env;
-    delete env[CODEX_PROVIDER_API_KEY_ENV];
-    for (const key of Object.keys(env)) {
-      if (/^AE_MCP_PROVIDER_HEADER_[0-9]{2}$/.test(key)) delete env[key];
-    }
-    for (const header of runtime.envHeaders) {
-      if (header.value === void 0) throw providerProfileError();
-      env[header.envName] = header.value;
-    }
-    if (runtime.apiKey !== void 0) env[CODEX_PROVIDER_API_KEY_ENV] = runtime.apiKey;
-    return env;
-  }
-
-  // src/lib/providerRouteSelection.js
-  var CLIENT_PROTOCOLS = Object.freeze({
-    codex: "responses",
-    "claude-code": "messages"
-  });
-  var AUTO_PROTOCOLS = Object.freeze({
-    codex: Object.freeze(["responses", "chat", "messages"]),
-    "claude-code": Object.freeze(["messages", "responses", "chat"])
-  });
-  var FEATURES = /* @__PURE__ */ new Set(["generate", "compact", "countTokens"]);
-  var AGENT_FEATURE_KEYS = Object.freeze([
-    "compact",
-    "continuation",
-    "countTokens",
-    "namespaceTools",
-    "reasoningReplay",
-    "stream",
-    "terminal",
-    "tools"
-  ]);
-  var GENERATE_AGENT_FEATURES = Object.freeze(["stream", "terminal", "tools"]);
-  var FEATURE_CLIENTS = Object.freeze({
-    compact: "codex",
-    countTokens: "claude-code"
-  });
-  function unknownFeatures() {
-    return {
-      generate: "unknown",
-      compact: "unknown",
-      continuation: "unknown",
-      countTokens: "unknown",
-      namespaceTools: "unknown",
-      reasoningReplay: "unknown",
-      stream: "unknown",
-      terminal: "unknown",
-      tools: "unknown"
-    };
-  }
-  function capabilityFeatures(capability) {
-    const features = unknownFeatures();
-    if (!capability) return features;
-    features.generate = capability.status;
-    for (const key of AGENT_FEATURE_KEYS) features[key] = capability.agentFeatures[key];
-    return features;
-  }
-  function routeResult({
-    ok = false,
-    upstreamProtocol = null,
-    clientProtocol = null,
-    conversion = null,
-    capability = null,
-    reasonCode
-  } = {}) {
-    return {
-      ok,
-      upstreamProtocol,
-      clientProtocol,
-      conversion,
-      apiRoot: ok ? capability.apiRoot : null,
-      auth: ok && capability.auth ? { ...capability.auth } : null,
-      compatibility: ok && capability.compatibility ? { ...capability.compatibility } : null,
-      features: capabilityFeatures(capability),
-      reasonCode
-    };
-  }
-  function currentTime(now) {
-    if (now === void 0) return Date.now();
-    const value = typeof now === "function" ? now() : now;
-    if (!Number.isFinite(value) || value < 0) throw new TypeError("now must resolve to a timestamp");
-    return value;
-  }
-  function capabilityKnowledge(provider, model, protocol, now) {
-    const capability = (model == null ? void 0 : model[protocol]) || null;
-    if (!capability || capability.status === "unknown") {
-      return { state: "unknown", capability };
-    }
-    if (capability.requestProfileRevision !== provider.requestProfileRevision || capability.modelListRevision !== provider.modelList.revision || capability.checkedAt > now || capability.validUntil !== null && capability.validUntil < now) {
-      return { state: "stale", capability };
-    }
-    return { state: "current", capability };
-  }
-  function evaluateCandidate(provider, model, protocol, feature, now, requireAgentReady) {
-    const knowledge = capabilityKnowledge(provider, model, protocol, now);
-    if (knowledge.state !== "current") return { outcome: "needs-probe", ...knowledge };
-    const { capability } = knowledge;
-    if (capability.status === "unsupported") return { outcome: "unavailable", ...knowledge };
-    const required = feature === "generate" ? requireAgentReady ? GENERATE_AGENT_FEATURES : [] : [feature];
-    const statuses = required.map((name) => capability.agentFeatures[name]);
-    if (statuses.includes("unsupported")) return { outcome: "unavailable", ...knowledge };
-    if (statuses.includes("unknown")) return { outcome: "needs-probe", ...knowledge };
-    return { outcome: "selected", ...knowledge };
-  }
-  function conversionFor(clientProtocol, upstreamProtocol) {
-    return clientProtocol === upstreamProtocol ? "native" : `${clientProtocol}-to-${upstreamProtocol}`;
-  }
-  function successfulRoute(clientProtocol, upstreamProtocol, capability, reasonCode) {
-    return routeResult({
-      ok: true,
-      upstreamProtocol,
-      clientProtocol,
-      conversion: conversionFor(clientProtocol, upstreamProtocol),
-      capability,
-      reasonCode
-    });
-  }
-  function selectProviderRoute(provider, {
-    client,
-    modelId,
-    feature = "generate",
-    now,
-    requireAgentReady = true
-  } = {}) {
-    const clientProtocol = CLIENT_PROTOCOLS[client] || null;
-    const selectedModelId = typeof modelId === "string" ? modelId.trim() : "";
-    if (!clientProtocol || !selectedModelId || !FEATURES.has(feature) || typeof requireAgentReady !== "boolean") {
-      return routeResult({ clientProtocol, reasonCode: "invalid-request" });
-    }
-    let timestamp;
+  function isCoreAuthorizedDynamicCall(name, args) {
+    if (!isPlainObject(args)) return false;
+    const normalized = normalizeMcpToolName(name);
     try {
-      timestamp = currentTime(now);
-    } catch {
-      return routeResult({ clientProtocol, reasonCode: "invalid-request" });
-    }
-    let normalized;
-    try {
-      normalized = normalizeProviderEntryV3(provider);
-    } catch {
-      return routeResult({ clientProtocol, reasonCode: "invalid-provider" });
-    }
-    const model = normalized.modelCapabilities.find((entry) => entry.modelId === selectedModelId);
-    const override = normalized.routeOverrides.find((entry) => entry.client === client && entry.modelId === selectedModelId);
-    if (feature !== "generate" && FEATURE_CLIENTS[feature] !== client) {
-      return routeResult({ clientProtocol, reasonCode: "unavailable" });
-    }
-    if (override) {
-      if (feature !== "generate" && override.protocol !== clientProtocol) {
-        return routeResult({
-          upstreamProtocol: override.protocol,
-          clientProtocol,
-          capability: (model == null ? void 0 : model[override.protocol]) || null,
-          reasonCode: "unavailable"
-        });
-      }
-      const evaluated = evaluateCandidate(
-        normalized,
-        model,
-        override.protocol,
-        feature,
-        timestamp,
-        requireAgentReady
-      );
-      if (evaluated.outcome === "selected") {
-        return successfulRoute(
-          clientProtocol,
-          override.protocol,
-          evaluated.capability,
-          "override-selected"
-        );
-      }
-      return routeResult({
-        upstreamProtocol: override.protocol,
-        clientProtocol,
-        capability: evaluated.capability,
-        reasonCode: evaluated.outcome
-      });
-    }
-    const protocols = feature === "generate" ? AUTO_PROTOCOLS[client] : [clientProtocol];
-    let pendingProbe = null;
-    for (const protocol of protocols) {
-      const evaluated = evaluateCandidate(
-        normalized,
-        model,
-        protocol,
-        feature,
-        timestamp,
-        requireAgentReady
-      );
-      if (evaluated.outcome === "selected") {
-        return successfulRoute(clientProtocol, protocol, evaluated.capability, "selected");
-      }
-      if (evaluated.outcome === "needs-probe" && !pendingProbe) {
-        pendingProbe = { protocol, capability: evaluated.capability };
-      }
-    }
-    if (pendingProbe) {
-      return routeResult({
-        upstreamProtocol: pendingProbe.protocol,
-        clientProtocol,
-        capability: pendingProbe.capability,
-        reasonCode: "needs-probe"
-      });
-    }
-    return routeResult({ clientProtocol, reasonCode: "unavailable" });
-  }
-  function providerRouteLabel(route, lang = "zh") {
-    if (!(route == null ? void 0 : route.ok) || !["responses", "chat", "messages"].includes(route.upstreamProtocol)) {
-      return null;
-    }
-    const direct = route.conversion === "native";
-    const names = lang === "en" ? { responses: "Responses", chat: "Chat", messages: "Messages" } : { responses: "Responses", chat: "Chat", messages: "Messages" };
-    const suffix = lang === "en" ? direct ? "direct" : "conversion" : direct ? "\u76F4\u8FDE" : "\u8F6C\u6362";
-    return `${names[route.upstreamProtocol]} ${suffix}`;
-  }
-
-  // src/cep/universalProviderRoute.js
-  init_cep_runtime_inject();
-
-  // src/lib/providerMessagesCodec.js
-  init_cep_runtime_inject();
-  var MESSAGE_BODY_FIELDS = /* @__PURE__ */ new Set([
-    "model",
-    "max_tokens",
-    "messages",
-    "system",
-    "stream",
-    "tools",
-    "tool_choice",
-    "temperature",
-    "top_p",
-    "top_k",
-    "stop_sequences",
-    "metadata",
-    "thinking",
-    "output_config",
-    "context_management"
-  ]);
-  var MESSAGE_FIELDS = /* @__PURE__ */ new Set(["role", "content"]);
-  var TEXT_BLOCK_FIELDS = /* @__PURE__ */ new Set(["type", "text", "cache_control", "citations"]);
-  var IMAGE_BLOCK_FIELDS = /* @__PURE__ */ new Set(["type", "source", "cache_control"]);
-  var IMAGE_SOURCE_BASE64_FIELDS = /* @__PURE__ */ new Set(["type", "media_type", "data"]);
-  var IMAGE_SOURCE_URL_FIELDS = /* @__PURE__ */ new Set(["type", "url"]);
-  var TOOL_USE_FIELDS = /* @__PURE__ */ new Set(["type", "id", "name", "input", "cache_control", "caller"]);
-  var TOOL_RESULT_FIELDS = /* @__PURE__ */ new Set(["type", "tool_use_id", "content", "is_error", "cache_control"]);
-  var THINKING_BLOCK_FIELDS = /* @__PURE__ */ new Set(["type", "thinking", "signature"]);
-  var REDACTED_THINKING_FIELDS = /* @__PURE__ */ new Set(["type", "data"]);
-  var CACHE_CONTROL_FIELDS = /* @__PURE__ */ new Set(["type", "ttl"]);
-  var TOOL_FIELDS = /* @__PURE__ */ new Set(["name", "description", "input_schema", "strict", "type", "cache_control"]);
-  var TOOL_CHOICE_AUTO_FIELDS = /* @__PURE__ */ new Set(["type", "disable_parallel_tool_use"]);
-  var TOOL_CHOICE_TOOL_FIELDS = /* @__PURE__ */ new Set(["type", "name", "disable_parallel_tool_use"]);
-  var CONTEXT_MANAGEMENT_FIELDS = /* @__PURE__ */ new Set(["edits"]);
-  var CLEAR_THINKING_FIELDS = /* @__PURE__ */ new Set(["type", "keep"]);
-  var METADATA_FIELDS = /* @__PURE__ */ new Set(["user_id"]);
-  var OUTPUT_CONFIG_FIELDS = /* @__PURE__ */ new Set(["effort"]);
-  var THINKING_ADAPTIVE_FIELDS = /* @__PURE__ */ new Set(["type", "display"]);
-  var THINKING_DISABLED_FIELDS = /* @__PURE__ */ new Set(["type"]);
-  var RESPONSES_BODY_FIELDS = /* @__PURE__ */ new Set([
-    "model",
-    "instructions",
-    "input",
-    "max_output_tokens",
-    "temperature",
-    "top_p",
-    "tools",
-    "tool_choice",
-    "parallel_tool_calls",
-    "stream",
-    "reasoning",
-    "include",
-    "store",
-    "prompt_cache_key",
-    "client_metadata"
-  ]);
-  var RESPONSES_MESSAGE_FIELDS = /* @__PURE__ */ new Set(["type", "id", "status", "role", "content"]);
-  var RESPONSES_TEXT_PART_FIELDS = /* @__PURE__ */ new Set(["type", "text"]);
-  var RESPONSES_IMAGE_PART_FIELDS = /* @__PURE__ */ new Set(["type", "image_url", "file_id", "detail"]);
-  var RESPONSES_FUNCTION_CALL_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "name", "arguments", "status"]);
-  var RESPONSES_FUNCTION_OUTPUT_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "output", "status"]);
-  var RESPONSES_REASONING_FIELDS = /* @__PURE__ */ new Set(["type", "id", "summary", "encrypted_content", "status"]);
-  var RESPONSES_TOOL_FIELDS = /* @__PURE__ */ new Set(["type", "name", "description", "parameters", "strict"]);
-  var RESPONSES_NAMESPACE_TOOL_FIELDS = /* @__PURE__ */ new Set(["type", "name", "description", "tools"]);
-  var RESPONSES_TOOL_CHOICE_FIELDS = /* @__PURE__ */ new Set(["type", "name"]);
-  var RESPONSES_REASONING_CONFIG_FIELDS = /* @__PURE__ */ new Set(["effort", "summary"]);
-  var CHAT_COMPLETION_FIELDS = /* @__PURE__ */ new Set([
-    "id",
-    "object",
-    "created",
-    "model",
-    "choices",
-    "usage",
-    "system_fingerprint",
-    "service_tier"
-  ]);
-  var CHAT_CHOICE_FIELDS = /* @__PURE__ */ new Set(["index", "message", "finish_reason", "logprobs"]);
-  var CHAT_MESSAGE_FIELDS = /* @__PURE__ */ new Set(["role", "content", "tool_calls", "refusal", "reasoning", "reasoning_content"]);
-  var CHAT_TOOL_CALL_FIELDS = /* @__PURE__ */ new Set(["id", "type", "function"]);
-  var CHAT_FUNCTION_FIELDS = /* @__PURE__ */ new Set(["name", "arguments"]);
-  var CHAT_USAGE_FIELDS = /* @__PURE__ */ new Set([
-    "prompt_tokens",
-    "completion_tokens",
-    "total_tokens",
-    "prompt_tokens_details",
-    "completion_tokens_details",
-    "input_tokens",
-    "output_tokens",
-    "input_tokens_details",
-    "claude_cache_creation_5_m_tokens",
-    "claude_cache_creation_1_h_tokens"
-  ]);
-  var CHAT_PROMPT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["cached_tokens", "text_tokens", "audio_tokens", "image_tokens"]);
-  var CHAT_COMPLETION_DETAILS_FIELDS = /* @__PURE__ */ new Set([
-    "reasoning_tokens",
-    "text_tokens",
-    "audio_tokens",
-    "image_tokens",
-    "accepted_prediction_tokens",
-    "rejected_prediction_tokens"
-  ]);
-  var CHAT_INPUT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["cached_tokens"]);
-  var RESPONSE_FIELDS = /* @__PURE__ */ new Set([
-    "id",
-    "object",
-    "status",
-    "model",
-    "output",
-    "usage",
-    "incomplete_details",
-    "error",
-    "created_at",
-    "completed_at",
-    "instructions",
-    "metadata",
-    "parallel_tool_calls",
-    "temperature",
-    "tool_choice",
-    "tools",
-    "top_p",
-    "max_output_tokens",
-    "previous_response_id",
-    "reasoning",
-    "service_tier",
-    "store",
-    "text",
-    "truncation",
-    "user"
-  ]);
-  var RESPONSE_MESSAGE_FIELDS = /* @__PURE__ */ new Set(["id", "type", "status", "role", "content"]);
-  var RESPONSE_OUTPUT_TEXT_FIELDS = /* @__PURE__ */ new Set(["type", "text", "annotations", "logprobs"]);
-  var RESPONSE_REFUSAL_FIELDS = /* @__PURE__ */ new Set(["type", "refusal"]);
-  var RESPONSE_REASONING_ITEM_FIELDS = /* @__PURE__ */ new Set(["type", "id", "summary", "encrypted_content", "status"]);
-  var RESPONSE_SUMMARY_FIELDS = /* @__PURE__ */ new Set(["type", "text"]);
-  var RESPONSE_FUNCTION_CALL_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "name", "arguments", "status"]);
-  var RESPONSE_USAGE_FIELDS = /* @__PURE__ */ new Set([
-    "input_tokens",
-    "output_tokens",
-    "total_tokens",
-    "input_tokens_details",
-    "output_tokens_details"
-  ]);
-  var RESPONSE_INPUT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["cached_tokens"]);
-  var RESPONSE_OUTPUT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["reasoning_tokens"]);
-  var RESPONSE_INCOMPLETE_FIELDS = /* @__PURE__ */ new Set(["reason"]);
-  var ANTHROPIC_RESPONSE_FIELDS = /* @__PURE__ */ new Set([
-    "id",
-    "type",
-    "role",
-    "model",
-    "content",
-    "stop_reason",
-    "stop_sequence",
-    "usage",
-    "container",
-    "context_management",
-    "diagnostics",
-    "stop_details"
-  ]);
-  var ANTHROPIC_TEXT_RESPONSE_FIELDS = /* @__PURE__ */ new Set(["type", "text", "citations"]);
-  var ANTHROPIC_TOOL_RESPONSE_FIELDS = /* @__PURE__ */ new Set(["type", "id", "name", "input", "caller"]);
-  var ANTHROPIC_USAGE_FIELDS = /* @__PURE__ */ new Set([
-    "input_tokens",
-    "output_tokens",
-    "cache_creation_input_tokens",
-    "cache_read_input_tokens",
-    "cache_creation",
-    "inference_geo",
-    "iterations",
-    "output_tokens_details",
-    "server_tool_use",
-    "service_tier",
-    "speed"
-  ]);
-  var ANTHROPIC_CACHE_CREATION_FIELDS = /* @__PURE__ */ new Set([
-    "ephemeral_1h_input_tokens",
-    "ephemeral_5m_input_tokens"
-  ]);
-  var ANTHROPIC_OUTPUT_DETAILS_FIELDS = /* @__PURE__ */ new Set(["thinking_tokens"]);
-  var FUNCTION_NAME = /^[A-Za-z0-9_-]{1,128}$/;
-  var IMAGE_MEDIA_TYPES = /* @__PURE__ */ new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
-  var DEFAULT_MESSAGES_MAX_TOKENS = 32e3;
-  var ProviderMessagesCompatibilityError = class extends Error {
-    constructor({ status, code, param, message }) {
-      super(message);
-      this.name = "ProviderMessagesCompatibilityError";
-      this.status = status;
-      this.code = code;
-      this.param = param;
-    }
-  };
-  function compatibilityError(status, code, param, label) {
-    return new ProviderMessagesCompatibilityError({
-      status,
-      code,
-      param,
-      message: `${label}: ${param || "body"}`
-    });
-  }
-  function invalidMessages(param) {
-    return compatibilityError(400, "invalid_messages_field", param, "Invalid Messages field");
-  }
-  function unsupportedMessages(param) {
-    return compatibilityError(501, "unsupported_messages_field", param, "Unsupported Messages field");
-  }
-  function invalidResponses(param) {
-    return compatibilityError(400, "invalid_responses_field", param, "Invalid Responses field");
-  }
-  function unsupportedResponses(param) {
-    return compatibilityError(501, "unsupported_responses_field", param, "Unsupported Responses field");
-  }
-  function invalidUpstream(protocol, param) {
-    return compatibilityError(502, `invalid_${protocol}_response`, param, `Invalid ${protocol} response field`);
-  }
-  function unsupportedUpstream(protocol, param) {
-    return compatibilityError(
-      501,
-      `unsupported_${protocol}_response_field`,
-      param,
-      `Unsupported ${protocol} response field`
-    );
-  }
-  function isObject(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
-  }
-  function unknownKey(value, allowed) {
-    return Object.keys(value).find((key) => !allowed.has(key)) || null;
-  }
-  function exactRequest(value, allowed, path, invalid, unsupported) {
-    if (!isObject(value)) throw invalid(path);
-    const key = unknownKey(value, allowed);
-    if (key !== null) throw unsupported(path ? `${path}.${key}` : key);
-    return value;
-  }
-  function exactUpstream(value, allowed, protocol, path) {
-    if (!isObject(value)) throw invalidUpstream(protocol, path);
-    const key = unknownKey(value, allowed);
-    if (key !== null) throw invalidUpstream(protocol, path ? `${path}.${key}` : key);
-    return value;
-  }
-  function nonemptyString(value, path, invalid) {
-    if (typeof value !== "string" || value.length === 0) throw invalid(path);
-    return value;
-  }
-  function finiteNumber(value, path, invalid, predicate = () => true) {
-    if (typeof value !== "number" || !Number.isFinite(value) || !predicate(value)) throw invalid(path);
-    return value;
-  }
-  function cloneJson2(value, path, invalid, seen = /* @__PURE__ */ new WeakSet()) {
-    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) throw invalid(path);
-      return value;
-    }
-    if (!value || typeof value !== "object" || seen.has(value)) throw invalid(path);
-    seen.add(value);
-    let result;
-    if (Array.isArray(value)) {
-      result = value.map((item, index) => cloneJson2(item, `${path}[${index}]`, invalid, seen));
-    } else if (isObject(value)) {
-      result = {};
-      for (const [key, item] of Object.entries(value)) {
-        result[key] = cloneJson2(item, path ? `${path}.${key}` : key, invalid, seen);
-      }
-    } else {
-      throw invalid(path);
-    }
-    seen.delete(value);
-    return result;
-  }
-  function collector() {
-    const paths = /* @__PURE__ */ new Set();
-    return {
-      add(path) {
-        paths.add(path);
-      },
-      values() {
-        return Array.from(paths).sort();
-      }
-    };
-  }
-  function consumeCacheControl(value, path, consumed, invalid = invalidMessages, unsupported = unsupportedMessages) {
-    if (value === void 0) return;
-    if (value === null) {
-      consumed.add(path);
-      return;
-    }
-    const cache = exactRequest(value, CACHE_CONTROL_FIELDS, path, invalid, unsupported);
-    if (cache.type !== "ephemeral") throw invalid(`${path}.type`);
-    if (cache.ttl !== void 0 && cache.ttl !== "5m" && cache.ttl !== "1h") {
-      throw invalid(`${path}.ttl`);
-    }
-    consumed.add(path);
-  }
-  function validateFunctionName(value, path, invalid) {
-    const name = nonemptyString(value, path, invalid);
-    if (!FUNCTION_NAME.test(name)) throw invalid(path);
-    return name;
-  }
-  function parseContextManagement(value, consumed) {
-    if (value === void 0) return;
-    const context = exactRequest(
-      value,
-      CONTEXT_MANAGEMENT_FIELDS,
-      "context_management",
-      invalidMessages,
-      unsupportedMessages
-    );
-    if (!Array.isArray(context.edits) || context.edits.length !== 1) {
-      throw unsupportedMessages("context_management.edits");
-    }
-    const edit = exactRequest(
-      context.edits[0],
-      CLEAR_THINKING_FIELDS,
-      "context_management.edits[0]",
-      invalidMessages,
-      unsupportedMessages
-    );
-    if (typeof edit.type !== "string") throw invalidMessages("context_management.edits[0].type");
-    if (edit.type !== "clear_thinking_20251015") {
-      throw unsupportedMessages("context_management.edits[0].type");
-    }
-    if (edit.keep !== "all") throw unsupportedMessages("context_management.edits[0].keep");
-    consumed.add("context_management");
-  }
-  function parseMetadata(value, consumed) {
-    if (value === void 0) return;
-    const metadata = exactRequest(value, METADATA_FIELDS, "metadata", invalidMessages, unsupportedMessages);
-    if (metadata.user_id !== void 0 && metadata.user_id !== null && typeof metadata.user_id !== "string") {
-      throw invalidMessages("metadata.user_id");
-    }
-    consumed.add("metadata");
-  }
-  function toOpenAiEffort(value, path, invalid) {
-    if (!["low", "medium", "high", "xhigh", "max"].includes(value)) throw invalid(path);
-    return value === "max" ? "xhigh" : value;
-  }
-  function toMessagesEffort(value, path) {
-    if (!["none", "minimal", "low", "medium", "high", "xhigh"].includes(value)) {
-      throw invalidResponses(path);
-    }
-    if (value === "none") return null;
-    if (value === "minimal") return "low";
-    return value === "xhigh" ? "max" : value;
-  }
-  function parseMessagesReasoning(request) {
-    let enabled = null;
-    let effort = null;
-    if (request.thinking !== void 0) {
-      if (!isObject(request.thinking)) throw invalidMessages("thinking");
-      if (request.thinking.type === "adaptive") {
-        const thinking = exactRequest(
-          request.thinking,
-          THINKING_ADAPTIVE_FIELDS,
-          "thinking",
-          invalidMessages,
-          unsupportedMessages
-        );
-        if (thinking.display !== void 0 && thinking.display !== null && thinking.display !== "summarized") {
-          throw unsupportedMessages("thinking.display");
-        }
-        enabled = true;
-      } else if (request.thinking.type === "disabled") {
-        exactRequest(
-          request.thinking,
-          THINKING_DISABLED_FIELDS,
-          "thinking",
-          invalidMessages,
-          unsupportedMessages
-        );
-        enabled = false;
-      } else if (typeof request.thinking.type !== "string") {
-        throw invalidMessages("thinking.type");
-      } else {
-        throw unsupportedMessages("thinking.type");
-      }
-    }
-    if (request.output_config !== void 0) {
-      const config = exactRequest(
-        request.output_config,
-        OUTPUT_CONFIG_FIELDS,
-        "output_config",
-        invalidMessages,
-        unsupportedMessages
-      );
-      if (config.effort !== void 0 && config.effort !== null) {
-        effort = toOpenAiEffort(config.effort, "output_config.effort", invalidMessages);
-        if (enabled === false) throw unsupportedMessages("output_config.effort");
-        enabled = true;
-      }
-    }
-    if (enabled === null) return null;
-    return { enabled, effort: effort || (enabled ? "high" : "none") };
-  }
-  function parseAnthropicImage(block, path, consumed) {
-    const image = exactRequest(block, IMAGE_BLOCK_FIELDS, path, invalidMessages, unsupportedMessages);
-    if (image.type !== "image") throw invalidMessages(`${path}.type`);
-    consumeCacheControl(image.cache_control, `${path}.cache_control`, consumed);
-    if (!isObject(image.source)) throw invalidMessages(`${path}.source`);
-    if (image.source.type === "base64") {
-      const source = exactRequest(
-        image.source,
-        IMAGE_SOURCE_BASE64_FIELDS,
-        `${path}.source`,
-        invalidMessages,
-        unsupportedMessages
-      );
-      if (!IMAGE_MEDIA_TYPES.has(source.media_type)) throw invalidMessages(`${path}.source.media_type`);
-      const data2 = nonemptyString(source.data, `${path}.source.data`, invalidMessages);
-      return { kind: "image", url: `data:${source.media_type};base64,${data2}` };
-    }
-    if (image.source.type === "url") {
-      const source = exactRequest(
-        image.source,
-        IMAGE_SOURCE_URL_FIELDS,
-        `${path}.source`,
-        invalidMessages,
-        unsupportedMessages
-      );
-      return { kind: "image", url: nonemptyString(source.url, `${path}.source.url`, invalidMessages) };
-    }
-    if (typeof image.source.type !== "string") throw invalidMessages(`${path}.source.type`);
-    throw unsupportedMessages(`${path}.source.type`);
-  }
-  function parseToolResultContent(value, path, consumed) {
-    if (value === void 0) return "";
-    if (typeof value === "string") return value;
-    if (!Array.isArray(value)) throw invalidMessages(path);
-    return value.map((raw, index) => {
-      const itemPath = `${path}[${index}]`;
-      if (!isObject(raw)) throw invalidMessages(itemPath);
-      if (raw.type !== "text") throw unsupportedMessages(`${itemPath}.type`);
-      const block = exactRequest(raw, TEXT_BLOCK_FIELDS, itemPath, invalidMessages, unsupportedMessages);
-      consumeCacheControl(block.cache_control, `${itemPath}.cache_control`, consumed);
-      if (block.citations !== void 0 && block.citations !== null && block.citations.length !== 0) {
-        throw unsupportedMessages(`${itemPath}.citations`);
-      }
-      if (block.citations !== void 0) consumed.add(`${itemPath}.citations`);
-      if (typeof block.text !== "string") throw invalidMessages(`${itemPath}.text`);
-      return block.text;
-    }).join("");
-  }
-  function openReasoningBlock(block, path, sourceProtocol, openReasoning) {
-    let token;
-    let visibleThinking = null;
-    if (block.type === "thinking") {
-      const thinking = exactRequest(
-        block,
-        THINKING_BLOCK_FIELDS,
-        path,
-        invalidMessages,
-        unsupportedMessages
-      );
-      visibleThinking = nonemptyString(thinking.thinking, `${path}.thinking`, invalidMessages);
-      token = nonemptyString(thinking.signature, `${path}.signature`, invalidMessages);
-    } else {
-      const redacted = exactRequest(
-        block,
-        REDACTED_THINKING_FIELDS,
-        path,
-        invalidMessages,
-        unsupportedMessages
-      );
-      token = nonemptyString(redacted.data, `${path}.data`, invalidMessages);
-    }
-    if (typeof openReasoning !== "function") throw unsupportedMessages(`${path}.type`);
-    let opened;
-    try {
-      opened = openReasoning(token, { sourceProtocol });
-    } catch {
-      throw unsupportedMessages(`${path}.${block.type === "thinking" ? "signature" : "data"}`);
-    }
-    if (!isObject(opened) || opened.sourceProtocol !== sourceProtocol) {
-      throw unsupportedMessages(`${path}.type`);
-    }
-    if (sourceProtocol === "chat") {
-      if (typeof opened.item !== "string") throw unsupportedMessages(`${path}.type`);
-      if (visibleThinking !== null && visibleThinking !== opened.item) throw invalidMessages(`${path}.thinking`);
-      return { kind: "reasoning", value: opened.item };
-    }
-    if (!isObject(opened.item) || opened.item.type !== "reasoning") {
-      throw unsupportedMessages(`${path}.type`);
-    }
-    if (visibleThinking !== null) {
-      const summary = Array.isArray(opened.item.summary) ? opened.item.summary.filter((item) => isObject(item) && item.type === "summary_text" && typeof item.text === "string").map((item) => item.text).join("\n") : "";
-      if (summary !== visibleThinking) throw invalidMessages(`${path}.thinking`);
-    }
-    return { kind: "reasoning", value: cloneJson2(opened.item, path, invalidMessages) };
-  }
-  function parseMessageContent(content, path, role, sourceProtocol, openReasoning, consumed) {
-    if (typeof content === "string") return [{ kind: "text", text: content }];
-    if (!Array.isArray(content)) throw invalidMessages(path);
-    return content.map((rawBlock, index) => {
-      const blockPath = `${path}[${index}]`;
-      if (!isObject(rawBlock)) throw invalidMessages(blockPath);
-      if (rawBlock.type === "text") {
-        const block = exactRequest(rawBlock, TEXT_BLOCK_FIELDS, blockPath, invalidMessages, unsupportedMessages);
-        consumeCacheControl(block.cache_control, `${blockPath}.cache_control`, consumed);
-        if (block.citations !== void 0 && block.citations !== null && block.citations.length !== 0) {
-          throw unsupportedMessages(`${blockPath}.citations`);
-        }
-        if (block.citations !== void 0) consumed.add(`${blockPath}.citations`);
-        return { kind: "text", text: typeof block.text === "string" ? block.text : (() => {
-          throw invalidMessages(`${blockPath}.text`);
-        })() };
-      }
-      if (rawBlock.type === "image") {
-        if (role !== "user") throw unsupportedMessages(`${blockPath}.type`);
-        return parseAnthropicImage(rawBlock, blockPath, consumed);
-      }
-      if (rawBlock.type === "tool_use") {
-        if (role !== "assistant") throw invalidMessages(`${blockPath}.type`);
-        const block = exactRequest(rawBlock, TOOL_USE_FIELDS, blockPath, invalidMessages, unsupportedMessages);
-        if (block.caller !== void 0) throw unsupportedMessages(`${blockPath}.caller`);
-        consumeCacheControl(block.cache_control, `${blockPath}.cache_control`, consumed);
-        const id = nonemptyString(block.id, `${blockPath}.id`, invalidMessages);
-        const name = validateFunctionName(block.name, `${blockPath}.name`, invalidMessages);
-        const input = cloneJson2(block.input, `${blockPath}.input`, invalidMessages);
-        if (!isObject(input)) throw invalidMessages(`${blockPath}.input`);
-        return { kind: "tool_use", id, name, input };
-      }
-      if (rawBlock.type === "tool_result") {
-        if (role !== "user") throw invalidMessages(`${blockPath}.type`);
-        const block = exactRequest(rawBlock, TOOL_RESULT_FIELDS, blockPath, invalidMessages, unsupportedMessages);
-        consumeCacheControl(block.cache_control, `${blockPath}.cache_control`, consumed);
-        const id = nonemptyString(block.tool_use_id, `${blockPath}.tool_use_id`, invalidMessages);
-        if (block.is_error !== void 0 && typeof block.is_error !== "boolean") {
-          throw invalidMessages(`${blockPath}.is_error`);
-        }
-        if (block.is_error !== void 0) consumed.add(`${blockPath}.is_error`);
-        const output = parseToolResultContent(block.content, `${blockPath}.content`, consumed);
-        return {
-          kind: "tool_result",
-          id,
-          output: block.is_error === true ? `[tool_error]
-${output}` : output
-        };
-      }
-      if (rawBlock.type === "thinking" || rawBlock.type === "redacted_thinking") {
-        if (role !== "assistant") throw invalidMessages(`${blockPath}.type`);
-        return openReasoningBlock(rawBlock, blockPath, sourceProtocol, openReasoning);
-      }
-      if (typeof rawBlock.type !== "string") throw invalidMessages(`${blockPath}.type`);
-      throw unsupportedMessages(`${blockPath}.type`);
-    });
-  }
-  function parseSystem(value, consumed) {
-    if (value === void 0) return [];
-    if (typeof value === "string") return [{ role: "system", blocks: [{ kind: "text", text: value }] }];
-    if (!Array.isArray(value)) throw invalidMessages("system");
-    return value.map((raw, index) => {
-      const path = `system[${index}]`;
-      if (!isObject(raw)) throw invalidMessages(path);
-      if (raw.type !== "text") {
-        if (typeof raw.type !== "string") throw invalidMessages(`${path}.type`);
-        throw unsupportedMessages(`${path}.type`);
-      }
-      const block = exactRequest(raw, TEXT_BLOCK_FIELDS, path, invalidMessages, unsupportedMessages);
-      consumeCacheControl(block.cache_control, `${path}.cache_control`, consumed);
-      if (block.citations !== void 0 && block.citations !== null && block.citations.length !== 0) {
-        throw unsupportedMessages(`${path}.citations`);
-      }
-      if (block.citations !== void 0) consumed.add(`${path}.citations`);
-      if (typeof block.text !== "string") throw invalidMessages(`${path}.text`);
-      return {
-        role: "system",
-        blocks: [{ kind: "text", text: block.text }]
-      };
-    });
-  }
-  function parseMessages(value, sourceProtocol, openReasoning, consumed) {
-    if (!Array.isArray(value) || value.length === 0) throw invalidMessages("messages");
-    return value.map((raw, index) => {
-      const path = `messages[${index}]`;
-      const message = exactRequest(raw, MESSAGE_FIELDS, path, invalidMessages, unsupportedMessages);
-      if (!["user", "assistant", "system"].includes(message.role)) throw invalidMessages(`${path}.role`);
-      if (!Object.hasOwn(message, "content")) throw invalidMessages(`${path}.content`);
-      return {
-        role: message.role,
-        path,
-        blocks: parseMessageContent(
-          message.content,
-          `${path}.content`,
-          message.role,
-          sourceProtocol,
-          openReasoning,
-          consumed
-        )
-      };
-    });
-  }
-  function parseTools(value, consumed) {
-    if (value === void 0) return [];
-    if (!Array.isArray(value)) throw invalidMessages("tools");
-    const names = /* @__PURE__ */ new Set();
-    return value.map((raw, index) => {
-      const path = `tools[${index}]`;
-      const tool = exactRequest(raw, TOOL_FIELDS, path, invalidMessages, unsupportedMessages);
-      if (tool.type !== void 0 && tool.type !== null && tool.type !== "custom") {
-        throw unsupportedMessages(`${path}.type`);
-      }
-      const name = validateFunctionName(tool.name, `${path}.name`, invalidMessages);
-      if (names.has(name)) throw invalidMessages(`${path}.name`);
-      names.add(name);
-      const schema = cloneJson2(tool.input_schema, `${path}.input_schema`, invalidMessages);
-      if (!isObject(schema)) throw invalidMessages(`${path}.input_schema`);
-      if (tool.description !== void 0 && typeof tool.description !== "string") {
-        throw invalidMessages(`${path}.description`);
-      }
-      if (tool.strict !== void 0 && typeof tool.strict !== "boolean") throw invalidMessages(`${path}.strict`);
-      consumeCacheControl(tool.cache_control, `${path}.cache_control`, consumed);
-      return {
-        name,
-        description: tool.description,
-        parameters: schema,
-        strict: tool.strict
-      };
-    });
-  }
-  function parseToolChoice(value, toolNames) {
-    if (value === void 0) return { choice: void 0, parallel: void 0 };
-    if (!isObject(value)) throw invalidMessages("tool_choice");
-    let choice;
-    if (value.type === "auto" || value.type === "any") {
-      const selected = exactRequest(
-        value,
-        TOOL_CHOICE_AUTO_FIELDS,
-        "tool_choice",
-        invalidMessages,
-        unsupportedMessages
-      );
-      choice = value.type === "any" ? "required" : "auto";
-      if (selected.disable_parallel_tool_use !== void 0 && typeof selected.disable_parallel_tool_use !== "boolean") {
-        throw invalidMessages("tool_choice.disable_parallel_tool_use");
-      }
-      return {
-        choice,
-        parallel: selected.disable_parallel_tool_use === void 0 ? void 0 : !selected.disable_parallel_tool_use
-      };
-    }
-    if (value.type === "none") {
-      exactRequest(value, /* @__PURE__ */ new Set(["type"]), "tool_choice", invalidMessages, unsupportedMessages);
-      return { choice: "none", parallel: void 0 };
-    }
-    if (value.type === "tool") {
-      const selected = exactRequest(
-        value,
-        TOOL_CHOICE_TOOL_FIELDS,
-        "tool_choice",
-        invalidMessages,
-        unsupportedMessages
-      );
-      const name = validateFunctionName(selected.name, "tool_choice.name", invalidMessages);
-      if (!toolNames.has(name)) throw invalidMessages("tool_choice.name");
-      if (selected.disable_parallel_tool_use !== void 0 && typeof selected.disable_parallel_tool_use !== "boolean") {
-        throw invalidMessages("tool_choice.disable_parallel_tool_use");
-      }
-      return {
-        choice: { type: "function", name },
-        parallel: selected.disable_parallel_tool_use === void 0 ? void 0 : !selected.disable_parallel_tool_use
-      };
-    }
-    if (typeof value.type !== "string") throw invalidMessages("tool_choice.type");
-    throw unsupportedMessages("tool_choice.type");
-  }
-  function normalizeMessagesRequest(body, sourceProtocol, openReasoning) {
-    const consumed = collector();
-    const request = exactRequest(body, MESSAGE_BODY_FIELDS, "", invalidMessages, unsupportedMessages);
-    const model = nonemptyString(request.model, "model", invalidMessages);
-    const maxTokens = finiteNumber(
-      request.max_tokens,
-      "max_tokens",
-      invalidMessages,
-      (value) => Number.isInteger(value) && value > 0
-    );
-    if (request.stream !== void 0 && typeof request.stream !== "boolean") throw invalidMessages("stream");
-    if (request.temperature !== void 0) finiteNumber(request.temperature, "temperature", invalidMessages, (v) => v >= 0 && v <= 2);
-    if (request.top_p !== void 0) finiteNumber(request.top_p, "top_p", invalidMessages, (v) => v >= 0 && v <= 1);
-    if (request.top_k !== void 0) throw unsupportedMessages("top_k");
-    if (request.stop_sequences !== void 0) {
-      if (!Array.isArray(request.stop_sequences)) throw invalidMessages("stop_sequences");
-      request.stop_sequences.forEach((value, index) => nonemptyString(value, `stop_sequences[${index}]`, invalidMessages));
-    }
-    parseContextManagement(request.context_management, consumed);
-    parseMetadata(request.metadata, consumed);
-    const system = parseSystem(request.system, consumed);
-    const messages = parseMessages(request.messages, sourceProtocol, openReasoning, consumed);
-    const tools = parseTools(request.tools, consumed);
-    const toolChoice = parseToolChoice(request.tool_choice, new Set(tools.map((tool) => tool.name)));
-    if (request.tool_choice !== void 0 && tools.length === 0) throw invalidMessages("tool_choice");
-    return {
-      request,
-      model,
-      maxTokens,
-      system,
-      messages,
-      tools,
-      toolChoice,
-      reasoning: parseMessagesReasoning(request),
-      consumed
-    };
-  }
-  function chatContent(blocks) {
-    const contentBlocks = blocks.filter((block) => block.kind === "text" || block.kind === "image");
-    if (!contentBlocks.some((block) => block.kind === "image")) {
-      return contentBlocks.map((block) => block.text).join("");
-    }
-    return contentBlocks.map((block) => block.kind === "text" ? { type: "text", text: block.text } : { type: "image_url", image_url: { url: block.url } });
-  }
-  function responsesMessage(role, blocks) {
-    const parts = blocks.filter((block) => block.kind === "text" || block.kind === "image").map((block) => {
-      if (block.kind === "image") return { type: "input_image", image_url: block.url };
-      return { type: role === "assistant" ? "output_text" : "input_text", text: block.text };
-    });
-    return { type: "message", role, content: parts };
-  }
-  function assertToolResultOrder(entry) {
-    let sawOrdinary = false;
-    for (let index = 0; index < entry.blocks.length; index += 1) {
-      const block = entry.blocks[index];
-      if (block.kind === "tool_result" && sawOrdinary) {
-        throw unsupportedMessages(`${entry.path}.content[${index}].type`);
-      }
-      if (block.kind !== "tool_result") sawOrdinary = true;
-    }
-  }
-  function chatToolDefinition(tool) {
-    const fn = { name: tool.name, parameters: tool.parameters };
-    if (tool.description !== void 0) fn.description = tool.description;
-    if (tool.strict !== void 0) fn.strict = tool.strict;
-    return { type: "function", function: fn };
-  }
-  function responsesToolDefinition(tool) {
-    const result = { type: "function", name: tool.name, parameters: tool.parameters };
-    if (tool.description !== void 0) result.description = tool.description;
-    if (tool.strict !== void 0) result.strict = tool.strict;
-    return result;
-  }
-  function messagesBodyToChatBody(body, { openReasoning } = {}) {
-    const normalized = normalizeMessagesRequest(body, "chat", openReasoning);
-    const messages = [];
-    const knownCalls = /* @__PURE__ */ new Set();
-    for (const system of normalized.system) {
-      messages.push({ role: "system", content: chatContent(system.blocks) });
-    }
-    for (const entry of normalized.messages) {
-      if (entry.role === "system") {
-        if (entry.blocks.some((block) => block.kind !== "text")) throw unsupportedMessages(`${entry.path}.content`);
-        messages.push({ role: "system", content: chatContent(entry.blocks) });
-        continue;
-      }
-      if (entry.role === "assistant") {
-        const reasoning = entry.blocks.filter((block) => block.kind === "reasoning");
-        if (reasoning.length > 1) throw unsupportedMessages(`${entry.path}.content`);
-        const calls = entry.blocks.filter((block) => block.kind === "tool_use").map((block) => {
-          if (knownCalls.has(block.id)) throw invalidMessages(`${entry.path}.content`);
-          knownCalls.add(block.id);
-          return {
-            id: block.id,
-            type: "function",
-            function: { name: block.name, arguments: JSON.stringify(block.input) }
-          };
-        });
-        const unsupported = entry.blocks.find((block) => !["text", "reasoning", "tool_use"].includes(block.kind));
-        if (unsupported) throw unsupportedMessages(`${entry.path}.content`);
-        const chat2 = { role: "assistant", content: chatContent(entry.blocks) || null };
-        if (reasoning.length === 1) chat2.reasoning_content = reasoning[0].value;
-        if (calls.length) chat2.tool_calls = calls;
-        messages.push(chat2);
-        continue;
-      }
-      assertToolResultOrder(entry);
-      const results = entry.blocks.filter((block) => block.kind === "tool_result");
-      for (const result of results) {
-        if (!knownCalls.has(result.id)) throw invalidMessages(`${entry.path}.content`);
-        messages.push({ role: "tool", tool_call_id: result.id, content: result.output });
-      }
-      const ordinary = entry.blocks.filter((block) => block.kind !== "tool_result");
-      if (ordinary.length) messages.push({ role: "user", content: chatContent(ordinary) });
-    }
-    const chat = {
-      model: normalized.model,
-      messages,
-      max_tokens: normalized.maxTokens,
-      stream: normalized.request.stream === true
-    };
-    if (normalized.request.temperature !== void 0) chat.temperature = normalized.request.temperature;
-    if (normalized.request.top_p !== void 0) chat.top_p = normalized.request.top_p;
-    if (normalized.request.stop_sequences !== void 0 && normalized.request.stop_sequences.length) {
-      chat.stop = [...normalized.request.stop_sequences];
-    }
-    if (normalized.tools.length) chat.tools = normalized.tools.map(chatToolDefinition);
-    if (normalized.toolChoice.choice !== void 0) {
-      chat.tool_choice = isObject(normalized.toolChoice.choice) ? { type: "function", function: { name: normalized.toolChoice.choice.name } } : normalized.toolChoice.choice;
-    }
-    if (normalized.toolChoice.parallel !== void 0) chat.parallel_tool_calls = normalized.toolChoice.parallel;
-    if (normalized.reasoning) chat.reasoning_effort = normalized.reasoning.effort;
-    return { body: chat, consumed: normalized.consumed.values() };
-  }
-  function messagesBodyToResponsesBody(body, { openReasoning } = {}) {
-    const normalized = normalizeMessagesRequest(body, "responses", openReasoning);
-    if (normalized.request.stop_sequences !== void 0 && normalized.request.stop_sequences.length) {
-      throw unsupportedMessages("stop_sequences");
-    }
-    const input = [];
-    const knownCalls = /* @__PURE__ */ new Set();
-    for (const system of normalized.system) input.push(responsesMessage("system", system.blocks));
-    for (const entry of normalized.messages) {
-      if (entry.role === "system") {
-        if (entry.blocks.some((block) => block.kind !== "text")) throw unsupportedMessages(`${entry.path}.content`);
-        input.push(responsesMessage("system", entry.blocks));
-        continue;
-      }
-      if (entry.role === "assistant") {
-        let textBlocks = [];
-        const flushText = () => {
-          if (!textBlocks.length) return;
-          input.push(responsesMessage("assistant", textBlocks));
-          textBlocks = [];
-        };
-        for (const block of entry.blocks) {
-          if (block.kind === "text") {
-            textBlocks.push(block);
-          } else if (block.kind === "reasoning") {
-            flushText();
-            input.push(block.value);
-          } else if (block.kind === "tool_use") {
-            flushText();
-            if (knownCalls.has(block.id)) throw invalidMessages(`${entry.path}.content`);
-            knownCalls.add(block.id);
-            input.push({
-              type: "function_call",
-              call_id: block.id,
-              name: block.name,
-              arguments: JSON.stringify(block.input),
-              status: "completed"
-            });
-          } else {
-            throw unsupportedMessages(`${entry.path}.content`);
-          }
-        }
-        flushText();
-        continue;
-      }
-      assertToolResultOrder(entry);
-      for (const block of entry.blocks.filter((item) => item.kind === "tool_result")) {
-        if (!knownCalls.has(block.id)) throw invalidMessages(`${entry.path}.content`);
-        input.push({
-          type: "function_call_output",
-          call_id: block.id,
-          output: block.output,
-          status: "completed"
-        });
-      }
-      const ordinary = entry.blocks.filter((block) => block.kind !== "tool_result");
-      if (ordinary.length) input.push(responsesMessage("user", ordinary));
-    }
-    const response = {
-      model: normalized.model,
-      input,
-      max_output_tokens: normalized.maxTokens,
-      stream: normalized.request.stream === true
-    };
-    if (normalized.request.temperature !== void 0) response.temperature = normalized.request.temperature;
-    if (normalized.request.top_p !== void 0) response.top_p = normalized.request.top_p;
-    if (normalized.tools.length) response.tools = normalized.tools.map(responsesToolDefinition);
-    if (normalized.toolChoice.choice !== void 0) response.tool_choice = normalized.toolChoice.choice;
-    if (normalized.toolChoice.parallel !== void 0) response.parallel_tool_calls = normalized.toolChoice.parallel;
-    if (normalized.reasoning) response.reasoning = { effort: normalized.reasoning.effort };
-    return { body: response, consumed: normalized.consumed.values() };
-  }
-  function responseImageToAnthropic(part, path, consumed) {
-    const image = exactRequest(
-      part,
-      RESPONSES_IMAGE_PART_FIELDS,
-      path,
-      invalidResponses,
-      unsupportedResponses
-    );
-    if (image.type !== "input_image") throw invalidResponses(`${path}.type`);
-    if (image.file_id !== void 0 && image.file_id !== null) throw unsupportedResponses(`${path}.file_id`);
-    if (image.file_id !== void 0) consumed.add(`${path}.file_id`);
-    if (image.detail !== void 0 && image.detail !== null) {
-      if (!["auto", "low", "high"].includes(image.detail)) throw invalidResponses(`${path}.detail`);
-      consumed.add(`${path}.detail`);
-    }
-    const url = nonemptyString(image.image_url, `${path}.image_url`, invalidResponses);
-    const data2 = url.match(/^data:(image\/(?:jpeg|png|gif|webp));base64,([A-Za-z0-9+/=]+)$/);
-    if (data2) {
-      return {
-        type: "image",
-        source: { type: "base64", media_type: data2[1], data: data2[2] }
-      };
-    }
-    return { type: "image", source: { type: "url", url } };
-  }
-  function responsesMessageContent(content, path, role, consumed) {
-    if (typeof content === "string") return [{ type: "text", text: content }];
-    if (!Array.isArray(content)) throw invalidResponses(path);
-    return content.map((raw, index) => {
-      const partPath = `${path}[${index}]`;
-      if (!isObject(raw)) throw invalidResponses(partPath);
-      if (raw.type === "input_text" || raw.type === "output_text") {
-        const part = exactRequest(
-          raw,
-          RESPONSES_TEXT_PART_FIELDS,
-          partPath,
-          invalidResponses,
-          unsupportedResponses
-        );
-        return { type: "text", text: typeof part.text === "string" ? part.text : (() => {
-          throw invalidResponses(`${partPath}.text`);
-        })() };
-      }
-      if (raw.type === "input_image") {
-        if (role !== "user") throw unsupportedResponses(`${partPath}.type`);
-        return responseImageToAnthropic(raw, partPath, consumed);
-      }
-      if (typeof raw.type !== "string") throw invalidResponses(`${partPath}.type`);
-      throw unsupportedResponses(`${partPath}.type`);
-    });
-  }
-  function openMessagesReasoning(item, path, openReasoning, consumed) {
-    const reasoning = exactRequest(
-      item,
-      RESPONSES_REASONING_FIELDS,
-      path,
-      invalidResponses,
-      unsupportedResponses
-    );
-    if (reasoning.type !== "reasoning") throw invalidResponses(`${path}.type`);
-    if (!Array.isArray(reasoning.summary)) throw invalidResponses(`${path}.summary`);
-    if (reasoning.summary.length !== 0) throw unsupportedResponses(`${path}.summary`);
-    const token = nonemptyString(reasoning.encrypted_content, `${path}.encrypted_content`, invalidResponses);
-    if (typeof openReasoning !== "function") throw unsupportedResponses(`${path}.encrypted_content`);
-    let opened;
-    try {
-      opened = openReasoning(token, { sourceProtocol: "messages" });
-    } catch {
-      throw unsupportedResponses(`${path}.encrypted_content`);
-    }
-    if (!isObject(opened) || opened.sourceProtocol !== "messages" || !isObject(opened.item)) {
-      throw unsupportedResponses(`${path}.encrypted_content`);
-    }
-    const rawBlock = cloneJson2(opened.item, path, invalidResponses);
-    if (rawBlock.type === "thinking") {
-      exactRequest(rawBlock, THINKING_BLOCK_FIELDS, path, invalidResponses, unsupportedResponses);
-      nonemptyString(rawBlock.thinking, `${path}.thinking`, invalidResponses);
-      nonemptyString(rawBlock.signature, `${path}.signature`, invalidResponses);
-    } else if (rawBlock.type === "redacted_thinking") {
-      exactRequest(rawBlock, REDACTED_THINKING_FIELDS, path, invalidResponses, unsupportedResponses);
-      nonemptyString(rawBlock.data, `${path}.data`, invalidResponses);
-    } else {
-      throw unsupportedResponses(`${path}.encrypted_content`);
-    }
-    for (const field of ["id", "status", "summary"]) {
-      if (reasoning[field] !== void 0) consumed.add(`${path}.${field}`);
-    }
-    return rawBlock;
-  }
-  function responseToolToMessages(raw, path, namespaceDescription = "") {
-    const tool = exactRequest(
-      raw,
-      RESPONSES_TOOL_FIELDS,
-      path,
-      invalidResponses,
-      unsupportedResponses
-    );
-    if (tool.type !== "function") throw unsupportedResponses(`${path}.type`);
-    const name = validateFunctionName(tool.name, `${path}.name`, invalidResponses);
-    const schema = cloneJson2(tool.parameters, `${path}.parameters`, invalidResponses);
-    if (!isObject(schema)) throw invalidResponses(`${path}.parameters`);
-    const result = { name, input_schema: schema };
-    const description = tool.description === void 0 ? "" : (() => {
-      if (typeof tool.description !== "string") throw invalidResponses(`${path}.description`);
-      return tool.description;
-    })();
-    if (namespaceDescription || description) {
-      result.description = [namespaceDescription, description].filter(Boolean).join("\n\n");
-    }
-    if (tool.strict !== void 0) {
-      if (typeof tool.strict !== "boolean") throw invalidResponses(`${path}.strict`);
-      result.strict = tool.strict;
-    }
-    return result;
-  }
-  function responsesToolsToMessages(value) {
-    if (value === void 0) return [];
-    if (!Array.isArray(value)) throw invalidResponses("tools");
-    const names = /* @__PURE__ */ new Set();
-    const converted = [];
-    const addTool = (raw, path, namespaceDescription = "") => {
-      const result = responseToolToMessages(raw, path, namespaceDescription);
-      const { name } = result;
-      if (names.has(name)) throw invalidResponses(`${path}.name`);
-      names.add(name);
-      converted.push(result);
-    };
-    value.forEach((raw, index) => {
-      const path = `tools[${index}]`;
-      if (!isObject(raw)) throw invalidResponses(path);
-      if (raw.type === "function") {
-        addTool(raw, path);
-        return;
-      }
-      if (raw.type !== "namespace") throw unsupportedResponses(`${path}.type`);
-      const namespace = exactRequest(
-        raw,
-        RESPONSES_NAMESPACE_TOOL_FIELDS,
-        path,
-        invalidResponses,
-        unsupportedResponses
-      );
-      const namespaceName = validateFunctionName(namespace.name, `${path}.name`, invalidResponses);
-      const namespaceDescription = namespace.description === void 0 ? namespaceName : (() => {
-        if (typeof namespace.description !== "string") throw invalidResponses(`${path}.description`);
-        return namespace.description;
-      })();
-      if (!Array.isArray(namespace.tools) || namespace.tools.length === 0) {
-        throw invalidResponses(`${path}.tools`);
-      }
-      namespace.tools.forEach((child, childIndex) => addTool(
-        child,
-        `${path}.tools[${childIndex}]`,
-        namespaceDescription
-      ));
-    });
-    return converted;
-  }
-  function responsesToolChoiceToMessages(value, parallel, toolNames) {
-    let choice;
-    if (value === void 0) {
-      if (parallel === false) choice = { type: "auto", disable_parallel_tool_use: true };
-    } else if (typeof value === "string") {
-      if (!["auto", "none", "required"].includes(value)) throw invalidResponses("tool_choice");
-      choice = { type: value === "required" ? "any" : value };
-    } else {
-      const selected = exactRequest(
-        value,
-        RESPONSES_TOOL_CHOICE_FIELDS,
-        "tool_choice",
-        invalidResponses,
-        unsupportedResponses
-      );
-      if (selected.type !== "function") throw unsupportedResponses("tool_choice.type");
-      const name = validateFunctionName(selected.name, "tool_choice.name", invalidResponses);
-      if (!toolNames.has(name)) throw invalidResponses("tool_choice.name");
-      choice = { type: "tool", name };
-    }
-    if (parallel !== void 0) {
-      if (typeof parallel !== "boolean") throw invalidResponses("parallel_tool_calls");
-      if (!choice) choice = { type: "auto" };
-      choice.disable_parallel_tool_use = !parallel;
-    }
-    return choice;
-  }
-  function responsesReasoningToMessages(value, consumed) {
-    if (value === void 0 || value === null) return {};
-    const reasoning = exactRequest(
-      value,
-      RESPONSES_REASONING_CONFIG_FIELDS,
-      "reasoning",
-      invalidResponses,
-      unsupportedResponses
-    );
-    if (reasoning.summary !== void 0 && reasoning.summary !== null && reasoning.summary !== "auto") {
-      throw unsupportedResponses("reasoning.summary");
-    }
-    if (reasoning.summary !== void 0) consumed.add("reasoning.summary");
-    if (reasoning.effort === void 0 || reasoning.effort === null) {
-      return { thinking: { type: "adaptive" } };
-    }
-    const effort = toMessagesEffort(reasoning.effort, "reasoning.effort");
-    if (effort === null) return { thinking: { type: "disabled" } };
-    return {
-      thinking: { type: "adaptive" },
-      output_config: { effort }
-    };
-  }
-  function pushOrMergeMessage(messages, role, blocks) {
-    if (!blocks.length) return;
-    const previous = messages[messages.length - 1];
-    if (previous && previous.role === role && Array.isArray(previous.content)) {
-      previous.content.push(...blocks);
-    } else {
-      messages.push({ role, content: [...blocks] });
-    }
-  }
-  function responsesBodyToMessagesBody(body, { openReasoning } = {}) {
-    const consumed = collector();
-    const request = exactRequest(
-      body,
-      RESPONSES_BODY_FIELDS,
-      "",
-      invalidResponses,
-      unsupportedResponses
-    );
-    const model = nonemptyString(request.model, "model", invalidResponses);
-    if (!Object.hasOwn(request, "input")) throw invalidResponses("input");
-    if (request.stream !== void 0 && typeof request.stream !== "boolean") throw invalidResponses("stream");
-    if (request.temperature !== void 0) finiteNumber(request.temperature, "temperature", invalidResponses, (v) => v >= 0 && v <= 2);
-    if (request.top_p !== void 0) finiteNumber(request.top_p, "top_p", invalidResponses, (v) => v >= 0 && v <= 1);
-    let maxTokens = DEFAULT_MESSAGES_MAX_TOKENS;
-    if (request.max_output_tokens !== void 0) {
-      maxTokens = finiteNumber(
-        request.max_output_tokens,
-        "max_output_tokens",
-        invalidResponses,
-        (value) => Number.isInteger(value) && value > 0
-      );
-    }
-    if (request.include !== void 0) {
-      if (!Array.isArray(request.include) || request.include.some((item) => item !== "reasoning.encrypted_content")) {
-        throw unsupportedResponses("include");
-      }
-      consumed.add("include");
-    }
-    if (request.store !== void 0) {
-      if (typeof request.store !== "boolean") throw invalidResponses("store");
-      if (request.store) throw unsupportedResponses("store");
-      consumed.add("store");
-    }
-    if (request.prompt_cache_key !== void 0) {
-      nonemptyString(request.prompt_cache_key, "prompt_cache_key", invalidResponses);
-      consumed.add("prompt_cache_key");
-    }
-    if (request.client_metadata !== void 0) {
-      const metadata = cloneJson2(request.client_metadata, "client_metadata", invalidResponses);
-      if (!isObject(metadata)) throw invalidResponses("client_metadata");
-      consumed.add("client_metadata");
-    }
-    const system = [];
-    if (request.instructions !== void 0) {
-      if (typeof request.instructions !== "string") throw invalidResponses("instructions");
-      system.push({ type: "text", text: request.instructions });
-    }
-    const messages = [];
-    const knownCalls = /* @__PURE__ */ new Set();
-    let pendingAssistant = [];
-    let pendingToolResults = [];
-    const flushAssistant = () => {
-      pushOrMergeMessage(messages, "assistant", pendingAssistant);
-      pendingAssistant = [];
-    };
-    const flushToolResults = () => {
-      pushOrMergeMessage(messages, "user", pendingToolResults);
-      pendingToolResults = [];
-    };
-    const rawInput = typeof request.input === "string" ? [{ type: "message", role: "user", content: request.input }] : request.input;
-    if (!Array.isArray(rawInput) || rawInput.length === 0) throw invalidResponses("input");
-    rawInput.forEach((rawItem, index) => {
-      const path = `input[${index}]`;
-      if (!isObject(rawItem)) throw invalidResponses(path);
-      if (rawItem.type === "reasoning") {
-        flushToolResults();
-        pendingAssistant.push(openMessagesReasoning(rawItem, path, openReasoning, consumed));
-        return;
-      }
-      if (rawItem.type === "function_call") {
-        flushToolResults();
-        const call = exactRequest(
-          rawItem,
-          RESPONSES_FUNCTION_CALL_FIELDS,
-          path,
-          invalidResponses,
-          unsupportedResponses
-        );
-        if (call.status !== void 0 && call.status !== "completed") throw unsupportedResponses(`${path}.status`);
-        const id = nonemptyString(call.call_id, `${path}.call_id`, invalidResponses);
-        if (knownCalls.has(id)) throw invalidResponses(`${path}.call_id`);
-        knownCalls.add(id);
-        const name = validateFunctionName(call.name, `${path}.name`, invalidResponses);
-        const args = nonemptyString(call.arguments, `${path}.arguments`, invalidResponses);
-        let input;
-        try {
-          input = JSON.parse(args);
-        } catch {
-          throw invalidResponses(`${path}.arguments`);
-        }
-        if (!isObject(input)) throw invalidResponses(`${path}.arguments`);
-        pendingAssistant.push({ type: "tool_use", id, name, input });
-        if (call.id !== void 0) consumed.add(`${path}.id`);
-        if (call.status !== void 0) consumed.add(`${path}.status`);
-        return;
-      }
-      if (rawItem.type === "function_call_output") {
-        flushAssistant();
-        const output = exactRequest(
-          rawItem,
-          RESPONSES_FUNCTION_OUTPUT_FIELDS,
-          path,
-          invalidResponses,
-          unsupportedResponses
-        );
-        if (output.status !== void 0 && output.status !== "completed") throw unsupportedResponses(`${path}.status`);
-        const id = nonemptyString(output.call_id, `${path}.call_id`, invalidResponses);
-        if (!knownCalls.has(id)) throw invalidResponses(`${path}.call_id`);
-        pendingToolResults.push({
-          type: "tool_result",
-          tool_use_id: id,
-          content: typeof output.output === "string" ? output.output : JSON.stringify(cloneJson2(output.output, `${path}.output`, invalidResponses))
-        });
-        if (output.id !== void 0) consumed.add(`${path}.id`);
-        if (output.status !== void 0) consumed.add(`${path}.status`);
-        return;
-      }
-      if (rawItem.type === void 0 || rawItem.type === "message") {
-        flushAssistant();
-        flushToolResults();
-        const message = exactRequest(
-          rawItem,
-          RESPONSES_MESSAGE_FIELDS,
-          path,
-          invalidResponses,
-          unsupportedResponses
-        );
-        if (!["user", "assistant", "system", "developer"].includes(message.role)) {
-          throw invalidResponses(`${path}.role`);
-        }
-        if (!Object.hasOwn(message, "content")) throw invalidResponses(`${path}.content`);
-        if (message.id !== void 0) {
-          nonemptyString(message.id, `${path}.id`, invalidResponses);
-          consumed.add(`${path}.id`);
-        }
-        if (message.status !== void 0) {
-          if (!["completed", "incomplete"].includes(message.status)) throw invalidResponses(`${path}.status`);
-          if (message.status !== "completed") throw unsupportedResponses(`${path}.status`);
-          consumed.add(`${path}.status`);
-        }
-        const role = message.role === "developer" ? "system" : message.role;
-        const content = responsesMessageContent(message.content, `${path}.content`, role, consumed);
-        if (role === "system" && messages.length === 0) system.push(...content);
-        else pushOrMergeMessage(messages, role, content);
-        return;
-      }
-      if (typeof rawItem.type !== "string") throw invalidResponses(`${path}.type`);
-      throw unsupportedResponses(`${path}.type`);
-    });
-    flushAssistant();
-    flushToolResults();
-    if (messages.length === 0) throw invalidResponses("input");
-    const tools = responsesToolsToMessages(request.tools);
-    const toolChoice = responsesToolChoiceToMessages(
-      request.tool_choice,
-      request.parallel_tool_calls,
-      new Set(tools.map((tool) => tool.name))
-    );
-    if (toolChoice && tools.length === 0) throw invalidResponses("tool_choice");
-    const result = {
-      model,
-      max_tokens: maxTokens,
-      messages,
-      stream: request.stream === true
-    };
-    if (system.length) result.system = system;
-    if (request.temperature !== void 0) result.temperature = request.temperature;
-    if (request.top_p !== void 0) result.top_p = request.top_p;
-    if (tools.length) result.tools = tools;
-    if (toolChoice) result.tool_choice = toolChoice;
-    Object.assign(result, responsesReasoningToMessages(request.reasoning, consumed));
-    return { body: result, consumed: consumed.values() };
-  }
-  function sealCapsule(sealReasoning, sourceProtocol, item, protocol, path) {
-    if (typeof sealReasoning !== "function") throw unsupportedUpstream(protocol, path);
-    let token;
-    try {
-      token = sealReasoning({ sourceProtocol, item });
-    } catch {
-      throw invalidUpstream(protocol, path);
-    }
-    if (typeof token !== "string" || token.length === 0) throw invalidUpstream(protocol, path);
-    return token;
-  }
-  function integerUsage(value, path, protocol) {
-    if (!Number.isInteger(value) || value < 0) throw invalidUpstream(protocol, path);
-    return value;
-  }
-  function chatUsageToMessages(value) {
-    if (value === void 0) {
-      return {
-        input_tokens: 0,
-        output_tokens: 0,
-        cache_creation_input_tokens: 0,
-        cache_read_input_tokens: 0
-      };
-    }
-    const usage = exactUpstream(value, CHAT_USAGE_FIELDS, "chat", "usage");
-    const prompt = integerUsage(usage.prompt_tokens, "usage.prompt_tokens", "chat");
-    const completion = integerUsage(usage.completion_tokens, "usage.completion_tokens", "chat");
-    if (usage.total_tokens !== void 0) {
-      const total = integerUsage(usage.total_tokens, "usage.total_tokens", "chat");
-      if (total !== prompt + completion) throw invalidUpstream("chat", "usage.total_tokens");
-    }
-    for (const [name, primary] of [["input_tokens", prompt], ["output_tokens", completion]]) {
-      if (usage[name] === void 0 || usage[name] === null) continue;
-      const alias = integerUsage(usage[name], `usage.${name}`, "chat");
-      if (alias !== 0 && alias !== primary) throw invalidUpstream("chat", `usage.${name}`);
-    }
-    let cached = 0;
-    let cachedObserved = false;
-    if (usage.prompt_tokens_details !== void 0 && usage.prompt_tokens_details !== null) {
-      const details = exactUpstream(
-        usage.prompt_tokens_details,
-        CHAT_PROMPT_DETAILS_FIELDS,
-        "chat",
-        "usage.prompt_tokens_details"
-      );
-      if (details.cached_tokens !== void 0) {
-        cached = integerUsage(details.cached_tokens, "usage.prompt_tokens_details.cached_tokens", "chat");
-        cachedObserved = true;
-      }
-      for (const key of ["text_tokens", "audio_tokens", "image_tokens"]) {
-        if (details[key] !== void 0 && details[key] !== null) {
-          integerUsage(details[key], `usage.prompt_tokens_details.${key}`, "chat");
-        }
-      }
-    }
-    if (usage.input_tokens_details !== void 0 && usage.input_tokens_details !== null) {
-      const details = exactUpstream(
-        usage.input_tokens_details,
-        CHAT_INPUT_DETAILS_FIELDS,
-        "chat",
-        "usage.input_tokens_details"
-      );
-      if (details.cached_tokens !== void 0 && details.cached_tokens !== null) {
-        const alias = integerUsage(details.cached_tokens, "usage.input_tokens_details.cached_tokens", "chat");
-        if (cachedObserved && alias !== 0 && alias !== cached) {
-          throw invalidUpstream("chat", "usage.input_tokens_details.cached_tokens");
-        }
-        if (!cachedObserved) cached = alias;
-      }
-    }
-    const fiveMinutes = usage.claude_cache_creation_5_m_tokens === void 0 || usage.claude_cache_creation_5_m_tokens === null ? 0 : integerUsage(usage.claude_cache_creation_5_m_tokens, "usage.claude_cache_creation_5_m_tokens", "chat");
-    const oneHour = usage.claude_cache_creation_1_h_tokens === void 0 || usage.claude_cache_creation_1_h_tokens === null ? 0 : integerUsage(usage.claude_cache_creation_1_h_tokens, "usage.claude_cache_creation_1_h_tokens", "chat");
-    const cacheCreation = fiveMinutes + oneHour;
-    if (cached + cacheCreation > prompt) throw invalidUpstream("chat", "usage.prompt_tokens");
-    let reasoningTokens;
-    if (usage.completion_tokens_details !== void 0 && usage.completion_tokens_details !== null) {
-      const details = exactUpstream(
-        usage.completion_tokens_details,
-        CHAT_COMPLETION_DETAILS_FIELDS,
-        "chat",
-        "usage.completion_tokens_details"
-      );
-      for (const [key, detail] of Object.entries(details)) {
-        if (detail !== void 0 && detail !== null) integerUsage(detail, `usage.completion_tokens_details.${key}`, "chat");
-      }
-      if (details.reasoning_tokens !== void 0 && details.reasoning_tokens !== null) {
-        reasoningTokens = details.reasoning_tokens;
-        if (reasoningTokens > completion) {
-          throw invalidUpstream("chat", "usage.completion_tokens_details.reasoning_tokens");
-        }
-      }
-    }
-    const result = {
-      input_tokens: prompt - cached - cacheCreation,
-      output_tokens: completion,
-      cache_creation_input_tokens: cacheCreation,
-      cache_read_input_tokens: cached
-    };
-    if (usage.claude_cache_creation_5_m_tokens !== void 0 || usage.claude_cache_creation_1_h_tokens !== void 0) {
-      result.cache_creation = {
-        ephemeral_5m_input_tokens: fiveMinutes,
-        ephemeral_1h_input_tokens: oneHour
-      };
-    }
-    if (reasoningTokens !== void 0) {
-      result.output_tokens_details = { thinking_tokens: reasoningTokens };
-    }
-    return result;
-  }
-  function parseChatToolCall(raw, path) {
-    const call = exactUpstream(raw, CHAT_TOOL_CALL_FIELDS, "chat", path);
-    const id = nonemptyString(call.id, `${path}.id`, (param) => invalidUpstream("chat", param));
-    if (call.type !== "function") throw invalidUpstream("chat", `${path}.type`);
-    const fn = exactUpstream(call.function, CHAT_FUNCTION_FIELDS, "chat", `${path}.function`);
-    const name = validateFunctionName(fn.name, `${path}.function.name`, (param) => invalidUpstream("chat", param));
-    const args = nonemptyString(fn.arguments, `${path}.function.arguments`, (param) => invalidUpstream("chat", param));
-    let input;
-    try {
-      input = JSON.parse(args);
-    } catch {
-      throw invalidUpstream("chat", `${path}.function.arguments`);
-    }
-    if (!isObject(input)) throw invalidUpstream("chat", `${path}.function.arguments`);
-    return { type: "tool_use", id, name, input };
-  }
-  function chatCompletionToMessages(completion, { sealReasoning } = {}) {
-    const chat = exactUpstream(completion, CHAT_COMPLETION_FIELDS, "chat", "");
-    if (chat.object !== "chat.completion") throw invalidUpstream("chat", "object");
-    const id = nonemptyString(chat.id, "id", (param) => invalidUpstream("chat", param));
-    const model = nonemptyString(chat.model, "model", (param) => invalidUpstream("chat", param));
-    if (!Array.isArray(chat.choices) || chat.choices.length !== 1) throw invalidUpstream("chat", "choices");
-    const choice = exactUpstream(chat.choices[0], CHAT_CHOICE_FIELDS, "chat", "choices[0]");
-    if (choice.index !== 0) throw invalidUpstream("chat", "choices[0].index");
-    if (choice.logprobs !== void 0 && choice.logprobs !== null) {
-      throw unsupportedUpstream("chat", "choices[0].logprobs");
-    }
-    const message = exactUpstream(choice.message, CHAT_MESSAGE_FIELDS, "chat", "choices[0].message");
-    if (message.role !== "assistant") throw invalidUpstream("chat", "choices[0].message.role");
-    if (message.content !== null && typeof message.content !== "string") {
-      throw invalidUpstream("chat", "choices[0].message.content");
-    }
-    if (message.refusal !== void 0 && message.refusal !== null && typeof message.refusal !== "string") {
-      throw invalidUpstream("chat", "choices[0].message.refusal");
-    }
-    const reasoningValues = [message.reasoning, message.reasoning_content].filter((value) => value !== void 0 && value !== null);
-    if (reasoningValues.length > 1 || reasoningValues.some((value) => typeof value !== "string")) {
-      throw invalidUpstream("chat", "choices[0].message.reasoning_content");
-    }
-    const content = [];
-    if (reasoningValues.length === 1 && reasoningValues[0].length > 0) {
-      content.push({
-        type: "thinking",
-        thinking: reasoningValues[0],
-        signature: sealCapsule(
-          sealReasoning,
-          "chat",
-          reasoningValues[0],
-          "chat",
-          "choices[0].message.reasoning_content"
-        )
-      });
-    }
-    if (typeof message.content === "string" && message.content.length > 0) {
-      content.push({ type: "text", text: message.content });
-    }
-    if (typeof message.refusal === "string" && message.refusal.length > 0) {
-      content.push({ type: "text", text: message.refusal });
-    }
-    const rawCalls = message.tool_calls === void 0 ? [] : message.tool_calls;
-    if (!Array.isArray(rawCalls)) throw invalidUpstream("chat", "choices[0].message.tool_calls");
-    const used = /* @__PURE__ */ new Set();
-    rawCalls.forEach((raw, index) => {
-      const call = parseChatToolCall(raw, `choices[0].message.tool_calls[${index}]`);
-      if (used.has(call.id)) throw invalidUpstream("chat", `choices[0].message.tool_calls[${index}].id`);
-      used.add(call.id);
-      content.push(call);
-    });
-    const stopMap = {
-      stop: "end_turn",
-      tool_calls: "tool_use",
-      function_call: "tool_use",
-      length: "max_tokens",
-      content_filter: "refusal"
-    };
-    const stopReason = stopMap[choice.finish_reason];
-    if (!stopReason) throw invalidUpstream("chat", "choices[0].finish_reason");
-    if (stopReason === "tool_use" && rawCalls.length === 0) throw invalidUpstream("chat", "choices[0].finish_reason");
-    if (stopReason !== "tool_use" && rawCalls.length !== 0) throw invalidUpstream("chat", "choices[0].finish_reason");
-    if (content.length === 0) content.push({ type: "text", text: "" });
-    return {
-      id,
-      type: "message",
-      role: "assistant",
-      model,
-      content,
-      stop_reason: stopReason,
-      stop_sequence: null,
-      usage: chatUsageToMessages(chat.usage)
-    };
-  }
-  function responseUsageToMessages(value) {
-    if (value === void 0 || value === null) {
-      return {
-        input_tokens: 0,
-        output_tokens: 0,
-        cache_creation_input_tokens: 0,
-        cache_read_input_tokens: 0
-      };
-    }
-    const usage = exactUpstream(value, RESPONSE_USAGE_FIELDS, "responses", "usage");
-    const input = integerUsage(usage.input_tokens, "usage.input_tokens", "responses");
-    const output = integerUsage(usage.output_tokens, "usage.output_tokens", "responses");
-    if (usage.total_tokens !== void 0) integerUsage(usage.total_tokens, "usage.total_tokens", "responses");
-    let cached = 0;
-    if (usage.input_tokens_details !== void 0 && usage.input_tokens_details !== null) {
-      const details = exactUpstream(
-        usage.input_tokens_details,
-        RESPONSE_INPUT_DETAILS_FIELDS,
-        "responses",
-        "usage.input_tokens_details"
-      );
-      if (details.cached_tokens !== void 0) {
-        cached = integerUsage(details.cached_tokens, "usage.input_tokens_details.cached_tokens", "responses");
-      }
-    }
-    if (cached > input) throw invalidUpstream("responses", "usage.input_tokens_details.cached_tokens");
-    if (usage.output_tokens_details !== void 0 && usage.output_tokens_details !== null) {
-      const details = exactUpstream(
-        usage.output_tokens_details,
-        RESPONSE_OUTPUT_DETAILS_FIELDS,
-        "responses",
-        "usage.output_tokens_details"
-      );
-      if (details.reasoning_tokens !== void 0) {
-        integerUsage(details.reasoning_tokens, "usage.output_tokens_details.reasoning_tokens", "responses");
-      }
-    }
-    return {
-      input_tokens: input - cached,
-      output_tokens: output,
-      cache_creation_input_tokens: 0,
-      cache_read_input_tokens: cached
-    };
-  }
-  function responseReasoningSummary(item, path) {
-    if (!Array.isArray(item.summary)) throw invalidUpstream("responses", `${path}.summary`);
-    return item.summary.map((raw, index) => {
-      const summaryPath = `${path}.summary[${index}]`;
-      const summary = exactUpstream(raw, RESPONSE_SUMMARY_FIELDS, "responses", summaryPath);
-      if (summary.type !== "summary_text") throw unsupportedUpstream("responses", `${summaryPath}.type`);
-      return nonemptyString(summary.text, `${summaryPath}.text`, (param) => invalidUpstream("responses", param));
-    }).join("\n");
-  }
-  function responseToMessages(response, { sealReasoning } = {}) {
-    const source = exactUpstream(response, RESPONSE_FIELDS, "responses", "");
-    if (source.object !== "response") throw invalidUpstream("responses", "object");
-    const id = nonemptyString(source.id, "id", (param) => invalidUpstream("responses", param));
-    const model = nonemptyString(source.model, "model", (param) => invalidUpstream("responses", param));
-    if (!["completed", "incomplete"].includes(source.status)) throw invalidUpstream("responses", "status");
-    if (source.error !== void 0 && source.error !== null) throw invalidUpstream("responses", "error");
-    if (!Array.isArray(source.output)) throw invalidUpstream("responses", "output");
-    const content = [];
-    let refusal = false;
-    let sawTool = false;
-    const usedCalls = /* @__PURE__ */ new Set();
-    source.output.forEach((rawItem, index) => {
-      const path = `output[${index}]`;
-      if (!isObject(rawItem)) throw invalidUpstream("responses", path);
-      if (rawItem.type === "message") {
-        const message = exactUpstream(rawItem, RESPONSE_MESSAGE_FIELDS, "responses", path);
-        if (message.role !== "assistant") throw invalidUpstream("responses", `${path}.role`);
-        if (message.status !== void 0 && !["completed", "incomplete"].includes(message.status)) {
-          throw invalidUpstream("responses", `${path}.status`);
-        }
-        if (!Array.isArray(message.content)) throw invalidUpstream("responses", `${path}.content`);
-        message.content.forEach((rawPart, partIndex) => {
-          const partPath = `${path}.content[${partIndex}]`;
-          if (!isObject(rawPart)) throw invalidUpstream("responses", partPath);
-          if (rawPart.type === "output_text") {
-            const part = exactUpstream(rawPart, RESPONSE_OUTPUT_TEXT_FIELDS, "responses", partPath);
-            if (part.annotations !== void 0 && part.annotations !== null && part.annotations.length !== 0) {
-              throw unsupportedUpstream("responses", `${partPath}.annotations`);
-            }
-            if (part.logprobs !== void 0 && part.logprobs !== null && part.logprobs.length !== 0) {
-              throw unsupportedUpstream("responses", `${partPath}.logprobs`);
-            }
-            content.push({
-              type: "text",
-              text: typeof part.text === "string" ? part.text : (() => {
-                throw invalidUpstream("responses", `${partPath}.text`);
-              })()
-            });
-          } else if (rawPart.type === "refusal") {
-            const part = exactUpstream(rawPart, RESPONSE_REFUSAL_FIELDS, "responses", partPath);
-            content.push({
-              type: "text",
-              text: nonemptyString(part.refusal, `${partPath}.refusal`, (param) => invalidUpstream("responses", param))
-            });
-            refusal = true;
-          } else if (typeof rawPart.type !== "string") {
-            throw invalidUpstream("responses", `${partPath}.type`);
-          } else {
-            throw unsupportedUpstream("responses", `${partPath}.type`);
-          }
-        });
-        return;
-      }
-      if (rawItem.type === "reasoning") {
-        const item = exactUpstream(rawItem, RESPONSE_REASONING_ITEM_FIELDS, "responses", path);
-        const summary = responseReasoningSummary(item, path);
-        const capsule = sealCapsule(
-          sealReasoning,
-          "responses",
-          cloneJson2(item, path, (param) => invalidUpstream("responses", param)),
-          "responses",
-          path
-        );
-        content.push(summary ? { type: "thinking", thinking: summary, signature: capsule } : { type: "redacted_thinking", data: capsule });
-        return;
-      }
-      if (rawItem.type === "function_call") {
-        const call = exactUpstream(rawItem, RESPONSE_FUNCTION_CALL_FIELDS, "responses", path);
-        if (call.status !== void 0 && call.status !== "completed") {
-          throw unsupportedUpstream("responses", `${path}.status`);
-        }
-        const callId = nonemptyString(call.call_id, `${path}.call_id`, (param) => invalidUpstream("responses", param));
-        if (usedCalls.has(callId)) throw invalidUpstream("responses", `${path}.call_id`);
-        usedCalls.add(callId);
-        const name = validateFunctionName(call.name, `${path}.name`, (param) => invalidUpstream("responses", param));
-        const args = nonemptyString(call.arguments, `${path}.arguments`, (param) => invalidUpstream("responses", param));
-        let input;
-        try {
-          input = JSON.parse(args);
-        } catch {
-          throw invalidUpstream("responses", `${path}.arguments`);
-        }
-        if (!isObject(input)) throw invalidUpstream("responses", `${path}.arguments`);
-        content.push({ type: "tool_use", id: callId, name, input });
-        sawTool = true;
-        return;
-      }
-      if (typeof rawItem.type !== "string") throw invalidUpstream("responses", `${path}.type`);
-      throw unsupportedUpstream("responses", `${path}.type`);
-    });
-    if (content.length === 0) content.push({ type: "text", text: "" });
-    let stopReason;
-    if (source.status === "completed") {
-      stopReason = refusal ? "refusal" : sawTool ? "tool_use" : "end_turn";
-    } else {
-      const details = exactUpstream(source.incomplete_details, RESPONSE_INCOMPLETE_FIELDS, "responses", "incomplete_details");
-      const mapping = {
-        max_output_tokens: "max_tokens",
-        content_filter: "refusal",
-        model_context_window_exceeded: "model_context_window_exceeded"
-      };
-      stopReason = mapping[details.reason];
-      if (!stopReason) throw unsupportedUpstream("responses", "incomplete_details.reason");
-    }
-    return {
-      id,
-      type: "message",
-      role: "assistant",
-      model,
-      content,
-      stop_reason: stopReason,
-      stop_sequence: null,
-      usage: responseUsageToMessages(source.usage)
-    };
-  }
-  function anthropicUsageToResponse(value) {
-    const usage = exactUpstream(value, ANTHROPIC_USAGE_FIELDS, "messages", "usage");
-    const input = integerUsage(usage.input_tokens, "usage.input_tokens", "messages");
-    const output = integerUsage(usage.output_tokens, "usage.output_tokens", "messages");
-    const creation = usage.cache_creation_input_tokens === void 0 || usage.cache_creation_input_tokens === null ? 0 : integerUsage(usage.cache_creation_input_tokens, "usage.cache_creation_input_tokens", "messages");
-    const cached = usage.cache_read_input_tokens === void 0 || usage.cache_read_input_tokens === null ? 0 : integerUsage(usage.cache_read_input_tokens, "usage.cache_read_input_tokens", "messages");
-    if (usage.cache_creation !== void 0 && usage.cache_creation !== null) {
-      const breakdown = exactUpstream(
-        usage.cache_creation,
-        ANTHROPIC_CACHE_CREATION_FIELDS,
-        "messages",
-        "usage.cache_creation"
-      );
-      const oneHour = integerUsage(
-        breakdown.ephemeral_1h_input_tokens,
-        "usage.cache_creation.ephemeral_1h_input_tokens",
-        "messages"
-      );
-      const fiveMinutes = integerUsage(
-        breakdown.ephemeral_5m_input_tokens,
-        "usage.cache_creation.ephemeral_5m_input_tokens",
-        "messages"
-      );
-      if (oneHour + fiveMinutes !== creation) {
-        throw invalidUpstream("messages", "usage.cache_creation");
-      }
-    }
-    for (const key of ["inference_geo", "iterations", "server_tool_use", "speed"]) {
-      if (usage[key] !== void 0 && usage[key] !== null) throw unsupportedUpstream("messages", `usage.${key}`);
-    }
-    let reasoningTokens;
-    if (usage.output_tokens_details !== void 0 && usage.output_tokens_details !== null) {
-      const details = exactUpstream(
-        usage.output_tokens_details,
-        ANTHROPIC_OUTPUT_DETAILS_FIELDS,
-        "messages",
-        "usage.output_tokens_details"
-      );
-      reasoningTokens = integerUsage(details.thinking_tokens, "usage.output_tokens_details.thinking_tokens", "messages");
-    }
-    const responseUsage = {
-      input_tokens: input + creation + cached,
-      output_tokens: output,
-      total_tokens: input + creation + cached + output,
-      input_tokens_details: { cached_tokens: cached }
-    };
-    if (reasoningTokens !== void 0) responseUsage.output_tokens_details = { reasoning_tokens: reasoningTokens };
-    return responseUsage;
-  }
-  function responseIdFromMessage(messageId) {
-    const suffix = messageId.startsWith("msg_") ? messageId.slice(4) : messageId;
-    return `resp_${suffix}`;
-  }
-  function anthropicMessageToResponse(message, { id, sealReasoning } = {}) {
-    var _a;
-    const source = exactUpstream(message, ANTHROPIC_RESPONSE_FIELDS, "messages", "");
-    if (source.type !== "message") throw invalidUpstream("messages", "type");
-    if (source.role !== "assistant") throw invalidUpstream("messages", "role");
-    const messageId = nonemptyString(source.id, "id", (param) => invalidUpstream("messages", param));
-    const model = nonemptyString(source.model, "model", (param) => invalidUpstream("messages", param));
-    for (const key of ["container", "context_management", "diagnostics", "stop_details"]) {
-      if (source[key] !== void 0 && source[key] !== null) throw unsupportedUpstream("messages", key);
-    }
-    if (source.stop_sequence !== void 0 && source.stop_sequence !== null) {
-      throw unsupportedUpstream("messages", "stop_sequence");
-    }
-    if (!Array.isArray(source.content)) throw invalidUpstream("messages", "content");
-    const responseId = id === void 0 ? responseIdFromMessage(messageId) : nonemptyString(id, "context.id", (param) => invalidUpstream("messages", param));
-    const output = [];
-    const sourceIncomplete = ["max_tokens", "refusal", "model_context_window_exceeded"].includes(source.stop_reason);
-    let sawTool = false;
-    let textParts = [];
-    let outputIndex = 0;
-    const flushText = () => {
-      if (!textParts.length) return;
-      output.push({
-        id: `msg_${responseId.replace(/^resp_/, "")}_${outputIndex}`,
-        type: "message",
-        status: sourceIncomplete ? "incomplete" : "completed",
-        role: "assistant",
-        content: textParts
-      });
-      outputIndex += 1;
-      textParts = [];
-    };
-    source.content.forEach((rawBlock, index) => {
-      const path = `content[${index}]`;
-      if (!isObject(rawBlock)) throw invalidUpstream("messages", path);
-      if (rawBlock.type === "text") {
-        const block = exactUpstream(rawBlock, ANTHROPIC_TEXT_RESPONSE_FIELDS, "messages", path);
-        if (block.citations !== void 0 && block.citations !== null && block.citations.length !== 0) {
-          throw unsupportedUpstream("messages", `${path}.citations`);
-        }
-        textParts.push({
-          type: "output_text",
-          text: typeof block.text === "string" ? block.text : (() => {
-            throw invalidUpstream("messages", `${path}.text`);
-          })()
-        });
-        return;
-      }
-      if (rawBlock.type === "thinking" || rawBlock.type === "redacted_thinking") {
-        flushText();
-        const allowed = rawBlock.type === "thinking" ? THINKING_BLOCK_FIELDS : REDACTED_THINKING_FIELDS;
-        const block = exactUpstream(rawBlock, allowed, "messages", path);
-        if (block.type === "thinking") {
-          nonemptyString(block.thinking, `${path}.thinking`, (param) => invalidUpstream("messages", param));
-          nonemptyString(block.signature, `${path}.signature`, (param) => invalidUpstream("messages", param));
-        } else {
-          nonemptyString(block.data, `${path}.data`, (param) => invalidUpstream("messages", param));
-        }
-        const capsule = sealCapsule(
-          sealReasoning,
-          "messages",
-          cloneJson2(block, path, (param) => invalidUpstream("messages", param)),
-          "messages",
-          path
-        );
-        output.push({
-          id: `rs_${responseId.replace(/^resp_/, "")}_${outputIndex}`,
-          type: "reasoning",
-          summary: [],
-          encrypted_content: capsule,
-          status: "completed"
-        });
-        outputIndex += 1;
-        return;
-      }
-      if (rawBlock.type === "tool_use") {
-        flushText();
-        const block = exactUpstream(rawBlock, ANTHROPIC_TOOL_RESPONSE_FIELDS, "messages", path);
-        if (block.caller !== void 0) throw unsupportedUpstream("messages", `${path}.caller`);
-        const callId = nonemptyString(block.id, `${path}.id`, (param) => invalidUpstream("messages", param));
-        const name = validateFunctionName(block.name, `${path}.name`, (param) => invalidUpstream("messages", param));
-        const input = cloneJson2(block.input, `${path}.input`, (param) => invalidUpstream("messages", param));
-        if (!isObject(input)) throw invalidUpstream("messages", `${path}.input`);
-        output.push({
-          id: `fc_${callId}`,
-          type: "function_call",
-          call_id: callId,
-          name,
-          arguments: JSON.stringify(input),
-          status: "completed"
-        });
-        sawTool = true;
-        outputIndex += 1;
-        return;
-      }
-      if (typeof rawBlock.type !== "string") throw invalidUpstream("messages", `${path}.type`);
-      throw unsupportedUpstream("messages", `${path}.type`);
-    });
-    flushText();
-    if (output.length === 0) {
-      textParts = [{ type: "output_text", text: "" }];
-      flushText();
-    }
-    const completedReasons = /* @__PURE__ */ new Set(["end_turn", "tool_use", "stop_sequence"]);
-    const incompleteMap = {
-      max_tokens: "max_output_tokens",
-      refusal: "content_filter",
-      model_context_window_exceeded: "model_context_window_exceeded"
-    };
-    let status;
-    let incompleteReason;
-    if (completedReasons.has(source.stop_reason)) {
-      status = "completed";
-    } else if (incompleteMap[source.stop_reason]) {
-      status = "incomplete";
-      incompleteReason = incompleteMap[source.stop_reason];
-    } else {
-      throw unsupportedUpstream("messages", "stop_reason");
-    }
-    if (source.stop_reason === "tool_use" !== sawTool) {
-      throw invalidUpstream("messages", "stop_reason");
-    }
-    const response = {
-      id: responseId,
-      object: "response",
-      status,
-      model,
-      output,
-      usage: anthropicUsageToResponse(source.usage)
-    };
-    if (incompleteReason) response.incomplete_details = { reason: incompleteReason };
-    if (((_a = source.usage) == null ? void 0 : _a.service_tier) !== void 0 && source.usage.service_tier !== null) {
-      response.service_tier = source.usage.service_tier;
-    }
-    return response;
-  }
-
-  // src/lib/providerSseCodec.js
-  init_cep_runtime_inject();
-  function streamError(code, param) {
-    const error = new Error("Provider SSE stream is invalid.");
-    error.name = "ProviderStreamError";
-    error.status = 502;
-    error.code = code;
-    error.param = param;
-    return error;
-  }
-  function isObject2(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
-  }
-  function byteLength2(value) {
-    return new TextEncoder().encode(value).byteLength;
-  }
-  function strictParser({ maxFrameBytes, onFrame }) {
-    if (!Number.isInteger(maxFrameBytes) || maxFrameBytes <= 0) {
-      throw new TypeError("maxFrameBytes must be a positive integer");
-    }
-    if (typeof onFrame !== "function") throw new TypeError("onFrame is required");
-    const decoder = new TextDecoder("utf-8", { fatal: true });
-    let buffer = "";
-    let ended = false;
-    function processFrame(frame) {
-      if (byteLength2(frame) > maxFrameBytes) throw streamError("upstream_sse_frame_too_large", "sse");
-      let event = "";
-      const data2 = [];
-      for (const rawLine of frame.split(/\r?\n/)) {
-        if (!rawLine || rawLine.startsWith(":")) continue;
-        if (rawLine.startsWith("event:")) {
-          if (event) throw streamError("upstream_sse_malformed", "sse.event");
-          event = rawLine.slice(6).replace(/^ /, "");
-          continue;
-        }
-        if (rawLine.startsWith("data:")) {
-          data2.push(rawLine.slice(5).replace(/^ /, ""));
-          continue;
-        }
-        throw streamError("upstream_sse_malformed", "sse");
-      }
-      if (data2.length === 0) return;
-      const rawData = data2.join("\n");
-      if (rawData === "[DONE]") {
-        onFrame({ event, done: true, data: null });
-        return;
-      }
-      let value;
-      try {
-        value = JSON.parse(rawData);
-      } catch {
-        throw streamError("upstream_sse_malformed", "sse.data");
-      }
-      onFrame({ event, done: false, data: value });
-    }
-    function drain() {
-      while (true) {
-        const match = /\r?\n\r?\n/.exec(buffer);
-        if (!match) break;
-        const frame = buffer.slice(0, match.index);
-        buffer = buffer.slice(match.index + match[0].length);
-        processFrame(frame);
-      }
-      if (byteLength2(buffer) > maxFrameBytes) throw streamError("upstream_sse_frame_too_large", "sse");
-    }
-    return {
-      feed(chunk) {
-        if (ended) throw streamError("upstream_sse_malformed", "sse");
-        try {
-          if (typeof chunk === "string") buffer += chunk;
-          else if (chunk instanceof Uint8Array) buffer += decoder.decode(chunk, { stream: true });
-          else throw streamError("upstream_sse_malformed", "sse.chunk");
-          drain();
-        } catch (error) {
-          if (error == null ? void 0 : error.code) throw error;
-          throw streamError("upstream_sse_malformed", "sse.chunk");
-        }
-      },
-      end() {
-        if (ended) throw streamError("upstream_sse_malformed", "sse");
-        ended = true;
-        try {
-          buffer += decoder.decode();
-          drain();
-        } catch (error) {
-          if (error == null ? void 0 : error.code) throw error;
-          throw streamError("upstream_sse_malformed", "sse.chunk");
-        }
-        if (buffer.trim()) throw streamError("upstream_sse_truncated", "sse");
-      }
-    };
-  }
-  function createResponsesSseCollector({ maxFrameBytes = 1024 * 1024 } = {}) {
-    let terminal = null;
-    let sawDone = false;
-    const parser = strictParser({
-      maxFrameBytes,
-      onFrame({ event, done, data: data2 }) {
-        if (done) {
-          if (!terminal || sawDone) throw streamError("upstream_sse_malformed", "sse.done");
-          sawDone = true;
-          return;
-        }
-        if (!isObject2(data2) || typeof data2.type !== "string") {
-          throw streamError("upstream_sse_malformed", "sse.data.type");
-        }
-        if (event && event !== data2.type) throw streamError("upstream_sse_malformed", "sse.event");
-        if (terminal) throw streamError("upstream_sse_malformed", "sse.after_terminal");
-        if (["response.completed", "response.incomplete", "response.failed"].includes(data2.type)) {
-          if (!isObject2(data2.response)) throw streamError("upstream_sse_malformed", "sse.data.response");
-          const expected = data2.type.slice("response.".length);
-          if (data2.response.status !== expected) {
-            throw streamError("upstream_sse_malformed", "sse.data.response.status");
-          }
-          terminal = data2.response;
-        }
-      }
-    });
-    return {
-      feed: parser.feed,
-      end() {
-        parser.end();
-        if (!terminal) throw streamError("upstream_sse_terminal_missing", "sse");
-        return terminal;
-      }
-    };
-  }
-  var CHAT_CHUNK_FIELDS = /* @__PURE__ */ new Set([
-    "id",
-    "object",
-    "created",
-    "model",
-    "choices",
-    "usage",
-    "system_fingerprint",
-    "service_tier"
-  ]);
-  var CHAT_CHOICE_FIELDS2 = /* @__PURE__ */ new Set(["index", "delta", "finish_reason", "logprobs"]);
-  var CHAT_DELTA_FIELDS = /* @__PURE__ */ new Set(["role", "content", "reasoning", "reasoning_content", "tool_calls"]);
-  var CHAT_TOOL_DELTA_FIELDS = /* @__PURE__ */ new Set(["index", "id", "type", "function"]);
-  var CHAT_FUNCTION_DELTA_FIELDS = /* @__PURE__ */ new Set(["name", "arguments"]);
-  function exactStream(value, allowed, path) {
-    if (!isObject2(value)) throw streamError("upstream_sse_malformed", path);
-    const unknown = Object.keys(value).find((key) => !allowed.has(key));
-    if (unknown) throw streamError("upstream_sse_malformed", path ? path + "." + unknown : unknown);
-    return value;
-  }
-  function createChatSseCollector({ maxFrameBytes = 1024 * 1024 } = {}) {
-    let id = "";
-    let model = "";
-    let created = 0;
-    let content = "";
-    let reasoning = "";
-    let finishReason = null;
-    let usage;
-    let doneMarker = false;
-    const tools = /* @__PURE__ */ new Map();
-    const parser = strictParser({
-      maxFrameBytes,
-      onFrame({ done, data: data2 }) {
-        if (done) {
-          if (doneMarker || !finishReason) throw streamError("upstream_sse_malformed", "sse.done");
-          doneMarker = true;
-          return;
-        }
-        const chunk = exactStream(data2, CHAT_CHUNK_FIELDS, "data");
-        if (chunk.object !== "chat.completion.chunk") throw streamError("upstream_sse_malformed", "data.object");
-        if (typeof chunk.id === "string" && chunk.id) {
-          if (id && id !== chunk.id) throw streamError("upstream_sse_malformed", "data.id");
-          id = chunk.id;
-        }
-        if (typeof chunk.model === "string" && chunk.model) {
-          if (model && model !== chunk.model) throw streamError("upstream_sse_malformed", "data.model");
-          model = chunk.model;
-        }
-        if (chunk.created !== void 0) {
-          if (!Number.isInteger(chunk.created) || chunk.created < 0) {
-            throw streamError("upstream_sse_malformed", "data.created");
-          }
-          created = chunk.created;
-        }
-        if (!Array.isArray(chunk.choices)) throw streamError("upstream_sse_malformed", "data.choices");
-        if (chunk.choices.length === 0) {
-          if (!finishReason || usage !== void 0 || !isObject2(chunk.usage)) {
-            throw streamError("upstream_sse_malformed", "data.usage");
-          }
-          usage = chunk.usage;
-          return;
-        }
-        if (finishReason) throw streamError("upstream_sse_malformed", "sse.after_terminal");
-        if (chunk.choices.length !== 1) throw streamError("upstream_sse_malformed", "data.choices");
-        const choice = exactStream(chunk.choices[0], CHAT_CHOICE_FIELDS2, "choices[0]");
-        if (choice.index !== 0) throw streamError("upstream_sse_malformed", "choices[0].index");
-        if (choice.logprobs !== void 0 && choice.logprobs !== null) {
-          throw streamError("upstream_sse_malformed", "choices[0].logprobs");
-        }
-        const delta = exactStream(choice.delta, CHAT_DELTA_FIELDS, "choices[0].delta");
-        if (delta.role !== void 0 && delta.role !== "assistant") {
-          throw streamError("upstream_sse_malformed", "choices[0].delta.role");
-        }
-        if (delta.content !== void 0 && delta.content !== null) {
-          if (typeof delta.content !== "string") throw streamError("upstream_sse_malformed", "choices[0].delta.content");
-          content += delta.content;
-        }
-        const reasoningValues = [delta.reasoning, delta.reasoning_content].filter((value) => value !== void 0 && value !== null);
-        if (reasoningValues.length > 1 || reasoningValues.some((value) => typeof value !== "string")) {
-          throw streamError("upstream_sse_malformed", "choices[0].delta.reasoning_content");
-        }
-        if (reasoningValues.length === 1) reasoning += reasoningValues[0];
-        if (delta.tool_calls !== void 0) {
-          if (!Array.isArray(delta.tool_calls)) {
-            throw streamError("upstream_sse_malformed", "choices[0].delta.tool_calls");
-          }
-          delta.tool_calls.forEach((raw, index) => {
-            const path = "choices[0].delta.tool_calls[" + index + "]";
-            const part = exactStream(raw, CHAT_TOOL_DELTA_FIELDS, path);
-            if (!Number.isInteger(part.index) || part.index < 0) {
-              throw streamError("upstream_sse_malformed", path + ".index");
-            }
-            const state = tools.get(part.index) || { id: "", name: "", arguments: "" };
-            if (part.id !== void 0) {
-              if (typeof part.id !== "string" || !part.id || state.id && state.id !== part.id) {
-                throw streamError("upstream_sse_malformed", path + ".id");
-              }
-              state.id = part.id;
-            }
-            if (part.type !== void 0 && part.type !== "function") {
-              throw streamError("upstream_sse_malformed", path + ".type");
-            }
-            if (part.function !== void 0) {
-              const fn = exactStream(part.function, CHAT_FUNCTION_DELTA_FIELDS, path + ".function");
-              if (fn.name !== void 0) {
-                if (typeof fn.name !== "string" || !fn.name || state.name && state.name !== fn.name) {
-                  throw streamError("upstream_sse_malformed", path + ".function.name");
-                }
-                state.name = fn.name;
-              }
-              if (fn.arguments !== void 0) {
-                if (typeof fn.arguments !== "string") {
-                  throw streamError("upstream_sse_malformed", path + ".function.arguments");
-                }
-                state.arguments += fn.arguments;
-              }
-            }
-            tools.set(part.index, state);
-          });
-        }
-        if (choice.finish_reason !== null) {
-          if (!["stop", "tool_calls", "function_call", "length", "content_filter"].includes(choice.finish_reason)) {
-            throw streamError("upstream_sse_malformed", "choices[0].finish_reason");
-          }
-          finishReason = choice.finish_reason;
-        }
-      }
-    });
-    return {
-      feed: parser.feed,
-      end() {
-        parser.end();
-        if (!finishReason || !id || !model) throw streamError("upstream_sse_terminal_missing", "sse");
-        const toolCalls = [...tools.entries()].sort(([left], [right]) => left - right).map(([index, state]) => {
-          if (!state.id || !state.name) {
-            throw streamError("upstream_sse_truncated", "choices[0].delta.tool_calls[" + index + "]");
-          }
-          let args;
-          try {
-            args = JSON.parse(state.arguments || "{}");
-          } catch {
-            throw streamError("upstream_sse_truncated", "choices[0].delta.tool_calls[" + index + "].function.arguments");
-          }
-          if (!isObject2(args)) {
-            throw streamError("upstream_sse_truncated", "choices[0].delta.tool_calls[" + index + "].function.arguments");
-          }
-          return {
-            id: state.id,
-            type: "function",
-            function: { name: state.name, arguments: state.arguments || "{}" }
-          };
-        });
-        if (["tool_calls", "function_call"].includes(finishReason) !== toolCalls.length > 0) {
-          throw streamError("upstream_sse_malformed", "choices[0].finish_reason");
-        }
-        const message = { role: "assistant", content: content || null };
-        if (reasoning) message.reasoning_content = reasoning;
-        if (toolCalls.length) message.tool_calls = toolCalls;
-        return {
-          id,
-          object: "chat.completion",
-          created,
-          model,
-          choices: [{
-            index: 0,
-            message,
-            finish_reason: finishReason,
-            logprobs: null
-          }],
-          ...usage === void 0 ? {} : { usage }
-        };
-      }
-    };
-  }
-  function messageBlockStart(block, index) {
-    if (!isObject2(block) || typeof block.type !== "string") {
-      throw streamError("upstream_sse_malformed", "content_block_start.content_block");
-    }
-    if (block.type === "text") return { index, type: "text", text: String(block.text || ""), stopped: false };
-    if (block.type === "tool_use") {
-      if (typeof block.id !== "string" || typeof block.name !== "string" || !isObject2(block.input || {})) {
-        throw streamError("upstream_sse_malformed", "content_block_start.content_block");
-      }
-      return {
-        index,
-        type: "tool_use",
-        id: block.id,
-        name: block.name,
-        input: block.input || {},
-        inputJson: "",
-        stopped: false
-      };
-    }
-    if (block.type === "thinking") {
-      return {
-        index,
-        type: "thinking",
-        thinking: String(block.thinking || ""),
-        signature: String(block.signature || ""),
-        stopped: false
-      };
-    }
-    if (block.type === "redacted_thinking" && typeof block.data === "string") {
-      return { index, type: "redacted_thinking", data: block.data, stopped: false };
-    }
-    throw streamError("upstream_sse_malformed", "content_block_start.content_block.type");
-  }
-  function applyMessageDelta(block, delta) {
-    if (!isObject2(delta) || typeof delta.type !== "string") {
-      throw streamError("upstream_sse_malformed", "content_block_delta.delta");
-    }
-    if (block.type === "text" && delta.type === "text_delta" && typeof delta.text === "string") {
-      block.text += delta.text;
-      return;
-    }
-    if (block.type === "tool_use" && delta.type === "input_json_delta" && typeof delta.partial_json === "string") {
-      block.inputJson += delta.partial_json;
-      return;
-    }
-    if (block.type === "thinking" && delta.type === "thinking_delta" && typeof delta.thinking === "string") {
-      block.thinking += delta.thinking;
-      return;
-    }
-    if (block.type === "thinking" && delta.type === "signature_delta" && typeof delta.signature === "string") {
-      block.signature += delta.signature;
-      return;
-    }
-    throw streamError("upstream_sse_malformed", "content_block_delta.delta.type");
-  }
-  function finalizedBlock(block) {
-    if (block.type === "tool_use") {
-      let input = block.input;
-      if (block.inputJson) {
-        try {
-          input = JSON.parse(block.inputJson);
-        } catch {
-          throw streamError("upstream_sse_malformed", "content_block_delta.delta.partial_json");
-        }
-        if (!isObject2(input)) throw streamError("upstream_sse_malformed", "content_block_delta.delta.partial_json");
-      }
-      return { type: "tool_use", id: block.id, name: block.name, input };
-    }
-    if (block.type === "thinking") {
-      return {
-        type: "thinking",
-        thinking: block.thinking,
-        signature: block.signature
-      };
-    }
-    if (block.type === "redacted_thinking") return { type: block.type, data: block.data };
-    return { type: "text", text: block.text };
-  }
-  function createMessagesSseCollector({ maxFrameBytes = 1024 * 1024 } = {}) {
-    let start = null;
-    let stopReason = null;
-    let stopSequence = null;
-    let usage = null;
-    let messageStop = false;
-    let doneMarker = false;
-    const blocks = /* @__PURE__ */ new Map();
-    const parser = strictParser({
-      maxFrameBytes,
-      onFrame({ event, done, data: data2 }) {
-        var _a;
-        if (done) {
-          if (doneMarker) throw streamError("upstream_sse_malformed", "sse.done");
-          doneMarker = true;
-          return;
-        }
-        if (!isObject2(data2) || typeof data2.type !== "string") {
-          throw streamError("upstream_sse_malformed", "sse.data.type");
-        }
-        if (event && event !== data2.type) throw streamError("upstream_sse_malformed", "sse.event");
-        if (messageStop) throw streamError("upstream_sse_malformed", "sse.after_terminal");
-        if (data2.type === "ping") return;
-        if (data2.type === "error") throw streamError("upstream_stream_error", "sse.data.error");
-        if (data2.type === "message_start") {
-          if (start || !isObject2(data2.message)) throw streamError("upstream_sse_malformed", "message_start.message");
-          start = data2.message;
-          usage = isObject2(start.usage) ? { ...start.usage } : {};
-          return;
-        }
-        if (data2.type === "content_block_start") {
-          if (!Number.isInteger(data2.index) || data2.index < 0 || blocks.has(data2.index)) {
-            throw streamError("upstream_sse_malformed", "content_block_start.index");
-          }
-          blocks.set(data2.index, messageBlockStart(data2.content_block, data2.index));
-          return;
-        }
-        if (data2.type === "content_block_delta") {
-          const block = blocks.get(data2.index);
-          if (!block || block.stopped) throw streamError("upstream_sse_malformed", "content_block_delta.index");
-          applyMessageDelta(block, data2.delta);
-          return;
-        }
-        if (data2.type === "content_block_stop") {
-          const block = blocks.get(data2.index);
-          if (!block || block.stopped) throw streamError("upstream_sse_malformed", "content_block_stop.index");
-          block.stopped = true;
-          return;
-        }
-        if (data2.type === "message_delta") {
-          if (!isObject2(data2.delta) || typeof data2.delta.stop_reason !== "string") {
-            throw streamError("upstream_sse_malformed", "message_delta.delta.stop_reason");
-          }
-          stopReason = data2.delta.stop_reason;
-          stopSequence = (_a = data2.delta.stop_sequence) != null ? _a : null;
-          if (data2.usage !== void 0) {
-            if (!isObject2(data2.usage)) throw streamError("upstream_sse_malformed", "message_delta.usage");
-            usage = { ...usage || {}, ...data2.usage };
-          }
-          return;
-        }
-        if (data2.type === "message_stop") {
-          if (!start || !stopReason) throw streamError("upstream_sse_malformed", "message_stop");
-          messageStop = true;
-          return;
-        }
-        throw streamError("upstream_sse_malformed", "sse.data.type");
-      }
-    });
-    return {
-      feed: parser.feed,
-      end() {
-        parser.end();
-        if (!start || !stopReason) throw streamError("upstream_sse_terminal_missing", "sse");
-        if ([...blocks.values()].some((block) => !block.stopped)) {
-          throw streamError("upstream_sse_truncated", "content_block_stop");
-        }
-        const content = [...blocks.values()].sort((left, right) => left.index - right.index).map(finalizedBlock);
-        return {
-          message: {
-            id: String(start.id || ""),
-            type: "message",
-            role: "assistant",
-            model: String(start.model || ""),
-            content,
-            stop_reason: stopReason,
-            stop_sequence: stopSequence,
-            usage: usage || {}
-          },
-          terminalMode: messageStop ? "message_stop" : "bounded_eof"
-        };
-      }
-    };
-  }
-  function messagesSseEvents(message) {
-    var _a;
-    if (!isObject2(message) || message.type !== "message" || !Array.isArray(message.content)) {
-      throw streamError("invalid_messages_response", "message");
-    }
-    const events = [[
-      "message_start",
-      {
-        type: "message_start",
-        message: {
-          id: message.id,
-          type: "message",
-          role: "assistant",
-          model: message.model,
-          content: [],
-          stop_reason: null,
-          stop_sequence: null,
-          usage: message.usage || { input_tokens: 0, output_tokens: 0 }
-        }
-      }
-    ]];
-    message.content.forEach((block, index) => {
-      if (block.type === "text") {
-        events.push(["content_block_start", {
-          type: "content_block_start",
-          index,
-          content_block: { type: "text", text: "" }
-        }]);
-        if (block.text) events.push(["content_block_delta", {
-          type: "content_block_delta",
-          index,
-          delta: { type: "text_delta", text: block.text }
-        }]);
-      } else if (block.type === "tool_use") {
-        events.push(["content_block_start", {
-          type: "content_block_start",
-          index,
-          content_block: {
-            type: "tool_use",
-            id: block.id,
-            name: block.name,
-            input: {}
-          }
-        }]);
-        events.push(["content_block_delta", {
-          type: "content_block_delta",
-          index,
-          delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input || {}) }
-        }]);
-      } else if (block.type === "thinking") {
-        events.push(["content_block_start", {
-          type: "content_block_start",
-          index,
-          content_block: { type: "thinking", thinking: "", signature: "" }
-        }]);
-        if (block.thinking) events.push(["content_block_delta", {
-          type: "content_block_delta",
-          index,
-          delta: { type: "thinking_delta", thinking: block.thinking }
-        }]);
-        if (block.signature) events.push(["content_block_delta", {
-          type: "content_block_delta",
-          index,
-          delta: { type: "signature_delta", signature: block.signature }
-        }]);
-      } else if (block.type === "redacted_thinking") {
-        events.push(["content_block_start", {
-          type: "content_block_start",
-          index,
-          content_block: { type: "redacted_thinking", data: block.data }
-        }]);
-      } else {
-        throw streamError("invalid_messages_response", "message.content[" + index + "].type");
-      }
-      events.push(["content_block_stop", { type: "content_block_stop", index }]);
-    });
-    events.push(["message_delta", {
-      type: "message_delta",
-      delta: {
-        stop_reason: message.stop_reason || "end_turn",
-        stop_sequence: (_a = message.stop_sequence) != null ? _a : null
-      },
-      usage: message.usage || {}
-    }]);
-    events.push(["message_stop", { type: "message_stop" }]);
-    return events;
-  }
-  function responsesSseEvents(response) {
-    if (!isObject2(response) || response.object !== "response" || !Array.isArray(response.output)) {
-      throw streamError("invalid_responses_response", "response");
-    }
-    const created = {
-      ...response,
-      status: "in_progress",
-      output: []
-    };
-    const events = [["response.created", { type: "response.created", response: created }]];
-    response.output.forEach((item, outputIndex) => {
-      const added = { ...item };
-      if (Object.hasOwn(added, "status")) added.status = "in_progress";
-      if (item.type === "message") added.content = [];
-      if (item.type === "function_call") added.arguments = "";
-      events.push(["response.output_item.added", {
-        type: "response.output_item.added",
-        output_index: outputIndex,
-        item: added
-      }]);
-      if (item.type === "message") {
-        (item.content || []).forEach((part, contentIndex) => {
-          if (part.type !== "output_text") {
-            throw streamError("invalid_responses_response", "response.output[" + outputIndex + "].content[" + contentIndex + "]");
-          }
-          events.push(["response.content_part.added", {
-            type: "response.content_part.added",
-            output_index: outputIndex,
-            content_index: contentIndex,
-            part: { type: "output_text", text: "" }
-          }]);
-          if (part.text) events.push(["response.output_text.delta", {
-            type: "response.output_text.delta",
-            output_index: outputIndex,
-            content_index: contentIndex,
-            delta: part.text
-          }]);
-          events.push(["response.output_text.done", {
-            type: "response.output_text.done",
-            output_index: outputIndex,
-            content_index: contentIndex,
-            text: part.text
-          }]);
-          events.push(["response.content_part.done", {
-            type: "response.content_part.done",
-            output_index: outputIndex,
-            content_index: contentIndex,
-            part
-          }]);
-        });
-      } else if (item.type === "function_call") {
-        if (item.arguments) events.push(["response.function_call_arguments.delta", {
-          type: "response.function_call_arguments.delta",
-          item_id: item.id,
-          output_index: outputIndex,
-          delta: item.arguments
-        }]);
-        events.push(["response.function_call_arguments.done", {
-          type: "response.function_call_arguments.done",
-          item_id: item.id,
-          output_index: outputIndex,
-          arguments: item.arguments || "{}"
-        }]);
-      } else if (item.type !== "reasoning") {
-        throw streamError("invalid_responses_response", "response.output[" + outputIndex + "].type");
-      }
-      events.push(["response.output_item.done", {
-        type: "response.output_item.done",
-        output_index: outputIndex,
-        item
-      }]);
-    });
-    const status = response.status || "completed";
-    if (!["completed", "incomplete", "failed"].includes(status)) {
-      throw streamError("invalid_responses_response", "response.status");
-    }
-    events.push(["response." + status, { type: "response." + status, response }]);
-    return events;
-  }
-
-  // src/lib/providerHeaders.js
-  init_cep_runtime_inject();
-  var RFC_TOKEN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
-  var INBOUND_EXACT = /* @__PURE__ */ new Set([
-    "accept",
-    "content-type",
-    "openai-beta",
-    "user-agent",
-    "x-client-request-id",
-    "x-request-id",
-    "traceparent",
-    "tracestate"
-  ]);
-  var LOCAL_ROUTE_TOKEN_HEADER = "x-ae-mcp-route-token";
-  var LOCAL_ONLY = /* @__PURE__ */ new Set([
-    "authorization",
-    LOCAL_ROUTE_TOKEN_HEADER,
-    "host",
-    "content-length",
-    "connection",
-    "transfer-encoding"
-  ]);
-  var RESPONSE_EXACT = /* @__PURE__ */ new Set([
-    "content-type",
-    "cache-control",
-    "retry-after",
-    "x-request-id",
-    "request-id",
-    "openai-request-id",
-    "x-goog-request-id",
-    "x-amzn-requestid"
-  ]);
-  var JSON_MEDIA_TYPE = /^application\/(?:json|[!#$%&'*+.^_`|~0-9A-Za-z-]+\+json)(?:\s*;\s*charset=utf-8)?$/i;
-  var DEFAULT_LIMITS = Object.freeze({ maxValueBytes: 8 * 1024, maxTotalBytes: 32 * 1024, maxCount: 64 });
-  function headerError(code, message) {
-    const error = new Error(message);
-    error.code = code;
-    return error;
-  }
-  function resolvedLimits(limits = {}) {
-    const output = {};
-    for (const key of Object.keys(DEFAULT_LIMITS)) {
-      const candidate = Number(limits[key]);
-      output[key] = Number.isFinite(candidate) && candidate > 0 ? Math.min(DEFAULT_LIMITS[key], Math.floor(candidate)) : DEFAULT_LIMITS[key];
-    }
-    return output;
-  }
-  function isForbiddenName(name) {
-    return isForbiddenProviderHeaderName(name);
-  }
-  function validatesInboundName(name) {
-    return INBOUND_EXACT.has(name) || name.startsWith("x-stainless-") || name.startsWith("x-codex-");
-  }
-  function validateName(name) {
-    const value = String(name);
-    if (!RFC_TOKEN.test(value)) throw headerError("provider_header_invalid_name", "Provider header name is invalid.");
-    return value.toLowerCase();
-  }
-  function validateValue(value, limits) {
-    const text = String(value);
-    if (/[\r\n\0]/.test(text)) throw headerError("provider_header_invalid_value", "Provider header value is invalid.");
-    if (Buffer.byteLength(text, "utf8") > limits.maxValueBytes) {
-      throw headerError("provider_header_value_too_large", "Provider header value is too large.");
-    }
-    return text;
-  }
-  function fieldBytes(name, value) {
-    return Buffer.byteLength(`${name}: ${value}`, "utf8");
-  }
-  function checkAggregate(fields, limits) {
-    if (fields.length > limits.maxCount) {
-      throw headerError("provider_header_count_exceeded", "Provider header count is too large.");
-    }
-    const total = fields.reduce((sum, field) => sum + fieldBytes(field.name, field.value), 0);
-    if (total > limits.maxTotalBytes) {
-      throw headerError("provider_headers_too_large", "Provider headers are too large.");
-    }
-  }
-  function validateContentType(value) {
-    if (value && !JSON_MEDIA_TYPE.test(String(value))) {
-      throw headerError("provider_content_type_unsupported", "Provider request content type must be JSON.");
-    }
-  }
-  function collectCodexHeaders(rawHeaders = [], limits = {}) {
-    if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) {
-      throw headerError("provider_header_invalid", "Provider headers are malformed.");
-    }
-    const bounded = resolvedLimits(limits);
-    const seen = /* @__PURE__ */ new Set();
-    const all = [];
-    const forwarded = [];
-    for (let index = 0; index < rawHeaders.length; index += 2) {
-      const name = validateName(rawHeaders[index]);
-      const value = validateValue(rawHeaders[index + 1], bounded);
-      if (seen.has(name) && name !== "authorization") {
-        throw headerError("provider_header_duplicate", "Duplicate provider header is forbidden.");
-      }
-      seen.add(name);
-      all.push({ name, value });
-      if (LOCAL_ONLY.has(name)) continue;
-      if (isForbiddenName(name)) throw headerError("provider_header_forbidden", "Provider header is forbidden.");
-      if (!validatesInboundName(name)) continue;
-      if (isSensitiveProviderHeaderName(name)) {
-        throw headerError("provider_header_forbidden", "Provider header is forbidden.");
-      }
-      if (name === "content-type") validateContentType(value);
-      forwarded.push({ name, value });
-    }
-    checkAggregate(all, bounded);
-    return forwarded;
-  }
-  function validateProviderHeaders(providerHeaders, authName, limits) {
-    if (!Array.isArray(providerHeaders)) throw headerError("provider_header_invalid", "Provider headers are invalid.");
-    const seen = /* @__PURE__ */ new Set();
-    const validated = [];
-    for (const header of providerHeaders) {
-      const name = validateName(header == null ? void 0 : header.name);
-      const value = validateValue(header == null ? void 0 : header.value, limits);
-      const source = header == null ? void 0 : header.source;
-      if (source !== "literal" && source !== "secret") {
-        throw headerError("provider_header_invalid", "Provider header source is invalid.");
-      }
-      if (seen.has(name)) throw headerError("provider_header_duplicate", "Duplicate provider header is forbidden.");
-      seen.add(name);
-      if (isForbiddenName(name) || name === "authorization" || name === "x-api-key" || name === authName) {
-        throw headerError("provider_header_forbidden", "Provider header is reserved.");
-      }
-      if (source !== "secret" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(value))) {
-        throw headerError("provider_header_secret_reference_required", "Provider header requires a secret reference.");
-      }
-      if (name === "content-type") validateContentType(value);
-      validated.push({ name, value });
-    }
-    return validated;
-  }
-  function validateAuth(auth, limits) {
-    if (!auth || auth.kind === "none") return { kind: "none" };
-    if (auth.kind !== "header") throw headerError("provider_header_invalid", "Provider auth header is invalid.");
-    const name = validateName(auth.name);
-    if (isForbiddenName(name)) throw headerError("provider_header_forbidden", "Provider auth header is forbidden.");
-    const value = validateValue(auth.value, limits);
-    return { kind: "header", name, value };
-  }
-  function mergeUpstreamHeaders({ rawHeaders = [], providerHeaders = [], auth = { kind: "none" }, contentType, limits } = {}) {
-    const bounded = resolvedLimits(limits);
-    const codex = collectCodexHeaders(rawHeaders, bounded);
-    const validatedAuth = validateAuth(auth, bounded);
-    const authName = validatedAuth.kind === "header" ? validatedAuth.name : "";
-    const extras = validateProviderHeaders(providerHeaders, authName, bounded);
-    const merged = {};
-    for (const field of codex) merged[field.name] = field.value;
-    if (contentType) {
-      validateContentType(contentType);
-      merged["content-type"] = String(contentType);
-    }
-    for (const field of extras) merged[field.name] = field.value;
-    if (validatedAuth.kind === "header") merged[validatedAuth.name] = validatedAuth.value;
-    if (merged["content-type"]) validateContentType(merged["content-type"]);
-    checkAggregate(Object.entries(merged).map(([name, value]) => ({ name, value })), bounded);
-    return merged;
-  }
-  function validateProviderRequestConfiguration(provider, scope, limits = {}) {
-    var _a, _b, _c, _d;
-    const bounded = resolvedLimits(limits);
-    const model = ((_a = provider == null ? void 0 : provider.auth) == null ? void 0 : _a.model) || { kind: "none" };
-    const probe = (_b = provider == null ? void 0 : provider.auth) == null ? void 0 : _b.probe;
-    const policy = scope === "probe" && (probe == null ? void 0 : probe.kind) !== "inherit-model" ? probe : model;
-    let authName = "";
-    if ((policy == null ? void 0 : policy.kind) === "bearer") authName = "authorization";
-    else if ((policy == null ? void 0 : policy.kind) === "x-api-key") authName = "x-api-key";
-    else if ((policy == null ? void 0 : policy.kind) === "custom") {
-      authName = validateName(policy.headerName);
-      if (isForbiddenName(authName)) throw headerError("provider_header_forbidden", "Provider auth header is forbidden.");
-    }
-    const relevant = [];
-    for (const header of (provider == null ? void 0 : provider.headers) || []) {
-      if (!Array.isArray(header == null ? void 0 : header.scopes) || !header.scopes.includes(scope)) continue;
-      relevant.push({
-        name: header.name,
-        value: ((_c = header.valueRef) == null ? void 0 : _c.kind) === "literal" ? header.valueRef.value : "resolved-secret",
-        source: ((_d = header.valueRef) == null ? void 0 : _d.kind) === "literal" ? "literal" : "secret"
-      });
-    }
-    const validated = validateProviderHeaders(relevant, authName, bounded);
-    checkAggregate(validated, bounded);
-  }
-  function filterUpstreamResponseHeaders(rawHeaders = []) {
-    if (!Array.isArray(rawHeaders)) return {};
-    const output = {};
-    for (let index = 0; index + 1 < rawHeaders.length; index += 2) {
-      const rawName = String(rawHeaders[index]);
-      if (!RFC_TOKEN.test(rawName)) continue;
-      const name = rawName.toLowerCase();
-      if (!RESPONSE_EXACT.has(name) && !name.startsWith("ratelimit-") && !name.startsWith("x-ratelimit-")) continue;
-      const value = String(rawHeaders[index + 1]);
-      if (/[\r\n\0]/.test(value)) continue;
-      output[name] = value;
-    }
-    return output;
-  }
-
-  // src/cep/codexResponsesRoute.js
-  init_cep_runtime_inject();
-
-  // src/lib/codexResponsesCodec.js
-  init_cep_runtime_inject();
-  var SUPPORTED_RESPONSE_FIELDS = /* @__PURE__ */ new Set([
-    "model",
-    "instructions",
-    "input",
-    "max_output_tokens",
-    "temperature",
-    "top_p",
-    "tools",
-    "tool_choice",
-    "parallel_tool_calls",
-    "stream",
-    "reasoning",
-    "include",
-    "store",
-    "prompt_cache_key",
-    "client_metadata"
-  ]);
-  var MESSAGE_FIELDS2 = /* @__PURE__ */ new Set(["type", "role", "content"]);
-  var TEXT_PART_FIELDS = /* @__PURE__ */ new Set(["type", "text"]);
-  var FUNCTION_CALL_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "name", "arguments", "status"]);
-  var FUNCTION_OUTPUT_FIELDS = /* @__PURE__ */ new Set(["type", "id", "call_id", "output", "status"]);
-  var REASONING_ITEM_FIELDS = /* @__PURE__ */ new Set(["type", "id", "summary", "encrypted_content", "status"]);
-  var FUNCTION_TOOL_FIELDS = /* @__PURE__ */ new Set([
-    "type",
-    "name",
-    "description",
-    "parameters",
-    "strict"
-  ]);
-  var NAMESPACE_TOOL_FIELDS = /* @__PURE__ */ new Set(["type", "name", "description", "tools"]);
-  var FUNCTION_CHOICE_FIELDS = /* @__PURE__ */ new Set(["type", "name"]);
-  var CHAT_COMPLETION_FIELDS2 = /* @__PURE__ */ new Set([
-    "id",
-    "object",
-    "created",
-    "model",
-    "choices",
-    "usage",
-    "system_fingerprint",
-    "service_tier"
-  ]);
-  var CHAT_CHOICE_FIELDS3 = /* @__PURE__ */ new Set([
-    "index",
-    "message",
-    "finish_reason",
-    "logprobs"
-  ]);
-  var CHAT_MESSAGE_FIELDS2 = /* @__PURE__ */ new Set(["role", "content", "tool_calls", "refusal", "reasoning_content"]);
-  var CHAT_TOOL_CALL_FIELDS2 = /* @__PURE__ */ new Set(["id", "type", "function"]);
-  var CHAT_FUNCTION_FIELDS2 = /* @__PURE__ */ new Set(["name", "arguments"]);
-  var CHAT_CHUNK_FIELDS2 = /* @__PURE__ */ new Set([
-    "id",
-    "object",
-    "created",
-    "model",
-    "choices",
-    "usage",
-    "system_fingerprint",
-    "service_tier"
-  ]);
-  var CHAT_STREAM_CHOICE_FIELDS = /* @__PURE__ */ new Set([
-    "index",
-    "delta",
-    "finish_reason",
-    "logprobs"
-  ]);
-  var CHAT_DELTA_FIELDS2 = /* @__PURE__ */ new Set(["role", "content", "tool_calls", "reasoning_content"]);
-  var CHAT_TOOL_DELTA_FIELDS2 = /* @__PURE__ */ new Set(["index", "id", "type", "function"]);
-  var CHAT_FUNCTION_DELTA_FIELDS2 = /* @__PURE__ */ new Set(["name", "arguments"]);
-  var UNSUPPORTED_TOKEN_PARAMETER_CODES = /* @__PURE__ */ new Set([
-    "unsupported_parameter",
-    "unknown_parameter",
-    "unrecognized_parameter"
-  ]);
-  var FUNCTION_NAME2 = /^[A-Za-z0-9_-]{1,64}$/;
-  var ResponsesCompatibilityError = class extends Error {
-    constructor({ status, code, param, message }) {
-      super(message);
-      this.name = "ResponsesCompatibilityError";
-      this.status = status;
-      this.code = code;
-      this.param = param;
-    }
-  };
-  function unsupportedResponsesField(param) {
-    return new ResponsesCompatibilityError({
-      status: 501,
-      code: "unsupported_responses_field",
-      param,
-      message: `Unsupported Responses field: ${param}`
-    });
-  }
-  function invalidResponsesField(param) {
-    return new ResponsesCompatibilityError({
-      status: 400,
-      code: "invalid_responses_field",
-      param,
-      message: `Invalid Responses field: ${param}`
-    });
-  }
-  function invalidChatCompletion(param) {
-    return new ResponsesCompatibilityError({
-      status: 502,
-      code: "invalid_chat_completion",
-      param,
-      message: `Invalid Chat completion field: ${param}`
-    });
-  }
-  function invalidChatSse(param) {
-    return new ResponsesCompatibilityError({
-      status: 502,
-      code: "upstream_sse_malformed",
-      param,
-      message: `Malformed upstream Chat SSE: ${param}`
-    });
-  }
-  function oversizedChatSse() {
-    return new ResponsesCompatibilityError({
-      status: 502,
-      code: "upstream_sse_frame_too_large",
-      param: "sse",
-      message: "Upstream Chat SSE frame exceeds the configured limit."
-    });
-  }
-  function isObject3(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const prototype = Object.getPrototypeOf(value);
-    return prototype === Object.prototype || prototype === null;
-  }
-  function unknownKey2(value, allowed) {
-    return Object.keys(value).find((key) => !allowed.has(key)) || null;
-  }
-  function requestObject(value, param) {
-    if (!isObject3(value)) throw invalidResponsesField(param);
-    return value;
-  }
-  function requestExact(value, allowed, param) {
-    const object = requestObject(value, param);
-    const key = unknownKey2(object, allowed);
-    if (key !== null) throw unsupportedResponsesField(param ? `${param}.${key}` : key);
-    return object;
-  }
-  function requestString(value, param, allowEmpty = true) {
-    if (typeof value !== "string" || !allowEmpty && value.length === 0) {
-      throw invalidResponsesField(param);
-    }
-    return value;
-  }
-  function requestFunctionName(value, param) {
-    const name = requestString(value, param, false);
-    if (!FUNCTION_NAME2.test(name)) throw invalidResponsesField(param);
-    return name;
-  }
-  function cloneRequestJson(value, param, seen = /* @__PURE__ */ new WeakSet()) {
-    if (value === null || typeof value === "string" || typeof value === "boolean") return value;
-    if (typeof value === "number") {
-      if (!Number.isFinite(value)) throw invalidResponsesField(param);
-      return value;
-    }
-    if (typeof value !== "object" || value === null || seen.has(value)) {
-      throw invalidResponsesField(param);
-    }
-    seen.add(value);
-    let result;
-    if (Array.isArray(value)) {
-      result = value.map((item) => cloneRequestJson(item, param, seen));
-    } else if (isObject3(value)) {
-      result = {};
-      for (const [key, item] of Object.entries(value)) {
-        result[key] = cloneRequestJson(item, param, seen);
-      }
-    } else {
-      throw invalidResponsesField(param);
-    }
-    seen.delete(value);
-    return result;
-  }
-  function requestJsonArguments(value, param) {
-    const raw = requestString(value, param);
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw invalidResponsesField(param);
-    }
-    if (!isObject3(parsed)) throw invalidResponsesField(param);
-    return raw;
-  }
-  function messageText(content, param) {
-    if (typeof content === "string") return content;
-    if (!Array.isArray(content)) throw invalidResponsesField(param);
-    return content.map((rawPart, index) => {
-      const partPath = `${param}[${index}]`;
-      const part = requestObject(rawPart, partPath);
-      if (part.type !== "input_text" && part.type !== "output_text") {
-        throw unsupportedResponsesField(`${partPath}.type`);
-      }
-      requestExact(part, TEXT_PART_FIELDS, partPath);
-      return requestString(part.text, `${partPath}.text`);
-    }).join("");
-  }
-  function responseMessageToChat(item, path) {
-    const message = requestExact(item, MESSAGE_FIELDS2, path);
-    if (message.type !== void 0 && message.type !== "message") {
-      throw invalidResponsesField(`${path}.type`);
-    }
-    if (!["user", "assistant", "system", "developer"].includes(message.role)) {
-      throw unsupportedResponsesField(`${path}.role`);
-    }
-    if (!Object.hasOwn(message, "content")) {
-      throw invalidResponsesField(`${path}.content`);
-    }
-    return {
-      role: message.role,
-      content: messageText(message.content, `${path}.content`)
-    };
-  }
-  function responseFunctionCallToChat(item, path) {
-    const call = requestExact(item, FUNCTION_CALL_FIELDS, path);
-    if (call.type !== "function_call") throw invalidResponsesField(`${path}.type`);
-    if (call.status !== void 0 && !["completed", "incomplete"].includes(call.status)) {
-      throw invalidResponsesField(`${path}.status`);
-    }
-    return {
-      id: requestString(call.call_id, `${path}.call_id`, false),
-      type: "function",
-      function: {
-        name: requestFunctionName(call.name, `${path}.name`),
-        arguments: requestJsonArguments(call.arguments, `${path}.arguments`)
-      }
-    };
-  }
-  function responseFunctionOutputToChat(item, path, knownCallIds, usedCallIds) {
-    const output = requestExact(item, FUNCTION_OUTPUT_FIELDS, path);
-    if (output.type !== "function_call_output") {
-      throw invalidResponsesField(`${path}.type`);
-    }
-    if (output.status !== void 0 && !["completed", "incomplete"].includes(output.status)) {
-      throw invalidResponsesField(`${path}.status`);
-    }
-    const callId = requestString(output.call_id, `${path}.call_id`, false);
-    if (!knownCallIds.has(callId) || usedCallIds.has(callId)) {
-      throw invalidResponsesField(`${path}.call_id`);
-    }
-    usedCallIds.add(callId);
-    return {
-      role: "tool",
-      tool_call_id: callId,
-      content: requestString(output.output, `${path}.output`)
-    };
-  }
-  function responsesInputToMessages(input, { openReasoning } = {}) {
-    if (typeof input === "string") return [{ role: "user", content: input }];
-    if (!Array.isArray(input) || input.length === 0) {
-      throw invalidResponsesField("input");
-    }
-    const messages = [];
-    const knownCallIds = /* @__PURE__ */ new Set();
-    const usedCallIds = /* @__PURE__ */ new Set();
-    let pendingCalls = [];
-    let pendingReasoning = null;
-    function flushCalls() {
-      if (pendingCalls.length === 0) return;
-      const assistant = { role: "assistant", content: null, tool_calls: pendingCalls };
-      if (pendingReasoning !== null) assistant.reasoning_content = pendingReasoning;
-      messages.push(assistant);
-      pendingCalls = [];
-      pendingReasoning = null;
-    }
-    input.forEach((rawItem, index) => {
-      const path = `input[${index}]`;
-      if (!isObject3(rawItem)) throw invalidResponsesField(path);
-      if (rawItem.type === "reasoning") {
-        if (typeof openReasoning !== "function") throw unsupportedResponsesField(`${path}.type`);
-        if (pendingReasoning !== null || pendingCalls.length > 0) {
-          throw invalidResponsesField(path);
-        }
-        const reasoning = requestExact(rawItem, REASONING_ITEM_FIELDS, path);
-        if (!Array.isArray(reasoning.summary)) throw invalidResponsesField(`${path}.summary`);
-        if (reasoning.summary.length > 0) throw unsupportedResponsesField(`${path}.summary`);
-        const encrypted = requestString(reasoning.encrypted_content, `${path}.encrypted_content`, false);
-        let opened;
-        try {
-          opened = openReasoning(encrypted, { sourceProtocol: "chat" });
-        } catch {
-          throw unsupportedResponsesField(`${path}.encrypted_content`);
-        }
-        if (typeof (opened == null ? void 0 : opened.item) !== "string") throw unsupportedResponsesField(`${path}.encrypted_content`);
-        pendingReasoning = opened.item;
-        return;
-      }
-      if (rawItem.type === "function_call") {
-        const call = responseFunctionCallToChat(rawItem, path);
-        if (knownCallIds.has(call.id)) throw invalidResponsesField(`${path}.call_id`);
-        knownCallIds.add(call.id);
-        pendingCalls.push(call);
-        return;
-      }
-      if (rawItem.type === "function_call_output") {
-        flushCalls();
-        messages.push(responseFunctionOutputToChat(
-          rawItem,
-          path,
-          knownCallIds,
-          usedCallIds
-        ));
-        return;
-      }
-      if (rawItem.type === void 0 || rawItem.type === "message") {
-        flushCalls();
-        const message = responseMessageToChat(rawItem, path);
-        if (pendingReasoning !== null) {
-          if (message.role !== "assistant") throw invalidResponsesField(path);
-          message.reasoning_content = pendingReasoning;
-          pendingReasoning = null;
-        }
-        messages.push(message);
-        return;
-      }
-      throw unsupportedResponsesField(`${path}.type`);
-    });
-    flushCalls();
-    if (pendingReasoning !== null) throw invalidResponsesField("input");
-    return messages;
-  }
-  function responseToolToChat(rawTool, path, namespaceDescription = "") {
-    const tool = requestExact(rawTool, FUNCTION_TOOL_FIELDS, path);
-    if (tool.type !== "function") throw unsupportedResponsesField(`${path}.type`);
-    const fn = {
-      name: requestFunctionName(tool.name, `${path}.name`),
-      parameters: cloneRequestJson(tool.parameters, `${path}.parameters`)
-    };
-    if (!isObject3(fn.parameters)) throw invalidResponsesField(`${path}.parameters`);
-    const description = tool.description === void 0 ? "" : requestString(tool.description, `${path}.description`);
-    if (namespaceDescription || description) {
-      fn.description = [namespaceDescription, description].filter(Boolean).join("\n\n");
-    }
-    if (tool.strict !== void 0) {
-      if (typeof tool.strict !== "boolean") throw invalidResponsesField(`${path}.strict`);
-      fn.strict = tool.strict;
-    }
-    return { type: "function", function: fn };
-  }
-  function responseToolsToChat(rawTools) {
-    const converted = [];
-    rawTools.forEach((rawTool, index) => {
-      const path = `tools[${index}]`;
-      const tool = requestObject(rawTool, path);
-      if (tool.type === "function") {
-        converted.push(responseToolToChat(tool, path));
-        return;
-      }
-      if (tool.type !== "namespace") throw unsupportedResponsesField(`${path}.type`);
-      const namespace = requestExact(tool, NAMESPACE_TOOL_FIELDS, path);
-      const namespaceName = requestFunctionName(namespace.name, `${path}.name`);
-      const namespaceDescription = namespace.description === void 0 ? namespaceName : requestString(namespace.description, `${path}.description`);
-      if (!Array.isArray(namespace.tools) || namespace.tools.length === 0) {
-        throw invalidResponsesField(`${path}.tools`);
-      }
-      namespace.tools.forEach((child, childIndex) => {
-        converted.push(responseToolToChat(
-          child,
-          `${path}.tools[${childIndex}]`,
-          namespaceDescription
-        ));
-      });
-    });
-    return converted;
-  }
-  function responseToolChoiceToChat(rawChoice, toolNames) {
-    if (typeof rawChoice === "string") {
-      if (!["auto", "none", "required"].includes(rawChoice)) {
-        throw invalidResponsesField("tool_choice");
-      }
-      return rawChoice;
-    }
-    const choice = requestExact(rawChoice, FUNCTION_CHOICE_FIELDS, "tool_choice");
-    if (choice.type !== "function") throw unsupportedResponsesField("tool_choice.type");
-    const name = requestFunctionName(choice.name, "tool_choice.name");
-    if (!toolNames.has(name)) throw invalidResponsesField("tool_choice.name");
-    return { type: "function", function: { name } };
-  }
-  function optionalNumber(value, param, predicate) {
-    if (typeof value !== "number" || !Number.isFinite(value) || !predicate(value)) {
-      throw invalidResponsesField(param);
-    }
-    return value;
-  }
-  function responsesBodyToChatBody(body, { openReasoning } = {}) {
-    const request = requestExact(body, SUPPORTED_RESPONSE_FIELDS, "");
-    const model = requestString(request.model, "model", false);
-    if (!Object.hasOwn(request, "input")) throw invalidResponsesField("input");
-    const messages = [];
-    if (request.instructions !== void 0) {
-      messages.push({
-        role: "system",
-        content: requestString(request.instructions, "instructions")
-      });
-    }
-    messages.push(...responsesInputToMessages(request.input, { openReasoning }));
-    const chat = {
-      model,
-      messages,
-      stream: request.stream === true
-    };
-    if (request.stream !== void 0 && typeof request.stream !== "boolean") {
-      throw invalidResponsesField("stream");
-    }
-    if (request.max_output_tokens !== void 0) {
-      chat.max_tokens = optionalNumber(
-        request.max_output_tokens,
-        "max_output_tokens",
-        (value) => Number.isInteger(value) && value > 0
-      );
-    }
-    if (request.temperature !== void 0) {
-      chat.temperature = optionalNumber(
-        request.temperature,
-        "temperature",
-        (value) => value >= 0 && value <= 2
-      );
-    }
-    if (request.top_p !== void 0) {
-      chat.top_p = optionalNumber(
-        request.top_p,
-        "top_p",
-        (value) => value >= 0 && value <= 1
-      );
-    }
-    if (request.reasoning !== void 0 && request.reasoning !== null) {
-      throw unsupportedResponsesField("reasoning");
-    }
-    if (request.include !== void 0) {
-      if (!Array.isArray(request.include)) throw invalidResponsesField("include");
-      const supported = typeof openReasoning === "function" && request.include.length === 1 && request.include[0] === "reasoning.encrypted_content";
-      if (request.include.length > 0 && !supported) throw unsupportedResponsesField("include");
-    }
-    if (request.store !== void 0) {
-      if (typeof request.store !== "boolean") throw invalidResponsesField("store");
-      if (request.store) throw unsupportedResponsesField("store");
-    }
-    if (request.prompt_cache_key !== void 0) {
-      chat.prompt_cache_key = requestString(request.prompt_cache_key, "prompt_cache_key", false);
-    }
-    if (request.client_metadata !== void 0) {
-      const metadata = cloneRequestJson(request.client_metadata, "client_metadata");
-      if (!isObject3(metadata)) throw invalidResponsesField("client_metadata");
-      chat.client_metadata = metadata;
-    }
-    let tools;
-    if (request.tools !== void 0) {
-      if (!Array.isArray(request.tools)) throw invalidResponsesField("tools");
-      tools = responseToolsToChat(request.tools);
-      const names = tools.map((tool) => tool.function.name);
-      if (new Set(names).size !== names.length) throw invalidResponsesField("tools");
-      chat.tools = tools;
-    }
-    if (request.tool_choice !== void 0) {
-      const toolNames = new Set((tools || []).map((tool) => tool.function.name));
-      if (toolNames.size === 0) throw invalidResponsesField("tool_choice");
-      chat.tool_choice = responseToolChoiceToChat(request.tool_choice, toolNames);
-    }
-    if (request.parallel_tool_calls !== void 0) {
-      if (typeof request.parallel_tool_calls !== "boolean" || !tools || tools.length === 0) {
-        throw invalidResponsesField("parallel_tool_calls");
-      }
-      chat.parallel_tool_calls = request.parallel_tool_calls;
-    }
-    return chat;
-  }
-  function chatBodyWithDeveloperRoleAsSystem(chatBody) {
-    if (!isObject3(chatBody) || !Array.isArray(chatBody.messages)) return null;
-    let changed = false;
-    const messages = chatBody.messages.map((message) => {
-      if (!isObject3(message) || message.role !== "developer") return message;
-      changed = true;
-      return { ...message, role: "system" };
-    });
-    return changed ? { ...chatBody, messages } : null;
-  }
-  function chatBodyWithMaxCompletionTokens(chatBody) {
-    if (!isObject3(chatBody) || !Object.hasOwn(chatBody, "max_tokens") || Object.hasOwn(chatBody, "max_completion_tokens")) return null;
-    const converted = {};
-    for (const [name, value] of Object.entries(chatBody)) {
-      converted[name === "max_tokens" ? "max_completion_tokens" : name] = value;
-    }
-    return converted;
-  }
-  function chatErrorRequestsMaxCompletionTokens(status, payload) {
-    if (status !== 400 && status !== 422) return false;
-    const envelope3 = isObject3(payload) ? payload : null;
-    const error = isObject3(envelope3 == null ? void 0 : envelope3.error) ? envelope3.error : envelope3;
-    if (!error) return false;
-    const param = String(error.param || "").trim().toLowerCase();
-    const code = String(error.code || "").trim().toLowerCase();
-    const message = String(error.message || "").toLowerCase();
-    const targetsMaxTokens = param === "max_tokens" || param === "body.max_tokens";
-    const explicitCode = UNSUPPORTED_TOKEN_PARAMETER_CODES.has(code);
-    const explicitMessage = message.includes("max_tokens") && (message.includes("max_completion_tokens") || /\b(?:unsupported|unrecognized|unknown|unexpected|disallowed|forbidden)\b/.test(message) || /\bnot\s+(?:supported|allowed|accepted|permitted)\b/.test(message));
-    return explicitMessage || targetsMaxTokens && explicitCode;
-  }
-  function chatObject(value, param) {
-    if (!isObject3(value)) throw invalidChatCompletion(param);
-    return value;
-  }
-  function chatExact(value, allowed, param) {
-    const object = chatObject(value, param);
-    const key = unknownKey2(object, allowed);
-    if (key !== null) throw invalidChatCompletion(param ? `${param}.${key}` : key);
-    return object;
-  }
-  function chatString(value, param, allowEmpty = true) {
-    if (typeof value !== "string" || !allowEmpty && value.length === 0) {
-      throw invalidChatCompletion(param);
-    }
-    return value;
-  }
-  function chatArguments(value, param) {
-    const raw = chatString(value, param);
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw invalidChatCompletion(param);
-    }
-    if (!isObject3(parsed)) throw invalidChatCompletion(param);
-    return raw;
-  }
-  function messageItemId(responseId) {
-    const suffix = responseId.startsWith("resp_") ? responseId.slice(5) : responseId;
-    return `msg_${suffix}`;
-  }
-  function reasoningItemId(responseId) {
-    const suffix = responseId.startsWith("resp_") ? responseId.slice(5) : responseId;
-    return `rs_${suffix}`;
-  }
-  function sealedChatReasoning(responseId, value, sealReasoning, invalid) {
-    if (typeof value !== "string" || value.length === 0 || typeof sealReasoning !== "function") {
-      throw invalid();
-    }
-    let encrypted;
-    try {
-      encrypted = sealReasoning({ sourceProtocol: "chat", item: value });
-    } catch {
-      throw invalid();
-    }
-    if (typeof encrypted !== "string" || encrypted.length === 0) throw invalid();
-    return {
-      id: reasoningItemId(responseId),
-      type: "reasoning",
-      summary: [],
-      encrypted_content: encrypted
-    };
-  }
-  function completedMessageItem(responseId, text, status = "completed") {
-    return {
-      id: messageItemId(responseId),
-      type: "message",
-      status,
-      role: "assistant",
-      content: [{ type: "output_text", text }]
-    };
-  }
-  function completedToolItem(rawCall, path, usedIds) {
-    const call = chatExact(rawCall, CHAT_TOOL_CALL_FIELDS2, path);
-    const id = chatString(call.id, `${path}.id`, false);
-    if (usedIds.has(id)) throw invalidChatCompletion(`${path}.id`);
-    usedIds.add(id);
-    if (call.type !== "function") throw invalidChatCompletion(`${path}.type`);
-    const fn = chatExact(call.function, CHAT_FUNCTION_FIELDS2, `${path}.function`);
-    const name = chatString(fn.name, `${path}.function.name`, false);
-    if (!FUNCTION_NAME2.test(name)) throw invalidChatCompletion(`${path}.function.name`);
-    return {
-      type: "function_call",
-      id: `fc_${id}`,
-      call_id: id,
-      name,
-      arguments: chatArguments(fn.arguments, `${path}.function.arguments`),
-      status: "completed"
-    };
-  }
-  function validateResponseContext(context) {
-    if (!isObject3(context)) throw invalidChatCompletion("context");
-    return {
-      id: chatString(context.id, "context.id", false),
-      model: chatString(context.model, "context.model", false)
-    };
-  }
-  function chatCompletionToResponse(chat, context, { sealReasoning } = {}) {
-    const completion = chatExact(chat, CHAT_COMPLETION_FIELDS2, "");
-    if (completion.object !== "chat.completion") throw invalidChatCompletion("object");
-    if (!Array.isArray(completion.choices) || completion.choices.length !== 1) {
-      throw invalidChatCompletion("choices");
-    }
-    if (completion.usage !== void 0 && !isObject3(completion.usage)) {
-      throw invalidChatCompletion("usage");
-    }
-    const choice = chatExact(completion.choices[0], CHAT_CHOICE_FIELDS3, "choices[0]");
-    if (choice.index !== 0) throw invalidChatCompletion("choices[0].index");
-    if (choice.logprobs !== void 0 && choice.logprobs !== null) {
-      throw invalidChatCompletion("choices[0].logprobs");
-    }
-    const message = chatExact(choice.message, CHAT_MESSAGE_FIELDS2, "choices[0].message");
-    if (message.role !== "assistant") throw invalidChatCompletion("choices[0].message.role");
-    if (message.refusal !== void 0 && message.refusal !== null) {
-      throw invalidChatCompletion("choices[0].message.refusal");
-    }
-    if (message.content !== null && typeof message.content !== "string") {
-      throw invalidChatCompletion("choices[0].message.content");
-    }
-    if (message.reasoning_content !== void 0 && message.reasoning_content !== null && typeof message.reasoning_content !== "string") {
-      throw invalidChatCompletion("choices[0].message.reasoning_content");
-    }
-    const rawCalls = message.tool_calls === void 0 ? [] : message.tool_calls;
-    if (!Array.isArray(rawCalls)) throw invalidChatCompletion("choices[0].message.tool_calls");
-    const usedIds = /* @__PURE__ */ new Set();
-    const toolItems = rawCalls.map((call, index) => completedToolItem(
-      call,
-      `choices[0].message.tool_calls[${index}]`,
-      usedIds
-    ));
-    if (choice.finish_reason === "tool_calls" && toolItems.length === 0) {
-      throw invalidChatCompletion("choices[0].finish_reason");
-    }
-    if (choice.finish_reason === "stop" && toolItems.length !== 0) {
-      throw invalidChatCompletion("choices[0].finish_reason");
-    }
-    if (choice.finish_reason === "length" && toolItems.length !== 0) {
-      throw invalidChatCompletion("choices[0].finish_reason");
-    }
-    if (!["stop", "tool_calls", "length"].includes(choice.finish_reason)) {
-      throw invalidChatCompletion("choices[0].finish_reason");
-    }
-    const responseContext = validateResponseContext(context);
-    const incomplete = choice.finish_reason === "length";
-    const itemStatus = incomplete ? "incomplete" : "completed";
-    const output = [];
-    if (typeof message.reasoning_content === "string" && message.reasoning_content.length > 0) {
-      output.push(sealedChatReasoning(
-        responseContext.id,
-        message.reasoning_content,
-        sealReasoning,
-        () => invalidChatCompletion("choices[0].message.reasoning_content")
-      ));
-    }
-    if (typeof message.content === "string" && message.content.length > 0) {
-      output.push(completedMessageItem(responseContext.id, message.content, itemStatus));
-    }
-    output.push(...toolItems);
-    if (output.length === 0) output.push(completedMessageItem(responseContext.id, "", itemStatus));
-    const response = {
-      id: responseContext.id,
-      object: "response",
-      status: incomplete ? "incomplete" : "completed",
-      model: responseContext.model,
-      output
-    };
-    if (incomplete) response.incomplete_details = { reason: "max_output_tokens" };
-    return response;
-  }
-  function utf8ByteLength(value) {
-    let bytes = 0;
-    for (let index = 0; index < value.length; index += 1) {
-      const code = value.charCodeAt(index);
-      if (code < 128) bytes += 1;
-      else if (code < 2048) bytes += 2;
-      else if (code >= 55296 && code <= 56319 && index + 1 < value.length && value.charCodeAt(index + 1) >= 56320 && value.charCodeAt(index + 1) <= 57343) {
-        bytes += 4;
-        index += 1;
-      } else bytes += 3;
-    }
-    return bytes;
-  }
-  function sseObject(value, param) {
-    if (!isObject3(value)) throw invalidChatSse(param);
-    return value;
-  }
-  function sseExact(value, allowed, param) {
-    const object = sseObject(value, param);
-    const key = unknownKey2(object, allowed);
-    if (key !== null) throw invalidChatSse(param ? `${param}.${key}` : key);
-    return object;
-  }
-  function sseString(value, param, allowEmpty = true) {
-    if (typeof value !== "string" || !allowEmpty && value.length === 0) {
-      throw invalidChatSse(param);
-    }
-    return value;
-  }
-  function validateCompletedArguments(value, param) {
-    const raw = value || "{}";
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      throw invalidChatSse(param);
-    }
-    if (!isObject3(parsed)) throw invalidChatSse(param);
-    return raw;
-  }
-  function createChatSseToResponses({
-    id,
-    model,
-    maxFrameBytes,
-    writeEvent,
-    fail,
-    sealReasoning
-  }) {
-    if (typeof id !== "string" || id.length === 0) throw new TypeError("id must be a non-empty string");
-    if (typeof model !== "string" || model.length === 0) throw new TypeError("model must be a non-empty string");
-    if (!Number.isInteger(maxFrameBytes) || maxFrameBytes <= 0) {
-      throw new TypeError("maxFrameBytes must be a positive integer");
-    }
-    if (typeof writeEvent !== "function") throw new TypeError("writeEvent must be a function");
-    if (typeof fail !== "function") throw new TypeError("fail must be a function");
-    if (typeof TextDecoder !== "function") throw new TypeError("TextDecoder is unavailable");
-    const decoder = new TextDecoder("utf-8", { fatal: true });
-    let buffer = "";
-    let failed = false;
-    let done = false;
-    let ended = false;
-    let started = false;
-    let choiceFinished = null;
-    let nextOutputIndex = 0;
-    let textOutputIndex = null;
-    let text = "";
-    let reasoningOutputIndex = null;
-    let reasoning = "";
-    const tools = /* @__PURE__ */ new Map();
-    const callIds = /* @__PURE__ */ new Map();
-    function failOnce(error) {
-      if (failed || done) return;
-      failed = true;
-      buffer = "";
-      fail(error);
-    }
-    function emit(event, data2) {
-      writeEvent(event, { type: event, ...data2 });
-    }
-    function ensureStarted() {
-      if (started) return;
-      started = true;
-      emit("response.created", {
-        response: {
-          id,
-          object: "response",
-          status: "in_progress",
-          model,
-          output: []
-        }
-      });
-    }
-    function ensureTextItem() {
-      ensureStarted();
-      if (textOutputIndex !== null) return textOutputIndex;
-      textOutputIndex = nextOutputIndex;
-      nextOutputIndex += 1;
-      emit("response.output_item.added", {
-        output_index: textOutputIndex,
-        item: {
-          id: messageItemId(id),
-          type: "message",
-          status: "in_progress",
-          role: "assistant",
-          content: []
-        }
-      });
-      emit("response.content_part.added", {
-        output_index: textOutputIndex,
-        content_index: 0,
-        part: { type: "output_text", text: "" }
-      });
-      return textOutputIndex;
-    }
-    function ensureReasoningItem() {
-      ensureStarted();
-      if (reasoningOutputIndex !== null) return reasoningOutputIndex;
-      reasoningOutputIndex = nextOutputIndex;
-      nextOutputIndex += 1;
-      emit("response.output_item.added", {
-        output_index: reasoningOutputIndex,
-        item: {
-          id: reasoningItemId(id),
-          type: "reasoning",
-          summary: []
-        }
-      });
-      return reasoningOutputIndex;
-    }
-    function addTextDelta(delta) {
-      if (delta.length === 0) return;
-      const outputIndex = ensureTextItem();
-      text += delta;
-      emit("response.output_text.delta", {
-        output_index: outputIndex,
-        content_index: 0,
-        delta
-      });
-    }
-    function addReasoningDelta(delta) {
-      if (delta.length === 0) return;
-      ensureReasoningItem();
-      reasoning += delta;
-    }
-    function addToolDelta(rawDelta, path) {
-      const delta = sseExact(rawDelta, CHAT_TOOL_DELTA_FIELDS2, path);
-      if (!Number.isInteger(delta.index) || delta.index < 0) {
-        throw invalidChatSse(`${path}.index`);
-      }
-      let state = tools.get(delta.index);
-      if (!state) {
-        state = {
-          chatIndex: delta.index,
-          callId: "",
-          name: "",
-          arguments: "",
-          outputIndex: null,
-          itemId: "",
-          added: false
-        };
-        tools.set(delta.index, state);
-      }
-      if (delta.id !== void 0) {
-        const callId = sseString(delta.id, `${path}.id`, false);
-        const otherIndex = callIds.get(callId);
-        if (state.callId && state.callId !== callId || otherIndex !== void 0 && otherIndex !== delta.index) {
-          throw invalidChatSse(`${path}.id`);
-        }
-        state.callId = callId;
-        callIds.set(callId, delta.index);
-      }
-      if (delta.type !== void 0 && delta.type !== "function") {
-        throw invalidChatSse(`${path}.type`);
-      }
-      let argumentDelta = "";
-      if (delta.function !== void 0) {
-        const fn = sseExact(delta.function, CHAT_FUNCTION_DELTA_FIELDS2, `${path}.function`);
-        if (fn.name !== void 0) {
-          const name = sseString(fn.name, `${path}.function.name`, false);
-          if (!FUNCTION_NAME2.test(name) || state.name && state.name !== name) {
-            throw invalidChatSse(`${path}.function.name`);
-          }
-          state.name = name;
-        }
-        if (fn.arguments !== void 0) {
-          argumentDelta = sseString(fn.arguments, `${path}.function.arguments`);
-          state.arguments += argumentDelta;
-        }
-        if (fn.name === void 0 && fn.arguments === void 0) {
-          throw invalidChatSse(`${path}.function`);
-        }
-      }
-      if (delta.id === void 0 && delta.type === void 0 && delta.function === void 0) {
-        throw invalidChatSse(path);
-      }
-      if (!state.added && state.callId && state.name) {
-        ensureStarted();
-        state.added = true;
-        state.outputIndex = nextOutputIndex;
-        nextOutputIndex += 1;
-        state.itemId = `fc_${state.callId}`;
-        emit("response.output_item.added", {
-          output_index: state.outputIndex,
-          item: {
-            type: "function_call",
-            id: state.itemId,
-            call_id: state.callId,
-            name: state.name,
-            arguments: "",
-            status: "in_progress"
-          }
-        });
-        if (state.arguments.length > 0) {
-          emit("response.function_call_arguments.delta", {
-            item_id: state.itemId,
-            output_index: state.outputIndex,
-            delta: state.arguments
-          });
-        }
-        return;
-      }
-      if (state.added && argumentDelta.length > 0) {
-        emit("response.function_call_arguments.delta", {
-          item_id: state.itemId,
-          output_index: state.outputIndex,
-          delta: argumentDelta
-        });
-      }
-    }
-    function processChatChunk(rawChunk) {
-      const chunk = sseExact(rawChunk, CHAT_CHUNK_FIELDS2, "data");
-      if (chunk.object !== "chat.completion.chunk") throw invalidChatSse("data.object");
-      if (!Array.isArray(chunk.choices)) throw invalidChatSse("data.choices");
-      if (chunk.choices.length === 0) {
-        if (!isObject3(chunk.usage)) throw invalidChatSse("data.choices");
-        return;
-      }
-      if (chunk.choices.length !== 1 || choiceFinished !== null) {
-        throw invalidChatSse("data.choices");
-      }
-      const choice = sseExact(chunk.choices[0], CHAT_STREAM_CHOICE_FIELDS, "choices[0]");
-      if (choice.index !== 0) throw invalidChatSse("choices[0].index");
-      if (choice.logprobs !== void 0 && choice.logprobs !== null) {
-        throw invalidChatSse("choices[0].logprobs");
-      }
-      const delta = sseExact(choice.delta, CHAT_DELTA_FIELDS2, "choices[0].delta");
-      if (delta.role !== void 0 && delta.role !== "assistant") {
-        throw invalidChatSse("choices[0].delta.role");
-      }
-      if (delta.reasoning_content !== void 0 && delta.reasoning_content !== null) {
-        addReasoningDelta(sseString(
-          delta.reasoning_content,
-          "choices[0].delta.reasoning_content"
-        ));
-      }
-      if (delta.content !== void 0 && delta.content !== null) {
-        addTextDelta(sseString(delta.content, "choices[0].delta.content"));
-      }
-      if (delta.tool_calls !== void 0) {
-        if (!Array.isArray(delta.tool_calls)) {
-          throw invalidChatSse("choices[0].delta.tool_calls");
-        }
-        delta.tool_calls.forEach((toolDelta, index) => addToolDelta(
-          toolDelta,
-          `choices[0].delta.tool_calls[${index}]`
-        ));
-      }
-      if (choice.finish_reason !== null) {
-        if (!["stop", "tool_calls", "length"].includes(choice.finish_reason)) {
-          throw invalidChatSse("choices[0].finish_reason");
-        }
-        choiceFinished = choice.finish_reason;
-      }
-    }
-    function completedEntries() {
-      const entries = [];
-      if (reasoningOutputIndex !== null) {
-        entries.push({
-          outputIndex: reasoningOutputIndex,
-          kind: "reasoning",
-          item: sealedChatReasoning(
-            id,
-            reasoning,
-            sealReasoning,
-            () => invalidChatSse("choices[0].delta.reasoning_content")
-          )
-        });
-      }
-      if (textOutputIndex !== null) {
-        entries.push({
-          outputIndex: textOutputIndex,
-          kind: "text",
-          item: completedMessageItem(id, text)
-        });
-      }
-      for (const state of tools.values()) {
-        if (!state.added || !state.callId || !state.name || state.outputIndex === null) {
-          throw invalidChatSse(`choices[0].delta.tool_calls[${state.chatIndex}]`);
-        }
-        const argsParam = `choices[0].delta.tool_calls[${state.chatIndex}].function.arguments`;
-        const args = validateCompletedArguments(state.arguments, argsParam);
-        entries.push({
-          outputIndex: state.outputIndex,
-          kind: "tool",
-          state,
-          item: {
-            type: "function_call",
-            id: state.itemId,
-            call_id: state.callId,
-            name: state.name,
-            arguments: args,
-            status: "completed"
-          }
-        });
-      }
-      entries.sort((left, right) => left.outputIndex - right.outputIndex);
-      return entries;
-    }
-    function complete() {
-      if (choiceFinished === null) throw invalidChatSse("choices[0].finish_reason");
-      if (choiceFinished === "tool_calls" && tools.size === 0) {
-        throw invalidChatSse("choices[0].finish_reason");
-      }
-      if (choiceFinished === "stop" && tools.size !== 0) {
-        throw invalidChatSse("choices[0].finish_reason");
-      }
-      if (choiceFinished === "length" && tools.size !== 0) {
-        throw invalidChatSse("choices[0].finish_reason");
-      }
-      const incomplete = choiceFinished === "length";
-      ensureStarted();
-      if (textOutputIndex === null && reasoningOutputIndex === null && tools.size === 0) ensureTextItem();
-      const entries = completedEntries();
-      done = true;
-      for (const entry of entries) {
-        if (entry.kind === "text") {
-          if (incomplete) entry.item.status = "incomplete";
-          emit("response.output_text.done", {
-            output_index: entry.outputIndex,
-            content_index: 0,
-            text
-          });
-          emit("response.content_part.done", {
-            output_index: entry.outputIndex,
-            content_index: 0,
-            part: { type: "output_text", text }
-          });
-        } else if (entry.kind === "tool") {
-          emit("response.function_call_arguments.done", {
-            item_id: entry.item.id,
-            output_index: entry.outputIndex,
-            arguments: entry.item.arguments
-          });
-        }
-        emit("response.output_item.done", {
-          output_index: entry.outputIndex,
-          item: entry.item
-        });
-      }
-      const response = {
-        id,
-        object: "response",
-        status: incomplete ? "incomplete" : "completed",
-        model,
-        output: entries.map((entry) => entry.item)
-      };
-      if (incomplete) response.incomplete_details = { reason: "max_output_tokens" };
-      emit(incomplete ? "response.incomplete" : "response.completed", { response });
-    }
-    function processFrame(frame) {
-      if (utf8ByteLength(frame) > maxFrameBytes) throw oversizedChatSse();
-      const dataLines = [];
-      for (const rawLine of frame.split(/\r?\n/)) {
-        if (rawLine.startsWith(":")) continue;
-        if (rawLine.startsWith("data:")) {
-          const data3 = rawLine.slice(5);
-          dataLines.push(data3.startsWith(" ") ? data3.slice(1) : data3);
-          continue;
-        }
-        if (rawLine.trim().length !== 0) throw invalidChatSse("sse");
-      }
-      if (dataLines.length === 0) return;
-      const data2 = dataLines.join("\n");
-      if (data2 === "[DONE]") {
-        complete();
-        return;
-      }
-      if (done) throw invalidChatSse("sse");
-      let chunk;
-      try {
-        chunk = JSON.parse(data2);
-      } catch {
-        throw invalidChatSse("data");
-      }
-      processChatChunk(chunk);
-    }
-    function drainFrames() {
-      while (!failed) {
-        const match = /\r?\n\r?\n/.exec(buffer);
-        if (!match) break;
-        const frame = buffer.slice(0, match.index);
-        buffer = buffer.slice(match.index + match[0].length);
-        processFrame(frame);
-      }
-      if (!failed && !done && utf8ByteLength(buffer) > maxFrameBytes) {
-        throw oversizedChatSse();
-      }
-      if (done && buffer.trim().length !== 0) throw invalidChatSse("sse");
-    }
-    function feed(chunk) {
-      if (failed || ended) return;
-      if (done) {
-        if ((typeof chunk === "string" ? chunk : "").trim().length !== 0) {
-          failOnce(invalidChatSse("sse"));
-        }
-        return;
-      }
-      try {
-        if (typeof chunk === "string") buffer += chunk;
-        else if (chunk instanceof Uint8Array) buffer += decoder.decode(chunk, { stream: true });
-        else throw invalidChatSse("chunk");
-        drainFrames();
-      } catch (error) {
-        failOnce(error instanceof ResponsesCompatibilityError ? error : invalidChatSse("chunk"));
-      }
-    }
-    function end() {
-      if (failed || ended) return;
-      ended = true;
-      try {
-        if (!done) {
-          buffer += decoder.decode();
-          drainFrames();
-        }
-        if (!done && buffer.trim().length === 0 && choiceFinished !== null) complete();
-        if (!done || buffer.trim().length !== 0) throw invalidChatSse("sse");
-      } catch (error) {
-        failOnce(error instanceof ResponsesCompatibilityError ? error : invalidChatSse("chunk"));
-      }
-    }
-    return { feed, end };
-  }
-
-  // src/lib/providerUrl.js
-  init_cep_runtime_inject();
-  var RESOURCES = Object.freeze({
-    models: "models",
-    responses: "responses",
-    "chat-completions": "chat/completions",
-    messages: "messages"
-  });
-  function providerUrlError(code, message) {
-    const error = new Error(message);
-    error.code = code;
-    return error;
-  }
-  function decodedPathHasTraversal(raw) {
-    let current = String(raw || "");
-    for (let layer = 0; layer < 4; layer += 1) {
-      if (current.split("/").some((segment) => segment === "." || segment === "..")) return true;
-      let decoded;
-      try {
-        decoded = decodeURIComponent(current);
-      } catch {
-        return true;
-      }
-      if (decoded === current) return false;
-      current = decoded;
-    }
-    return current.split("/").some((segment) => segment === "." || segment === "..");
-  }
-  function rawPathFromAbsoluteUrl(raw) {
-    const scheme = raw.indexOf("://");
-    if (scheme < 0) return "";
-    const pathStart = raw.indexOf("/", scheme + 3);
-    if (pathStart < 0) return "/";
-    const endCandidates = [raw.indexOf("?", pathStart), raw.indexOf("#", pathStart)].filter((value) => value >= 0);
-    const end = endCandidates.length ? Math.min(...endCandidates) : raw.length;
-    return raw.slice(pathStart, end);
-  }
-  function isLoopbackHostname2(hostname) {
-    const host = String(hostname || "").toLowerCase().replace(/^\[|\]$/g, "");
-    if (host === "localhost" || host.endsWith(".localhost") || host === "::1") return true;
-    const mapped = host.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    const ipv4 = mapped ? mapped[1] : host;
-    if (/^127(?:\.\d{1,3}){3}$/.test(ipv4)) return true;
-    return /^::ffff:7f[0-9a-f]{2}:[0-9a-f]{1,4}$/i.test(host);
-  }
-  function parseBaseUrl(baseUrl, allowInsecureHttp) {
-    const raw = typeof baseUrl === "string" ? baseUrl.trim() : "";
-    if (!raw || raw.startsWith("//") || !/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(raw)) {
-      throw providerUrlError("provider_url_invalid", "Provider URL must be absolute.");
-    }
-    if (decodedPathHasTraversal(rawPathFromAbsoluteUrl(raw))) {
-      throw providerUrlError("provider_url_traversal_forbidden", "Provider URL path traversal is forbidden.");
-    }
-    let url;
-    try {
-      url = new URL(raw);
-    } catch {
-      throw providerUrlError("provider_url_invalid", "Provider URL is invalid.");
-    }
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-      throw providerUrlError("provider_url_invalid", "Provider URL protocol is unsupported.");
-    }
-    if (url.username || url.password) {
-      throw providerUrlError("provider_url_userinfo_forbidden", "Provider URL userinfo is forbidden.");
-    }
-    if (url.hash || raw.includes("#")) {
-      throw providerUrlError("provider_url_fragment_forbidden", "Provider URL fragments are forbidden.");
-    }
-    if (url.search || raw.includes("?")) {
-      throw providerUrlError("provider_url_query_forbidden", "Provider base URL queries are forbidden.");
-    }
-    if (url.protocol === "http:" && !isLoopbackHostname2(url.hostname) && allowInsecureHttp !== true) {
-      throw providerUrlError("provider_insecure_http_forbidden", "Insecure provider HTTP requires explicit approval.");
-    }
-    return url;
-  }
-  function normalizeSearch(inboundSearch) {
-    const value = inboundSearch === void 0 || inboundSearch === null ? "" : String(inboundSearch);
-    if (!value) return "";
-    if (!value.startsWith("?") || value.includes("#") || value.includes("\r") || value.includes("\n")) {
-      throw providerUrlError("provider_url_invalid_search", "Provider request query is invalid.");
-    }
-    return value;
-  }
-  function buildProviderEndpoint({
-    baseUrl,
-    resource,
-    inboundSearch = "",
-    allowInsecureHttp = false
-  } = {}) {
-    if (!Object.hasOwn(RESOURCES, resource)) {
-      throw providerUrlError("provider_url_invalid_resource", "Provider resource is invalid.");
-    }
-    const endpoint = buildProviderApiBaseUrl({ baseUrl, allowInsecureHttp });
-    const configuredOrigin = endpoint.origin;
-    endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, "")}/${RESOURCES[resource]}`;
-    endpoint.search = normalizeSearch(inboundSearch);
-    endpoint.hash = "";
-    if (endpoint.origin !== configuredOrigin) {
-      throw providerUrlError("provider_url_origin_mismatch", "Provider endpoint origin changed unexpectedly.");
-    }
-    return endpoint;
-  }
-  function buildProviderApiBaseCandidates({
-    baseUrl,
-    allowInsecureHttp = false
-  } = {}) {
-    const configured = parseBaseUrl(baseUrl, allowInsecureHttp);
-    const configuredRoot = new URL(configured.toString());
-    configuredRoot.pathname = configuredRoot.pathname.replace(/\/+$/, "") || "/";
-    configuredRoot.search = "";
-    configuredRoot.hash = "";
-    const plusV1 = new URL(configuredRoot.toString());
-    const configuredPath = plusV1.pathname.replace(/\/+$/, "");
-    plusV1.pathname = /\/v1$/i.test(configuredPath) ? configuredPath : `${configuredPath === "/" ? "" : configuredPath}/v1`;
-    const candidates = [{ id: "configured-root", url: configuredRoot }];
-    if (plusV1.toString() !== configuredRoot.toString()) {
-      candidates.push({ id: "plus-v1", url: plusV1 });
-    }
-    return candidates;
-  }
-  function buildProviderEndpointCandidates({
-    baseUrl,
-    resource,
-    inboundSearch = "",
-    allowInsecureHttp = false
-  } = {}) {
-    if (!Object.hasOwn(RESOURCES, resource)) {
-      throw providerUrlError("provider_url_invalid_resource", "Provider resource is invalid.");
-    }
-    const search = normalizeSearch(inboundSearch);
-    return buildProviderApiBaseCandidates({ baseUrl, allowInsecureHttp }).map((candidate) => {
-      const endpoint = new URL(candidate.url.toString());
-      endpoint.pathname = `${endpoint.pathname.replace(/\/+$/, "")}/${RESOURCES[resource]}`;
-      endpoint.search = search;
-      endpoint.hash = "";
-      if (endpoint.origin !== candidate.url.origin) {
-        throw providerUrlError("provider_url_origin_mismatch", "Provider endpoint origin changed unexpectedly.");
-      }
-      return { id: candidate.id, apiRoot: new URL(candidate.url.toString()), url: endpoint };
-    });
-  }
-  function buildProviderApiBaseUrl({ baseUrl, allowInsecureHttp = false } = {}) {
-    const candidates = buildProviderApiBaseCandidates({ baseUrl, allowInsecureHttp });
-    if (/\/v\d+(?:beta)?\/openai\/?$/i.test(candidates[0].url.pathname)) {
-      return new URL(candidates[0].url.toString());
-    }
-    return new URL((candidates.find((candidate) => candidate.id === "plus-v1") || candidates[0]).url.toString());
-  }
-
-  // src/lib/providerSseSecretGuard.js
-  init_cep_runtime_inject();
-  var STREAM_TEXT_KEYS = /* @__PURE__ */ new Set([
-    "arguments",
-    "content",
-    "delta",
-    "input_json",
-    "output_text",
-    "partial_json",
-    "reasoning_content",
-    "refusal",
-    "signature",
-    "summary",
-    "summary_text",
-    "text",
-    "thinking",
-    "transcript"
-  ]);
-  var STREAM_CONTROL_KEYS = /* @__PURE__ */ new Set([
-    "content_index",
-    "id",
-    "index",
-    "item_id",
-    "message_id",
-    "model",
-    "object",
-    "output_index",
-    "response_id",
-    "role",
-    "status",
-    "type"
-  ]);
-  var STREAM_DISCRIMINATOR_KEYS = /* @__PURE__ */ new Set([
-    "object",
-    "role",
-    "status",
-    "type"
-  ]);
-  var MAX_STREAM_AGGREGATE_CHARS = 16 * 1024 * 1024;
-  var MAX_STREAM_PROJECTION_CHARS = MAX_STREAM_AGGREGATE_CHARS * 12;
-  var STREAM_TOTAL_CHARS = Symbol("stream-total-chars");
-  function invalidSse(code, message) {
-    return Object.assign(new Error(message), { status: 502, code });
-  }
-  function payloadIdentity(payload) {
-    var _a, _b;
-    if (!payload || typeof payload !== "object") return "";
-    return [
-      payload.item_id,
-      payload.id,
-      (_a = payload.response) == null ? void 0 : _a.id,
-      (_b = payload.message) == null ? void 0 : _b.id,
-      payload.output_index,
-      payload.content_index,
-      payload.index
-    ].map((value) => String(value != null ? value : "")).join("|");
-  }
-  function appendStream(streams, key, value) {
-    const next = (streams.get(key) || "") + value;
-    const total = (streams.get(STREAM_TOTAL_CHARS) || 0) + value.length;
-    if (next.length > MAX_STREAM_AGGREGATE_CHARS || total > MAX_STREAM_PROJECTION_CHARS) {
-      throw invalidSse("provider_stream_too_large", "Provider stream was too large.");
-    }
-    streams.set(key, next);
-    streams.set(STREAM_TOTAL_CHARS, total);
-  }
-  function collectStreamingStrings(value, identity, streams, path = []) {
-    var _a;
-    if (value === null || ["string", "number", "boolean", "bigint"].includes(typeof value)) {
-      const text = String(value);
-      const leaf = String((_a = path.at(-1)) != null ? _a : "");
-      const pathKey = `path:${identity}:${path.join(".")}`;
-      appendStream(streams, pathKey, text);
-      const globalPathKey = `global-path:${path.join(".")}`;
-      appendStream(streams, globalPathKey, text);
-      appendStream(streams, "global-all-values", text);
-      if (!STREAM_DISCRIMINATOR_KEYS.has(leaf)) {
-        appendStream(streams, "global-data-values", text);
-        appendStream(streams, "sse-visible-data-values", text);
-        for (const key of streams.keys()) {
-          if (typeof key === "string" && key.startsWith("sse-seed-value:")) {
-            appendStream(streams, key, text);
-          }
-        }
-      }
-      if (STREAM_TEXT_KEYS.has(leaf)) {
-        const semanticKey = `semantic:${identity}`;
-        appendStream(streams, semanticKey, text);
-        appendStream(streams, "global-semantic", text);
-      }
-      return;
-    }
-    if (Array.isArray(value)) {
-      value.forEach((item, index) => collectStreamingStrings(item, identity, streams, [...path, index]));
-      return;
-    }
-    if (!value || typeof value !== "object") return;
-    for (const [key, item] of Object.entries(value)) {
-      appendStream(streams, "global-all-keys", key);
-      if (!STREAM_CONTROL_KEYS.has(key)) {
-        appendStream(streams, "global-data-keys", key);
-        appendStream(streams, "global-data-key-values", key);
-        if (item === null || ["string", "number", "boolean", "bigint"].includes(typeof item)) {
-          appendStream(streams, "global-data-key-values", String(item));
-        }
-      }
-      collectStreamingStrings(item, identity, streams, [...path, key]);
-    }
-  }
-  function requireCredentialFreeSse(data2, secrets = [], {
-    maxFrameBytes = 1024 * 1024,
-    seedValues = []
-  } = {}) {
-    const bytes = Buffer.isBuffer(data2) ? Buffer.from(data2) : Buffer.from(data2 || "");
-    if (bytes.length > MAX_STREAM_AGGREGATE_CHARS) {
-      throw invalidSse("provider_stream_too_large", "Provider stream was too large.");
-    }
-    const text = bytes.toString("utf8");
-    if (!Buffer.from(text, "utf8").equals(bytes)) {
-      throw invalidSse("provider_stream_invalid_utf8", "Provider stream was not valid UTF-8.");
-    }
-    const frames = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split(/\n\n/);
-    const streams = /* @__PURE__ */ new Map();
-    for (const [index, value] of Array.from(seedValues || []).entries()) {
-      const textValue = String(value);
-      appendStream(streams, `sse-seed-value:${index}`, textValue);
-      appendStream(streams, "sse-visible-data-values", textValue);
-    }
-    for (const frame of frames) {
-      if (!frame) continue;
-      if (Buffer.byteLength(frame, "utf8") > maxFrameBytes) {
-        throw invalidSse("provider_stream_frame_too_large", "Provider stream frame was too large.");
-      }
-      if (containsExactSecret(frame, secrets)) {
-        throw invalidSse("provider_stream_credential_reflection", "Provider stream metadata was rejected.");
-      }
-      const dataLines = [];
-      for (const line of frame.split("\n")) {
-        if (line.startsWith(":")) {
-          const comment = line.slice(1).replace(/^ /, "");
-          appendStream(streams, "sse-comments", comment);
-          appendStream(streams, "sse-non-data-values", comment);
-          appendStream(streams, "sse-visible-data-values", comment);
-          continue;
-        }
-        const separator = line.indexOf(":");
-        const field = separator < 0 ? line : line.slice(0, separator);
-        const fieldValue = separator < 0 ? "" : line.slice(separator + 1).replace(/^ /, "");
-        if (field === "data") {
-          dataLines.push(fieldValue);
-          continue;
-        }
-        appendStream(streams, `sse-field:${field}`, fieldValue);
-        appendStream(streams, "sse-field-names", field);
-        appendStream(streams, "sse-non-data-values", fieldValue);
-        appendStream(streams, "sse-non-data-key-values", field + fieldValue);
-        appendStream(streams, "sse-visible-data-values", fieldValue);
-      }
-      if (!dataLines.length) continue;
-      const payloadText = dataLines.join("\n");
-      if (payloadText.trim() === "[DONE]") continue;
-      let payload;
-      try {
-        payload = JSON.parse(payloadText);
-      } catch {
-        throw invalidSse("provider_stream_invalid_json", "Provider stream contained invalid JSON.");
-      }
-      if (containsExactSecret(payload, secrets)) {
-        throw invalidSse("provider_stream_credential_reflection", "Provider stream metadata was rejected.");
-      }
-      collectStreamingStrings(payload, payloadIdentity(payload), streams);
-    }
-    for (const [key, value] of streams) {
-      if (key === STREAM_TOTAL_CHARS) continue;
-      if (containsExactSecret(value, secrets)) {
-        throw invalidSse("provider_stream_credential_reflection", "Provider stream metadata was rejected.");
-      }
-    }
-  }
-
-  // src/cep/providerRouteAuth.js
-  init_cep_runtime_inject();
-  function generateRouteToken({ randomBytes } = {}) {
-    if (typeof randomBytes !== "function") throw new TypeError("randomBytes is required");
-    const bytes = randomBytes(32);
-    if (!bytes || bytes.length !== 32) throw new TypeError("randomBytes must return exactly 32 bytes");
-    return Buffer.from(bytes).toString("base64url");
-  }
-  function parseRouteTokenHeader(rawHeaders = []) {
-    if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) return null;
-    const values = [];
-    for (let index = 0; index < rawHeaders.length; index += 2) {
-      if (String(rawHeaders[index]).toLowerCase() === LOCAL_ROUTE_TOKEN_HEADER) {
-        values.push(String(rawHeaders[index + 1]));
-      }
-    }
-    if (values.length !== 1) return null;
-    return /^[A-Za-z0-9_-]+$/.test(values[0]) ? values[0] : null;
-  }
-  function parseRouteAuthorization(rawHeaders = []) {
-    if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) return null;
-    const values = [];
-    for (let index = 0; index < rawHeaders.length; index += 2) {
-      if (String(rawHeaders[index]).toLowerCase() === "authorization") {
-        values.push(String(rawHeaders[index + 1]));
-      }
-    }
-    if (values.length !== 1) return null;
-    const match = values[0].match(/^Bearer ([A-Za-z0-9_-]+)$/i);
-    return match ? match[1] : null;
-  }
-  function parseRouteToken(rawHeaders = []) {
-    if (!Array.isArray(rawHeaders) || rawHeaders.length % 2 !== 0) return null;
-    let dedicatedCount = 0;
-    for (let index = 0; index < rawHeaders.length; index += 2) {
-      if (String(rawHeaders[index]).toLowerCase() === LOCAL_ROUTE_TOKEN_HEADER) dedicatedCount += 1;
-    }
-    if (dedicatedCount > 0) return parseRouteTokenHeader(rawHeaders);
-    return parseRouteAuthorization(rawHeaders);
-  }
-  function routeTokenMatches(candidate, expected, { createHash, timingSafeEqual } = {}) {
-    if (typeof createHash !== "function" || typeof timingSafeEqual !== "function") {
-      throw new TypeError("createHash and timingSafeEqual are required");
-    }
-    const left = createHash("sha256").update(String(candidate), "utf8").digest();
-    const right = createHash("sha256").update(String(expected), "utf8").digest();
-    return timingSafeEqual(left, right);
-  }
-
-  // src/cep/reasoningCapsule.js
-  init_cep_runtime_inject();
-  var PREFIX = "aemcp-r1";
-  var AAD = Buffer.from("ae-mcp/provider-reasoning-capsule/v1", "utf8");
-  var MAX_PAYLOAD_BYTES = 1024 * 1024;
-  var SOURCE_PROTOCOLS = /* @__PURE__ */ new Set(["chat", "messages", "responses"]);
-  function capsuleError(code) {
-    const error = new Error("Provider reasoning capsule is invalid.");
-    error.code = code;
-    return error;
-  }
-  function base64url(value) {
-    return Buffer.from(value).toString("base64url");
-  }
-  function decode(value, maximum, code) {
-    if (typeof value !== "string" || !/^[A-Za-z0-9_-]+$/.test(value)) throw capsuleError(code);
-    const decoded = Buffer.from(value, "base64url");
-    if (decoded.length === 0 || decoded.length > maximum || base64url(decoded) !== value) {
-      throw capsuleError(code);
-    }
-    return decoded;
-  }
-  function exactPayload(value) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) throw capsuleError("reasoning_capsule_payload_invalid");
-    const keys = Object.keys(value).sort();
-    if (keys.join(",") !== "item,sourceProtocol,version" || value.version !== 1) {
-      throw capsuleError("reasoning_capsule_payload_invalid");
-    }
-    if (!SOURCE_PROTOCOLS.has(value.sourceProtocol)) throw capsuleError("reasoning_capsule_payload_invalid");
-    return value;
-  }
-  function createReasoningCapsule({ crypto, key } = {}) {
-    if (!crypto || typeof crypto.randomBytes !== "function" || typeof crypto.createCipheriv !== "function" || typeof crypto.createDecipheriv !== "function") {
-      throw new TypeError("crypto implementation is required");
-    }
-    const secret = key ? Buffer.from(key) : Buffer.from(crypto.randomBytes(32));
-    if (secret.length !== 32) throw new TypeError("reasoning capsule key must be 32 bytes");
-    function seal({ sourceProtocol, item } = {}) {
-      if (!SOURCE_PROTOCOLS.has(sourceProtocol)) throw capsuleError("reasoning_capsule_payload_invalid");
-      const payload = Buffer.from(JSON.stringify({ version: 1, sourceProtocol, item }), "utf8");
-      if (payload.length === 0 || payload.length > MAX_PAYLOAD_BYTES) {
-        throw capsuleError("reasoning_capsule_payload_too_large");
-      }
-      const iv = Buffer.from(crypto.randomBytes(12));
-      if (iv.length !== 12) throw new TypeError("crypto.randomBytes must return 12 bytes");
-      const cipher = crypto.createCipheriv("aes-256-gcm", secret, iv);
-      cipher.setAAD(AAD);
-      const ciphertext = Buffer.concat([cipher.update(payload), cipher.final()]);
-      const tag = cipher.getAuthTag();
-      payload.fill(0);
-      return [PREFIX, base64url(iv), base64url(ciphertext), base64url(tag)].join(".");
-    }
-    function open(token, { sourceProtocol } = {}) {
-      if (typeof token !== "string" || token.length > MAX_PAYLOAD_BYTES * 2) {
-        throw capsuleError("reasoning_capsule_invalid");
-      }
-      const parts = token.split(".");
-      if (parts.length !== 4 || parts[0] !== PREFIX) throw capsuleError("reasoning_capsule_invalid");
-      const iv = decode(parts[1], 12, "reasoning_capsule_invalid");
-      const ciphertext = decode(parts[2], MAX_PAYLOAD_BYTES + 256, "reasoning_capsule_invalid");
-      const tag = decode(parts[3], 16, "reasoning_capsule_invalid");
-      if (iv.length !== 12 || tag.length !== 16) throw capsuleError("reasoning_capsule_invalid");
-      let plaintext;
-      try {
-        const decipher = crypto.createDecipheriv("aes-256-gcm", secret, iv);
-        decipher.setAAD(AAD);
-        decipher.setAuthTag(tag);
-        plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
-      } catch {
-        throw capsuleError("reasoning_capsule_auth_failed");
-      }
-      try {
-        const payload = exactPayload(JSON.parse(plaintext.toString("utf8")));
-        if (sourceProtocol && payload.sourceProtocol !== sourceProtocol) {
-          throw capsuleError("reasoning_capsule_protocol_mismatch");
-        }
-        return payload;
-      } catch (error) {
-        if (error == null ? void 0 : error.code) throw error;
-        throw capsuleError("reasoning_capsule_payload_invalid");
-      } finally {
-        plaintext.fill(0);
-      }
-    }
-    function destroy() {
-      secret.fill(0);
-    }
-    return { seal, open, destroy };
-  }
-
-  // src/cep/codexResponsesRoute.js
-  var DEFAULT_ROUTE_LIMITS = Object.freeze({
-    requestBodyBytes: 16 * 1024 * 1024,
-    responseBodyBytes: 16 * 1024 * 1024,
-    sseFrameBytes: 1024 * 1024,
-    concurrent: 4,
-    connectTimeoutMs: 15e3,
-    idleTimeoutMs: 12e4,
-    totalTimeoutMs: 30 * 6e4,
-    errorBodyBytes: 64 * 1024,
-    headerValueBytes: 8 * 1024,
-    headerTotalBytes: 32 * 1024,
-    headerCount: 64
-  });
-  var LOCAL_ORIGIN = "http://127.0.0.1";
-  function getCepRequire() {
-    var _a, _b, _c;
-    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
-    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function supportsReasoningCapsule(crypto) {
-    return typeof (crypto == null ? void 0 : crypto.createCipheriv) === "function" && typeof (crypto == null ? void 0 : crypto.createDecipheriv) === "function";
-  }
-  function routeLimits(overrides = {}) {
-    const limits = {};
-    for (const [name, maximum] of Object.entries(DEFAULT_ROUTE_LIMITS)) {
-      const value = Number(overrides[name]);
-      limits[name] = Number.isFinite(value) && value > 0 ? Math.min(maximum, Math.floor(value)) : maximum;
-    }
-    return Object.freeze(limits);
-  }
-  function headerLimits(limits) {
-    return {
-      maxValueBytes: limits.headerValueBytes,
-      maxTotalBytes: limits.headerTotalBytes,
-      maxCount: limits.headerCount
-    };
-  }
-  function envelope(type, code, message, extra = {}) {
-    return { error: { type, code, message, ...extra } };
-  }
-  function sendJson(res, status, body, headers = {}) {
-    if (res.writableEnded || res.destroyed) return;
-    res.writeHead(status, { ...headers, "content-type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify(body));
-  }
-  function writeSse(res, name, payload) {
-    if (res.writableEnded || res.destroyed) return;
-    res.write(`event: ${name}
-`);
-    res.write(`data: ${JSON.stringify(payload)}
-
-`);
-  }
-  function localPathHasTraversal(rawUrl) {
-    const path = String(rawUrl || "").split(/[?#]/, 1)[0];
-    let current = path;
-    for (let layer = 0; layer < 4; layer += 1) {
-      if (current.split("/").some((segment) => segment === "." || segment === "..")) return true;
-      let decoded;
-      try {
-        decoded = decodeURIComponent(current);
-      } catch {
-        return true;
-      }
-      if (decoded === current) return false;
-      current = decoded;
-    }
-    return current.split("/").some((segment) => segment === "." || segment === "..");
-  }
-  function parseLocalUrl(rawUrl) {
-    const raw = String(rawUrl || "");
-    if (!raw.startsWith("/") || raw.includes("#") || localPathHasTraversal(raw)) {
-      const error = new Error("Local provider route URL is invalid.");
-      error.code = "invalid_route_url";
-      throw error;
-    }
-    let parsed;
-    try {
-      parsed = new URL(raw, LOCAL_ORIGIN);
-    } catch {
-      const error = new Error("Local provider route URL is invalid.");
-      error.code = "invalid_route_url";
-      throw error;
-    }
-    if (parsed.origin !== LOCAL_ORIGIN) {
-      const error = new Error("Local provider route URL is invalid.");
-      error.code = "invalid_route_url";
-      throw error;
-    }
-    return parsed;
-  }
-  function rawResponseHeaders(upstream) {
-    if (Array.isArray(upstream == null ? void 0 : upstream.rawHeaders)) return upstream.rawHeaders;
-    const raw = [];
-    for (const [name, value] of Object.entries((upstream == null ? void 0 : upstream.headers) || {})) {
-      if (Array.isArray(value)) {
-        for (const item of value) raw.push(name, String(item));
-      } else if (value !== void 0) raw.push(name, String(value));
-    }
-    return raw;
-  }
-  function destroyOnce(context) {
-    if (context.upstreamDestroyed) return;
-    context.upstreamDestroyed = true;
-    for (const stream of [context.upstreamRequest, context.upstreamResponse]) {
-      if (stream && typeof stream.destroy === "function" && !stream.destroyed) {
-        try {
-          stream.destroy();
-        } catch {
-        }
-      }
-    }
-  }
-  function finishOnce(context) {
-    if (context.finished) return false;
-    context.finished = true;
-    if (context.cancelBodyRead) context.cancelBodyRead();
-    clearTimeout(context.connectTimer);
-    clearTimeout(context.idleTimer);
-    clearTimeout(context.totalTimer);
-    context.req.off("aborted", context.onClientAbort);
-    context.res.off("close", context.onClientClose);
-    context.gate.release();
-    context.owner.delete(context);
-    return true;
-  }
-  function streamFailure(context, error) {
-    if (context.finished) return;
-    destroyOnce(context);
-    const code = String((error == null ? void 0 : error.code) || "provider_error");
-    const message = String((error == null ? void 0 : error.message) || "Provider stream failed.");
-    if (!context.res.headersSent) {
-      finishOnce(context);
-      sendJson(context.res, Number(error == null ? void 0 : error.status) || 502, envelope("provider_protocol_error", code, message));
-      return;
-    }
-    writeSse(context.res, "error", {
-      type: "error",
-      error: { type: "provider_protocol_error", code, message }
-    });
-    finishOnce(context);
-    context.res.end();
-  }
-  function timeoutRequest(context, code, message) {
-    if (context.finished) return;
-    destroyOnce(context);
-    if (context.res.headersSent) {
-      streamFailure(context, { status: 504, code, message });
-      return;
-    }
-    finishOnce(context);
-    sendJson(context.res, 504, envelope("provider_timeout_error", code, message));
-  }
-  function resetIdleTimer(context) {
-    clearTimeout(context.idleTimer);
-    context.idleTimer = setTimeout(() => timeoutRequest(
-      context,
-      "provider_idle_timeout",
-      "Provider response became idle."
-    ), context.limits.idleTimeoutMs);
-  }
-  function requestIdFromHeaders(headers) {
-    const item = headers.find((header) => header.name === "x-client-request-id" || header.name === "x-request-id");
-    return item ? item.value : `route-${Date.now().toString(36)}`;
-  }
-  function readRequestBody(req, maximum, context) {
-    return new Promise((resolve, reject) => {
-      const chunks = [];
-      let bytes = 0;
-      let settled = false;
-      const cleanup = () => {
-        req.off("data", onData);
-        req.off("end", onEnd);
-        req.off("error", onError);
-        if (context.cancelBodyRead === cancel) context.cancelBodyRead = null;
-      };
-      const fail = (error) => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        reject(error);
-      };
-      const onData = (chunk) => {
-        const value = Buffer.from(chunk);
-        bytes += value.length;
-        if (bytes > maximum) {
-          const error = new Error("Request body is too large.");
-          error.code = "request_body_too_large";
-          fail(error);
-          req.resume();
-          return;
-        }
-        chunks.push(value);
-      };
-      const onEnd = () => {
-        if (settled) return;
-        settled = true;
-        cleanup();
-        resolve(Buffer.concat(chunks));
-      };
-      const onError = () => {
-        const error = new Error("Request body could not be read.");
-        error.code = "invalid_request_body";
-        fail(error);
-      };
-      const cancel = () => {
-        const error = new Error("Request body was cancelled.");
-        error.code = "request_body_cancelled";
-        fail(error);
-      };
-      context.cancelBodyRead = cancel;
-      req.on("data", onData);
-      req.on("end", onEnd);
-      req.on("error", onError);
-    });
-  }
-  function parseJsonBody(buffer) {
-    try {
-      return JSON.parse(buffer.length ? buffer.toString("utf8") : "{}");
-    } catch {
-      const error = new Error("Request body must be valid JSON.");
-      error.code = "invalid_json";
-      throw error;
-    }
-  }
-  function secretValues(profile) {
-    var _a;
-    const values = [];
-    if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header" && profile.auth.value) {
-      const value = String(profile.auth.value);
-      values.push(value);
-      const match = value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
-      if (match) values.push(match[1]);
-    }
-    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
-      if (header == null ? void 0 : header.value) values.push(String(header.value));
-    }
-    return [...new Set(values.filter(Boolean))].sort((left, right) => right.length - left.length);
-  }
-  function sanitizedProviderMessage(buffer, truncated, secrets) {
-    var _a, _b;
-    if (truncated) return "Provider request failed with a bounded error response.";
-    let parsed;
-    try {
-      parsed = JSON.parse(buffer.toString("utf8"));
-    } catch {
-      return "Provider request failed.";
-    }
-    let message = (_b = (_a = parsed == null ? void 0 : parsed.error) == null ? void 0 : _a.message) != null ? _b : parsed == null ? void 0 : parsed.message;
-    if (typeof message !== "string" || !message) return "Provider request failed.";
-    message = redactText(message, secrets);
-    return message.replace(/[\r\n\0]+/g, " ").slice(0, 256);
-  }
-  function explicitlyRejectsDeveloperRole(status, buffer) {
-    var _a, _b;
-    if (status !== 400 && status !== 422) return false;
-    let parsed;
-    try {
-      parsed = JSON.parse(buffer.toString("utf8"));
+      if (normalized === "ae.toolUse") return TOOL_USE_ACTIONS.has(args.action);
+      if (normalized === "ae.skillUse") return typeof args.execute === "boolean";
     } catch {
       return false;
     }
-    const message = (_b = (_a = parsed == null ? void 0 : parsed.error) == null ? void 0 : _a.message) != null ? _b : parsed == null ? void 0 : parsed.message;
-    if (typeof message !== "string") return false;
-    const normalized = message.toLowerCase();
-    if (!/(^|[^a-z])developer([^a-z]|$)/.test(normalized)) return false;
-    if (!/(^|[^a-z])roles?([^a-z]|$)/.test(normalized)) return false;
-    return /\b(unexpected|unsupported|invalid|disallowed|forbidden)\b/.test(normalized) || /\bunknown\s+variant\b/.test(normalized) || /\bexpected\s+one\s+of\b/.test(normalized) || /\bnot\s+(?:supported|allowed|accepted)\b/.test(normalized) || /\ballowed\s+roles?\b/.test(normalized);
+    return false;
   }
-  function withoutSecretBearingHeaders(headers, secrets) {
-    const output = {};
-    for (const [name, value] of Object.entries(headers)) {
-      const text = String(value);
-      if (containsExactSecret(text, secrets)) continue;
-      output[name] = text;
-    }
-    return containsExactSecret(output, secrets) ? {} : output;
-  }
-  function withoutHeadersCompletedByPayload(headers, payload, secrets) {
-    const entries = Object.entries(headers);
-    const seeds = [
-      ...entries.flat(),
-      entries.map(([name]) => name).join(""),
-      entries.map(([, value]) => value).join(""),
-      entries.flat().join("")
-    ];
-    if (containsExactSecretAcrossBoundary(seeds, payload, secrets)) return {};
-    return Object.fromEntries(Object.entries(headers).filter(([name, value]) => !containsExactSecretAcrossBoundary([name, value], payload, secrets)));
-  }
-  function readProviderError(context, upstream, status, responseHeaders, secrets, retryCompatibility) {
-    const chunks = [];
-    let bytes = 0;
-    let settled = false;
-    const finish = (truncated) => {
-      if (settled || context.finished) return;
-      settled = true;
-      const buffer = Buffer.concat(chunks);
-      if (!truncated && typeof retryCompatibility === "function" && retryCompatibility(status, buffer)) return;
-      let message = sanitizedProviderMessage(buffer, truncated, secrets);
-      let requestId = responseHeaders["x-request-id"] || responseHeaders["request-id"] || responseHeaders["openai-request-id"];
-      let extra = requestId ? { request_id: requestId } : {};
-      let outputHeaders = requestId ? { "x-request-id": requestId } : {};
-      const errorPayload = { message, ...extra };
-      outputHeaders = withoutHeadersCompletedByPayload(outputHeaders, errorPayload, secrets);
-      if (!Object.keys(outputHeaders).length && requestId) {
-        message = "Provider request failed.";
-        requestId = null;
-        extra = {};
-        outputHeaders = {};
-      }
-      finishOnce(context);
-      sendJson(
-        context.res,
-        status >= 400 && status < 500 ? status : 502,
-        envelope("provider_error", "provider_error", message, extra),
-        outputHeaders
-      );
-    };
-    upstream.on("data", (chunk) => {
-      if (settled) return;
-      resetIdleTimer(context);
-      const value = Buffer.from(chunk);
-      const remaining = context.limits.errorBodyBytes + 1 - bytes;
-      if (remaining > 0) chunks.push(value.subarray(0, remaining));
-      bytes += value.length;
-      if (bytes > context.limits.errorBodyBytes) {
-        if (typeof upstream.destroy === "function") upstream.destroy();
-        finish(true);
-      }
-    });
-    upstream.on("end", () => finish(false));
-    upstream.on("error", () => finish(bytes > context.limits.errorBodyBytes));
-  }
-  function pipeModels(context, upstream, status, headers, secrets) {
-    const chunks = [];
-    let bytes = 0;
-    upstream.on("data", (chunk) => {
-      if (context.finished) return;
-      resetIdleTimer(context);
-      const value = Buffer.from(chunk);
-      bytes += value.length;
-      if (bytes > context.limits.responseBodyBytes) {
-        streamFailure(context, {
-          status: 502,
-          code: "provider_response_too_large",
-          message: "Provider model response was too large."
-        });
-        return;
-      }
-      chunks.push(value);
-    });
-    upstream.on("end", () => {
-      if (context.finished) return;
-      let parsed;
-      try {
-        parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-        if (containsExactSecret(parsed, secrets)) throw new Error("credential reflection");
-        parsed = redactValue(parsed, secrets);
-      } catch {
-        streamFailure(context, {
-          status: 502,
-          code: "provider_model_metadata_rejected",
-          message: "Provider model metadata was rejected."
-        });
-        return;
-      }
-      const outputHeaders = withoutHeadersCompletedByPayload(headers, parsed, secrets);
-      if (!finishOnce(context)) return;
-      sendJson(context.res, status, parsed, outputHeaders);
-    });
-    upstream.on("error", () => {
-      streamFailure(context, {
-        status: 502,
-        code: "provider_error",
-        message: "Provider response stream failed."
-      });
-    });
-  }
-  function readNonStreamingResponse(context, upstream, status, headers, chatBody, secrets) {
-    const chunks = [];
-    let bytes = 0;
-    upstream.on("data", (chunk) => {
-      if (context.finished) return;
-      resetIdleTimer(context);
-      const value = Buffer.from(chunk);
-      bytes += value.length;
-      if (bytes > context.limits.responseBodyBytes) {
-        streamFailure(context, {
-          status: 502,
-          code: "provider_response_too_large",
-          message: "Provider response body is too large."
-        });
-        return;
-      }
-      chunks.push(value);
-    });
-    upstream.on("end", () => {
-      var _a;
-      if (context.finished) return;
-      let parsed;
-      let response;
-      try {
-        parsed = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-        response = chatCompletionToResponse(
-          parsed,
-          { id: context.responseId, model: String(chatBody.model || "") },
-          { sealReasoning: (_a = context.reasoningCapsule) == null ? void 0 : _a.seal }
-        );
-        response = redactValue(response, secrets);
-      } catch {
-        streamFailure(context, {
-          status: 502,
-          code: "invalid_chat_completion",
-          message: "Provider returned an invalid Chat Completion."
-        });
-        return;
-      }
-      const outputHeaders = withoutHeadersCompletedByPayload(headers, response, secrets);
-      finishOnce(context);
-      sendJson(context.res, status, response, outputHeaders);
-    });
-    upstream.on("error", () => streamFailure(context, {
-      status: 502,
-      code: "provider_error",
-      message: "Provider response body failed."
-    }));
-  }
-  function streamChatResponse(context, upstream, status, headers, chatBody, secrets) {
-    const chunks = [];
-    let bytes = 0;
-    upstream.on("data", (chunk) => {
-      if (context.finished) return;
-      resetIdleTimer(context);
-      const value = Buffer.from(chunk);
-      bytes += value.length;
-      if (bytes > context.limits.responseBodyBytes) {
-        streamFailure(context, {
-          status: 502,
-          code: "provider_response_too_large",
-          message: "Provider response stream was too large."
-        });
-        return;
-      }
-      chunks.push(value);
-    });
-    upstream.on("end", () => {
-      var _a;
-      if (context.finished) return;
-      const transcript = Buffer.concat(chunks);
-      let outputHeaders = headers;
-      try {
-        requireCredentialFreeSse(transcript, secrets, {
-          maxFrameBytes: context.limits.sseFrameBytes,
-          seedValues: [
-            ...Object.entries(headers).flat(),
-            Object.keys(headers).join(""),
-            Object.values(headers).join(""),
-            Object.entries(headers).flat().join("")
-          ]
-        });
-      } catch (error) {
-        try {
-          requireCredentialFreeSse(transcript, secrets, {
-            maxFrameBytes: context.limits.sseFrameBytes
-          });
-          outputHeaders = {};
-        } catch {
-          streamFailure(context, error);
-          return;
-        }
-      }
-      context.res.writeHead(status, {
-        ...outputHeaders,
-        "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": outputHeaders["cache-control"] || "no-cache"
-      });
-      const responseRedactor = createByteRedactor(secrets, (chunk) => context.res.write(chunk));
-      const failAdapter = () => {
-        responseRedactor.discard();
-        streamFailure(context, {
-          status: 502,
-          code: "invalid_chat_completion",
-          message: "Provider returned an invalid Chat Completion stream."
-        });
-      };
-      const adapter = createChatSseToResponses({
-        id: context.responseId,
-        model: String(chatBody.model || ""),
-        maxFrameBytes: context.limits.sseFrameBytes,
-        writeEvent: (name, payload) => responseRedactor.feed(Buffer.from(
-          `event: ${name}
-data: ${JSON.stringify(payload)}
-
-`,
-          "utf8"
-        )),
-        fail: failAdapter,
-        sealReasoning: (_a = context.reasoningCapsule) == null ? void 0 : _a.seal
-      });
-      try {
-        adapter.feed(transcript);
-        if (!context.finished) adapter.end();
-      } catch {
-        failAdapter();
-        return;
-      }
-      if (context.finished) return;
-      responseRedactor.flush();
-      if (!finishOnce(context)) return;
-      context.res.end();
-    });
-    upstream.on("error", () => {
-      streamFailure(context, {
-        status: 502,
-        code: "provider_error",
-        message: "Provider response stream failed."
-      });
-    });
-  }
-  function handleUpstreamResponse(context, upstream, kind, profile, chatBody, retryCompatibility) {
-    if (context.finished) {
-      if (typeof upstream.destroy === "function") upstream.destroy();
-      return;
-    }
-    context.upstreamResponse = upstream;
-    clearTimeout(context.connectTimer);
-    resetIdleTimer(context);
-    const status = Number(upstream.statusCode) || 502;
-    const secrets = secretValues(profile);
-    const headers = withoutSecretBearingHeaders(
-      filterUpstreamResponseHeaders(rawResponseHeaders(upstream)),
-      secrets
-    );
-    if (status >= 300 && status < 400) {
-      destroyOnce(context);
-      finishOnce(context);
-      sendJson(context.res, 502, envelope(
-        "provider_protocol_error",
-        "provider_redirect_blocked",
-        "Provider redirects are not followed."
-      ));
-      return;
-    }
-    if (status >= 400) {
-      readProviderError(
-        context,
-        upstream,
-        status,
-        headers,
-        secrets,
-        retryCompatibility
-      );
-      return;
-    }
-    if (kind === "models") {
-      pipeModels(context, upstream, status, headers, secrets);
-      return;
-    }
-    if (chatBody.stream === false) {
-      readNonStreamingResponse(context, upstream, status, headers, chatBody, secrets);
-      return;
-    }
-    streamChatResponse(context, upstream, status, headers, chatBody, secrets);
-  }
-  function openUpstream(context, {
-    endpoint,
-    method,
-    headers,
-    payload,
-    kind,
-    profile,
-    chatBody,
-    requireImpl,
-    createUpstreamRequest,
-    lookupImpl,
-    allowDeveloperRoleRetry = false,
-    allowMaxCompletionTokensRetry = false
-  }) {
-    if (context.finished) return;
-    const options = {
-      protocol: endpoint.protocol,
-      hostname: endpoint.hostname,
-      port: endpoint.port || void 0,
-      path: endpoint.pathname + endpoint.search,
-      method,
-      headers
-    };
-    if (lookupImpl) options.lookup = lookupImpl;
-    context.connectTimer = setTimeout(() => timeoutRequest(
-      context,
-      "provider_connect_timeout",
-      "Provider connection timed out."
-    ), context.limits.connectTimeoutMs);
-    let request;
+  function extractToolPlan(requestedSchema, now = Date.now()) {
+    if (!isPlainObject(requestedSchema)) return null;
+    let raw;
     try {
-      const requestFactory = createUpstreamRequest || requireImpl(endpoint.protocol === "http:" ? "http" : "https").request.bind(
-        requireImpl(endpoint.protocol === "http:" ? "http" : "https")
-      );
-      request = requestFactory(options, (upstream) => {
-        const retryCompatibility = allowDeveloperRoleRetry || allowMaxCompletionTokensRetry ? (status, buffer) => {
-          let retryBody = null;
-          let retryDeveloperRole = allowDeveloperRoleRetry;
-          let retryMaxCompletionTokens = allowMaxCompletionTokensRetry;
-          if (retryDeveloperRole && explicitlyRejectsDeveloperRole(status, buffer)) {
-            retryBody = chatBodyWithDeveloperRoleAsSystem(chatBody);
-            if (retryBody) retryDeveloperRole = false;
-          }
-          if (!retryBody && retryMaxCompletionTokens) {
-            let parsed = null;
-            try {
-              parsed = JSON.parse(buffer.toString("utf8"));
-            } catch {
-            }
-            if (chatErrorRequestsMaxCompletionTokens(status, parsed)) {
-              retryBody = chatBodyWithMaxCompletionTokens(chatBody);
-              if (retryBody) retryMaxCompletionTokens = false;
-            }
-          }
-          if (!retryBody || context.finished) return false;
-          clearTimeout(context.idleTimer);
-          context.idleTimer = null;
-          context.upstreamRequest = null;
-          context.upstreamResponse = null;
-          openUpstream(context, {
-            endpoint,
-            method,
-            headers,
-            payload: Buffer.from(JSON.stringify(retryBody), "utf8"),
-            kind,
-            profile,
-            chatBody: retryBody,
-            requireImpl,
-            createUpstreamRequest,
-            lookupImpl,
-            allowDeveloperRoleRetry: retryDeveloperRole,
-            allowMaxCompletionTokensRetry: retryMaxCompletionTokens
-          });
-          return true;
-        } : null;
-        handleUpstreamResponse(
-          context,
-          upstream,
-          kind,
-          profile,
-          chatBody,
-          retryCompatibility
-        );
-      });
-      context.upstreamRequest = request;
-      request.on("error", () => {
-        if (context.finished || context.upstreamResponse) return;
-        clearTimeout(context.connectTimer);
-        finishOnce(context);
-        sendJson(context.res, 502, envelope("provider_error", "provider_error", "Provider request failed."));
-      });
-      if (payload) request.write(payload);
-      request.end();
-    } catch {
-      clearTimeout(context.connectTimer);
-      finishOnce(context);
-      sendJson(context.res, 502, envelope("provider_error", "provider_error", "Provider request failed."));
-    }
-  }
-  function createGate(maximum) {
-    let active = 0;
-    return {
-      acquire() {
-        if (active >= maximum) return false;
-        active += 1;
-        return true;
-      },
-      release() {
-        if (active > 0) active -= 1;
-      }
-    };
-  }
-  function compactResponse(res) {
-    sendJson(res, 501, envelope(
-      "provider_compaction_unsupported",
-      "provider_compaction_unsupported",
-      "This chat-only provider cannot compact Responses context."
-    ));
-  }
-  function methodNotAllowed(res, method, pathname, allowed) {
-    sendJson(res, 405, envelope(
-      "invalid_request_error",
-      "method_not_allowed",
-      `Method ${method} is not allowed for ${pathname}.`
-    ), { allow: allowed });
-  }
-  function createCodexResponsesRoute({
-    provider,
-    resolveRequestProfile,
-    requireImpl = getCepRequire(),
-    createUpstreamRequest,
-    lookupImpl,
-    cryptoImpl,
-    limits: limitOverrides,
-    onAudit = () => {
-    }
-  } = {}) {
-    if (!provider || typeof provider !== "object") throw new TypeError("provider is required");
-    if (typeof resolveRequestProfile !== "function") throw new TypeError("resolveRequestProfile is required");
-    const crypto = cryptoImpl || requireImpl("crypto");
-    if (!crypto || typeof crypto.randomBytes !== "function" || typeof crypto.createHash !== "function" || typeof crypto.timingSafeEqual !== "function") throw new TypeError("crypto implementation is required");
-    const limits = routeLimits(limitOverrides);
-    const headersLimit = headerLimits(limits);
-    const gate = createGate(limits.concurrent);
-    const contexts = /* @__PURE__ */ new Set();
-    let server = null;
-    let baseUrl = "";
-    let routeToken = null;
-    let reasoningCapsule = null;
-    let startPromise = null;
-    let responseSequence = 0;
-    const admit = (req, res) => {
-      if (!gate.acquire()) {
-        sendJson(res, 429, envelope(
-          "rate_limit_error",
-          "route_concurrency_limit",
-          "Local provider route concurrency limit reached."
-        ));
-        return null;
-      }
-      const context = {
-        req,
-        res,
-        gate,
-        owner: contexts,
-        limits,
-        finished: false,
-        upstreamDestroyed: false,
-        upstreamRequest: null,
-        upstreamResponse: null,
-        connectTimer: null,
-        idleTimer: null,
-        totalTimer: null,
-        responseId: `resp_route_${Date.now().toString(36)}_${(responseSequence += 1).toString(36)}`,
-        cancelBodyRead: null,
-        onClientAbort: null,
-        onClientClose: null,
-        reasoningCapsule
-      };
-      context.onClientAbort = () => {
-        if (context.finished) return;
-        destroyOnce(context);
-        finishOnce(context);
-      };
-      context.onClientClose = () => {
-        if (context.finished) return;
-        destroyOnce(context);
-        finishOnce(context);
-      };
-      req.on("aborted", context.onClientAbort);
-      res.on("close", context.onClientClose);
-      context.totalTimer = setTimeout(() => timeoutRequest(
-        context,
-        "provider_total_timeout",
-        "Provider request exceeded the total time limit."
-      ), limits.totalTimeoutMs);
-      contexts.add(context);
-      return context;
-    };
-    const resolveProfile = async (scope, details = {}) => {
-      validateProviderRequestConfiguration(provider, scope, headersLimit);
-      return resolveRequestProfile(provider, { scope, ...details });
-    };
-    const prepareHeaders = (req, profile, contentType) => {
-      var _a;
-      const merged = mergeUpstreamHeaders({
-        rawHeaders: req.rawHeaders || [],
-        providerHeaders: profile.extraHeaders,
-        auth: profile.auth,
-        contentType,
-        limits: headersLimit
-      });
-      const codex = collectCodexHeaders(req.rawHeaders || [], headersLimit);
-      const requestId = requestIdFromHeaders(codex);
-      onAudit({
-        event: "provider_headers",
-        requestId,
-        forwardedNames: codex.map((header) => header.name),
-        providerNames: (profile.extraHeaders || []).map((header) => String(header.name).toLowerCase()),
-        authName: ((_a = profile.auth) == null ? void 0 : _a.kind) === "header" ? String(profile.auth.name).toLowerCase() : null,
-        decision: "allowed"
-      });
-      return merged;
-    };
-    const handleModels = async (req, res, localUrl) => {
-      var _a;
-      try {
-        collectCodexHeaders(req.rawHeaders || [], headersLimit);
-      } catch (error) {
-        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
-        return;
-      }
-      try {
-        validateProviderRequestConfiguration(provider, "probe", headersLimit);
-      } catch (error) {
-        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
-        return;
-      }
-      const context = admit(req, res);
-      if (!context) return;
-      let profile;
-      let endpoint;
-      let headers;
-      try {
-        profile = await resolveProfile("probe");
-        if (context.finished) return;
-        endpoint = buildProviderEndpoint({
-          baseUrl: profile.baseUrl,
-          resource: "models",
-          inboundSearch: localUrl.search,
-          allowInsecureHttp: profile.allowInsecureHttp
-        });
-        headers = prepareHeaders(req, profile);
-      } catch (error) {
-        if (context.finished) return;
-        finishOnce(context);
-        sendJson(res, ((_a = error == null ? void 0 : error.code) == null ? void 0 : _a.startsWith("provider_header_")) ? 400 : 502, envelope(
-          "provider_configuration_error",
-          (error == null ? void 0 : error.code) || "provider_configuration_error",
-          "Provider request configuration is invalid."
-        ));
-        return;
-      }
-      openUpstream(context, {
-        endpoint,
-        method: "GET",
-        headers,
-        payload: null,
-        kind: "models",
-        profile,
-        chatBody: null,
-        requireImpl,
-        createUpstreamRequest,
-        lookupImpl
-      });
-    };
-    const handleResponses = async (req, res, localUrl) => {
-      var _a;
-      try {
-        collectCodexHeaders(req.rawHeaders || [], headersLimit);
-      } catch (error) {
-        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
-        return;
-      }
-      try {
-        validateProviderRequestConfiguration(provider, "model", headersLimit);
-      } catch (error) {
-        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
-        return;
-      }
-      const context = admit(req, res);
-      if (!context) return;
-      let requestBody;
-      let chatBody;
-      try {
-        requestBody = await readRequestBody(req, limits.requestBodyBytes, context);
-        if (context.finished) return;
-        chatBody = responsesBodyToChatBody(parseJsonBody(requestBody), {
-          openReasoning: reasoningCapsule == null ? void 0 : reasoningCapsule.open
-        });
-      } catch (error) {
-        if (context.finished) return;
-        finishOnce(context);
-        const status = (error == null ? void 0 : error.code) === "request_body_too_large" ? 413 : Number(error == null ? void 0 : error.status) || 400;
-        sendJson(res, status, envelope(
-          "invalid_request_error",
-          (error == null ? void 0 : error.code) || "invalid_request_body",
-          (error == null ? void 0 : error.message) || "Request body is invalid.",
-          (error == null ? void 0 : error.param) ? { param: error.param } : {}
-        ));
-        return;
-      }
-      let profile;
-      let endpoint;
-      let headers;
-      let payload;
-      try {
-        profile = await resolveProfile("model", {
-          modelId: String(chatBody.model || ""),
-          protocol: "chat"
-        });
-        if (context.finished) return;
-        endpoint = buildProviderEndpoint({
-          baseUrl: profile.baseUrl,
-          resource: "chat-completions",
-          inboundSearch: localUrl.search,
-          allowInsecureHttp: profile.allowInsecureHttp
-        });
-        headers = prepareHeaders(req, profile, "application/json");
-        payload = Buffer.from(JSON.stringify(chatBody), "utf8");
-      } catch (error) {
-        if (context.finished) return;
-        finishOnce(context);
-        sendJson(res, ((_a = error == null ? void 0 : error.code) == null ? void 0 : _a.startsWith("provider_header_")) ? 400 : 502, envelope(
-          "provider_configuration_error",
-          (error == null ? void 0 : error.code) || "provider_configuration_error",
-          "Provider request configuration is invalid."
-        ));
-        return;
-      }
-      openUpstream(context, {
-        endpoint,
-        method: "POST",
-        headers,
-        payload,
-        kind: "responses",
-        profile,
-        chatBody,
-        requireImpl,
-        createUpstreamRequest,
-        lookupImpl,
-        allowDeveloperRoleRetry: true,
-        allowMaxCompletionTokensRetry: true
-      });
-    };
-    const handleLocalRequest = (req, res) => {
-      const candidate = parseRouteToken(req.rawHeaders || []);
-      const authorized = routeTokenMatches(candidate || "", routeToken || "", crypto);
-      if (!candidate || !routeToken || !authorized) {
-        sendJson(res, 401, envelope(
-          "authentication_error",
-          "invalid_route_token",
-          "Invalid local provider route token."
-        ));
-        return;
-      }
-      let localUrl;
-      try {
-        localUrl = parseLocalUrl(req.url);
-      } catch (error) {
-        sendJson(res, 400, envelope("invalid_request_error", error.code, error.message));
-        return;
-      }
-      const method = String(req.method || "GET").toUpperCase();
-      const pathname = localUrl.pathname;
-      if (pathname === "/v1/responses/compact") {
-        if (method !== "POST") methodNotAllowed(res, method, pathname, "POST");
-        else compactResponse(res);
-        return;
-      }
-      if (pathname === "/v1/models") {
-        if (method !== "GET") methodNotAllowed(res, method, pathname, "GET");
-        else void handleModels(req, res, localUrl);
-        return;
-      }
-      if (pathname === "/v1/responses") {
-        if (method !== "POST") methodNotAllowed(res, method, pathname, "POST");
-        else void handleResponses(req, res, localUrl);
-        return;
-      }
-      sendJson(res, 404, envelope(
-        "invalid_request_error",
-        "not_found",
-        "Unknown local provider route endpoint."
-      ));
-    };
-    return {
-      async start() {
-        if (server && baseUrl && routeToken) return { baseUrl, routeToken };
-        if (startPromise) return startPromise;
-        if (!reasoningCapsule && supportsReasoningCapsule(crypto)) {
-          reasoningCapsule = createReasoningCapsule({ crypto });
-        }
-        startPromise = new Promise((resolve, reject) => {
-          const http = requireImpl("http");
-          const nextServer = http.createServer(handleLocalRequest);
-          const onError = (error) => {
-            nextServer.off("listening", onListening);
-            server = null;
-            baseUrl = "";
-            routeToken = null;
-            reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
-            reasoningCapsule = null;
-            reject(error);
-          };
-          const onListening = () => {
-            nextServer.off("error", onError);
-            const address = nextServer.address();
-            server = nextServer;
-            routeToken = generateRouteToken(crypto);
-            baseUrl = `http://127.0.0.1:${address.port}/v1`;
-            resolve({ baseUrl, routeToken });
-          };
-          nextServer.once("error", onError);
-          nextServer.once("listening", onListening);
-          nextServer.listen(0, "127.0.0.1");
-        }).finally(() => {
-          startPromise = null;
-        });
-        return startPromise;
-      },
-      async close() {
-        if (startPromise) {
-          try {
-            await startPromise;
-          } catch {
-            return;
-          }
-        }
-        if (!server) {
-          routeToken = null;
-          baseUrl = "";
-          reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
-          reasoningCapsule = null;
-          return;
-        }
-        const closing = server;
-        server = null;
-        baseUrl = "";
-        for (const context of [...contexts]) {
-          destroyOnce(context);
-          finishOnce(context);
-          if (!context.res.writableEnded) context.res.end();
-        }
-        await new Promise((resolve) => closing.close(resolve));
-        routeToken = null;
-        reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
-        reasoningCapsule = null;
-      }
-    };
-  }
-
-  // src/cep/universalProviderRoute.js
-  var LOCAL_ORIGIN2 = "http://127.0.0.1";
-  var PROTOCOLS = /* @__PURE__ */ new Set(["responses", "chat", "messages"]);
-  var DEFAULT_LIMITS2 = Object.freeze({
-    requestBodyBytes: 16 * 1024 * 1024,
-    responseBodyBytes: 16 * 1024 * 1024,
-    errorBodyBytes: 64 * 1024,
-    concurrent: 4,
-    connectTimeoutMs: 15e3,
-    totalTimeoutMs: 30 * 6e4
-  });
-  function getCepRequire2() {
-    var _a, _b, _c;
-    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
-    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function resolvedLimits2(overrides = {}) {
-    return Object.fromEntries(Object.entries(DEFAULT_LIMITS2).map(([name, maximum]) => {
-      const value = Number(overrides[name]);
-      return [name, Number.isFinite(value) && value > 0 ? Math.min(maximum, Math.floor(value)) : maximum];
-    }));
-  }
-  function envelope2(type, code, message, extra = {}) {
-    return { error: { type, code, message, ...extra } };
-  }
-  function sendJson2(res, status, body, headers = {}) {
-    if (res.writableEnded || res.destroyed) return;
-    res.writeHead(status, { ...headers, "content-type": "application/json; charset=utf-8" });
-    res.end(JSON.stringify(body));
-  }
-  function writeSse2(res, event, data2) {
-    res.write("event: " + event + "\n");
-    res.write("data: " + JSON.stringify(data2) + "\n\n");
-  }
-  function parseLocalUrl2(rawUrl) {
-    const raw = String(rawUrl || "/");
-    if (/\\|%5c|%2f|%00/i.test(raw)) throw Object.assign(new Error("Invalid local path."), { code: "invalid_path" });
-    const url = new URL(raw, LOCAL_ORIGIN2);
-    if (url.origin !== LOCAL_ORIGIN2 || url.username || url.password || url.hash) {
-      throw Object.assign(new Error("Invalid local path."), { code: "invalid_path" });
-    }
-    let decoded;
-    try {
-      decoded = decodeURIComponent(url.pathname);
-    } catch {
-      throw Object.assign(new Error("Invalid local path."), { code: "invalid_path" });
-    }
-    if (decoded.split("/").some((part) => part === ".." || part === ".")) {
-      throw Object.assign(new Error("Invalid local path."), { code: "invalid_path" });
-    }
-    return url;
-  }
-  function readBody(req, maximum) {
-    return new Promise((resolve, reject) => {
-      const chunks = [];
-      let bytes = 0;
-      let settled = false;
-      const fail = (error) => {
-        if (settled) return;
-        settled = true;
-        reject(error);
-      };
-      req.on("data", (chunk) => {
-        if (settled) return;
-        const value = Buffer.from(chunk);
-        bytes += value.length;
-        if (bytes > maximum) {
-          fail(Object.assign(new Error("Request body is too large."), {
-            code: "request_body_too_large",
-            status: 413
-          }));
-          req.destroy();
-          return;
-        }
-        chunks.push(value);
-      });
-      req.once("end", () => {
-        if (settled) return;
-        settled = true;
-        resolve(Buffer.concat(chunks));
-      });
-      req.once("error", fail);
-    });
-  }
-  function requestEnvelope(buffer) {
-    let body;
-    try {
-      body = JSON.parse(buffer.toString("utf8"));
-    } catch {
-      throw Object.assign(new Error("Request body must be valid JSON."), {
-        code: "invalid_request_body",
-        status: 400
-      });
-    }
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-      throw Object.assign(new Error("Request body must be an object."), {
-        code: "invalid_request_body",
-        status: 400
-      });
-    }
-    const modelId = typeof body.model === "string" ? body.model.trim() : "";
-    if (!modelId) throw Object.assign(new Error("Request model is required."), { code: "invalid_model", status: 400 });
-    return { body, modelId };
-  }
-  function providerEndpoint(apiRoot, suffix, search, allowInsecureHttp) {
-    const root = new URL(String(apiRoot));
-    if (root.username || root.password || root.search || root.hash) throw new Error("Invalid Provider API root.");
-    const loopback = root.protocol === "http:" && ["127.0.0.1", "::1", "localhost"].includes(root.hostname);
-    if (root.protocol !== "https:" && !(loopback || allowInsecureHttp === true)) {
-      throw new Error("Provider transport is not allowed.");
-    }
-    if (!["https:", "http:"].includes(root.protocol)) throw new Error("Provider transport is not allowed.");
-    const endpoint = new URL(root.toString());
-    endpoint.pathname = endpoint.pathname.replace(/\/+$/, "") + suffix;
-    endpoint.search = search || "";
-    if (endpoint.origin !== root.origin) throw new Error("Provider endpoint origin changed.");
-    return endpoint;
-  }
-  function oneHeader(rawHeaders, wanted) {
-    const values = [];
-    for (let index = 0; index + 1 < rawHeaders.length; index += 2) {
-      if (String(rawHeaders[index]).toLowerCase() === wanted) values.push(String(rawHeaders[index + 1]));
-    }
-    if (values.length > 1) throw Object.assign(new Error("Duplicate client header."), { code: "provider_header_duplicate" });
-    const value = values[0];
-    if (value !== void 0 && (/[\r\n\0]/.test(value) || Buffer.byteLength(value, "utf8") > 8192)) {
-      throw Object.assign(new Error("Invalid client header."), { code: "provider_header_invalid_value" });
-    }
-    return value;
-  }
-  function nativeHeaders(req, profile, clientProtocol) {
-    const headers = mergeUpstreamHeaders({
-      rawHeaders: clientProtocol === "responses" ? req.rawHeaders || [] : [],
-      providerHeaders: profile.extraHeaders || [],
-      auth: profile.auth || { kind: "none" },
-      contentType: "application/json"
-    });
-    if (clientProtocol === "messages") {
-      headers["anthropic-version"] = oneHeader(req.rawHeaders || [], "anthropic-version") || "2023-06-01";
-      const beta = oneHeader(req.rawHeaders || [], "anthropic-beta");
-      if (beta) headers["anthropic-beta"] = beta;
-    }
-    return headers;
-  }
-  function profileSecrets(profile) {
-    var _a;
-    const values = [];
-    if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header") {
-      const value = String(profile.auth.value || "");
-      if (value) values.push(value);
-      const match = value.match(/^(?:Bearer|Basic)\s+(.+)$/i);
-      if (match == null ? void 0 : match[1]) values.push(match[1]);
-    }
-    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
-      if (header == null ? void 0 : header.value) values.push(String(header.value));
-    }
-    return [...new Set(values)].sort((left, right) => right.length - left.length);
-  }
-  function withoutSecretBearingHeaders2(headers, secrets) {
-    const filtered = Object.fromEntries(Object.entries(headers).filter(([, value]) => !containsExactSecret(String(value), secrets)));
-    return containsExactSecret(filtered, secrets) ? {} : filtered;
-  }
-  function withoutHeadersCompletedByPayload2(headers, payload, secrets) {
-    const entries = Object.entries(headers);
-    const seeds = [
-      ...entries.flat(),
-      entries.map(([name]) => name).join(""),
-      entries.map(([, value]) => value).join(""),
-      entries.flat().join("")
-    ];
-    if (containsExactSecretAcrossBoundary(seeds, payload, secrets)) return {};
-    return Object.fromEntries(Object.entries(headers).filter(([name, value]) => !containsExactSecretAcrossBoundary([name, value], payload, secrets)));
-  }
-  function sanitizedError(buffer, secrets) {
-    let parsed;
-    try {
-      parsed = JSON.parse(buffer.toString("utf8"));
-    } catch {
-      return "Provider request failed.";
-    }
-    const source = (parsed == null ? void 0 : parsed.error) && typeof parsed.error === "object" ? parsed.error : parsed;
-    const message = typeof (source == null ? void 0 : source.message) === "string" ? source.message : "Provider request failed.";
-    return redactText(message, secrets).replace(/[\r\n\0]+/g, " ").slice(0, 256);
-  }
-  function headersWithoutRejectedAnthropicBetas(headers, buffer) {
-    const current = headers["anthropic-beta"];
-    if (typeof current !== "string" || !current.trim()) return null;
-    let parsed;
-    try {
-      parsed = JSON.parse(buffer.toString("utf8"));
+      raw = requestedSchema[PLAN_SCHEMA_KEY];
     } catch {
       return null;
     }
-    const source = (parsed == null ? void 0 : parsed.error) && typeof parsed.error === "object" ? parsed.error : parsed;
-    const message = typeof (source == null ? void 0 : source.message) === "string" ? source.message : "";
-    const match = message.match(
-      /^Unexpected value\(s\)\s+(.+?)\s+for the `anthropic-beta` header(?:\.|$)/
-    );
-    if (!match) {
-      if (!/\bbeta\b/i.test(message) || !/\binvalid\b/i.test(message)) return null;
-      const next2 = { ...headers };
-      delete next2["anthropic-beta"];
-      return next2;
-    }
-    const token = "[A-Za-z0-9][A-Za-z0-9._:-]{0,127}";
-    const listPattern = new RegExp("^`" + token + "`(?:\\s*(?:,|and)\\s*`" + token + "`)*$");
-    if (!listPattern.test(match[1])) return null;
-    const rejected = [...match[1].matchAll(/`([A-Za-z0-9][A-Za-z0-9._:-]{0,127})`/g)].map((entry) => entry[1]);
-    if (rejected.length === 0 || rejected.length > 16) return null;
-    const values = current.split(",").map((value) => value.trim()).filter(Boolean);
-    const currentValues = new Set(values);
-    if (!rejected.every((value) => currentValues.has(value))) return null;
-    const rejectedValues = new Set(rejected);
-    const remaining = values.filter((value) => !rejectedValues.has(value));
-    const next = { ...headers };
-    if (remaining.length > 0) next["anthropic-beta"] = remaining.join(", ");
-    else delete next["anthropic-beta"];
-    return next;
-  }
-  function payloadWithoutRejectedContextManagement(payload, buffer) {
-    let errorBody;
-    let requestBody;
+    if (!isPlainObject(raw)) return null;
     try {
-      errorBody = JSON.parse(buffer.toString("utf8"));
-      requestBody = JSON.parse(payload.toString("utf8"));
+      const current = typeof now === "function" ? now() : now;
+      if (typeof raw.artifactId !== "string" || !raw.artifactId.trim()) return null;
+      if (!HASH_PATTERN.test(raw.contentHash) || !HASH_PATTERN.test(raw.planHash)) return null;
+      if (!OPERATIONS.has(raw.operation) || !RISKS.has(raw.risk)) return null;
+      if (!isPlainObject(raw.normalizedArgs) || !isPlainObject(raw.target)) return null;
+      if (!Number.isSafeInteger(raw.expiresAt) || !Number.isFinite(current) || raw.expiresAt <= current) return null;
+      return deepFreeze(cloneJson(raw));
     } catch {
       return null;
     }
-    const source = (errorBody == null ? void 0 : errorBody.error) && typeof errorBody.error === "object" ? errorBody.error : errorBody;
-    const message = typeof (source == null ? void 0 : source.message) === "string" ? source.message : "";
-    if (!/\bcontext_management\b/.test(message) || requestBody === null || typeof requestBody !== "object" || Array.isArray(requestBody)) return null;
-    const context = requestBody.context_management;
-    if (context === null || typeof context !== "object" || Array.isArray(context) || JSON.stringify(Object.keys(context).sort()) !== '["edits"]' || !Array.isArray(context.edits) || context.edits.length !== 1) return null;
-    const edit = context.edits[0];
-    if (edit === null || typeof edit !== "object" || Array.isArray(edit) || JSON.stringify(Object.keys(edit).sort()) !== '["keep","type"]' || edit.type !== "clear_thinking_20251015" || edit.keep !== "all") return null;
-    const next = { ...requestBody };
-    delete next.context_management;
-    return Buffer.from(JSON.stringify(next), "utf8");
   }
-  function createGate2(maximum) {
-    let active = 0;
-    return {
-      acquire() {
-        if (active >= maximum) return false;
-        active += 1;
-        return true;
-      },
-      release() {
-        active = Math.max(0, active - 1);
-      }
+  function planSessionKey(plan) {
+    const payload = {
+      artifactId: plan.artifactId,
+      contentHash: plan.contentHash,
+      operation: plan.operation,
+      normalizedTarget: cloneJson(plan.target)
     };
+    return sha256Text(JSON.stringify(canonicalize(payload)));
   }
-  function createUniversalProviderRoute({
-    provider,
-    resolveCapability,
-    resolveRequestProfile,
-    getModels = () => {
-      var _a;
-      return ((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models) || (provider == null ? void 0 : provider.probedModels) || [];
-    },
-    requireImpl = getCepRequire2(),
-    createUpstreamRequest,
-    lookupImpl,
-    createChatRoute = createCodexResponsesRoute,
-    limits: limitOverrides,
-    onAudit = () => {
+  function decideToolPlan({ tier, plan, sessionAllowed = false }) {
+    const risk = plan && plan.risk;
+    if (!RISKS.has(risk)) {
+      return { decision: "deny", risk: "unknown", allowSession: false, sessionKey: null };
     }
-  } = {}) {
-    if (!provider || typeof provider !== "object") throw new TypeError("provider is required");
-    if (typeof resolveCapability !== "function") throw new TypeError("resolveCapability is required");
-    if (typeof resolveRequestProfile !== "function") throw new TypeError("resolveRequestProfile is required");
-    const crypto = requireImpl("crypto");
-    const http = requireImpl("http");
-    const bounded = resolvedLimits2(limitOverrides);
-    const gate = createGate2(bounded.concurrent);
-    const activeRequests = /* @__PURE__ */ new Set();
-    let server = null;
-    let routeToken = null;
-    let origin = "";
-    let startPromise = null;
-    let chatRoute = null;
-    let chatRouteInfo = null;
-    let reasoningCapsule = null;
-    let responseSequence = 0;
-    const capabilityFor = async ({ modelId, clientProtocol, feature = "generate" }) => {
-      const capability = await resolveCapability({ provider, modelId, clientProtocol, feature });
-      if (!capability || capability.ok !== true || !PROTOCOLS.has(capability.upstreamProtocol)) {
-        const error = new Error("No verified Provider route is available.");
-        error.code = "provider_route_unavailable";
-        error.status = 501;
-        throw error;
-      }
-      return capability;
-    };
-    const profileFor = (modelId, capability) => resolveRequestProfile(provider, {
-      scope: "model",
-      modelId,
-      protocol: capability.upstreamProtocol,
-      apiRoot: capability.apiRoot,
-      authChoice: capability.auth || capability.authChoice
-    });
-    const nestedProfile = async (_provider, details = {}) => {
-      const capability = await capabilityFor({
-        modelId: details.modelId,
-        clientProtocol: "responses"
-      });
-      if (capability.upstreamProtocol !== "chat") throw new Error("Provider route changed during request.");
-      return profileFor(details.modelId, capability);
-    };
-    const begin = (req, res) => {
-      if (!gate.acquire()) {
-        sendJson2(res, 429, envelope2(
-          "rate_limit_error",
-          "route_concurrency_limit",
-          "Local provider route concurrency limit reached."
-        ));
-        return null;
-      }
-      const context = {
-        req,
-        res,
-        upstream: null,
-        finished: false,
-        timer: null,
-        finish: null
-      };
-      context.finish = () => {
-        if (context.finished) return false;
-        context.finished = true;
-        clearTimeout(context.timer);
-        activeRequests.delete(context);
-        gate.release();
-        return true;
-      };
-      context.timer = setTimeout(() => {
-        var _a;
-        if (!context.finish()) return;
-        try {
-          (_a = context.upstream) == null ? void 0 : _a.destroy();
-        } catch {
-        }
-        sendJson2(res, 504, envelope2(
-          "provider_error",
-          "provider_total_timeout",
-          "Provider request exceeded the total time limit."
-        ));
-      }, bounded.totalTimeoutMs);
-      const abort = () => {
-        var _a;
-        if (!context.finish()) return;
-        try {
-          (_a = context.upstream) == null ? void 0 : _a.destroy();
-        } catch {
-        }
-      };
-      req.once("aborted", abort);
-      res.once("close", () => {
-        if (!res.writableEnded) abort();
-      });
-      activeRequests.add(context);
-      return context;
-    };
-    const convertRequest = (clientProtocol, upstreamProtocol, body, capability) => {
-      var _a;
-      const options = { openReasoning: reasoningCapsule == null ? void 0 : reasoningCapsule.open };
-      let converted;
-      if (clientProtocol === "messages" && upstreamProtocol === "chat") {
-        converted = messagesBodyToChatBody(body, options);
-        const tokenField = (_a = capability.compatibility) == null ? void 0 : _a.tokenField;
-        if (tokenField === "max_completion_tokens" && Object.hasOwn(converted.body, "max_tokens")) {
-          converted.body.max_completion_tokens = converted.body.max_tokens;
-          delete converted.body.max_tokens;
-        }
-      } else if (clientProtocol === "messages" && upstreamProtocol === "responses") {
-        converted = messagesBodyToResponsesBody(body, options);
-      } else if (clientProtocol === "responses" && upstreamProtocol === "messages") {
-        converted = responsesBodyToMessagesBody(body, options);
-      } else {
-        throw Object.assign(new Error("Provider conversion is unavailable."), {
-          status: 501,
-          code: "provider_conversion_unsupported"
-        });
-      }
+    if (!["readonly", "manual", "auto", "none"].includes(tier)) {
+      return { decision: "deny", risk, allowSession: false, sessionKey: null };
+    }
+    const high = risk === "destructive" || risk === "external";
+    if (risk === "read") {
+      return { decision: "allow", risk, allowSession: false, sessionKey: null };
+    }
+    if (tier === "readonly") {
+      return { decision: "deny", risk, allowSession: false, sessionKey: null };
+    }
+    if (sessionAllowed && risk === "write") {
       return {
-        body: converted.body,
-        consumed: [...converted.consumed]
-      };
-    };
-    const collectorFor = (protocol) => {
-      const options = { maxFrameBytes: 1024 * 1024 };
-      if (protocol === "chat") return createChatSseCollector(options);
-      if (protocol === "responses") return createResponsesSseCollector(options);
-      if (protocol === "messages") return createMessagesSseCollector(options);
-      throw new Error("Unsupported Provider protocol.");
-    };
-    const convertCompletion = (source, upstreamProtocol, clientProtocol) => {
-      const options = { sealReasoning: reasoningCapsule == null ? void 0 : reasoningCapsule.seal };
-      if (clientProtocol === "messages" && upstreamProtocol === "chat") {
-        return chatCompletionToMessages(source, options);
-      }
-      if (clientProtocol === "messages" && upstreamProtocol === "responses") {
-        return responseToMessages(source, options);
-      }
-      if (clientProtocol === "responses" && upstreamProtocol === "messages") {
-        responseSequence += 1;
-        return anthropicMessageToResponse(source, {
-          id: "resp_route_" + Date.now().toString(36) + "_" + responseSequence.toString(36),
-          sealReasoning: reasoningCapsule == null ? void 0 : reasoningCapsule.seal
-        });
-      }
-      throw Object.assign(new Error("Provider conversion is unavailable."), {
-        status: 501,
-        code: "provider_conversion_unsupported"
-      });
-    };
-    const writeConverted = ({ context, value, clientProtocol, stream, responseHeaders, secrets }) => {
-      const safeValue = redactValue(value, secrets);
-      const safeHeaders = withoutHeadersCompletedByPayload2(responseHeaders, safeValue, secrets);
-      if (!stream) {
-        if (!context.finish()) return;
-        sendJson2(context.res, 200, safeValue, safeHeaders);
-        return;
-      }
-      const events = clientProtocol === "messages" ? messagesSseEvents(safeValue) : responsesSseEvents(safeValue);
-      if (!context.finish()) return;
-      context.res.writeHead(200, {
-        ...safeHeaders,
-        "content-type": "text/event-stream; charset=utf-8",
-        "cache-control": safeHeaders["cache-control"] || "no-cache"
-      });
-      for (const [event, data2] of events) writeSse2(context.res, event, data2);
-      context.res.end();
-    };
-    const readConvertedResponse = ({
-      context,
-      upstream,
-      responseHeaders,
-      clientProtocol,
-      upstreamProtocol,
-      stream,
-      modelId,
-      consumed,
-      secrets
-    }) => {
-      const chunks = [];
-      const collector2 = stream ? collectorFor(upstreamProtocol) : null;
-      let bytes = 0;
-      let settled = false;
-      const fail = (error) => {
-        if (settled) return;
-        settled = true;
-        try {
-          upstream.destroy();
-        } catch {
-        }
-        if (!context.finish()) return;
-        const status = Number(error == null ? void 0 : error.status) || 502;
-        const rawCode = String((error == null ? void 0 : error.code) || "provider_conversion_failed");
-        const code = containsExactSecret(rawCode, secrets) ? "provider_conversion_failed" : rawCode;
-        const message = redactText(
-          (error == null ? void 0 : error.message) || "Provider response conversion failed.",
-          secrets
-        );
-        const rawParam = typeof (error == null ? void 0 : error.param) === "string" ? error.param : "";
-        const param = rawParam && !containsExactSecret(rawParam, secrets) ? redactText(rawParam, secrets) : "provider_response";
-        sendJson2(context.res, status, envelope2(
-          status === 501 || status === 400 ? "invalid_request_error" : "provider_error",
-          code,
-          message,
-          (error == null ? void 0 : error.param) ? { param } : {}
-        ));
-      };
-      upstream.on("data", (chunk) => {
-        if (settled) return;
-        const value = Buffer.from(chunk);
-        bytes += value.length;
-        if (bytes > bounded.responseBodyBytes) {
-          fail(Object.assign(new Error("Provider response is too large."), {
-            status: 502,
-            code: "provider_response_too_large"
-          }));
-          return;
-        }
-        try {
-          if (collector2) collector2.feed(value);
-          else chunks.push(value);
-        } catch (error) {
-          fail(error);
-        }
-      });
-      upstream.once("end", () => {
-        if (settled) return;
-        let source;
-        let converted;
-        try {
-          if (collector2) {
-            const collected = collector2.end();
-            source = upstreamProtocol === "messages" ? collected.message : collected;
-          } else {
-            source = JSON.parse(Buffer.concat(chunks).toString("utf8"));
-          }
-          converted = convertCompletion(source, upstreamProtocol, clientProtocol);
-          writeConverted({ context, value: converted, clientProtocol, stream, responseHeaders, secrets });
-          settled = true;
-          onAudit({
-            event: "provider_route",
-            modelId,
-            clientProtocol,
-            upstreamProtocol,
-            conversion: clientProtocol + "-to-" + upstreamProtocol,
-            consumed,
-            outcome: "pass"
-          });
-        } catch (error) {
-          fail(error);
-        }
-      });
-      upstream.once("error", () => fail(Object.assign(new Error("Provider response stream failed."), {
-        status: 502,
-        code: "provider_stream_error"
-      })));
-    };
-    const nativeProxy = async ({
-      context,
-      capability,
-      clientProtocol,
-      suffix,
-      search,
-      payload,
-      modelId,
-      conversion = null,
-      stream = false
-    }) => {
-      let profile;
-      let endpoint;
-      let headers;
-      let secrets;
-      try {
-        profile = await profileFor(modelId, capability);
-        if (context.finished) return;
-        endpoint = providerEndpoint(
-          profile.apiRoot || capability.apiRoot || profile.baseUrl,
-          suffix,
-          search,
-          profile.allowInsecureHttp
-        );
-        headers = nativeHeaders(context.req, profile, clientProtocol);
-        headers["content-length"] = String(payload.length);
-        secrets = profileSecrets(profile);
-      } catch {
-        if (!context.finish()) return;
-        sendJson2(context.res, 502, envelope2(
-          "provider_configuration_error",
-          "provider_configuration_error",
-          "Provider request configuration is invalid."
-        ));
-        return;
-      }
-      const requestOptions = {
-        protocol: endpoint.protocol,
-        hostname: endpoint.hostname,
-        port: endpoint.port || void 0,
-        path: endpoint.pathname + endpoint.search,
-        method: "POST"
-      };
-      if (lookupImpl) requestOptions.lookup = lookupImpl;
-      const sendAttempt = (attemptHeaders, attemptPayload, compatibility) => {
-        let connected = false;
-        let requestSettled = false;
-        let request = null;
-        const connectTimer = setTimeout(() => {
-          if (connected || context.finished) return;
-          request == null ? void 0 : request.destroy();
-        }, bounded.connectTimeoutMs);
-        try {
-          const transport = requireImpl(endpoint.protocol === "http:" ? "http" : "https");
-          const factory = createUpstreamRequest || transport.request.bind(transport);
-          request = factory({ ...requestOptions, headers: attemptHeaders }, (upstream) => {
-            connected = true;
-            requestSettled = true;
-            clearTimeout(connectTimer);
-            if (context.finished) {
-              upstream.destroy();
-              return;
-            }
-            const status = Number(upstream.statusCode || 0);
-            if (status >= 300 && status < 400) {
-              upstream.resume();
-              if (!context.finish()) return;
-              sendJson2(context.res, 502, envelope2(
-                "provider_error",
-                "provider_redirect_blocked",
-                "Provider redirects are not followed."
-              ));
-              return;
-            }
-            const responseHeaders = withoutSecretBearingHeaders2(
-              filterUpstreamResponseHeaders(upstream.rawHeaders || []),
-              secrets
-            );
-            if (status >= 400) {
-              const chunks2 = [];
-              let bytes2 = 0;
-              let responseSettled = false;
-              upstream.on("data", (chunk) => {
-                const value = Buffer.from(chunk);
-                const remaining = bounded.errorBodyBytes - bytes2;
-                if (remaining > 0) chunks2.push(value.subarray(0, remaining));
-                bytes2 += value.length;
-                if (bytes2 > bounded.errorBodyBytes) upstream.destroy();
-              });
-              const finishError = () => {
-                if (responseSettled || context.finished) return;
-                responseSettled = true;
-                const rawErrorBody = Buffer.concat(chunks2);
-                const retryHeaders = compatibility.beta && status === 400 ? headersWithoutRejectedAnthropicBetas(attemptHeaders, rawErrorBody) : null;
-                if (retryHeaders) {
-                  retryHeaders["content-length"] = String(attemptPayload.length);
-                  onAudit({
-                    event: "provider_route_compat_retry",
-                    modelId,
-                    clientProtocol,
-                    upstreamProtocol: capability.upstreamProtocol,
-                    compatibility: "anthropic-beta-rejected-values",
-                    outcome: "retry"
-                  });
-                  sendAttempt(retryHeaders, attemptPayload, {
-                    beta: false,
-                    contextManagement: compatibility.contextManagement
-                  });
-                  return;
-                }
-                const retryPayload = compatibility.contextManagement && status === 400 ? payloadWithoutRejectedContextManagement(attemptPayload, rawErrorBody) : null;
-                if (retryPayload) {
-                  onAudit({
-                    event: "provider_route_compat_retry",
-                    modelId,
-                    clientProtocol,
-                    upstreamProtocol: capability.upstreamProtocol,
-                    compatibility: "context-management-rejected",
-                    outcome: "retry"
-                  });
-                  sendAttempt(
-                    {
-                      ...attemptHeaders,
-                      "content-length": String(retryPayload.length)
-                    },
-                    retryPayload,
-                    {
-                      beta: compatibility.beta,
-                      contextManagement: false
-                    }
-                  );
-                  return;
-                }
-                let errorHeaders = responseHeaders;
-                let outputErrorBody = envelope2(
-                  "provider_error",
-                  "provider_error",
-                  sanitizedError(rawErrorBody, profileSecrets(profile))
-                );
-                errorHeaders = withoutHeadersCompletedByPayload2(
-                  errorHeaders,
-                  outputErrorBody,
-                  secrets
-                );
-                if (Object.keys(errorHeaders).length < Object.keys(responseHeaders).length) {
-                  outputErrorBody = envelope2(
-                    "provider_error",
-                    "provider_error",
-                    "Provider request failed."
-                  );
-                }
-                if (!context.finish()) return;
-                sendJson2(
-                  context.res,
-                  status >= 400 && status < 500 ? status : 502,
-                  outputErrorBody,
-                  errorHeaders
-                );
-              };
-              upstream.once("end", finishError);
-              upstream.once("error", finishError);
-              return;
-            }
-            if (conversion) {
-              readConvertedResponse({
-                context,
-                upstream,
-                responseHeaders,
-                clientProtocol: conversion.clientProtocol,
-                upstreamProtocol: capability.upstreamProtocol,
-                stream: conversion.stream,
-                modelId,
-                consumed: conversion.consumed,
-                secrets
-              });
-              return;
-            }
-            if (!stream) {
-              const chunks2 = [];
-              let bytes2 = 0;
-              let settled2 = false;
-              const failNative = () => {
-                if (settled2 || context.finished) return;
-                settled2 = true;
-                try {
-                  upstream.destroy();
-                } catch {
-                }
-                if (!context.finish()) return;
-                sendJson2(context.res, 502, envelope2(
-                  "provider_error",
-                  "provider_response_invalid",
-                  "Provider response is invalid."
-                ));
-              };
-              upstream.on("data", (chunk) => {
-                if (settled2) return;
-                const value = Buffer.from(chunk);
-                bytes2 += value.length;
-                if (bytes2 > bounded.responseBodyBytes) {
-                  failNative();
-                  return;
-                }
-                chunks2.push(value);
-              });
-              upstream.once("end", () => {
-                if (settled2 || context.finished) return;
-                let safeValue;
-                let safeHeaders = responseHeaders;
-                try {
-                  safeValue = redactValue(JSON.parse(Buffer.concat(chunks2).toString("utf8")), secrets);
-                  safeHeaders = withoutHeadersCompletedByPayload2(responseHeaders, safeValue, secrets);
-                } catch {
-                  failNative();
-                  return;
-                }
-                settled2 = true;
-                if (!context.finish()) return;
-                context.res.writeHead(status || 200, safeHeaders);
-                context.res.end(JSON.stringify(safeValue));
-                onAudit({
-                  event: "provider_route",
-                  modelId,
-                  clientProtocol,
-                  upstreamProtocol: capability.upstreamProtocol,
-                  conversion: "native",
-                  outcome: "pass"
-                });
-              });
-              upstream.once("error", failNative);
-              return;
-            }
-            const chunks = [];
-            let bytes = 0;
-            let settled = false;
-            const failNativeStream = (error) => {
-              if (settled || context.finished) return;
-              settled = true;
-              try {
-                upstream.destroy();
-              } catch {
-              }
-              if (!context.finish()) return;
-              sendJson2(context.res, Number(error == null ? void 0 : error.status) || 502, envelope2(
-                "provider_error",
-                (error == null ? void 0 : error.code) || "provider_stream_error",
-                (error == null ? void 0 : error.message) || "Provider response stream failed."
-              ));
-            };
-            upstream.on("data", (chunk) => {
-              if (settled || context.finished) return;
-              const value = Buffer.from(chunk);
-              bytes += value.length;
-              if (bytes > bounded.responseBodyBytes) {
-                failNativeStream(Object.assign(new Error("Provider response is too large."), {
-                  status: 502,
-                  code: "provider_response_too_large"
-                }));
-                return;
-              }
-              chunks.push(value);
-            });
-            upstream.once("end", () => {
-              if (settled || context.finished) return;
-              const transcript = Buffer.concat(chunks);
-              let safeHeaders = responseHeaders;
-              try {
-                requireCredentialFreeSse(transcript, secrets, {
-                  maxFrameBytes: 1024 * 1024,
-                  seedValues: [
-                    ...Object.entries(responseHeaders).flat(),
-                    Object.keys(responseHeaders).join(""),
-                    Object.values(responseHeaders).join(""),
-                    Object.entries(responseHeaders).flat().join("")
-                  ]
-                });
-              } catch (error) {
-                try {
-                  requireCredentialFreeSse(transcript, secrets, { maxFrameBytes: 1024 * 1024 });
-                  safeHeaders = {};
-                } catch {
-                  failNativeStream(error);
-                  return;
-                }
-              }
-              settled = true;
-              if (!context.finish()) return;
-              context.res.writeHead(status || 200, safeHeaders);
-              context.res.end(transcript);
-              onAudit({
-                event: "provider_route",
-                modelId,
-                clientProtocol,
-                upstreamProtocol: capability.upstreamProtocol,
-                conversion: "native",
-                outcome: "pass"
-              });
-            });
-            upstream.once("error", () => {
-              failNativeStream(Object.assign(new Error("Provider response stream failed."), {
-                status: 502,
-                code: "provider_stream_error"
-              }));
-            });
-          });
-          context.upstream = request;
-          request.once("error", () => {
-            clearTimeout(connectTimer);
-            if (requestSettled || !context.finish()) return;
-            sendJson2(context.res, 502, envelope2(
-              "provider_error",
-              "provider_error",
-              "Provider request failed."
-            ));
-          });
-          request.end(attemptPayload);
-        } catch {
-          clearTimeout(connectTimer);
-          if (!context.finish()) return;
-          sendJson2(context.res, 502, envelope2(
-            "provider_error",
-            "provider_error",
-            "Provider request failed."
-          ));
-        }
-      };
-      sendAttempt(headers, payload, {
-        beta: true,
-        contextManagement: true
-      });
-    };
-    const forwardChatFacade = ({ context, payload, modelId }) => {
-      const endpoint = new URL("responses", chatRouteInfo.baseUrl.replace(/\/+$/, "") + "/");
-      const forwarded = Object.fromEntries(
-        collectCodexHeaders(context.req.rawHeaders || []).map((header) => [header.name, header.value])
-      );
-      forwarded["content-type"] = "application/json";
-      forwarded["content-length"] = String(payload.length);
-      forwarded["x-ae-mcp-route-token"] = chatRouteInfo.routeToken;
-      const request = http.request({
-        hostname: endpoint.hostname,
-        port: endpoint.port,
-        path: endpoint.pathname + endpoint.search,
-        method: "POST",
-        headers: forwarded
-      }, (response) => {
-        if (context.finished) {
-          response.destroy();
-          return;
-        }
-        context.res.writeHead(
-          response.statusCode || 502,
-          filterUpstreamResponseHeaders(response.rawHeaders || [])
-        );
-        response.on("data", (chunk) => {
-          if (!context.finished) context.res.write(chunk);
-        });
-        response.once("end", () => {
-          if (!context.finish()) return;
-          context.res.end();
-          onAudit({
-            event: "provider_route",
-            modelId,
-            clientProtocol: "responses",
-            upstreamProtocol: "chat",
-            conversion: "responses-to-chat",
-            outcome: "pass"
-          });
-        });
-        response.once("error", () => {
-          if (!context.finish()) return;
-          context.res.destroy();
-        });
-      });
-      context.upstream = request;
-      request.once("error", () => {
-        if (!context.finish()) return;
-        sendJson2(context.res, 502, envelope2(
-          "provider_error",
-          "provider_error",
-          "Local Provider facade failed."
-        ));
-      });
-      request.end(payload);
-    };
-    const handleGenerate = async (req, res, localUrl, clientProtocol) => {
-      const context = begin(req, res);
-      if (!context) return;
-      let payload;
-      let body;
-      let modelId;
-      try {
-        payload = await readBody(req, bounded.requestBodyBytes);
-        ({ body, modelId } = requestEnvelope(payload));
-      } catch (error) {
-        if (!context.finish()) return;
-        sendJson2(
-          res,
-          Number(error == null ? void 0 : error.status) || 400,
-          envelope2(
-            "invalid_request_error",
-            (error == null ? void 0 : error.code) || "invalid_request_body",
-            (error == null ? void 0 : error.message) || "Request body is invalid."
-          )
-        );
-        return;
-      }
-      let capability;
-      try {
-        capability = await capabilityFor({ modelId, clientProtocol });
-      } catch (error) {
-        if (!context.finish()) return;
-        sendJson2(
-          res,
-          Number(error == null ? void 0 : error.status) || 501,
-          envelope2(
-            "invalid_request_error",
-            (error == null ? void 0 : error.code) || "provider_route_unavailable",
-            (error == null ? void 0 : error.message) || "No verified Provider route is available."
-          )
-        );
-        return;
-      }
-      if (capability.upstreamProtocol === clientProtocol) {
-        await nativeProxy({
-          context,
-          capability,
-          clientProtocol,
-          suffix: clientProtocol === "responses" ? "/responses" : "/messages",
-          search: clientProtocol === "messages" ? localUrl.search : "",
-          payload,
-          modelId,
-          stream: body.stream === true
-        });
-        return;
-      }
-      if (clientProtocol === "responses" && capability.upstreamProtocol === "chat") {
-        forwardChatFacade({ context, payload, modelId });
-        return;
-      }
-      let converted;
-      try {
-        converted = convertRequest(clientProtocol, capability.upstreamProtocol, body, capability);
-      } catch (error) {
-        if (!context.finish()) return;
-        const status = Number(error == null ? void 0 : error.status) || 501;
-        sendJson2(res, status, envelope2(
-          "invalid_request_error",
-          (error == null ? void 0 : error.code) || "provider_conversion_unsupported",
-          (error == null ? void 0 : error.message) || "Provider conversion is unavailable.",
-          (error == null ? void 0 : error.param) ? { param: error.param } : {}
-        ));
-        return;
-      }
-      const upstreamProtocol = capability.upstreamProtocol;
-      await nativeProxy({
-        context,
-        capability,
-        clientProtocol: upstreamProtocol,
-        suffix: upstreamProtocol === "responses" ? "/responses" : upstreamProtocol === "messages" ? "/messages" : "/chat/completions",
-        search: "",
-        payload: Buffer.from(JSON.stringify(converted.body), "utf8"),
-        modelId,
-        conversion: {
-          clientProtocol,
-          stream: converted.body.stream === true,
-          consumed: converted.consumed
-        }
-      });
-    };
-    const handleFeature = async (req, res, localUrl, feature, clientProtocol, suffix) => {
-      var _a;
-      const context = begin(req, res);
-      if (!context) return;
-      let payload;
-      let modelId;
-      try {
-        payload = await readBody(req, bounded.requestBodyBytes);
-        ({ modelId } = requestEnvelope(payload));
-      } catch (error) {
-        if (!context.finish()) return;
-        sendJson2(
-          res,
-          Number(error == null ? void 0 : error.status) || 400,
-          envelope2(
-            "invalid_request_error",
-            (error == null ? void 0 : error.code) || "invalid_request_body",
-            (error == null ? void 0 : error.message) || "Request body is invalid."
-          )
-        );
-        return;
-      }
-      const unsupportedCode = feature === "compact" ? "provider_compaction_unsupported" : "provider_count_tokens_unsupported";
-      let capability;
-      try {
-        capability = await capabilityFor({ modelId, clientProtocol, feature });
-      } catch (error) {
-        if (!context.finish()) return;
-        sendJson2(res, 501, envelope2(
-          "invalid_request_error",
-          unsupportedCode,
-          "Provider " + feature + " is unavailable for this model."
-        ));
-        return;
-      }
-      if (capability.upstreamProtocol !== clientProtocol || ((_a = capability.features) == null ? void 0 : _a[feature]) !== "supported") {
-        if (!context.finish()) return;
-        sendJson2(res, 501, envelope2(
-          "invalid_request_error",
-          unsupportedCode,
-          "Provider " + feature + " is unavailable for this model."
-        ));
-        return;
-      }
-      await nativeProxy({
-        context,
-        capability,
-        clientProtocol,
-        suffix,
-        search: localUrl.search,
-        payload,
-        modelId
-      });
-    };
-    const handleModels = (res) => {
-      const data2 = (getModels() || []).map((entry) => ({
-        id: String((entry == null ? void 0 : entry.id) || "").trim(),
-        object: "model",
-        owned_by: "custom-provider"
-      })).filter((entry) => entry.id);
-      sendJson2(res, 200, { object: "list", data: data2 });
-    };
-    const handleLocalRequest = (req, res) => {
-      const candidate = parseRouteToken(req.rawHeaders || []);
-      if (!candidate || !routeToken || !routeTokenMatches(candidate, routeToken, crypto)) {
-        sendJson2(res, 401, envelope2(
-          "authentication_error",
-          "invalid_route_token",
-          "Invalid local provider route token."
-        ));
-        return;
-      }
-      let localUrl;
-      try {
-        localUrl = parseLocalUrl2(req.url);
-      } catch (error) {
-        sendJson2(res, 400, envelope2(
-          "invalid_request_error",
-          error.code || "invalid_path",
-          error.message
-        ));
-        return;
-      }
-      const method = String(req.method || "").toUpperCase();
-      const pathname = localUrl.pathname;
-      if (pathname === "/v1/models" && method === "GET") {
-        handleModels(res);
-        return;
-      }
-      if (pathname === "/v1/responses" && method === "POST") {
-        void handleGenerate(req, res, localUrl, "responses");
-        return;
-      }
-      if (pathname === "/v1/messages" && method === "POST") {
-        void handleGenerate(req, res, localUrl, "messages");
-        return;
-      }
-      if (pathname === "/v1/responses/compact" && method === "POST") {
-        void handleFeature(req, res, localUrl, "compact", "responses", "/responses/compact");
-        return;
-      }
-      if (pathname === "/v1/messages/count_tokens" && method === "POST") {
-        void handleFeature(req, res, localUrl, "countTokens", "messages", "/messages/count_tokens");
-        return;
-      }
-      const known = [
-        "/v1/models",
-        "/v1/responses",
-        "/v1/messages",
-        "/v1/responses/compact",
-        "/v1/messages/count_tokens"
-      ];
-      if (known.includes(pathname)) {
-        sendJson2(res, 405, envelope2(
-          "invalid_request_error",
-          "method_not_allowed",
-          "Method " + method + " is not allowed for " + pathname + "."
-        ));
-        return;
-      }
-      sendJson2(res, 404, envelope2(
-        "invalid_request_error",
-        "not_found",
-        "Unknown local Provider route endpoint."
-      ));
-    };
-    function routeInfo() {
-      return {
-        origin,
-        openaiBaseUrl: origin + "/v1",
-        anthropicBaseUrl: origin,
-        baseUrl: origin + "/v1",
-        routeToken
+        decision: "allow",
+        risk,
+        allowSession: true,
+        sessionKey: planSessionKey(plan)
       };
     }
-    return {
-      async start() {
-        if (server && routeToken && origin) return routeInfo();
-        if (startPromise) return startPromise;
-        startPromise = (async () => {
-          reasoningCapsule = createReasoningCapsule({ crypto });
-          chatRoute = createChatRoute({
-            provider,
-            resolveRequestProfile: nestedProfile,
-            requireImpl,
-            createUpstreamRequest,
-            lookupImpl
-          });
-          chatRouteInfo = await chatRoute.start();
-          const next = http.createServer(handleLocalRequest);
-          await new Promise((resolve, reject) => {
-            next.once("error", reject);
-            next.listen(0, "127.0.0.1", resolve);
-          });
-          server = next;
-          routeToken = generateRouteToken(crypto);
-          origin = "http://127.0.0.1:" + server.address().port;
-          return routeInfo();
-        })().catch(async (error) => {
-          await (chatRoute == null ? void 0 : chatRoute.close().catch(() => {
-          }));
-          chatRoute = null;
-          chatRouteInfo = null;
-          reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
-          reasoningCapsule = null;
-          throw error;
-        }).finally(() => {
-          startPromise = null;
-        });
-        return startPromise;
-      },
-      async close() {
-        var _a;
-        if (startPromise) await startPromise.catch(() => {
-        });
-        for (const context of [...activeRequests]) {
-          try {
-            (_a = context.upstream) == null ? void 0 : _a.destroy();
-          } catch {
-          }
-          if (context.finish()) context.res.end();
-        }
-        const closing = server;
-        server = null;
-        routeToken = null;
-        origin = "";
-        if (closing) await new Promise((resolve) => closing.close(resolve));
-        await (chatRoute == null ? void 0 : chatRoute.close());
-        chatRoute = null;
-        chatRouteInfo = null;
-        reasoningCapsule == null ? void 0 : reasoningCapsule.destroy();
-        reasoningCapsule = null;
-      }
-    };
+    if (high) {
+      return { decision: "ask", risk, allowSession: false, sessionKey: null };
+    }
+    if (tier === "manual") {
+      return {
+        decision: "ask",
+        risk,
+        allowSession: true,
+        sessionKey: planSessionKey(plan)
+      };
+    }
+    return { decision: "allow", risk, allowSession: false, sessionKey: null };
+  }
+  function approvalResult(decision, policy = {}) {
+    if (decision === "once" || decision === "allow") {
+      return { action: "accept", content: { decision: "once" } };
+    }
+    if (decision === "session" && policy.allowSession === true) {
+      return { action: "accept", content: { decision: "session" } };
+    }
+    return { action: "decline", content: {} };
   }
 
   // src/cep/claudeAgentBackend.js
   var CLAUDE_MINIMUM_VERSION = "2.0.0";
-  var STDERR_TAIL_LIMIT2 = 4096;
+  var STDERR_TAIL_LIMIT = 4096;
   var DISALLOWED_TOOLS = [
     "Bash",
     "Edit",
@@ -36444,50 +27338,21 @@ data: ${JSON.stringify(payload)}
       executable: resolved
     };
   }
-  function clone2(value) {
+  function clone(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
-  function appendTail3(tail, chunk) {
+  function appendTail2(tail, chunk) {
     const next = tail + String(chunk || "");
-    return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
+    return next.length > STDERR_TAIL_LIMIT ? next.slice(next.length - STDERR_TAIL_LIMIT) : next;
   }
   function randomTempName() {
     const stamp = Date.now().toString(36);
     const random = Math.random().toString(36).slice(2);
     return `ae-claude-${stamp}-${random}`;
   }
-  function defaultResolveCapability({ provider, modelId, feature = "generate" } = {}) {
-    return selectProviderRoute(provider, {
-      client: "claude-code",
-      modelId,
-      feature
-    });
-  }
-  function conversationIdentity({ channel, provider }) {
-    var _a, _b, _c, _d, _e;
-    return JSON.stringify([
-      channel,
-      channel === "api" ? (_a = provider.id) != null ? _a : null : null,
-      channel === "api" ? (_b = provider.baseUrl) != null ? _b : null : null,
-      channel === "api" ? (_c = provider.requestProfileRevision) != null ? _c : null : null,
-      channel === "api" ? (_e = (_d = provider.modelList) == null ? void 0 : _d.revision) != null ? _e : null : null
-    ]);
-  }
-  function providerCandidateIdentity({ channel, model, provider }) {
-    return JSON.stringify([conversationIdentity({ channel, provider }), model]);
-  }
-  function normalizeChannel(channel) {
-    return channel === "api" ? "api" : "subscription";
-  }
   function normalizePermissionMode(mode) {
     if (["manual", "auto", "none", "readonly"].includes(mode)) return mode;
     return "manual";
-  }
-  function providerModelError(code, message) {
-    const error = new Error(message);
-    error.kind = "model";
-    error.code = code;
-    return error;
   }
   function cancelledStartError() {
     const error = new Error("Claude CLI start was cancelled");
@@ -36626,15 +27491,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getPermissionMode,
     getEffort,
     getThinking,
-    getChannel = () => "subscription",
-    getProviderSensitiveValues = () => [],
-    resolveApiProvider,
-    resolveRequestProfile,
-    resolveCapability = defaultResolveCapability,
-    createProviderRoute = createUniversalProviderRoute,
-    recoverProviderProfile,
-    onProviderProfileRecovered = () => {
-    },
     onEvent,
     lang = "zh",
     spawnImpl,
@@ -36665,11 +27521,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let processChannel = "subscription";
     let processConversationIdentity = null;
     let processSettings = null;
-    let processProvider = null;
-    let processCandidateIdentity = null;
     let sessionId = null;
-    let providerRoute = null;
-    let routeClosePromise = Promise.resolve();
     let runtimeGeneration = 0;
     let configDir = "";
     let providerSensitiveValues = [];
@@ -36829,14 +27681,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       emit({ type: "tool-denied", toolUseId: id });
       return true;
     }
-    function closeProviderRoute() {
-      const route = providerRoute;
-      providerRoute = null;
-      if (!route || typeof route.close !== "function") return routeClosePromise;
-      routeClosePromise = routeClosePromise.then(() => route.close()).catch(() => {
-      });
-      return routeClosePromise;
-    }
     function cleanupConfig() {
       const directory = configDir;
       configDir = "";
@@ -36859,8 +27703,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       proc = null;
       startPromise = null;
       processSettings = null;
-      processProvider = null;
-      processCandidateIdentity = null;
       if (current) {
         try {
           current.kill();
@@ -36877,10 +27719,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (finishRun) finishActive();
       if (clearStderr) stderrTail = "";
       clearProviderSensitiveValues();
-      await closeProviderRoute();
-    }
-    function apiSafeErrorMessage(message) {
-      return processChannel === "api" ? "Provider CLI request failed." : message;
     }
     function handleProcessFailure(target, generation, message) {
       if (generation !== runtimeGeneration || proc !== target) return;
@@ -36888,18 +27726,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       proc = null;
       startPromise = null;
       processSettings = null;
-      processProvider = null;
-      processCandidateIdentity = null;
       setThinking(false);
       drainControls("Claude CLI process ended.", false);
       cleanupConfig();
-      void closeProviderRoute();
       if (activeRun) {
         providerDeltaRedactor.flush();
         emit({
           type: "error",
           kind: "mcp",
-          message: apiSafeErrorMessage(message)
+          message
         });
         finishActive();
       }
@@ -37148,99 +27983,16 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
       if (message.type === "result") handleResult(message);
     }
-    async function selectApiRoute(provider, model) {
-      try {
-        return await resolveCapability({
-          provider,
-          modelId: model,
-          clientProtocol: "messages",
-          feature: "generate"
-        });
-      } catch {
-        return null;
-      }
-    }
-    async function desiredSession(channel) {
+    function desiredSession() {
       const model = String(getModel ? getModel() : "").trim();
       const effort = String(getEffort ? getEffort() || "" : "").trim();
       const thinking = getThinking ? getThinking() : null;
-      let provider = null;
-      let candidateIdentity = null;
-      let recovered = false;
-      if (channel === "api") {
-        if (typeof resolveApiProvider !== "function") {
-          throw new Error("Provider is unavailable.");
-        }
-        if (typeof resolveRequestProfile !== "function") {
-          throw new Error("Provider credential resolver is unavailable.");
-        }
-        if (typeof createProviderRoute !== "function") {
-          throw new Error("Provider route factory is unavailable.");
-        }
-        provider = await resolveApiProvider();
-        if (!isPlainObject2(provider)) throw new Error("Provider is unavailable.");
-        candidateIdentity = providerCandidateIdentity({ channel, model, provider });
-        if (proc && processProvider && processCandidateIdentity === candidateIdentity) {
-          provider = processProvider;
-        } else {
-          let route = await selectApiRoute(provider, model);
-          if (!(route == null ? void 0 : route.ok)) {
-            if ((route == null ? void 0 : route.reasonCode) !== "needs-probe") {
-              throw providerModelError(
-                "provider_route_unavailable",
-                `Custom provider has no verified Claude route for model ${model}`
-              );
-            }
-            if (typeof recoverProviderProfile !== "function") {
-              throw providerModelError(
-                "provider_preflight_unavailable",
-                `Custom provider cannot be verified for model ${model}`
-              );
-            }
-            let recovery;
-            try {
-              recovery = await recoverProviderProfile(
-                provider,
-                { status: null, code: "provider_preflight_required" },
-                model
-              );
-            } catch (cause) {
-              const detail = typeof (cause == null ? void 0 : cause.message) === "string" ? cause.message.trim() : "";
-              throw providerModelError(
-                "provider_preflight_failed",
-                `Custom provider could not verify model ${model}` + (detail ? `: ${detail}` : "")
-              );
-            }
-            const recoveredProvider = (recovery == null ? void 0 : recovery.provider) || recovery;
-            const recoveredModel = String((recovery == null ? void 0 : recovery.modelId) || model).trim();
-            if (!isPlainObject2(recoveredProvider) || recoveredModel !== model) {
-              throw providerModelError(
-                "provider_preflight_failed",
-                `Custom provider did not expose a verified API for model ${model}`
-              );
-            }
-            route = await selectApiRoute(recoveredProvider, model);
-            if (!(route == null ? void 0 : route.ok)) {
-              throw providerModelError(
-                "provider_preflight_failed",
-                `Custom provider did not expose a verified API for model ${model}`
-              );
-            }
-            provider = recoveredProvider;
-            candidateIdentity = providerCandidateIdentity({ channel, model, provider });
-            recovered = true;
-          }
-        }
-      }
       return {
-        channel,
+        channel: "subscription",
         model,
         effort,
         thinking,
-        provider,
-        candidateIdentity,
-        recovered,
-        conversationIdentity: conversationIdentity({ channel, provider })
+        conversationIdentity: "subscription"
       };
     }
     function canonicalTurn(input) {
@@ -37329,37 +28081,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           });
           return false;
         }
-        await routeClosePromise;
-        if (activeRun === null) throw cancelledStartError();
-        let localRoute = null;
-        if (session.channel === "api") {
-          providerRoute = createProviderRoute({
-            provider: session.provider,
-            resolveCapability,
-            resolveRequestProfile
-          });
-          const routeInfo = await providerRoute.start();
-          localRoute = {
-            origin: routeInfo == null ? void 0 : routeInfo.origin,
-            routeToken: routeInfo == null ? void 0 : routeInfo.routeToken
-          };
-          const values = getProviderSensitiveValues();
-          if (!Array.isArray(values)) {
-            throw new TypeError("getProviderSensitiveValues must return an array");
-          }
-          setProviderSensitiveValues([...values, routeInfo == null ? void 0 : routeInfo.routeToken]);
-        } else {
-          setProviderSensitiveValues([]);
-        }
+        setProviderSensitiveValues([]);
         const mcpPath = writeMcpConfig(mcpSpec);
-        let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), {
-          channel: session.channel,
-          localRoute
-        });
+        let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}));
         stderrTail = "";
-        processChannel = session.channel;
-        processProvider = session.provider;
-        processCandidateIdentity = session.candidateIdentity;
+        processChannel = "subscription";
         const executable = resolved.executable || {
           ok: true,
           id: "claude",
@@ -37392,11 +28118,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         (_b = (_a = spawnedProc.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", reader);
         (_d = (_c = spawnedProc.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", (chunk) => {
           if (generation !== runtimeGeneration || proc !== spawnedProc) return;
-          const detail = processChannel === "api" ? "[provider-cli-stderr-redacted]\n" : redactValue(String(chunk), [
+          const detail = redactValue(String(chunk), [
             ...providerSensitiveValues,
             ...activeAttachmentPaths
           ]);
-          stderrTail = appendTail3(stderrTail, detail);
+          stderrTail = appendTail2(stderrTail, detail);
         });
         (_e = spawnedProc.on) == null ? void 0 : _e.call(spawnedProc, "exit", (code, signal) => {
           handleExit(spawnedProc, generation, code, signal);
@@ -37412,13 +28138,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       } catch (error) {
         cleanupConfig();
         clearProviderSensitiveValues();
-        await closeProviderRoute();
         if ((error == null ? void 0 : error.code) !== "CLAUDE_AGENT_START_CANCELLED") {
           emit({
             type: "error",
             kind: (error == null ? void 0 : error.kind) || "mcp",
             ...(error == null ? void 0 : error.code) ? { code: error.code } : {},
-            message: session.channel === "api" ? "Provider CLI request failed." : (error == null ? void 0 : error.message) || "Failed to start Claude CLI."
+            message: (error == null ? void 0 : error.message) || "Failed to start Claude CLI."
           });
         }
         return false;
@@ -37427,18 +28152,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
     }
     async function ensureCli(runToken, turn) {
-      let channel = "subscription";
       try {
-        channel = normalizeChannel(getChannel ? getChannel() : "subscription");
-        const session = await desiredSession(channel);
+        const session = desiredSession();
         if (activeRun !== runToken) throw cancelledStartError();
-        if (session.recovered) {
-          try {
-            await onProviderProfileRecovered(session.provider);
-          } catch {
-          }
-          if (activeRun !== runToken) throw cancelledStartError();
-        }
         const meta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
         const normalizedMeta = {
           allowedTools: Array.isArray(meta == null ? void 0 : meta.allowedTools) ? meta.allowedTools : [],
@@ -37474,7 +28190,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
             type: "error",
             kind: (error == null ? void 0 : error.kind) || "mcp",
             ...(error == null ? void 0 : error.code) ? { code: error.code } : {},
-            message: channel === "api" ? "Provider CLI request failed." : (error == null ? void 0 : error.message) || "Failed to start Claude CLI."
+            message: (error == null ? void 0 : error.message) || "Failed to start Claude CLI."
           });
         }
         return false;
@@ -37548,7 +28264,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       answerQuestion,
       stop,
       reset,
-      getMessages: () => clone2(transcript),
+      getMessages: () => clone(transcript),
       getStderrTail: () => stderrTail
     };
   }
@@ -37686,17 +28402,17 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/cep/codexBackend.js
   init_cep_runtime_inject();
-  var RPC_TIMEOUT_MS2 = 3e4;
-  var STDERR_TAIL_LIMIT3 = 4096;
+  var RPC_TIMEOUT_MS = 3e4;
+  var STDERR_TAIL_LIMIT2 = 4096;
   var APPROVAL_POLICY = {
     granular: { mcp_elicitations: true, rules: false, sandbox_approval: false }
   };
   var SANDBOX_POLICY = { type: "readOnly" };
-  function appendTail4(tail, chunk) {
+  function appendTail3(tail, chunk) {
     const next = tail + String(chunk || "");
-    return next.length > STDERR_TAIL_LIMIT3 ? next.slice(next.length - STDERR_TAIL_LIMIT3) : next;
+    return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
   }
-  function clone3(value) {
+  function clone2(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
   function defaultCwd(env, platform) {
@@ -37715,47 +28431,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const message = error && error.message !== void 0 ? String(error.message) : "";
     return /^reconnecting\.\.\.\s*\d+\/\d+$/i.test(message);
   }
-  function recoverableProviderFailure(error) {
-    const values = [error, error == null ? void 0 : error.data, error == null ? void 0 : error.error, error == null ? void 0 : error.cause].filter((value) => value && typeof value === "object");
-    if (values.some((value) => ["code", "type", "kind", "reason"].some((key) => String(value[key] || "").toLowerCase() === "provider_compaction_unsupported"))) {
-      return false;
-    }
-    const message = values.map((value) => String(value.message || "")).filter(Boolean).join("\n");
-    if (/\bprovider_compaction_unsupported\b/i.test(message) || /\bthis chat-only provider cannot compact responses context\.?/i.test(message)) return false;
-    for (const value of values) {
-      for (const key of ["status", "statusCode", "httpStatus", "upstreamStatus"]) {
-        if ([401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
-      }
-      for (const key of ["code", "type", "kind", "reason"]) {
-        if (key === "code" && [401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
-        const code = String(value[key] || "").toLowerCase();
-        if (/unsupported[_-](?:endpoint|api|wire)|(?:endpoint|api|wire)[_-]unsupported/.test(code)) return true;
-      }
-    }
-    return /\b(?:http|status(?:\s+code)?)\s*[:=]?\s*(?:401|403|404|405|501)\b/i.test(message) || /\bunsupported\s+(?:endpoint|api|wire api|request)\b/i.test(message);
-  }
-  function providerFailureFacts(error) {
-    const values = [error, error == null ? void 0 : error.data, error == null ? void 0 : error.error, error == null ? void 0 : error.cause].filter((value) => value && typeof value === "object");
-    let status = null;
-    let code = "";
-    for (const value of values) {
-      for (const key of ["status", "statusCode", "httpStatus", "upstreamStatus"]) {
-        const candidate = Number(value[key]);
-        if (Number.isInteger(candidate)) status = candidate;
-      }
-      for (const key of ["code", "type", "kind", "reason"]) {
-        if (!code && value[key] !== void 0) code = String(value[key]);
-      }
-    }
-    return { status, code };
-  }
-  function providerModelError2(code, message) {
-    const error = new Error(message);
-    error.kind = "model";
-    error.code = code;
-    return error;
-  }
-  function createRpc2({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS2 }) {
+  function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
     let nextId2 = 1;
     const pending = /* @__PURE__ */ new Map();
     function writeMessage(message) {
@@ -37847,7 +28523,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function itemFromParams(params) {
     return params && params.item || params || {};
   }
-  function mcpToolName2(item) {
+  function mcpToolName(item) {
     const tool = item && (item.tool || item.name);
     return tool ? "mcp__ae__" + String(tool).replace(/^mcp__ae__/, "") : "";
   }
@@ -37876,29 +28552,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     getMcpSpec: getMcpSpec2,
     getToolMeta,
     getServerInstructions = () => "",
-    getProviderProfile = () => null,
-    getProviderCandidate = () => null,
-    getProviderSensitiveValues = () => [],
-    resolveRequestProfile,
-    recoverProviderProfile,
-    onProviderProfileRecovered = () => {
-    },
-    // When the panel has no explicit custom provider, inherit a model_provider
-    // already declared in ~/.codex/config.toml. config.toml owns provider
-    // selection; the
-    // panel only supplies the missing API key env var the provider needs (no
-    // `-c model_provider=...` override).
-    getCliConfigProvider = () => null,
-    createProviderRoute = createUniversalProviderRoute,
-    createResponsesRoute,
-    selectRoute = selectProviderRoute,
     resolveCli = resolveCodexCli,
     onEvent,
     lang = "zh",
     env
   }) {
     const adapter = platform || createPlatformAdapter();
-    const providerRouteFactory = createResponsesRoute || createProviderRoute;
     let proc = null;
     let rpc = null;
     let startPromise = null;
@@ -37915,8 +28574,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let activeAssistantText = "";
     let toolMeta = { allowedTools: [], annotations: {} };
     let lastCliInfo = null;
-    let providerRoute = null;
-    let providerSensitiveValues = [];
     let activeAttachmentPaths = [];
     let processStderrAttachmentPaths = [];
     let providerDeltaPhase = void 0;
@@ -37925,12 +28582,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     let providerStderrRedactor = createDeltaRedactor([], () => {
     });
     let runtimeGeneration = 0;
-    let providerProfileOverride = null;
-    let providerRecoveryAttempted = false;
-    let providerRecoveryInFlight = false;
     let turnFailureInFlight = false;
-    let providerRecoverySequence = 0;
-    let providerRefreshPending = false;
     let activeTurn = null;
     let activeTurnAccepted = false;
     let activeTurnDispatched = false;
@@ -37940,20 +28592,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const pendingUserInputs = /* @__PURE__ */ new Map();
     const sessionAllowedTools = /* @__PURE__ */ new Set();
     const sessionAllowedPlans = /* @__PURE__ */ new Set();
-    function closeProviderRoute() {
-      const route = providerRoute;
-      providerRoute = null;
-      if (route && route.close) Promise.resolve(route.close()).catch(() => {
-      });
-    }
     function emit(evt) {
-      if (onEvent) onEvent(redactValue(evt, [...providerSensitiveValues, ...activeAttachmentPaths]));
+      if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
     }
     function resetProviderDeltaRedactor() {
       providerDeltaRedactor.discard();
       providerDeltaPhase = void 0;
       providerDeltaRedactor = createDeltaRedactor(
-        [...providerSensitiveValues, ...activeAttachmentPaths],
+        activeAttachmentPaths,
         (text) => {
           activeAssistantText += text;
           emit({ type: "text-delta", text, phase: providerDeltaPhase });
@@ -37963,16 +28609,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function resetProviderStderrRedactor() {
       providerStderrRedactor.discard();
       providerStderrRedactor = createDeltaRedactor(
-        [...providerSensitiveValues, ...processStderrAttachmentPaths],
+        processStderrAttachmentPaths,
         (text) => {
-          stderrTail = appendTail4(stderrTail, text);
+          stderrTail = appendTail3(stderrTail, text);
         }
       );
-    }
-    function setProviderSensitiveValues(values) {
-      providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
-      resetProviderDeltaRedactor();
-      resetProviderStderrRedactor();
     }
     function setActiveAttachmentPaths(values) {
       activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
@@ -37991,23 +28632,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       processStderrAttachmentPaths = preserveActive ? activeAttachmentPaths.slice() : [];
       resetProviderStderrRedactor();
     }
-    function providerRedactionValues(additional = []) {
-      const values = getProviderSensitiveValues();
-      if (!Array.isArray(values)) throw new TypeError("getProviderSensitiveValues must return an array");
-      return [...values, ...additional];
-    }
-    function clearProviderSensitiveValues() {
-      providerDeltaRedactor.discard();
-      providerStderrRedactor.discard();
-      providerSensitiveValues = [];
-      providerDeltaPhase = void 0;
-      providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {
-      });
-      providerStderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, () => {
-      });
-    }
     function currentEnv() {
-      return adapter.completeSpawnEnv(env || {});
+      const spawnEnv = adapter.completeSpawnEnv(env || {});
+      const codexHome = adapter.paths.join([adapter.paths.configRoot, "codex-home"]);
+      adapter.fs.mkdirSync(codexHome, { recursive: true });
+      return { ...spawnEnv, CODEX_HOME: codexHome };
     }
     function activeTurnFailureFields() {
       if (!(activeTurn == null ? void 0 : activeTurn.turnId)) return {};
@@ -38020,7 +28649,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     function finishActive() {
       const resolve = activeResolve;
-      const refreshProvider = providerRefreshPending;
       activeResolve = null;
       activeRun = null;
       activeAssistantText = "";
@@ -38029,16 +28657,9 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       activeTurnDispatched = false;
       activeUserText = "";
       activeUserRecorded = false;
-      providerRecoveryAttempted = false;
-      providerRecoveryInFlight = false;
       turnFailureInFlight = false;
-      providerRefreshPending = false;
       setActiveAttachmentPaths([]);
       if (resolve) resolve();
-      if (refreshProvider) {
-        Promise.resolve().then(() => onProviderProfileRecovered()).catch(() => {
-        });
-      }
     }
     function drainApprovals() {
       for (const [toolUseId, approval] of Array.from(pendingApprovals.entries())) {
@@ -38072,32 +28693,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       });
       return true;
     }
-    function detachRuntimeForProviderRecovery() {
-      const previousProc = proc;
-      const previousRpc = rpc;
-      runtimeGeneration += 1;
-      drainApprovals();
-      closeProviderRoute();
-      if (previousRpc) previousRpc.close(new Error("Codex provider runtime is restarting"));
-      proc = null;
-      rpc = null;
-      startPromise = null;
-      initializePromise = null;
-      initialized = false;
-      threadId = null;
-      preambleSent = false;
-      currentTurnId = null;
-      activeAssistantText = "";
-      stderrTail = "";
-      clearProviderSensitiveValues();
-      clearProcessStderrAttachmentPaths({ preserveActive: true });
-      if (previousProc) {
-        try {
-          previousProc.kill();
-        } catch {
-        }
-      }
-    }
     function handleNotification(message) {
       const params = message.params || {};
       if (message.method === "turn/started") {
@@ -38129,7 +28724,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         emit({
           type: "tool-start",
           toolUseId: String(item.id || ""),
-          name: mcpToolName2(item),
+          name: mcpToolName(item),
           input: item.arguments
         });
         return;
@@ -38144,7 +28739,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         emit({
           type: "tool-result",
           toolUseId: String(item.id || ""),
-          name: mcpToolName2(item),
+          name: mcpToolName(item),
           ok: !item.error && item.status === "completed",
           text: toolResultText2(item.result),
           durationMs: item.durationMs
@@ -38289,10 +28884,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       initialized = false;
       threadId = null;
       preambleSent = false;
-      closeProviderRoute();
       drainApprovals();
       if (wasStopping) {
-        clearProviderSensitiveValues();
         clearProcessStderrAttachmentPaths();
         return;
       }
@@ -38305,7 +28898,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         });
         finishActive();
       }
-      clearProviderSensitiveValues();
       clearProcessStderrAttachmentPaths();
     }
     function handleError(error) {
@@ -38318,147 +28910,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       initialized = false;
       threadId = null;
       preambleSent = false;
-      closeProviderRoute();
       drainApprovals();
       if (activeRun) {
         emit({ type: "error", kind: "mcp", message: err.message, ...activeTurnFailureFields() });
         finishActive();
       }
-      clearProviderSensitiveValues();
       clearProcessStderrAttachmentPaths();
-    }
-    function clearSpawnCredentialCopies(runtimeConfig, spawnEnvironment, extraNames = []) {
-      const names = new Set(extraNames);
-      for (const header of (runtimeConfig == null ? void 0 : runtimeConfig.envHeaders) || []) {
-        names.add(header.envName);
-        header.value = void 0;
-      }
-      for (const name of names) delete spawnEnvironment[name];
-    }
-    function selectedProviderProfile() {
-      const selected = providerProfileOverride || (getProviderProfile ? getProviderProfile() : null);
-      if (!selected) return null;
-      const provider = selected.provider || selected;
-      const modelId = String(selected.modelId || "").trim();
-      const runtimeModelId = String(getModel ? getModel() : "").trim();
-      if (!provider) throw new Error("Custom provider is unavailable");
-      if (!modelId || modelId !== runtimeModelId) {
-        throw new Error("Custom provider model binding is unavailable");
-      }
-      if (typeof resolveRequestProfile !== "function") {
-        throw new Error("Custom provider credential resolver is unavailable");
-      }
-      const route = selectRoute(provider, {
-        client: "codex",
-        modelId,
-        feature: "generate"
-      });
-      if (!(route == null ? void 0 : route.ok)) {
-        const code = (route == null ? void 0 : route.reasonCode) === "needs-probe" ? "provider_preflight_required" : "provider_route_unavailable";
-        throw providerModelError2(code, `Custom provider has no verified Codex route for model ${modelId}`);
-      }
-      return { provider, modelId, route };
-    }
-    function normalizedProviderProfile(selected) {
-      if (!selected) return null;
-      const provider = selected.provider || selected;
-      const modelId = String(selected.modelId || "").trim();
-      let route = null;
-      try {
-        route = selectRoute(provider, {
-          client: "codex",
-          modelId,
-          feature: "generate"
-        });
-      } catch {
-        route = null;
-      }
-      return {
-        provider,
-        modelId,
-        route
-      };
-    }
-    function providerProfileMatchesCandidate(profile, candidate) {
-      var _a, _b, _c, _d, _e, _f, _g, _h, _i;
-      if (!(profile == null ? void 0 : profile.provider) || !(candidate == null ? void 0 : candidate.provider)) return false;
-      const profileProviderId = String(profile.provider.id || "").trim();
-      const candidateProviderId = String(candidate.provider.id || "").trim();
-      const profileBaseUrl = String(profile.provider.baseUrl || "").trim();
-      const candidateBaseUrl = String(candidate.provider.baseUrl || "").trim();
-      const profileRequestRevision = (_b = (_a = profile.provider.requestProfileRevision) != null ? _a : profile.provider.authProfileRevision) != null ? _b : null;
-      const candidateRequestRevision = (_d = (_c = candidate.provider.requestProfileRevision) != null ? _c : candidate.provider.authProfileRevision) != null ? _d : null;
-      const profileModelListRevision = (_f = (_e = profile.provider.modelList) == null ? void 0 : _e.revision) != null ? _f : null;
-      const candidateModelListRevision = (_h = (_g = candidate.provider.modelList) == null ? void 0 : _g.revision) != null ? _h : null;
-      return Boolean(
-        profileProviderId && profileProviderId === candidateProviderId && profileBaseUrl === candidateBaseUrl && profileRequestRevision === candidateRequestRevision && profileModelListRevision === candidateModelListRevision && ((_i = profile.route) == null ? void 0 : _i.ok) === true && profile.modelId === candidate.modelId
-      );
-    }
-    function currentProviderCandidate() {
-      const selected = getProviderCandidate ? getProviderCandidate() : null;
-      if (!selected) return null;
-      const provider = selected.provider || selected;
-      const modelId = String(selected.modelId || "").trim();
-      const runtimeModelId = String(getModel ? getModel() : "").trim();
-      if (!provider) {
-        throw providerModelError2("provider_candidate_unavailable", "Selected custom provider is unavailable");
-      }
-      if (!modelId || modelId !== runtimeModelId) {
-        throw providerModelError2("provider_model_binding_unavailable", "Selected custom provider model binding is unavailable");
-      }
-      return { provider, modelId };
-    }
-    async function ensureProviderProfileForSend() {
-      const candidate = currentProviderCandidate();
-      if (!candidate) return true;
-      const override = normalizedProviderProfile(providerProfileOverride);
-      if (providerProfileMatchesCandidate(override, candidate)) return true;
-      let configured = null;
-      try {
-        configured = normalizedProviderProfile(getProviderProfile ? getProviderProfile() : null);
-      } catch {
-        configured = null;
-      }
-      const sequence = providerRecoverySequence + 1;
-      providerRecoverySequence = sequence;
-      detachRuntimeForProviderRecovery();
-      providerProfileOverride = null;
-      if (providerProfileMatchesCandidate(configured, candidate)) {
-        providerProfileOverride = configured;
-        return true;
-      }
-      if (typeof recoverProviderProfile !== "function") {
-        throw providerModelError2(
-          "provider_preflight_unavailable",
-          `Custom provider cannot be verified for model ${candidate.modelId}`
-        );
-      }
-      let recovered;
-      try {
-        recovered = await recoverProviderProfile(
-          candidate.provider,
-          { status: null, code: "provider_preflight_required" },
-          candidate.modelId
-        );
-      } catch (error) {
-        if (sequence !== providerRecoverySequence || !activeRun) return false;
-        throw providerModelError2(
-          "provider_preflight_failed",
-          (error == null ? void 0 : error.message) || `Custom provider could not verify model ${candidate.modelId}`
-        );
-      }
-      if (sequence !== providerRecoverySequence || !activeRun) return false;
-      const profile = normalizedProviderProfile(recovered);
-      const currentModelId = String(getModel ? getModel() : "").trim();
-      if (!providerProfileMatchesCandidate(profile, candidate) || currentModelId !== candidate.modelId) {
-        throw providerModelError2(
-          "provider_preflight_failed",
-          `Custom provider did not expose a verified API for model ${candidate.modelId}`
-        );
-      }
-      providerProfileOverride = profile;
-      providerRefreshPending = true;
-      return true;
     }
     async function startProcess() {
       if (proc && rpc) return true;
@@ -38484,71 +28941,21 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
           version: cliInfo.version || null,
           arch: null
         };
-        const selected = selectedProviderProfile();
-        let runtimeConfig = null;
-        if (selected) {
-          closeProviderRoute();
-          providerRoute = providerRouteFactory({
-            provider: selected.provider,
-            resolveCapability: ({ provider, modelId, clientProtocol, feature }) => selectRoute(provider, {
-              client: clientProtocol === "messages" ? "claude-code" : "codex",
-              modelId,
-              feature
-            }),
-            resolveRequestProfile
-          });
-          const routeInfo = await providerRoute.start();
-          assertCurrentStart();
-          runtimeConfig = {
-            providerId: selected.provider.id,
-            baseUrl: routeInfo.openaiBaseUrl || routeInfo.baseUrl,
-            chatCompatibility: selected.route.upstreamProtocol !== "responses",
-            envHeaders: [{
-              name: LOCAL_ROUTE_TOKEN_HEADER,
-              envName: "AE_MCP_PROVIDER_HEADER_00",
-              value: routeInfo.routeToken
-            }]
-          };
-          setProviderSensitiveValues(providerRedactionValues([routeInfo.routeToken]));
-        } else {
-          setProviderSensitiveValues([]);
-        }
-        let spawnEnvWithCreds = codexSpawnEnv(runtimeConfig, spawnEnv);
-        const extraCredentialEnvNames = [];
-        if (!selected) {
-          const cliConfig = getCliConfigProvider ? getCliConfigProvider() : null;
-          const envKey = cliConfig && cliConfig.provider && String(cliConfig.provider.envKey || "").trim();
-          if (envKey && cliConfig.apiKey) {
-            spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
-            extraCredentialEnvNames.push(envKey);
-            setProviderSensitiveValues([String(cliConfig.apiKey)]);
-          }
-        }
-        if (runtimeConfig) {
-          const codexHome = adapter.paths.join([adapter.paths.configRoot, "codex-home"]);
-          adapter.fs.mkdirSync(codexHome, { recursive: true });
-          spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { CODEX_HOME: codexHome });
-        }
         assertCurrentStart();
-        let spawnedProc;
-        try {
-          const appServerArgs = [
-            ...codexAppServerArgs(runtimeConfig),
-            "-c",
-            "features.default_mode_request_user_input=true"
-          ];
-          spawnedProc = adapter.spawn(executable, appServerArgs, {
-            stdio: "pipe",
-            windowsHide: true,
-            env: spawnEnvWithCreds
-          });
-        } finally {
-          clearSpawnCredentialCopies(runtimeConfig, spawnEnvWithCreds, extraCredentialEnvNames);
-        }
+        const appServerArgs = [
+          "app-server",
+          "-c",
+          "features.default_mode_request_user_input=true"
+        ];
+        const spawnedProc = adapter.spawn(executable, appServerArgs, {
+          stdio: "pipe",
+          windowsHide: true,
+          env: spawnEnv
+        });
         proc = spawnedProc;
         const generation = startGeneration + 1;
         runtimeGeneration = generation;
-        const nextRpc = createRpc2({
+        const nextRpc = createRpc({
           writeLine: (line) => spawnedProc.stdin.write(line),
           onNotification: handleNotification,
           onRequest: handleRequest
@@ -38571,8 +28978,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         return true;
       })().catch((error) => {
         if (startGeneration === runtimeGeneration) {
-          closeProviderRoute();
-          clearProviderSensitiveValues();
           drainApprovals();
         }
         throw error;
@@ -38684,74 +29089,25 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         void handleTurnFailure(error);
       });
     }
-    async function attemptProviderRecovery(error) {
-      var _a;
-      if (providerRecoveryInFlight) return true;
-      if (providerRecoveryAttempted || !activeRun || typeof recoverProviderProfile !== "function" || !recoverableProviderFailure(error)) return false;
-      let selected;
-      try {
-        selected = selectedProviderProfile();
-      } catch {
-        return false;
-      }
-      if (!selected) return false;
-      providerRecoveryAttempted = true;
-      providerRecoveryInFlight = true;
-      const sequence = providerRecoverySequence + 1;
-      providerRecoverySequence = sequence;
-      detachRuntimeForProviderRecovery();
-      let recovered;
-      try {
-        recovered = await recoverProviderProfile(
-          selected.provider,
-          providerFailureFacts(error),
-          selected.modelId
-        );
-      } catch {
-        recovered = null;
-      }
-      if (sequence !== providerRecoverySequence || !activeRun) return true;
-      providerRecoveryInFlight = false;
-      const profile = normalizedProviderProfile(recovered);
-      const provider = profile == null ? void 0 : profile.provider;
-      const modelId = (profile == null ? void 0 : profile.modelId) || "";
-      if (!provider || String(provider.id || "").trim() !== String(selected.provider.id || "").trim() || ((_a = profile.route) == null ? void 0 : _a.ok) !== true || modelId !== selected.modelId || modelId !== String(getModel ? getModel() : "").trim()) return false;
-      providerProfileOverride = profile;
-      providerRefreshPending = true;
-      await launchActiveTurn();
-      return true;
-    }
     async function handleTurnFailure(error) {
-      if (!activeRun || providerRecoveryInFlight || turnFailureInFlight) return;
+      if (!activeRun || turnFailureInFlight) return;
       turnFailureInFlight = true;
       try {
-        let failure = {
+        const failure = {
           kind: error == null ? void 0 : error.kind,
           code: error == null ? void 0 : error.code,
           message: redactValue(
             (error == null ? void 0 : error.message) || "Failed to start Codex turn.",
-            [...providerSensitiveValues, ...activeAttachmentPaths]
+            activeAttachmentPaths
           )
         };
-        try {
-          if (!activeTurnDispatched && await attemptProviderRecovery(error)) return;
-        } catch (recoveryError) {
-          failure = {
-            kind: recoveryError == null ? void 0 : recoveryError.kind,
-            code: recoveryError == null ? void 0 : recoveryError.code,
-            message: redactValue(
-              (recoveryError == null ? void 0 : recoveryError.message) || "Failed to start Codex turn.",
-              [...providerSensitiveValues, ...activeAttachmentPaths]
-            )
-          };
-        }
         providerDeltaRedactor.discard();
         drainApprovals();
         const message = (failure == null ? void 0 : failure.message) || "Failed to start Codex turn.";
-        const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
+        const httpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
         emit({
           type: "error",
-          kind: (failure == null ? void 0 : failure.kind) || (providerHttpFailure || /model/i.test(message) ? "model" : "mcp"),
+          kind: (failure == null ? void 0 : failure.kind) || (httpFailure || /model/i.test(message) ? "model" : "mcp"),
           ...(failure == null ? void 0 : failure.code) ? { code: failure.code } : {},
           message,
           ...activeTurnFailureFields()
@@ -38784,16 +29140,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
       activeUserText = turn.text;
       activeUserRecorded = false;
-      providerRecoveryAttempted = false;
-      providerRecoveryInFlight = false;
       turnFailureInFlight = false;
-      providerRecoverySequence += 1;
       activeRun = new Promise((resolve) => {
         activeResolve = resolve;
       });
       const run = activeRun;
       try {
-        if (await ensureProviderProfileForSend()) await launchActiveTurn();
+        await launchActiveTurn();
       } catch (error) {
         await handleTurnFailure(error);
       }
@@ -38821,7 +29174,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       else emit({ type: "tool-allowed", toolUseId: id });
     }
     function stop() {
-      providerRecoverySequence += 1;
       if (rpc && threadId && currentTurnId) {
         rpc.fireRequest("turn/interrupt", { threadId, turnId: currentTurnId });
       }
@@ -38835,8 +29187,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function reset() {
       stopping = true;
       runtimeGeneration += 1;
-      providerRecoverySequence += 1;
-      closeProviderRoute();
       drainApprovals();
       if (rpc) rpc.close(new Error("Codex backend reset"));
       if (proc) {
@@ -38859,10 +29209,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       sessionAllowedTools.clear();
       sessionAllowedPlans.clear();
       toolMeta = { allowedTools: [], annotations: {} };
-      providerProfileOverride = null;
       finishActive();
       stderrTail = "";
-      clearProviderSensitiveValues();
       clearProcessStderrAttachmentPaths();
       stopping = false;
     }
@@ -38886,14 +29234,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       } catch (e) {
       }
       const diag = { cliPath: cliInfo.cliPath || "", cliVersion: cliInfo.version || "" };
-      const probeSecrets = () => {
-        let secrets = [...providerSensitiveValues];
-        try {
-          secrets = [...secrets, ...providerRedactionValues()];
-        } catch (e) {
-        }
-        return secrets;
-      };
+      const probeSecrets = () => [];
       const failure = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
       if (!cliInfo.ok) {
         return failure(redactText(cliInfo.detail || "codex CLI is unavailable", probeSecrets()));
@@ -38909,15 +29250,15 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       };
       let probeProc;
       try {
-        probeProc = adapter.spawn(executable, codexAppServerArgs(null), {
+        probeProc = adapter.spawn(executable, ["app-server"], {
           stdio: "pipe",
           windowsHide: true,
-          env: codexSpawnEnv(null, spawnEnv)
+          env: spawnEnv
         });
       } catch (error) {
         return failure(redactText(error && error.message ? error.message : String(error), probeSecrets()));
       }
-      const probeRpc = createRpc2({ writeLine: (line) => probeProc.stdin.write(line) });
+      const probeRpc = createRpc({ writeLine: (line) => probeProc.stdin.write(line) });
       const reader = createNdjsonReader((message) => probeRpc.handleMessage(message));
       if (probeProc.stdout && probeProc.stdout.on) probeProc.stdout.on("data", reader);
       if (probeProc.stderr && probeProc.stderr.on) probeProc.stderr.on("data", () => {
@@ -38978,7 +29319,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       answerQuestion,
       stop,
       reset,
-      getMessages: () => clone3(transcript),
+      getMessages: () => clone2(transcript),
       getStderrTail: () => stderrTail,
       probeAccount
     };
@@ -39033,7 +29374,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     error.code = code;
     return error;
   }
-  function clone4(value) {
+  function clone3(value) {
     return JSON.parse(JSON.stringify(value));
   }
   function slug(value) {
@@ -39045,7 +29386,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     if (!normalized) throw storeError("OPENCODE_PROVIDER_INVALID", "Provider name is required");
     return `aemcp-${normalized}`;
   }
-  function normalizeBaseUrl2(value) {
+  function normalizeBaseUrl(value) {
     let url;
     try {
       url = new URL(String(value || "").trim());
@@ -39070,13 +29411,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const id = normalizeOpenCodeProviderId(value.id || value.name);
     const name = String(value.name || "").trim();
     if (!name) throw storeError("OPENCODE_PROVIDER_INVALID", "Provider name is required");
-    if (value.allowInsecureHttp !== true && normalizeBaseUrl2(value.baseUrl).startsWith("http:")) {
+    if (value.allowInsecureHttp !== true && normalizeBaseUrl(value.baseUrl).startsWith("http:")) {
       throw storeError("OPENCODE_PROVIDER_INVALID", "Insecure provider HTTP requires confirmation");
     }
     return {
       id,
       name,
-      baseUrl: normalizeBaseUrl2(value.baseUrl),
+      baseUrl: normalizeBaseUrl(value.baseUrl),
       allowInsecureHttp: value.allowInsecureHttp === true,
       modelIds: normalizeModelIds(value.modelIds || value.modelId),
       needsApiKey: value.needsApiKey === true
@@ -39146,21 +29487,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     }
     return value;
   }
-  function legacyProviderDraft(provider) {
-    var _a;
-    const name = String((provider == null ? void 0 : provider.name) || (provider == null ? void 0 : provider.id) || "").trim();
-    const baseUrl = String((provider == null ? void 0 : provider.baseUrl) || "").trim();
-    if (!name || !baseUrl) return null;
-    const models = Array.isArray((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models) ? provider.modelList.models.map((model) => model == null ? void 0 : model.id) : Array.isArray(provider == null ? void 0 : provider.probedModels) ? provider.probedModels.map((model) => model == null ? void 0 : model.id) : [];
-    return {
-      id: provider.id || name,
-      name,
-      baseUrl,
-      allowInsecureHttp: provider.allowInsecureHttp === true,
-      modelIds: models.length ? models : ["model-required"],
-      needsApiKey: true
-    };
-  }
   function openCodeProviderDefinitions(providers) {
     const definitions = {};
     for (const raw of providers || []) {
@@ -39190,7 +29516,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return normalizeState(parseJsonFile(fs, file, emptyState2(), "OPENCODE_PROVIDER_STORE_UNAVAILABLE"));
     }
     function list() {
-      return clone4(readState().providers);
+      return clone3(readState().providers);
     }
     function auth() {
       return normalizeAuth(parseJsonFile(fs, authFile, {}, "OPENCODE_AUTH_UNAVAILABLE"));
@@ -39221,7 +29547,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (index === -1) current.providers.push(provider);
       else current.providers[index] = provider;
       writeAtomic(fs, file, current, nextSuffix());
-      return clone4(provider);
+      return clone3(provider);
     }
     function remove(providerId) {
       const id = normalizeOpenCodeProviderId(providerId);
@@ -39232,20 +29558,10 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       writeAtomic(fs, file, current, nextSuffix());
       return true;
     }
-    function importLegacyProviders(legacyProviders) {
-      const current = readState();
-      if (current.providers.length) return list();
-      const providers = (legacyProviders || []).map(legacyProviderDraft).filter(Boolean).map(normalizeProvider);
-      if (!providers.length) return [];
-      current.providers = providers;
-      writeAtomic(fs, file, current, nextSuffix());
-      return clone4(providers);
-    }
     return Object.freeze({
       authFilePath: () => authFile,
       filePath: () => file,
       hasApiKey,
-      importLegacyProviders,
       list,
       remove,
       save
@@ -39257,7 +29573,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   var READY_POLL_MS = 250;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "north-mini-code-free";
-  function getCepRequire3() {
+  function getCepRequire() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -39273,7 +29589,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
-  function appendTail5(tail, chunk) {
+  function appendTail4(tail, chunk) {
     const next = tail + String(chunk || "");
     return next.length > 4096 ? next.slice(next.length - 4096) : next;
   }
@@ -39285,7 +29601,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     return "ae-opencode-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
   }
   async function defaultGetPort() {
-    const net = getCepRequire3()("net");
+    const net = getCepRequire()("net");
     return new Promise((resolve, reject) => {
       const server = net.createServer();
       server.on("error", reject);
@@ -39413,7 +29729,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     function resetStderrRedactor() {
       stderrRedactor.discard();
       stderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, (text) => {
-        stderrTail = appendTail5(stderrTail, text);
+        stderrTail = appendTail4(stderrTail, text);
       });
     }
     function setActiveAttachmentPaths(values) {
@@ -39910,59 +30226,45 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/lib/channels.js
   init_cep_runtime_inject();
-  function claudeChannels({
-    probe
-  } = {}) {
-    const sub = {
+  function claudeChannels({ probe } = {}) {
+    return [{
       channel: "subscription",
       source: { zh: "\u8BA2\u9605\u767B\u5F55", en: "Subscription login" },
       checking: probe === null,
       ok: Boolean(probe && probe.cliOk !== false && probe.loggedIn),
-      detail: probe && probe.detail || "",
+      detail: (probe == null ? void 0 : probe.detail) || "",
       fixHint: (probe == null ? void 0 : probe.reason) === "cli-too-old" ? {
         zh: "Claude CLI \u7248\u672C\u8FC7\u65E7\uFF1A\u8BF7\u5347\u7EA7 Claude CLI \u5230 2.x \u6216\u66F4\u9AD8\u7248\u672C\u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
         en: "Claude CLI is too old. Upgrade Claude CLI to version 2.x or newer, then re-check."
-      } : probe && probe.cliOk === false ? {
+      } : (probe == null ? void 0 : probe.cliOk) === false ? {
         zh: "\u672A\u627E\u5230 Claude CLI\uFF1A\u8BF7\u5B89\u88C5 Claude Code 2.x\uFF1B\u82E5\u9762\u677F PATH \u4E0D\u542B claude\uFF0C\u53EF\u8BBE\u7F6E AE_MCP_CLAUDE_CLI \u540E\u91CD\u542F AE\u3002",
         en: "Claude CLI was not found. Install Claude Code 2.x; if claude is not on the panel PATH, set AE_MCP_CLAUDE_CLI and restart AE."
       } : {
         zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528 OpenCode Provider \u901A\u9053\u3002",
         en: "Not logged in: run claude /login in a terminal and re-check, or use the OpenCode Provider channel."
       }
-    };
-    return [sub];
+    }];
   }
-  function codexChannels({
-    codexProbe,
-    cliConfig,
-    cliCredentialAvailable
-  } = {}) {
-    const cli = {
+  function codexChannels({ codexProbe } = {}) {
+    return [{
       channel: "cli",
       source: { zh: "Codex CLI \u767B\u5F55\u6001", en: "Codex CLI login" },
       checking: codexProbe === null,
-      ok: Boolean(codexProbe && codexProbe.loggedIn),
-      detail: codexProbe ? [codexProbe.email, codexProbe.planType, codexProbe.cliPath, codexProbe.cliVersion].filter(Boolean).join(" \xB7 ") : "",
-      fixHint: { zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002", en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE." }
-    };
-    const runtimeOk = Boolean(!codexProbe || codexProbe.runtimeOk !== false);
-    const hasProvider = Boolean(cliConfig && cliConfig.provider);
-    const hasKey = Boolean(cliCredentialAvailable);
-    const cliConfigChannel = {
-      channel: "cli-config",
-      source: { zh: "\u7EE7\u627F\u81EA Codex CLI \u914D\u7F6E", en: "Inherited from Codex CLI config" },
-      checking: false,
-      ok: hasProvider && hasKey && runtimeOk,
-      detail: hasProvider ? [cliConfig.providerId, cliConfig.model, cliConfig.provider.baseUrl].filter(Boolean).join(" \xB7 ") : "",
-      fixHint: !hasProvider ? { zh: "\u672A\u627E\u5230 ~/.codex/config.toml \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 Codex CLI \u91CC\u914D\u7F6E model_provider\u3002", en: "No usable provider in ~/.codex/config.toml: configure model_provider in the Codex CLI first." } : !hasKey ? {
-        zh: "\u68C0\u6D4B\u5230 Codex CLI provider\u300C" + cliConfig.providerId + "\u300D\uFF0C\u4F46\u6CA1\u6709\u53EF\u7528\u51ED\u636E\u3002\u8BF7\u5728 Codex CLI \u4E2D\u8BBE\u7F6E\u5176\u73AF\u5883\u53D8\u91CF\u3002",
-        en: 'Found Codex CLI provider "' + cliConfig.providerId + '", but no credential is available. Set its environment variable in the Codex CLI environment.'
-      } : { zh: "Codex \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u8BF7\u68C0\u67E5 Codex CLI \u5B89\u88C5\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Codex runtime unavailable: check the Codex CLI install and re-check." }
-    };
-    return [cli, cliConfigChannel];
+      ok: Boolean(codexProbe == null ? void 0 : codexProbe.loggedIn),
+      detail: codexProbe ? [
+        codexProbe.email,
+        codexProbe.planType,
+        codexProbe.cliPath,
+        codexProbe.cliVersion
+      ].filter(Boolean).join(" \xB7 ") : "",
+      fixHint: {
+        zh: "\u5728\u7EC8\u7AEF\u5B8C\u6210 codex \u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u82E5 codex \u4E0D\u5728\u9762\u677F PATH \u4E0A\uFF0C\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF AE_MCP_CODEX_CLI \u6307\u5411 codex \u53EF\u6267\u884C\u6587\u4EF6\u540E\u91CD\u542F AE\u3002",
+        en: "Sign in with codex in a terminal and re-check; if codex is not on the panel PATH, set AE_MCP_CODEX_CLI to the codex executable and restart AE."
+      }
+    }];
   }
   function openCodeChannels({ probe, providers = [] } = {}) {
-    const configured = providers.some((provider) => provider && provider.needsApiKey !== true);
+    const configured = providers.some((provider) => (provider == null ? void 0 : provider.needsApiKey) !== true);
     return [{
       channel: "provider",
       source: { zh: "Provider \u7BA1\u7406 \xB7 OpenCode", en: "Provider Manager \xB7 OpenCode" },
@@ -39971,784 +30273,36 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       detail: (probe == null ? void 0 : probe.detail) || "",
       fixHint: configured ? {
         zh: "OpenCode \u672A\u80FD\u542F\u52A8\uFF1A\u5B89\u88C5\u6216\u66F4\u65B0 OpenCode CLI \u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
-        en: "OpenCode could not start. Install or update the OpenCode CLI, then re-check."
+        en: "OpenCode could not start. Install or update OpenCode CLI, then re-check."
       } : {
         zh: "\u5728 Provider \u7BA1\u7406\u4E2D\u586B\u5199 Base URL\u3001API Key \u548C\u6A21\u578B\uFF1B\u65E7 Provider \u9700\u8981\u91CD\u65B0\u586B\u5199 key\u3002",
         en: "Add a Base URL, API key, and model in Provider Manager. Older providers require their key again."
       }
     }];
   }
-  function zcodeChannels({ zcodeProbe, configSummary } = {}) {
-    const summary = configSummary || {};
-    const runtimeOk = Boolean(zcodeProbe && zcodeProbe.runtimeOk !== false);
-    const runtimeHint = { zh: "ZCode \u8FD0\u884C\u65F6\u4E0D\u53EF\u7528\uFF1A\u5B89\u88C5 ZCode\u3001\u786E\u8BA4\u7CFB\u7EDF Node \u53EF\u7528\uFF0C\u6216\u8BBE\u7F6E AE_MCP_ZCODE_CLI \u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "ZCode runtime unavailable: install ZCode, confirm system Node, or set AE_MCP_ZCODE_CLI, then re-check." };
-    const cli = {
-      channel: "cli-config",
-      source: { zh: "\u7EE7\u627F\u81EA ZCode CLI", en: "Inherited from ZCode CLI" },
-      checking: zcodeProbe === null,
-      ok: Boolean(summary.cli && summary.cli.hasCredential && runtimeOk),
-      detail: summary.cli ? summary.cli.model || summary.cli.providerId : "",
-      fixHint: !runtimeOk && summary.cli ? runtimeHint : summary.cli && !summary.cli.hasCredential ? { zh: "\u68C0\u6D4B\u5230 ZCode CLI provider\u300C" + summary.cli.providerId + "\u300D\uFF0C\u4F46\u5176 API Key \u73AF\u5883\u53D8\u91CF\uFF08" + (summary.cli.apiKeyEnv || "-") + "\uFF09\u6CA1\u6709\u88AB\u9762\u677F\u7EE7\u627F\u3002\u5728\u4E0B\u65B9\u7C98\u8D34\u4E00\u6B21 Key\uFF08\u4FDD\u5B58\u5230\u7CFB\u7EDF\u5B89\u5168\u51ED\u636E\u5E93\uFF09\u5373\u53EF\u4F7F\u7528\u3002", en: 'Found ZCode CLI provider "' + summary.cli.providerId + '", but its API key env (' + (summary.cli.apiKeyEnv || "-") + ") is not inherited by the panel. Paste the key once below; it will be stored in the protected system credential store." } : { zh: "\u672A\u627E\u5230 ~/.zcode/cli/config.json \u7684\u53EF\u7528 provider\uFF1A\u5148\u5728 ZCode CLI \u91CC\u914D\u7F6E provider \u4E0E\u9ED8\u8BA4\u6A21\u578B\u3002", en: "No usable provider in ~/.zcode/cli/config.json: configure a provider and default model in the ZCode CLI first." }
-    };
-    const desktop = {
-      channel: "desktop",
-      source: { zh: "\u7EE7\u627F\u81EA ZCode \u684C\u9762\u7248", en: "Inherited from ZCode desktop" },
-      checking: zcodeProbe === null,
-      ok: Boolean(summary.desktop && runtimeOk),
-      detail: summary.desktop ? summary.desktop.providerId : "",
-      fixHint: !runtimeOk && summary.desktop ? runtimeHint : { zh: "\u6253\u5F00 ZCode \u684C\u9762\u7248\u5E76\u9009\u62E9\u4E00\u4E2A provider/model\uFF0C\u7136\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Open ZCode desktop, pick a provider/model, then re-check." }
-    };
-    const startPlan = {
-      channel: "start-plan",
-      source: { zh: "\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212", en: "Official hosted plan" },
-      checking: false,
-      ok: Boolean(summary.startPlan && summary.startPlan.hasCredential && runtimeOk),
-      detail: summary.startPlan ? summary.startPlan.providerId : "",
-      fixHint: { zh: "\u5B98\u65B9\u6258\u7BA1\u8BA1\u5212\u9700\u8981 ZCode \u684C\u9762\u9A8C\u8BC1\u7801\u6865\u63A5\uFF08\u9762\u677F\u5C1A\u672A\u5B9E\u73B0\uFF09\uFF1A\u68C0\u6D4B\u5230\u6709\u6548\u51ED\u636E\u524D\u4E0D\u53EF\u9009\u3002\u8BF7\u4F7F\u7528 CLI \u914D\u7F6E\u6216\u684C\u9762\u7248\u901A\u9053\u3002", en: "The hosted plan needs the ZCode desktop captcha bridge (not implemented in the panel yet) and stays unavailable until valid credentials are detected. Use the CLI-config or desktop channel instead." }
-    };
-    return [cli, desktop, startPlan];
-  }
   var CLAUDE_CHANNEL_IDS = ["subscription"];
-  var CODEX_CHANNEL_IDS = ["cli", "cli-config"];
+  var CODEX_CHANNEL_IDS = ["cli"];
   function migrateBackendPref(storage) {
     let pref = "subscription";
     const channelChoices = { claude: "subscription", codex: "cli", opencode: "provider" };
     try {
       const raw = storage.getItem("ae_mcp_backend") || "subscription";
-      const legacyLock = storage.getItem("ae_mcp_channel_lock") || "";
       const storedClaude = storage.getItem("ae_mcp_channel_claude") || "";
       const storedCodex = storage.getItem("ae_mcp_channel_codex") || "";
-      if (raw === "opencode") {
-        pref = "opencode";
-      } else if (raw === "byok" || raw === "zcode") {
-        pref = "subscription";
-        storage.setItem("ae_mcp_backend", pref);
-      } else if (raw === "codex" || raw === "subscription") {
+      if (raw === "opencode" || raw === "codex" || raw === "subscription") {
         pref = raw;
+      } else {
+        storage.setItem("ae_mcp_backend", pref);
       }
       if (CLAUDE_CHANNEL_IDS.includes(storedClaude)) channelChoices.claude = storedClaude;
-      else if (legacyLock === "api") channelChoices.claude = "subscription";
       if (CODEX_CHANNEL_IDS.includes(storedCodex)) channelChoices.codex = storedCodex;
-      else if (legacyLock === "custom") channelChoices.codex = "cli";
       storage.setItem("ae_mcp_channel_claude", channelChoices.claude);
       storage.setItem("ae_mcp_channel_codex", channelChoices.codex);
       storage.setItem("ae_mcp_channel_opencode", channelChoices.opencode);
       storage.removeItem("ae_mcp_channel_lock");
-    } catch (e) {
+    } catch (error) {
     }
     return { pref, channelChoices };
-  }
-
-  // src/cep/providerStore.js
-  init_cep_runtime_inject();
-  var FILE_NAME = "providers.json";
-  var STATE_KEYS = ["migratedLegacy", "pendingSecretDeletes", "providers", "revision", "version"];
-  var VALUE_REF_KEYS = ["kind", "reference", "revision"];
-  var LOCK_KEYS = ["createdAt", "ownerNonce", "pid", "schemaVersion"];
-  var RELEASED_LOCK_NONCES = /* @__PURE__ */ new Set();
-  var MAX_RELEASED_LOCK_NONCES = 256;
-  var LOCK_STALE_AFTER_MS = 3e4;
-  function cepRequire2() {
-    var _a, _b, _c;
-    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
-    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    return null;
-  }
-  function defaultDeps() {
-    const req = cepRequire2();
-    if (!req) throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-    const processApi = req("process");
-    return {
-      fs: req("fs"),
-      os: req("os"),
-      path: req("path"),
-      crypto: req("crypto"),
-      pid: (processApi == null ? void 0 : processApi.pid) || 0,
-      now: Date.now,
-      isProcessAlive(pid) {
-        try {
-          processApi.kill(pid, 0);
-          return true;
-        } catch (error) {
-          return (error == null ? void 0 : error.code) !== "ESRCH";
-        }
-      }
-    };
-  }
-  function storeError2(code) {
-    const messages = {
-      PROVIDER_STORE_CONFLICT: "Provider store revision conflict",
-      PROVIDER_STORE_INVALID: "Provider store is invalid",
-      PROVIDER_STORE_MIGRATION_REQUIRED: "Provider store migration is required",
-      PROVIDER_STORE_UNAVAILABLE: "Provider store is unavailable"
-    };
-    const error = new Error(messages[code] || messages.PROVIDER_STORE_INVALID);
-    error.code = messages[code] ? code : "PROVIDER_STORE_INVALID";
-    return error;
-  }
-  function hasExactKeys2(value, expected) {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-    const keys = Object.keys(value).sort();
-    return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
-  }
-  function clone5(value) {
-    return value == null ? value : JSON.parse(JSON.stringify(value));
-  }
-  function normalizeValueRef(value) {
-    if (!hasExactKeys2(value, VALUE_REF_KEYS) || value.kind !== "secret") {
-      throw storeError2("PROVIDER_STORE_INVALID");
-    }
-    try {
-      parseProviderSecretReference(value.reference);
-    } catch {
-      throw storeError2("PROVIDER_STORE_INVALID");
-    }
-    if (!Number.isSafeInteger(value.revision) || value.revision <= 0) {
-      throw storeError2("PROVIDER_STORE_INVALID");
-    }
-    return { kind: "secret", reference: value.reference, revision: value.revision };
-  }
-  function requireSafeProviderUrl(value) {
-    try {
-      validateProviderBaseUrl(value);
-    } catch {
-      throw storeError2("PROVIDER_STORE_INVALID");
-    }
-  }
-  function providerSecretReferences(provider) {
-    var _a, _b, _c, _d, _e;
-    const references = [];
-    const add = (valueRef) => {
-      if ((valueRef == null ? void 0 : valueRef.kind) === "secret") references.push(valueRef);
-    };
-    if (provider.credential) {
-      add(provider.credential.valueRef);
-      add((_a = provider.probeAuthOverride) == null ? void 0 : _a.valueRef);
-    } else {
-      add((_c = (_b = provider.auth) == null ? void 0 : _b.model) == null ? void 0 : _c.valueRef);
-      add((_e = (_d = provider.auth) == null ? void 0 : _d.probe) == null ? void 0 : _e.valueRef);
-    }
-    for (const header of provider.headers || []) add(header.valueRef);
-    return references;
-  }
-  function exactStatInteger(value) {
-    if (typeof value === "bigint") {
-      if (value < BigInt(0)) throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      return value <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(value) : value.toString(10);
-    }
-    if (!Number.isSafeInteger(value) || value < 0) {
-      throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-    }
-    return value;
-  }
-  function statTimeMilliseconds(value) {
-    const number = typeof value === "bigint" ? Number(value) : value;
-    if (!Number.isFinite(number) || number < 0 || !Number.isSafeInteger(Math.trunc(number))) {
-      throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-    }
-    return number;
-  }
-  function fileIdentity(stat) {
-    if (!stat || typeof stat !== "object") throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-    return {
-      kind: "provider-file-identity-v1",
-      dev: exactStatInteger(stat.dev),
-      ino: exactStatInteger(stat.ino),
-      size: exactStatInteger(stat.size),
-      mtimeMs: statTimeMilliseconds(stat.mtimeMs),
-      ctimeMs: statTimeMilliseconds(stat.ctimeMs)
-    };
-  }
-  function readFileIdentity(fs, file) {
-    try {
-      return fileIdentity(fs.statSync(file));
-    } catch (error) {
-      if ((error == null ? void 0 : error.code) !== "PROVIDER_STORE_UNAVAILABLE") throw error;
-    }
-    return fileIdentity(fs.statSync(file, { bigint: true }));
-  }
-  function normalizeStateForVersion(value, version, normalizeProvider2) {
-    if (!hasExactKeys2(value, STATE_KEYS)) throw storeError2("PROVIDER_STORE_INVALID");
-    if (value.version !== version || !Number.isSafeInteger(value.revision) || value.revision < 0 || value.migratedLegacy !== true || !Array.isArray(value.pendingSecretDeletes) || !Array.isArray(value.providers)) {
-      throw storeError2("PROVIDER_STORE_INVALID");
-    }
-    const pendingSecretDeletes = value.pendingSecretDeletes.map(normalizeValueRef);
-    const pendingKeys = /* @__PURE__ */ new Set();
-    for (const ref of pendingSecretDeletes) {
-      if (pendingKeys.has(ref.reference)) throw storeError2("PROVIDER_STORE_INVALID");
-      pendingKeys.add(ref.reference);
-    }
-    const providers = value.providers.map((provider) => {
-      try {
-        const normalized = normalizeProvider2(provider);
-        requireSafeProviderUrl(normalized.baseUrl);
-        return normalized;
-      } catch {
-        throw storeError2("PROVIDER_STORE_INVALID");
-      }
-    });
-    const ids = /* @__PURE__ */ new Set();
-    const activeReferences = /* @__PURE__ */ new Map();
-    for (const provider of providers) {
-      if (ids.has(provider.id)) throw storeError2("PROVIDER_STORE_INVALID");
-      ids.add(provider.id);
-      for (const valueRef of providerSecretReferences(provider)) {
-        if (pendingKeys.has(valueRef.reference)) throw storeError2("PROVIDER_STORE_INVALID");
-        const existingRevision = activeReferences.get(valueRef.reference);
-        if (existingRevision !== void 0 && existingRevision !== valueRef.revision) {
-          throw storeError2("PROVIDER_STORE_INVALID");
-        }
-        activeReferences.set(valueRef.reference, valueRef.revision);
-      }
-    }
-    return {
-      version,
-      revision: value.revision,
-      migratedLegacy: true,
-      pendingSecretDeletes,
-      providers
-    };
-  }
-  function normalizeStateV2(value) {
-    return normalizeStateForVersion(value, 2, normalizeProviderEntryV2);
-  }
-  function normalizeStateV3(value) {
-    return normalizeStateForVersion(value, 3, normalizeProviderEntryV3);
-  }
-  function normalizePersistedState(value) {
-    if ((value == null ? void 0 : value.version) === 2) return normalizeStateV2(value);
-    if ((value == null ? void 0 : value.version) === 3) return normalizeStateV3(value);
-    throw storeError2("PROVIDER_STORE_INVALID");
-  }
-  function emptyState3() {
-    return {
-      version: 3,
-      revision: 0,
-      migratedLegacy: true,
-      pendingSecretDeletes: [],
-      providers: []
-    };
-  }
-  function appendPending(existing, additions) {
-    if (additions === void 0) return existing.slice();
-    if (!Array.isArray(additions)) throw storeError2("PROVIDER_STORE_INVALID");
-    const output = existing.slice();
-    const seen = new Map(output.map((ref) => [ref.reference, ref.revision]));
-    for (const raw of additions) {
-      const ref = normalizeValueRef(raw);
-      if (seen.has(ref.reference)) {
-        if (seen.get(ref.reference) !== ref.revision) throw storeError2("PROVIDER_STORE_INVALID");
-      } else {
-        seen.set(ref.reference, ref.revision);
-        output.push(ref);
-      }
-    }
-    return output;
-  }
-  function createProviderStore(inputDeps) {
-    var _a;
-    const deps = inputDeps || defaultDeps();
-    const { fs, os, path } = deps;
-    const now = typeof deps.now === "function" ? deps.now : Date.now;
-    const pid = Number.isSafeInteger(deps.pid) && deps.pid > 0 ? deps.pid : 0;
-    const randomBytes = (_a = deps.crypto) == null ? void 0 : _a.randomBytes;
-    const isProcessAlive = typeof deps.isProcessAlive === "function" ? deps.isProcessAlive : () => true;
-    let tempCounter = 0;
-    let activeLockOwner = null;
-    function dir() {
-      return path.join(os.homedir(), ".ae-mcp");
-    }
-    function filePath() {
-      return path.join(dir(), FILE_NAME);
-    }
-    function lockPath() {
-      return path.join(dir(), `${FILE_NAME}.lock`);
-    }
-    function ensureDirectory() {
-      const directory = dir();
-      if (!fs.existsSync(directory)) fs.mkdirSync(directory, { recursive: true });
-      return directory;
-    }
-    function normalizeLockMetadata(value) {
-      if (!hasExactKeys2(value, LOCK_KEYS) || value.schemaVersion !== 1 || typeof value.ownerNonce !== "string" || !/^[0-9a-f]{32,128}$/.test(value.ownerNonce) || !Number.isSafeInteger(value.pid) || value.pid <= 0 || !Number.isFinite(value.createdAt) || value.createdAt < 0) {
-        return null;
-      }
-      return {
-        schemaVersion: 1,
-        ownerNonce: value.ownerNonce,
-        pid: value.pid,
-        createdAt: value.createdAt
-      };
-    }
-    function readLockMetadata(lock) {
-      try {
-        return normalizeLockMetadata(JSON.parse(String(fs.readFileSync(lock, "utf8"))));
-      } catch {
-        return null;
-      }
-    }
-    function readLockSnapshot(lock) {
-      if (typeof fs.statSync !== "function") return null;
-      try {
-        const firstRaw = String(fs.readFileSync(lock, "utf8"));
-        const firstIdentity = readFileIdentity(fs, lock);
-        const secondRaw = String(fs.readFileSync(lock, "utf8"));
-        const secondIdentity = readFileIdentity(fs, lock);
-        if (firstRaw !== secondRaw || JSON.stringify(firstIdentity) !== JSON.stringify(secondIdentity)) {
-          return null;
-        }
-        let metadata = null;
-        try {
-          metadata = normalizeLockMetadata(JSON.parse(firstRaw));
-        } catch {
-        }
-        return { raw: firstRaw, identity: firstIdentity, metadata };
-      } catch {
-        return null;
-      }
-    }
-    function sameLockOwner(left, right) {
-      return Boolean(left && right && left.ownerNonce === right.ownerNonce && left.pid === right.pid && left.createdAt === right.createdAt);
-    }
-    function sameLockSnapshot(left, right) {
-      return Boolean(left && right && left.raw === right.raw && JSON.stringify(left.identity) === JSON.stringify(right.identity) && (left.metadata === null && right.metadata === null || sameLockOwner(left.metadata, right.metadata)));
-    }
-    function sameLockPayload(left, right) {
-      return Boolean(left && right && left.raw === right.raw && (left.metadata === null && right.metadata === null || sameLockOwner(left.metadata, right.metadata)));
-    }
-    function rememberReleasedNonce(ownerNonce) {
-      RELEASED_LOCK_NONCES.add(ownerNonce);
-      while (RELEASED_LOCK_NONCES.size > MAX_RELEASED_LOCK_NONCES) {
-        RELEASED_LOCK_NONCES.delete(RELEASED_LOCK_NONCES.values().next().value);
-      }
-    }
-    function ownerIsAlive(ownerPid) {
-      try {
-        return isProcessAlive(ownerPid) !== false;
-      } catch {
-        return true;
-      }
-    }
-    function lockLeaseExpired(snapshot) {
-      const timestamp = snapshot.metadata ? snapshot.metadata.createdAt : Math.max(snapshot.identity.mtimeMs, snapshot.identity.ctimeMs);
-      const age = now() - timestamp;
-      return Number.isFinite(age) && age >= LOCK_STALE_AFTER_MS;
-    }
-    function lockSnapshotIsRecoverable(snapshot) {
-      const releasedByThisProcess = Boolean(snapshot.metadata && snapshot.metadata.pid === pid && RELEASED_LOCK_NONCES.has(snapshot.metadata.ownerNonce));
-      const deadOwner = Boolean(snapshot.metadata && !ownerIsAlive(snapshot.metadata.pid));
-      return releasedByThisProcess || deadOwner || lockLeaseExpired(snapshot);
-    }
-    function recoverQuarantinedLock(lock) {
-      var _a2, _b;
-      const recovery = `${lock}.recovering`;
-      if (!((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, recovery)) || ((_b = fs.existsSync) == null ? void 0 : _b.call(fs, lock))) return false;
-      const observed = readLockSnapshot(recovery);
-      if (!observed || !lockSnapshotIsRecoverable(observed)) return false;
-      const confirmed = readLockSnapshot(recovery);
-      if (!sameLockSnapshot(observed, confirmed)) return false;
-      try {
-        fs.unlinkSync(recovery);
-        if (observed.metadata) RELEASED_LOCK_NONCES.delete(observed.metadata.ownerNonce);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-    function restoreQuarantinedLock(lock, recovery) {
-      if (typeof fs.linkSync !== "function") return false;
-      try {
-        fs.linkSync(recovery, lock);
-        fs.unlinkSync(recovery);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-    function quarantineAndRemoveLock(lock, observed) {
-      var _a2;
-      const recovery = `${lock}.recovering`;
-      if ((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, recovery)) return false;
-      const confirmed = readLockSnapshot(lock);
-      if (!sameLockSnapshot(observed, confirmed)) return false;
-      try {
-        fs.renameSync(lock, recovery);
-      } catch {
-        return false;
-      }
-      const quarantined = readLockSnapshot(recovery);
-      if (!sameLockPayload(observed, quarantined)) {
-        restoreQuarantinedLock(lock, recovery);
-        return false;
-      }
-      try {
-        fs.unlinkSync(recovery);
-        return true;
-      } catch {
-        return false;
-      }
-    }
-    function recoverReleasedOrDeadLock(lock) {
-      const observed = readLockSnapshot(lock);
-      if (!observed) return false;
-      if (!lockSnapshotIsRecoverable(observed)) return false;
-      if (quarantineAndRemoveLock(lock, observed)) {
-        if (observed.metadata) RELEASED_LOCK_NONCES.delete(observed.metadata.ownerNonce);
-        return true;
-      }
-      return false;
-    }
-    function createLockOwner() {
-      if (pid <= 0 || typeof randomBytes !== "function") {
-        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      }
-      let ownerNonce;
-      try {
-        ownerNonce = randomBytes.call(deps.crypto, 24).toString("hex");
-      } catch {
-        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      }
-      const metadata = normalizeLockMetadata({
-        schemaVersion: 1,
-        ownerNonce,
-        pid,
-        createdAt: now()
-      });
-      if (!metadata) throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      return metadata;
-    }
-    function acquireMutationLock(lock) {
-      var _a2, _b;
-      const owner = createLockOwner();
-      const recovery = `${lock}.recovering`;
-      let fd;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
-        if (((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, recovery)) && !recoverQuarantinedLock(lock)) {
-          throw storeError2("PROVIDER_STORE_CONFLICT");
-        }
-        try {
-          fd = fs.openSync(lock, "wx");
-          break;
-        } catch (error) {
-          if ((error == null ? void 0 : error.code) !== "EEXIST") throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-          if (attempt === 0 && recoverReleasedOrDeadLock(lock)) continue;
-          throw storeError2("PROVIDER_STORE_CONFLICT");
-        }
-      }
-      if (fd === void 0) throw storeError2("PROVIDER_STORE_CONFLICT");
-      try {
-        fs.writeFileSync(fd, `${JSON.stringify(owner)}
-`, "utf8");
-        if (typeof fs.fsyncSync === "function") fs.fsyncSync(fd);
-        try {
-          fs.chmodSync(lock, 384);
-        } catch {
-        }
-        if ((_b = fs.existsSync) == null ? void 0 : _b.call(fs, recovery)) throw storeError2("PROVIDER_STORE_CONFLICT");
-      } catch (error) {
-        try {
-          fs.closeSync(fd);
-        } catch {
-        }
-        try {
-          const observed = readLockSnapshot(lock);
-          if (observed && sameLockOwner(observed.metadata, owner)) {
-            quarantineAndRemoveLock(lock, observed);
-          }
-        } catch {
-        }
-        if ((error == null ? void 0 : error.code) === "PROVIDER_STORE_CONFLICT") throw error;
-        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      }
-      return { fd, owner };
-    }
-    function withMutationLock(operation) {
-      if (typeof fs.openSync !== "function" || typeof fs.closeSync !== "function") {
-        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      }
-      ensureDirectory();
-      const lock = lockPath();
-      const { fd, owner } = acquireMutationLock(lock);
-      activeLockOwner = owner;
-      let result;
-      let operationError = null;
-      try {
-        result = operation();
-      } catch (error) {
-        operationError = error;
-      }
-      activeLockOwner = null;
-      let closed = false;
-      try {
-        fs.closeSync(fd);
-        closed = true;
-      } catch {
-      }
-      let removed = false;
-      try {
-        const observed = readLockSnapshot(lock);
-        if (observed && sameLockOwner(observed.metadata, owner)) {
-          removed = quarantineAndRemoveLock(lock, observed);
-        }
-      } catch {
-      }
-      if (removed) RELEASED_LOCK_NONCES.delete(owner.ownerNonce);
-      else if (closed) rememberReleasedNonce(owner.ownerNonce);
-      if (operationError) throw operationError;
-      return result;
-    }
-    function readRaw() {
-      var _a2;
-      let text;
-      try {
-        text = fs.readFileSync(filePath(), "utf8");
-      } catch (error) {
-        if ((error == null ? void 0 : error.code) === "ENOENT" || !((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, filePath()))) return null;
-        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      }
-      let parsed;
-      try {
-        parsed = JSON.parse(String(text));
-      } catch {
-        throw storeError2("PROVIDER_STORE_INVALID");
-      }
-      return { text: String(text), parsed };
-    }
-    function readState() {
-      var _a2, _b;
-      const raw = readRaw();
-      if (raw === null) return emptyState3();
-      if (((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1) {
-        throw storeError2("PROVIDER_STORE_MIGRATION_REQUIRED");
-      }
-      if (((_b = raw.parsed) == null ? void 0 : _b.version) === 2) {
-        normalizeStateV2(raw.parsed);
-        throw storeError2("PROVIDER_STORE_MIGRATION_REQUIRED");
-      }
-      return normalizeStateV3(raw.parsed);
-    }
-    function writeState(value) {
-      var _a2;
-      const state = normalizePersistedState(value);
-      const directory = ensureDirectory();
-      const tmp = path.join(
-        directory,
-        `${FILE_NAME}.${deps.pid || 0}.${now()}.${tempCounter += 1}.tmp`
-      );
-      try {
-        fs.writeFileSync(tmp, `${JSON.stringify(state, null, 2)}
-`, "utf8");
-        try {
-          fs.chmodSync(tmp, 384);
-        } catch {
-        }
-        if (!sameLockOwner(readLockMetadata(lockPath()), activeLockOwner) || ((_a2 = fs.existsSync) == null ? void 0 : _a2.call(fs, `${lockPath()}.recovering`))) {
-          throw storeError2("PROVIDER_STORE_CONFLICT");
-        }
-        fs.renameSync(tmp, filePath());
-      } catch (error) {
-        try {
-          fs.unlinkSync(tmp);
-        } catch {
-        }
-        if ((error == null ? void 0 : error.code) === "PROVIDER_STORE_INVALID" || (error == null ? void 0 : error.code) === "PROVIDER_STORE_CONFLICT") throw error;
-        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      }
-      return clone5(state);
-    }
-    function assertExpected(state, expectedRevision) {
-      if (expectedRevision === void 0) return;
-      if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0 || expectedRevision !== state.revision) {
-        throw storeError2("PROVIDER_STORE_CONFLICT");
-      }
-    }
-    function list() {
-      var _a2, _b;
-      const raw = readRaw();
-      if (raw === null) return [];
-      if (((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1) return [];
-      if (((_b = raw.parsed) == null ? void 0 : _b.version) === 2) {
-        normalizeStateV2(raw.parsed);
-        return [];
-      }
-      return clone5(normalizeStateV3(raw.parsed).providers);
-    }
-    function get(id) {
-      const wanted = String(id || "").trim();
-      return list().find((provider) => provider.id === wanted) || null;
-    }
-    function upsert(entry, options = {}) {
-      let normalized;
-      try {
-        normalized = normalizeProviderEntryV3(entry);
-      } catch {
-        throw storeError2("PROVIDER_STORE_INVALID");
-      }
-      return withMutationLock(() => {
-        const state = readState();
-        assertExpected(state, options.expectedRevision);
-        const index = state.providers.findIndex((provider) => provider.id === normalized.id);
-        if (index === -1) state.providers.push(normalized);
-        else state.providers[index] = normalized;
-        state.pendingSecretDeletes = appendPending(state.pendingSecretDeletes, options.pendingSecretDeletes);
-        state.revision += 1;
-        const written = writeState(state);
-        return { entry: clone5(normalized), stateRevision: written.revision };
-      });
-    }
-    function remove(id, options = {}) {
-      const wanted = String(id || "").trim();
-      return withMutationLock(() => {
-        const state = readState();
-        assertExpected(state, options.expectedRevision);
-        const nextProviders = state.providers.filter((provider) => provider.id !== wanted);
-        const removed = nextProviders.length !== state.providers.length;
-        const pending = appendPending(state.pendingSecretDeletes, options.pendingSecretDeletes);
-        if (!removed && pending.length === state.pendingSecretDeletes.length) {
-          return { removed: false, stateRevision: state.revision };
-        }
-        state.providers = nextProviders;
-        state.pendingSecretDeletes = pending;
-        state.revision += 1;
-        const written = writeState(state);
-        return { removed, stateRevision: written.revision };
-      });
-    }
-    function acknowledgeSecretDelete(reference, options = {}) {
-      if (typeof reference !== "string" || !reference) throw storeError2("PROVIDER_STORE_INVALID");
-      try {
-        parseProviderSecretReference(reference);
-      } catch {
-        throw storeError2("PROVIDER_STORE_INVALID");
-      }
-      return withMutationLock(() => {
-        const state = readState();
-        assertExpected(state, options.expectedRevision);
-        const pending = state.pendingSecretDeletes.filter((ref) => ref.reference !== reference);
-        if (pending.length === state.pendingSecretDeletes.length) return { stateRevision: state.revision };
-        state.pendingSecretDeletes = pending;
-        state.revision += 1;
-        return { stateRevision: writeState(state).revision };
-      });
-    }
-    function replaceState(value, options = {}) {
-      const next = normalizePersistedState(value);
-      return withMutationLock(() => {
-        const raw = readRaw();
-        if (options.expectedSourceRevision !== void 0) {
-          if (typeof options.expectedSourceRevision !== "string" || !options.expectedSourceRevision) {
-            throw storeError2("PROVIDER_STORE_INVALID");
-          }
-          const expectedSourceVersion = options.expectedSourceVersion === void 0 ? next.version - 1 : options.expectedSourceVersion;
-          const currentSource = expectedSourceVersion === 1 ? readLegacyMigrationInput() : expectedSourceVersion === 2 ? readSchemaMigrationInput() : null;
-          if (!currentSource || currentSource.sourceRevision !== options.expectedSourceRevision) {
-            throw storeError2("PROVIDER_STORE_CONFLICT");
-          }
-        }
-        if (options.expectedRevision !== void 0) {
-          const current = raw === null ? emptyState3() : normalizeStateV3(raw.parsed);
-          assertExpected(current, options.expectedRevision);
-        }
-        return { stateRevision: writeState(next).revision };
-      });
-    }
-    function needsSecretMigration() {
-      var _a2;
-      const raw = readRaw();
-      return raw !== null && ((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 1;
-    }
-    function needsSchemaMigration() {
-      var _a2;
-      const raw = readRaw();
-      return raw !== null && ((_a2 = raw.parsed) == null ? void 0 : _a2.version) === 2;
-    }
-    function stableMigrationInput(raw, state) {
-      if (typeof fs.statSync !== "function") throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      let firstIdentity;
-      let secondIdentity;
-      let secondRaw;
-      try {
-        firstIdentity = readFileIdentity(fs, filePath());
-        secondRaw = readRaw();
-        secondIdentity = readFileIdentity(fs, filePath());
-      } catch (error) {
-        if ((error == null ? void 0 : error.code) === "PROVIDER_STORE_UNAVAILABLE") throw error;
-        throw storeError2("PROVIDER_STORE_UNAVAILABLE");
-      }
-      if (secondRaw === null || secondRaw.text !== raw.text || JSON.stringify(firstIdentity) !== JSON.stringify(secondIdentity)) {
-        throw storeError2("PROVIDER_STORE_CONFLICT");
-      }
-      return { sourceRevision: JSON.stringify(firstIdentity), state: clone5(state) };
-    }
-    function readLegacyMigrationInput() {
-      var _a2;
-      const raw = readRaw();
-      if (raw === null || ((_a2 = raw.parsed) == null ? void 0 : _a2.version) !== 1) return null;
-      if (!raw.parsed || typeof raw.parsed !== "object" || !Array.isArray(raw.parsed.providers)) {
-        throw storeError2("PROVIDER_STORE_INVALID");
-      }
-      for (const provider of raw.parsed.providers) {
-        if (!provider || typeof provider !== "object" || typeof provider.baseUrl !== "string") {
-          throw storeError2("PROVIDER_STORE_INVALID");
-        }
-        requireSafeProviderUrl(provider.baseUrl);
-      }
-      return stableMigrationInput(raw, raw.parsed);
-    }
-    function readSchemaMigrationInput() {
-      var _a2;
-      const raw = readRaw();
-      if (raw === null || ((_a2 = raw.parsed) == null ? void 0 : _a2.version) !== 2) return null;
-      return stableMigrationInput(raw, normalizeStateV2(raw.parsed));
-    }
-    async function writeRedactedBackup(value, policy = {}) {
-      const state = normalizePersistedState(value);
-      const keep = policy.keep === void 0 ? 3 : policy.keep;
-      const maxAgeDays = policy.maxAgeDays === void 0 ? 30 : policy.maxAgeDays;
-      if (!Number.isSafeInteger(keep) || keep < 1 || !Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
-        throw storeError2("PROVIDER_STORE_INVALID");
-      }
-      const backupDir = path.join(dir(), "provider-backups");
-      if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
-      const stamp = now();
-      const file = path.join(backupDir, `providers-${stamp}.json`);
-      fs.writeFileSync(file, `${JSON.stringify(state, null, 2)}
-`, "utf8");
-      try {
-        fs.chmodSync(file, 384);
-      } catch {
-      }
-      if (typeof fs.readdirSync === "function") {
-        const names = fs.readdirSync(backupDir).filter((name) => /^providers-\d+\.json$/.test(name)).sort().reverse();
-        const cutoff = stamp - maxAgeDays * 24 * 60 * 60 * 1e3;
-        for (let index = 0; index < names.length; index += 1) {
-          const match = names[index].match(/^providers-(\d+)\.json$/);
-          const tooOld = match && Number(match[1]) < cutoff;
-          if (index >= keep || tooOld) {
-            try {
-              fs.unlinkSync(path.join(backupDir, names[index]));
-            } catch {
-            }
-          }
-        }
-      }
-    }
-    return Object.freeze({
-      filePath,
-      readState,
-      readLegacyMigrationInput,
-      readSchemaMigrationInput,
-      list,
-      get,
-      upsert,
-      remove,
-      acknowledgeSecretDelete,
-      replaceState,
-      writeRedactedBackup,
-      needsSecretMigration,
-      needsSchemaMigration
-    });
   }
 
   // src/components/settings/ProviderManagerSection.jsx
@@ -40763,81 +30317,29 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       name: "",
       baseUrl: "",
       allowInsecureHttp: false,
-      modelAuthKind: "auto",
-      modelAuthAutomatic: false,
-      modelAuthHeaderName: "",
-      modelAuthSecret: "",
-      headers: [],
-      probePreference: ""
-    };
-  }
-  function headerDraft(header) {
-    var _a;
-    if (((_a = header == null ? void 0 : header.valueRef) == null ? void 0 : _a.kind) === "literal") {
-      return {
-        id: header.id,
-        name: header.name,
-        scopes: Array.isArray(header.scopes) ? header.scopes.slice() : [],
-        valueKind: "literal",
-        value: header.valueRef.value
-      };
-    }
-    return {
-      id: header.id,
-      name: header.name,
-      scopes: Array.isArray(header.scopes) ? header.scopes.slice() : [],
-      valueKind: "secret",
-      value: ""
-    };
-  }
-  function legacyAuth(entry) {
-    var _a;
-    const model = ((_a = entry == null ? void 0 : entry.auth) == null ? void 0 : _a.model) || { kind: "none" };
-    return {
-      scheme: model.kind || "none",
-      headerName: model.kind === "custom" ? model.headerName : null
+      modelId: ""
     };
   }
   function draftFromEntry(entry) {
-    var _a, _b, _c;
-    const auth = ((_a = entry == null ? void 0 : entry.credential) == null ? void 0 : _a.preferredAuth) || legacyAuth(entry);
-    const legacyProbePreference = ((_c = (_b = entry == null ? void 0 : entry.dialect) == null ? void 0 : _b.override) == null ? void 0 : _c.source) === "manual" ? entry.dialect.override.wireApi : "";
     return {
       ...emptyDraft(),
       id: String((entry == null ? void 0 : entry.id) || ""),
       name: String((entry == null ? void 0 : entry.name) || ""),
       baseUrl: String((entry == null ? void 0 : entry.baseUrl) || ""),
       allowInsecureHttp: (entry == null ? void 0 : entry.allowInsecureHttp) === true,
-      modelAuthKind: auth.scheme || "auto",
-      modelAuthAutomatic: false,
-      modelAuthHeaderName: auth.scheme === "custom" ? String(auth.headerName || "") : "",
-      headers: Array.isArray(entry == null ? void 0 : entry.headers) ? entry.headers.map(headerDraft) : [],
-      probePreference: String((entry == null ? void 0 : entry.probePreference) || legacyProbePreference || "")
+      modelId: Array.isArray(entry == null ? void 0 : entry.modelIds) ? entry.modelIds.join(", ") : ""
     };
   }
   function validateDraft(draft) {
     if (!String((draft == null ? void 0 : draft.name) || "").trim() && !String((draft == null ? void 0 : draft.id) || "").trim()) {
       return "\u540D\u79F0\u4E0D\u80FD\u4E3A\u7A7A / name is required";
     }
-    let url;
     try {
-      url = new URL(String((draft == null ? void 0 : draft.baseUrl) || "").trim());
-    } catch {
-      return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
+      const url = new URL(String((draft == null ? void 0 : draft.baseUrl) || "").trim());
+      if (url.protocol === "http:" || url.protocol === "https:") return "";
+    } catch (error) {
     }
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
-    }
-    for (const header of (draft == null ? void 0 : draft.headers) || []) {
-      const name = String((header == null ? void 0 : header.name) || "").trim();
-      if (isReservedProviderExtraHeaderName(name)) {
-        return "\u8BE5 Header \u4E0D\u5141\u8BB8\u8F6C\u53D1 / this header cannot be forwarded";
-      }
-      if ((header == null ? void 0 : header.valueKind) === "literal" && (isSensitiveProviderHeaderName(name) || isCredentialShapedProviderLiteral(header == null ? void 0 : header.value))) {
-        return "\u654F\u611F Header \u5FC5\u987B\u4F7F\u7528\u5B89\u5168\u51ED\u636E / sensitive headers require protected secrets";
-      }
-    }
-    return "";
+    return "Base URL \u5FC5\u987B\u4EE5 http(s):// \u5F00\u5934 / must start with http(s)://";
   }
   function draftToEntry(draft) {
     const name = String((draft == null ? void 0 : draft.name) || (draft == null ? void 0 : draft.id) || "").trim();
@@ -40846,57 +30348,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       ...emptyDraft(),
       ...draft || {},
       id,
-      name,
-      headers: Array.isArray(draft == null ? void 0 : draft.headers) ? draft.headers.map((header) => ({ ...header, scopes: [...header.scopes || []] })) : []
-    };
-  }
-
-  // src/lib/providerDialectBadge.js
-  init_cep_runtime_inject();
-  var CLIENT_LABELS = Object.freeze({
-    codex: "Codex",
-    "claude-code": "Claude"
-  });
-  function providerClientRouteBadge(provider, {
-    client,
-    modelId,
-    lang = "zh",
-    now
-  } = {}) {
-    const clientLabel = CLIENT_LABELS[client];
-    if (!clientLabel) return null;
-    const selectedModelId = String(modelId || "").trim();
-    if (!selectedModelId) {
-      return {
-        label: `${clientLabel} \xB7 ${lang === "en" ? "select model" : "\u8BF7\u9009\u6A21\u578B"}`,
-        title: lang === "en" ? "Select a model to inspect its Provider route." : "\u9009\u62E9\u6A21\u578B\u540E\u53EF\u67E5\u770B\u8BE5 Provider \u7684\u9010\u6A21\u578B\u9009\u8DEF\u3002",
-        status: "warn"
-      };
-    }
-    const route = selectProviderRoute(provider, {
-      client,
-      modelId: selectedModelId,
-      feature: "generate",
-      now
-    });
-    if (route.ok) {
-      return {
-        label: `${clientLabel} \xB7 ${providerRouteLabel(route, lang)}`,
-        title: lang === "en" ? `Current route for ${selectedModelId}` : `${selectedModelId} \u7684\u5F53\u524D\u9009\u8DEF`,
-        status: "neutral"
-      };
-    }
-    if (route.reasonCode === "needs-probe") {
-      return {
-        label: `${clientLabel} \xB7 ${lang === "en" ? "probe required" : "\u9700\u63A2\u6D4B"}`,
-        title: lang === "en" ? `Probe ${selectedModelId} before selecting a protocol route.` : `\u9700\u5148\u63A2\u6D4B ${selectedModelId} \u7684\u534F\u8BAE\u4E0E Agent \u7279\u6027\u3002`,
-        status: "warn"
-      };
-    }
-    return {
-      label: `${clientLabel} \xB7 ${lang === "en" ? "unavailable" : "\u4E0D\u53EF\u7528"}`,
-      title: lang === "en" ? `No verified route is available for ${selectedModelId}.` : `${selectedModelId} \u6682\u65E0\u5DF2\u9A8C\u8BC1\u7684\u53EF\u7528\u9009\u8DEF\u3002`,
-      status: "error"
+      name
     };
   }
 
@@ -40908,9 +30360,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       add: "\u65B0\u589E",
       edit: "\u7F16\u8F91",
       del: "\u5220\u9664",
-      probe: "\u63A2\u6D4B\u6A21\u578B",
-      redetect: "\u91CD\u65B0\u63A2\u6D4B\u5F53\u524D\u6A21\u578B",
-      probing: "\u63A2\u6D4B\u4E2D\u2026",
       save: "\u4FDD\u5B58",
       cancel: "\u53D6\u6D88",
       name: "\u540D\u79F0",
@@ -40919,27 +30368,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       model: "\u6A21\u578B",
       openCodeKeyCap: "\u5BC6\u94A5\u5199\u5165 OpenCode auth.json\uFF1B\u4ECE\u65E7\u7248\u672C\u5347\u7EA7\u7684 Provider \u5FC5\u987B\u91CD\u65B0\u586B\u5199\u3002",
       needsApiKey: "\u9700\u91CD\u586B key",
-      autoAuthCap: "\u81EA\u52A8\u8BC6\u522B Authorization: Bearer\u3001x-api-key \u6216\u65E0\u8BA4\u8BC1\uFF1B\u586B\u5199\u5E73\u53F0\u7ED9\u51FA\u7684 API Key\u3002",
-      overrideAuthCap: "\u5DF2\u542F\u7528\u9AD8\u7EA7\u8BA4\u8BC1\u89C4\u5219\uFF1B\u586B\u5199\u5E73\u53F0\u63D0\u4F9B\u7684\u8BA4\u8BC1\u503C\u3002",
-      noApiKey: "\u9AD8\u7EA7\u8BBE\u7F6E\u4E3A\u65E0\u9700\u51ED\u636E\u3002",
-      advancedAuth: "\u9AD8\u7EA7\u8BA4\u8BC1\u4E0E\u8BF7\u6C42\u5934",
-      authType: "\u8BA4\u8BC1\u89C4\u5219",
-      probePreference: "\u63A2\u6D4B\u4F18\u5148\u534F\u8BAE",
-      probePreferenceCap: "\u4EC5\u8C03\u6574\u63A2\u6D4B\u987A\u5E8F\uFF1B\u5B9E\u9645\u8DEF\u7531\u6BCF\u4E2A\u6A21\u578B\u7684\u80FD\u529B\u77E9\u9635\u51B3\u5B9A\u3002",
-      auto: "\u81EA\u52A8\uFF08\u63A8\u8350\uFF09",
-      models: (n) => `${n} \u4E2A\u6A21\u578B`,
-      probeFailed: "\u63A2\u6D4B\u5931\u8D25\uFF1A",
-      importCc: "\u4ECE cc-switch \u5BFC\u5165",
       insecure: "\u5141\u8BB8\u975E\u56DE\u73AF HTTP\uFF08\u4FDD\u5B58\u65F6\u518D\u6B21\u786E\u8BA4\uFF09",
-      extraHeaders: "\u989D\u5916\u8BF7\u6C42\u5934",
-      addHeader: "\u65B0\u589E\u8BF7\u6C42\u5934",
-      removeHeader: "\u79FB\u9664",
-      headerName: "Header \u540D\u79F0",
-      literal: "\u666E\u901A\u6587\u672C",
-      secretValue: "\u7CFB\u7EDF\u51ED\u636E",
-      scopeProbe: "\u63A2\u6D4B",
-      scopeModel: "\u6A21\u578B\u8BF7\u6C42",
-      perModel: "\u9010\u6A21\u578B",
+      models: (count) => `${count} \u4E2A\u6A21\u578B`,
       selected: "\u5DF2\u9009"
     },
     en: {
@@ -40947,9 +30377,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       add: "Add",
       edit: "Edit",
       del: "Delete",
-      probe: "Probe models",
-      redetect: "Re-probe current model",
-      probing: "Probing\u2026",
       save: "Save",
       cancel: "Cancel",
       name: "Name",
@@ -40958,27 +30385,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       model: "Model",
       openCodeKeyCap: "The key is written to OpenCode auth.json. Older providers must be entered again.",
       needsApiKey: "API key required",
-      autoAuthCap: "Automatically detects Authorization: Bearer, x-api-key, or no authentication. Enter the provider API key.",
-      overrideAuthCap: "An advanced authentication rule is active. Enter the provider credential.",
-      noApiKey: "Advanced settings specify that no credential is required.",
-      advancedAuth: "Advanced authentication and headers",
-      authType: "Authentication rule",
-      probePreference: "Probe protocol preference",
-      probePreferenceCap: "Changes probe order only; each model's capability matrix determines its actual route.",
-      auto: "Auto (recommended)",
-      models: (n) => `${n} models`,
-      probeFailed: "Probe failed: ",
-      importCc: "Import from cc-switch",
       insecure: "Allow non-loopback HTTP (confirmed again on save)",
-      extraHeaders: "Extra headers",
-      addHeader: "Add header",
-      removeHeader: "Remove",
-      headerName: "Header name",
-      literal: "Literal text",
-      secretValue: "Credential store",
-      scopeProbe: "Probe",
-      scopeModel: "Model request",
-      perModel: "per-model",
+      models: (count) => `${count} models`,
       selected: "selected"
     }
   };
@@ -41006,40 +30414,20 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       }
     );
   }
-  function nextHeaderId(headers) {
-    let index = headers.length + 1;
-    while (headers.some((header) => header.id === `header-${index}`)) index += 1;
-    return `header-${index}`;
-  }
-  function providerModelCount(provider) {
-    var _a;
-    if (Array.isArray(provider == null ? void 0 : provider.modelIds)) return provider.modelIds.length;
-    if (Array.isArray((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.models)) return provider.modelList.models.length;
-    return Array.isArray(provider == null ? void 0 : provider.probedModels) ? provider.probedModels.length : 0;
-  }
   function ProviderManagerSection({
     lang = "zh",
     providers = [],
     activeProviderId = "",
-    activeModelId = "",
     onUpsert,
     onRemove,
-    onProbe,
-    probing = "",
-    probeErrors = {},
-    ccSwitch = null,
-    onImportCcSwitch,
-    disabled = false,
-    opencodeMode = false
+    disabled = false
   }) {
     const t = L4[lang] || L4.zh;
     const [draft, setDraft] = import_react43.default.useState(null);
     const [error, setError] = import_react43.default.useState("");
-    const currentModelId = String(activeModelId || "").trim();
     const save = async (event) => {
-      var _a;
+      var _a, _b;
       event.preventDefault();
-      const formElement = event.currentTarget;
       const message = validateDraft(draft);
       if (message) {
         setError(message);
@@ -41052,631 +30440,184 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       } catch (saveError) {
         setError((saveError == null ? void 0 : saveError.message) || "Provider save failed");
       } finally {
-        (_a = formElement == null ? void 0 : formElement.reset) == null ? void 0 : _a.call(formElement);
+        (_b = (_a = event.currentTarget) == null ? void 0 : _a.reset) == null ? void 0 : _b.call(_a);
       }
     };
-    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("details", { style: { border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", background: "var(--bg-well)", padding: "7px 8px" }, children: [
-      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("summary", { style: { cursor: "pointer", listStyle: "none", display: "flex", alignItems: "center", gap: 8 }, children: [
-        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: { flex: 1, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)" }, children: t.title }),
-        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: (event) => {
-          event.preventDefault();
-          setDraft(emptyDraft());
-        }, children: t.add })
+    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("details", { style: {
+      border: "1px solid var(--border-subtle)",
+      borderRadius: "var(--radius-md)",
+      background: "var(--bg-well)",
+      padding: "7px 8px"
+    }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("summary", { style: {
+        cursor: "pointer",
+        listStyle: "none",
+        display: "flex",
+        alignItems: "center",
+        gap: 8
+      }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: {
+          flex: 1,
+          font: "500 12px/1.35 var(--font-ui)",
+          color: "var(--text-primary)"
+        }, children: t.title }),
+        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+          Button,
+          {
+            variant: "secondary",
+            size: "sm",
+            icon: "plus",
+            onClick: (event) => {
+              event.preventDefault();
+              setDraft(emptyDraft());
+            },
+            children: t.add
+          }
+        )
       ] }),
       /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }, children: [
-        ccSwitch && onImportCcSwitch ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", size: "sm", icon: "download", disabled, onClick: onImportCcSwitch, children: t.importCc }) : null,
         providers.map((provider) => {
-          const modelCount = providerModelCount(provider);
+          const modelCount = Array.isArray(provider == null ? void 0 : provider.modelIds) ? provider.modelIds.length : 0;
           const selected = provider.id === activeProviderId;
-          const routeBadges = opencodeMode ? [] : ["codex", "claude-code"].map((client) => providerClientRouteBadge(provider, { client, modelId: currentModelId, lang })).filter(Boolean);
-          const canRedetectCurrentModel = Boolean(currentModelId && Array.isArray(provider.modelCapabilities));
-          return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { "data-provider-id": provider.id, style: { display: "flex", flexDirection: "column", gap: 4, padding: "6px 8px", border: `1px solid ${selected ? "var(--accent-border)" : "var(--border-default)"}`, borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
+          return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { "data-provider-id": provider.id, style: {
+            display: "flex",
+            flexDirection: "column",
+            gap: 4,
+            padding: "6px 8px",
+            border: `1px solid ${selected ? "var(--accent-border)" : "var(--border-default)"}`,
+            borderRadius: "var(--radius-sm)",
+            background: "var(--bg-panel)"
+          }, children: [
             /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: { flex: 1, minWidth: 120, font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.name }),
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: {
+                flex: 1,
+                minWidth: 120,
+                font: "500 12px/1.35 var(--font-ui)",
+                color: "var(--text-primary)",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap"
+              }, children: provider.name }),
               selected ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "accent", children: t.selected }) : null,
               provider.needsApiKey ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "warn", children: t.needsApiKey }) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "neutral", children: t.perModel }),
               modelCount ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: "ok", children: t.models(modelCount) }) : null
             ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }, children: routeBadges.map((badge) => /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { title: badge.title, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Badge, { status: badge.status, children: badge.label }) }, badge.label)) }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: provider.baseUrl }),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: {
+              font: "400 10px/1.35 var(--font-mono)",
+              color: "var(--text-tertiary)",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap"
+            }, children: provider.baseUrl }),
             /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }, children: [
-              !opencodeMode ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
-                Button,
-                {
-                  variant: "ghost",
-                  size: "sm",
-                  disabled: disabled || probing === provider.id,
-                  onClick: () => onProbe(provider),
-                  children: probing === provider.id ? t.probing : t.probe
-                }
-              ) : null,
-              !opencodeMode ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
-                Button,
-                {
-                  variant: "ghost",
-                  size: "sm",
-                  disabled: disabled || probing === provider.id || !canRedetectCurrentModel,
-                  onClick: () => onProbe(provider, {
-                    forceDetect: true,
-                    modelId: currentModelId
-                  }),
-                  children: t.redetect
-                }
-              ) : null,
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => {
-                const next = draftFromEntry(provider);
-                setDraft({ ...next, modelId: (provider.modelIds || []).join(", ") });
-                setError("");
-              }, children: t.edit }),
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", disabled, onClick: () => onRemove(provider), children: t.del })
-            ] }),
-            probeErrors[provider.id] ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: [
-              t.probeFailed,
-              probeErrors[provider.id]
-            ] }) : null
-          ] }, provider.id);
-        }),
-        draft ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("form", { onSubmit: save, style: { display: "flex", flexDirection: "column", gap: 6, padding: "8px", border: "1px solid var(--border-strong)", borderRadius: "var(--radius-sm)", background: "var(--bg-panel)" }, children: [
-          opencodeMode ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(import_jsx_runtime41.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
-              Input,
-              {
-                mono: true,
-                value: draft.baseUrl,
-                onChange: (value) => setDraft({ ...draft, baseUrl: value }),
-                placeholder: "https://api.example.com/v1"
-              }
-            ) }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
-              Input,
-              {
-                mono: true,
-                value: draft.modelId || "",
-                onChange: (value) => setDraft({ ...draft, modelId: value }),
-                placeholder: "claude-sonnet-4"
-              }
-            ) }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: {
-              display: "flex",
-              gap: 6,
-              alignItems: "center",
-              font: "400 11px/1.35 var(--font-ui)"
-            }, children: [
               /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
-                "input",
+                Button,
                 {
-                  type: "checkbox",
-                  checked: draft.allowInsecureHttp,
-                  onChange: (event) => setDraft({
-                    ...draft,
-                    allowInsecureHttp: event.target.checked
-                  })
+                  variant: "ghost",
+                  size: "sm",
+                  disabled,
+                  onClick: () => {
+                    setDraft(draftFromEntry(provider));
+                    setError("");
+                  },
+                  children: t.edit
                 }
               ),
-              t.insecure
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) })
-          ] }) : /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(import_jsx_runtime41.Fragment, { children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: draft.baseUrl, onChange: (value) => setDraft({ ...draft, baseUrl: value }), placeholder: "https://api.example.com/v1" }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: { display: "flex", gap: 6, alignItems: "center", font: "400 11px/1.35 var(--font-ui)" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("input", { type: "checkbox", checked: draft.allowInsecureHttp, onChange: (event) => setDraft({ ...draft, allowInsecureHttp: event.target.checked }) }),
-              t.insecure
-            ] }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.apiKey, caption: draft.modelAuthKind === "auto" ? t.autoAuthCap : t.overrideAuthCap, children: draft.modelAuthKind !== "none" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) : /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("span", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--text-tertiary)" }, children: t.noApiKey }) }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("details", { "data-provider-advanced-auth": true, style: { border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)", padding: "5px 6px" }, children: [
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("summary", { style: { cursor: "pointer", font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)" }, children: t.advancedAuth }),
-              /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }, children: [
-                /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)(Field, { label: t.authType, children: [
-                  /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Select, { value: draft.modelAuthKind, onChange: (value) => setDraft({ ...draft, modelAuthKind: value, modelAuthAutomatic: false }), options: [
-                    { value: "auto", label: t.auto },
-                    { value: "bearer", label: "Authorization: Bearer" },
-                    { value: "x-api-key", label: "x-api-key" },
-                    { value: "custom", label: "Custom header" },
-                    { value: "none", label: "None" }
-                  ] }),
-                  draft.modelAuthKind === "custom" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: draft.modelAuthHeaderName, onChange: (value) => setDraft({ ...draft, modelAuthHeaderName: value }), placeholder: "x-provider-token" }) : null
-                ] }),
-                /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.probePreference, caption: t.probePreferenceCap, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Select, { value: draft.probePreference, onChange: (value) => setDraft({ ...draft, probePreference: value }), options: [
-                  { value: "", label: t.auto },
-                  { value: "responses", label: "Responses" },
-                  { value: "chat", label: "Chat Completions" },
-                  { value: "messages", label: "Messages" }
-                ] }) }),
-                /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.extraHeaders, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 6 }, children: [
-                  draft.headers.map((header, index) => {
-                    const sensitiveName = isSensitiveProviderHeaderName(header.name);
-                    const valueKind = sensitiveName ? "secret" : header.valueKind;
-                    return /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", flexDirection: "column", gap: 4, padding: 6, border: "1px solid var(--border-default)", borderRadius: "var(--radius-sm)" }, children: [
-                      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: header.name, onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, name: value, ...isSensitiveProviderHeaderName(value) ? { valueKind: "secret", value: "" } : {} } : item) }), placeholder: t.headerName }),
-                      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Select, { value: valueKind, onChange: (nextValueKind) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, valueKind: nextValueKind, value: nextValueKind === "literal" ? item.value || "" : "" } : item) }), options: sensitiveName ? [{ value: "secret", label: t.secretValue }] : [{ value: "literal", label: t.literal }, { value: "secret", label: t.secretValue }] }),
-                      valueKind === "secret" ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: `headerSecret:${header.id}`, disabled }) : /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { mono: true, value: header.value || "", onChange: (value) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, value } : item) }) }),
-                      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { display: "flex", gap: 10 }, children: ["probe", "model"].map((scope) => /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: { display: "flex", alignItems: "center", gap: 4, font: "400 10px/1.35 var(--font-ui)" }, children: [
-                        /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("input", { type: "checkbox", checked: header.scopes.includes(scope), onChange: (event) => setDraft({ ...draft, headers: draft.headers.map((item, itemIndex) => itemIndex === index ? { ...item, scopes: event.target.checked ? [.../* @__PURE__ */ new Set([...item.scopes, scope])] : item.scopes.filter((value) => value !== scope) } : item) }) }),
-                        scope === "probe" ? t.scopeProbe : t.scopeModel
-                      ] }, scope)) }),
-                      /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => setDraft({ ...draft, headers: draft.headers.filter((_, itemIndex) => itemIndex !== index) }), children: t.removeHeader })
-                    ] }, header.id);
-                  }),
-                  /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "secondary", size: "sm", icon: "plus", onClick: () => setDraft({ ...draft, headers: [...draft.headers, { id: nextHeaderId(draft.headers), name: "", scopes: ["model"], valueKind: "secret", value: "" }] }), children: t.addHeader })
-                ] }) })
-              ] })
+              /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+                Button,
+                {
+                  variant: "ghost",
+                  size: "sm",
+                  disabled,
+                  onClick: () => onRemove(provider),
+                  children: t.del
+                }
+              )
             ] })
+          ] }, provider.id);
+        }),
+        draft ? /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("form", { onSubmit: save, style: {
+          display: "flex",
+          flexDirection: "column",
+          gap: 6,
+          padding: "8px",
+          border: "1px solid var(--border-strong)",
+          borderRadius: "var(--radius-sm)",
+          background: "var(--bg-panel)"
+        }, children: [
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.name, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Input, { value: draft.name, onChange: (value) => setDraft({ ...draft, name: value }) }) }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.baseUrl, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+            Input,
+            {
+              mono: true,
+              value: draft.baseUrl,
+              onChange: (value) => setDraft({ ...draft, baseUrl: value }),
+              placeholder: "https://api.example.com/v1"
+            }
+          ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.model, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+            Input,
+            {
+              mono: true,
+              value: draft.modelId,
+              onChange: (value) => setDraft({ ...draft, modelId: value }),
+              placeholder: "claude-sonnet-4"
+            }
+          ) }),
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("label", { style: {
+            display: "flex",
+            gap: 6,
+            alignItems: "center",
+            font: "400 11px/1.35 var(--font-ui)"
+          }, children: [
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+              "input",
+              {
+                type: "checkbox",
+                checked: draft.allowInsecureHttp,
+                onChange: (event) => setDraft({
+                  ...draft,
+                  allowInsecureHttp: event.target.checked
+                })
+              }
+            ),
+            t.insecure
           ] }),
-          error ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: { font: "400 10px/1.4 var(--font-ui)", color: "var(--warn)" }, children: error }) : null,
+          /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Field, { label: t.apiKey, caption: t.openCodeKeyCap, children: /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(SecretInput, { name: "modelAuthSecret", disabled }) }),
+          error ? /* @__PURE__ */ (0, import_jsx_runtime41.jsx)("div", { style: {
+            font: "400 10px/1.4 var(--font-ui)",
+            color: "var(--warn)"
+          }, children: error }) : null,
           /* @__PURE__ */ (0, import_jsx_runtime41.jsxs)("div", { style: { display: "flex", gap: 6, justifyContent: "flex-end" }, children: [
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "ghost", size: "sm", onClick: () => {
-              setDraft(null);
-              setError("");
-            }, children: t.cancel }),
-            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(Button, { variant: "primary", size: "sm", disabled, onClick: (event) => {
-              var _a;
-              return (_a = event.currentTarget.closest("form")) == null ? void 0 : _a.requestSubmit();
-            }, children: t.save })
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+              Button,
+              {
+                variant: "ghost",
+                size: "sm",
+                onClick: () => {
+                  setDraft(null);
+                  setError("");
+                },
+                children: t.cancel
+              }
+            ),
+            /* @__PURE__ */ (0, import_jsx_runtime41.jsx)(
+              Button,
+              {
+                variant: "primary",
+                size: "sm",
+                disabled,
+                onClick: (event) => {
+                  var _a;
+                  return (_a = event.currentTarget.closest("form")) == null ? void 0 : _a.requestSubmit();
+                },
+                children: t.save
+              }
+            )
           ] })
         ] }) : null
       ] })
     ] });
-  }
-
-  // src/cep/modelProbe.js
-  init_cep_runtime_inject();
-
-  // src/lib/providerProbeAuth.js
-  init_cep_runtime_inject();
-  var AUTH_NAMES = /* @__PURE__ */ new Set(["authorization", "x-api-key"]);
-  function profileError() {
-    const error = new Error("Provider probe profile is invalid");
-    error.code = "provider_probe_profile_invalid";
-    return error;
-  }
-  function normalizedExtraHeaders(profile, protocol) {
-    var _a;
-    const headers = {};
-    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
-      const name = String((header == null ? void 0 : header.name) || "").trim().toLowerCase();
-      const value = String((_a = header == null ? void 0 : header.value) != null ? _a : "");
-      if (!name || /[\r\n\0]/.test(name) || /[\r\n\0]/.test(value) || Object.hasOwn(headers, name)) {
-        throw profileError();
-      }
-      if (AUTH_NAMES.has(name)) throw profileError();
-      headers[name] = value;
-    }
-    if (protocol === "messages" && !Object.hasOwn(headers, "anthropic-version")) {
-      headers["anthropic-version"] = "2023-06-01";
-    }
-    return headers;
-  }
-  function standardSecret(auth) {
-    var _a;
-    if ((auth == null ? void 0 : auth.kind) !== "header") return null;
-    const name = String(auth.name || "").trim().toLowerCase();
-    const value = String((_a = auth.value) != null ? _a : "");
-    if (name === "x-api-key" && value) return value;
-    if (name === "authorization") {
-      const match = /^Bearer[ \t]+(\S+)$/i.exec(value.trim());
-      if (match) return match[1];
-    }
-    return null;
-  }
-  function standardScheme(auth) {
-    if ((auth == null ? void 0 : auth.kind) !== "header") return null;
-    const name = String(auth.name || "").trim().toLowerCase();
-    if (name === "x-api-key") return "x-api-key";
-    if (name === "authorization" && /^Bearer[ \t]+\S+$/i.test(String(auth.value || "").trim())) {
-      return "bearer";
-    }
-    return null;
-  }
-  function authCandidate(baseHeaders, scheme, secret) {
-    const headers = { ...baseHeaders };
-    if (scheme === "bearer") headers.authorization = `Bearer ${secret}`;
-    if (scheme === "x-api-key") headers["x-api-key"] = secret;
-    return { scheme, headers };
-  }
-  function buildProtocolAuthCandidates(profile, protocol) {
-    var _a;
-    if (!["responses", "chat", "messages", "models"].includes(protocol)) throw profileError();
-    const baseHeaders = normalizedExtraHeaders(profile, protocol);
-    const auth = (profile == null ? void 0 : profile.auth) || { kind: "none" };
-    if (auth.kind === "none") return [{ scheme: "none", headers: baseHeaders }];
-    if (auth.kind !== "header") throw profileError();
-    const secret = standardSecret(auth);
-    if (secret !== null) {
-      const resolvedScheme = standardScheme(auth);
-      const fallbackScheme = resolvedScheme === "bearer" ? "x-api-key" : "bearer";
-      const preferred = [resolvedScheme, fallbackScheme];
-      return preferred.map((scheme) => authCandidate(baseHeaders, scheme, secret));
-    }
-    const name = String(auth.name || "").trim().toLowerCase();
-    const value = String((_a = auth.value) != null ? _a : "");
-    if (!name || AUTH_NAMES.has(name) || /[\r\n\0]/.test(name) || /[\r\n\0]/.test(value)) {
-      throw profileError();
-    }
-    return [{ scheme: "custom", headers: { ...baseHeaders, [name]: value } }];
-  }
-
-  // src/cep/modelProbe.js
-  var MAX_MODELS_RESPONSE_BYTES = 512 * 1024;
-  function getCepRequire4() {
-    var _a, _b, _c;
-    if ((_b = (_a = globalThis.window) == null ? void 0 : _a.cep_node) == null ? void 0 : _b.require) return globalThis.window.cep_node.require;
-    if ((_c = globalThis.window) == null ? void 0 : _c.require) return globalThis.window.require;
-    if (globalThis.require) return globalThis.require;
-    throw new Error("CEP Node require is unavailable");
-  }
-  function authSchemeFromDialect(dialect) {
-    if (!dialect) return "";
-    if (typeof dialect === "string") return dialect;
-    return String(dialect.authScheme || "").trim();
-  }
-  function probeHeaders(protocol, apiKey, dialect) {
-    if (protocol === "anthropic") {
-      return { "x-api-key": String(apiKey || ""), "anthropic-version": "2023-06-01" };
-    }
-    const authScheme = authSchemeFromDialect(dialect);
-    if (authScheme === "x-api-key") return { "x-api-key": String(apiKey || "") };
-    if (authScheme === "none") return {};
-    return { Authorization: "Bearer " + String(apiKey || "") };
-  }
-  function stringList(value) {
-    return Array.isArray(value) ? value.filter((item) => typeof item === "string").map(String) : [];
-  }
-  function parseProviderModelInventory(json) {
-    const list = Array.isArray(json) ? json : json && Array.isArray(json.data) ? json.data : json && Array.isArray(json.models) ? json.models : [];
-    return list.map((model) => {
-      const id = model && (model.id || model.model || model.name);
-      if (!id) return null;
-      return {
-        id: String(id),
-        label: String(model.display_name || model.displayName || id),
-        metadata: {
-          task: typeof model.task === "string" ? model.task : null,
-          inputModalities: stringList(model.input_modalities || model.inputModalities),
-          outputModalities: stringList(model.output_modalities || model.outputModalities || model.modalities),
-          capabilities: stringList(model.capabilities)
-        }
-      };
-    }).filter(Boolean);
-  }
-  function networkFailure() {
-    return {
-      ok: false,
-      status: 0,
-      models: [],
-      detail: "Network error while probing provider models"
-    };
-  }
-  function responseTooLargeFailure() {
-    return {
-      ok: false,
-      status: 0,
-      models: [],
-      detail: "Provider model response exceeded size limit"
-    };
-  }
-  function timeoutFailure() {
-    return {
-      ok: false,
-      status: 0,
-      models: [],
-      detail: "Provider model request timed out"
-    };
-  }
-  function resultFromResponse(status, body, sensitiveValues = []) {
-    if (status !== 200) {
-      return { ok: false, status, models: [], detail: "HTTP " + status + " from provider" };
-    }
-    try {
-      const inventory = parseProviderModelInventory(JSON.parse(body));
-      const models = inventory.map(({ id, label }) => ({ id, label }));
-      if (containsExactSecret(inventory, sensitiveValues)) {
-        return { ok: false, status: 200, models: [], detail: "Provider model metadata was rejected" };
-      }
-      return models.length ? { ok: true, status: 200, models, inventory, detail: "" } : { ok: false, status: 200, models: [], detail: "Empty model list" };
-    } catch {
-      return { ok: false, status: 200, models: [], detail: "Response was not valid JSON" };
-    }
-  }
-  function requestWithTransport({
-    endpoint,
-    headers,
-    sensitiveValues,
-    httpsImpl,
-    timeoutMs,
-    responseBodyBytes
-  }) {
-    var _a;
-    let transport;
-    let BufferImpl;
-    try {
-      transport = httpsImpl || getCepRequire4()(endpoint.protocol === "http:" ? "http" : "https");
-      BufferImpl = globalThis.Buffer || ((_a = getCepRequire4()("buffer")) == null ? void 0 : _a.Buffer);
-      if (!BufferImpl || typeof BufferImpl.from !== "function" || typeof BufferImpl.concat !== "function") {
-        throw new Error("Buffer is unavailable");
-      }
-    } catch {
-      return Promise.resolve(networkFailure());
-    }
-    return new Promise((resolve) => {
-      let settled = false;
-      let req = null;
-      let activeResponse = null;
-      const finish = (result) => {
-        if (settled) return;
-        settled = true;
-        resolve(result);
-      };
-      const abort = () => {
-        var _a2, _b;
-        try {
-          (_a2 = activeResponse == null ? void 0 : activeResponse.destroy) == null ? void 0 : _a2.call(activeResponse);
-        } catch {
-        }
-        try {
-          (_b = req == null ? void 0 : req.destroy) == null ? void 0 : _b.call(req);
-        } catch {
-        }
-      };
-      req = transport.request({
-        hostname: endpoint.hostname,
-        port: endpoint.port || void 0,
-        protocol: endpoint.protocol,
-        path: endpoint.pathname + endpoint.search,
-        method: "GET",
-        headers
-      }, (res) => {
-        activeResponse = res;
-        let chunks = [];
-        let responseBytes = 0;
-        res.on("data", (chunk) => {
-          var _a2;
-          if (settled) return;
-          const bytes = ((_a2 = BufferImpl.isBuffer) == null ? void 0 : _a2.call(BufferImpl, chunk)) ? chunk : BufferImpl.from(chunk);
-          responseBytes += bytes.length;
-          if (responseBytes > responseBodyBytes) {
-            chunks = [];
-            finish(responseTooLargeFailure());
-            abort();
-            return;
-          }
-          chunks.push(bytes);
-        });
-        res.on("end", () => {
-          if (settled) return;
-          const body = BufferImpl.concat(chunks, responseBytes).toString("utf8");
-          chunks = [];
-          finish(resultFromResponse(res.statusCode || 0, body, sensitiveValues));
-        });
-      });
-      req.on("error", () => finish(networkFailure()));
-      if (req.setTimeout) {
-        req.setTimeout(timeoutMs, () => {
-          finish(timeoutFailure());
-          abort();
-        });
-      }
-      req.end();
-    });
-  }
-  async function probeProviderModels({
-    requestProfile,
-    baseUrl,
-    apiKey,
-    protocol = "openai-compatible",
-    dialect,
-    authScheme,
-    allowInsecureHttp = false,
-    requestImpl,
-    httpsImpl,
-    timeoutMs = 8e3,
-    responseBodyBytes = MAX_MODELS_RESPONSE_BYTES
-  } = {}) {
-    var _a;
-    const profile = requestProfile && typeof requestProfile === "object" ? requestProfile : null;
-    const selectedBaseUrl = profile ? profile.baseUrl : baseUrl;
-    const selectedAllowInsecureHttp = profile ? profile.allowInsecureHttp === true : allowInsecureHttp;
-    let endpoints;
-    try {
-      validateProviderBaseUrl(selectedBaseUrl, {
-        allowInsecureHttp: selectedAllowInsecureHttp,
-        requireTransportApproval: true
-      });
-      endpoints = buildProviderEndpointCandidates({
-        baseUrl: selectedBaseUrl,
-        resource: "models",
-        allowInsecureHttp: selectedAllowInsecureHttp
-      });
-    } catch (error) {
-      if ((error == null ? void 0 : error.code) === "provider_insecure_http_forbidden") {
-        return {
-          ok: false,
-          status: 0,
-          models: [],
-          detail: "Insecure provider HTTP is not approved"
-        };
-      }
-      return { ok: false, status: 0, models: [], detail: "Invalid base URL" };
-    }
-    let authCandidates;
-    try {
-      authCandidates = profile ? buildProtocolAuthCandidates(profile, protocol === "anthropic" ? "messages" : "models") : [{
-        scheme: authSchemeFromDialect(dialect || authScheme) || (protocol === "anthropic" ? "x-api-key" : "bearer"),
-        headers: probeHeaders(protocol, apiKey, dialect || authScheme)
-      }];
-    } catch {
-      return { ok: false, status: 0, models: [], detail: "Invalid provider request profile" };
-    }
-    const sensitiveValues = [];
-    if (((_a = profile == null ? void 0 : profile.auth) == null ? void 0 : _a.kind) === "header" && profile.auth.value) {
-      const value = String(profile.auth.value);
-      sensitiveValues.push(value);
-      const bearer = /^Bearer\s+(.+)$/i.exec(value);
-      if (bearer == null ? void 0 : bearer[1]) sensitiveValues.push(bearer[1]);
-    } else if (apiKey) {
-      sensitiveValues.push(String(apiKey));
-    }
-    for (const header of (profile == null ? void 0 : profile.extraHeaders) || []) {
-      if (header.source === "secret" && header.value) sensitiveValues.push(String(header.value));
-    }
-    let lastResult = null;
-    for (const endpoint of endpoints) {
-      for (let authIndex = 0; authIndex < authCandidates.length; authIndex += 1) {
-        const authCandidate2 = authCandidates[authIndex];
-        let result;
-        if (typeof requestImpl === "function") {
-          try {
-            const response = await requestImpl({
-              url: endpoint.url.toString(),
-              method: "GET",
-              headers: authCandidate2.headers,
-              timeoutMs
-            });
-            const status = Number.isInteger(response == null ? void 0 : response.status) ? response.status : 0;
-            result = status === 0 ? networkFailure() : resultFromResponse(
-              status,
-              typeof (response == null ? void 0 : response.body) === "string" ? response.body : "",
-              sensitiveValues
-            );
-          } catch {
-            result = networkFailure();
-          }
-        } else {
-          result = await requestWithTransport({
-            endpoint: endpoint.url,
-            headers: authCandidate2.headers,
-            sensitiveValues,
-            httpsImpl,
-            timeoutMs,
-            responseBodyBytes: Number.isSafeInteger(responseBodyBytes) && responseBodyBytes > 0 ? responseBodyBytes : MAX_MODELS_RESPONSE_BYTES
-          });
-        }
-        lastResult = {
-          ...result,
-          apiRoot: endpoint.apiRoot.toString().replace(/\/$/, ""),
-          apiRootId: endpoint.id,
-          authScheme: authCandidate2.scheme
-        };
-        if (result.ok) return lastResult;
-        if ((result.status === 401 || result.status === 403) && authIndex + 1 < authCandidates.length) {
-          continue;
-        }
-        break;
-      }
-      if (![0, 401, 403, 404, 405].includes(lastResult == null ? void 0 : lastResult.status) && (lastResult == null ? void 0 : lastResult.redirected) !== true) return lastResult;
-    }
-    return lastResult || networkFailure();
-  }
-
-  // src/cep/codexConfig.js
-  init_cep_runtime_inject();
-  function stripInlineComment(line) {
-    let inString = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"' && line[i - 1] !== "\\") inString = !inString;
-      else if (ch === "#" && !inString) return line.slice(0, i);
-    }
-    return line;
-  }
-  function unquote(value) {
-    const trimmed = String(value || "").trim();
-    if (trimmed.length >= 2 && trimmed.startsWith('"') && trimmed.endsWith('"')) {
-      return trimmed.slice(1, -1);
-    }
-    if (trimmed.length >= 2 && trimmed.startsWith("'") && trimmed.endsWith("'")) {
-      return trimmed.slice(1, -1);
-    }
-    return trimmed;
-  }
-  function parseToml(text) {
-    const root = {};
-    const sections = {};
-    let current = root;
-    const lines = String(text || "").split(/\r?\n/);
-    for (const rawLine of lines) {
-      const noComment = stripInlineComment(rawLine).trim();
-      if (!noComment) continue;
-      const sectionMatch = noComment.match(/^\[([^\]]+)\]$/);
-      if (sectionMatch) {
-        const name = sectionMatch[1].trim();
-        sections[name] = sections[name] || {};
-        current = sections[name];
-        continue;
-      }
-      const kvMatch = noComment.match(/^([^=]+)=(.*)$/);
-      if (!kvMatch) continue;
-      const key = kvMatch[1].trim();
-      if (!key) continue;
-      current[key] = unquote(kvMatch[2]);
-    }
-    return { root, sections };
-  }
-  function readCodexCliConfig({ platform, fsImpl } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    const home = adapter.paths.home;
-    if (!home) return null;
-    const fs = fsImpl || adapter.fs;
-    if (!fs) return null;
-    let text;
-    try {
-      text = fs.readFileSync(adapter.paths.join([home, ".codex", "config.toml"]), "utf8");
-    } catch (e) {
-      return null;
-    }
-    let parsed;
-    try {
-      parsed = parseToml(text);
-    } catch (e) {
-      return null;
-    }
-    const model = String(parsed.root.model || "").trim();
-    const providerId = String(parsed.root.model_provider || "").trim();
-    if (!model && !providerId) return null;
-    const result = { model, providerId, provider: null };
-    if (providerId) {
-      const section2 = parsed.sections["model_providers." + providerId];
-      if (section2) {
-        result.provider = {
-          name: String(section2.name || "").trim(),
-          baseUrl: String(section2.base_url || "").trim(),
-          envKey: String(section2.env_key || "").trim(),
-          wireApi: String(section2.wire_api || "").trim()
-        };
-      }
-    }
-    return result;
-  }
-  function usableStoredValueRef(value) {
-    if (!value || value.kind !== "secret" || typeof value.reference !== "string" || !Number.isSafeInteger(value.revision) || value.revision <= 0) return false;
-    try {
-      parseProviderSecretReference(value.reference);
-    } catch {
-      return false;
-    }
-    return true;
-  }
-  function codexCliCredentialAvailable({ provider, env = {}, storedValueRef = null } = {}) {
-    const envKey = provider && String(provider.envKey || "").trim();
-    if (envKey && typeof env[envKey] === "string" && env[envKey].length > 0) return true;
-    return usableStoredValueRef(storedValueRef);
-  }
-  async function resolveCodexCliCredential({
-    provider,
-    env = {},
-    storedValueRef = null,
-    secretService
-  } = {}) {
-    const envKey = provider && String(provider.envKey || "").trim();
-    if (envKey && typeof env[envKey] === "string" && env[envKey].length > 0) return env[envKey];
-    if (usableStoredValueRef(storedValueRef) && secretService && typeof secretService.resolve === "function") {
-      return await secretService.resolve(storedValueRef);
-    }
-    const error = new Error("Codex CLI credential is unavailable");
-    error.code = "CODEX_CREDENTIAL_UNAVAILABLE";
-    throw error;
   }
 
   // src/lib/chatEntries.js
@@ -42046,102 +30987,47 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     });
   }
 
-  // src/lib/anthropic.js
-  init_cep_runtime_inject();
-  var DEFAULT_MODEL = "claude-sonnet-4-6";
-
   // src/lib/descriptorSelect.js
   init_cep_runtime_inject();
-  function isClaudeApiBackend(effectiveBackend) {
-    return effectiveBackend === "claude-api" || effectiveBackend === "byok";
-  }
-  function providerModels(provider) {
-    var _a;
-    if (((_a = provider == null ? void 0 : provider.modelList) == null ? void 0 : _a.status) === "supported" && Array.isArray(provider.modelList.models)) {
-      return provider.modelList.models;
-    }
-    return Array.isArray(provider == null ? void 0 : provider.probedModels) ? provider.probedModels : [];
-  }
   function selectDescriptor({
     effectiveBackend = "none",
-    effectiveChannel = null,
     backendPref = "subscription",
     baseDescriptor,
-    customModel = "",
-    claudeApiProvider = null,
-    codexCustomProvider = null,
-    customProviderCredentialResolverReady = false,
-    byokApiModels = null,
     codexCachedModels = null,
-    openCodeProviders = [],
-    zcodeSessionModels = null,
-    zcodeProbedModels = null
+    openCodeProviders = []
   }) {
-    const claudeApi = isClaudeApiBackend(effectiveBackend);
-    const customId = claudeApi || backendPref === "codex" ? String(customModel || "").trim() : "";
-    if (claudeApi) {
-      const models = providerModels(claudeApiProvider);
-      if (models.length) {
-        return descriptorWithCustomModel(descriptorFromProbedModels(byokStaticDescriptor(), models), customId);
-      }
-      if (byokApiModels) {
-        return descriptorWithCustomModel(mergeByokModels(byokStaticDescriptor(), byokApiModels), customId);
-      }
-      return baseDescriptor;
-    }
-    if (backendPref === "codex") {
-      const customProviderFactsAllowed = customProviderCredentialResolverReady === true;
-      const models = providerModels(codexCustomProvider);
-      if (customProviderFactsAllowed && codexCustomProvider && models.length) {
-        return descriptorWithCustomModel(descriptorFromProbedModels(codexStaticDescriptor(), models), customId);
-      }
+    if (backendPref === "codex" || effectiveBackend === "codex") {
       if (codexCachedModels) {
-        const cachedDescriptor = codexDescriptorFromModels({ models: codexCachedModels });
-        const channelDescriptor = effectiveChannel === "cli" ? mergeCodexOfficialLoginModels(cachedDescriptor) : cachedDescriptor;
-        return descriptorWithCustomModel(channelDescriptor, customId);
+        return mergeCodexOfficialLoginModels(
+          codexDescriptorFromModels({ models: codexCachedModels })
+        );
       }
-      return effectiveChannel === "cli" ? descriptorWithCustomModel(mergeCodexOfficialLoginModels(baseDescriptor), customId) : baseDescriptor;
+      return mergeCodexOfficialLoginModels(baseDescriptor || codexStaticDescriptor());
     }
     if (backendPref === "opencode" || effectiveBackend === "opencode") {
-      const providerResult = {};
+      const providers = {};
       for (const provider of openCodeProviders || []) {
         if (!provider || provider.needsApiKey === true) continue;
-        const models = {};
-        for (const modelId of provider.modelIds || []) {
-          models[modelId] = { name: modelId };
-        }
-        providerResult[provider.id] = { id: provider.id, name: provider.name, models };
+        providers[provider.id] = {
+          id: provider.id,
+          name: provider.name,
+          models: Object.fromEntries(
+            (provider.modelIds || []).map((modelId) => [modelId, { name: modelId }])
+          )
+        };
       }
-      return Object.keys(providerResult).length ? openCodeDescriptorFromModels(providerResult) : baseDescriptor;
-    }
-    if (backendPref === "zcode" || effectiveBackend === "zcode") {
-      const available = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available) ? zcodeSessionModels.settings.model.available : [];
-      if (available.length > 1) return zcodeDescriptorFromModels(zcodeSessionModels);
-      if (zcodeProbedModels) {
-        const probed = zcodeDescriptorFromProbedModels(zcodeProbedModels);
-        if (probed) return probed;
-      }
-      if (zcodeSessionModels) return zcodeDescriptorFromModels(zcodeSessionModels);
-      return baseDescriptor;
+      return Object.keys(providers).length ? openCodeDescriptorFromModels(providers) : baseDescriptor;
     }
     return baseDescriptor;
   }
-  function reconcileModelPref(model, descriptor, {
-    isCustom = false,
-    providerFactsPending = false
-  } = {}) {
-    if (isCustom || providerFactsPending) return model;
-    const models = descriptor && Array.isArray(descriptor.models) ? descriptor.models : [];
+  function reconcileModelPref(model, descriptor, { providerFactsPending = false } = {}) {
+    if (providerFactsPending) return model;
+    const models = Array.isArray(descriptor == null ? void 0 : descriptor.models) ? descriptor.models : [];
     if (!models.length) return model;
-    const trimmed = String(model || "").trim();
-    if (trimmed && models.some((m) => m.id === trimmed)) return trimmed;
+    const current = String(model || "").trim();
+    if (current && models.some((item) => item.id === current)) return current;
     return descriptor.defaultModelId;
   }
-
-  // src/lib/zcodeModelCache.js
-  init_cep_runtime_inject();
-  var ZCODE_PROBED_MODELS_CACHE_KEY = "ae_mcp_zcode_probed_models";
-  var ZCODE_PROBED_MODELS_CACHE_MS = 60 * 60 * 1e3;
 
   // src/cep/useActivity.js
   init_cep_runtime_inject();
@@ -42591,7 +31477,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     } catch (e) {
     }
   }
-  function getCepRequire5() {
+  function getCepRequire2() {
     if (globalThis.window && globalThis.window.cep_node && globalThis.window.cep_node.require) {
       return globalThis.window.cep_node.require;
     }
@@ -42599,8 +31485,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     if (globalThis.require) return globalThis.require;
     throw new Error("CEP Node require is unavailable");
   }
-  function loadBundledHostDependencies({ cepRequire: cepRequire4, adapter, extensionRoot }) {
-    if (typeof cepRequire4 !== "function") throw new TypeError("CEP Node require is unavailable");
+  function loadBundledHostDependencies({ cepRequire: cepRequire3, adapter, extensionRoot }) {
+    if (typeof cepRequire3 !== "function") throw new TypeError("CEP Node require is unavailable");
     if (!adapter || !["macos-arm64", "windows-x64"].includes(adapter.id)) {
       throw new TypeError("A supported platform adapter is required");
     }
@@ -42611,11 +31497,11 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     if (typeof nativePath.resolve !== "function" || typeof nativePath.dirname !== "function" || typeof nativePath.isAbsolute !== "function" || typeof nativePath.contains !== "function" || typeof nativePath.same !== "function") {
       throw new TypeError("A complete native platform path catalog is required");
     }
-    const moduleApi = cepRequire4("module");
+    const moduleApi = cepRequire3("module");
     if (!moduleApi || typeof moduleApi.createRequire !== "function") {
       throw new Error("CEP Node module.createRequire is unavailable");
     }
-    const fs = adapter.fs || cepRequire4("fs");
+    const fs = adapter.fs || cepRequire3("fs");
     if (!fs || typeof fs.existsSync !== "function" || typeof fs.lstatSync !== "function" || typeof fs.realpathSync !== "function" || typeof fs.statSync !== "function" || typeof fs.readFileSync !== "function") {
       throw new Error("CEP Node filesystem is unavailable");
     }
@@ -42757,16 +31643,16 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       host = null;
       if (priorHost) disposeLifecycle(priorHost);
       try {
-        const cepRequire4 = requireImpl || getCepRequire5();
+        const cepRequire3 = requireImpl || getCepRequire2();
         const extRoot = normalizeCepPath(extensionRoot || cs2.getSystemPath("extension"), adapter);
         const hostPath = adapter.paths.join([extRoot, "host", "server.js"]);
         onLog("host: " + hostPath);
         const runtimeDependencies = loadBundledHostDependencies({
-          cepRequire: cepRequire4,
+          cepRequire: cepRequire3,
           adapter,
           extensionRoot: extRoot
         });
-        const nextHost = cepRequire4(hostPath);
+        const nextHost = cepRequire3(hostPath);
         if (!nextHost || typeof nextHost.setRuntimeDependencies !== "function") {
           throw new Error("Host runtime dependency binding is unavailable");
         }
@@ -42835,6 +31721,48 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
 
   // src/lib/credentialTextRedaction.js
   init_cep_runtime_inject();
+  var SENSITIVE_SEGMENTS = /* @__PURE__ */ new Set([
+    "api-key",
+    "apikey",
+    "auth",
+    "authentication",
+    "authorization",
+    "cookie",
+    "credential",
+    "credentials",
+    "key",
+    "oauth",
+    "passwd",
+    "password",
+    "secret",
+    "session",
+    "signature",
+    "token"
+  ]);
+  var STRONG_SENSITIVE_FRAGMENTS = [
+    "apikey",
+    "auth",
+    "cookie",
+    "credential",
+    "oauth",
+    "passwd",
+    "password",
+    "secret",
+    "session",
+    "signature",
+    "token"
+  ];
+  var KEY_SUFFIX_PREFIXES = /* @__PURE__ */ new Set([
+    "api",
+    "access",
+    "client",
+    "credential",
+    "private",
+    "provider",
+    "public",
+    "secret",
+    "x"
+  ]);
   var SECRET_REFERENCE = /aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9_-]+\/v1/gi;
   var HEADER_LINE = /^([ \t]*)([!#$%&'*+.^_`|~0-9A-Za-z-]+)([ \t]*:[ \t]*)([^\r\n]+)$/gm;
   var QUOTED_PAIR = /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"'\r\n]+)\4/g;
@@ -42846,18 +31774,26 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
   var JSON_KEY = /"((?:\\.|[^"\\])*)"\s*:/g;
   var SENSITIVE_ASSIGNMENT_START = /(^|[^A-Za-z0-9_.-])(["']?)([A-Za-z][A-Za-z0-9_.-]*)(\2)([ \t]*[:=][ \t]*)/g;
   var MARKER = "[redacted]";
+  function isSensitiveCredentialName(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return false;
+    const separated = raw.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2");
+    const segments = separated.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+    if (segments.some((segment) => SENSITIVE_SEGMENTS.has(segment))) return true;
+    const compact = raw.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    if (STRONG_SENSITIVE_FRAGMENTS.some((fragment) => compact.includes(fragment))) return true;
+    if (!compact.endsWith("key")) return false;
+    const prefix = compact.slice(0, -3);
+    return KEY_SUFFIX_PREFIXES.has(prefix) || Array.from(KEY_SUFFIX_PREFIXES).some((candidate) => prefix.endsWith(candidate));
+  }
   function quotedValueEnd(text, start) {
     const quote = text[start];
     let escaped = false;
     for (let index = start + 1; index < text.length; index += 1) {
       const character = text[index];
-      if (escaped) {
-        escaped = false;
-      } else if (character === "\\") {
-        escaped = true;
-      } else if (character === quote) {
-        return index + 1;
-      }
+      if (escaped) escaped = false;
+      else if (character === "\\") escaped = true;
+      else if (character === quote) return index + 1;
     }
     return -1;
   }
@@ -42906,7 +31842,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       } catch {
         name = "";
       }
-      if (!isSensitiveProviderHeaderName(name)) {
+      if (!isSensitiveCredentialName(name)) {
         offset = JSON_KEY.lastIndex;
         continue;
       }
@@ -42928,7 +31864,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     SENSITIVE_ASSIGNMENT_START.lastIndex = 0;
     let match;
     while ((match = SENSITIVE_ASSIGNMENT_START.exec(text)) !== null) {
-      if (!isSensitiveProviderHeaderName(match[3])) continue;
+      if (!isSensitiveCredentialName(match[3])) continue;
       return text.slice(0, match.index) + match[1] + match[2] + match[3] + match[4] + match[5] + MARKER;
     }
     return text;
@@ -42939,13 +31875,12 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     text = redactSensitiveLineSuffixes(text);
     text = text.replace(SECRET_REFERENCE, "[secret-reference-redacted]");
     text = text.replace(PRIVATE_KEY, MARKER);
-    text = text.replace(HEADER_LINE, (match, prefix, name, separator, headerValue) => isSensitiveProviderHeaderName(name) && headerValue.trim() ? prefix + name + separator + MARKER : match);
-    text = text.replace(QUOTED_PAIR, (match, quote, name, separator) => isSensitiveProviderHeaderName(name) ? quote + name + quote + separator + quote + MARKER + quote : match);
-    text = text.replace(ASSIGNMENT, (match, prefix, name, separator) => isSensitiveProviderHeaderName(name) ? prefix + name + separator + MARKER : match);
-    text = text.replace(INLINE_HEADER, (match, prefix, name, separator) => isSensitiveProviderHeaderName(name) ? prefix + name + separator + MARKER : match);
+    text = text.replace(HEADER_LINE, (match, prefix, name, separator, headerValue) => isSensitiveCredentialName(name) && headerValue.trim() ? prefix + name + separator + MARKER : match);
+    text = text.replace(QUOTED_PAIR, (match, quote, name, separator) => isSensitiveCredentialName(name) ? quote + name + quote + separator + quote + MARKER + quote : match);
+    text = text.replace(ASSIGNMENT, (match, prefix, name, separator) => isSensitiveCredentialName(name) ? prefix + name + separator + MARKER : match);
+    text = text.replace(INLINE_HEADER, (match, prefix, name, separator) => isSensitiveCredentialName(name) ? prefix + name + separator + MARKER : match);
     text = text.replace(PREFIXED_KEY, MARKER);
-    text = text.replace(JWT, MARKER);
-    return text;
+    return text.replace(JWT, MARKER);
   }
 
   // src/lib/logExport.js
@@ -43179,14 +32114,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       if (onError) onError(error);
     });
     return result;
-  }
-
-  // src/lib/stableValue.js
-  init_cep_runtime_inject();
-  function reconcileStableJsonValue(previous, value) {
-    const json = JSON.stringify(value);
-    if (previous && previous.json === json) return previous;
-    return { json, value };
   }
 
   // src/lib/elicitationCoordinator.js
@@ -43725,14 +32652,14 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     } catch (e) {
     }
   }
-  var CODEX_MODELS_CACHE_KEY = "ae_mcp_codex_models";
-  function cepRequire3(mod) {
+  var DEFAULT_MODEL = claudeSubDescriptor().defaultModelId;
+  function cepRequire2(mod) {
     if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
     if (window.require) return window.require(mod);
     return null;
   }
   function randomProviderCredentialId() {
-    const cryptoImpl = cepRequire3("crypto");
+    const cryptoImpl = cepRequire2("crypto");
     if (!cryptoImpl || typeof cryptoImpl.randomUUID !== "function") throw new Error("Secure UUID generation is unavailable");
     return cryptoImpl.randomUUID();
   }
@@ -43779,7 +32706,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const pendingTurnRef = import_react46.default.useRef(null);
     const acceptedTurnRef = import_react46.default.useRef(null);
     import_react46.default.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-    const [customModel, setCustomModel] = import_react46.default.useState(() => readPref("ae_mcp_custom_model", ""));
     const [model, setModel] = import_react46.default.useState(() => readPref("ae_mcp_model", DEFAULT_MODEL));
     const [logLevel, setLogLevel] = import_react46.default.useState(() => readPref("ae_mcp_log_level", "info"));
     const logLevelRef = import_react46.default.useRef(logLevel);
@@ -43826,13 +32752,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const backendMigration = import_react46.default.useMemo(() => migrateBackendPref(window.localStorage), []);
     const [backendPref, setBackendPref] = import_react46.default.useState(() => backendMigration.pref);
     const [channelChoices, setChannelChoices] = import_react46.default.useState(() => backendMigration.channelChoices);
-    const legacyProviderStore = import_react46.default.useMemo(() => {
-      try {
-        return createProviderStore();
-      } catch (e) {
-        return null;
-      }
-    }, []);
     const openCodeProviderStore = import_react46.default.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
     const [providerInit, setProviderInit] = import_react46.default.useState({ state: "checking", error: "" });
     const [providers, setProviders] = import_react46.default.useState([]);
@@ -43878,21 +32797,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     const [codexProbe, setCodexProbe] = import_react46.default.useState(null);
     const [codexModels, setCodexModels] = import_react46.default.useState(null);
     const [openCodeProbe, setOpenCodeProbe] = import_react46.default.useState(null);
-    const [zcodeProbe, setZcodeProbe] = import_react46.default.useState(null);
-    const [zcodeSessionModels, setZcodeSessionModels] = import_react46.default.useState(null);
-    const [zcodeProbedModels, setZcodeProbedModels] = import_react46.default.useState(null);
-    import_react46.default.useEffect(() => {
-      try {
-        window.localStorage.removeItem(CODEX_MODELS_CACHE_KEY);
-        window.localStorage.removeItem(ZCODE_PROBED_MODELS_CACHE_KEY);
-      } catch {
-      }
-    }, []);
     const [chatEntries, setChatEntries] = import_react46.default.useState([]);
     const [chatStreaming, setChatStreaming] = import_react46.default.useState(false);
     const [thinkingActive, setThinkingActive] = import_react46.default.useState(false);
-    const customModelForBackend = backendPref === "codex" ? customModel : "";
-    const baseDescriptor = import_react46.default.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, window.cep_node && window.cep_node.process && window.cep_node.process.env || {}), customModelForBackend), [backendPref, customModelForBackend]);
+    const baseDescriptor = import_react46.default.useMemo(
+      () => baseDescriptorFor(backendPref),
+      [backendPref]
+    );
     const [descriptor, setDescriptor] = import_react46.default.useState(() => baseDescriptor);
     const requestedModel = sessionModel || model;
     const effectiveModel = descriptor.models.some((m) => m.id === requestedModel) ? requestedModel : descriptor.defaultModelId || descriptor.models[0] && descriptor.models[0].id || requestedModel;
@@ -43909,7 +32820,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         lang,
         providers,
         disabled: providerInit.state !== "ready",
-        opencodeMode: true,
         onUpsert: async (event, draft) => {
           var _a;
           const formElement = event.currentTarget;
@@ -43938,47 +32848,15 @@ ${draft.baseUrl}`)) return;
         }
       }
     );
-    const zcodeConfigSummary = import_react46.default.useMemo(() => {
-      try {
-        const env = window.cep_node && window.cep_node.process && window.cep_node.process.env || {};
-        return summarizeZcodeConfig({ env });
-      } catch (e) {
-        return null;
-      }
-    }, [zcodeProbe]);
-    const codexCliConfigStableRef = import_react46.default.useRef(null);
-    const codexCliConfig = import_react46.default.useMemo(() => {
-      let next;
-      try {
-        next = readCodexCliConfig({ env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {} });
-      } catch (e) {
-        next = null;
-      }
-      codexCliConfigStableRef.current = reconcileStableJsonValue(codexCliConfigStableRef.current, next);
-      return codexCliConfigStableRef.current.value;
-    }, [codexProbe]);
-    const codexCliCredentialReady = import_react46.default.useMemo(() => {
-      const env = window.cep_node && window.cep_node.process && window.cep_node.process.env || {};
-      return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
-    }, [codexCliConfig]);
     const channels = import_react46.default.useMemo(() => ({
       claude: claudeChannels({ probe }),
-      codex: codexChannels({
-        codexProbe,
-        cliConfig: codexCliConfig,
-        cliCredentialAvailable: codexCliCredentialReady
-      }),
-      opencode: openCodeChannels({ probe: openCodeProbe, providers }),
-      zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary })
+      codex: codexChannels({ codexProbe }),
+      opencode: openCodeChannels({ probe: openCodeProbe, providers })
     }), [
       probe,
       codexProbe,
-      codexCliConfig,
-      codexCliCredentialReady,
       openCodeProbe,
-      providers,
-      zcodeProbe,
-      zcodeConfigSummary
+      providers
     ]);
     const effective = pickBackend({ pref: backendPref, channels, channelChoices });
     const runtimeRef = import_react46.default.useRef({
@@ -44099,7 +32977,6 @@ ${draft.baseUrl}`)) return;
         setChatStreaming(false);
         setThinkingActive(false);
       }
-      if (evt.type === "zcode-session-created") setZcodeSessionModels(evt.result || null);
       setChatEntries((entries) => reduceEvent(entries, evt));
     }, [releaseTurnAttachments]);
     const claudeBackend = import_react46.default.useMemo(() => createClaudeAgentBackend({
@@ -44129,7 +33006,6 @@ ${draft.baseUrl}`)) return;
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getExpertGuidance: () => loadExpertGuidance(window.localStorage),
       getServerInstructions: () => mcp.getServerInstructions(),
-      getCliConfigProvider: () => null,
       lang,
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
@@ -44149,18 +33025,6 @@ ${draft.baseUrl}`)) return;
       env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
       onEvent: handleChatEvent
     }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
-    const zcodeBackend = import_react46.default.useMemo(() => createZcodeBackend({
-      platform,
-      getMcpSpec: getMcpSpec2,
-      getModel: () => runtimeRef.current.model,
-      getPermissionMode: () => runtimeRef.current.permissionMode,
-      getEffort: () => runtimeRef.current.effort,
-      getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
-      getExpertGuidance: () => loadExpertGuidance(window.localStorage),
-      getServerInstructions: () => mcp.getServerInstructions(),
-      env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
-      onEvent: handleChatEvent
-    }), [extRoot, getMcpSpec2, mcp, handleChatEvent, platform]);
     runtimeRef.current = {
       model: effectiveModel,
       permissionMode,
@@ -44171,28 +33035,29 @@ ${draft.baseUrl}`)) return;
     const backendInstances = {
       subscription: claudeBackend,
       codex: codexBackend,
-      opencode: openCodeBackend,
-      zcode: zcodeBackend
+      opencode: openCodeBackend
     };
-    const activeBackend = backendInstances[effective.backend] || null;
+    const activeBackend = (() => {
+      if (effective.backend === "none") return null;
+      const backend = backendInstances[effective.backend];
+      if (backend) return backend;
+      const knownBackendIds = Object.keys(backendInstances).join(", ");
+      throw new Error(
+        `Unknown backend id "${effective.backend}". Known backend ids: ${knownBackendIds}`
+      );
+    })();
     import_react46.default.useEffect(() => {
       const facts = {
         effectiveBackend: effective.backend,
         effectiveChannel: effective.channel,
         backendPref,
         baseDescriptor,
-        customModel,
         codexCachedModels: codexModels,
-        openCodeProviders: providers,
-        zcodeSessionModels,
-        zcodeProbedModels
+        openCodeProviders: providers
       };
       const nextDescriptor = selectDescriptor(facts);
       setDescriptor(nextDescriptor);
-      const isCustomModelPath = backendPref === "codex" && customModelForBackend && model === customModelForBackend;
-      const reconciled = reconcileModelPref(model, nextDescriptor, {
-        isCustom: isCustomModelPath
-      });
+      const reconciled = reconcileModelPref(model, nextDescriptor);
       if (reconciled !== model) {
         setModel(reconciled);
         writePref("ae_mcp_model", reconciled);
@@ -44202,38 +33067,10 @@ ${draft.baseUrl}`)) return;
       effective.channel,
       backendPref,
       baseDescriptor,
-      customModel,
       codexModels,
-      providers,
-      zcodeSessionModels,
-      zcodeProbedModels
+      providers
     ]);
     const activeBackendRef = import_react46.default.useRef(null);
-    import_react46.default.useEffect(() => {
-      if (backendPref !== "zcode") return void 0;
-      const sessionAvailable = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available) ? zcodeSessionModels.settings.model.available : [];
-      if (sessionAvailable.length > 1) return void 0;
-      const cli = zcodeConfigSummary && zcodeConfigSummary.cli;
-      if (!cli || !cli.model || !cli.baseUrl || !cli.hasCredential) return void 0;
-      let alive = true;
-      const providerId = cli.providerId || "";
-      probeProviderModels({
-        baseUrl: cli.baseUrl,
-        ["apiKey"]: "",
-        protocol: cli.protocol,
-        allowInsecureHttp: false
-      }).then((result) => {
-        if (!alive) return;
-        if (result.ok && result.models && result.models.length) {
-          const entry = { cliModel: cli.model, providerId, probedModels: result.models };
-          setZcodeProbedModels(entry);
-        }
-      }).catch(() => {
-      });
-      return () => {
-        alive = false;
-      };
-    }, [backendPref, zcodeSessionModels, zcodeConfigSummary]);
     const runClaudeProbe = import_react46.default.useCallback(() => {
       let alive = true;
       setProbe(null);
@@ -44301,79 +33138,24 @@ ${draft.baseUrl}`)) return;
       return runOpenCodeProbe();
     }, [backendPref, runOpenCodeProbe]);
     import_react46.default.useEffect(() => {
-      if (backendPref !== "codex") return void 0;
-      if (!codexCliConfig || !codexCliConfig.provider || !codexCliCredentialReady) return void 0;
-      if (codexModels && codexModels.length > 1) return void 0;
-      let alive = true;
-      (async () => {
-        let credential = "";
-        try {
-          credential = await resolveCodexCliCredential({
-            provider: codexCliConfig.provider,
-            env: window.cep_node && window.cep_node.process && window.cep_node.process.env || {},
-            storedValueRef: null
-          });
-          const result = await probeProviderModels({
-            baseUrl: codexCliConfig.provider.baseUrl,
-            ["apiKey"]: credential,
-            protocol: "openai-compatible",
-            allowInsecureHttp: false
-          });
-          if (!alive) return;
-          if (result.ok && result.models && result.models.length && !modelMetadataContainsCredential(result.models, [credential])) {
-            setCodexModels(result.models);
-          }
-        } catch {
-        } finally {
-          credential = "";
-        }
-      })();
-      return () => {
-        alive = false;
-      };
-    }, [backendPref, codexCliConfig, codexCliCredentialReady, codexModels]);
-    const runZcodeProbe = import_react46.default.useCallback(() => {
-      let alive = true;
-      setZcodeProbe(null);
-      zcodeBackend.probeAccount().then((result) => {
-        if (alive) setZcodeProbe(result);
-      }).catch((e) => {
-        if (alive) setZcodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
-      });
-      return () => {
-        alive = false;
-      };
-    }, [zcodeBackend]);
-    import_react46.default.useEffect(() => {
-      if (backendPref !== "zcode") return void 0;
-      return runZcodeProbe();
-    }, [backendPref, runZcodeProbe]);
-    import_react46.default.useEffect(() => {
-      if (effective.backend !== "zcode" || !effectiveEffort) return;
-      zcodeBackend.setThoughtLevel(effectiveEffort);
-    }, [effective.backend, effectiveEffort, zcodeBackend]);
-    import_react46.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;
       if (!decision.reset) return;
       claudeBackend.reset();
       codexBackend.reset();
       openCodeBackend.reset();
-      zcodeBackend.reset();
       resetAttachmentDraftSession();
       setChatEntries([]);
       setChatStreaming(false);
       setSessionModel(null);
       setSessionEffort(null);
       setSessionFast(null);
-      if (decision.nextReal !== "zcode") setZcodeSessionModels(null);
     }, [
       effective.backend,
       claudeBackend,
       codexBackend,
       openCodeBackend,
-      resetAttachmentDraftSession,
-      zcodeBackend
+      resetAttachmentDraftSession
     ]);
     const sendChat = (input) => {
       var _a;
@@ -44472,7 +33254,7 @@ ${draft.baseUrl}`)) return;
           diagnosticItems = await runDiagnostics({
             getHost,
             port: status.port,
-            fs: cepRequire3("fs"),
+            fs: cepRequire2("fs"),
             fetchImpl: window.fetch.bind(window),
             platform
           });
@@ -44513,8 +33295,7 @@ ${draft.baseUrl}`)) return;
         for (const [name, backend] of [
           ["claude", claudeBackend],
           ["codex", codexBackend],
-          ["opencode", openCodeBackend],
-          ["zcode", zcodeBackend]
+          ["opencode", openCodeBackend]
         ]) {
           if (!backend || typeof backend.getStderrTail !== "function") continue;
           try {
@@ -44557,7 +33338,6 @@ ${draft.baseUrl}`)) return;
       claudeBackend,
       codexBackend,
       openCodeBackend,
-      zcodeBackend,
       pushLog,
       attachmentDraft,
       getHost,
@@ -44597,12 +33377,6 @@ ${draft.baseUrl}`)) return;
       setProviderInit({ state: "checking", error: "" });
       (async () => {
         try {
-          let legacyProviders = [];
-          try {
-            legacyProviders = legacyProviderStore ? legacyProviderStore.list() : [];
-          } catch {
-          }
-          openCodeProviderStore.importLegacyProviders(legacyProviders);
           if (!alive) return;
           setProviders(openCodeProviderStore.list());
           setProviderInit({ state: "ready", error: "" });
@@ -44617,7 +33391,7 @@ ${draft.baseUrl}`)) return;
       return () => {
         alive = false;
       };
-    }, [legacyProviderStore, openCodeProviderStore, status.state]);
+    }, [openCodeProviderStore, status.state]);
     import_react46.default.useEffect(() => {
       if (!drawerOpen) return void 0;
       const update = () => {
@@ -44646,7 +33420,7 @@ ${draft.baseUrl}`)) return;
         const items = await runDiagnostics({
           getHost,
           port: status.port,
-          fs: cepRequire3("fs"),
+          fs: cepRequire2("fs"),
           fetchImpl: window.fetch.bind(window),
           platform
         });
@@ -44843,29 +33617,18 @@ ${draft.baseUrl}`)) return;
             onRecheckBackend: () => {
               if (backendPref === "codex") runCodexProbe();
               else if (backendPref === "opencode") runOpenCodeProbe();
-              else if (backendPref === "zcode") runZcodeProbe();
               else runClaudeProbe();
             },
-            recheckDisabled: backendPref === "codex" ? codexProbe === null : backendPref === "opencode" ? openCodeProbe === null : backendPref === "zcode" ? zcodeProbe === null : probe === null,
+            recheckDisabled: backendPref === "codex" ? codexProbe === null : backendPref === "opencode" ? openCodeProbe === null : probe === null,
             providers,
             providerManager,
             providerInit,
-            codexCliConfig,
             model: effectiveModel,
             modelOptions,
             modelSwitchable: descriptor.perTurnModelSwitch !== false,
             onModelChange: (m) => {
               setModel(m);
               writePref("ae_mcp_model", m);
-            },
-            customModel,
-            onCustomModelChange: (m) => {
-              setCustomModel(m);
-              writePref("ae_mcp_custom_model", m);
-              if (String(m || "").trim()) {
-                setModel(String(m || "").trim());
-                writePref("ae_mcp_model", String(m || "").trim());
-              }
             },
             backend: backendPref,
             onBackendChange: (m) => {

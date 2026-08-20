@@ -14,7 +14,7 @@ import {
   validateQuestionAnswers,
 } from '../src/lib/questionForm.js';
 
-// --- normalization: ZCode interaction/requestUserInput ---
+// --- normalization: interaction/requestUserInput ---
 
 test('questionsFromUserInput normalizes options, multiSelect, and custom-answer capability', () => {
   const questions = questionsFromUserInput({

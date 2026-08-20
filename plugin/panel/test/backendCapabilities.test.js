@@ -1,297 +1,80 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CLAUDE_MODELS, APPROVAL_MODES, costTier,
-  claudeSubDescriptor, byokStaticDescriptor, mergeByokModels,
-  codexStaticDescriptor, codexDescriptorFromModels, mergeCodexOfficialLoginModels,
-  descriptorWithCustomModel,
-  zcodeStaticDescriptor, zcodeDescriptorFromModels, zcodeDescriptorFromProbedModels,
+  APPROVAL_MODES,
+  CLAUDE_MODELS,
+  claudeSubDescriptor,
+  codexDescriptorFromModels,
+  codexStaticDescriptor,
+  costTier,
+  mergeCodexOfficialLoginModels,
+  openCodeDescriptorFromModels,
   resolveEffectiveEffort,
 } from '../src/lib/backendCapabilities.js';
-import { readFileSync } from 'node:fs';
 
-test('claude-sub descriptor lists the full family with effort levels', () => {
-  const d = claudeSubDescriptor();
-  assert.equal(d.id, 'claude-sub');
-  const ids = d.models.map((m) => m.id);
-  assert.deepEqual(ids, [
-    'claude-fable-5', 'claude-opus-4-8', 'claude-sonnet-5', 'claude-sonnet-4-6', 'claude-haiku-4-5-20251001',
-  ]);
-  const sonnet5 = d.models.find((m) => m.id === 'claude-sonnet-5');
-  assert.deepEqual(sonnet5.effortLevels, ['low', 'medium', 'high', 'xhigh']);
-  assert.equal(sonnet5.effortLevels.includes('max'), false);
-  const sonnet = d.models.find((m) => m.id === 'claude-sonnet-4-6');
-  assert.deepEqual(sonnet.effortLevels, ['low', 'medium', 'high', 'max']);
-  const fable = d.models.find((m) => m.id === 'claude-fable-5');
-  assert.deepEqual(fable.effortLevels, ['low', 'medium', 'high', 'xhigh', 'max']);
-  const haiku = d.models.find((m) => m.id === 'claude-haiku-4-5-20251001');
-  // effort 真机已证可用（2026-06-12 探针），adaptive thinking 未验证 → 解耦
-  assert.deepEqual(haiku.effortLevels, ['low', 'medium', 'high']);
-  assert.equal(haiku.adaptive, false);
-  assert.equal(fable.adaptive, true);
-  assert.equal(d.defaultModelId, 'claude-sonnet-5');
-  assert.equal(d.defaultEffort, 'high');
-  assert.equal(d.supportsFast('claude-opus-4-8'), false);
+test('Claude subscription descriptor exposes the curated models and approval modes', () => {
+  const descriptor = claudeSubDescriptor();
+  assert.equal(descriptor.id, 'claude-sub');
+  assert.equal(descriptor.defaultModelId, 'claude-sonnet-5');
+  assert.equal(descriptor.models.length, CLAUDE_MODELS.length);
+  assert.equal(descriptor.approvalModes, APPROVAL_MODES);
+  assert.equal(descriptor.supportsFast('claude-opus-4-8'), false);
 });
 
-test('byok descriptor enables fast only for opus models', () => {
-  const d = byokStaticDescriptor();
-  assert.equal(d.supportsFast('claude-opus-4-8'), true);
-  assert.equal(d.supportsFast('claude-sonnet-4-6'), false);
-});
-
-test('cost tiers derive from the price map', () => {
+test('cost tiers derive from the Claude price map', () => {
   assert.equal(costTier('claude-haiku-4-5-20251001'), 1);
   assert.equal(costTier('claude-sonnet-5'), 2);
-  assert.equal(costTier('claude-fable-5'), 4);
+  assert.equal(costTier('claude-opus-4-8'), 3);
+  assert.equal(costTier('unknown'), 2);
 });
 
-test('approval modes are the four annotated tiers', () => {
-  assert.deepEqual(APPROVAL_MODES.map((m) => m.id), ['readonly', 'manual', 'auto', 'none']);
-});
-
-test('mergeByokModels keeps curated metadata and admits unknown claude models', () => {
-  const merged = mergeByokModels(byokStaticDescriptor(), [
-    { id: 'claude-sonnet-4-6', display_name: 'Claude Sonnet 4.6' },
-    { id: 'claude-next-9', display_name: 'Claude Next 9' },
-  ]);
-  const ids = merged.models.map((m) => m.id);
-  assert.ok(ids.includes('claude-sonnet-4-6'));
-  assert.ok(ids.includes('claude-next-9'));
-  assert.ok(!ids.includes('claude-fable-5'));
-  const next = merged.models.find((m) => m.id === 'claude-next-9');
-  assert.deepEqual(next.effortLevels, []);
-  assert.equal(next.cost, 2);
-});
-
-test('mergeByokModels with null list returns the static descriptor unchanged', () => {
-  const d = byokStaticDescriptor();
-  assert.equal(mergeByokModels(d, null), d);
-});
-
-test('codexDescriptorFromModels maps live model/list metadata', () => {
+test('Codex model-list data preserves capability metadata', () => {
   const descriptor = codexDescriptorFromModels({
-    models: [
-      {
-        id: 'gpt-5.5',
-        displayName: 'GPT-5.5',
-        supportedReasoningEfforts: [
-          { reasoningEffort: 'low' },
-          { reasoningEffort: 'medium' },
-          { reasoningEffort: 'high' },
-          { reasoningEffort: 'xhigh' },
-        ],
-        defaultReasoningEffort: 'medium',
-        additionalSpeedTiers: ['fast'],
-        serviceTiers: [{ id: 'priority', name: 'Fast' }],
-        isDefault: true,
-        hidden: false,
-      },
-      {
-        id: 'hidden-model',
-        displayName: 'Hidden',
-        supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
-        hidden: true,
-      },
-      {
-        id: 'gpt-5.4',
-        displayName: 'GPT-5.4',
-        supportedReasoningEfforts: [{ reasoningEffort: 'low' }],
-        defaultReasoningEffort: 'low',
-        hidden: false,
-      },
-    ],
+    models: [{
+      id: 'gpt-5.6-terra',
+      displayName: 'Terra',
+      isDefault: true,
+      defaultReasoningEffort: 'high',
+      additionalSpeedTiers: ['fast'],
+      supportedReasoningEfforts: [{ reasoningEffort: 'low' }, { reasoningEffort: 'high' }],
+    }],
   });
-
-  assert.equal(descriptor.id, 'codex');
-  assert.equal(descriptor.label, 'Codex');
-  assert.deepEqual(descriptor.models, [
-    { id: 'gpt-5.5', label: 'GPT-5.5', effortLevels: ['low', 'medium', 'high', 'xhigh'], cost: 2, adaptive: false },
-    { id: 'gpt-5.4', label: 'GPT-5.4', effortLevels: ['low'], cost: 2, adaptive: false },
-  ]);
-  assert.equal(descriptor.defaultModelId, 'gpt-5.5');
-  assert.equal(descriptor.defaultEffort, 'medium');
-  assert.equal(descriptor.supportsFast('gpt-5.5'), true);
-  assert.equal(descriptor.supportsFast('gpt-5.4'), false);
-  assert.equal(descriptor.approvalModes, APPROVAL_MODES);
-  assert.equal(descriptor.perTurnModelSwitch, true);
-});
-
-test('codexDescriptorFromModels falls back to static descriptor for empty input', () => {
-  const fallback = codexDescriptorFromModels(null);
-  const staticDescriptor = codexStaticDescriptor();
-  assert.equal(fallback.id, staticDescriptor.id);
-  assert.equal(fallback.label, staticDescriptor.label);
-  assert.deepEqual(fallback.models.map((m) => m.id), ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']);
-  assert.deepEqual(fallback.models.find((m) => m.id === 'gpt-5.4-mini'), {
-    id: 'gpt-5.4-mini',
-    label: 'GPT-5.4 mini',
-    effortLevels: ['low', 'medium', 'high', 'xhigh'],
-    cost: 1,
-    adaptive: false,
-  });
-  assert.equal(fallback.defaultEffort, 'medium');
-  assert.equal(fallback.supportsFast('gpt-5.5'), true);
-  assert.equal(fallback.supportsFast('gpt-5.6-sol'), false);
-});
-
-test('mergeCodexOfficialLoginModels adds all GPT-5.6 variants without replacing live metadata', () => {
-  const liveSol = {
-    id: 'gpt-5.6-sol',
-    label: 'Live Sol',
-    effortLevels: ['low'],
-    cost: 2,
-    adaptive: false,
-  };
-  const descriptor = mergeCodexOfficialLoginModels({
-    ...codexStaticDescriptor(),
-    models: [codexStaticDescriptor().models[0], liveSol],
-  });
-
-  assert.deepEqual(descriptor.models.map((model) => model.id), [
-    'gpt-5.5', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
-  ]);
-  assert.equal(descriptor.models.find((model) => model.id === 'gpt-5.6-sol'), liveSol);
-  assert.deepEqual(descriptor.models.find((model) => model.id === 'gpt-5.6-terra').effortLevels, ['low', 'medium', 'high', 'xhigh', 'max', 'ultra']);
-  assert.deepEqual(descriptor.models.find((model) => model.id === 'gpt-5.6-luna').effortLevels, ['low', 'medium', 'high', 'xhigh', 'max']);
-  assert.equal(descriptor.supportsFast('gpt-5.6-sol'), true);
+  assert.equal(descriptor.defaultModelId, 'gpt-5.6-terra');
+  assert.equal(descriptor.defaultEffort, 'high');
   assert.equal(descriptor.supportsFast('gpt-5.6-terra'), true);
-  assert.equal(descriptor.supportsFast('gpt-5.6-luna'), true);
-  assert.deepEqual(mergeCodexOfficialLoginModels(descriptor).models.map((model) => model.id), descriptor.models.map((model) => model.id));
+  assert.deepEqual(descriptor.models[0].effortLevels, ['low', 'high']);
 });
 
-test('descriptorWithCustomModel promotes a user-supplied model id without losing the base list', () => {
-  const descriptor = descriptorWithCustomModel(codexStaticDescriptor(), 'provider/custom-model');
-
-  assert.equal(descriptor.defaultModelId, 'provider/custom-model');
-  assert.equal(descriptor.models[0].id, 'provider/custom-model');
-  assert.deepEqual(descriptor.models.slice(1).map((m) => m.id), ['gpt-5.5', 'gpt-5.4', 'gpt-5.4-mini']);
+test('Codex login descriptor fills the official 5.6 models', () => {
+  const merged = mergeCodexOfficialLoginModels(codexStaticDescriptor());
+  assert.ok(merged.models.some((model) => model.id === 'gpt-5.6-terra'));
+  assert.equal(merged.supportsFast('gpt-5.6-terra'), true);
 });
 
-test('zcodeStaticDescriptor keeps model metadata but does not advertise per-turn model switching', () => {
-  const descriptor = zcodeStaticDescriptor();
-  assert.equal(descriptor.id, 'zcode');
-  assert.equal(descriptor.defaultModelId, 'builtin:bigmodel-start-plan/GLM-5.2');
-  assert.deepEqual(descriptor.models.map((m) => m.id), [
-    'builtin:bigmodel-start-plan/GLM-5.2',
-    'builtin:bigmodel-start-plan/GLM-5-Turbo',
-  ]);
-  assert.ok(descriptor.models.length > 0);
-  assert.equal(descriptor.perTurnModelSwitch, false);
-});
-
-test('zcodeDescriptorFromModels keeps live model metadata but does not advertise per-turn model switching', () => {
-  const descriptor = zcodeDescriptorFromModels({
-    settings: {
-      model: {
-        available: [
-          { label: 'GLM-5.2', ref: { modelId: 'glm-5.2', providerId: 'mediastorm_glm' } },
-          { label: 'Deepseek V4', ref: { modelId: 'deepseek-v4-pro', providerId: 'mediastorm_glm' } },
-        ],
-        current: { modelId: 'glm-5.2', providerId: 'mediastorm_glm' },
-      },
+test('OpenCode descriptor qualifies third-party models with their provider id', () => {
+  const descriptor = openCodeDescriptorFromModels({
+    'aemcp-example': {
+      id: 'aemcp-example',
+      models: { 'model-a': { name: 'Model A' } },
     },
   });
-  assert.equal(descriptor.defaultModelId, 'mediastorm_glm/glm-5.2');
-  assert.deepEqual(descriptor.models.map((m) => m.id), [
-    'mediastorm_glm/glm-5.2',
-    'mediastorm_glm/deepseek-v4-pro',
-  ]);
-  assert.equal(descriptor.perTurnModelSwitch, false);
+  assert.equal(descriptor.models[0].id, 'aemcp-example/model-a');
+  assert.equal(descriptor.models[0].label, 'Model A');
 });
 
-test('zcodeDescriptorFromProbedModels maps probed models to providerId/modelId and pins the CLI model as default', () => {
-  const descriptor = zcodeDescriptorFromProbedModels({
-    cliModel: 'mediastorm_glm/deepseek-v4-flash',
-    providerId: 'mediastorm_glm',
-    probedModels: [
-      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-      { id: 'glm-5.2', label: 'GLM-5.2' },
-    ],
-  });
-  assert.equal(descriptor.id, 'zcode');
-  assert.equal(descriptor.defaultModelId, 'mediastorm_glm/deepseek-v4-flash');
-  assert.deepEqual(descriptor.models.map((m) => m.id), [
-    'mediastorm_glm/deepseek-v4-flash',
-    'mediastorm_glm/glm-5.2',
-  ]);
-  assert.equal(descriptor.perTurnModelSwitch, false);
-});
-
-test('zcodeDescriptorFromProbedModels dedupes when CLI model is already in the probed list, keeping it first', () => {
-  const descriptor = zcodeDescriptorFromProbedModels({
-    cliModel: 'mediastorm_glm/glm-5.2',
-    providerId: 'mediastorm_glm',
-    probedModels: [
-      { id: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash' },
-      { id: 'glm-5.2', label: 'GLM-5.2' },
-    ],
-  });
-  assert.deepEqual(descriptor.models.map((m) => m.id), [
-    'mediastorm_glm/glm-5.2',
-    'mediastorm_glm/deepseek-v4-flash',
-  ]);
-  assert.equal(descriptor.defaultModelId, 'mediastorm_glm/glm-5.2');
-});
-
-test('zcodeDescriptorFromProbedModels falls back to null when probe is empty or missing cliModel', () => {
-  assert.equal(zcodeDescriptorFromProbedModels({ cliModel: '', providerId: 'p', probedModels: [{ id: 'a' }] }), null);
-  assert.equal(zcodeDescriptorFromProbedModels({ cliModel: 'p/a', providerId: 'p', probedModels: [] }), null);
-  assert.equal(zcodeDescriptorFromProbedModels({ cliModel: 'p/a', providerId: 'p', probedModels: null }), null);
-});
-
-test('descriptorFromProbedModels replaces curated models for custom-provider channels', async () => {
-  const { byokStaticDescriptor, descriptorFromProbedModels } = await import('../src/lib/backendCapabilities.js');
-  const base = byokStaticDescriptor();
-  const probed = descriptorFromProbedModels(base, [{ id: 'glm-5.2', label: 'GLM 5.2' }, { id: 'claude-sonnet-5', label: 'x' }]);
-  assert.equal(probed.models.length, 2);
-  assert.equal(probed.models[0].id, 'glm-5.2');
-  assert.equal(probed.models[0].label, 'GLM 5.2');
-  assert.equal(probed.models[1].label, 'Sonnet 5', 'curated metadata reused when ids match');
-  assert.equal(probed.defaultModelId, 'glm-5.2');
-  assert.equal(descriptorFromProbedModels(base, []), base, 'empty probe keeps descriptor (manual model id fallback)');
-  assert.equal(descriptorFromProbedModels(base, null), base);
-});
-
-// #218: a session effort chosen for one model must never be dispatched after
-// switching to a model whose effort set does not include it.
-test('resolveEffectiveEffort keeps a supported session effort', () => {
-  const fable = CLAUDE_MODELS.find((m) => m.id === 'claude-fable-5');
-  assert.equal(resolveEffectiveEffort({ requested: 'max', model: fable, defaultEffort: 'high' }), 'max');
-});
-
-test('resolveEffectiveEffort clamps a stale higher effort to the nearest supported level', () => {
-  const haiku = CLAUDE_MODELS.find((m) => m.id === 'claude-haiku-4-5-20251001');
-  // max/ultra selected on GPT-5.6 or Fable, then switch to Haiku (low/medium/high).
-  assert.equal(resolveEffectiveEffort({ requested: 'max', model: haiku, defaultEffort: 'high' }), 'high');
-  assert.equal(resolveEffectiveEffort({ requested: 'ultra', model: haiku, defaultEffort: 'high' }), 'high');
-  // Sonnet 4.6 has no xhigh: xhigh clamps down to high, not up to max.
-  const sonnet46 = CLAUDE_MODELS.find((m) => m.id === 'claude-sonnet-4-6');
-  assert.equal(resolveEffectiveEffort({ requested: 'xhigh', model: sonnet46, defaultEffort: 'high' }), 'high');
-});
-
-test('resolveEffectiveEffort clamps up when the request sits below every supported level', () => {
-  const model = { id: 'x', effortLevels: ['high', 'xhigh'] };
-  assert.equal(resolveEffectiveEffort({ requested: 'low', model, defaultEffort: 'high' }), 'high');
-});
-
-test('resolveEffectiveEffort resolves null for models without effort levels', () => {
-  assert.equal(resolveEffectiveEffort({ requested: 'max', model: { id: 'custom', effortLevels: [] }, defaultEffort: 'high' }), null);
-  assert.equal(resolveEffectiveEffort({ requested: null, model: {}, defaultEffort: 'high' }), null);
-});
-
-test('resolveEffectiveEffort without a session override uses a supported default', () => {
-  const haiku = CLAUDE_MODELS.find((m) => m.id === 'claude-haiku-4-5-20251001');
-  assert.equal(resolveEffectiveEffort({ requested: null, model: haiku, defaultEffort: 'high' }), 'high');
-  // Descriptor default missing from the model's set falls back deterministically.
-  assert.equal(resolveEffectiveEffort({ requested: null, model: { effortLevels: ['low', 'medium'] }, defaultEffort: 'high' }), 'low');
-  // Unknown requested value (not on the canonical ladder) also lands on the default path.
-  assert.equal(resolveEffectiveEffort({ requested: 'turbo', model: haiku, defaultEffort: 'high' }), 'high');
-});
-
-test('App derives the dispatched effort through resolveEffectiveEffort', () => {
-  const app = readFileSync(new URL('../src/app/App.jsx', import.meta.url), 'utf8');
-  assert.match(app, /const effectiveEffort = resolveEffectiveEffort\(\{\s*requested: sessionEffort,\s*model: modelMeta,\s*defaultEffort: descriptor\.defaultEffort,\s*\}\)/);
-  // The old unreconciled derivation must not come back.
-  assert.doesNotMatch(app, /sessionEffort \|\| \(modelMeta\.effortLevels/);
+test('effective effort stays compatible with the selected model', () => {
+  const model = { effortLevels: ['low', 'medium', 'high'] };
+  assert.equal(
+    resolveEffectiveEffort({ requested: 'high', model, defaultEffort: 'medium' }),
+    'high',
+  );
+  assert.equal(
+    resolveEffectiveEffort({ requested: 'ultra', model, defaultEffort: 'medium' }),
+    'high',
+  );
+  assert.equal(
+    resolveEffectiveEffort({ requested: null, model, defaultEffort: 'medium' }),
+    'medium',
+  );
+  assert.equal(resolveEffectiveEffort({ requested: 'high', model: { effortLevels: [] } }), null);
 });

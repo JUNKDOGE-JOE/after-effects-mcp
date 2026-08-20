@@ -24,33 +24,22 @@ import { probeClaudeLogin } from '../cep/claudeAuth';
 import { createClaudeAgentBackend } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
-import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
 import {
   claudeChannels,
   codexChannels,
   openCodeChannels,
-  zcodeChannels,
   migrateBackendPref,
 } from '../lib/channels.js';
-import { createProviderStore } from '../cep/providerStore';
 import { createOpenCodeProviderStore } from '../cep/openCodeProviderStore.js';
 import { ProviderManagerSection } from '../components/settings/ProviderManagerSection';
-import { probeProviderModels } from '../cep/modelProbe';
-import {
-  codexCliCredentialAvailable,
-  readCodexCliConfig,
-  resolveCodexCliCredential,
-} from '../cep/codexConfig';
 import { reduceEvent, userTurnEntry } from '../lib/chatEntries';
 import {
   createAttachmentDraftState,
   reduceAttachmentDraft,
 } from '../lib/attachmentDraft.js';
 import { createAttachmentStore } from '../cep/attachmentStore.js';
-import { DEFAULT_MODEL } from '../lib/anthropic';
-import { descriptorWithCustomModel, resolveEffectiveEffort } from '../lib/backendCapabilities';
+import { claudeSubDescriptor, resolveEffectiveEffort } from '../lib/backendCapabilities';
 import { selectDescriptor, reconcileModelPref } from '../lib/descriptorSelect';
-import { ZCODE_PROBED_MODELS_CACHE_KEY } from '../lib/zcodeModelCache';
 import { baseDescriptorFor } from '../cep/backends/index.js';
 import { costBadge } from '../lib/composerOptions';
 import { useActivity } from '../cep/useActivity';
@@ -65,7 +54,6 @@ import { loadExpertGuidance, saveExpertGuidance } from '../lib/expertGuidance.js
 import pkg from '../../package.json';
 import { attachmentPathSecrets, buildLogExport, exportFileName, keepLogLine } from '../lib/logExport.js';
 import { writeLogExport, revealInExplorer } from '../cep/logExportFs.js';
-import { reconcileStableJsonValue } from '../lib/stableValue.js';
 import { createPlatformAdapter } from '../cep/platform/index.js';
 import { readCepSystemPath } from '../cep/platform/paths.js';
 import { createElicitationCoordinator } from '../lib/elicitationCoordinator.js';
@@ -138,7 +126,7 @@ function writePref(key, value) {
   try { window.localStorage.setItem(key, value); } catch (e) { /* best-effort */ }
 }
 
-const CODEX_MODELS_CACHE_KEY = 'ae_mcp_codex_models';
+const DEFAULT_MODEL = claudeSubDescriptor().defaultModelId;
 
 function cepRequire(mod) {
   if (window.cep_node && window.cep_node.require) return window.cep_node.require(mod);
@@ -207,7 +195,6 @@ function Shell({ cs }) {
   const pendingTurnRef = React.useRef(null);
   const acceptedTurnRef = React.useRef(null);
   React.useEffect(() => () => attachmentStore.dispose(), [attachmentStore]);
-  const [customModel, setCustomModel] = React.useState(() => readPref('ae_mcp_custom_model', ''));
   const [model, setModel] = React.useState(() => readPref('ae_mcp_model', DEFAULT_MODEL));
   const [logLevel, setLogLevel] = React.useState(() => readPref('ae_mcp_log_level', 'info'));
   const logLevelRef = React.useRef(logLevel);
@@ -260,9 +247,6 @@ function Shell({ cs }) {
   // #229: channels are user-enabled per backend; routing follows the choice
   // exactly (no auto-pick, no lock, no pinning by provider selection).
   const [channelChoices, setChannelChoices] = React.useState(() => backendMigration.channelChoices);
-  const legacyProviderStore = React.useMemo(() => {
-    try { return createProviderStore(); } catch (e) { return null; }
-  }, []);
   const openCodeProviderStore = React.useMemo(() => createOpenCodeProviderStore({ platform }), [platform]);
   const [providerInit, setProviderInit] = React.useState({ state: 'checking', error: '' });
   const [providers, setProviders] = React.useState([]);
@@ -308,20 +292,13 @@ function Shell({ cs }) {
   const [codexProbe, setCodexProbe] = React.useState(null);
   const [codexModels, setCodexModels] = React.useState(null);
   const [openCodeProbe, setOpenCodeProbe] = React.useState(null);
-  const [zcodeProbe, setZcodeProbe] = React.useState(null);
-  const [zcodeSessionModels, setZcodeSessionModels] = React.useState(null);
-  const [zcodeProbedModels, setZcodeProbedModels] = React.useState(null);
-  React.useEffect(() => {
-    try {
-      window.localStorage.removeItem(CODEX_MODELS_CACHE_KEY);
-      window.localStorage.removeItem(ZCODE_PROBED_MODELS_CACHE_KEY);
-    } catch {}
-  }, []);
   const [chatEntries, setChatEntries] = React.useState([]);
   const [chatStreaming, setChatStreaming] = React.useState(false);
   const [thinkingActive, setThinkingActive] = React.useState(false);
-  const customModelForBackend = backendPref === 'codex' ? customModel : '';
-  const baseDescriptor = React.useMemo(() => descriptorWithCustomModel(baseDescriptorFor(backendPref, (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {}), customModelForBackend), [backendPref, customModelForBackend]);
+  const baseDescriptor = React.useMemo(
+    () => baseDescriptorFor(backendPref),
+    [backendPref],
+  );
   const [descriptor, setDescriptor] = React.useState(() => baseDescriptor);
   const requestedModel = sessionModel || model;
   const effectiveModel = descriptor.models.some((m) => m.id === requestedModel)
@@ -343,7 +320,6 @@ function Shell({ cs }) {
       lang={lang}
       providers={providers}
       disabled={providerInit.state !== 'ready'}
-      opencodeMode
       onUpsert={async (event, draft) => {
         const formElement = event.currentTarget;
         const form = new FormData(event.currentTarget);
@@ -370,47 +346,15 @@ function Shell({ cs }) {
       }}
     />
   );
-  const zcodeConfigSummary = React.useMemo(() => {
-    try {
-      const env = (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {};
-      return summarizeZcodeConfig({ env });
-    } catch (e) {
-      return null;
-    }
-  }, [zcodeProbe]);
-  const codexCliConfigStableRef = React.useRef(null);
-  // Keep a Codex CLI model_provider available when the panel has no explicit
-  // provider configuration of its own.
-  const codexCliConfig = React.useMemo(() => {
-    let next;
-    try { next = readCodexCliConfig({ env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {} }); } catch (e) { next = null; }
-    // Probe state re-reads config.toml, but equal content must not recreate
-    // process-owning backends through referential churn.
-    codexCliConfigStableRef.current = reconcileStableJsonValue(codexCliConfigStableRef.current, next);
-    return codexCliConfigStableRef.current.value;
-  }, [codexProbe]);
-  const codexCliCredentialReady = React.useMemo(() => {
-    const env = (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {};
-    return codexCliCredentialAvailable({ provider: codexCliConfig && codexCliConfig.provider, env, storedValueRef: null });
-  }, [codexCliConfig]);
   const channels = React.useMemo(() => ({
     claude: claudeChannels({ probe }),
-    codex: codexChannels({
-      codexProbe,
-      cliConfig: codexCliConfig,
-      cliCredentialAvailable: codexCliCredentialReady,
-    }),
+    codex: codexChannels({ codexProbe }),
     opencode: openCodeChannels({ probe: openCodeProbe, providers }),
-    zcode: zcodeChannels({ zcodeProbe, configSummary: zcodeConfigSummary }),
   }), [
     probe,
     codexProbe,
-    codexCliConfig,
-    codexCliCredentialReady,
     openCodeProbe,
     providers,
-    zcodeProbe,
-    zcodeConfigSummary,
   ]);
   const effective = pickBackend({ pref: backendPref, channels, channelChoices });
   const runtimeRef = React.useRef({
@@ -537,7 +481,6 @@ function Shell({ cs }) {
       setChatStreaming(false);
       setThinkingActive(false);
     }
-    if (evt.type === 'zcode-session-created') setZcodeSessionModels(evt.result || null);
     setChatEntries((entries) => reduceEvent(entries, evt));
   }, [releaseTurnAttachments]);
 
@@ -569,7 +512,6 @@ function Shell({ cs }) {
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getExpertGuidance: () => loadExpertGuidance(window.localStorage),
     getServerInstructions: () => mcp.getServerInstructions(),
-    getCliConfigProvider: () => null,
     lang,
     env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
     onEvent: handleChatEvent,
@@ -592,19 +534,6 @@ function Shell({ cs }) {
     onEvent: handleChatEvent,
   }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
 
-  const zcodeBackend = React.useMemo(() => createZcodeBackend({
-    platform,
-    getMcpSpec,
-    getModel: () => runtimeRef.current.model,
-    getPermissionMode: () => runtimeRef.current.permissionMode,
-    getEffort: () => runtimeRef.current.effort,
-    getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
-    getExpertGuidance: () => loadExpertGuidance(window.localStorage),
-    getServerInstructions: () => mcp.getServerInstructions(),
-    env: { AE_MCP_PANEL_EXT_ROOT: extRoot },
-    onEvent: handleChatEvent,
-  }), [extRoot, getMcpSpec, mcp, handleChatEvent, platform]);
-
   runtimeRef.current = {
     model: effectiveModel,
     permissionMode,
@@ -617,9 +546,16 @@ function Shell({ cs }) {
     subscription: claudeBackend,
     codex: codexBackend,
     opencode: openCodeBackend,
-    zcode: zcodeBackend,
   };
-  const activeBackend = backendInstances[effective.backend] || null;
+  const activeBackend = (() => {
+    if (effective.backend === 'none') return null;
+    const backend = backendInstances[effective.backend];
+    if (backend) return backend;
+    const knownBackendIds = Object.keys(backendInstances).join(', ');
+    throw new Error(
+      `Unknown backend id "${effective.backend}". Known backend ids: ${knownBackendIds}`,
+    );
+  })();
 
   // Descriptor selection is keyed on the effective backend from pickBackend.
   React.useEffect(() => {
@@ -628,22 +564,14 @@ function Shell({ cs }) {
       effectiveChannel: effective.channel,
       backendPref,
       baseDescriptor,
-      customModel,
       codexCachedModels: codexModels,
       openCodeProviders: providers,
-      zcodeSessionModels,
-      zcodeProbedModels,
     };
     const nextDescriptor = selectDescriptor(facts);
     setDescriptor(nextDescriptor);
     // A persisted model id can outlive its backend or model catalog. Reset it
-    // when the current model isn't in the new descriptor's model list, but
-    // exempt the codex custom-model path (customModel is intentionally not
-    // in the curated list there).
-    const isCustomModelPath = backendPref === 'codex' && customModelForBackend && model === customModelForBackend;
-    const reconciled = reconcileModelPref(model, nextDescriptor, {
-      isCustom: isCustomModelPath,
-    });
+    // when the current model isn't in the new descriptor's model list.
+    const reconciled = reconcileModelPref(model, nextDescriptor);
     if (reconciled !== model) {
       setModel(reconciled);
       writePref('ae_mcp_model', reconciled);
@@ -653,40 +581,10 @@ function Shell({ cs }) {
     effective.channel,
     backendPref,
     baseDescriptor,
-    customModel,
     codexModels,
     providers,
-    zcodeSessionModels,
-    zcodeProbedModels,
   ]);
   const activeBackendRef = React.useRef(null);
-
-  // Custom ZCode providers can omit model.available, so use their authenticated
-  // /models endpoint only after the runtime configuration is ready.
-  React.useEffect(() => {
-    if (backendPref !== 'zcode') return undefined;
-    const sessionAvailable = zcodeSessionModels && zcodeSessionModels.settings && zcodeSessionModels.settings.model && Array.isArray(zcodeSessionModels.settings.model.available)
-      ? zcodeSessionModels.settings.model.available
-      : [];
-    if (sessionAvailable.length > 1) return undefined;
-    const cli = zcodeConfigSummary && zcodeConfigSummary.cli;
-    if (!cli || !cli.model || !cli.baseUrl || !cli.hasCredential) return undefined;
-    let alive = true;
-    const providerId = cli.providerId || '';
-    probeProviderModels({
-      baseUrl: cli.baseUrl,
-      ['apiKey']: '',
-      protocol: cli.protocol,
-      allowInsecureHttp: false,
-    }).then((result) => {
-      if (!alive) return;
-      if (result.ok && result.models && result.models.length) {
-        const entry = { cliModel: cli.model, providerId, probedModels: result.models };
-        setZcodeProbedModels(entry);
-      }
-    }).catch(() => {});
-    return () => { alive = false; };
-  }, [backendPref, zcodeSessionModels, zcodeConfigSummary]);
 
   const runClaudeProbe = React.useCallback(() => {
     let alive = true;
@@ -754,61 +652,6 @@ function Shell({ cs }) {
     return runOpenCodeProbe();
   }, [backendPref, runOpenCodeProbe]);
 
-  // CLI-configured providers need a direct /models fallback when Codex does
-  // not enumerate their models through the app-server.
-  React.useEffect(() => {
-    if (backendPref !== 'codex') return undefined;
-    if (!codexCliConfig || !codexCliConfig.provider || !codexCliCredentialReady) return undefined;
-    if (codexModels && codexModels.length > 1) return undefined;
-    let alive = true;
-    (async () => {
-      let credential = '';
-      try {
-        credential = await resolveCodexCliCredential({
-          provider: codexCliConfig.provider,
-          env: (window.cep_node && window.cep_node.process && window.cep_node.process.env) || {},
-          storedValueRef: null,
-        });
-        const result = await probeProviderModels({
-          baseUrl: codexCliConfig.provider.baseUrl,
-          ['apiKey']: credential,
-          protocol: 'openai-compatible',
-          allowInsecureHttp: false,
-        });
-        if (!alive) return;
-        if (result.ok && result.models && result.models.length && !modelMetadataContainsCredential(result.models, [credential])) {
-          setCodexModels(result.models);
-        }
-      } catch { /* probe is best effort */ } finally {
-        credential = '';
-      }
-    })();
-    return () => { alive = false; };
-  }, [backendPref, codexCliConfig, codexCliCredentialReady, codexModels]);
-
-  const runZcodeProbe = React.useCallback(() => {
-    let alive = true;
-    setZcodeProbe(null);
-    zcodeBackend.probeAccount().then((result) => {
-      if (alive) setZcodeProbe(result);
-    }).catch((e) => {
-      if (alive) setZcodeProbe({ loggedIn: false, detail: e && e.message ? e.message : String(e) });
-    });
-    return () => { alive = false; };
-  }, [zcodeBackend]);
-
-  React.useEffect(() => {
-    if (backendPref !== 'zcode') return undefined;
-    return runZcodeProbe();
-  }, [backendPref, runZcodeProbe]);
-
-  // ZCode session/send does not carry thoughtLevel, so a mid-conversation effort
-  // change is pushed via the dedicated session/setThoughtLevel method.
-  React.useEffect(() => {
-    if (effective.backend !== 'zcode' || !effectiveEffort) return;
-    zcodeBackend.setThoughtLevel(effectiveEffort);
-  }, [effective.backend, effectiveEffort, zcodeBackend]);
-
   React.useEffect(() => {
     const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
     activeBackendRef.current = decision.nextReal;
@@ -816,21 +659,18 @@ function Shell({ cs }) {
     claudeBackend.reset();
     codexBackend.reset();
     openCodeBackend.reset();
-    zcodeBackend.reset();
     resetAttachmentDraftSession();
     setChatEntries([]);
     setChatStreaming(false);
     setSessionModel(null);
     setSessionEffort(null);
     setSessionFast(null);
-    if (decision.nextReal !== 'zcode') setZcodeSessionModels(null);
   }, [
     effective.backend,
     claudeBackend,
     codexBackend,
     openCodeBackend,
     resetAttachmentDraftSession,
-    zcodeBackend,
   ]);
 
   const sendChat = (input) => {
@@ -977,7 +817,6 @@ function Shell({ cs }) {
         ['claude', claudeBackend],
         ['codex', codexBackend],
         ['opencode', openCodeBackend],
-        ['zcode', zcodeBackend],
       ]) {
         if (!backend || typeof backend.getStderrTail !== 'function') continue;
         try {
@@ -1026,7 +865,6 @@ function Shell({ cs }) {
     claudeBackend,
     codexBackend,
     openCodeBackend,
-    zcodeBackend,
     pushLog,
     attachmentDraft,
     getHost,
@@ -1069,9 +907,6 @@ function Shell({ cs }) {
     setProviderInit({ state: 'checking', error: '' });
     (async () => {
       try {
-        let legacyProviders = [];
-        try { legacyProviders = legacyProviderStore ? legacyProviderStore.list() : []; } catch {}
-        openCodeProviderStore.importLegacyProviders(legacyProviders);
         if (!alive) return;
         setProviders(openCodeProviderStore.list());
         setProviderInit({ state: 'ready', error: '' });
@@ -1084,7 +919,7 @@ function Shell({ cs }) {
       }
     })();
     return () => { alive = false; };
-  }, [legacyProviderStore, openCodeProviderStore, status.state]);
+  }, [openCodeProviderStore, status.state]);
 
   // Keep connection info fresh while the drawer is open.
   React.useEffect(() => {
@@ -1322,30 +1157,18 @@ function Shell({ cs }) {
             onRecheckBackend={() => {
               if (backendPref === 'codex') runCodexProbe();
               else if (backendPref === 'opencode') runOpenCodeProbe();
-              else if (backendPref === 'zcode') runZcodeProbe();
               else runClaudeProbe();
             }}
             recheckDisabled={backendPref === 'codex'
               ? codexProbe === null : backendPref === 'opencode'
-                ? openCodeProbe === null : backendPref === 'zcode'
-                  ? zcodeProbe === null : probe === null}
+                ? openCodeProbe === null : probe === null}
             providers={providers}
             providerManager={providerManager}
             providerInit={providerInit}
-            codexCliConfig={codexCliConfig}
             model={effectiveModel}
             modelOptions={modelOptions}
             modelSwitchable={descriptor.perTurnModelSwitch !== false}
             onModelChange={(m) => { setModel(m); writePref('ae_mcp_model', m); }}
-            customModel={customModel}
-            onCustomModelChange={(m) => {
-              setCustomModel(m);
-              writePref('ae_mcp_custom_model', m);
-              if (String(m || '').trim()) {
-                setModel(String(m || '').trim());
-                writePref('ae_mcp_model', String(m || '').trim());
-              }
-            }}
             backend={backendPref}
             onBackendChange={(m) => { setBackendPref(m); writePref('ae_mcp_backend', m); }}
             expertGuidance={expertGuidance}

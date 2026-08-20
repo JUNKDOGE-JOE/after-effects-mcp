@@ -130,23 +130,6 @@ function normalizeAuth(value) {
   return value;
 }
 
-function legacyProviderDraft(provider) {
-  const name = String(provider?.name || provider?.id || '').trim();
-  const baseUrl = String(provider?.baseUrl || '').trim();
-  if (!name || !baseUrl) return null;
-  const models = Array.isArray(provider?.modelList?.models)
-    ? provider.modelList.models.map((model) => model?.id)
-    : Array.isArray(provider?.probedModels) ? provider.probedModels.map((model) => model?.id) : [];
-  return {
-    id: provider.id || name,
-    name,
-    baseUrl,
-    allowInsecureHttp: provider.allowInsecureHttp === true,
-    modelIds: models.length ? models : ['model-required'],
-    needsApiKey: true,
-  };
-}
-
 export function openCodeProviderDefinitions(providers) {
   const definitions = {};
   for (const raw of providers || []) {
@@ -226,21 +209,10 @@ export function createOpenCodeProviderStore({ platform, fsImpl, tempSuffix } = {
     return true;
   }
 
-  function importLegacyProviders(legacyProviders) {
-    const current = readState();
-    if (current.providers.length) return list();
-    const providers = (legacyProviders || []).map(legacyProviderDraft).filter(Boolean).map(normalizeProvider);
-    if (!providers.length) return [];
-    current.providers = providers;
-    writeAtomic(fs, file, current, nextSuffix());
-    return clone(providers);
-  }
-
   return Object.freeze({
     authFilePath: () => authFile,
     filePath: () => file,
     hasApiKey,
-    importLegacyProviders,
     list,
     remove,
     save,
