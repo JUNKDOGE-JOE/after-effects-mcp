@@ -4,7 +4,14 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Module, { createRequire } from 'node:module';
-import { normalizeCepPath, isValidPort, buildMcpConfig, loadSavedPort, savePort, createHostController, loadBundledHostDependencies } from '../src/cep/hostBridge.js';
+import {
+  normalizeCepPath,
+  isValidPort,
+  loadSavedPort,
+  savePort,
+  createHostController,
+  loadBundledHostDependencies,
+} from '../src/cep/hostBridge.js';
 import { createWindowsAdapter } from '../src/cep/platform/windows.js';
 
 function testPathCatalog(platformId, runtimeRoot) {
@@ -145,21 +152,6 @@ test('isValidPort bounds', () => {
   assert.equal(isValidPort(11488), true);
   assert.equal(isValidPort(80), false);
   assert.equal(isValidPort(NaN), false);
-});
-
-test('buildMcpConfig matches the real shape - no --port args, no token', () => {
-  const c = buildMcpConfig(11488);
-  assert.deepEqual(c.mcpServers.ae, {
-    command: 'ae-mcp',
-    env: { AE_MCP_BACKEND: 'ae-mcp', AE_MCP_PLUGIN_URL: 'http://127.0.0.1:11488' },
-  });
-  assert.equal(JSON.stringify(c).includes('token'), false);
-});
-
-test('buildMcpConfig accepts the verified absolute stable launcher path', () => {
-  const launcher = '/Users/测试 User/.ae-mcp/bin/ae-mcp';
-  const config = buildMcpConfig(11488, true, launcher);
-  assert.equal(config.mcpServers.ae.command, launcher);
 });
 
 test('port persistence round-trip with fake storage', () => {

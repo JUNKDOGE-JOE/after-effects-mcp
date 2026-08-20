@@ -8,7 +8,7 @@ test('buildLogExport includes all diagnostic sections and sources', () => {
     version: '0.9.6',
     now: new Date('2026-08-19T10:20:30.000Z'),
     hostInfo: {
-      hostVersion: '0.9.6', pythonVersion: '3.12.1',
+      hostVersion: '0.9.6',
       aeApp: { appName: 'After Effects', appVersion: '25.0', appLocale: 'en_US', appUILocale: 'en_US' },
       cepVersion: '11.0', os: { platform: 'win32', release: '10.0' },
       hostNode: 'v15.14.0', chromiumUa: 'Chrome/88', pluginPort: 11488,
@@ -16,16 +16,22 @@ test('buildLogExport includes all diagnostic sections and sources', () => {
     },
     diagnostics: [{ id: 'host-listening', ok: true, detail: 'Host is ready' }],
     hostActivity: [{ id: 4, ts: Date.parse('2026-08-19T10:00:00Z'), client: 'claude', engine: 'jsx', ok: true }, { id: 5, ts: Date.parse('2026-08-19T10:00:01Z'), client: 'claude', ok: false, error: 'JSX timeout after 3000ms', disposition: 'uncertain' }],
-    hostLogMemory: [{ ts: '2026-08-19T10:01:00Z', pid: 10, level: 'info', source: 'panel', message: 'memory line' }],
+    hostLogMemory: [{
+      ts: '2026-08-19T10:01:00Z',
+      pid: 10,
+      level: 'info',
+      source: 'panel',
+      message: 'previewFrame.branch source=comp method=saveFrameToPng '
+        + 'ok=true fallbackReason=- compId=7 durationMs=12',
+    }],
     hostLogDisk: [{ ts: '2026-08-18T10:01:00Z', pid: 10, level: 'info', source: 'activity', message: 'disk line' }],
     panelLogs: ['[10:02] panel line'],
     backendStderrTails: { claude: 'claude stderr', codex: '', opencode: 'opencode stderr' },
-    pythonServerLog: '2026 INFO previewFrame.branch source=comp method=saveFrameToPng ok=true fallbackReason=- compId=7 durationMs=12',
   });
   for (const heading of [
     '# ae-mcp diagnostics bundle', '## diagnostics', '## host activity (last N)',
     '## host log (memory, last 500)', '## host log (disk tail, 2 days, last 500)',
-    '## panel log (1)', '## backend stderr tails', '## python server log (tail)',
+    '## panel log (1)', '## backend stderr tails',
     '## previewFrame branches',
   ]) assert.match(text, new RegExp(heading.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.match(text, /summary: comp\/saveFrameToPng=1\s+failed=0/);
@@ -39,16 +45,15 @@ test('a missing source only makes its own section unavailable', () => {
   assert.match(text, /## host log \(memory, last 500\)\n\(unavailable:/);
   assert.match(text, /## host log \(disk tail, 2 days, last 500\)\n\(unavailable:/);
   assert.match(text, /## panel log \(1\)\n\[?still here/);
-  assert.match(text, /## python server log \(tail\)\n\(unavailable:/);
   assert.match(text, /## previewFrame branches\nsummary:/);
 });
 
-test('redacts exact secrets in activity and Python sections', () => {
+test('redacts exact secrets in activity and host log sections', () => {
   const secret = 'sk-test-log-export-secret';
   const text = buildLogExport({
     exactSecrets: [secret],
     hostActivity: [{ id: 1, ts: Date.now(), client: 'client', engine: 'jsx', ok: false, error: secret }],
-    pythonServerLog: 'server error token=' + secret,
+    hostLogMemory: [{ message: 'server error token=' + secret }],
   });
   assert.equal(text.includes(secret), false);
   assert.match(text, /\[redacted\]/);

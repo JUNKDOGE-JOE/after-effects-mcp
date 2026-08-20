@@ -1,10 +1,8 @@
 import { createSseParser } from '../lib/sse.js';
-import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
 import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
 import { attachmentFileUrl, normalizeTurnInput } from '../../../shared/chat-attachments.mjs';
 
-const MCP_TIMEOUT_MS = 120000;
 const READY_TIMEOUT_MS = 30000;
 const READY_POLL_MS = 250;
 const DEFAULT_PROVIDER_ID = 'opencode';
@@ -54,12 +52,6 @@ async function defaultGetPort() {
       server.close(() => resolve(port));
     });
   });
-}
-
-function asCommandArray(mcpSpec) {
-  const command = mcpSpec && mcpSpec.command ? String(mcpSpec.command) : 'ae-mcp';
-  const args = mcpSpec && Array.isArray(mcpSpec.args) ? mcpSpec.args.map(String) : [];
-  return [command].concat(args);
 }
 
 function prefixedToolName(raw) {
@@ -155,7 +147,6 @@ export function createOpenCodeBackend({
   getPermissionMode,
   getMcpSpec,
   getToolMeta,
-  getExpertGuidance = () => true,
   onEvent,
   env,
 } = {}) {
@@ -313,18 +304,7 @@ export function createOpenCodeBackend({
     configHome = adapter.paths.join([adapter.paths.tempRoot, tempDirName()]);
     const configDir = adapter.paths.join([configHome, 'opencode']);
     fs.mkdirSync(configDir, { recursive: true });
-    const mcpEntry = mcpSpec && mcpSpec.kind === 'http'
-      ? { type: 'remote', url: mcpSpec.url, enabled: true }
-      : {
-        type: 'local',
-        command: asCommandArray(mcpSpec),
-        enabled: true,
-        timeout: MCP_TIMEOUT_MS,
-        environment: Object.assign({}, (mcpSpec && mcpSpec.env) || {}, {
-          AE_MCP_BACKEND: 'ae-mcp',
-          ...expertGuidanceEnv(getExpertGuidance()),
-        }),
-      };
+    const mcpEntry = { type: 'remote', url: mcpSpec.url, enabled: true };
     const config = {
       $schema: 'https://opencode.ai/config.json',
       mcp: {

@@ -13,7 +13,6 @@ import {
 } from '../lib/exactSecretRedaction.js';
 import { PANEL_VERSION } from './mcpClient.js';
 import { createUniversalProviderRoute } from './universalProviderRoute.js';
-import { expertGuidanceEnv } from './externalClients.js';
 import { createPlatformAdapter } from './platform/index.js';
 import {
   PLAN_SCHEMA_KEY,
@@ -266,7 +265,6 @@ export function createCodexBackend({
   getPermissionMode,
   getMcpSpec,
   getToolMeta,
-  getExpertGuidance = () => true,
   getServerInstructions = () => '',
   getProviderProfile = () => null,
   getProviderCandidate = () => null,
@@ -1105,16 +1103,7 @@ export function createCodexBackend({
       sandboxPolicy: SANDBOX_POLICY,
       config: {
         mcp_servers: {
-          ae: mcpSpec && mcpSpec.kind === 'http'
-            ? { url: mcpSpec.url }
-            : {
-              command: mcpSpec.command,
-              args: mcpSpec.args || [],
-              env: Object.assign({}, mcpSpec.env || {}, {
-                AE_MCP_BACKEND: 'ae-mcp',
-                ...expertGuidanceEnv(getExpertGuidance()),
-              }),
-            },
+          ae: { url: mcpSpec.url },
         },
       },
     });

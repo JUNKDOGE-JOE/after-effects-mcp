@@ -1,8 +1,9 @@
-export const LOCAL_STEPS = ['uv', 'aeMcp'];
-export const SUBSCRIPTION_STEPS = ['node', 'claude', 'login'];
+export const HOST_STEPS = ['host'];
+export const CLI_STEPS = ['claude', 'codex', 'opencode'];
+export const OPTIONAL_CLIENT_STEPS = ['node'];
 
 const LOG_TAIL = 4096;
-const ALL_STEPS = [...LOCAL_STEPS, ...SUBSCRIPTION_STEPS];
+const ALL_STEPS = [...HOST_STEPS, ...CLI_STEPS, ...OPTIONAL_CLIENT_STEPS];
 
 function emptyState() {
   return { status: 'idle', version: '', logTail: '' };
@@ -39,11 +40,14 @@ export function stepReducer(state, action) {
       return patchStep(state, action.id, {
         status: action.ok ? 'ok' : 'missing',
         version: action.ok ? (action.version || '') : '',
+        logTail: action.detail || current.logTail,
       });
     case 'run-start':
       return patchStep(state, action.id, { status: 'running', logTail: '' });
     case 'run-chunk':
-      return patchStep(state, action.id, { logTail: appendTail(current.logTail, action.text) });
+      return patchStep(state, action.id, {
+        logTail: appendTail(current.logTail, action.text),
+      });
     case 'run-done':
       return patchStep(state, action.id, {
         status: action.ok ? 'checking' : 'fail',

@@ -395,7 +395,11 @@ function makeBackend(options = {}) {
     getEffort: () => 'high',
     getFast: () => true,
     getPermissionMode: () => 'manual',
-    getMcpSpec: async () => ({ command: 'ae-mcp', args: ['--stdio'], env: { A: 'B' } }),
+    getMcpSpec: async () => ({
+      kind: 'http',
+      url: 'http://127.0.0.1:11488/mcp/c/codex-default-token',
+      name: 'ae',
+    }),
     getToolMeta: async () => TOOL_META,
     onEvent: (evt) => events.push(evt),
     lang: 'en',
@@ -553,14 +557,8 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   });
   assert.deepEqual(threadStart.params.sandboxPolicy, { type: 'readOnly' });
   assert.deepEqual(threadStart.params.config.mcp_servers.ae, {
-    command: 'ae-mcp',
-    args: ['--stdio'],
-    env: {
-      A: 'B',
-      AE_MCP_BACKEND: 'ae-mcp',
-    },
+    url: 'http://127.0.0.1:11488/mcp/c/codex-default-token',
   });
-  assert.equal(Object.hasOwn(threadStart.params.config.mcp_servers.ae.env, 'AE_MCP_APPROVAL_TIER_FILE'), false);
   respond(proc, threadStart, { threadId: 'thread_1' });
   await flush();
 
@@ -583,7 +581,7 @@ test('createCodexBackend starts codex app-server and sends thread/start with AE 
   await pending;
 });
 
-test('createCodexBackend writes a streamable HTTP MCP URL for cep-host mode', async () => {
+test('createCodexBackend writes only a per-conversation Streamable HTTP MCP URL', async () => {
   const url = 'http://127.0.0.1:11488/mcp/c/codex-token';
   const { backend, spawned } = makeBackend({
     getMcpSpec: async () => ({ kind: 'http', url, name: 'ae' }),

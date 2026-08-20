@@ -1,402 +1,250 @@
-import { createNdjsonReader } from '../lib/ndjson.js';
-import { expertGuidanceEnv } from './externalClients.js';
-import { createPlatformAdapter } from './platform/index.js';
-import { createRuntimeManager, hasDevelopmentRuntimeOverride } from './runtimeManager.js';
-
-const DEFAULT_TIMEOUT_MS = 30000;
-const INITIALIZE_TIMEOUT_MS = 120000;
 const MCP_PROTOCOL_VERSION = '2025-06-18';
 export const PANEL_VERSION = '0.9.6';
 
-function defaultRandomBytes(size) {
-  const cryptoImpl = globalThis.crypto;
-  if (!cryptoImpl || typeof cryptoImpl.getRandomValues !== 'function') {
-    throw new Error('Secure random generation is unavailable');
+function defaultFetch() {
+  if (globalThis.window && globalThis.window.fetch) {
+    return globalThis.window.fetch.bind(globalThis.window);
   }
-  const value = new Uint8Array(size);
-  cryptoImpl.getRandomValues(value);
-  return value;
+  if (globalThis.fetch) return globalThis.fetch.bind(globalThis);
+  throw new Error('fetch is unavailable');
 }
 
-function secureHex(randomBytes, size) {
-  const value = randomBytes(size);
-  if (!value || value.length !== size) throw new Error('Secure random generation failed');
-  return Array.from(value, (byte) => Number(byte).toString(16).padStart(2, '0')).join('');
+function loadHostServer(extensionRoot) {
+  const requireImpl = globalThis.window
+    && globalThis.window.cep_node
+    && globalThis.window.cep_node.require;
+  const root = String(extensionRoot || '').replace(/[\\/]+$/, '');
+  if (typeof requireImpl !== 'function' || !root) return null;
+  try {
+    return requireImpl(root + '/host/server.js');
+  } catch (error) {
+    return null;
+  }
 }
 
-export function findProjectRoot({ extRoot, repoRoot, fsImpl, platform }) {
-  const adapter = platform || createPlatformAdapter();
-  if (repoRoot && fsImpl.existsSync(adapter.paths.join([repoRoot, 'pyproject.toml']))) return adapter.paths.resolve([repoRoot]);
-
-  let current = adapter.paths.resolve([extRoot]);
-  while (current) {
-    if (fsImpl.existsSync(adapter.paths.join([current, 'pyproject.toml']))) return current;
-    const parent = adapter.paths.dirname(current);
-    if (!parent || parent === current) break;
-    current = parent;
-  }
-  return '';
+function rpcError(response) {
+  const detail = response && response.error;
+  const error = new Error(detail && detail.message ? detail.message : 'MCP request failed');
+  if (detail && detail.code !== undefined) error.code = detail.code;
+  if (detail && detail.data !== undefined) error.data = detail.data;
+  return error;
 }
 
-export async function resolveMcpCommand({
-  explicitPath,
-  platform,
-  extRoot,
-  runtimeManager,
-} = {}) {
-  const configured = String(explicitPath || '').trim();
-  if (configured) return { command: configured, args: [], source: 'explicit' };
-  const adapter = platform || createPlatformAdapter();
-  const debugMarker = extRoot && adapter.paths.join([extRoot, '.debug']);
-  const bundleManifest = extRoot && adapter.paths.join([extRoot, 'bundle-manifest.json']);
-  const developmentFallback = adapter.id === 'macos-arm64'
-    && debugMarker
-    && adapter.fs.existsSync(debugMarker)
-    && !adapter.fs.existsSync(bundleManifest);
-  const developmentRuntimeOverride = hasDevelopmentRuntimeOverride(adapter.env);
-  if (adapter.id === 'macos-arm64'
-      && (runtimeManager || (extRoot && (!developmentFallback || developmentRuntimeOverride)))) {
-    const manager = runtimeManager || createRuntimeManager({ platform: adapter, extensionRoot: extRoot });
-    const selected = await manager.ensureReady();
-    return {
-      command: selected.launcher,
-      args: selected.args || [],
-      cwd: selected.cwd,
-      source: selected.developmentRuntime
-        ? 'development-runtime'
-        : (selected.action === 'fallback' ? 'runtime-fallback' : 'runtime-manager'),
-      runtime: selected,
-    };
-  }
-  const resolved = await adapter.resolveExecutable('ae-mcp', developmentFallback
-    ? { allowDevelopmentPath: true }
-    : {});
-  if (resolved.ok) return { command: resolved.path, args: [...resolved.argsPrefix], source: resolved.source };
-  throw new Error('Unable to find ae-mcp. Repair the installed runtime launcher at ' + adapter.paths.launcher + '.');
+function resultFor(response) {
+  if (!response || typeof response !== 'object') return null;
+  if (response.error) throw rpcError(response);
+  return response.result === undefined ? null : response.result;
 }
 
-export function _createRpc(stdinWrite, onLine, options = {}) {
-  const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
-  const onRequest = options.onRequest;
-  let nextId = 1;
-  const pending = new Map();
-  const inbound = new Map();
-
-  function rejectPending(id, error) {
-    const entry = pending.get(id);
-    if (!entry) return;
-    pending.delete(id);
-    clearTimeout(entry.timer);
-    entry.reject(error);
+async function responseBody(response) {
+  if (!response) return null;
+  if (typeof response.text === 'function') {
+    const text = await response.text();
+    return text ? JSON.parse(text) : null;
   }
+  if (typeof response.json === 'function') return response.json();
+  return null;
+}
 
-  function writeMessage(message) {
-    stdinWrite(JSON.stringify(message) + '\n');
-  }
-
-  function hasId(message) {
-    return message && message.id !== undefined && message.id !== null;
-  }
-
-  function hasMethod(message) {
-    return message && typeof message.method === 'string' && message.method.length > 0;
-  }
-
-  function abortInbound(id) {
-    const entry = inbound.get(id);
-    if (entry) entry.controller.abort();
-  }
-
-  async function dispatchRequest(message) {
-    if (inbound.has(message.id)) {
-      writeMessage({
-        jsonrpc: '2.0',
-        id: message.id,
-        error: { code: -32600, message: 'Invalid Request' },
-      });
-      return;
-    }
-    const controller = new AbortController();
-    let settleAbort;
-    const aborted = new Promise((resolve) => { settleAbort = resolve; });
-    const abortHandler = () => settleAbort({ kind: 'abort' });
-    controller.signal.addEventListener('abort', abortHandler, { once: true });
-    inbound.set(message.id, { controller });
-    try {
-      const handled = typeof onRequest === 'function'
-        ? Promise.resolve().then(() => onRequest(message, { signal: controller.signal }))
-        : Promise.reject(Object.assign(new Error('Method not found'), { code: -32601 }));
-      const outcome = await Promise.race([
-        handled.then(
-          (result) => ({ kind: 'result', result }),
-          (error) => ({ kind: 'error', error }),
-        ),
-        aborted,
-      ]);
-      if (outcome.kind === 'abort') {
-        writeMessage({
-          jsonrpc: '2.0',
-          id: message.id,
-          result: { action: 'cancel', content: {} },
-        });
-      } else if (outcome.kind === 'error') {
-        const code = outcome.error && outcome.error.code === -32601 ? -32601 : -32603;
-        const error = {
-          code,
-          message: code === -32601 ? 'Method not found' : 'Internal error',
-        };
-        if (code === -32601 && outcome.error && outcome.error.data !== undefined) {
-          error.data = outcome.error.data;
-        }
-        writeMessage({ jsonrpc: '2.0', id: message.id, error });
-      } else {
-        writeMessage({
-          jsonrpc: '2.0',
-          id: message.id,
-          result: outcome.result === undefined ? null : outcome.result,
-        });
-      }
-    } finally {
-      controller.signal.removeEventListener('abort', abortHandler);
-      inbound.delete(message.id);
+function requestHeaders(values) {
+  const normalized = {};
+  for (const [name, value] of Object.entries(values)) {
+    if (value !== undefined && value !== null && value !== '') {
+      normalized[name.toLowerCase()] = String(value);
     }
   }
-
-  function handleMessage(message) {
-    if (!message || typeof message !== 'object') return;
-    if (hasMethod(message)) {
-      if (!hasId(message)) {
-        if (message.method === 'notifications/cancelled') {
-          abortInbound(message.params && message.params.requestId);
-        }
-        return;
-      }
-      dispatchRequest(message).catch(() => {});
-      return;
-    }
-    if (!hasId(message)) return;
-    const entry = pending.get(message.id);
-    if (!entry) return;
-    pending.delete(message.id);
-    clearTimeout(entry.timer);
-    if (message.error) {
-      const error = new Error(message.error.message || 'JSON-RPC request failed');
-      error.code = message.error.code;
-      error.data = message.error.data;
-      entry.reject(error);
-    } else {
-      entry.resolve(message.result);
-    }
-  }
-
-  const handleChunk = createNdjsonReader(handleMessage);
-
-  if (onLine) onLine(handleChunk);
-
-  function request(method, params, timeoutOverrideMs) {
-    const id = nextId++;
-    const message = { jsonrpc: '2.0', id, method };
-    if (params !== undefined) message.params = params;
-    const limit = Number.isFinite(timeoutOverrideMs) && timeoutOverrideMs > 0
-      ? timeoutOverrideMs
-      : timeoutMs;
-    const promise = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => rejectPending(id, new Error(method + ' timed out after ' + limit + 'ms')), limit);
-      pending.set(id, { resolve, reject, timer });
-    });
-    writeMessage(message);
-    return promise;
-  }
-
-  function notify(method, params) {
-    const message = { jsonrpc: '2.0', method };
-    if (params !== undefined) message.params = params;
-    writeMessage(message);
-  }
-
-  function close(reason = new Error('MCP process closed')) {
-    for (const id of Array.from(pending.keys())) rejectPending(id, reason);
-    for (const entry of inbound.values()) entry.controller.abort();
-  }
-
-  return { request, notify, handleChunk, close };
+  return {
+    values: normalized,
+    get(name) {
+      return normalized[String(name || '').toLowerCase()];
+    },
+  };
 }
 
 export function createMcpClient({
-  platform,
-  spawnImpl,
-  resolveCommand = resolveMcpCommand,
-  env,
-  onCrash,
-  onElicitation,
+  getHost,
+  getConversation = () => null,
+  getPort,
+  port = 11488,
+  fetchImpl,
   extRoot,
-  repoRoot,
-  getExpertGuidance = () => true,
   packageVersion = PANEL_VERSION,
-  retryDelays = [1000, 2000, 4000],
-  initializeTimeoutMs = INITIALIZE_TIMEOUT_MS,
-  randomBytes = defaultRandomBytes,
 } = {}) {
-  let proc = null;
-  let rpc = null;
+  let status = 'idle';
+  let lastError = null;
   let tools = null;
   let serverInstructions = '';
   let serverInfo = null;
-  let status = 'idle';
+  let sessionId = '';
+  let nextId = 1;
+  let transport = null;
   let startPromise = null;
-  let retryCount = 0;
-  let lastError = null;
   let stopped = false;
-  let restartTimer = null;
-  const panelCapability = secureHex(randomBytes, 32);
+
+  function resolveHost() {
+    return typeof getHost === 'function' ? getHost() : loadHostServer(extRoot);
+  }
+
+  function mountedMcp() {
+    const host = resolveHost();
+    const mounted = host && host.mcp;
+    return mounted && typeof mounted.dispatch === 'function' ? mounted : null;
+  }
+
+  function currentConversation() {
+    return typeof getConversation === 'function' ? getConversation() : null;
+  }
+
+  function currentPort() {
+    const value = typeof getPort === 'function' ? getPort() : port;
+    return Number(value) || 11488;
+  }
+
+  function rootUrl() {
+    return `http://127.0.0.1:${currentPort()}/mcp`;
+  }
 
   function currentState() {
-    return { status, retryCount, error: lastError, tools };
-  }
-
-  function attachBeforeUnload() {
-    if (globalThis.window && globalThis.window.addEventListener) {
-      globalThis.window.addEventListener('beforeunload', () => stop());
-    }
-  }
-
-  async function handleServerRequest(message, { signal }) {
-    if (message.method !== 'elicitation/create') {
-      throw Object.assign(new Error('Method not found'), {
-        code: -32601,
-        data: { method: message.method },
-      });
-    }
-    if (typeof onElicitation !== 'function') return { action: 'decline', content: {} };
-    const params = message.params && typeof message.params === 'object' ? message.params : {};
-    const request = {
-      serverName: serverInfo && typeof serverInfo.name === 'string' ? serverInfo.name : '',
-      message: typeof params.message === 'string' ? params.message : '',
-      requestedSchema: params.requestedSchema,
-      mode: params.mode,
-      serverInfo: serverInfo ? { ...serverInfo } : null,
-      serverInstructions,
-      meta: params._meta,
-    };
-    if (signal.aborted) return { action: 'cancel', content: {} };
-    const result = await onElicitation(request, { signal });
-    if (signal.aborted) return { action: 'cancel', content: {} };
-    if (!result || !['accept', 'decline', 'cancel'].includes(result.action)) {
-      return { action: 'decline', content: {} };
-    }
     return {
-      action: result.action,
-      content: result.content && typeof result.content === 'object' && !Array.isArray(result.content)
-        ? result.content
-        : {},
+      status,
+      error: lastError,
+      tools,
+      transport: transport ? transport.kind : null,
     };
+  }
+
+  function message(method, params) {
+    const value = { jsonrpc: '2.0', id: nextId++, method };
+    if (params !== undefined) value.params = params;
+    return value;
+  }
+
+  function notification(method, params) {
+    const value = { jsonrpc: '2.0', method };
+    if (params !== undefined) value.params = params;
+    return value;
+  }
+
+  async function dispatchInProcess(payload) {
+    const headers = requestHeaders({
+      'mcp-session-id': sessionId,
+      'mcp-protocol-version': MCP_PROTOCOL_VERSION,
+    });
+    const request = {
+      get: headers.get,
+      headers: headers.values,
+      socket: { localPort: currentPort() },
+    };
+    const conversation = currentConversation();
+    const output = await transport.mounted.dispatch(request, payload, conversation);
+    if (output && output.session && output.session.id) sessionId = output.session.id;
+    return output ? output.response : null;
+  }
+
+  async function dispatchHttp(payload, method = 'POST') {
+    const headers = {
+      accept: 'application/json, text/event-stream',
+      'content-type': 'application/json',
+      'mcp-protocol-version': MCP_PROTOCOL_VERSION,
+    };
+    if (sessionId) headers['mcp-session-id'] = sessionId;
+    const response = await transport.fetcher(transport.url, {
+      method,
+      headers,
+      ...(method === 'POST' ? { body: JSON.stringify(payload) } : {}),
+    });
+    if (response && response.headers && typeof response.headers.get === 'function') {
+      sessionId = response.headers.get('mcp-session-id') || sessionId;
+    }
+    if (response && response.ok === false) {
+      const error = new Error('MCP HTTP request failed with status ' + response.status);
+      error.status = response.status;
+      throw error;
+    }
+    return responseBody(response);
+  }
+
+  function dispatch(payload) {
+    return transport.kind === 'in-process'
+      ? dispatchInProcess(payload)
+      : dispatchHttp(payload);
+  }
+
+  function connectionMatches() {
+    if (!transport) return false;
+    if (transport.kind === 'in-process') {
+      const conversation = currentConversation();
+      const conversationId = conversation && conversation.id ? conversation.id : null;
+      return mountedMcp() === transport.mounted
+        && conversationId === transport.conversationId;
+    }
+    return rootUrl() === transport.url;
+  }
+
+  function clearConnection() {
+    if (transport && sessionId) {
+      if (transport.kind === 'in-process') {
+        try { transport.mounted.sessions?.delete?.(sessionId); } catch (error) { /* best effort */ }
+      } else {
+        dispatchHttp(null, 'DELETE').catch(() => {});
+      }
+    }
+    transport = null;
+    sessionId = '';
+    tools = null;
+    serverInstructions = '';
+    serverInfo = null;
+    startPromise = null;
   }
 
   async function start() {
-    if (status === 'ready') return currentState();
+    if (status === 'ready' && connectionMatches()) return currentState();
+    if (status === 'ready') clearConnection();
     if (startPromise) return startPromise;
     stopped = false;
     status = 'starting';
+    lastError = null;
     startPromise = (async () => {
-      const adapter = platform || (!spawnImpl ? createPlatformAdapter() : null);
-      const commandSpec = await resolveCommand({ extRoot, repoRoot, platform: adapter || undefined });
-      const additions = {
-        AE_MCP_BACKEND: 'ae-mcp',
-        AE_MCP_PANEL_CAPABILITY: panelCapability,
-        ...expertGuidanceEnv(getExpertGuidance()),
-      };
-      const spawnEnv = adapter ? adapter.completeSpawnEnv(env || {}, additions) : Object.assign({}, env || {}, additions);
-      const options = {
-        stdio: 'pipe',
-        windowsHide: true,
-        env: spawnEnv,
-        ...(commandSpec.cwd ? { cwd: commandSpec.cwd } : {}),
-      };
-      if (adapter) {
-        const executable = { ok: true, id: 'ae-mcp', path: commandSpec.command, argsPrefix: [], source: commandSpec.source || 'runtime', version: null, arch: null };
-        proc = adapter.spawn(executable, commandSpec.args || [], options);
+      const mounted = mountedMcp();
+      if (mounted) {
+        const conversation = currentConversation();
+        transport = {
+          kind: 'in-process',
+          mounted,
+          conversationId: conversation && conversation.id ? conversation.id : null,
+        };
       } else {
-        proc = spawnImpl(commandSpec.command, commandSpec.args || [], { ...options, shell: false });
+        transport = {
+          kind: 'http',
+          url: rootUrl(),
+          fetcher: fetchImpl || defaultFetch(),
+        };
       }
-      const spawnedProc = proc;
-      rpc = _createRpc(
-        (line) => spawnedProc.stdin.write(line),
-        (handler) => spawnedProc.stdout.on('data', handler),
-        { onRequest: handleServerRequest },
-      );
-      proc.on('exit', (code, signal) => {
-        if (proc === spawnedProc) handleExit(code, signal);
-      });
-      proc.on('error', (err) => {
-        if (proc === spawnedProc) handleCrash(err);
-      });
-      if (proc.stderr && proc.stderr.on) proc.stderr.on('data', () => {});
-
-      const initResult = await rpc.request('initialize', {
+      const initialized = resultFor(await dispatch(message('initialize', {
         protocolVersion: MCP_PROTOCOL_VERSION,
-        clientInfo: { name: 'panel-chat', version: packageVersion },
-        capabilities: { elicitation: {} },
-      }, initializeTimeoutMs);
-      serverInstructions = (initResult && initResult.instructions) || '';
-      serverInfo = initResult && initResult.serverInfo && typeof initResult.serverInfo === 'object'
-        ? { ...initResult.serverInfo }
+        clientInfo: { name: 'ae-mcp-panel', version: packageVersion },
+        capabilities: {},
+      })));
+      serverInstructions = initialized && initialized.instructions || '';
+      serverInfo = initialized && initialized.serverInfo
+        ? { ...initialized.serverInfo }
         : null;
-      rpc.notify('notifications/initialized');
-      const listed = await rpc.request('tools/list', {});
+      await dispatch(notification('notifications/initialized'));
+      const listed = resultFor(await dispatch(message('tools/list', {})));
       tools = listed && Array.isArray(listed.tools) ? listed.tools : [];
       status = 'ready';
-      retryCount = 0;
-      lastError = null;
-      attachBeforeUnload();
       return currentState();
     })();
-
     try {
       return await startPromise;
-    } catch (e) {
-      const failedRpc = rpc;
-      const failedProc = proc;
-      rpc = null;
-      proc = null;
-      if (failedRpc) failedRpc.close(e instanceof Error ? e : new Error('MCP initialization failed'));
-      if (failedProc && failedProc.kill) {
-        try { failedProc.kill(); } catch (killError) { /* best effort */ }
-      }
+    } catch (error) {
+      clearConnection();
       status = 'error';
-      lastError = e;
-      throw e;
+      lastError = error;
+      throw error;
     } finally {
       startPromise = null;
     }
-  }
-
-  function handleCrash(error) {
-    if (stopped) return;
-    status = 'crashed';
-    lastError = error;
-    if (rpc) rpc.close(error instanceof Error ? error : new Error('MCP process crashed'));
-    if (onCrash) onCrash(error);
-    scheduleRestart();
-  }
-
-  function handleExit(code, signal) {
-    if (stopped) return;
-    handleCrash(new Error('MCP process exited: ' + code + (signal ? ' ' + signal : '')));
-  }
-
-  function scheduleRestart() {
-    if (retryCount >= retryDelays.length) {
-      status = 'error';
-      return;
-    }
-    const delay = retryDelays[retryCount++];
-    clearTimeout(restartTimer);
-    restartTimer = setTimeout(() => {
-      start().catch((err) => {
-        lastError = err;
-        scheduleRestart();
-      });
-    }, delay);
   }
 
   async function listTools() {
@@ -406,40 +254,31 @@ export function createMcpClient({
 
   async function callTool(name, args = {}) {
     await start();
-    return rpc.request('tools/call', { name, arguments: args });
-  }
-
-  async function callPanelTool(name, args = {}) {
-    return callTool(name, { ...args, _ae_panel_capability: panelCapability });
-  }
-
-  function newOperationId() {
-    return secureHex(randomBytes, 16);
+    try {
+      return resultFor(await dispatch(message('tools/call', { name, arguments: args })));
+    } catch (error) {
+      clearConnection();
+      status = 'error';
+      lastError = error;
+      throw error;
+    }
   }
 
   function stop() {
     stopped = true;
-    clearTimeout(restartTimer);
-    restartTimer = null;
+    clearConnection();
     status = 'stopped';
-    if (rpc) rpc.close(new Error('MCP client stopped'));
-    if (proc) {
-      try { proc.kill(); } catch (e) { /* best effort */ }
-    }
-    proc = null;
-    rpc = null;
-    serverInfo = null;
-    startPromise = null;
+    lastError = null;
   }
 
   return {
     start,
     listTools,
     callTool,
-    callPanelTool,
-    newOperationId,
     stop,
     state: currentState,
     getServerInstructions: () => serverInstructions,
+    getServerInfo: () => serverInfo,
+    isStopped: () => stopped,
   };
 }
