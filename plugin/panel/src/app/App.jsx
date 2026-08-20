@@ -332,6 +332,7 @@ function Shell({ cs }) {
 
   // Settings: live client registry + token regeneration
   const [clients, setClients] = React.useState([]);
+  const [mcpSessions, setMcpSessions] = React.useState([]);
   const [confirmRegen, setConfirmRegen] = React.useState(false);
   const [tokenEpoch, setTokenEpoch] = React.useState(0);
 
@@ -1717,6 +1718,7 @@ function Shell({ cs }) {
     const update = () => {
       const h = getHost();
       if (h && h.getClients) setClients(h.getClients());
+      if (h && h.getMcpSessions) setMcpSessions(h.getMcpSessions());
       if (h && h.getConnectionInfo) setConnInfo(h.getConnectionInfo());
     };
     update();
@@ -1777,7 +1779,7 @@ function Shell({ cs }) {
     : runtimeReady;
   const mcpConfigStr = externalMcpReady ? JSON.stringify(
     mcpEngine === MCP_ENGINE_CEP_HOST
-      ? httpConfigFor('claude-desktop', status.port)
+      ? httpConfigFor('claude-desktop', status.port, extRoot)
       : buildMcpConfig(status.port, expertGuidance, mcpCommand),
     null,
     2,
@@ -1919,12 +1921,22 @@ function Shell({ cs }) {
             }}
             logs={logs}
             clients={clients}
+            mcpSessions={mcpSessions}
+            extensionRoot={extRoot}
             onBlockClient={(label, v) => {
               const h = getHost();
               if (h && h.setClientBlocked) {
                 h.setClientBlocked(label, v);
                 if (h.getClients) setClients(h.getClients());
                 pushLog((v ? 'Blocked client: ' : 'Unblocked client: ') + label);
+              }
+            }}
+            onBlockMcpClient={(name, v) => {
+              const h = getHost();
+              if (h && h.setClientBlocked) {
+                h.setClientBlocked(name, v);
+                if (h.getMcpSessions) setMcpSessions(h.getMcpSessions());
+                pushLog((v ? 'Blocked MCP client: ' : 'Unblocked MCP client: ') + name);
               }
             }}
             onRegenToken={() => setConfirmRegen(true)}

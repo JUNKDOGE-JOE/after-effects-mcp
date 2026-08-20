@@ -33,6 +33,7 @@ const CEP_EXECUTED_FILES = [
     'mcp/index.js',
     'mcp/jsonrpc.js',
     'mcp/session.js',
+    'mcp/client-blocklist.js',
     'mcp/sse.js',
     'mcp/conversations.js',
     'mcp/approvals.js',
