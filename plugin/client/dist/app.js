@@ -29941,6 +29941,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     async function startServer() {
       if (proc && baseUrl) return true;
       if (serverPromise) return serverPromise;
+      if (proc && baseUrl && !stopping && !sseClosed) return true;
       serverPromise = (async () => {
         const mcpSpec = getMcpSpec2 ? await getMcpSpec2() : { command: "ae-mcp", args: [] };
         writeConfig(mcpSpec);

@@ -364,6 +364,13 @@ export function createOpenCodeBackend({
   async function startServer() {
     if (proc && baseUrl) return true;
     if (serverPromise) return serverPromise;
+    // Reuse the live instance. Without this, every probe-then-send pair
+    // spawned a second opencode while startSse's started-guard kept the event
+    // stream attached to the first one — the new instance's session events
+    // never reached the panel (turns hung busy forever) and orphan processes
+    // piled up (#286). reset()/exit clear proc, so config changes still
+    // rebuild with fresh state.
+    if (proc && baseUrl && !stopping && !sseClosed) return true;
     serverPromise = (async () => {
       const mcpSpec = getMcpSpec ? await getMcpSpec() : { command: 'ae-mcp', args: [] };
       writeConfig(mcpSpec);

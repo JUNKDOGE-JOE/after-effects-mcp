@@ -582,3 +582,21 @@ test('session.error objects surface their nested message, never "[object Object]
   const errorEvent = [...events].reverse().find((evt) => evt.type === 'error');
   assert.equal(errorEvent.message, 'relay rejected the request (403)');
 });
+
+test('probe then send reuse one opencode instance and one event stream', async () => {
+  const { backend, spawned, fetched } = makeBackend();
+  await backend.probeAccount();
+  assert.equal(spawned.calls.length, 1);
+  const pending = backend.sendUser({ turnId: 'turn-reuse', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  assert.equal(spawned.calls.length, 1);
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+  assert.equal(spawned.calls.length, 1);
+});
