@@ -20885,9 +20885,13 @@
       }
     };
   }
-  function httpConfigFor(client, port = 11488) {
+  function httpConfigFor(client, port = 11488, extensionRoot = "<extension root>") {
     const id = typeof client === "string" ? client : client && client.id;
     const url = `http://127.0.0.1:${port}/mcp`;
+    const shimPath = String(extensionRoot).replace(/[\\/]+$/, "") + "/host/stdio-shim.js";
+    if (id === "claude-desktop") {
+      return { mcpServers: { ae: { command: "node", args: [shimPath] } } };
+    }
     if (id === "claude-code") {
       return `claude mcp add --transport http ae ${url}`;
     }
@@ -20901,9 +20905,10 @@
     engine = "python",
     port = 11488,
     expertGuidance = true,
-    command = "ae-mcp"
+    command = "ae-mcp",
+    extensionRoot = "<extension root>"
   } = {}) {
-    const config = engine === "cep-host" ? httpConfigFor(client, port) : mcpConfigFor(client, port, expertGuidance, command);
+    const config = engine === "cep-host" ? httpConfigFor(client, port, extensionRoot) : mcpConfigFor(client, port, expertGuidance, command);
     return typeof config === "string" ? config : JSON.stringify(config, null, 2);
   }
 
@@ -22261,6 +22266,10 @@
       tokenCap: "\u91CD\u65B0\u751F\u6210\u540E\u9700\u91CD\u542F\u4F60\u7684 AI \u5BA2\u6237\u7AEF",
       tokenMissing: "\u672A\u627E\u5230 ~/.ae-mcp/auth-token",
       clients: "\u5DF2\u8FDE\u63A5\u5BA2\u6237\u7AEF",
+      mcpSessions: "\u6D3B\u52A8 MCP \u4F1A\u8BDD",
+      sessionSourcePanel: "\u9762\u677F\u5185\u4F1A\u8BDD",
+      sessionSourceExternal: "\u5916\u90E8\u5BA2\u6237\u7AEF",
+      sessionId: "session",
       lastActive: "\u6700\u540E\u6D3B\u8DC3",
       blocked: "\u5C4F\u853D",
       mins: (n) => `${n} \u5206\u949F\u524D`,
@@ -22332,6 +22341,10 @@
       tokenCap: "Restart your AI client after regenerating.",
       tokenMissing: "~/.ae-mcp/auth-token not found",
       clients: "Connected clients",
+      mcpSessions: "Active MCP sessions",
+      sessionSourcePanel: "Panel session",
+      sessionSourceExternal: "External client",
+      sessionId: "session",
       lastActive: "Last active",
       blocked: "Block",
       mins: (n) => `${n} min ago`,
@@ -22410,6 +22423,27 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: blocked, onChange: onBlock })
     ] });
   }
+  function McpSessionRow({ session, t, onBlock }) {
+    const info = session.clientInfo || {};
+    const name = info.version ? `${info.name} \xB7 ${info.version}` : info.name || session.clientName || "-";
+    const source = session.source === "panel" ? t.sessionSourcePanel : t.sessionSourceExternal;
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 42, padding: "4px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: session.blocked ? 0.55 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: session.blocked ? "line-through" : "none" }, children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
+          t.sessionId,
+          ": ",
+          session.sessionId
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          source,
+          " \xB7 ",
+          formatLastSeen(session.lastActivityAt, t)
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: !!session.blocked, onChange: (value) => onBlock && onBlock(info.name, value) })
+    ] });
+  }
   function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false, http = false }) {
     const isStdio = client.kind === "mcp-stdio";
     const hasConfig = http || isStdio;
@@ -22469,12 +22503,15 @@
     onApplyPort,
     mcpConfig,
     mcpCommand = "ae-mcp",
+    extensionRoot = "<extension root>",
     mcpReady = true,
     mcpEngine = "python",
     onMcpEngineChange,
     logs = [],
     clients = [],
+    mcpSessions = [],
     onBlockClient,
+    onBlockMcpClient,
     onRegenToken,
     hostVersion = "-",
     pythonVersion = "-",
@@ -22658,7 +22695,8 @@
           engine: mcpEngine,
           port: Number(draftPort) || port || 11488,
           expertGuidance,
-          command: mcpCommand
+          command: mcpCommand,
+          extensionRoot
         }) : "";
         return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ExternalClientRow,
@@ -22675,6 +22713,16 @@
         );
       }) }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "sec", title: t.sec, expanded: sections.sec, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.mcpSessions }),
+        mcpSessions.map((session) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          McpSessionRow,
+          {
+            session,
+            t,
+            onBlock: onBlockMcpClient
+          },
+          session.sessionId
+        )),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
         clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ClientRow,
@@ -51274,6 +51322,7 @@ data: ${JSON.stringify(payload)}
     const [diagnostics, setDiagnostics] = import_react48.default.useState(null);
     const { events, clear } = useActivity(getHost);
     const [clients, setClients] = import_react48.default.useState([]);
+    const [mcpSessions, setMcpSessions] = import_react48.default.useState([]);
     const [confirmRegen, setConfirmRegen] = import_react48.default.useState(false);
     const [tokenEpoch, setTokenEpoch] = import_react48.default.useState(0);
     const platform = import_react48.default.useMemo(() => createPlatformAdapter(), []);
@@ -52613,6 +52662,7 @@ ${baseUrl}`),
       const update = () => {
         const h = getHost();
         if (h && h.getClients) setClients(h.getClients());
+        if (h && h.getMcpSessions) setMcpSessions(h.getMcpSessions());
         if (h && h.getConnectionInfo) setConnInfo(h.getConnectionInfo());
       };
       update();
@@ -52666,7 +52716,7 @@ ${baseUrl}`),
     };
     const externalMcpReady = mcpEngine === MCP_ENGINE_CEP_HOST ? status.state === "ok" : runtimeReady;
     const mcpConfigStr = externalMcpReady ? JSON.stringify(
-      mcpEngine === MCP_ENGINE_CEP_HOST ? httpConfigFor("claude-desktop", status.port) : buildMcpConfig(status.port, expertGuidance, mcpCommand),
+      mcpEngine === MCP_ENGINE_CEP_HOST ? httpConfigFor("claude-desktop", status.port, extRoot) : buildMcpConfig(status.port, expertGuidance, mcpCommand),
       null,
       2
     ) : "";
@@ -52808,12 +52858,22 @@ ${baseUrl}`),
             },
             logs,
             clients,
+            mcpSessions,
+            extensionRoot: extRoot,
             onBlockClient: (label, v) => {
               const h = getHost();
               if (h && h.setClientBlocked) {
                 h.setClientBlocked(label, v);
                 if (h.getClients) setClients(h.getClients());
                 pushLog((v ? "Blocked client: " : "Unblocked client: ") + label);
+              }
+            },
+            onBlockMcpClient: (name, v) => {
+              const h = getHost();
+              if (h && h.setClientBlocked) {
+                h.setClientBlocked(name, v);
+                if (h.getMcpSessions) setMcpSessions(h.getMcpSessions());
+                pushLog((v ? "Blocked MCP client: " : "Unblocked MCP client: ") + name);
               }
             },
             onRegenToken: () => setConfirmRegen(true),
