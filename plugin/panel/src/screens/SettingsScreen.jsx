@@ -81,6 +81,10 @@ const S = {
     tokenCap: '重新生成后需重启你的 AI 客户端',
     tokenMissing: '未找到 ~/.ae-mcp/auth-token',
     clients: '已连接客户端',
+    mcpSessions: '活动 MCP 会话',
+    sessionSourcePanel: '面板内会话',
+    sessionSourceExternal: '外部客户端',
+    sessionId: 'session',
     lastActive: '最后活跃',
     blocked: '屏蔽',
     mins: (n) => `${n} 分钟前`,
@@ -152,6 +156,10 @@ const S = {
     tokenCap: 'Restart your AI client after regenerating.',
     tokenMissing: '~/.ae-mcp/auth-token not found',
     clients: 'Connected clients',
+    mcpSessions: 'Active MCP sessions',
+    sessionSourcePanel: 'Panel session',
+    sessionSourceExternal: 'External client',
+    sessionId: 'session',
     lastActive: 'Last active',
     blocked: 'Block',
     mins: (n) => `${n} min ago`,
@@ -236,6 +244,22 @@ function ClientRow({ name, lastActive, blocked, onBlock, blockLabel }) {
   );
 }
 
+function McpSessionRow({ session, t, onBlock }) {
+  const info = session.clientInfo || {};
+  const name = info.version ? `${info.name} · ${info.version}` : (info.name || session.clientName || '-');
+  const source = session.source === 'panel' ? t.sessionSourcePanel : t.sessionSourceExternal;
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, minHeight: 42, padding: '4px 8px', background: 'var(--bg-well)', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', opacity: session.blocked ? 0.55 : 1 }}>
+      <span style={{ flex: 1, minWidth: 0 }}>
+        <span style={{ display: 'block', font: '500 12px/1.35 var(--font-ui)', color: 'var(--text-primary)', textDecoration: session.blocked ? 'line-through' : 'none' }}>{name}</span>
+        <span style={{ display: 'block', font: '400 10px/1.35 var(--font-mono)', color: 'var(--text-tertiary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.sessionId}: {session.sessionId}</span>
+        <span style={{ display: 'block', font: '400 10px/1.35 var(--font-ui)', color: 'var(--text-tertiary)' }}>{source} · {formatLastSeen(session.lastActivityAt, t)}</span>
+      </span>
+      <Switch checked={!!session.blocked} onChange={(value) => onBlock && onBlock(info.name, value)} />
+    </div>
+  );
+}
+
 function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false, http = false }) {
   const isStdio = client.kind === 'mcp-stdio';
   const hasConfig = http || isStdio;
@@ -303,12 +327,15 @@ export function SettingsScreen({
   onApplyPort,
   mcpConfig,
   mcpCommand = 'ae-mcp',
+  extensionRoot = '<extension root>',
   mcpReady = true,
   mcpEngine = 'python',
   onMcpEngineChange,
   logs = [],
   clients = [],
+  mcpSessions = [],
   onBlockClient,
+  onBlockMcpClient,
   onRegenToken,
   hostVersion = '-',
   pythonVersion = '-',
@@ -529,6 +556,7 @@ export function SettingsScreen({
             port: Number(draftPort) || port || 11488,
             expertGuidance,
             command: mcpCommand,
+            extensionRoot,
           }) : '';
           return (
             <ExternalClientRow
@@ -546,6 +574,15 @@ export function SettingsScreen({
       </Section>
 
       <Section id="sec" title={t.sec} expanded={sections.sec} onToggle={onToggleSection}>
+        <div style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)', marginTop: 2 }}>{t.mcpSessions}</div>
+        {mcpSessions.map((session) => (
+          <McpSessionRow
+            key={session.sessionId}
+            session={session}
+            t={t}
+            onBlock={onBlockMcpClient}
+          />
+        ))}
         <div style={{ font: '500 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)', marginTop: 2 }}>{t.clients}</div>
         {clients.map((client) => (
           <ClientRow

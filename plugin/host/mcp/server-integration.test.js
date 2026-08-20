@@ -74,16 +74,18 @@ test('MCP ae_exec shares paused/blocked gates and activity records with /exec', 
             jsonrpc: '2.0', id: 3, method: 'tools/call',
             params: { name: 'ae_exec', arguments: { code: '1 + 1' } },
         });
-        assert.equal(blocked.body.result.isError, true);
-        assert.match(blocked.body.result.structuredContent.error, /blocked/);
+        assert.equal(blocked.body.error.code, -32003);
+        assert.equal(blocked.body.error.data.code, 'CLIENT_BLOCKED');
+        assert.match(blocked.body.error.message, /blocked/);
         host.server.setClientBlocked(client, false);
         host.server.setPaused(true);
         const paused = await request(host.port, headers, {
             jsonrpc: '2.0', id: 4, method: 'tools/call',
             params: { name: 'ae_exec', arguments: { code: '1 + 1' } },
         });
-        assert.equal(paused.body.result.isError, true);
-        assert.match(paused.body.result.structuredContent.error, /paused/);
+        assert.equal(paused.body.error.code, -32004);
+        assert.equal(paused.body.error.data.code, 'ACTIONS_PAUSED');
+        assert.match(paused.body.error.message, /paused/);
         assert.equal(host.server.activity.list().filter(function (event) {
             return event.client === client;
         }).length, 3);

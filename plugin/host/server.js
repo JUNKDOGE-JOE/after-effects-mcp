@@ -9,6 +9,7 @@ const activity = require('./activity');
 const hostLog = require('./host-log');
 const nativeAegp = require('./native-aegp-client');
 const mountMcp = require('./mcp');
+const { createClientBlocklist } = require('./mcp/client-blocklist');
 const PKG_VERSION = require('./package.json').version;
 
 let app = null;
@@ -29,6 +30,7 @@ let restoreHostConsole = null;
 let unsubscribeHostActivity = null;
 const clients = new Map();
 const blocked = new Set();
+let clientBlocklist = null;
 // Self-reported label of the panel's own diagnostic /exec probes. Must match
 // the x-ae-mcp-client header in plugin/panel/src/cep/diagnostics.js.
 const INTERNAL_CLIENT = 'panel-diagnostics/internal';
@@ -79,7 +81,24 @@ function touchClient(label) {
     return { label: key, lastSeen: lastSeen, blocked: blocked.has(key) };
 }
 
+function ensureClientBlocklist() {
+    if (clientBlocklist) return clientBlocklist;
+    clientBlocklist = createClientBlocklist({
+        logger: function (event) { hostLog.record(event); },
+    });
+    blocked.clear();
+    clientBlocklist.list().forEach(function (name) { blocked.add(name); });
+    return clientBlocklist;
+}
+
+function isClientBlocked(label) {
+    const key = String(label || '').trim();
+    if (!key) return false;
+    return blocked.has(key) || ensureClientBlocklist().has(key);
+}
+
 function getClients() {
+    ensureClientBlocklist();
     const labels = new Set(Array.from(clients.keys()).concat(Array.from(blocked.keys())));
     return Array.from(labels).map((label) => {
         const item = clients.get(label) || {};
@@ -94,6 +113,17 @@ function setClientBlocked(label, v) {
     const key = String(label || 'unknown');
     if (v) blocked.add(key);
     else blocked.delete(key);
+    ensureClientBlocklist().set(key, !!v);
+}
+
+function getMcpSessions() {
+    const mounted = module.exports.mcp;
+    if (!mounted || !mounted.sessions || typeof mounted.sessions.list !== 'function') return [];
+    return mounted.sessions.list().map(function (session) {
+        return Object.assign({}, session, {
+            blocked: isClientBlocked(session.clientInfo && session.clientInfo.name),
+        });
+    });
 }
 
 function getConnectionInfo() {
@@ -506,6 +536,7 @@ async function executeJsx(request) {
 
 function buildApp() {
     const express = expressFactory();
+    ensureClientBlocklist();
     const a = express();
     a.use(express.json({ limit: '5mb' }));
     async function nativeNegotiate(deadlineUnixMs) {
@@ -563,7 +594,10 @@ function buildApp() {
         hostLog,
         getNativeStatus: function () { return makeNativeAegpClient().status(); },
         getClients,
+        touchClient,
+        isClientBlocked,
         isPaused,
+        recordMcpActivity: function (event) { activity.record(event); },
     });
 
     a.get('/health', (req, res) => {
@@ -902,6 +936,7 @@ module.exports = {
     hostLog,
     getConnectionInfo,
     getClients,
+    getMcpSessions,
     setClientBlocked,
     regenerateToken,
     setCSInterface: jsxBridge.setCSInterface,
@@ -917,6 +952,13 @@ module.exports = {
     // touching the real token file.
     buildApp,
     _setExecToken: function (t) { execToken = t; },
+    _setClientBlocklistForTest: function (value) {
+        clientBlocklist = value || null;
+        blocked.clear();
+        if (clientBlocklist && typeof clientBlocklist.list === 'function') {
+            clientBlocklist.list().forEach(function (name) { blocked.add(name); });
+        }
+    },
     _setNativeAegpClientForTest: function (client) {
         closeNativeAegpClient();
         nativeAegpClient = client;

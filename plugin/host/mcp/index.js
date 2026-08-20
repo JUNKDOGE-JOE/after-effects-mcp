@@ -38,13 +38,37 @@ function selectProtocol(req) {
     return PROTOCOLS.indexOf(requested) !== -1 ? requested : DEFAULT_PROTOCOL;
 }
 
-function clientName(params, id, conversation) {
+function clientInfo(params, id) {
     const info = params && params.clientInfo;
-    if (!info || typeof info.name !== 'string' || !info.name.trim()) {
-        return 'mcp:' + id.slice(0, 8);
-    }
-    const name = info.name.trim();
-    return conversation ? name + '@' + conversation.policy.label : name;
+    return {
+        name: info && typeof info.name === 'string' && info.name.trim()
+            ? info.name.trim() : 'mcp:' + id.slice(0, 8),
+        version: info && typeof info.version === 'string' && info.version.trim()
+            ? info.version.trim() : null,
+    };
+}
+
+function sessionIdentity(session) {
+    return {
+        clientInfo: session.clientInfo ? Object.assign({}, session.clientInfo) : null,
+        sessionId: session.id,
+        conversationId: session.conversationId,
+        conversationToken: session.conversationToken,
+    };
+}
+
+function blockedError(message, session, reason) {
+    const identity = sessionIdentity(session);
+    const code = reason === 'paused' ? -32004 : -32003;
+    const label = reason === 'paused'
+        ? 'AI actions are paused in the panel'
+        : 'this MCP client is blocked in the panel';
+    return jsonrpc.error(
+        jsonrpc.requestId(message),
+        code,
+        label + ' (' + identity.clientInfo.name + ', session ' + identity.sessionId + ')',
+        Object.assign({ code: reason === 'paused' ? 'ACTIONS_PAUSED' : 'CLIENT_BLOCKED' }, identity),
+    );
 }
 
 function gate(req, res, next) {
@@ -112,6 +136,30 @@ function mountMcp(app, deps) {
         return session && session.conversationId === expected ? session : null;
     }
 
+    function touchSession(session) {
+        session.lastActivityAt = Date.now();
+        if (typeof deps.touchClient === 'function') deps.touchClient(session.clientName);
+        return session;
+    }
+
+    function isBlocked(session) {
+        return typeof deps.isClientBlocked === 'function'
+            && deps.isClientBlocked(session.clientInfo && session.clientInfo.name);
+    }
+
+    function recordDenied(session, reason) {
+        if (typeof deps.recordMcpActivity !== 'function') return;
+        deps.recordMcpActivity({
+            client: session.clientName,
+            sessionId: session.id,
+            clientInfo: session.clientInfo,
+            conversationId: session.conversationId,
+            engine: 'mcp',
+            ok: false,
+            denied: reason,
+        });
+    }
+
     async function dispatch(req, message, conversation) {
         if (jsonrpc.isResponse(message)) return { status: 202, response: null };
         const problem = jsonrpc.validateMessage(message);
@@ -127,7 +175,20 @@ function mountMcp(app, deps) {
                 'pending',
                 conversation ? conversation.id : null,
             );
-            session.clientName = clientName(params, session.id, conversation);
+            session.clientInfo = clientInfo(params, session.id);
+            session.clientName = conversation
+                ? session.clientInfo.name + '@' + conversation.policy.label : session.clientInfo.name;
+            session.conversationToken = conversation ? conversation.token : null;
+            if (typeof deps.isClientBlocked === 'function'
+                && deps.isClientBlocked(session.clientInfo.name)) {
+                recordDenied(session, 'blocked');
+                sessions.delete(session.id);
+                return {
+                    status: 200,
+                    response: blockedError(message, session, 'blocked'),
+                };
+            }
+            touchSession(session);
             const value = {
                 protocolVersion,
                 capabilities: { tools: { listChanged: false }, logging: {} },
@@ -143,6 +204,15 @@ function mountMcp(app, deps) {
         if (!id) return missingSession(message, 400, 'Mcp-Session-Id header is required');
         const session = sessionForRequest(req, conversation);
         if (!session) return missingSession(message, 404, 'Mcp-Session-Id is unknown');
+        touchSession(session);
+        if (message.method === 'tools/call' && isBlocked(session)) {
+            recordDenied(session, 'blocked');
+            return { status: 200, session, response: blockedError(message, session, 'blocked') };
+        }
+        if (message.method === 'tools/call' && typeof deps.isPaused === 'function' && deps.isPaused()) {
+            recordDenied(session, 'paused');
+            return { status: 200, session, response: blockedError(message, session, 'paused') };
+        }
         if (message.method === 'notifications/initialized') {
             session.initialized = true;
             return { status: 202, session, response: jsonrpc.result(message, {}) };
