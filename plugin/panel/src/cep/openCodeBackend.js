@@ -124,12 +124,6 @@ function parseModel(value) {
   return { id: raw, providerID: DEFAULT_PROVIDER_ID };
 }
 
-function permissionRuleset() {
-  // The CEP host owns write approval for the embedded path via /mcp/c/<token>.
-  // Do not add a second OpenCode permission gate in front of that conversation.
-  return { type: 'allow' };
-}
-
 function permissionReplyBody(decision) {
   if (decision === 'deny') return { action: 'deny', remember: false };
   return { action: 'allow', remember: decision === 'allow-session' };
@@ -370,6 +364,13 @@ export function createOpenCodeBackend({
   async function startServer() {
     if (proc && baseUrl) return true;
     if (serverPromise) return serverPromise;
+    // Reuse the live instance. Without this, every probe-then-send pair
+    // spawned a second opencode while startSse's started-guard kept the event
+    // stream attached to the first one — the new instance's session events
+    // never reached the panel (turns hung busy forever) and orphan processes
+    // piled up (#286). reset()/exit clear proc, so config changes still
+    // rebuild with fresh state.
+    if (proc && baseUrl && !stopping && !sseClosed) return true;
     serverPromise = (async () => {
       const mcpSpec = getMcpSpec ? await getMcpSpec() : { command: 'ae-mcp', args: [] };
       writeConfig(mcpSpec);
@@ -385,6 +386,11 @@ export function createOpenCodeBackend({
       proc = adapter.spawn(executable, ['serve', '--port', String(port)], {
         stdio: 'pipe',
         windowsHide: true,
+        // OpenCode scopes its project context to the cwd. Inheriting the CEP
+        // process cwd (AE's Support Files, thousands of files) inflated every
+        // provider request until the relay-side WAF rejected it with a 403
+        // challenge page (live-debugged 2026-08-20); pin a tiny neutral dir.
+        cwd: configHome,
         env: spawnEnv,
       });
       if (proc.stderr && proc.stderr.on) proc.stderr.on('data', (chunk) => {
@@ -447,10 +453,13 @@ export function createOpenCodeBackend({
     sessionPromise = (async () => {
       await startServer();
       toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
+      // OpenCode 1.17.x /session rejects unknown fields with a bare 400
+      // (a permission field here broke session creation on the live round).
+      // Write approval is owned by the CEP host conversation gate, and the
+      // injected opencode.json already sets permission '*': 'allow'.
       const result = await postJson('/session', {
         title: 'After Effects MCP',
         model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID),
-        permission: permissionRuleset(),
       });
       sessionId = String((result && (result.id || result.sessionID || result.sessionId)) || '');
       if (!sessionId) throw new Error('OpenCode did not return a session id.');
@@ -575,10 +584,15 @@ export function createOpenCodeBackend({
     if (type === 'session.error') {
       assistantDeltaRedactor.discard();
       const error = p.error || p;
+      const detail = (error && error.data && error.data.message)
+        || (error && error.message)
+        || (typeof error === 'string' ? error : '');
       emit({
         type: 'error',
         kind: error.kind || 'mcp',
-        message: error.message || String(error || 'OpenCode session error'),
+        // OpenCode session errors arrive as {name, data:{message}} objects;
+        // String() on that shape rendered "[object Object]" in the chat.
+        message: detail || (error && error.name) || 'OpenCode session error',
         ...activeTurnFailureFields(),
       });
       finishActive();
@@ -645,13 +659,19 @@ export function createOpenCodeBackend({
       const userText = turn.text;
       transcript.push({ role: 'user', text: userText });
       messageDispatched = true;
-      await postJson('/session/' + encodeURIComponent(id) + '/message', {
-        parts: openCodeParts(turn),
-      });
+      // Accept at dispatch, not on POST completion: OpenCode's message POST
+      // blocks until the model finishes while assistant deltas stream over
+      // SSE, so a late accept rendered the reply ABOVE the user's message.
+      // ensureSession failures above still reject as not-started (draft is
+      // restored); a POST failure after this point surfaces as an in-chat
+      // error under the already-rendered user turn.
       if (turn.turnId) {
         activeTurnAccepted = true;
         emit({ type: 'turn-accepted', turnId: turn.turnId, transport: 'opencode-file-part' });
       }
+      await postJson('/session/' + encodeURIComponent(id) + '/message', {
+        parts: openCodeParts(turn),
+      });
     } catch (e) {
       emit({
         type: 'error',
@@ -721,8 +741,10 @@ export function createOpenCodeBackend({
   async function probeAccount() {
     try {
       await startServer();
-      const providers = await requestJson('/config/providers').catch(() => requestJson('/provider'));
-      return { loggedIn: true, models: providers };
+      // Reachability check only. The payload embeds each provider's raw API
+      // key (OpenCode returns auth.json values verbatim), so never retain it.
+      await requestJson('/config/providers').catch(() => requestJson('/provider'));
+      return { loggedIn: true };
     } catch (e) {
       return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
     }

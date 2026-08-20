@@ -1,13 +1,13 @@
 import { REAL_BACKENDS } from '../cep/backends/index.js';
 
-const DEFAULT_CHANNEL = { claude: 'subscription', codex: 'cli', opencode: 'provider', zcode: 'cli-config' };
+const DEFAULT_CHANNEL = { claude: 'subscription', codex: 'cli', opencode: 'provider' };
 
 // Channels are chosen by the user, never auto-picked (#229): the effective
 // channel is exactly the enabled one. A broken choice surfaces its own
 // fixHint instead of silently falling back to a sibling channel, and only
 // the enabled channel's probe state gates sending.
 export function pickBackend({ pref, channels = {}, channelChoices = {} }) {
-  const group = ['codex', 'opencode', 'zcode'].includes(pref) ? pref : 'claude';
+  const group = ['codex', 'opencode'].includes(pref) ? pref : 'claude';
   const list = channels[group] || [];
   const wanted = channelChoices[group] || DEFAULT_CHANNEL[group];
   const chosen = list.find((c) => c && c.channel === wanted) || list[0] || null;

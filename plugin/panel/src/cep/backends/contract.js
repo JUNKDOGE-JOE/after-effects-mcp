@@ -27,8 +27,7 @@
 //       -> answerQuestion cancel -> question-resolved{toolUseId,outcome:'cancelled'}
 //       (backend teardown settles it as cancelled — a question never outlives
 //        its backend; see #219/#220. source is the protocol origin:
-//        zcode-user-input / zcode-elicitation / codex-user-input (#228) /
-//        claude-ask-user-question (#228))
+//        codex-user-input (#228) / claude-ask-user-question (#228))
 //   | thinking{active} )*
 //   turn-end{stopReason} | error{kind,message}
 //

@@ -23,6 +23,8 @@ Format based on Keep a Changelog; versioning follows SemVer.
 
 #### 🐛 修复 / 改进
 
+- **Phase 3：provider 收敛到三通道，删除自研 wire-protocol 机器（#263）**——聊天后端注册表现在恰好三条：`subscription`（claude CLI）、`codex`（codex CLI）、`opencode`（所有自定义 / 第三方 provider 的统一入口）；未知后端 id 一律**抛错**而不是静默兜底（旧行为会悄悄落回 claude 描述符 / 拒收附件的 byokLoop）。删除 76 个文件、约 3.5 万行：zcode 后端全家、byok / claude-api 通道、`universalProviderRoute` / `providerCapabilityProbe` / `codexResponsesRoute` / provider 各 codec 与旧 `providerStore` 等自实现任意端点协议的全部机器；claude 后端剥离自定义 API 路由半边（连同「Provider CLI request failed.」类错误改写），codex 后端剥离 `~/.codex/config.toml` provider 继承通道（环境隔离决策：codex=预建隔离 `CODEX_HOME`、claude=`--strict-mcp-config`，两通道都选隔离，#230）。存活的 provider 层约 590 行（OpenCode 注册表 / Provider Manager 前端）。**行为变化**：旧 provider 存量不再以「需重填 key」占位列出，升级用户需在 Provider Manager 中整体重新添加（Base URL + Key + 模型，与 #256 的既定口径一致）；codex 自定义模型输入框与 cc-switch 导入随旧通道下线。
+- **OpenCode 通道真机加固(#263 收尾)**——Provider 新增**接口方言**选项(Anthropic `/v1/messages` 默认 / OpenAI 兼容 `/v1/chat/completions`,后者对混合模型列表的中转通常全家可用);修复七个真机缺陷:npm direct-exe shim 解析(opencode 装机即 ARCH_MISMATCH)、OpenCode 1.17 会话创建 400、注入 baseURL 补 `/v1`、探针双重启动竞态(宿主/注册表就绪门)、模型偏好被启动竞态重置、回复渲染在用户消息上方(派发即确认)、**每次发送重复 spawn OpenCode 且事件流挂死旧实例**(回合永忙无报错、孤儿进程堆积的根因,改为复用活实例);session 错误对象按嵌套提取不再显示 `[object Object]`,探针不再留存含明文 key 的 provider 载荷。
 - **`ae.diagnose` 本机探针忽略代理环境变量**——本机 `/health` 探针不再继承 `HTTP_PROXY`/`HTTPS_PROXY`/`ALL_PROXY`，代理返回的 502 不再被当成本机宿主不可达。（#267）
 - **Tool Library `argsSchema` 接受属性描述**——每个属性现在可带不超过 1024 字符的字符串 `description`，legacy skill 不再“能列出、不能执行”。（#268）
 - **`ae.skillUse(execute=true)` 恢复 v0.9.0 透传返回形状**——技能脚本自己的 JSON 结果原样放在顶层，不再包 `{ok,name,template_type,result}`，也不再出现外层 `ok:true` 包住内层 `ok:false` 的矛盾；v0.9.2–v0.9.6 期间按 `result.*` 读取的调用方需改回顶层字段。执行仍走审批引擎，`execute=false` 不变。（#269）

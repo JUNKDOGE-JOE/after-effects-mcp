@@ -409,7 +409,7 @@ test('strict npm cmd-shims use native Node even when the caller omits requiredAr
 });
 
 test('requiredArch accepts strict local and global npm cmd-shims without cmd.exe', async () => {
-  for (const value of CMD_SHIM_GOLDENS) {
+  for (const value of CMD_SHIM_GOLDENS.filter((fixture) => fixture.variant === 'node-launcher')) {
     const calls = [];
     const node = 'C:\\Tools\\node.exe';
     const adapter = createWindowsAdapter({
@@ -430,6 +430,48 @@ test('requiredArch accepts strict local and global npm cmd-shims without cmd.exe
     assert.equal(result.displayPath, value.shim);
     assert.deepEqual(result.argsPrefix, [value.entry]);
     assert.deepEqual(calls.map((call) => call.file), [node, node]);
+  }
+});
+
+test('direct-exe npm cmd-shims dereference the native entry before arch inspection', async () => {
+  const calls = [];
+  const golden = cmdShimGolden('cmd-shim-direct-exe-global');
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\A', temp: 'C:\\Temp', env: { Path: golden.path },
+    fs: fakeFs(new Set([golden.shim, golden.entry]), {}, {
+      [golden.shim]: Buffer.from(golden.content),
+      [golden.entry]: pe64(0x8664),
+    }),
+    spawnImpl: processFactory([{ stdout: 'opencode 1.2.3' }], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('opencode', { requiredArch: 'x64' });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, golden.entry);
+  assert.equal(result.displayPath, golden.shim);
+  assert.deepEqual(result.argsPrefix, []);
+  assert.equal(result.arch, 'x64');
+  assert.deepEqual(calls.map((call) => call.file), [golden.entry]);
+  assert.deepEqual(calls[0].args, ['--version']);
+});
+
+test('direct-exe npm cmd-shims reject escape, non-exe, and mangled-prefix variants', async () => {
+  for (const golden of CMD_SHIM_GOLDENS.filter((fixture) => fixture.variant === 'direct-exe-negative')) {
+    const calls = [];
+    const adapter = createWindowsAdapter({
+      platform: 'win32', arch: 'x64', home: 'C:\\Users\\A', temp: 'C:\\Temp', env: { Path: golden.path },
+      fs: fakeFs(new Set([golden.shim, golden.entry]), {}, {
+        [golden.shim]: Buffer.from(golden.content),
+        [golden.entry]: pe64(0x8664),
+      }),
+      spawnImpl: processFactory([], calls), now: () => 0,
+    });
+
+    const result = await adapter.resolveExecutable('opencode', { requiredArch: 'x64' });
+
+    assert.equal(result.ok, false, golden.name);
+    assert.deepEqual(calls, [], golden.name);
   }
 });
 
@@ -708,53 +750,4 @@ test('Windows executable resolution looks up PATH and SystemRoot case-insensitiv
   assert.equal(result.path, executable);
   assert.equal(calls[0].file, executable);
   assert.equal(calls[1].file, 'D:\\Windows\\System32\\cmd.exe');
-});
-
-test('Windows ZCode desktop scripts are materialized as a verified Node command', async () => {
-  const calls = [];
-  const discoveredNode = 'C:\\Tools\\node.exe';
-  const zcodeScript = 'C:\\Users\\a\\AppData\\Local\\Programs\\ZCode\\resources\\glm\\zcode.cjs';
-  const adapter = createWindowsAdapter({
-    platform: 'win32', arch: 'x64', home: 'C:\\Users\\a', temp: 'C:\\Temp', env: { Path: 'C:\\Tools' },
-    fs: fakeFs(new Set([discoveredNode, zcodeScript])),
-    spawnImpl: processFactory([
-      { stdout: 'v24.17.0 x64' },
-      { stdout: 'zcode 1.0.0' },
-    ], calls),
-    now: () => 0,
-  });
-  const result = await adapter.resolveExecutable('zcode', { requiredArch: 'x64' });
-  assert.equal(result.ok, true);
-  assert.equal(result.path, discoveredNode);
-  assert.deepEqual(result.argsPrefix, [zcodeScript]);
-  assert.deepEqual(calls[1].args, [zcodeScript, '--version']);
-});
-
-test('macOS ZCode cjs candidates need read access but not an executable bit before Node materialization', async () => {
-  const calls = [];
-  const discoveredNode = '/path/bin/node';
-  const zcodeScript = '/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs';
-  const files = new Set([discoveredNode, zcodeScript]);
-  const adapter = createMacosAdapter({
-    platform: 'darwin', arch: 'arm64', home: '/Users/a', temp: '/tmp', env: { PATH: '/path/bin' },
-    fs: {
-      constants: { X_OK: 1, R_OK: 4 },
-      existsSync: (file) => files.has(file),
-      realpathSync: (file) => file,
-      statSync: () => ({ isFile: () => true }),
-      accessSync: (file, mode) => {
-        if (file === zcodeScript && mode === 1) throw Object.assign(new Error('not executable'), { code: 'EACCES' });
-      },
-    },
-    spawnImpl: processFactory([
-      { stdout: 'v24.17.0 arm64' },
-      { stdout: 'zcode 1.0.0' },
-    ], calls),
-    now: () => 0,
-  });
-
-  const result = await adapter.resolveExecutable('zcode', { requiredArch: 'arm64' });
-  assert.equal(result.ok, true);
-  assert.equal(result.path, discoveredNode);
-  assert.deepEqual(result.argsPrefix, [zcodeScript]);
 });

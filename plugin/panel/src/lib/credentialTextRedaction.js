@@ -1,6 +1,18 @@
 import { redactText } from './exactSecretRedaction.js';
-import { isSensitiveProviderHeaderName } from './providerHeaderPolicy.js';
 
+const SENSITIVE_SEGMENTS = new Set([
+  'api-key', 'apikey', 'auth', 'authentication', 'authorization', 'cookie',
+  'credential', 'credentials', 'key', 'oauth', 'passwd', 'password', 'secret',
+  'session', 'signature', 'token',
+]);
+const STRONG_SENSITIVE_FRAGMENTS = [
+  'apikey', 'auth', 'cookie', 'credential', 'oauth', 'passwd', 'password',
+  'secret', 'session', 'signature', 'token',
+];
+const KEY_SUFFIX_PREFIXES = new Set([
+  'api', 'access', 'client', 'credential', 'private', 'provider', 'public',
+  'secret', 'x',
+]);
 const SECRET_REFERENCE = /aemcp-secret:\/\/provider\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[a-z0-9_-]+\/v1/gi;
 const HEADER_LINE = /^([ \t]*)([!#$%&'*+.^_`|~0-9A-Za-z-]+)([ \t]*:[ \t]*)([^\r\n]+)$/gm;
 const QUOTED_PAIR = /(["'])([A-Za-z][A-Za-z0-9_.-]*)\1(\s*:\s*)(["'])([^"'\r\n]+)\4/g;
@@ -11,21 +23,32 @@ const JWT = /(?<![A-Za-z0-9_-])[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-
 const PREFIXED_KEY = /(?<![A-Za-z0-9_-])sk-[A-Za-z0-9_-]{8,}(?![A-Za-z0-9_-])/g;
 const JSON_KEY = /"((?:\\.|[^"\\])*)"\s*:/g;
 const SENSITIVE_ASSIGNMENT_START = /(^|[^A-Za-z0-9_.-])(["']?)([A-Za-z][A-Za-z0-9_.-]*)(\2)([ \t]*[:=][ \t]*)/g;
-
 const MARKER = '[redacted]';
+
+function isSensitiveCredentialName(value) {
+  const raw = String(value || '').trim();
+  if (!raw) return false;
+  const separated = raw
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+  const segments = separated.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  if (segments.some((segment) => SENSITIVE_SEGMENTS.has(segment))) return true;
+  const compact = raw.toLowerCase().replace(/[^a-z0-9]+/g, '');
+  if (STRONG_SENSITIVE_FRAGMENTS.some((fragment) => compact.includes(fragment))) return true;
+  if (!compact.endsWith('key')) return false;
+  const prefix = compact.slice(0, -3);
+  return KEY_SUFFIX_PREFIXES.has(prefix)
+    || Array.from(KEY_SUFFIX_PREFIXES).some((candidate) => prefix.endsWith(candidate));
+}
 
 function quotedValueEnd(text, start) {
   const quote = text[start];
   let escaped = false;
   for (let index = start + 1; index < text.length; index += 1) {
     const character = text[index];
-    if (escaped) {
-      escaped = false;
-    } else if (character === '\\') {
-      escaped = true;
-    } else if (character === quote) {
-      return index + 1;
-    }
+    if (escaped) escaped = false;
+    else if (character === '\\') escaped = true;
+    else if (character === quote) return index + 1;
   }
   return -1;
 }
@@ -73,7 +96,7 @@ function redactSensitiveJsonValues(value) {
     if (!match) break;
     let name = '';
     try { name = JSON.parse(`"${match[1]}"`); } catch { name = ''; }
-    if (!isSensitiveProviderHeaderName(name)) {
+    if (!isSensitiveCredentialName(name)) {
       offset = JSON_KEY.lastIndex;
       continue;
     }
@@ -96,7 +119,7 @@ function redactSensitiveLineSuffixes(value) {
   SENSITIVE_ASSIGNMENT_START.lastIndex = 0;
   let match;
   while ((match = SENSITIVE_ASSIGNMENT_START.exec(text)) !== null) {
-    if (!isSensitiveProviderHeaderName(match[3])) continue;
+    if (!isSensitiveCredentialName(match[3])) continue;
     return text.slice(0, match.index)
       + match[1] + match[2] + match[3] + match[4] + match[5] + MARKER;
   }
@@ -110,26 +133,25 @@ export function redactCredentialText(value, exactSecrets = []) {
   text = text.replace(SECRET_REFERENCE, '[secret-reference-redacted]');
   text = text.replace(PRIVATE_KEY, MARKER);
   text = text.replace(HEADER_LINE, (match, prefix, name, separator, headerValue) => (
-    isSensitiveProviderHeaderName(name) && headerValue.trim()
+    isSensitiveCredentialName(name) && headerValue.trim()
       ? prefix + name + separator + MARKER
       : match
   ));
   text = text.replace(QUOTED_PAIR, (match, quote, name, separator) => (
-    isSensitiveProviderHeaderName(name)
+    isSensitiveCredentialName(name)
       ? quote + name + quote + separator + quote + MARKER + quote
       : match
   ));
   text = text.replace(ASSIGNMENT, (match, prefix, name, separator) => (
-    isSensitiveProviderHeaderName(name)
+    isSensitiveCredentialName(name)
       ? prefix + name + separator + MARKER
       : match
   ));
   text = text.replace(INLINE_HEADER, (match, prefix, name, separator) => (
-    isSensitiveProviderHeaderName(name)
+    isSensitiveCredentialName(name)
       ? prefix + name + separator + MARKER
       : match
   ));
   text = text.replace(PREFIXED_KEY, MARKER);
-  text = text.replace(JWT, MARKER);
-  return text;
+  return text.replace(JWT, MARKER);
 }

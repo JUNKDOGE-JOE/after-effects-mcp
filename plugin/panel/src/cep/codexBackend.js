@@ -1,18 +1,11 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import {
-  codexAppServerArgs,
-  codexSpawnEnv,
-} from '../lib/providerProfile.js';
-import { LOCAL_ROUTE_TOKEN_HEADER } from '../lib/providerHeaders.js';
-import { selectProviderRoute } from '../lib/providerRouteSelection.js';
-import {
   containsExactSecret,
   createDeltaRedactor,
   redactText,
   redactValue,
 } from '../lib/exactSecretRedaction.js';
 import { PANEL_VERSION } from './mcpClient.js';
-import { createUniversalProviderRoute } from './universalProviderRoute.js';
 import { createPlatformAdapter } from './platform/index.js';
 import {
   PLAN_SCHEMA_KEY,
@@ -69,54 +62,6 @@ function isTransientReconnectError(error) {
   // codex app-server currently exposes MCP cold-start retries only as this
   // notification text; there is no structured retry flag in the panel protocol.
   return /^reconnecting\.\.\.\s*\d+\/\d+$/i.test(message);
-}
-
-function recoverableProviderFailure(error) {
-  const values = [error, error?.data, error?.error, error?.cause].filter((value) => value && typeof value === 'object');
-  if (values.some((value) => ['code', 'type', 'kind', 'reason']
-    .some((key) => String(value[key] || '').toLowerCase() === 'provider_compaction_unsupported'))) {
-    return false;
-  }
-  const message = values.map((value) => String(value.message || '')).filter(Boolean).join('\n');
-  if (
-    /\bprovider_compaction_unsupported\b/i.test(message)
-    || /\bthis chat-only provider cannot compact responses context\.?/i.test(message)
-  ) return false;
-  for (const value of values) {
-    for (const key of ['status', 'statusCode', 'httpStatus', 'upstreamStatus']) {
-      if ([401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
-    }
-    for (const key of ['code', 'type', 'kind', 'reason']) {
-      if (key === 'code' && [401, 403, 404, 405, 501].includes(Number(value[key]))) return true;
-      const code = String(value[key] || '').toLowerCase();
-      if (/unsupported[_-](?:endpoint|api|wire)|(?:endpoint|api|wire)[_-]unsupported/.test(code)) return true;
-    }
-  }
-  return /\b(?:http|status(?:\s+code)?)\s*[:=]?\s*(?:401|403|404|405|501)\b/i.test(message)
-    || /\bunsupported\s+(?:endpoint|api|wire api|request)\b/i.test(message);
-}
-
-function providerFailureFacts(error) {
-  const values = [error, error?.data, error?.error, error?.cause].filter((value) => value && typeof value === 'object');
-  let status = null;
-  let code = '';
-  for (const value of values) {
-    for (const key of ['status', 'statusCode', 'httpStatus', 'upstreamStatus']) {
-      const candidate = Number(value[key]);
-      if (Number.isInteger(candidate)) status = candidate;
-    }
-    for (const key of ['code', 'type', 'kind', 'reason']) {
-      if (!code && value[key] !== undefined) code = String(value[key]);
-    }
-  }
-  return { status, code };
-}
-
-function providerModelError(code, message) {
-  const error = new Error(message);
-  error.kind = 'model';
-  error.code = code;
-  return error;
 }
 
 function createRpc({ writeLine, onNotification, onRequest, timeoutMs = RPC_TIMEOUT_MS }) {
@@ -266,28 +211,12 @@ export function createCodexBackend({
   getMcpSpec,
   getToolMeta,
   getServerInstructions = () => '',
-  getProviderProfile = () => null,
-  getProviderCandidate = () => null,
-  getProviderSensitiveValues = () => [],
-  resolveRequestProfile,
-  recoverProviderProfile,
-  onProviderProfileRecovered = () => {},
-  // When the panel has no explicit custom provider, inherit a model_provider
-  // already declared in ~/.codex/config.toml. config.toml owns provider
-  // selection; the
-  // panel only supplies the missing API key env var the provider needs (no
-  // `-c model_provider=...` override).
-  getCliConfigProvider = () => null,
-  createProviderRoute = createUniversalProviderRoute,
-  createResponsesRoute,
-  selectRoute = selectProviderRoute,
   resolveCli = resolveCodexCli,
   onEvent,
   lang = 'zh',
   env,
 }) {
   const adapter = platform || createPlatformAdapter();
-  const providerRouteFactory = createResponsesRoute || createProviderRoute;
   let proc = null;
   let rpc = null;
   let startPromise = null;
@@ -307,20 +236,13 @@ export function createCodexBackend({
   let activeAssistantText = '';
   let toolMeta = { allowedTools: [], annotations: {} };
   let lastCliInfo = null;
-  let providerRoute = null;
-  let providerSensitiveValues = [];
   let activeAttachmentPaths = [];
   let processStderrAttachmentPaths = [];
   let providerDeltaPhase = undefined;
   let providerDeltaRedactor = createDeltaRedactor([], () => {});
   let providerStderrRedactor = createDeltaRedactor([], () => {});
   let runtimeGeneration = 0;
-  let providerProfileOverride = null;
-  let providerRecoveryAttempted = false;
-  let providerRecoveryInFlight = false;
   let turnFailureInFlight = false;
-  let providerRecoverySequence = 0;
-  let providerRefreshPending = false;
   let activeTurn = null;
   let activeTurnAccepted = false;
   let activeTurnDispatched = false;
@@ -331,21 +253,15 @@ export function createCodexBackend({
   const sessionAllowedTools = new Set();
   const sessionAllowedPlans = new Set();
 
-  function closeProviderRoute() {
-    const route = providerRoute;
-    providerRoute = null;
-    if (route && route.close) Promise.resolve(route.close()).catch(() => {});
-  }
-
   function emit(evt) {
-    if (onEvent) onEvent(redactValue(evt, [...providerSensitiveValues, ...activeAttachmentPaths]));
+    if (onEvent) onEvent(redactValue(evt, activeAttachmentPaths));
   }
 
   function resetProviderDeltaRedactor() {
     providerDeltaRedactor.discard();
     providerDeltaPhase = undefined;
     providerDeltaRedactor = createDeltaRedactor(
-      [...providerSensitiveValues, ...activeAttachmentPaths],
+      activeAttachmentPaths,
       (text) => {
         activeAssistantText += text;
         emit({ type: 'text-delta', text, phase: providerDeltaPhase });
@@ -356,18 +272,11 @@ export function createCodexBackend({
   function resetProviderStderrRedactor() {
     providerStderrRedactor.discard();
     providerStderrRedactor = createDeltaRedactor(
-      [...providerSensitiveValues, ...processStderrAttachmentPaths],
+      processStderrAttachmentPaths,
       (text) => {
         stderrTail = appendTail(stderrTail, text);
       },
     );
-  }
-
-  function setProviderSensitiveValues(values) {
-    providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === 'string' && value)))
-      .sort((left, right) => right.length - left.length);
-    resetProviderDeltaRedactor();
-    resetProviderStderrRedactor();
   }
 
   function setActiveAttachmentPaths(values) {
@@ -391,23 +300,11 @@ export function createCodexBackend({
     resetProviderStderrRedactor();
   }
 
-  function providerRedactionValues(additional = []) {
-    const values = getProviderSensitiveValues();
-    if (!Array.isArray(values)) throw new TypeError('getProviderSensitiveValues must return an array');
-    return [...values, ...additional];
-  }
-
-  function clearProviderSensitiveValues() {
-    providerDeltaRedactor.discard();
-    providerStderrRedactor.discard();
-    providerSensitiveValues = [];
-    providerDeltaPhase = undefined;
-    providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {});
-    providerStderrRedactor = createDeltaRedactor(processStderrAttachmentPaths, () => {});
-  }
-
   function currentEnv() {
-    return adapter.completeSpawnEnv(env || {});
+    const spawnEnv = adapter.completeSpawnEnv(env || {});
+    const codexHome = adapter.paths.join([adapter.paths.configRoot, 'codex-home']);
+    adapter.fs.mkdirSync(codexHome, { recursive: true });
+    return { ...spawnEnv, CODEX_HOME: codexHome };
   }
 
   function activeTurnFailureFields() {
@@ -422,7 +319,6 @@ export function createCodexBackend({
 
   function finishActive() {
     const resolve = activeResolve;
-    const refreshProvider = providerRefreshPending;
     activeResolve = null;
     activeRun = null;
     activeAssistantText = '';
@@ -431,15 +327,9 @@ export function createCodexBackend({
     activeTurnDispatched = false;
     activeUserText = '';
     activeUserRecorded = false;
-    providerRecoveryAttempted = false;
-    providerRecoveryInFlight = false;
     turnFailureInFlight = false;
-    providerRefreshPending = false;
     setActiveAttachmentPaths([]);
     if (resolve) resolve();
-    if (refreshProvider) {
-      Promise.resolve().then(() => onProviderProfileRecovered()).catch(() => {});
-    }
   }
 
   function drainApprovals() {
@@ -482,30 +372,6 @@ export function createCodexBackend({
       answers: displayAnswers(pending.questions, result.values),
     });
     return true;
-  }
-
-  function detachRuntimeForProviderRecovery() {
-    const previousProc = proc;
-    const previousRpc = rpc;
-    runtimeGeneration += 1;
-    drainApprovals();
-    closeProviderRoute();
-    if (previousRpc) previousRpc.close(new Error('Codex provider runtime is restarting'));
-    proc = null;
-    rpc = null;
-    startPromise = null;
-    initializePromise = null;
-    initialized = false;
-    threadId = null;
-    preambleSent = false;
-    currentTurnId = null;
-    activeAssistantText = '';
-    stderrTail = '';
-    clearProviderSensitiveValues();
-    clearProcessStderrAttachmentPaths({ preserveActive: true });
-    if (previousProc) {
-      try { previousProc.kill(); } catch { /* best effort */ }
-    }
   }
 
   function handleNotification(message) {
@@ -599,7 +465,7 @@ export function createCodexBackend({
 
   // #228: surface an agent-to-user question through the #219 form. The answer
   // returns via answerQuestion(); teardown settles it as cancelled so a
-  // question never outlives its backend (mirrors zcode / #220).
+  // question never outlives its backend (#220).
   function handleUserInput(message) {
     const params = message.params || {};
     const questions = questionsFromCodexUserInput(params);
@@ -721,13 +587,11 @@ export function createCodexBackend({
     initialized = false;
     threadId = null;
     preambleSent = false;
-    closeProviderRoute();
     // Settle pending approvals now that the RPC peer is gone: without this the
     // awaiting-approval card stays actionable forever (#220). rpc is already
     // null, so drain releases local state without writing to a dead pipe.
     drainApprovals();
     if (wasStopping) {
-      clearProviderSensitiveValues();
       clearProcessStderrAttachmentPaths();
       return;
     }
@@ -740,7 +604,6 @@ export function createCodexBackend({
       });
       finishActive();
     }
-    clearProviderSensitiveValues();
     clearProcessStderrAttachmentPaths();
   }
 
@@ -754,169 +617,12 @@ export function createCodexBackend({
     initialized = false;
     threadId = null;
     preambleSent = false;
-    closeProviderRoute();
     drainApprovals();
     if (activeRun) {
       emit({ type: 'error', kind: 'mcp', message: err.message, ...activeTurnFailureFields() });
       finishActive();
     }
-    clearProviderSensitiveValues();
     clearProcessStderrAttachmentPaths();
-  }
-
-  function clearSpawnCredentialCopies(runtimeConfig, spawnEnvironment, extraNames = []) {
-    const names = new Set(extraNames);
-    for (const header of runtimeConfig?.envHeaders || []) {
-      names.add(header.envName);
-      header.value = undefined;
-    }
-    for (const name of names) delete spawnEnvironment[name];
-  }
-
-  function selectedProviderProfile() {
-    const selected = providerProfileOverride || (getProviderProfile ? getProviderProfile() : null);
-    if (!selected) return null;
-    const provider = selected.provider || selected;
-    const modelId = String(selected.modelId || '').trim();
-    const runtimeModelId = String(getModel ? getModel() : '').trim();
-    if (!provider) throw new Error('Custom provider is unavailable');
-    if (!modelId || modelId !== runtimeModelId) {
-      throw new Error('Custom provider model binding is unavailable');
-    }
-    if (typeof resolveRequestProfile !== 'function') {
-      throw new Error('Custom provider credential resolver is unavailable');
-    }
-    const route = selectRoute(provider, {
-      client: 'codex',
-      modelId,
-      feature: 'generate',
-    });
-    if (!route?.ok) {
-      const code = route?.reasonCode === 'needs-probe'
-        ? 'provider_preflight_required'
-        : 'provider_route_unavailable';
-      throw providerModelError(code, `Custom provider has no verified Codex route for model ${modelId}`);
-    }
-    return { provider, modelId, route };
-  }
-
-  function normalizedProviderProfile(selected) {
-    if (!selected) return null;
-    const provider = selected.provider || selected;
-    const modelId = String(selected.modelId || '').trim();
-    let route = null;
-    try {
-      route = selectRoute(provider, {
-        client: 'codex',
-        modelId,
-        feature: 'generate',
-      });
-    } catch {
-      route = null;
-    }
-    return {
-      provider,
-      modelId,
-      route,
-    };
-  }
-
-  function providerProfileMatchesCandidate(profile, candidate) {
-    if (!profile?.provider || !candidate?.provider) return false;
-    const profileProviderId = String(profile.provider.id || '').trim();
-    const candidateProviderId = String(candidate.provider.id || '').trim();
-    const profileBaseUrl = String(profile.provider.baseUrl || '').trim();
-    const candidateBaseUrl = String(candidate.provider.baseUrl || '').trim();
-    const profileRequestRevision = profile.provider.requestProfileRevision
-      ?? profile.provider.authProfileRevision
-      ?? null;
-    const candidateRequestRevision = candidate.provider.requestProfileRevision
-      ?? candidate.provider.authProfileRevision
-      ?? null;
-    const profileModelListRevision = profile.provider.modelList?.revision ?? null;
-    const candidateModelListRevision = candidate.provider.modelList?.revision ?? null;
-    return Boolean(
-      profileProviderId
-      && profileProviderId === candidateProviderId
-      && profileBaseUrl === candidateBaseUrl
-      && profileRequestRevision === candidateRequestRevision
-      && profileModelListRevision === candidateModelListRevision
-      && profile.route?.ok === true
-      && profile.modelId === candidate.modelId,
-    );
-  }
-
-  function currentProviderCandidate() {
-    const selected = getProviderCandidate ? getProviderCandidate() : null;
-    if (!selected) return null;
-    const provider = selected.provider || selected;
-    const modelId = String(selected.modelId || '').trim();
-    const runtimeModelId = String(getModel ? getModel() : '').trim();
-    if (!provider) {
-      throw providerModelError('provider_candidate_unavailable', 'Selected custom provider is unavailable');
-    }
-    if (!modelId || modelId !== runtimeModelId) {
-      throw providerModelError('provider_model_binding_unavailable', 'Selected custom provider model binding is unavailable');
-    }
-    return { provider, modelId };
-  }
-
-  async function ensureProviderProfileForSend() {
-    const candidate = currentProviderCandidate();
-    if (!candidate) return true;
-
-    const override = normalizedProviderProfile(providerProfileOverride);
-    if (providerProfileMatchesCandidate(override, candidate)) return true;
-
-    let configured = null;
-    try {
-      configured = normalizedProviderProfile(getProviderProfile ? getProviderProfile() : null);
-    } catch {
-      configured = null;
-    }
-
-    const sequence = providerRecoverySequence + 1;
-    providerRecoverySequence = sequence;
-    detachRuntimeForProviderRecovery();
-    providerProfileOverride = null;
-    if (providerProfileMatchesCandidate(configured, candidate)) {
-      providerProfileOverride = configured;
-      return true;
-    }
-    if (typeof recoverProviderProfile !== 'function') {
-      throw providerModelError(
-        'provider_preflight_unavailable',
-        `Custom provider cannot be verified for model ${candidate.modelId}`,
-      );
-    }
-
-    let recovered;
-    try {
-      recovered = await recoverProviderProfile(
-        candidate.provider,
-        { status: null, code: 'provider_preflight_required' },
-        candidate.modelId,
-      );
-    } catch (error) {
-      if (sequence !== providerRecoverySequence || !activeRun) return false;
-      throw providerModelError(
-        'provider_preflight_failed',
-        error?.message || `Custom provider could not verify model ${candidate.modelId}`,
-      );
-    }
-    if (sequence !== providerRecoverySequence || !activeRun) return false;
-
-    const profile = normalizedProviderProfile(recovered);
-    const currentModelId = String(getModel ? getModel() : '').trim();
-    if (!providerProfileMatchesCandidate(profile, candidate) || currentModelId !== candidate.modelId) {
-      throw providerModelError(
-        'provider_preflight_failed',
-        `Custom provider did not expose a verified API for model ${candidate.modelId}`,
-      );
-    }
-    providerProfileOverride = profile;
-    providerRefreshPending = true;
-    return true;
   }
 
   async function startProcess() {
@@ -937,85 +643,16 @@ export function createCodexBackend({
       const executable = cliInfo.executable || {
         ok: true, id: 'codex', path: cliInfo.cliPath, argsPrefix: [], source: 'path', version: cliInfo.version || null, arch: null,
       };
-      const selected = selectedProviderProfile();
-      let runtimeConfig = null;
-      if (selected) {
-        closeProviderRoute();
-        providerRoute = providerRouteFactory({
-          provider: selected.provider,
-          resolveCapability: ({ provider, modelId, clientProtocol, feature }) => selectRoute(provider, {
-            client: clientProtocol === 'messages' ? 'claude-code' : 'codex',
-            modelId,
-            feature,
-          }),
-          resolveRequestProfile,
-        });
-        const routeInfo = await providerRoute.start();
-        assertCurrentStart();
-        runtimeConfig = {
-          providerId: selected.provider.id,
-          baseUrl: routeInfo.openaiBaseUrl || routeInfo.baseUrl,
-          chatCompatibility: selected.route.upstreamProtocol !== 'responses',
-          envHeaders: [{
-            name: LOCAL_ROUTE_TOKEN_HEADER,
-            envName: 'AE_MCP_PROVIDER_HEADER_00',
-            value: routeInfo.routeToken,
-          }],
-        };
-        setProviderSensitiveValues(providerRedactionValues([routeInfo.routeToken]));
-      } else {
-        setProviderSensitiveValues([]);
-      }
-      let spawnEnvWithCreds = codexSpawnEnv(runtimeConfig, spawnEnv);
-      const extraCredentialEnvNames = [];
-      // Only inherit cli-config's provider env var when the panel has no
-      // explicit custom provider configured — an explicit
-      // custom provider always wins.
-      if (!selected) {
-        const cliConfig = getCliConfigProvider ? getCliConfigProvider() : null;
-        const envKey = cliConfig && cliConfig.provider && String(cliConfig.provider.envKey || '').trim();
-        if (envKey && cliConfig.apiKey) {
-          spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { [envKey]: cliConfig.apiKey });
-          extraCredentialEnvNames.push(envKey);
-          setProviderSensitiveValues([String(cliConfig.apiKey)]);
-        }
-      }
-      // #230: the explicit-custom-provider channel runs codex in a private
-      // CODEX_HOME so the user's global ~/.codex config never reaches the
-      // panel session — with the real home every global MCP server's tools
-      // land in the model surface (202 foreign tools measured on 0.144.1,
-      // including arbitrary code execution via node_repl). Config overrides
-      // cannot do this: `-c mcp_servers=...` merges instead of replacing and
-      // per-server `enabled=false` is ignored (verified on 0.144.1/0.147.0);
-      // only a private home empties the surface down to the thread-injected
-      // `ae` server. The CLI-login and cli-config-provider channels keep the
-      // real home: ChatGPT auth.json and config-declared model_providers live
-      // there, and a private auth.json copy risks refresh-token rotation
-      // invalidating the user's own login.
-      if (runtimeConfig) {
-        const codexHome = adapter.paths.join([adapter.paths.configRoot, 'codex-home']);
-        adapter.fs.mkdirSync(codexHome, { recursive: true });
-        spawnEnvWithCreds = Object.assign({}, spawnEnvWithCreds, { CODEX_HOME: codexHome });
-      }
       assertCurrentStart();
-      let spawnedProc;
-      try {
-        // #228: enable the experimental request_user_input tool for the chat
-        // process only. The probe deliberately stays bare (see probeAccount /
-        // #226), so this flag is appended here rather than in the shared
-        // codexAppServerArgs builder.
-        const appServerArgs = [
-          ...codexAppServerArgs(runtimeConfig),
-          '-c', 'features.default_mode_request_user_input=true',
-        ];
-        spawnedProc = adapter.spawn(executable, appServerArgs, {
-          stdio: 'pipe',
-          windowsHide: true,
-          env: spawnEnvWithCreds,
-        });
-      } finally {
-        clearSpawnCredentialCopies(runtimeConfig, spawnEnvWithCreds, extraCredentialEnvNames);
-      }
+      const appServerArgs = [
+        'app-server',
+        '-c', 'features.default_mode_request_user_input=true',
+      ];
+      const spawnedProc = adapter.spawn(executable, appServerArgs, {
+        stdio: 'pipe',
+        windowsHide: true,
+        env: spawnEnv,
+      });
       proc = spawnedProc;
       const generation = startGeneration + 1;
       runtimeGeneration = generation;
@@ -1042,8 +679,6 @@ export function createCodexBackend({
       return true;
     })().catch((error) => {
       if (startGeneration === runtimeGeneration) {
-        closeProviderRoute();
-        clearProviderSensitiveValues();
         drainApprovals();
       }
       throw error;
@@ -1161,87 +796,28 @@ export function createCodexBackend({
     });
   }
 
-  async function attemptProviderRecovery(error) {
-    if (providerRecoveryInFlight) return true;
-    if (
-      providerRecoveryAttempted
-      || !activeRun
-      || typeof recoverProviderProfile !== 'function'
-      || !recoverableProviderFailure(error)
-    ) return false;
-
-    let selected;
-    try { selected = selectedProviderProfile(); } catch { return false; }
-    if (!selected) return false;
-
-    providerRecoveryAttempted = true;
-    providerRecoveryInFlight = true;
-    const sequence = providerRecoverySequence + 1;
-    providerRecoverySequence = sequence;
-    detachRuntimeForProviderRecovery();
-
-    let recovered;
-    try {
-      recovered = await recoverProviderProfile(
-        selected.provider,
-        providerFailureFacts(error),
-        selected.modelId,
-      );
-    } catch {
-      recovered = null;
-    }
-    if (sequence !== providerRecoverySequence || !activeRun) return true;
-    providerRecoveryInFlight = false;
-    const profile = normalizedProviderProfile(recovered);
-    const provider = profile?.provider;
-    const modelId = profile?.modelId || '';
-    if (
-      !provider
-      || String(provider.id || '').trim() !== String(selected.provider.id || '').trim()
-      || profile.route?.ok !== true
-      || modelId !== selected.modelId
-      || modelId !== String(getModel ? getModel() : '').trim()
-    ) return false;
-    providerProfileOverride = profile;
-    providerRefreshPending = true;
-    await launchActiveTurn();
-    return true;
-  }
-
   async function handleTurnFailure(error) {
-    if (!activeRun || providerRecoveryInFlight || turnFailureInFlight) return;
+    if (!activeRun || turnFailureInFlight) return;
     turnFailureInFlight = true;
     try {
-      let failure = {
+      const failure = {
         kind: error?.kind,
         code: error?.code,
         message: redactValue(
           error?.message || 'Failed to start Codex turn.',
-          [...providerSensitiveValues, ...activeAttachmentPaths],
+          activeAttachmentPaths,
         ),
       };
-      try {
-        if (!activeTurnDispatched && await attemptProviderRecovery(error)) return;
-      } catch (recoveryError) {
-        failure = {
-          kind: recoveryError?.kind,
-          code: recoveryError?.code,
-          message: redactValue(
-            recoveryError?.message || 'Failed to start Codex turn.',
-            [...providerSensitiveValues, ...activeAttachmentPaths],
-          ),
-        };
-      }
       providerDeltaRedactor.discard();
       // The turn is reaching its error terminal state; settle any approval that
       // is still awaiting the user so the card cannot outlive its turn (#220).
       // The peer may still be alive here, so drain delivers real declines.
       drainApprovals();
       const message = failure?.message || 'Failed to start Codex turn.';
-      const providerHttpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
+      const httpFailure = /\bunexpected status\s+\d{3}\b.*\burl:\s*https?:\/\//i.test(message);
       emit({
         type: 'error',
-        kind: failure?.kind || (providerHttpFailure || /model/i.test(message) ? 'model' : 'mcp'),
+        kind: failure?.kind || (httpFailure || /model/i.test(message) ? 'model' : 'mcp'),
         ...(failure?.code ? { code: failure.code } : {}),
         message,
         ...activeTurnFailureFields(),
@@ -1275,17 +851,14 @@ export function createCodexBackend({
     setActiveAttachmentPaths(turn.attachments.map((attachment) => attachment.localPath));
     activeUserText = turn.text;
     activeUserRecorded = false;
-    providerRecoveryAttempted = false;
-    providerRecoveryInFlight = false;
     turnFailureInFlight = false;
-    providerRecoverySequence += 1;
     activeRun = new Promise((resolve) => {
       activeResolve = resolve;
     });
     const run = activeRun;
 
     try {
-      if (await ensureProviderProfileForSend()) await launchActiveTurn();
+      await launchActiveTurn();
     } catch (error) {
       await handleTurnFailure(error);
     }
@@ -1317,7 +890,6 @@ export function createCodexBackend({
   }
 
   function stop() {
-    providerRecoverySequence += 1;
     // turn/interrupt requires BOTH ids (schema: TurnInterruptParams);
     // without an active turn there is nothing to interrupt server-side.
     if (rpc && threadId && currentTurnId) {
@@ -1334,8 +906,6 @@ export function createCodexBackend({
   function reset() {
     stopping = true;
     runtimeGeneration += 1;
-    providerRecoverySequence += 1;
-    closeProviderRoute();
     drainApprovals();
     if (rpc) rpc.close(new Error('Codex backend reset'));
     if (proc) {
@@ -1355,10 +925,8 @@ export function createCodexBackend({
     sessionAllowedTools.clear();
     sessionAllowedPlans.clear();
     toolMeta = { allowedTools: [], annotations: {} };
-    providerProfileOverride = null;
     finishActive();
     stderrTail = '';
-    clearProviderSensitiveValues();
     clearProcessStderrAttachmentPaths();
     stopping = false;
   }
@@ -1389,30 +957,23 @@ export function createCodexBackend({
       lastCliInfo = cliInfo;
     } catch (e) { /* diagnostics only, never blocks the probe */ }
     const diag = { cliPath: cliInfo.cliPath || '', cliVersion: cliInfo.version || '' };
-    const probeSecrets = () => {
-      let secrets = [...providerSensitiveValues];
-      try { secrets = [...secrets, ...providerRedactionValues()]; } catch (e) { /* redaction stays best-effort */ }
-      return secrets;
-    };
+    const probeSecrets = () => [];
     const failure = (detail) => ({ loggedIn: false, runtimeOk: false, detail, ...diag });
     if (!cliInfo.ok) {
       return failure(redactText(cliInfo.detail || 'codex CLI is unavailable', probeSecrets()));
     }
 
-    // #226: the probe answers "is the codex CLI itself logged in / runtime
-    // ok", so it runs a dedicated bare app-server. Routing it through the chat
-    // process would inherit the custom-provider config — a stale provider
-    // route then throws before account/read and reports a healthy login as
-    // runtimeOk:false — and would interleave probe RPC with an active turn.
+    // The probe is a dedicated app-server process so it never interleaves
+    // probe RPC with an active conversation.
     const executable = cliInfo.executable || {
       ok: true, id: 'codex', path: cliInfo.cliPath, argsPrefix: [], source: 'path', version: cliInfo.version || null, arch: null,
     };
     let probeProc;
     try {
-      probeProc = adapter.spawn(executable, codexAppServerArgs(null), {
+      probeProc = adapter.spawn(executable, ['app-server'], {
         stdio: 'pipe',
         windowsHide: true,
-        env: codexSpawnEnv(null, spawnEnv),
+        env: spawnEnv,
       });
     } catch (error) {
       return failure(redactText(error && error.message ? error.message : String(error), probeSecrets()));

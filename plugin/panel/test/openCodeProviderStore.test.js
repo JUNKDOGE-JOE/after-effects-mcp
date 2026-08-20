@@ -61,28 +61,45 @@ test('OpenCode provider store merge-writes auth.json and preserves existing prov
   }
 });
 
-test('OpenCode provider IDs are stable and legacy providers require a new key', () => {
+test('OpenCode provider IDs are stable and new providers require an API key', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ae-mcp-opencode-provider-'));
   try {
     const store = makeStore(root);
     assert.equal(normalizeOpenCodeProviderId('aemcp-My Relay'), 'aemcp-my-relay');
-    store.importLegacyProviders([{
-      id: 'old-relay',
-      name: 'Old Relay',
-      baseUrl: 'https://old.example/v1',
-      allowInsecureHttp: false,
-      modelList: { models: [{ id: 'old-model' }] },
-    }]);
-
-    assert.equal(store.list()[0].needsApiKey, true);
     assert.throws(() => store.save({
-      id: 'old-relay',
-      name: 'Old Relay',
-      baseUrl: 'https://old.example/v1',
-      modelId: 'old-model',
+      id: 'new-relay',
+      name: 'New Relay',
+      baseUrl: 'https://new.example/v1',
+      modelId: 'new-model',
       allowInsecureHttp: false,
     }), { code: 'OPENCODE_API_KEY_REQUIRED' });
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('openCodeProviderDefinitions appends /v1 to a bare relay base URL', () => {
+  const definitions = openCodeProviderDefinitions([{
+    id: 'aemcp-bare',
+    name: 'Bare Relay',
+    baseUrl: 'https://relay.example',
+    allowInsecureHttp: false,
+    modelIds: ['claude-test'],
+    needsApiKey: false,
+  }]);
+  assert.equal(definitions['aemcp-bare'].options.baseURL, 'https://relay.example/v1');
+});
+
+test('openai-protocol providers inject the openai-compatible loader', () => {
+  const definitions = openCodeProviderDefinitions([{
+    id: 'aemcp-relay',
+    name: 'Relay',
+    baseUrl: 'https://relay.example',
+    allowInsecureHttp: false,
+    modelIds: ['gemini-test'],
+    needsApiKey: false,
+    protocol: 'openai',
+  }]);
+  assert.equal(definitions['aemcp-relay'].npm, '@ai-sdk/openai-compatible');
+  assert.equal(definitions['aemcp-relay'].options.baseURL, 'https://relay.example/v1');
 });

@@ -11,7 +11,6 @@ import { Select } from '../components/forms/Select';
 import { Field } from '../components/forms/Field';
 import { EXTERNAL_CLIENTS, externalClientConfigText } from '../cep/externalClients';
 import { copyText } from '../lib/clipboard';
-import { zcodeDefaultModelLocked as shouldLockZcodeDefaultModel, zcodeManagedModelLabel } from '../lib/settingsState';
 import { Icon } from '../components/core/Icon';
 import { loadSectionState, saveSectionState, toggleSection } from '../lib/settingsSections';
 import { createPlatformAdapter } from '../cep/platform/index';
@@ -46,14 +45,10 @@ const S = {
     backendSub: 'Claude',
     backendCodex: 'Codex',
     backendOpenCode: 'OpenCode',
-    backendZcode: 'ZCode',
     recheck: '重新检测',
     providerInitializationFailed: 'Provider 初始化失败；当前列表已保留。请检查 OpenCode provider 配置后重新检测。',
     save: '保存',
     modelDefault: '默认模型（打开面板时使用）',
-    customModel: '自定义模型 ID',
-    customModelCap: '可选；填写后优先用于 Codex',
-    zcodeModelManaged: '由 ZCode 当前会话管理',
     port: '端口',
     portHint: '默认 11488',
     apply: '应用',
@@ -102,15 +97,11 @@ const S = {
     backendSub: 'Claude',
     backendCodex: 'Codex',
     backendOpenCode: 'OpenCode',
-    backendZcode: 'ZCode',
     recheck: 'Re-check',
     providerInitializationFailed: 'Provider initialization failed; the current list was retained. '
       + 'Check the OpenCode provider configuration, then re-check.',
     save: 'Save',
     modelDefault: 'Default model (used when the panel opens)',
-    customModel: 'Custom model ID',
-    customModelCap: 'Optional; takes priority for Codex',
-    zcodeModelManaged: 'Managed by the current ZCode session',
     port: 'Port',
     portHint: 'Default 11488',
     apply: 'Apply',
@@ -310,19 +301,16 @@ export function SettingsScreen({
   modelOptions,
   modelSwitchable = true,
   onModelChange,
-  customModel = '',
-  onCustomModelChange,
   backend = 'subscription',
   onBackendChange,
   expertGuidance = true,
   onExpertGuidance,
-  channels = { claude: [], codex: [], opencode: [], zcode: [] },
+  channels = { claude: [], codex: [], opencode: [] },
   activeChannel = '',
   selectedChannel = '',
   onSelectChannel,
   onRecheckBackend,
   recheckDisabled = false,
-  codexCliConfig = null,
   providerManager = null,
   providerInit = { state: 'checking', error: '' },
   logLevel = 'info',
@@ -332,8 +320,6 @@ export function SettingsScreen({
 }) {
   const t = S[lang] || S.zh;
   const providerInitMessage = t.providerInitializationFailed;
-  const zcodeModelLocked = shouldLockZcodeDefaultModel({ backend, models: modelOptions });
-  const [customModelDraft, setCustomModelDraft] = React.useState(customModel);
   const [draftPort, setDraftPort] = React.useState(String(port));
   const [tokenRaw, setTokenRaw] = React.useState('');
   const [copied, setCopied] = React.useState('');
@@ -346,7 +332,6 @@ export function SettingsScreen({
 
   React.useEffect(() => setDraftPort(String(port)), [port]);
   React.useEffect(() => setTokenRaw(readTokenValue()), []);
-  React.useEffect(() => setCustomModelDraft(customModel), [customModel]);
 
   const copy = (label, text) => {
     copyText(text).then(() => {
@@ -378,28 +363,13 @@ export function SettingsScreen({
         <ChannelCard
           lang={lang}
           channels={backend === 'codex'
-            ? channels.codex : backend === 'opencode'
-              ? channels.opencode : backend === 'zcode' ? channels.zcode : channels.claude}
+            ? channels.codex : backend === 'opencode' ? channels.opencode : channels.claude}
           activeChannel={activeChannel}
           selectedChannel={selectedChannel}
           onSelectChannel={onSelectChannel}
           onRecheck={onRecheckBackend}
           recheckLabel={t.recheck}
           recheckDisabled={recheckDisabled}
-          renderChannelBody={(channel) => {
-            if (backend === 'codex' && channel === 'cli-config') {
-              return (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {codexCliConfig && codexCliConfig.provider ? (
-                    <div style={{ font: '400 10px/1.5 var(--font-ui)', color: 'var(--text-tertiary)' }}>
-                      {[codexCliConfig.providerId, codexCliConfig.model, codexCliConfig.provider.baseUrl].filter(Boolean).join(' · ')}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            }
-            return null;
-          }}
         />
         {providerInit.state === 'unavailable' ? (
           <div role="alert" style={{ padding: '7px 8px', border: '1px solid var(--error-border)', borderRadius: 'var(--radius-md)', background: 'var(--error-bg)', color: 'var(--error)', font: '400 10px/1.5 var(--font-ui)' }}>
@@ -408,23 +378,12 @@ export function SettingsScreen({
         ) : null}
         {providerManager}
         <Field label={t.modelDefault}>
-          {zcodeModelLocked ? (
-            <div style={{ minHeight: 28, display: 'flex', alignItems: 'center', padding: '0 8px', border: '1px solid var(--border-subtle)', borderRadius: 'var(--radius-md)', background: 'var(--bg-well)', font: '400 11px/1.35 var(--font-ui)', color: 'var(--text-secondary)' }}>
-              {zcodeManagedModelLabel(lang, backend === 'zcode' ? model : '')}
-            </div>
-          ) : (
-            <Select value={model} onChange={onModelChange} options={modelOptions || [
-              { value: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
-              { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
-              { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
-            ]} />
-          )}
+          <Select value={model} onChange={onModelChange} options={modelOptions || [
+            { value: 'claude-sonnet-5', label: 'Claude Sonnet 5' },
+            { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6' },
+            { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5' },
+          ]} />
         </Field>
-        {backend === 'codex' ? (
-          <Field label={t.customModel} caption={t.customModelCap}>
-            <Input mono value={customModelDraft} onChange={(v) => { setCustomModelDraft(v); if (onCustomModelChange) onCustomModelChange(v); }} placeholder={backend === 'codex' ? 'provider/model' : 'claude-custom'} />
-          </Field>
-        ) : null}
       </Section>
 
       <Section id="conn" title={t.conn} expanded={sections.conn} onToggle={onToggleSection}>

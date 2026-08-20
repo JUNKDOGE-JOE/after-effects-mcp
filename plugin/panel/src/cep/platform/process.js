@@ -3,7 +3,7 @@ const DEFAULT_OUTPUT_LIMIT = 8192;
 const TERMINATE_GRACE_MS = 50;
 const FORCE_CLOSE_GRACE_MS = 250;
 const EXECUTABLE_IDS = new Set([
-  'node', 'claude', 'codex', 'zcode', 'npm', 'opencode', 'brew', 'winget', 'powershell',
+  'node', 'claude', 'codex', 'npm', 'opencode', 'brew', 'winget', 'powershell',
 ]);
 const WINDOWS_COMMAND_SCRIPT = /\.(?:cmd|bat)$/i;
 
@@ -330,7 +330,6 @@ export function createProcessBoundary({ deps, paths, platform }) {
   function standardCandidates(id, env) {
     if (!windows) {
       const values = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin'].map((root) => paths.join([root, id]));
-      if (id === 'zcode') values.unshift('/Applications/ZCode.app/Contents/Resources/glm/zcode.cjs');
       return values;
     }
     const values = [];
@@ -339,7 +338,6 @@ export function createProcessBoundary({ deps, paths, platform }) {
     const appData = environmentValue(env, 'APPDATA', true) || paths.join([paths.home, 'AppData', 'Roaming']);
     values.push(paths.join([appData, 'npm', id + '.cmd']));
     const local = environmentValue(env, 'LOCALAPPDATA', true) || paths.join([paths.home, 'AppData', 'Local']);
-    if (id === 'zcode') values.unshift(paths.join([local, 'Programs', 'ZCode', 'resources', 'glm', 'zcode.cjs']));
     if (id === 'winget') values.unshift(paths.join([local, 'Microsoft', 'WindowsApps', 'winget.exe']));
     if (id === 'powershell') values.unshift(paths.join([systemRoot, 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe']));
     values.push(paths.join([local, 'Programs', id, id + '.exe']));
@@ -415,6 +413,45 @@ export function createProcessBoundary({ deps, paths, platform }) {
     }
   }
 
+  function strictNpmCmdExeEntry(candidate) {
+    if (!/\.cmd$/i.test(candidate.path) || !Buffer.isBuffer(candidate.prefixBytes)) return null;
+    const text = candidate.prefixBytes.toString('utf8');
+    if (text.includes('\0') || /\r(?!\n)/.test(text)) return null;
+    const lines = text.replace(/\r\n/g, '\n').split('\n');
+    if (lines.at(-1) === '') lines.pop();
+    const common = [
+      '@ECHO off',
+      'GOTO start',
+      ':find_dp0',
+      'SET dp0=%~dp0',
+      'EXIT /b',
+      ':start',
+      'SETLOCAL',
+      'CALL :find_dp0',
+    ];
+    if (lines.length !== common.length + 1) return null;
+    if (common.some((line, index) => lines[index] !== line)) return null;
+
+    const invocation = lines[common.length].match(/^"%dp0%\\(node_modules\\[^"\r\n]+?\.exe)"[ \t]+%\*$/i);
+    if (!invocation || /[%:*?"<>|]/.test(invocation[1])) return null;
+
+    const shimDirectory = paths.dirname(candidate.displayPath);
+    const allowedRoot = paths.join([shimDirectory, 'node_modules']);
+    const lexicalEntry = paths.resolve([shimDirectory, invocation[1]]);
+    if (!windowsPathInside(allowedRoot, lexicalEntry) || !deps.fs.existsSync(lexicalEntry)) return null;
+    try {
+      const entryInfo = (deps.fs.lstatSync || deps.fs.statSync).call(deps.fs, lexicalEntry);
+      if (!entryInfo || !entryInfo.isFile() || entryInfo.isSymbolicLink?.()) return null;
+      deps.fs.accessSync?.(lexicalEntry, deps.fs.constants?.R_OK ?? 4);
+      const realEntry = deps.fs.realpathSync ? deps.fs.realpathSync(lexicalEntry) : lexicalEntry;
+      const realRoot = deps.fs.realpathSync ? deps.fs.realpathSync(allowedRoot) : allowedRoot;
+      if (!windowsPathInside(realRoot, realEntry)) return null;
+      return realEntry;
+    } catch (error) {
+      return null;
+    }
+  }
+
   function strictClaudeNativeEntry(candidate) {
     if (!/\.cmd$/i.test(candidate.path) || !Buffer.isBuffer(candidate.prefixBytes)) return null;
     const text = candidate.prefixBytes.toString('utf8');
@@ -469,6 +506,21 @@ export function createProcessBoundary({ deps, paths, platform }) {
     }
     if (!candidate.nodeScript && !candidate.windowsCommandScript) {
       return { candidate, failure: null };
+    }
+    if (candidate.windowsCommandScript) {
+      const nativeEntry = strictNpmCmdExeEntry(candidate);
+      const nativeCandidate = nativeEntry
+        ? fileCandidate(nativeEntry, candidate.source, options.env)
+        : null;
+      if (nativeCandidate) {
+        return {
+          failure: null,
+          candidate: {
+            ...nativeCandidate,
+            displayPath: candidate.displayPath,
+          },
+        };
+      }
     }
     if (candidate.windowsCommandScript && id === 'claude') {
       const nativeEntry = strictClaudeNativeEntry(candidate);
@@ -567,7 +619,7 @@ export function createProcessBoundary({ deps, paths, platform }) {
   }
 
   async function loginShellCandidate(id, env, attempts) {
-    if (windows || !['claude', 'codex', 'zcode', 'npm', 'opencode', 'node'].includes(id)) return null;
+    if (windows || !['claude', 'codex', 'npm', 'opencode', 'node'].includes(id)) return null;
     const shell = fileCandidate('/bin/zsh', 'standard', env);
     if (!shell) return null;
     const begin = '__AE_MCP_PATH_BEGIN__';
@@ -586,7 +638,7 @@ export function createProcessBoundary({ deps, paths, platform }) {
       if (result.stdout || result.stderr) attempts.push({ path: '/bin/zsh', source: 'login-shell', detail: 'login shell output was polluted or empty' });
       return null;
     }
-    return fileCandidate(match[1], 'login-shell', env, id === 'zcode');
+    return fileCandidate(match[1], 'login-shell', env);
   }
 
   async function resolveExecutable(id, options = {}) {

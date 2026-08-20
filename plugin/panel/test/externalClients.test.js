@@ -60,7 +60,7 @@ test('externalClientConfigText no longer accepts an engine or stdio command bran
   assert.doesNotMatch(text, /retired-ae-mcp/);
 });
 
-test('expertGuidanceEnv remains available to the legacy ZCode provider route', () => {
+test('expertGuidanceEnv remains a generic external-client environment toggle', () => {
   assert.deepEqual(expertGuidanceEnv(true), {});
   assert.deepEqual(expertGuidanceEnv(false), { AE_MCP_EXPERT_GUIDANCE: '0' });
 });

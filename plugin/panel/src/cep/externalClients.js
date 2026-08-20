@@ -25,8 +25,8 @@ export const EXTERNAL_CLIENTS = [
   },
 ];
 
-// The host defaults expert anti-error guidance ON. This helper remains only
-// for the legacy ZCode provider route until its serial cleanup lands.
+// The host defaults expert anti-error guidance ON. Keep this small environment
+// helper for external-client integrations that explicitly opt out.
 export function expertGuidanceEnv(on) {
   return on ? {} : { AE_MCP_EXPERT_GUIDANCE: '0' };
 }

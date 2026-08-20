@@ -63,6 +63,11 @@ function normalizeProvider(value) {
     id,
     name,
     baseUrl: normalizeBaseUrl(value.baseUrl),
+    // Relay endpoints differ per model family in which dialect they accept;
+    // the user picks the wire dialect per provider (#263 live follow-up:
+    // gemini models behind an Anthropic-dialect call broke with Google's
+    // unknown-field errors, while /chat/completions served every family).
+    protocol: value.protocol === 'openai' ? 'openai' : 'anthropic',
     allowInsecureHttp: value.allowInsecureHttp === true,
     modelIds: normalizeModelIds(value.modelIds || value.modelId),
     needsApiKey: value.needsApiKey === true,
@@ -130,32 +135,19 @@ function normalizeAuth(value) {
   return value;
 }
 
-function legacyProviderDraft(provider) {
-  const name = String(provider?.name || provider?.id || '').trim();
-  const baseUrl = String(provider?.baseUrl || '').trim();
-  if (!name || !baseUrl) return null;
-  const models = Array.isArray(provider?.modelList?.models)
-    ? provider.modelList.models.map((model) => model?.id)
-    : Array.isArray(provider?.probedModels) ? provider.probedModels.map((model) => model?.id) : [];
-  return {
-    id: provider.id || name,
-    name,
-    baseUrl,
-    allowInsecureHttp: provider.allowInsecureHttp === true,
-    modelIds: models.length ? models : ['model-required'],
-    needsApiKey: true,
-  };
-}
-
 export function openCodeProviderDefinitions(providers) {
   const definitions = {};
   for (const raw of providers || []) {
     const provider = normalizeProvider(raw);
     if (provider.needsApiKey) continue;
+    const root = provider.baseUrl.replace(/\/+$/, '');
     definitions[provider.id] = {
-      npm: '@ai-sdk/anthropic',
+      npm: provider.protocol === 'openai' ? '@ai-sdk/openai-compatible' : '@ai-sdk/anthropic',
       name: provider.name,
-      options: { baseURL: provider.baseUrl },
+      // Both loaders append their endpoint path ("/messages" or
+      // "/chat/completions") directly to baseURL, so the injected URL must
+      // carry the "/v1" segment relay endpoints expect.
+      options: { baseURL: root.endsWith('/v1') ? root : root + '/v1' },
       models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }])),
     };
   }
@@ -226,21 +218,10 @@ export function createOpenCodeProviderStore({ platform, fsImpl, tempSuffix } = {
     return true;
   }
 
-  function importLegacyProviders(legacyProviders) {
-    const current = readState();
-    if (current.providers.length) return list();
-    const providers = (legacyProviders || []).map(legacyProviderDraft).filter(Boolean).map(normalizeProvider);
-    if (!providers.length) return [];
-    current.providers = providers;
-    writeAtomic(fs, file, current, nextSuffix());
-    return clone(providers);
-  }
-
   return Object.freeze({
     authFilePath: () => authFile,
     filePath: () => file,
     hasApiKey,
-    importLegacyProviders,
     list,
     remove,
     save,

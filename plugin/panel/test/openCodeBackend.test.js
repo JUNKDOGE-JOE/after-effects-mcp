@@ -178,7 +178,7 @@ function makeBackend(options = {}) {
   return { backend, events, spawned, fetched, fsImpl };
 }
 
-test('createOpenCodeBackend sends official file parts and accepts after the message POST', async () => {
+test('createOpenCodeBackend sends official file parts and accepts at dispatch', async () => {
   const { backend, events, fetched } = makeBackend();
   const pending = backend.sendUser({
     turnId: 'turn-1',
@@ -349,15 +349,19 @@ test('createOpenCodeBackend correlates a failed message POST as uncertain withou
   });
   for (let index = 0; index < 20 && !rejectMessage; index += 1) await flush();
   assert.equal(typeof rejectMessage, 'function');
+  // Accepted must land while the POST is still in flight (SSE deltas can
+  // arrive before the blocking POST returns; see the reply-order fix).
+  assert.equal(events.some((evt) => evt.type === 'turn-accepted' && evt.turnId === 'turn-post-failed'), true);
   rejectMessage(new Error('message POST disconnected'));
   await pending;
 
+  // The turn was accepted at dispatch, so a POST failure is an in-chat error
+  // for the already-rendered turn, not a draft-recovery dispatchState.
   assert.deepEqual(events.at(-1), {
     type: 'error',
     kind: 'mcp',
     message: 'message POST disconnected',
     turnId: 'turn-post-failed',
-    dispatchState: 'uncertain',
   });
   assert.equal(base.calls.filter((call) => call.path === '/session/session_1/message').length, 1);
 });
@@ -372,6 +376,9 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   assert.deepEqual(spawned.calls[0].args, ['serve', '--port', '4567']);
   assert.equal(spawned.calls[0].options.shell, undefined);
   assert.equal(spawned.calls[0].options.windowsHide, true);
+  // OpenCode scopes project context to cwd; inheriting AE's cwd ballooned
+  // provider requests until relay-side WAFs rejected them (2026-08-20).
+  assert.equal(spawned.calls[0].options.cwd, 'C:\\tmp\\ae-opencode-test');
   assert.equal(spawned.calls[0].options.env.XDG_CONFIG_HOME, 'C:\\tmp\\ae-opencode-test');
 
   assert.equal(fsImpl.writes.length, 1);
@@ -385,7 +392,7 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   await flush();
   const sessionCall = fetched.calls.find((call) => call.path === '/session');
   assert.deepEqual(sessionCall.body.model, { id: 'north-mini-code-free', providerID: 'opencode' });
-  assert.equal(sessionCall.body.permission.type, 'allow');
+  assert.equal('permission' in sessionCall.body, false);
   assert.equal(fetched.calls.some((call) => call.path === '/session/session_1/message' && call.body.parts[0].text === 'hello'), true);
 
   fetched.sse.push({
@@ -555,4 +562,41 @@ test('openCode descriptors use the free default and map provider model metadata'
   assert.deepEqual(descriptor.models.map((m) => m.id), ['north-mini-code-free', 'south-pro-code']);
   assert.equal(descriptor.defaultModelId, 'north-mini-code-free');
   assert.equal(descriptor.approvalModes.length, 4);
+});
+
+test('session.error objects surface their nested message, never "[object Object]"', async () => {
+  const { backend, events, fetched } = makeBackend();
+  const pending = backend.sendUser({ turnId: 'turn-err', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  fetched.sse.push({
+    type: 'session.error',
+    properties: {
+      sessionID: 'session_1',
+      error: { name: 'UnknownError', data: { message: 'relay rejected the request (403)' } },
+    },
+  });
+  await pending;
+  const errorEvent = [...events].reverse().find((evt) => evt.type === 'error');
+  assert.equal(errorEvent.message, 'relay rejected the request (403)');
+});
+
+test('probe then send reuse one opencode instance and one event stream', async () => {
+  const { backend, spawned, fetched } = makeBackend();
+  await backend.probeAccount();
+  assert.equal(spawned.calls.length, 1);
+  const pending = backend.sendUser({ turnId: 'turn-reuse', text: 'hello', attachments: [] });
+  for (let index = 0; index < 30
+    && !fetched.calls.some((call) => call.path === '/session/session_1/message'); index += 1) {
+    await flush();
+  }
+  assert.equal(spawned.calls.length, 1);
+  fetched.sse.push({
+    type: 'session.status',
+    properties: { sessionID: 'session_1', status: { type: 'idle' } },
+  });
+  await pending;
+  assert.equal(spawned.calls.length, 1);
 });

@@ -1,9 +1,7 @@
 import { createNdjsonReader } from '../lib/ndjson.js';
 import { claudeChannelEnv } from '../lib/claudeChannel.js';
 import { createDeltaRedactor, redactValue } from '../lib/exactSecretRedaction.js';
-import { selectProviderRoute } from '../lib/providerRouteSelection.js';
 import { createPlatformAdapter } from './platform/index.js';
-import { createUniversalProviderRoute } from './universalProviderRoute.js';
 import {
   normalizeTurnInput,
   withAttachmentManifest,
@@ -149,42 +147,9 @@ function randomTempName() {
   return `ae-claude-${stamp}-${random}`;
 }
 
-function defaultResolveCapability({ provider, modelId, feature = 'generate' } = {}) {
-  return selectProviderRoute(provider, {
-    client: 'claude-code',
-    modelId,
-    feature,
-  });
-}
-
-function conversationIdentity({ channel, provider }) {
-  return JSON.stringify([
-    channel,
-    channel === 'api' ? provider.id ?? null : null,
-    channel === 'api' ? provider.baseUrl ?? null : null,
-    channel === 'api' ? provider.requestProfileRevision ?? null : null,
-    channel === 'api' ? provider.modelList?.revision ?? null : null,
-  ]);
-}
-
-function providerCandidateIdentity({ channel, model, provider }) {
-  return JSON.stringify([conversationIdentity({ channel, provider }), model]);
-}
-
-function normalizeChannel(channel) {
-  return channel === 'api' ? 'api' : 'subscription';
-}
-
 function normalizePermissionMode(mode) {
   if (['manual', 'auto', 'none', 'readonly'].includes(mode)) return mode;
   return 'manual';
-}
-
-function providerModelError(code, message) {
-  const error = new Error(message);
-  error.kind = 'model';
-  error.code = code;
-  return error;
 }
 
 function cancelledStartError() {
@@ -332,14 +297,6 @@ export function createClaudeAgentBackend({
   getPermissionMode,
   getEffort,
   getThinking,
-  getChannel = () => 'subscription',
-  getProviderSensitiveValues = () => [],
-  resolveApiProvider,
-  resolveRequestProfile,
-  resolveCapability = defaultResolveCapability,
-  createProviderRoute = createUniversalProviderRoute,
-  recoverProviderProfile,
-  onProviderProfileRecovered = () => {},
   onEvent,
   lang = 'zh',
   spawnImpl,
@@ -373,11 +330,7 @@ export function createClaudeAgentBackend({
   let processChannel = 'subscription';
   let processConversationIdentity = null;
   let processSettings = null;
-  let processProvider = null;
-  let processCandidateIdentity = null;
   let sessionId = null;
-  let providerRoute = null;
-  let routeClosePromise = Promise.resolve();
   let runtimeGeneration = 0;
   let configDir = '';
   let providerSensitiveValues = [];
@@ -553,16 +506,6 @@ export function createClaudeAgentBackend({
     return true;
   }
 
-  function closeProviderRoute() {
-    const route = providerRoute;
-    providerRoute = null;
-    if (!route || typeof route.close !== 'function') return routeClosePromise;
-    routeClosePromise = routeClosePromise
-      .then(() => route.close())
-      .catch(() => {});
-    return routeClosePromise;
-  }
-
   function cleanupConfig() {
     const directory = configDir;
     configDir = '';
@@ -583,8 +526,6 @@ export function createClaudeAgentBackend({
     proc = null;
     startPromise = null;
     processSettings = null;
-    processProvider = null;
-    processCandidateIdentity = null;
     if (current) {
       try { current.kill(); } catch {}
     }
@@ -598,11 +539,6 @@ export function createClaudeAgentBackend({
     if (finishRun) finishActive();
     if (clearStderr) stderrTail = '';
     clearProviderSensitiveValues();
-    await closeProviderRoute();
-  }
-
-  function apiSafeErrorMessage(message) {
-    return processChannel === 'api' ? 'Provider CLI request failed.' : message;
   }
 
   function handleProcessFailure(target, generation, message) {
@@ -611,18 +547,15 @@ export function createClaudeAgentBackend({
     proc = null;
     startPromise = null;
     processSettings = null;
-    processProvider = null;
-    processCandidateIdentity = null;
     setThinking(false);
     drainControls('Claude CLI process ended.', false);
     cleanupConfig();
-    void closeProviderRoute();
     if (activeRun) {
       providerDeltaRedactor.flush();
       emit({
         type: 'error',
         kind: 'mcp',
-        message: apiSafeErrorMessage(message),
+        message,
       });
       finishActive();
     }
@@ -888,107 +821,16 @@ export function createClaudeAgentBackend({
     if (message.type === 'result') handleResult(message);
   }
 
-  async function selectApiRoute(provider, model) {
-    try {
-      return await resolveCapability({
-        provider,
-        modelId: model,
-        clientProtocol: 'messages',
-        feature: 'generate',
-      });
-    } catch {
-      return null;
-    }
-  }
-
-  async function desiredSession(channel) {
+  function desiredSession() {
     const model = String(getModel ? getModel() : '').trim();
     const effort = String(getEffort ? getEffort() || '' : '').trim();
     const thinking = getThinking ? getThinking() : null;
-    let provider = null;
-    let candidateIdentity = null;
-    let recovered = false;
-    if (channel === 'api') {
-      if (typeof resolveApiProvider !== 'function') {
-        throw new Error('Provider is unavailable.');
-      }
-      if (typeof resolveRequestProfile !== 'function') {
-        throw new Error('Provider credential resolver is unavailable.');
-      }
-      if (typeof createProviderRoute !== 'function') {
-        throw new Error('Provider route factory is unavailable.');
-      }
-      provider = await resolveApiProvider();
-      if (!isPlainObject(provider)) throw new Error('Provider is unavailable.');
-      candidateIdentity = providerCandidateIdentity({ channel, model, provider });
-      if (
-        proc
-        && processProvider
-        && processCandidateIdentity === candidateIdentity
-      ) {
-        provider = processProvider;
-      } else {
-        let route = await selectApiRoute(provider, model);
-        if (!route?.ok) {
-          if (route?.reasonCode !== 'needs-probe') {
-            throw providerModelError(
-              'provider_route_unavailable',
-              `Custom provider has no verified Claude route for model ${model}`,
-            );
-          }
-          if (typeof recoverProviderProfile !== 'function') {
-            throw providerModelError(
-              'provider_preflight_unavailable',
-              `Custom provider cannot be verified for model ${model}`,
-            );
-          }
-          let recovery;
-          try {
-            recovery = await recoverProviderProfile(
-              provider,
-              { status: null, code: 'provider_preflight_required' },
-              model,
-            );
-          } catch (cause) {
-            const detail = typeof cause?.message === 'string'
-              ? cause.message.trim()
-              : '';
-            throw providerModelError(
-              'provider_preflight_failed',
-              `Custom provider could not verify model ${model}`
-                + (detail ? `: ${detail}` : ''),
-            );
-          }
-          const recoveredProvider = recovery?.provider || recovery;
-          const recoveredModel = String(recovery?.modelId || model).trim();
-          if (!isPlainObject(recoveredProvider) || recoveredModel !== model) {
-            throw providerModelError(
-              'provider_preflight_failed',
-              `Custom provider did not expose a verified API for model ${model}`,
-            );
-          }
-          route = await selectApiRoute(recoveredProvider, model);
-          if (!route?.ok) {
-            throw providerModelError(
-              'provider_preflight_failed',
-              `Custom provider did not expose a verified API for model ${model}`,
-            );
-          }
-          provider = recoveredProvider;
-          candidateIdentity = providerCandidateIdentity({ channel, model, provider });
-          recovered = true;
-        }
-      }
-    }
     return {
-      channel,
+      channel: 'subscription',
       model,
       effort,
       thinking,
-      provider,
-      candidateIdentity,
-      recovered,
-      conversationIdentity: conversationIdentity({ channel, provider }),
+      conversationIdentity: 'subscription',
     };
   }
 
@@ -1076,37 +918,11 @@ export function createClaudeAgentBackend({
         });
         return false;
       }
-      await routeClosePromise;
-      if (activeRun === null) throw cancelledStartError();
-      let localRoute = null;
-      if (session.channel === 'api') {
-        providerRoute = createProviderRoute({
-          provider: session.provider,
-          resolveCapability,
-          resolveRequestProfile,
-        });
-        const routeInfo = await providerRoute.start();
-        localRoute = {
-          origin: routeInfo?.origin,
-          routeToken: routeInfo?.routeToken,
-        };
-        const values = getProviderSensitiveValues();
-        if (!Array.isArray(values)) {
-          throw new TypeError('getProviderSensitiveValues must return an array');
-        }
-        setProviderSensitiveValues([...values, routeInfo?.routeToken]);
-      } else {
-        setProviderSensitiveValues([]);
-      }
+      setProviderSensitiveValues([]);
       const mcpPath = writeMcpConfig(mcpSpec);
-      let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), {
-        channel: session.channel,
-        localRoute,
-      });
+      let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}));
       stderrTail = '';
-      processChannel = session.channel;
-      processProvider = session.provider;
-      processCandidateIdentity = session.candidateIdentity;
+      processChannel = 'subscription';
       const executable = resolved.executable || {
         ok: true,
         id: 'claude',
@@ -1139,12 +955,10 @@ export function createClaudeAgentBackend({
       spawnedProc.stdout?.on?.('data', reader);
       spawnedProc.stderr?.on?.('data', (chunk) => {
         if (generation !== runtimeGeneration || proc !== spawnedProc) return;
-        const detail = processChannel === 'api'
-          ? '[provider-cli-stderr-redacted]\n'
-          : redactValue(String(chunk), [
-            ...providerSensitiveValues,
-            ...activeAttachmentPaths,
-          ]);
+        const detail = redactValue(String(chunk), [
+          ...providerSensitiveValues,
+          ...activeAttachmentPaths,
+        ]);
         stderrTail = appendTail(stderrTail, detail);
       });
       spawnedProc.on?.('exit', (code, signal) => {
@@ -1161,15 +975,12 @@ export function createClaudeAgentBackend({
     } catch (error) {
       cleanupConfig();
       clearProviderSensitiveValues();
-      await closeProviderRoute();
       if (error?.code !== 'CLAUDE_AGENT_START_CANCELLED') {
         emit({
           type: 'error',
           kind: error?.kind || 'mcp',
           ...(error?.code ? { code: error.code } : {}),
-          message: session.channel === 'api'
-            ? 'Provider CLI request failed.'
-            : (error?.message || 'Failed to start Claude CLI.'),
+          message: error?.message || 'Failed to start Claude CLI.',
         });
       }
       return false;
@@ -1179,15 +990,9 @@ export function createClaudeAgentBackend({
   }
 
   async function ensureCli(runToken, turn) {
-    let channel = 'subscription';
     try {
-      channel = normalizeChannel(getChannel ? getChannel() : 'subscription');
-      const session = await desiredSession(channel);
+      const session = desiredSession();
       if (activeRun !== runToken) throw cancelledStartError();
-      if (session.recovered) {
-        try { await onProviderProfileRecovered(session.provider); } catch {}
-        if (activeRun !== runToken) throw cancelledStartError();
-      }
       const meta = getToolMeta
         ? await getToolMeta()
         : { allowedTools: [], annotations: {} };
@@ -1228,9 +1033,7 @@ export function createClaudeAgentBackend({
           type: 'error',
           kind: error?.kind || 'mcp',
           ...(error?.code ? { code: error.code } : {}),
-          message: channel === 'api'
-            ? 'Provider CLI request failed.'
-            : (error?.message || 'Failed to start Claude CLI.'),
+          message: error?.message || 'Failed to start Claude CLI.',
         });
       }
       return false;

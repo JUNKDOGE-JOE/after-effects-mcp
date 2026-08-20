@@ -1,64 +1,51 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-
 import { deriveToolMeta, pickBackend, shouldResetOnBackendChange } from '../src/lib/backendSelect.js';
 
-function channel(id, ok, checking = false) {
+function channel(id, ok = true, checking = false) {
   return { channel: id, ok, checking, detail: '', source: {}, fixHint: { zh: 'fix', en: 'fix' } };
 }
 
 test('pickBackend routes a configured provider through OpenCode', () => {
-  const selected = pickBackend({
+  assert.deepEqual(pickBackend({
     pref: 'opencode',
-    channels: { opencode: [channel('provider', true)] },
+    channels: { opencode: [channel('provider')] },
     channelChoices: { opencode: 'provider' },
-  });
-  assert.deepEqual(selected, {
+  }), {
     backend: 'opencode', reason: 'ok', channel: 'provider', fixHint: null,
   });
 });
 
-test('pickBackend keeps unavailable OpenCode providers fail-closed with their re-entry hint', () => {
+test('pickBackend keeps unavailable channels disabled', () => {
   const selected = pickBackend({
-    pref: 'opencode',
-    channels: { opencode: [channel('provider', false)] },
-    channelChoices: { opencode: 'provider' },
+    pref: 'codex',
+    channels: { codex: [channel('cli', false)] },
+    channelChoices: { codex: 'cli' },
   });
   assert.equal(selected.backend, 'none');
-  assert.equal(selected.channel, 'provider');
-  assert.equal(selected.fixHint.zh, 'fix');
+  assert.equal(selected.reason, 'codex-no-channel');
 });
 
-test('pickBackend does not expose removed Claude/Codex custom channels', () => {
-  const claude = pickBackend({
-    pref: 'subscription',
-    channels: { claude: [channel('subscription', true)] },
-    channelChoices: { claude: 'api' },
-  });
-  assert.equal(claude.backend, 'subscription');
-  assert.equal(claude.channel, 'subscription');
-
-  const codex = pickBackend({
-    pref: 'codex',
-    channels: { codex: [channel('cli', true), channel('cli-config', false)] },
-    channelChoices: { codex: 'custom' },
-  });
-  assert.equal(codex.backend, 'codex');
-  assert.equal(codex.channel, 'cli');
-});
-
-test('deriveToolMeta maps AE tool annotations', () => {
-  assert.deepEqual(deriveToolMeta([{ name: 'overview', annotations: { readOnlyHint: true } }]), {
-    allowedTools: ['mcp__ae__overview'],
-    annotations: { mcp__ae__overview: { readOnly: true, destructive: false } },
+test('deriveToolMeta maps AE annotations', () => {
+  assert.deepEqual(deriveToolMeta([
+    { name: 'status', annotations: { readOnlyHint: true } },
+    { name: 'exec', annotations: { destructiveHint: true } },
+  ]), {
+    allowedTools: ['mcp__ae__status'],
+    annotations: {
+      mcp__ae__status: { readOnly: true, destructive: false },
+      mcp__ae__exec: { readOnly: false, destructive: true },
+    },
   });
 });
 
-test('shouldResetOnBackendChange resets only between real backends', () => {
+test('shouldResetOnBackendChange only resets between supported backends', () => {
   assert.deepEqual(shouldResetOnBackendChange('codex', 'opencode'), {
-    reset: true, nextReal: 'opencode',
+    reset: true,
+    nextReal: 'opencode',
   });
-  assert.deepEqual(shouldResetOnBackendChange('opencode', 'none'), {
-    reset: false, nextReal: 'opencode',
+  assert.deepEqual(shouldResetOnBackendChange('codex', 'none'), {
+    reset: false,
+    nextReal: 'codex',
   });
 });
