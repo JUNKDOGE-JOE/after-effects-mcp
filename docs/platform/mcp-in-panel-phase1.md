@@ -12,7 +12,8 @@
 
 - `/mcp/c/:token` 与 `/mcp` 复用同一套 POST / GET(SSE) / DELETE；`initialize` 把会话绑到该 conversation，会话不能跨路径复用；未知 token → 404。
 - 普通 `/mcp` 的会话 `conversationId = null`，策略 = 默认外部策略 `{ approvalTier: null, expertGuidance: true, label: 'external' }`。`approvalTier: null` 等价于 Python 里 `AE_MCP_APPROVAL_TIER_FILE` 未设置：调用方是外部 MCP 客户端，它自己的权限系统就是门。
-- 会话身份 `session.clientName` = `initialize.clientInfo.name`（对话会话为 `<name>@<label>`；无 clientInfo 时 `mcp:<id 前 8 位>`），传进 `executeJsx({client})` 用于 activity 与客户端阻断。
+- 会话身份由 `initialize.clientInfo.name/version`、`Mcp-Session-Id` 和（经 `/mcp/c/<token>` 时）conversation token 组成；面板会话的活动归因可显示为 `<name>@<label>`，但阻断键只取 `clientInfo.name`。
+- `/mcp` 的 kill switch 和客户端阻断在每次 `tools/call` 前按当前 session 判定：已建立 session 在下一请求生效，返回结构化 JSON-RPC error（`ACTIONS_PAUSED` / `CLIENT_BLOCKED`，包含 clientInfo 与 session id）；被阻断名称的新 `initialize` 直接拒绝。阻断名单原子持久化到 `~/.ae-mcp/blocked-clients.json`，损坏时 fail-open 并写 host 日志；kill switch 仅为运行态，不持久化。旧 `/exec` 仍只按 `x-ae-mcp-client` header 归因与阻断。
 - 策略在每次 `tools/call` 时现读，`update()` 立即生效。
 
 面板（同一 CEP Node 上下文，`require` 宿主后 `start()`）用进程内 API，不走 HTTP：
@@ -83,7 +84,7 @@ Python `ae.previewFrame` 的 **`saveFrameToPng` 分支**移植：`comp_id` / `ti
 - 设置 → 连接 → **MCP server engine**：`Python`（默认）/ `CEP host（实验性）`，pref `ae_mcp_mcp_engine`，对新会话生效。
 - `cep-host` 模式：`plugin/panel/src/lib/hostConversation.js` 为每个聊天会话 `conversations.create`（label = 会话 id，policy = 审批芯片 + 专家指导），芯片 / 指导变化 `update`，新建会话 `close` 旧的；`plugin/panel/src/lib/mcpEngine.js` 的 `getMcpSpec` 返回 `{ kind: 'http', url: 'http://127.0.0.1:<port>/mcp/c/<token>' }`；codex → `mcp_servers.ae = { url }`，opencode → `{ type: 'remote', url, enabled }`，claude sidecar → `--mcp { type: 'http', url }`。
 - `plugin/panel/src/lib/hostApprovalBridge.js`：`server.mcp.approvals` 的 `request` → 现有 `elicitationCoordinator` 卡片（Python 那份 `approve: boolean` schema）→ `approvals.resolve(accept|decline)`，按 `conversationId` 投递；非 `cep-host` 模式不挂。
-- 外部客户端页（`externalClients.httpConfigFor`）在 `cep-host` 模式显示 HTTP 片段（Claude Code：`claude mcp add --transport http ae http://127.0.0.1:<port>/mcp`），并说明面板必须开着。
+- 外部客户端页（`externalClients.httpConfigFor`）在 `cep-host` 模式提供两种配置：Claude Code 使用 URL-only 命令 `claude mcp add --transport http ae http://127.0.0.1:<port>/mcp`，Cursor 使用 URL-only 的 `mcpServers` 配置；Claude Desktop 使用 `{ "command": "node", "args": ["<扩展根>/host/stdio-shim.js"] }`，由零依赖 stdio→HTTP shim 转发到 `/mcp`。shim 在系统 Node 中运行（不是 CEP 引擎），因此 Claude Desktop 这条路径需要安装系统 Node；所有路径都要求面板保持打开。
 - **仍走 Python stdio**：面板自己的 Tools UI / Tool Library / 工具搜索客户端（`createMcpClient`）。
 
 ### `ae_checkpoint` / `ae_revert` / `ae_validateExpressions` / instructions

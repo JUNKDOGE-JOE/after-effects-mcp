@@ -18,12 +18,12 @@ const ATTACHMENT_CONFORMANCE = {
   subscription: {
     factory: createClaudeAgentBackend,
     testFile: 'claudeAgentBackend.test.js',
-    assertion: /turn-accepted.*turn-1.*claude-agent-sdk/s,
+    assertion: /turn-accepted.*turn-1.*claude-cli-stream-json/s,
   },
   'claude-api': {
     factory: createClaudeAgentBackend,
     testFile: 'claudeAgentBackend.test.js',
-    assertion: /turn-accepted.*turn-1.*claude-agent-sdk/s,
+    assertion: /turn-accepted.*turn-1.*claude-cli-stream-json/s,
   },
   byok: {
     factory: createAgentLoop,
@@ -75,9 +75,9 @@ test('registry gives every backend a truthful attachment disposition', () => {
   assert.deepEqual(
     Object.fromEntries(REAL_BACKENDS.map((id) => [id, BACKENDS[id].attachmentTransport])),
     {
-      subscription: 'agent-sdk',
+      subscription: 'manifest+read-rule',
       byok: 'reject',
-      'claude-api': 'agent-sdk',
+      'claude-api': 'manifest+read-rule',
       codex: 'native+manifest',
       opencode: 'native',
       zcode: 'manifest',

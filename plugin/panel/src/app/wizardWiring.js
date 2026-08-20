@@ -10,15 +10,16 @@ import {
 } from '../cep/wizardActions.js';
 import { initialStepStates, LOCAL_STEPS, SUBSCRIPTION_STEPS, stepReducer } from '../lib/wizardSteps.js';
 
-// App's claudeStatus shape is { state: 'checking'|'ready'|'not-logged-in'|'no-node',
-// nodeVersion?, detail? } — see SettingsScreen's claudeState handling.
+// App's claudeStatus shape is
+// { state:'checking'|'ready'|'not-logged-in'|'no-cli'|'cli-too-old',
+//   cliVersion?, detail? }.
 function isLoginOk(claudeStatus) {
   return Boolean(claudeStatus && claudeStatus.state === 'ready');
 }
 
 function versionFrom(status) {
   if (!status) return '';
-  if (status.nodeVersion) return 'Node ' + String(status.nodeVersion).replace(/^v?/, 'v');
+  if (status.cliVersion) return 'Claude CLI ' + String(status.cliVersion).replace(/^v?/, 'v');
   return String(status.detail || '').trim();
 }
 

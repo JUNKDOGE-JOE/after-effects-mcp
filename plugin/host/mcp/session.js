@@ -17,8 +17,11 @@ class SessionStore {
             id,
             protocolVersion,
             clientName,
+            clientInfo: null,
             conversationId: conversationId || null,
+            conversationToken: null,
             initialized: false,
+            lastActivityAt: Date.now(),
             writers: new Set(),
         };
         this.sessions.set(id, session);
@@ -53,6 +56,23 @@ class SessionStore {
 
     publish(session, message) {
         session.writers.forEach(function (writer) { writer.send(message); });
+    }
+
+    list() {
+        return Array.from(this.sessions.values()).map(function (session) {
+            return {
+                sessionId: session.id,
+                clientInfo: session.clientInfo ? Object.assign({}, session.clientInfo) : null,
+                clientName: session.clientName,
+                conversationId: session.conversationId,
+                conversationToken: session.conversationToken,
+                initialized: session.initialized,
+                lastActivityAt: session.lastActivityAt || null,
+                source: session.conversationId ? 'panel' : 'external',
+            };
+        }).sort(function (a, b) {
+            return (b.lastActivityAt || 0) - (a.lastActivityAt || 0);
+        });
     }
 
     get size() {

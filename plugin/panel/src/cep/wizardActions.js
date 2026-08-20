@@ -27,7 +27,9 @@ export async function detectTool(id, { platform, extRoot, runtimeManager } = {})
       return { ok: false, detail: error?.code || error?.message || 'RUNTIME_MANAGER_FAILED' };
     }
   }
-  const options = executableId === 'node' ? { minimumVersion: '18.0.0' } : {};
+  const options = executableId === 'node'
+    ? { minimumVersion: '18.0.0' }
+    : (executableId === 'claude' ? { minimumVersion: '2.0.0' } : {});
   const resolved = await adapter.resolveExecutable(executableId, options);
   if (!resolved.ok) return { ok: false, detail: resolved.code, resolution: resolved };
   return {

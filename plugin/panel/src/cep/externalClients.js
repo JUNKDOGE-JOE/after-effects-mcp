@@ -113,9 +113,13 @@ export function mcpConfigFor(client, port = 11488, expertGuidance = true, comman
   };
 }
 
-export function httpConfigFor(client, port = 11488) {
+export function httpConfigFor(client, port = 11488, extensionRoot = '<extension root>') {
   const id = typeof client === 'string' ? client : (client && client.id);
   const url = `http://127.0.0.1:${port}/mcp`;
+  const shimPath = String(extensionRoot).replace(/[\\/]+$/, '') + '/host/stdio-shim.js';
+  if (id === 'claude-desktop') {
+    return { mcpServers: { ae: { command: 'node', args: [shimPath] } } };
+  }
   if (id === 'claude-code') {
     return `claude mcp add --transport http ae ${url}`;
   }
@@ -131,9 +135,10 @@ export function externalClientConfigText({
   port = 11488,
   expertGuidance = true,
   command = 'ae-mcp',
+  extensionRoot = '<extension root>',
 } = {}) {
   const config = engine === 'cep-host'
-    ? httpConfigFor(client, port)
+    ? httpConfigFor(client, port, extensionRoot)
     : mcpConfigFor(client, port, expertGuidance, command);
   return typeof config === 'string' ? config : JSON.stringify(config, null, 2);
 }

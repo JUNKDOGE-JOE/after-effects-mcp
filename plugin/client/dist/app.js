@@ -20885,9 +20885,13 @@
       }
     };
   }
-  function httpConfigFor(client, port = 11488) {
+  function httpConfigFor(client, port = 11488, extensionRoot = "<extension root>") {
     const id = typeof client === "string" ? client : client && client.id;
     const url = `http://127.0.0.1:${port}/mcp`;
+    const shimPath = String(extensionRoot).replace(/[\\/]+$/, "") + "/host/stdio-shim.js";
+    if (id === "claude-desktop") {
+      return { mcpServers: { ae: { command: "node", args: [shimPath] } } };
+    }
     if (id === "claude-code") {
       return `claude mcp add --transport http ae ${url}`;
     }
@@ -20901,9 +20905,10 @@
     engine = "python",
     port = 11488,
     expertGuidance = true,
-    command = "ae-mcp"
+    command = "ae-mcp",
+    extensionRoot = "<extension root>"
   } = {}) {
-    const config = engine === "cep-host" ? httpConfigFor(client, port) : mcpConfigFor(client, port, expertGuidance, command);
+    const config = engine === "cep-host" ? httpConfigFor(client, port, extensionRoot) : mcpConfigFor(client, port, expertGuidance, command);
     return typeof config === "string" ? config : JSON.stringify(config, null, 2);
   }
 
@@ -21539,6 +21544,46 @@
         return null;
       }
     }
+    function strictClaudeNativeEntry(candidate) {
+      var _a, _b, _c, _d, _e;
+      if (!/\.cmd$/i.test(candidate.path) || !Buffer.isBuffer(candidate.prefixBytes)) return null;
+      const text = candidate.prefixBytes.toString("utf8");
+      if (text.includes("\0") || /\r(?!\n)/.test(text)) return null;
+      const lines = text.replace(/\r\n/g, "\n").split("\n");
+      if (lines.at(-1) === "") lines.pop();
+      const common = [
+        "@ECHO off",
+        "GOTO start",
+        ":find_dp0",
+        "SET dp0=%~dp0",
+        "EXIT /b",
+        ":start",
+        "SETLOCAL",
+        "CALL :find_dp0"
+      ];
+      if (lines.length !== common.length + 1) return null;
+      if (common.some((line, index) => lines[index] !== line)) return null;
+      const shimDirectory = paths.dirname(candidate.displayPath);
+      const localNodeModules = paths.basename(shimDirectory).toLowerCase() === ".bin" && paths.basename(paths.dirname(shimDirectory)).toLowerCase() === "node_modules" ? paths.dirname(shimDirectory) : null;
+      const nodeModules = localNodeModules || paths.join([shimDirectory, "node_modules"]);
+      const relativeEntry = localNodeModules ? "..\\@anthropic-ai\\claude-code\\bin\\claude.exe" : "node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe";
+      const invocation = lines[common.length].match(/^"%dp0%\\([^"]+)"\s+%\*$/);
+      if (!invocation || invocation[1].toLowerCase() !== relativeEntry.toLowerCase()) return null;
+      const packageRoot = paths.join([nodeModules, "@anthropic-ai", "claude-code"]);
+      const lexicalEntry = paths.join([packageRoot, "bin", "claude.exe"]);
+      if (!windowsPathInside(packageRoot, lexicalEntry) || !deps.fs.existsSync(lexicalEntry)) return null;
+      try {
+        const entryInfo = (deps.fs.lstatSync || deps.fs.statSync).call(deps.fs, lexicalEntry);
+        if (!entryInfo || !entryInfo.isFile() || ((_a = entryInfo.isSymbolicLink) == null ? void 0 : _a.call(entryInfo))) return null;
+        (_e = (_d = deps.fs).accessSync) == null ? void 0 : _e.call(_d, lexicalEntry, (_c = (_b = deps.fs.constants) == null ? void 0 : _b.X_OK) != null ? _c : 1);
+        const realEntry = deps.fs.realpathSync ? deps.fs.realpathSync(lexicalEntry) : lexicalEntry;
+        const realRoot = deps.fs.realpathSync ? deps.fs.realpathSync(packageRoot) : packageRoot;
+        if (!windowsPathInside(realRoot, realEntry)) return null;
+        return realEntry;
+      } catch (error) {
+        return null;
+      }
+    }
     async function materializeScriptCandidate(candidate, id, options, attempts) {
       if (candidate.windowsCommandScript && id === "node") {
         attempts.push({ path: candidate.displayPath, source: candidate.source, detail: "Node command wrappers are not trusted interpreters" });
@@ -21546,6 +21591,25 @@
       }
       if (!candidate.nodeScript && !candidate.windowsCommandScript) {
         return { candidate, failure: null };
+      }
+      if (candidate.windowsCommandScript && id === "claude") {
+        const nativeEntry = strictClaudeNativeEntry(candidate);
+        const nativeCandidate = nativeEntry ? fileCandidate(nativeEntry, candidate.source, options.env) : null;
+        if (!nativeCandidate) {
+          attempts.push({
+            path: candidate.displayPath,
+            source: candidate.source,
+            detail: "Claude command wrapper does not select the in-package native executable"
+          });
+          return { candidate: null, failure: "NOT_FOUND" };
+        }
+        return {
+          failure: null,
+          candidate: {
+            ...nativeCandidate,
+            displayPath: candidate.displayPath
+          }
+        };
       }
       let scriptEntry = candidate.displayPath;
       if (candidate.windowsCommandScript) {
@@ -22261,6 +22325,10 @@
       tokenCap: "\u91CD\u65B0\u751F\u6210\u540E\u9700\u91CD\u542F\u4F60\u7684 AI \u5BA2\u6237\u7AEF",
       tokenMissing: "\u672A\u627E\u5230 ~/.ae-mcp/auth-token",
       clients: "\u5DF2\u8FDE\u63A5\u5BA2\u6237\u7AEF",
+      mcpSessions: "\u6D3B\u52A8 MCP \u4F1A\u8BDD",
+      sessionSourcePanel: "\u9762\u677F\u5185\u4F1A\u8BDD",
+      sessionSourceExternal: "\u5916\u90E8\u5BA2\u6237\u7AEF",
+      sessionId: "session",
       lastActive: "\u6700\u540E\u6D3B\u8DC3",
       blocked: "\u5C4F\u853D",
       mins: (n) => `${n} \u5206\u949F\u524D`,
@@ -22332,6 +22400,10 @@
       tokenCap: "Restart your AI client after regenerating.",
       tokenMissing: "~/.ae-mcp/auth-token not found",
       clients: "Connected clients",
+      mcpSessions: "Active MCP sessions",
+      sessionSourcePanel: "Panel session",
+      sessionSourceExternal: "External client",
+      sessionId: "session",
       lastActive: "Last active",
       blocked: "Block",
       mins: (n) => `${n} min ago`,
@@ -22410,6 +22482,27 @@
       /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: blocked, onChange: onBlock })
     ] });
   }
+  function McpSessionRow({ session, t, onBlock }) {
+    const info = session.clientInfo || {};
+    const name = info.version ? `${info.name} \xB7 ${info.version}` : info.name || session.clientName || "-";
+    const source = session.source === "panel" ? t.sessionSourcePanel : t.sessionSourceExternal;
+    return /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("div", { style: { display: "flex", alignItems: "center", gap: 8, minHeight: 42, padding: "4px 8px", background: "var(--bg-well)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-md)", opacity: session.blocked ? 0.55 : 1 }, children: [
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { flex: 1, minWidth: 0 }, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("span", { style: { display: "block", font: "500 12px/1.35 var(--font-ui)", color: "var(--text-primary)", textDecoration: session.blocked ? "line-through" : "none" }, children: name }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-mono)", color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }, children: [
+          t.sessionId,
+          ": ",
+          session.sessionId
+        ] }),
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)("span", { style: { display: "block", font: "400 10px/1.35 var(--font-ui)", color: "var(--text-tertiary)" }, children: [
+          source,
+          " \xB7 ",
+          formatLastSeen(session.lastActivityAt, t)
+        ] })
+      ] }),
+      /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(Switch, { checked: !!session.blocked, onChange: (value) => onBlock && onBlock(info.name, value) })
+    ] });
+  }
   function ExternalClientRow({ client, t, configText, copied, onCopy, copyDisabled = false, http = false }) {
     const isStdio = client.kind === "mcp-stdio";
     const hasConfig = http || isStdio;
@@ -22469,12 +22562,15 @@
     onApplyPort,
     mcpConfig,
     mcpCommand = "ae-mcp",
+    extensionRoot = "<extension root>",
     mcpReady = true,
     mcpEngine = "python",
     onMcpEngineChange,
     logs = [],
     clients = [],
+    mcpSessions = [],
     onBlockClient,
+    onBlockMcpClient,
     onRegenToken,
     hostVersion = "-",
     pythonVersion = "-",
@@ -22658,7 +22754,8 @@
           engine: mcpEngine,
           port: Number(draftPort) || port || 11488,
           expertGuidance,
-          command: mcpCommand
+          command: mcpCommand,
+          extensionRoot
         }) : "";
         return /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ExternalClientRow,
@@ -22675,6 +22772,16 @@
         );
       }) }),
       /* @__PURE__ */ (0, import_jsx_runtime17.jsxs)(Section, { id: "sec", title: t.sec, expanded: sections.sec, onToggle: onToggleSection, children: [
+        /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.mcpSessions }),
+        mcpSessions.map((session) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
+          McpSessionRow,
+          {
+            session,
+            t,
+            onBlock: onBlockMcpClient
+          },
+          session.sessionId
+        )),
         /* @__PURE__ */ (0, import_jsx_runtime17.jsx)("div", { style: { font: "500 11px/1.35 var(--font-ui)", color: "var(--text-secondary)", marginTop: 2 }, children: t.clients }),
         clients.map((client) => /* @__PURE__ */ (0, import_jsx_runtime17.jsx)(
           ClientRow,
@@ -23192,7 +23299,7 @@
     uv: "uv",
     aeMcp: "ae-mcp",
     node: "Node.js LTS",
-    claude: "Claude Code",
+    claude: "Claude Code CLI 2.x+",
     login: "Claude login"
   };
   function copyText2(text) {
@@ -30990,7 +31097,7 @@
     subscription: {
       id: "subscription",
       baseDescriptor: claudeSubDescriptor,
-      attachmentTransport: "agent-sdk"
+      attachmentTransport: "manifest+read-rule"
     },
     byok: {
       id: "byok",
@@ -31000,7 +31107,7 @@
     "claude-api": {
       id: "claude-api",
       baseDescriptor: byokStaticDescriptor,
-      attachmentTransport: "agent-sdk"
+      attachmentTransport: "manifest+read-rule"
     },
     codex: {
       id: "codex",
@@ -31025,7 +31132,7 @@
     }
   };
   var ATTACHMENT_TRANSPORTS = /* @__PURE__ */ new Set([
-    "agent-sdk",
+    "manifest+read-rule",
     "native",
     "native+manifest",
     "manifest",
@@ -40106,25 +40213,109 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/claudeAgentBackend.js
-  var READY_TIMEOUT_MS = 15e3;
+  var CLAUDE_MINIMUM_VERSION = "2.0.0";
   var STDERR_TAIL_LIMIT2 = 4096;
-  async function resolveSystemNode({ platform } = {}) {
+  var PROVIDER_ENV_KEYS = [
+    "ANTHROPIC_API_KEY",
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN"
+  ];
+  var DISALLOWED_TOOLS = [
+    "Bash",
+    "Edit",
+    "Write",
+    "PowerShell",
+    "Task",
+    "WebFetch",
+    "WebSearch"
+  ];
+  var ATTACHMENT_READ_RULE = [
+    "Read may be used only for exact paths listed in the current",
+    "<ae_mcp_attachments> manifest."
+  ].join(" ");
+  var SYSTEM_PROMPTS = {
+    zh: [
+      "\u4F60\u662F After Effects \u9762\u677F\u5185\u7684\u52A9\u624B\u3002\u53EA\u4F7F\u7528 ae_ \u524D\u7F00\u5DE5\u5177\u64CD\u4F5C After Effects\u3002\u56DE\u7B54\u7B80\u77ED\uFF0C\u4F18\u5148\u76F4\u63A5\u5B8C\u6210\u7528\u6237\u8BF7\u6C42\u3002",
+      "",
+      "\u5DE5\u4F5C\u65B9\u5F0F\uFF1A",
+      "- \u4F18\u5148\u4F7F\u7528\u5DE5\u5177\u5217\u8868\u91CC\u7684\u7ED3\u6784\u5316\u5DE5\u5177\uFF08\u8BFB\u53D6\u4F18\u5148 ae_read \u8FD9\u7C7B\u8BFB\u5DE5\u5177\uFF1B\u5DF2\u5B58\u5DE5\u5177\u7528 ae_toolSearch \u627E\u3001ae_toolUse \u6267\u884C\uFF09\uFF1B\u6CA1\u6709\u5BF9\u5E94\u5DE5\u5177\u65F6\u624D\u7528 ae_exec \u5199\u811A\u672C\u3002",
+      "- \u5199\u811A\u672C\u524D\u5148\u7528\u8BFB\u5DE5\u5177\u786E\u8BA4\u7ED3\u6784\uFF0C\u4E0D\u8981\u51ED\u8BB0\u5FC6\u731C\u6D4B\u5DE5\u7A0B\u5185\u5BB9\u3002",
+      "- ae_exec \u6CA1\u6709 comp_id \u7B49\u5B9A\u4F4D\u53C2\u6570\u2014\u2014\u76EE\u6807\u5B9A\u4F4D\u5199\u5728\u811A\u672C\u91CC\u3002",
+      "- MCP/\u9762\u677F\u901A\u9053\u4E0D\u53EF\u7528\u65F6\uFF0CDo not switch to OS screenshots\u3001\u684C\u9762\u81EA\u52A8\u5316\u6216\u5916\u90E8\u4E34\u65F6\u811A\u672C\uFF1Breport the MCP failure \u7ED9\u7528\u6237\u3002",
+      "- \u751F\u6210\u6587\u4EF6\u548C temporary files \u653E\u5728 project workspace \u6216\u7528\u6237\u660E\u786E\u540C\u610F\u7684\u8F93\u51FA\u76EE\u5F55\uFF0C\u4E0D\u8981\u6563\u843D\u5230\u5DE5\u4F5C\u533A\u5916\u3002",
+      "",
+      "ExtendScript \u9AD8\u9891\u9677\u9631\uFF08\u52A1\u5FC5\u9075\u5B88\uFF09\uFF1A",
+      "- setTemporalEaseAtKey \u7684\u7F13\u52A8\u6570\u7EC4\u957F\u5EA6\u5FC5\u987B\u7B49\u4E8E\u5C5E\u6027\u7EF4\u5EA6\uFF08\u4E00\u7EF4\u5982 Opacity=1\uFF1BScale \u4E09\u7EF4=3\uFF1B\u7A7A\u95F4\u5C5E\u6027\u5982 Position=1\uFF09\u3002\u76F4\u63A5\u7528 AEMCP.easeKeys(prop) \u81EA\u52A8\u5904\u7406\u3002",
+      '- \u4EFB\u4F55 byName / \u7D22\u5F15\u67E5\u627E\u90FD\u53EF\u80FD\u8FD4\u56DE null\uFF0C\u4F7F\u7528\u524D\u5FC5\u987B\u5224\u7A7A\uFF1B\u6216\u7528 AEMCP.mustFind(value, "\u540D\u5B57") \u8BA9\u9519\u8BEF\u81EA\u5E26\u540D\u5B57\u3002',
+      "- \u4E0D\u5B58\u5728\u7684 API \u4E0D\u8981\u81C6\u9020\uFF08\u5982 items.byName \u4E0D\u5B58\u5728\uFF09\uFF1B\u4E0D\u786E\u5B9A\u5C31\u5148\u7528\u8BFB\u5DE5\u5177\u6216\u904D\u5386\u3002",
+      "- \u672C\u673A\u53EF\u80FD\u662F\u672C\u5730\u5316\uFF08\u4E2D\u6587\uFF09AE\uFF1A\u663E\u793A\u540D\u662F\u7FFB\u8BD1\u8FC7\u7684\uFF0C\u5339\u914D\u5C5E\u6027\u4F18\u5148\u7528 matchName\u3002",
+      "- AEMCP \u52A9\u624B\uFF08safeValue / easeKeys / mustFind / compById / layerById\uFF09\u5DF2\u6CE8\u5165\uFF0C\u53EF\u76F4\u63A5\u8C03\u7528\uFF1BlayerById \u7B49\u7528\u6570\u5B57 id\u3002"
+    ].join("\n"),
+    en: [
+      "You are an assistant inside an After Effects panel. Use only ae_ prefixed tools to operate After Effects. Keep replies brief and focus on completing the user request.",
+      "",
+      "Working mode:",
+      "- Prefer the structured tools in your tool list (reads via ae_read-style read tools; stored tools via ae_toolSearch / ae_toolUse); use ae_exec scripts only when no tool fits.",
+      "- Before scripting, inspect with read tools to confirm structure instead of guessing project contents.",
+      "- ae_exec has no comp_id or other targeting parameters. Put target lookup inside the script.",
+      "- If the MCP/panel path is unavailable, do not switch to OS screenshots, desktop automation, or ad-hoc external scripts; report the MCP failure to the user.",
+      "- Keep generated files and temporary files in the project workspace or a user-approved output directory; do not scatter files outside it.",
+      "",
+      "ExtendScript scripting pitfalls (must follow):",
+      "- setTemporalEaseAtKey ease arrays must match the property dimension (1D like Opacity=1; Scale 3D=3; spatial properties like Position=1). Use AEMCP.easeKeys(prop) to size them automatically.",
+      '- Any byName / index lookup may return null; check before use, or call AEMCP.mustFind(value, "name") so the error names the missing target.',
+      "- Do not invent APIs that do not exist (for example items.byName); if unsure, use read tools or iterate.",
+      "- AE may be localized (Chinese): display names are translated, so prefer matchName for property matching.",
+      "- AEMCP helpers (safeValue / easeKeys / mustFind / compById / layerById) are injected and available; layerById and similar helpers expect numeric ids."
+    ].join("\n")
+  };
+  function requiredArchitecture(adapter) {
+    if (adapter.id === "macos-arm64") return "arm64";
+    if (adapter.id === "windows-x64") return "x64";
+    return void 0;
+  }
+  function cliResolutionMessage(code, lang) {
+    if (code === "VERSION_TOO_OLD") {
+      return lang === "zh" ? "Claude CLI \u7248\u672C\u8FC7\u65E7\uFF0C\u8BF7\u5347\u7EA7 Claude CLI \u5230 2.x \u6216\u66F4\u9AD8\u7248\u672C\u3002" : "Claude CLI is too old. Upgrade Claude CLI to version 2.x or newer.";
+    }
+    return lang === "zh" ? "\u672A\u627E\u5230 Claude CLI\u3002\u8BF7\u5B89\u88C5 Claude Code 2.x\uFF0C\u5E76\u786E\u4FDD claude \u5728 PATH \u4E2D\u3002" : "Claude CLI was not found. Install Claude Code 2.x and put claude on PATH.";
+  }
+  async function resolveClaudeCli({ platform, env, lang = "zh" } = {}) {
     const adapter = platform || createPlatformAdapter();
-    const requiredArch = adapter.id === "macos-arm64" ? "arm64" : adapter.id === "windows-x64" ? "x64" : void 0;
-    const resolved = await adapter.resolveExecutable("node", { minimumVersion: "18.0.0", ...requiredArch ? { requiredArch } : {} });
-    if (!resolved.ok) return { ok: false, detail: "Node runtime resolution failed: " + resolved.code, resolution: resolved };
-    return { ok: true, nodePath: resolved.path, version: resolved.version || "", executable: resolved };
+    const arch = requiredArchitecture(adapter);
+    const options = {
+      minimumVersion: CLAUDE_MINIMUM_VERSION,
+      ...arch ? { requiredArch: arch } : {},
+      ...env === void 0 ? {} : { env }
+    };
+    const resolved = await adapter.resolveExecutable("claude", options);
+    if (!resolved.ok) {
+      return {
+        ok: false,
+        code: resolved.code,
+        detail: cliResolutionMessage(resolved.code, lang),
+        resolution: resolved
+      };
+    }
+    return {
+      ok: true,
+      cliPath: resolved.path,
+      displayPath: resolved.displayPath || resolved.path,
+      version: resolved.version || "",
+      executable: resolved
+    };
   }
   function clone3(value) {
     return value == null ? value : JSON.parse(JSON.stringify(value));
   }
-  function nodeMissingMessage(lang) {
-    if (lang === "zh") return "\u5185\u5D4C\u5BF9\u8BDD\u8FD0\u884C\u65F6\u7F3A\u5931\u6216\u635F\u574F\uFF0C\u8BF7\u5728\u8BBE\u7F6E\u4E2D\u4FEE\u590D\u79BB\u7EBF\u8FD0\u884C\u65F6\u3002";
-    return "The embedded chat runtime is missing or damaged. Repair the offline runtime in Settings.";
-  }
   function appendTail3(tail, chunk) {
     const next = tail + String(chunk || "");
     return next.length > STDERR_TAIL_LIMIT2 ? next.slice(next.length - STDERR_TAIL_LIMIT2) : next;
+  }
+  function randomTempName() {
+    const stamp = Date.now().toString(36);
+    const random = Math.random().toString(36).slice(2);
+    return `ae-claude-${stamp}-${random}`;
   }
   function defaultResolveCapability({ provider, modelId, feature = "generate" } = {}) {
     return selectProviderRoute(provider, {
@@ -40133,24 +40324,25 @@ data: ${JSON.stringify(payload)}
       feature
     });
   }
-  function runtimeIdentity({ channel, model, provider }) {
+  function conversationIdentity({ channel, provider }) {
     var _a, _b, _c, _d, _e;
     return JSON.stringify([
       channel,
-      model,
       channel === "api" ? (_a = provider.id) != null ? _a : null : null,
       channel === "api" ? (_b = provider.baseUrl) != null ? _b : null : null,
       channel === "api" ? (_c = provider.requestProfileRevision) != null ? _c : null : null,
       channel === "api" ? (_e = (_d = provider.modelList) == null ? void 0 : _d.revision) != null ? _e : null : null
     ]);
   }
-  function cancelledStartError() {
-    const error = new Error("Claude sidecar start was cancelled");
-    error.code = "CLAUDE_AGENT_START_CANCELLED";
-    return error;
+  function providerCandidateIdentity({ channel, model, provider }) {
+    return JSON.stringify([conversationIdentity({ channel, provider }), model]);
   }
   function normalizeChannel(channel) {
     return channel === "api" ? "api" : "subscription";
+  }
+  function normalizePermissionMode(mode) {
+    if (["manual", "auto", "none", "readonly"].includes(mode)) return mode;
+    return "manual";
   }
   function providerModelError(code, message) {
     const error = new Error(message);
@@ -40158,10 +40350,161 @@ data: ${JSON.stringify(payload)}
     error.code = code;
     return error;
   }
+  function cancelledStartError() {
+    const error = new Error("Claude CLI start was cancelled");
+    error.code = "CLAUDE_AGENT_START_CANCELLED";
+    return error;
+  }
+  function uniqueToolList(items) {
+    const seen = /* @__PURE__ */ new Set();
+    const result = [];
+    for (const item of items) {
+      if (typeof item !== "string" || !item || seen.has(item)) continue;
+      seen.add(item);
+      result.push(item);
+    }
+    return result;
+  }
+  function isPlainObject2(value) {
+    return value !== null && typeof value === "object" && !Array.isArray(value);
+  }
+  function normalizeInput(input) {
+    return isPlainObject2(input) ? input : {};
+  }
+  function toolResultText(content) {
+    if (typeof content === "string") return content;
+    if (!Array.isArray(content)) return "";
+    return content.filter((item) => item && item.type === "text").map((item) => String(item.text || "")).join("");
+  }
+  function classifyError(error) {
+    const detail = truncateDetail(error);
+    if (/\/login|logged|credential|authentication/i.test(detail)) return "auth";
+    if (/not_found|model.*(unavailable|not available|does not exist)/i.test(detail)) {
+      return "model";
+    }
+    return "network";
+  }
+  function truncateDetail(error) {
+    let detail;
+    if (typeof error === "string") detail = error;
+    else if (error && typeof error.message === "string") detail = error.message;
+    else {
+      try {
+        detail = JSON.stringify(error);
+      } catch {
+        detail = String(error);
+      }
+    }
+    return String(detail || "").slice(0, 500);
+  }
+  function normalizedThinking(value) {
+    if (value === "adaptive") return { type: "adaptive" };
+    if (!isPlainObject2(value)) return null;
+    if (value.type === "adaptive" || value.type === "disabled") {
+      return { type: value.type };
+    }
+    if (value.type === "enabled") {
+      const budgetTokens = Number(value.budgetTokens);
+      return Number.isFinite(budgetTokens) && budgetTokens >= 0 ? { type: "enabled", budgetTokens: Math.floor(budgetTokens) } : { type: "enabled" };
+    }
+    return null;
+  }
+  function thinkingArgs(value) {
+    const thinking = normalizedThinking(value);
+    if (!thinking) return [];
+    if (thinking.type === "disabled") return ["--thinking", "disabled"];
+    if (thinking.type === "enabled" && thinking.budgetTokens !== void 0) {
+      return ["--max-thinking-tokens", String(thinking.budgetTokens)];
+    }
+    return ["--thinking", "adaptive"];
+  }
+  function tierAllowedTools(meta, permissionMode, attachments) {
+    const annotations = isPlainObject2(meta == null ? void 0 : meta.annotations) ? meta.annotations : {};
+    const names = Object.keys(annotations);
+    const readOnly = names.filter((name) => {
+      var _a;
+      return ((_a = annotations[name]) == null ? void 0 : _a.readOnly) === true;
+    });
+    const nonDestructive = names.filter(
+      (name) => {
+        var _a;
+        return ((_a = annotations[name]) == null ? void 0 : _a.destructive) !== true;
+      }
+    );
+    let tools;
+    if (permissionMode === "readonly") tools = readOnly;
+    else if (permissionMode === "none") tools = names;
+    else if (permissionMode === "auto") tools = [...readOnly, ...nonDestructive];
+    else tools = Array.isArray(meta == null ? void 0 : meta.allowedTools) ? meta.allowedTools : [];
+    const attachmentRules = attachments.map(
+      (attachment) => `Read(${attachment.localPath})`
+    );
+    return uniqueToolList([...tools, ...attachmentRules]);
+  }
+  function agentDefinition(meta, attachments, lang) {
+    const annotations = isPlainObject2(meta == null ? void 0 : meta.annotations) ? meta.annotations : {};
+    const attachmentTools = attachments.length ? ["Read"] : [];
+    const prompt = attachments.length ? `${SYSTEM_PROMPTS[lang]}
+
+${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
+    return {
+      ae: {
+        description: "After Effects panel assistant",
+        prompt,
+        tools: uniqueToolList([
+          ...Object.keys(annotations),
+          ...Array.isArray(meta == null ? void 0 : meta.allowedTools) ? meta.allowedTools : [],
+          ...attachmentTools,
+          "AskUserQuestion"
+        ])
+      }
+    };
+  }
+  function deleteEnvironmentKey2(environment, name) {
+    const normalized = name.toUpperCase();
+    for (const key of Object.keys(environment)) {
+      if (key.toUpperCase() === normalized) delete environment[key];
+    }
+  }
+  function mcpConfigForSpec(spec) {
+    if (spec && spec.kind === "http") {
+      return {
+        mcpServers: {
+          ae: { type: "http", url: String(spec.url || "") }
+        }
+      };
+    }
+    const childEnv = isPlainObject2(spec == null ? void 0 : spec.env) ? { ...spec.env } : {};
+    for (const key of PROVIDER_ENV_KEYS) deleteEnvironmentKey2(childEnv, key);
+    for (const key of PROVIDER_ENV_KEYS) childEnv[key] = "";
+    for (const key of ["AE_MCP_APPROVAL_TIER_FILE", "AE_MCP_TOOL_APPROVAL_TIER_FILE"]) {
+      deleteEnvironmentKey2(childEnv, key);
+    }
+    childEnv.AE_MCP_BACKEND = "ae-mcp";
+    return {
+      mcpServers: {
+        ae: {
+          command: String((spec == null ? void 0 : spec.command) || "ae-mcp"),
+          args: Array.isArray(spec == null ? void 0 : spec.args) ? spec.args.map(String) : [],
+          env: childEnv
+        }
+      }
+    };
+  }
+  function processSettingsIdentity({ session, turn, meta, mcpSpec }) {
+    return JSON.stringify({
+      model: session.model,
+      effort: session.effort,
+      thinking: normalizedThinking(session.thinking),
+      permissionMode: turn.permissionMode,
+      attachments: turn.attachments.map((attachment) => attachment.localPath),
+      meta,
+      mcp: mcpConfigForSpec(mcpSpec)
+    });
+  }
   function createClaudeAgentBackend({
     platform,
-    resolveNode = resolveSystemNode,
-    sidecarPath,
+    resolveClaude = resolveClaudeCli,
     getMcpSpec: getMcpSpec2,
     getToolMeta,
     getModel,
@@ -40180,39 +40523,49 @@ data: ${JSON.stringify(payload)}
     onEvent,
     lang = "zh",
     spawnImpl,
+    fsImpl,
+    tempDirName = randomTempName,
+    now = Date.now,
     env
-  }) {
-    const adapter = platform || (spawnImpl ? {
-      completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
-      spawn: (executable, args, options) => spawnImpl(executable.path, [...executable.argsPrefix || [], ...args], options)
-    } : createPlatformAdapter());
+  } = {}) {
+    const adapter = platform || createPlatformAdapter();
+    const fs = fsImpl || adapter.fs;
+    const spawnProcess = spawnImpl ? (executable, args, options) => spawnImpl(
+      executable.path,
+      [...executable.argsPrefix || [], ...args],
+      options
+    ) : (executable, args, options) => adapter.spawn(executable, args, options);
     let proc = null;
     let startPromise = null;
-    let pendingReadyReject = null;
-    let pendingReadyTimer = null;
-    let ready = false;
     let stderrTail = "";
     let transcript = [];
     let activeRun = null;
     let activeResolve = null;
     let activeAssistantText = "";
-    let processChannel = "subscription";
-    let processModel = "";
-    let processIdentity = null;
-    let processProvider = null;
-    let processCandidateIdentity = null;
-    let providerRoute = null;
-    let routeClosePromise = Promise.resolve();
-    let runtimeGeneration = 0;
-    let providerSensitiveValues = [];
-    let activeAttachmentPaths = [];
-    let providerDeltaPhase = void 0;
-    let providerDeltaRedactor = createDeltaRedactor([], () => {
-    });
     let activeTurn = null;
     let activeTurnAccepted = false;
     let activeTurnDispatched = false;
-    const pendingUserInputs = /* @__PURE__ */ new Map();
+    let activeSawTextDelta = false;
+    let activeAttachmentPaths = [];
+    let processChannel = "subscription";
+    let processConversationIdentity = null;
+    let processSettings = null;
+    let processProvider = null;
+    let processCandidateIdentity = null;
+    let sessionId = null;
+    let providerRoute = null;
+    let routeClosePromise = Promise.resolve();
+    let runtimeGeneration = 0;
+    let configDir = "";
+    let providerSensitiveValues = [];
+    let providerDeltaPhase;
+    let thinkingActive = false;
+    let providerDeltaRedactor = createDeltaRedactor([], () => {
+    });
+    const pendingApprovals = /* @__PURE__ */ new Map();
+    const pendingQuestions = /* @__PURE__ */ new Map();
+    const sessionAllowedTools = /* @__PURE__ */ new Set();
+    const startedTools = /* @__PURE__ */ new Map();
     function emit(evt) {
       let event = evt;
       if ((event == null ? void 0 : event.type) === "error" && (activeTurn == null ? void 0 : activeTurn.turnId) && !event.turnId) {
@@ -40224,25 +40577,31 @@ data: ${JSON.stringify(payload)}
           } : {}
         };
       }
-      if (onEvent) onEvent(redactValue(event, [...providerSensitiveValues, ...activeAttachmentPaths]));
+      if (onEvent) {
+        onEvent(redactValue(event, [
+          ...providerSensitiveValues,
+          ...activeAttachmentPaths
+        ]));
+      }
     }
     function resetProviderDeltaRedactor() {
       providerDeltaRedactor.discard();
       providerDeltaPhase = void 0;
-      providerDeltaRedactor = createDeltaRedactor([...providerSensitiveValues, ...activeAttachmentPaths], (text) => {
+      providerDeltaRedactor = createDeltaRedactor([
+        ...providerSensitiveValues,
+        ...activeAttachmentPaths
+      ], (text) => {
         activeAssistantText += text;
-        emit({ type: "text-delta", text, ...providerDeltaPhase ? { phase: providerDeltaPhase } : {} });
+        activeSawTextDelta = true;
+        emit({
+          type: "text-delta",
+          text,
+          ...providerDeltaPhase ? { phase: providerDeltaPhase } : {}
+        });
       });
     }
     function setProviderSensitiveValues(values) {
       providerSensitiveValues = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
-      resetProviderDeltaRedactor();
-    }
-    function setActiveAttachmentPaths(values) {
-      activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
-      if (stderrTail) {
-        stderrTail = redactValue(stderrTail, activeAttachmentPaths);
-      }
       resetProviderDeltaRedactor();
     }
     function clearProviderSensitiveValues() {
@@ -40252,34 +40611,56 @@ data: ${JSON.stringify(payload)}
       providerDeltaRedactor = createDeltaRedactor(activeAttachmentPaths, () => {
       });
     }
-    function writeMessage(message) {
-      if (!proc || !proc.stdin || !proc.stdin.write) return;
-      proc.stdin.write(JSON.stringify(message) + "\n");
+    function setActiveAttachmentPaths(values) {
+      activeAttachmentPaths = Array.from(new Set((values || []).filter((value) => typeof value === "string" && value))).sort((left, right) => right.length - left.length);
+      if (stderrTail) stderrTail = redactValue(stderrTail, activeAttachmentPaths);
+      resetProviderDeltaRedactor();
     }
-    function answerQuestion(toolUseId, result) {
-      const id = String(toolUseId);
-      const pending = pendingUserInputs.get(id);
-      if (!pending) return false;
-      pendingUserInputs.delete(id);
-      if (!result || result.action !== "submit") {
-        writeMessage({ t: "answer", id, cancel: true });
-        emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
-        return true;
-      }
-      const answers = answersForAskUserQuestion(pending.questions, result.values);
-      writeMessage({ t: "answer", id, answers });
-      emit({
-        type: "question-resolved",
-        toolUseId: id,
-        outcome: "answered",
-        answers: displayAnswers(pending.questions, result.values)
-      });
+    function setThinking(active) {
+      const next = Boolean(active);
+      if (thinkingActive === next) return;
+      thinkingActive = next;
+      emit({ type: "thinking", active: next });
+    }
+    function writeMessage(message) {
+      var _a;
+      if (!((_a = proc == null ? void 0 : proc.stdin) == null ? void 0 : _a.write)) return false;
+      proc.stdin.write(`${JSON.stringify(message)}
+`);
       return true;
     }
-    function drainUserInputs() {
-      for (const id of Array.from(pendingUserInputs.keys())) {
-        pendingUserInputs.delete(id);
-        emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
+    function writeControlResponse(requestId, response) {
+      return writeMessage({
+        type: "control_response",
+        response: {
+          subtype: "success",
+          request_id: requestId,
+          response
+        }
+      });
+    }
+    function denyControl(requestId, message) {
+      writeControlResponse(requestId, {
+        behavior: "deny",
+        message
+      });
+    }
+    function allowControl(requestId, input) {
+      writeControlResponse(requestId, {
+        behavior: "allow",
+        updatedInput: input
+      });
+    }
+    function drainControls(message, writeResponses = true) {
+      for (const [toolUseId, pending] of pendingApprovals) {
+        pendingApprovals.delete(toolUseId);
+        if (writeResponses) denyControl(pending.requestId, message);
+        emit({ type: "tool-denied", toolUseId });
+      }
+      for (const [toolUseId, pending] of pendingQuestions) {
+        pendingQuestions.delete(toolUseId);
+        if (writeResponses) denyControl(pending.requestId, message);
+        emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
       }
     }
     function finishActive() {
@@ -40290,57 +40671,48 @@ data: ${JSON.stringify(payload)}
       activeTurn = null;
       activeTurnAccepted = false;
       activeTurnDispatched = false;
+      activeSawTextDelta = false;
+      startedTools.clear();
       setActiveAttachmentPaths([]);
       if (resolve) resolve();
     }
-    function handleSidecarMessage(message) {
-      if (!message || message.t === "ready") return;
-      if (message.t !== "event") return;
-      let event = message.event;
-      if (!event) return;
-      if (event.type === "question-required-raw") {
-        const toolUseId = String(event.toolUseId || "");
-        const questions = questionsFromAskUserQuestion(event);
-        pendingUserInputs.set(toolUseId, { questions });
-        emit({ type: "question-required", toolUseId, source: "claude-ask-user-question", title: "", questions });
-        return;
+    function answerQuestion(toolUseId, result) {
+      const id = String(toolUseId || "");
+      const pending = pendingQuestions.get(id);
+      if (!pending) return false;
+      pendingQuestions.delete(id);
+      if (!result || result.action !== "submit") {
+        denyControl(pending.requestId, "User dismissed the question.");
+        emit({ type: "question-resolved", toolUseId: id, outcome: "cancelled" });
+        return true;
       }
-      if (event.type === "question-resolved-raw") {
-        const toolUseId = String(event.toolUseId || "");
-        if (pendingUserInputs.delete(toolUseId)) {
-          emit({ type: "question-resolved", toolUseId, outcome: "cancelled" });
-        }
-        return;
-      }
-      if (processChannel === "api" && event.type === "error") {
-        event = { ...event, message: "Provider sidecar request failed." };
-      }
-      if (event.type === "text-delta") {
-        const nextPhase = typeof event.phase === "string" ? event.phase : void 0;
-        if (providerDeltaPhase !== void 0 && providerDeltaPhase !== nextPhase) providerDeltaRedactor.flush();
-        providerDeltaPhase = nextPhase;
-        providerDeltaRedactor.feed(String(event.text || ""));
-        return;
-      }
-      providerDeltaRedactor.flush();
-      if (event.type === "turn-accepted" && activeTurn && event.turnId === activeTurn.turnId) {
-        activeTurnAccepted = true;
-      }
-      emit(event);
-      if (event.type === "turn-end") {
-        transcript.push({ role: "assistant", text: activeAssistantText });
-        finishActive();
-      }
-      if (event.type === "error") finishActive();
+      const answers = answersForAskUserQuestion(pending.questions, result.values);
+      allowControl(pending.requestId, {
+        ...pending.input,
+        questions: pending.originalQuestions,
+        answers
+      });
+      emit({
+        type: "question-resolved",
+        toolUseId: id,
+        outcome: "answered",
+        answers: displayAnswers(pending.questions, result.values)
+      });
+      return true;
     }
-    function exitDetail(code, signal) {
-      const suffix = signal ? String(code) + " " + signal : String(code);
-      return stderrTail ? suffix + " " + stderrTail : suffix;
-    }
-    function clearReadyWait() {
-      if (pendingReadyTimer) clearTimeout(pendingReadyTimer);
-      pendingReadyTimer = null;
-      pendingReadyReject = null;
+    function approve(toolUseId, decision) {
+      const id = String(toolUseId || "");
+      const pending = pendingApprovals.get(id);
+      if (!pending) return false;
+      pendingApprovals.delete(id);
+      if (decision === "allow" || decision === "allow-session") {
+        if (decision === "allow-session") sessionAllowedTools.add(pending.name);
+        allowControl(pending.requestId, pending.input);
+        return true;
+      }
+      denyControl(pending.requestId, "User denied this action.");
+      emit({ type: "tool-denied", toolUseId: id });
+      return true;
     }
     function closeProviderRoute() {
       const route = providerRoute;
@@ -40350,94 +40722,316 @@ data: ${JSON.stringify(payload)}
       });
       return routeClosePromise;
     }
-    async function discardRuntime({ clearTranscript = false, finishRun = false, clearStderr = false } = {}) {
+    function cleanupConfig() {
+      const directory = configDir;
+      configDir = "";
+      if (!directory) return;
+      try {
+        fs.rmSync(directory, { recursive: true, force: true });
+      } catch {
+      }
+    }
+    async function discardRuntime({
+      clearTranscript = false,
+      clearSession = false,
+      finishRun = false,
+      clearStderr = false
+    } = {}) {
       runtimeGeneration += 1;
+      drainControls("Claude CLI session ended.");
+      setThinking(false);
       const current = proc;
-      const rejectReady = pendingReadyReject;
       proc = null;
-      ready = false;
       startPromise = null;
-      clearReadyWait();
-      processChannel = "subscription";
-      processModel = "";
-      processIdentity = null;
+      processSettings = null;
       processProvider = null;
       processCandidateIdentity = null;
-      if (rejectReady) rejectReady(cancelledStartError());
       if (current) {
         try {
           current.kill();
         } catch {
         }
       }
+      cleanupConfig();
       if (clearTranscript) transcript = [];
+      if (clearSession) {
+        sessionId = null;
+        processConversationIdentity = null;
+        sessionAllowedTools.clear();
+      }
       if (finishRun) finishActive();
       if (clearStderr) stderrTail = "";
-      drainUserInputs();
       clearProviderSensitiveValues();
       await closeProviderRoute();
     }
     function apiSafeErrorMessage(message) {
-      return processChannel === "api" ? "Provider sidecar request failed." : message;
+      return processChannel === "api" ? "Provider CLI request failed." : message;
+    }
+    function handleProcessFailure(target, generation, message) {
+      if (generation !== runtimeGeneration || proc !== target) return;
+      runtimeGeneration += 1;
+      proc = null;
+      startPromise = null;
+      processSettings = null;
+      processProvider = null;
+      processCandidateIdentity = null;
+      setThinking(false);
+      drainControls("Claude CLI process ended.", false);
+      cleanupConfig();
+      void closeProviderRoute();
+      if (activeRun) {
+        providerDeltaRedactor.flush();
+        emit({
+          type: "error",
+          kind: "mcp",
+          message: apiSafeErrorMessage(message)
+        });
+        finishActive();
+      }
+      processChannel = "subscription";
+      clearProviderSensitiveValues();
     }
     function handleExit(target, generation, code, signal) {
-      if (generation !== runtimeGeneration || proc !== target) return;
-      const wasReady = ready;
-      const detail = exitDetail(code, signal);
-      const rejectReady = pendingReadyReject;
-      proc = null;
-      ready = false;
-      startPromise = null;
-      processIdentity = null;
-      processModel = "";
-      processProvider = null;
-      processCandidateIdentity = null;
-      runtimeGeneration += 1;
-      void closeProviderRoute();
-      drainUserInputs();
-      if (!wasReady && rejectReady) {
-        clearReadyWait();
-        processChannel = "subscription";
-        clearProviderSensitiveValues();
-        rejectReady(new Error("sidecar exited: " + detail));
-        return;
-      }
-      if (activeRun) {
-        providerDeltaRedactor.flush();
-        emit({ type: "error", kind: "mcp", message: apiSafeErrorMessage("sidecar exited: " + detail) });
-        finishActive();
-      }
-      processChannel = "subscription";
-      clearProviderSensitiveValues();
+      const suffix = signal ? `${code} ${signal}` : String(code);
+      const detail = stderrTail ? `${suffix} ${stderrTail}` : suffix;
+      handleProcessFailure(target, generation, `Claude CLI exited: ${detail}`);
     }
     function handleProcError(target, generation, error) {
-      if (generation !== runtimeGeneration || proc !== target) return;
-      const rejectReady = pendingReadyReject;
-      proc = null;
-      ready = false;
-      startPromise = null;
-      processIdentity = null;
-      processModel = "";
-      processProvider = null;
-      processCandidateIdentity = null;
-      runtimeGeneration += 1;
-      void closeProviderRoute();
-      drainUserInputs();
-      if (rejectReady) {
-        clearReadyWait();
-        processChannel = "subscription";
-        clearProviderSensitiveValues();
-        rejectReady(error instanceof Error ? error : new Error("sidecar error"));
+      const message = (error == null ? void 0 : error.message) || "Claude CLI process error";
+      handleProcessFailure(target, generation, message);
+    }
+    function markTurnAccepted() {
+      if (!activeTurn || activeTurnAccepted) return;
+      activeTurnAccepted = true;
+      if (activeTurn.turnId) {
+        emit({
+          type: "turn-accepted",
+          turnId: activeTurn.turnId,
+          transport: "claude-cli-stream-json"
+        });
+      }
+    }
+    function handleAssistantMessage(message) {
+      var _a;
+      const blocks = Array.isArray((_a = message == null ? void 0 : message.message) == null ? void 0 : _a.content) ? message.message.content : [];
+      for (const block of blocks) {
+        if ((block == null ? void 0 : block.type) === "text" && !activeSawTextDelta) {
+          const text = String(block.text || "");
+          if (text) providerDeltaRedactor.feed(text);
+          continue;
+        }
+        if ((block == null ? void 0 : block.type) !== "tool_use") continue;
+        const toolUseId = String(block.id || "");
+        const name = String(block.name || "");
+        if (!toolUseId || !name.startsWith("mcp__ae__")) continue;
+        if (startedTools.has(toolUseId)) continue;
+        startedTools.set(toolUseId, {
+          name,
+          startedAt: now()
+        });
+        emit({
+          type: "tool-start",
+          toolUseId,
+          name,
+          input: normalizeInput(block.input)
+        });
+      }
+    }
+    function handleUserMessage(message) {
+      var _a;
+      const blocks = Array.isArray((_a = message == null ? void 0 : message.message) == null ? void 0 : _a.content) ? message.message.content : [];
+      for (const block of blocks) {
+        if ((block == null ? void 0 : block.type) !== "tool_result") continue;
+        const toolUseId = String(block.tool_use_id || "");
+        const tool = startedTools.get(toolUseId);
+        if (!tool) continue;
+        emit({
+          type: "tool-result",
+          toolUseId,
+          ok: block.is_error !== true,
+          text: toolResultText(block.content),
+          durationMs: Math.max(0, now() - tool.startedAt)
+        });
+      }
+    }
+    function readDecision(name, input, turn) {
+      if (name === "Read") {
+        const filePath = input == null ? void 0 : input.file_path;
+        if (!turn.attachments.length || typeof filePath !== "string") {
+          return { behavior: "deny", message: "Read is limited to selected attachment files." };
+        }
+        try {
+          const realPath = String(fs.realpathSync(filePath));
+          const selected = turn.attachments.some(
+            (attachment) => attachment.localPath === realPath
+          );
+          if (realPath !== filePath || !fs.statSync(realPath).isFile() || !selected) {
+            throw new Error("attachment mismatch");
+          }
+          return { behavior: "allow", updatedInput: input };
+        } catch {
+          return { behavior: "deny", message: "Read is limited to selected attachment files." };
+        }
+      }
+      return null;
+    }
+    function immediateToolDecision(name, input, turn) {
+      const read = readDecision(name, input, turn);
+      if (read) return read;
+      if (!name.startsWith("mcp__ae__")) {
+        return {
+          behavior: "deny",
+          message: "Only After Effects (mcp__ae__*) tools are available in this panel."
+        };
+      }
+      const annotation = turn.toolMeta.annotations[name] || {};
+      if (turn.permissionMode === "readonly") {
+        return annotation.readOnly === true ? { behavior: "allow", updatedInput: input } : {
+          behavior: "deny",
+          message: "This tool is unavailable in the read-only tier."
+        };
+      }
+      if (isCoreAuthorizedDynamicCall(name, input)) {
+        return { behavior: "allow", updatedInput: input };
+      }
+      if (sessionAllowedTools.has(name)) {
+        return { behavior: "allow", updatedInput: input };
+      }
+      const destructive = annotation.destructive === true;
+      if (turn.permissionMode === "none") {
+        return { behavior: "allow", updatedInput: input };
+      }
+      if (turn.permissionMode === "auto" && !destructive) {
+        return { behavior: "allow", updatedInput: input };
+      }
+      return null;
+    }
+    function handleAskUserQuestion(requestId, request, input) {
+      const originalQuestions = Array.isArray(input.questions) ? input.questions : [];
+      if (!originalQuestions.length) {
+        allowControl(requestId, { ...input, questions: originalQuestions, answers: {} });
         return;
       }
-      if (activeRun) {
-        const message = error && error.message ? error.message : "sidecar error";
-        providerDeltaRedactor.flush();
-        emit({ type: "error", kind: "mcp", message: apiSafeErrorMessage(message) });
-        finishActive();
+      const toolUseId = String(request.tool_use_id || requestId);
+      const questions = questionsFromAskUserQuestion(input);
+      pendingQuestions.set(toolUseId, {
+        requestId,
+        input,
+        originalQuestions,
+        questions
+      });
+      emit({
+        type: "question-required",
+        toolUseId,
+        source: "claude-ask-user-question",
+        title: "",
+        questions
+      });
+    }
+    function handleControlRequest(message) {
+      const requestId = String((message == null ? void 0 : message.request_id) || "");
+      const request = message == null ? void 0 : message.request;
+      if (!requestId || (request == null ? void 0 : request.subtype) !== "can_use_tool") return;
+      const name = String(request.tool_name || "");
+      const input = normalizeInput(request.input);
+      if (name === "AskUserQuestion") {
+        handleAskUserQuestion(requestId, request, input);
+        return;
       }
-      processChannel = "subscription";
-      clearProviderSensitiveValues();
+      if (!activeTurn) {
+        denyControl(requestId, "No active panel turn owns this tool request.");
+        return;
+      }
+      const decision = immediateToolDecision(name, input, activeTurn);
+      if (decision) {
+        if (decision.behavior === "allow") allowControl(requestId, decision.updatedInput);
+        else denyControl(requestId, decision.message);
+        return;
+      }
+      const toolUseId = String(request.tool_use_id || requestId);
+      const annotation = activeTurn.toolMeta.annotations[name] || {};
+      pendingApprovals.set(toolUseId, { requestId, name, input });
+      emit({
+        type: "approval-required",
+        toolUseId,
+        name,
+        input,
+        risk: annotation.destructive === true ? "destructive" : "write"
+      });
+    }
+    function handleStreamEvent(message) {
+      var _a;
+      const event = message == null ? void 0 : message.event;
+      if (!event) return;
+      if (event.type === "content_block_start") {
+        const type = (_a = event.content_block) == null ? void 0 : _a.type;
+        if (type === "thinking") setThinking(true);
+        if (type === "text" || type === "tool_use") setThinking(false);
+        return;
+      }
+      if (event.type === "content_block_delta") {
+        const delta = event.delta || {};
+        if (delta.type === "thinking_delta") {
+          setThinking(true);
+        } else if (delta.type === "text_delta") {
+          setThinking(false);
+          activeSawTextDelta = true;
+          providerDeltaRedactor.feed(String(delta.text || ""));
+        }
+        return;
+      }
+      if (event.type === "message_stop") setThinking(false);
+    }
+    function handleResult(message) {
+      if (!activeRun) return;
+      markTurnAccepted();
+      providerDeltaRedactor.flush();
+      setThinking(false);
+      drainControls("Claude CLI turn ended.");
+      if (message.is_error) {
+        emit({
+          type: "error",
+          kind: classifyError(message.result || message),
+          message: apiSafeErrorMessage(truncateDetail(message.result || message))
+        });
+        finishActive();
+        return;
+      }
+      if (!activeAssistantText && typeof message.result === "string" && message.result) {
+        providerDeltaRedactor.feed(message.result);
+        providerDeltaRedactor.flush();
+      }
+      transcript.push({ role: "assistant", text: activeAssistantText });
+      emit({
+        type: "turn-end",
+        stopReason: message.stop_reason || (message.subtype === "success" ? "end_turn" : String(message.subtype || "end_turn"))
+      });
+      finishActive();
+    }
+    function handleCliMessage(message) {
+      if (!message || typeof message !== "object") return;
+      if (message.session_id) sessionId = String(message.session_id);
+      if (message.type === "system" && message.subtype === "init") {
+        markTurnAccepted();
+        return;
+      }
+      if (message.type === "stream_event") {
+        handleStreamEvent(message);
+        return;
+      }
+      if (message.type === "assistant") {
+        handleAssistantMessage(message);
+        return;
+      }
+      if (message.type === "user") {
+        handleUserMessage(message);
+        return;
+      }
+      if (message.type === "control_request") {
+        handleControlRequest(message);
+        return;
+      }
+      if (message.type === "result") handleResult(message);
     }
     async function selectApiRoute(provider, model) {
       try {
@@ -40453,134 +41047,175 @@ data: ${JSON.stringify(payload)}
     }
     async function desiredSession(channel) {
       const model = String(getModel ? getModel() : "").trim();
+      const effort = String(getEffort ? getEffort() || "" : "").trim();
+      const thinking = getThinking ? getThinking() : null;
       let provider = null;
       let candidateIdentity = null;
       let recovered = false;
-      let route = null;
       if (channel === "api") {
-        if (typeof resolveApiProvider !== "function") throw new Error("Provider is unavailable.");
-        if (typeof resolveRequestProfile !== "function") throw new Error("Provider credential resolver is unavailable.");
-        if (typeof resolveCapability !== "function") throw new Error("Provider capability resolver is unavailable.");
-        if (typeof createProviderRoute !== "function") throw new Error("Provider route factory is unavailable.");
-        provider = await resolveApiProvider();
-        if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
+        if (typeof resolveApiProvider !== "function") {
           throw new Error("Provider is unavailable.");
         }
-        candidateIdentity = runtimeIdentity({ channel, model, provider });
-        if (proc && ready && processProvider && processCandidateIdentity === candidateIdentity) {
-          provider = processProvider;
-          return {
-            channel,
-            model,
-            provider,
-            candidateIdentity,
-            recovered,
-            route: null,
-            identity: runtimeIdentity({ channel, model, provider })
-          };
+        if (typeof resolveRequestProfile !== "function") {
+          throw new Error("Provider credential resolver is unavailable.");
         }
-        route = await selectApiRoute(provider, model);
-        if (!(route == null ? void 0 : route.ok)) {
-          if ((route == null ? void 0 : route.reasonCode) !== "needs-probe") {
-            throw providerModelError(
-              "provider_route_unavailable",
-              `Custom provider has no verified Claude route for model ${model}`
-            );
-          }
-          if (typeof recoverProviderProfile !== "function") {
-            throw providerModelError(
-              "provider_preflight_unavailable",
-              `Custom provider cannot be verified for model ${model}`
-            );
-          }
-          let recovery;
-          try {
-            recovery = await recoverProviderProfile(
-              provider,
-              { status: null, code: "provider_preflight_required" },
-              model
-            );
-          } catch (cause) {
-            const detail = typeof (cause == null ? void 0 : cause.message) === "string" ? cause.message.trim() : "";
-            throw providerModelError(
-              "provider_preflight_failed",
-              `Custom provider could not verify model ${model}` + (detail ? `: ${detail}` : "")
-            );
-          }
-          const recoveredProvider = (recovery == null ? void 0 : recovery.provider) || recovery;
-          const recoveredModel = String((recovery == null ? void 0 : recovery.modelId) || model).trim();
-          if (!recoveredProvider || typeof recoveredProvider !== "object" || Array.isArray(recoveredProvider) || recoveredModel !== model) {
-            throw providerModelError(
-              "provider_preflight_failed",
-              `Custom provider did not expose a verified API for model ${model}`
-            );
-          }
-          route = await selectApiRoute(recoveredProvider, model);
+        if (typeof createProviderRoute !== "function") {
+          throw new Error("Provider route factory is unavailable.");
+        }
+        provider = await resolveApiProvider();
+        if (!isPlainObject2(provider)) throw new Error("Provider is unavailable.");
+        candidateIdentity = providerCandidateIdentity({ channel, model, provider });
+        if (proc && processProvider && processCandidateIdentity === candidateIdentity) {
+          provider = processProvider;
+        } else {
+          let route = await selectApiRoute(provider, model);
           if (!(route == null ? void 0 : route.ok)) {
-            throw providerModelError(
-              "provider_preflight_failed",
-              `Custom provider did not expose a verified API for model ${model}`
-            );
+            if ((route == null ? void 0 : route.reasonCode) !== "needs-probe") {
+              throw providerModelError(
+                "provider_route_unavailable",
+                `Custom provider has no verified Claude route for model ${model}`
+              );
+            }
+            if (typeof recoverProviderProfile !== "function") {
+              throw providerModelError(
+                "provider_preflight_unavailable",
+                `Custom provider cannot be verified for model ${model}`
+              );
+            }
+            let recovery;
+            try {
+              recovery = await recoverProviderProfile(
+                provider,
+                { status: null, code: "provider_preflight_required" },
+                model
+              );
+            } catch (cause) {
+              const detail = typeof (cause == null ? void 0 : cause.message) === "string" ? cause.message.trim() : "";
+              throw providerModelError(
+                "provider_preflight_failed",
+                `Custom provider could not verify model ${model}` + (detail ? `: ${detail}` : "")
+              );
+            }
+            const recoveredProvider = (recovery == null ? void 0 : recovery.provider) || recovery;
+            const recoveredModel = String((recovery == null ? void 0 : recovery.modelId) || model).trim();
+            if (!isPlainObject2(recoveredProvider) || recoveredModel !== model) {
+              throw providerModelError(
+                "provider_preflight_failed",
+                `Custom provider did not expose a verified API for model ${model}`
+              );
+            }
+            route = await selectApiRoute(recoveredProvider, model);
+            if (!(route == null ? void 0 : route.ok)) {
+              throw providerModelError(
+                "provider_preflight_failed",
+                `Custom provider did not expose a verified API for model ${model}`
+              );
+            }
+            provider = recoveredProvider;
+            candidateIdentity = providerCandidateIdentity({ channel, model, provider });
+            recovered = true;
           }
-          provider = recoveredProvider;
-          recovered = true;
         }
       }
       return {
         channel,
         model,
+        effort,
+        thinking,
         provider,
         candidateIdentity,
         recovered,
-        route,
-        identity: runtimeIdentity({ channel, model, provider })
+        conversationIdentity: conversationIdentity({ channel, provider })
       };
     }
-    async function cleanupFailedStart(generation) {
-      if (generation !== runtimeGeneration) {
-        await routeClosePromise;
-        return;
-      }
-      runtimeGeneration += 1;
-      const current = proc;
-      proc = null;
-      ready = false;
-      processChannel = "subscription";
-      processModel = "";
-      processIdentity = null;
-      processProvider = null;
-      processCandidateIdentity = null;
-      clearReadyWait();
-      clearProviderSensitiveValues();
-      if (current) {
-        try {
-          current.kill();
-        } catch {
+    function canonicalTurn(input) {
+      const normalized = normalizeTurnInput(input);
+      const attachments = normalized.attachments.map((attachment) => {
+        if (!adapter.paths.isAbsolute(attachment.localPath)) {
+          throw new Error("attachment path must be absolute");
         }
-      }
-      await closeProviderRoute();
-    }
-    async function startSidecar(session) {
-      if (proc && ready) return true;
-      if (startPromise) return startPromise;
-      const startGeneration = runtimeGeneration;
-      const assertCurrentStart = () => {
-        if (startGeneration !== runtimeGeneration) throw cancelledStartError();
+        const realPath = String(fs.realpathSync(attachment.localPath));
+        if (!adapter.paths.isAbsolute(realPath) || !fs.statSync(realPath).isFile()) {
+          throw new Error("attachment path must resolve to a file");
+        }
+        return Object.freeze({ ...attachment, localPath: realPath });
+      });
+      return {
+        ...normalized,
+        attachments,
+        permissionMode: normalizePermissionMode(getPermissionMode == null ? void 0 : getPermissionMode()),
+        toolMeta: { allowedTools: [], annotations: {} }
       };
+    }
+    function writeMcpConfig(mcpSpec) {
+      var _a;
+      configDir = adapter.paths.join([adapter.paths.tempRoot, tempDirName()]);
+      fs.mkdirSync(configDir, { recursive: true });
+      const configPath = adapter.paths.join([configDir, "mcp.json"]);
+      fs.writeFileSync(
+        configPath,
+        `${JSON.stringify(mcpConfigForSpec(mcpSpec), null, 2)}
+`,
+        { encoding: "utf8", mode: 384 }
+      );
+      try {
+        (_a = fs.chmodSync) == null ? void 0 : _a.call(fs, configPath, 384);
+      } catch {
+      }
+      return configPath;
+    }
+    function buildCliArgs(session, turn, meta, mcpPath) {
+      const allowedTools = tierAllowedTools(meta, turn.permissionMode, turn.attachments);
+      const args = [
+        "--print",
+        "--input-format",
+        "stream-json",
+        "--output-format",
+        "stream-json",
+        "--include-partial-messages",
+        "--verbose",
+        "--model",
+        session.model,
+        "--mcp-config",
+        mcpPath,
+        "--strict-mcp-config",
+        "--setting-sources",
+        "",
+        "--permission-prompt-tool",
+        "stdio",
+        "--disallowedTools",
+        ...DISALLOWED_TOOLS
+      ];
+      if (allowedTools.length) args.push("--allowedTools", ...allowedTools);
+      args.push(
+        "--agents",
+        JSON.stringify(agentDefinition(meta, turn.attachments, lang)),
+        "--agent",
+        "ae"
+      );
+      if (session.effort) args.push("--effort", session.effort);
+      args.push(...thinkingArgs(session.thinking));
+      if (sessionId) args.push("--resume", sessionId);
+      return args;
+    }
+    async function startCli(session, turn, meta, mcpSpec, settingsIdentity) {
+      if (proc && processSettings === settingsIdentity) return true;
+      if (startPromise) return startPromise;
       const pendingStart = (async () => {
-        const node = await resolveNode({ platform: adapter });
-        assertCurrentStart();
-        if (!node || !node.ok) {
-          emit({ type: "error", kind: "mcp", message: nodeMissingMessage(lang) });
+        var _a, _b, _c, _d, _e, _f;
+        const resolved = await resolveClaude({ platform: adapter, env, lang });
+        if (activeRun === null) throw cancelledStartError();
+        if (!(resolved == null ? void 0 : resolved.ok)) {
+          emit({
+            type: "error",
+            kind: "mcp",
+            code: (resolved == null ? void 0 : resolved.code) || "NOT_FOUND",
+            message: (resolved == null ? void 0 : resolved.detail) || cliResolutionMessage(resolved == null ? void 0 : resolved.code, lang)
+          });
           return false;
         }
-        const mcpSpec = await getMcpSpec2();
-        const sidecarMcpSpec = mcpSpec && mcpSpec.kind === "http" ? { type: "http", url: mcpSpec.url } : mcpSpec;
-        assertCurrentStart();
-        const meta = await getToolMeta();
-        assertCurrentStart();
         await routeClosePromise;
-        assertCurrentStart();
+        if (activeRun === null) throw cancelledStartError();
         let localRoute = null;
         if (session.channel === "api") {
           providerRoute = createProviderRoute({
@@ -40589,177 +41224,165 @@ data: ${JSON.stringify(payload)}
             resolveRequestProfile
           });
           const routeInfo = await providerRoute.start();
-          assertCurrentStart();
           localRoute = {
             origin: routeInfo == null ? void 0 : routeInfo.origin,
             routeToken: routeInfo == null ? void 0 : routeInfo.routeToken
           };
-          const redactionValues = getProviderSensitiveValues();
-          if (!Array.isArray(redactionValues)) throw new TypeError("getProviderSensitiveValues must return an array");
-          setProviderSensitiveValues([...redactionValues, routeInfo == null ? void 0 : routeInfo.routeToken]);
+          const values = getProviderSensitiveValues();
+          if (!Array.isArray(values)) {
+            throw new TypeError("getProviderSensitiveValues must return an array");
+          }
+          setProviderSensitiveValues([...values, routeInfo == null ? void 0 : routeInfo.routeToken]);
         } else {
           setProviderSensitiveValues([]);
         }
+        const mcpPath = writeMcpConfig(mcpSpec);
         let spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), {
           channel: session.channel,
           localRoute
         });
         stderrTail = "";
-        ready = false;
         processChannel = session.channel;
-        processModel = session.model;
-        processIdentity = session.identity;
         processProvider = session.provider;
         processCandidateIdentity = session.candidateIdentity;
-        let readyResolve;
-        let readyReject;
-        const readyPromise = new Promise((resolve, reject) => {
-          readyResolve = resolve;
-          readyReject = reject;
-        });
-        pendingReadyReject = readyReject;
-        pendingReadyTimer = setTimeout(() => {
-          pendingReadyTimer = null;
-          pendingReadyReject = null;
-          try {
-            if (proc) proc.kill();
-          } catch {
-          }
-          readyReject(new Error("sidecar ready timed out"));
-        }, READY_TIMEOUT_MS);
+        const executable = resolved.executable || {
+          ok: true,
+          id: "claude",
+          path: resolved.cliPath,
+          argsPrefix: [],
+          source: "path",
+          version: resolved.version || null,
+          arch: null
+        };
+        const args = buildCliArgs(session, turn, meta, mcpPath);
         let spawnedProc;
         try {
-          const executable = node.executable || { ok: true, id: "node", path: node.nodePath, argsPrefix: [], source: "runtime", version: node.version || null, arch: null };
-          spawnedProc = adapter.spawn(executable, [
-            sidecarPath,
-            "--mcp",
-            JSON.stringify(sidecarMcpSpec),
-            "--allowed-tools",
-            JSON.stringify(meta.allowedTools),
-            "--annotations",
-            JSON.stringify(meta.annotations),
-            "--model",
-            session.model,
-            "--lang",
-            lang,
-            "--channel",
-            session.channel
-          ], {
+          spawnedProc = spawnProcess(executable, args, {
             stdio: "pipe",
             windowsHide: true,
             env: spawnEnv
           });
-        } catch (e) {
-          clearReadyWait();
-          throw e;
         } finally {
           if (spawnEnv) delete spawnEnv.ANTHROPIC_AUTH_TOKEN;
           spawnEnv = null;
         }
-        assertCurrentStart();
+        runtimeGeneration += 1;
+        const generation = runtimeGeneration;
         proc = spawnedProc;
+        processSettings = settingsIdentity;
         const reader = createNdjsonReader((message) => {
-          if (startGeneration !== runtimeGeneration || proc !== spawnedProc) return;
-          if (message && message.t === "ready") {
-            ready = true;
-            clearReadyWait();
-            readyResolve(true);
-            return;
-          }
-          handleSidecarMessage(message);
+          if (generation !== runtimeGeneration || proc !== spawnedProc) return;
+          handleCliMessage(message);
         });
-        if (spawnedProc.stdout && spawnedProc.stdout.on) spawnedProc.stdout.on("data", reader);
-        if (spawnedProc.stderr && spawnedProc.stderr.on) spawnedProc.stderr.on("data", (chunk) => {
-          if (startGeneration !== runtimeGeneration || proc !== spawnedProc) return;
-          const detail = processChannel === "api" ? "[provider-sidecar-stderr-redacted]\n" : redactValue(String(chunk), [...providerSensitiveValues, ...activeAttachmentPaths]);
+        (_b = (_a = spawnedProc.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", reader);
+        (_d = (_c = spawnedProc.stderr) == null ? void 0 : _c.on) == null ? void 0 : _d.call(_c, "data", (chunk) => {
+          if (generation !== runtimeGeneration || proc !== spawnedProc) return;
+          const detail = processChannel === "api" ? "[provider-cli-stderr-redacted]\n" : redactValue(String(chunk), [
+            ...providerSensitiveValues,
+            ...activeAttachmentPaths
+          ]);
           stderrTail = appendTail3(stderrTail, detail);
         });
-        spawnedProc.on("exit", (code, signal) => handleExit(spawnedProc, startGeneration, code, signal));
-        spawnedProc.on("error", (error) => {
-          handleProcError(spawnedProc, startGeneration, error);
+        (_e = spawnedProc.on) == null ? void 0 : _e.call(spawnedProc, "exit", (code, signal) => {
+          handleExit(spawnedProc, generation, code, signal);
         });
-        await readyPromise;
+        (_f = spawnedProc.on) == null ? void 0 : _f.call(spawnedProc, "error", (error) => {
+          handleProcError(spawnedProc, generation, error);
+        });
         return true;
       })();
       startPromise = pendingStart;
       try {
         return await pendingStart;
-      } catch (e) {
-        await cleanupFailedStart(startGeneration);
-        if ((e == null ? void 0 : e.code) !== "CLAUDE_AGENT_START_CANCELLED") {
-          const message = session.channel === "api" ? "Provider sidecar request failed." : e && e.message ? e.message : "Failed to start sidecar.";
-          emit({ type: "error", kind: "mcp", message });
+      } catch (error) {
+        cleanupConfig();
+        clearProviderSensitiveValues();
+        await closeProviderRoute();
+        if ((error == null ? void 0 : error.code) !== "CLAUDE_AGENT_START_CANCELLED") {
+          emit({
+            type: "error",
+            kind: (error == null ? void 0 : error.kind) || "mcp",
+            ...(error == null ? void 0 : error.code) ? { code: error.code } : {},
+            message: session.channel === "api" ? "Provider CLI request failed." : (error == null ? void 0 : error.message) || "Failed to start Claude CLI."
+          });
         }
         return false;
       } finally {
         if (startPromise === pendingStart) startPromise = null;
       }
     }
-    async function ensureSidecar(runToken) {
-      let session;
+    async function ensureCli(runToken, turn) {
       let channel = "subscription";
-      const initialGeneration = runtimeGeneration;
       try {
         channel = normalizeChannel(getChannel ? getChannel() : "subscription");
-        session = await desiredSession(channel);
-        if (activeRun !== runToken || runtimeGeneration !== initialGeneration) {
-          throw cancelledStartError();
-        }
+        const session = await desiredSession(channel);
+        if (activeRun !== runToken) throw cancelledStartError();
         if (session.recovered) {
           try {
             await onProviderProfileRecovered(session.provider);
           } catch {
           }
-          if (activeRun !== runToken || runtimeGeneration !== initialGeneration) {
-            throw cancelledStartError();
-          }
+          if (activeRun !== runToken) throw cancelledStartError();
         }
-        if (processIdentity !== null && processIdentity !== session.identity) {
-          const replacing = discardRuntime({ clearTranscript: true, clearStderr: true });
-          const replacementGeneration = runtimeGeneration;
-          await replacing;
-          if (activeRun !== runToken || runtimeGeneration !== replacementGeneration) {
-            throw cancelledStartError();
-          }
+        const meta = getToolMeta ? await getToolMeta() : { allowedTools: [], annotations: {} };
+        const normalizedMeta = {
+          allowedTools: Array.isArray(meta == null ? void 0 : meta.allowedTools) ? meta.allowedTools : [],
+          annotations: isPlainObject2(meta == null ? void 0 : meta.annotations) ? meta.annotations : {}
+        };
+        const mcpSpec = await getMcpSpec2();
+        if (activeRun !== runToken) throw cancelledStartError();
+        turn.toolMeta = normalizedMeta;
+        const nextSettings = processSettingsIdentity({
+          session,
+          turn,
+          meta: normalizedMeta,
+          mcpSpec
+        });
+        if (processConversationIdentity !== null && processConversationIdentity !== session.conversationIdentity) {
+          await discardRuntime({
+            clearTranscript: true,
+            clearSession: true,
+            clearStderr: true
+          });
+        } else if (proc && processSettings !== nextSettings) {
+          await discardRuntime();
         }
-        if (proc && ready && processIdentity === session.identity) {
-          processProvider = session.provider;
-          processCandidateIdentity = session.candidateIdentity;
-        }
-        return await startSidecar(session);
+        if (activeRun !== runToken) throw cancelledStartError();
+        processConversationIdentity = session.conversationIdentity;
+        return await startCli(session, turn, normalizedMeta, mcpSpec, nextSettings);
       } catch (error) {
         if (activeRun === runToken) {
-          await discardRuntime({ clearTranscript: true, clearStderr: true });
+          await discardRuntime({ clearStderr: true });
         }
         if ((error == null ? void 0 : error.code) !== "CLAUDE_AGENT_START_CANCELLED") {
-          if ((error == null ? void 0 : error.kind) === "model") {
-            emit({ type: "error", kind: "model", code: error.code, message: error.message });
-          } else {
-            const message = channel === "api" ? "Provider sidecar request failed." : (error == null ? void 0 : error.message) || "Failed to start sidecar.";
-            emit({ type: "error", kind: "mcp", message });
-          }
+          emit({
+            type: "error",
+            kind: (error == null ? void 0 : error.kind) || "mcp",
+            ...(error == null ? void 0 : error.code) ? { code: error.code } : {},
+            message: channel === "api" ? "Provider CLI request failed." : (error == null ? void 0 : error.message) || "Failed to start Claude CLI."
+          });
         }
         return false;
       }
     }
     async function sendUser(input) {
       if (activeRun) return activeRun;
-      const structuredInput = input !== null && typeof input === "object" && !Array.isArray(input);
       let turn;
       try {
-        turn = normalizeTurnInput(input);
+        turn = canonicalTurn(input);
       } catch (error) {
         const turnId = typeof (input == null ? void 0 : input.turnId) === "string" ? input.turnId : "";
         emit({
           type: "error",
           kind: "attachment",
           code: "TURN_INPUT_INVALID",
-          message: error.message,
+          message: "Selected attachment path is unavailable: [attachment-path]",
           ...turnId ? { turnId, dispatchState: "not-started" } : {}
         });
         return;
       }
       activeAssistantText = "";
+      activeSawTextDelta = false;
       activeTurn = turn;
       activeTurnAccepted = false;
       activeTurnDispatched = false;
@@ -40769,34 +41392,40 @@ data: ${JSON.stringify(payload)}
         activeResolve = resolve;
       });
       const run = activeRun;
-      const ok = await ensureSidecar(run);
-      if (!ok || activeRun !== run || !proc || !ready) {
+      emit({ type: "turn-start" });
+      const ok = await ensureCli(run, turn);
+      if (!ok || activeRun !== run || !proc) {
         if (activeRun === run) finishActive();
         return run;
       }
-      const userText = turn.text;
-      transcript.push({ role: "user", text: userText });
+      const userText = withAttachmentManifest(turn.text, turn.attachments);
+      transcript.push({ role: "user", text: turn.text });
       activeTurnDispatched = true;
       writeMessage({
-        t: "user",
-        ...turn.turnId ? { turnId: turn.turnId } : {},
-        text: userText,
-        ...structuredInput ? { attachments: turn.attachments } : {},
-        permissionMode: getPermissionMode(),
-        model: processModel,
-        effort: getEffort ? getEffort() : void 0,
-        thinking: getThinking ? getThinking() : void 0
+        type: "user",
+        message: {
+          role: "user",
+          content: [{ type: "text", text: userText }]
+        }
       });
       return run;
     }
-    function approve(toolUseId, decision) {
-      writeMessage({ t: "approve", id: toolUseId, decision });
-    }
     function stop() {
-      writeMessage({ t: "stop" });
+      if (!activeRun) return;
+      providerDeltaRedactor.flush();
+      setThinking(false);
+      drainControls("Turn was stopped.");
+      emit({ type: "error", kind: "aborted", message: "Turn aborted." });
+      finishActive();
+      void discardRuntime();
     }
     function reset() {
-      void discardRuntime({ clearTranscript: true, finishRun: true, clearStderr: true });
+      void discardRuntime({
+        clearTranscript: true,
+        clearSession: true,
+        finishRun: true,
+        clearStderr: true
+      });
     }
     return {
       sendUser,
@@ -40810,118 +41439,33 @@ data: ${JSON.stringify(payload)}
   }
 
   // src/cep/claudeAuth.js
-  function incompatibleSidecarSelection(message) {
-    const error = new Error(message);
-    error.code = "RUNTIME_SIDECAR_SELECTION_INCOMPATIBLE";
-    return error;
-  }
-  function resolveSidecarPath({
-    extRoot,
-    fsImpl,
-    platform,
-    runtimeSelection
-  } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    const root = normalizeCepSystemPath(extRoot || adapter.paths.configRoot, adapter);
-    const developmentMarker = adapter.paths.join([root, ".debug"]);
-    const developmentSidecar = adapter.paths.join([root, "sidecar", "agent-sidecar.mjs"]);
-    const extensionRuntimeSidecar = adapter.paths.join([
-      root,
-      "runtime",
-      adapter.id,
-      "node",
-      "sidecar",
-      "agent-sidecar.mjs"
-    ]);
-    const fs = fsImpl || adapter.fs;
-    if (!fs || typeof fs.existsSync !== "function") {
-      throw new Error("platform filesystem is unavailable");
-    }
-    if (fs.existsSync(developmentMarker) && fs.existsSync(developmentSidecar)) {
-      return developmentSidecar;
-    }
-    if (adapter.id !== "macos-arm64") return extensionRuntimeSidecar;
-    if (!runtimeSelection) return null;
-    const receipt = runtimeSelection.componentReceipt;
-    const canonicalPath = receipt == null ? void 0 : receipt.canonicalPath;
-    if ((receipt == null ? void 0 : receipt.component) !== "core-runtime" || (receipt == null ? void 0 : receipt.platform) !== adapter.id || typeof canonicalPath !== "string" || !adapter.paths.isAbsolute(canonicalPath) || !adapter.paths.contains(adapter.paths.runtimeRoot, canonicalPath)) {
-      throw incompatibleSidecarSelection(
-        "The selected runtime does not own a compatible Claude sidecar payload"
-      );
-    }
-    return adapter.paths.join([
-      canonicalPath,
-      "node",
-      "sidecar",
-      "agent-sidecar.mjs"
-    ]);
-  }
-  function resolveSidecarSelection({
-    runtimeActivation,
-    extRoot,
-    fsImpl,
-    platform
-  } = {}) {
-    const adapter = platform || createPlatformAdapter();
-    if (adapter.id === "macos-arm64" && (runtimeActivation == null ? void 0 : runtimeActivation.state) === "error" && runtimeActivation.error) {
-      return { state: "error", path: null, error: runtimeActivation.error };
-    }
-    try {
-      const path = resolveSidecarPath({
-        extRoot,
-        fsImpl,
-        platform: adapter,
-        runtimeSelection: (runtimeActivation == null ? void 0 : runtimeActivation.state) === "ready" ? runtimeActivation.result : null
-      });
-      return path ? { state: "ready", path, error: null } : { state: "pending", path: null, error: null };
-    } catch (error) {
-      return { state: "error", path: null, error };
-    }
-  }
-  async function resolveNodeForSidecarSelection({
-    resolveNode,
-    runtimeSelection,
-    platform
-  } = {}) {
-    var _a, _b, _c;
-    const resolved = await resolveNode({ platform });
-    const sidecarCanonicalPath = (_a = runtimeSelection == null ? void 0 : runtimeSelection.componentReceipt) == null ? void 0 : _a.canonicalPath;
-    if (sidecarCanonicalPath && ((_c = (_b = resolved == null ? void 0 : resolved.runtime) == null ? void 0 : _b.componentReceipt) == null ? void 0 : _c.canonicalPath) !== sidecarCanonicalPath) {
-      const error = new Error("Selected Sidecar and Node runtime receipts do not match");
-      error.code = "RUNTIME_SIDECAR_NODE_SELECTION_MISMATCH";
-      throw error;
-    }
-    return resolved;
-  }
   async function probeClaudeLogin({
     platform,
-    resolveNode,
-    sidecarPath,
+    resolveClaude,
     spawnImpl,
     env,
-    timeoutMs = 3e4
+    timeoutMs = 1e4
   } = {}) {
-    if (!sidecarPath) {
+    const adapter = platform || createPlatformAdapter();
+    const resolver = resolveClaude || resolveClaudeCli;
+    const resolved = await resolver({ platform: adapter, env });
+    if (!resolved || resolved.ok === false) {
       return {
         loggedIn: false,
-        nodeOk: false,
-        detail: "verified runtime sidecar is not ready"
+        cliOk: false,
+        reason: (resolved == null ? void 0 : resolved.code) === "VERSION_TOO_OLD" ? "cli-too-old" : "cli-missing",
+        detail: (resolved == null ? void 0 : resolved.detail) || "Claude CLI is unavailable"
       };
     }
-    const adapter = platform || (spawnImpl ? {
-      completeSpawnEnv: (base = {}, additions = {}) => ({ ...base, ...additions }),
-      spawn: (executable, args, options) => spawnImpl(executable.path, [...executable.argsPrefix || [], ...args], options)
-    } : createPlatformAdapter());
-    const nodeResolver = resolveNode || resolveSystemNode;
-    const resolved = await nodeResolver({ platform: adapter });
-    if (!resolved || resolved.ok === false) {
-      return { loggedIn: false, nodeOk: false, detail: resolved && resolved.detail || "node unavailable" };
-    }
     return await new Promise((resolve) => {
+      var _a, _b;
       let settled = false;
+      let stdout = "";
       let stderr = "";
       let proc = null;
-      const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), { channel: "subscription" });
+      const spawnEnv = claudeChannelEnv(adapter.completeSpawnEnv(env || {}), {
+        channel: "subscription"
+      });
       function finish(result) {
         if (settled) return;
         settled = true;
@@ -40935,29 +41479,49 @@ data: ${JSON.stringify(payload)}
           } catch (e) {
           }
         }
-        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: "probe timeout" });
+        finish({
+          loggedIn: false,
+          cliOk: true,
+          cliVersion: resolved.version,
+          cliPath: resolved.displayPath || resolved.cliPath,
+          reason: "probe-timeout",
+          detail: "Claude CLI auth probe timed out"
+        });
       }, timeoutMs);
       try {
-        const executable = resolved.executable || { ok: true, id: "node", path: resolved.nodePath, argsPrefix: [], source: "runtime", version: resolved.version || null, arch: null };
-        proc = adapter.spawn(executable, [sidecarPath, "--probe"], {
+        const executable = resolved.executable || {
+          ok: true,
+          id: "claude",
+          path: resolved.cliPath,
+          argsPrefix: [],
+          source: "path",
+          version: resolved.version || null,
+          arch: null
+        };
+        const args = ["auth", "status", "--json"];
+        proc = spawnImpl ? spawnImpl(
+          executable.path,
+          [...executable.argsPrefix || [], ...args],
+          { stdio: "pipe", windowsHide: true, env: spawnEnv }
+        ) : adapter.spawn(executable, args, {
           stdio: "pipe",
           windowsHide: true,
           env: spawnEnv
         });
       } catch (e) {
-        finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: e && e.message ? e.message : String(e) });
+        finish({
+          loggedIn: false,
+          cliOk: true,
+          cliVersion: resolved.version,
+          cliPath: resolved.displayPath || resolved.cliPath,
+          reason: "probe-failed",
+          detail: (e == null ? void 0 : e.message) || String(e)
+        });
         return;
       }
-      const onMessage = createNdjsonReader((message) => {
-        if (!message || message.t !== "probe-result") return;
-        finish({
-          loggedIn: !!message.loggedIn,
-          nodeOk: true,
-          nodeVersion: resolved.version,
-          detail: message.detail || message.reason || ""
-        });
+      (_b = (_a = proc.stdout) == null ? void 0 : _a.on) == null ? void 0 : _b.call(_a, "data", (chunk) => {
+        stdout = (stdout + String(chunk || "")).slice(-4e3);
       });
-      if (proc.stdout && proc.stdout.on) proc.stdout.on("data", onMessage);
       if (proc.stderr && proc.stderr.on) {
         proc.stderr.on("data", (chunk) => {
           stderr += String(chunk || "");
@@ -40966,10 +41530,40 @@ data: ${JSON.stringify(payload)}
       }
       if (proc.on) {
         proc.on("error", (err) => {
-          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: err && err.message ? err.message : String(err) });
+          finish({
+            loggedIn: false,
+            cliOk: true,
+            cliVersion: resolved.version,
+            cliPath: resolved.displayPath || resolved.cliPath,
+            reason: "probe-failed",
+            detail: (err == null ? void 0 : err.message) || String(err)
+          });
         });
         proc.on("exit", () => {
-          finish({ loggedIn: false, nodeOk: true, nodeVersion: resolved.version, detail: stderr.trim() || "probe exited without result" });
+          let status = null;
+          try {
+            status = JSON.parse(stdout);
+          } catch {
+          }
+          if (status && typeof status.loggedIn === "boolean") {
+            finish({
+              loggedIn: status.loggedIn,
+              cliOk: true,
+              cliVersion: resolved.version,
+              cliPath: resolved.displayPath || resolved.cliPath,
+              reason: status.loggedIn ? null : "not-logged-in",
+              detail: status.loggedIn ? [resolved.version, resolved.displayPath || resolved.cliPath].filter(Boolean).join(" \xB7 ") : "Claude CLI is not logged in."
+            });
+            return;
+          }
+          finish({
+            loggedIn: false,
+            cliOk: true,
+            cliVersion: resolved.version,
+            cliPath: resolved.displayPath || resolved.cliPath,
+            reason: "probe-failed",
+            detail: stderr.trim() || stdout.trim() || "Claude auth probe exited without JSON"
+          });
         });
       }
     });
@@ -41142,7 +41736,7 @@ data: ${JSON.stringify(payload)}
     const tool = item && (item.tool || item.name);
     return tool ? "mcp__ae__" + String(tool).replace(/^mcp__ae__/, "") : "";
   }
-  function toolResultText(result) {
+  function toolResultText2(result) {
     const content = result && Array.isArray(result.content) ? result.content : [];
     return content.filter((part) => part && part.type === "text").map((part) => String(part.text || "")).join("");
   }
@@ -41438,7 +42032,7 @@ data: ${JSON.stringify(payload)}
           toolUseId: String(item.id || ""),
           name: mcpToolName2(item),
           ok: !item.error && item.status === "completed",
-          text: toolResultText(item.result),
+          text: toolResultText2(item.result),
           durationMs: item.durationMs
         });
         return;
@@ -42286,7 +42880,7 @@ data: ${JSON.stringify(payload)}
   // src/cep/openCodeBackend.js
   init_cep_runtime_inject();
   var MCP_TIMEOUT_MS = 12e4;
-  var READY_TIMEOUT_MS2 = 3e4;
+  var READY_TIMEOUT_MS = 3e4;
   var READY_POLL_MS = 250;
   var DEFAULT_PROVIDER_ID = "opencode";
   var DEFAULT_MODEL_ID = "north-mini-code-free";
@@ -42314,7 +42908,7 @@ data: ${JSON.stringify(payload)}
     if (typeof value === "string") return value;
     return new TextDecoder().decode(value);
   }
-  function randomTempName() {
+  function randomTempName2() {
     return "ae-opencode-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
   }
   async function defaultGetPort() {
@@ -42399,7 +42993,7 @@ data: ${JSON.stringify(payload)}
     fetchImpl,
     getPort = defaultGetPort,
     fsImpl,
-    tempDirName = randomTempName,
+    tempDirName = randomTempName2,
     getModel,
     getPermissionMode,
     getMcpSpec: getMcpSpec2,
@@ -42530,7 +43124,7 @@ data: ${JSON.stringify(payload)}
       });
     }
     async function waitForMcp() {
-      const deadline = Date.now() + READY_TIMEOUT_MS2;
+      const deadline = Date.now() + READY_TIMEOUT_MS;
       let lastError = null;
       while (Date.now() < deadline) {
         try {
@@ -42976,13 +43570,22 @@ data: ${JSON.stringify(payload)}
       channel: "subscription",
       source: { zh: "\u8BA2\u9605\u767B\u5F55", en: "Subscription login" },
       checking: probe === null,
-      ok: Boolean(probe && probe.nodeOk !== false && probe.loggedIn),
+      ok: Boolean(probe && probe.cliOk !== false && probe.loggedIn),
       detail: probe && probe.detail || "",
-      fixHint: probe && probe.nodeOk === false ? { zh: "Claude Code \u5185\u5D4C\u5BF9\u8BDD\u4E0E\u81EA\u5B9A\u4E49 Provider \u90FD\u9700\u8981\u53EF\u7528\u7684 Node \u8FD0\u884C\u65F6\uFF1A\u4FEE\u590D\u8FD0\u884C\u65F6\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Embedded Claude Code chat and custom Providers both require an available Node runtime. Repair the runtime, then re-check." } : { zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528\u4E0B\u65B9\u300C\u81EA\u5B9A\u4E49 Provider\u300D\u901A\u9053\u3002", en: "Not logged in: run claude /login in a terminal and re-check, or switch to the custom Provider channel below." }
+      fixHint: (probe == null ? void 0 : probe.reason) === "cli-too-old" ? {
+        zh: "Claude CLI \u7248\u672C\u8FC7\u65E7\uFF1A\u8BF7\u5347\u7EA7 Claude CLI \u5230 2.x \u6216\u66F4\u9AD8\u7248\u672C\u540E\u91CD\u65B0\u68C0\u6D4B\u3002",
+        en: "Claude CLI is too old. Upgrade Claude CLI to version 2.x or newer, then re-check."
+      } : probe && probe.cliOk === false ? {
+        zh: "\u672A\u627E\u5230 Claude CLI\uFF1A\u8BF7\u5B89\u88C5 Claude Code 2.x\uFF1B\u82E5\u9762\u677F PATH \u4E0D\u542B claude\uFF0C\u53EF\u8BBE\u7F6E AE_MCP_CLAUDE_CLI \u540E\u91CD\u542F AE\u3002",
+        en: "Claude CLI was not found. Install Claude Code 2.x; if claude is not on the panel PATH, set AE_MCP_CLAUDE_CLI and restart AE."
+      } : {
+        zh: "\u8BA2\u9605\u672A\u767B\u5F55\uFF1A\u5728\u7EC8\u7AEF\u8FD0\u884C claude /login \u5B8C\u6210\u767B\u5F55\u540E\u91CD\u65B0\u68C0\u6D4B\uFF1B\u6216\u6539\u7528\u4E0B\u65B9\u300C\u81EA\u5B9A\u4E49 Provider\u300D\u901A\u9053\u3002",
+        en: "Not logged in: run claude /login in a terminal and re-check, or switch to the custom Provider channel below."
+      }
     };
     const selected = apiProviderSelected === void 0 ? Boolean(apiProvider) : Boolean(apiProviderSelected);
     const resolverReady = providerCredentialResolverReady === void 0 ? providerAvailable === void 0 ? providerHasCredentialPolicy(apiProvider) : providerAvailable : providerCredentialResolverReady;
-    const runtimeReady = !(probe && probe.nodeOk === false);
+    const runtimeReady = !(probe && probe.cliOk === false);
     const canPreflight = Boolean(
       !providerChecking && selected && (apiProvider == null ? void 0 : apiProvider.baseUrl) && resolverReady && runtimeReady
     );
@@ -42994,7 +43597,10 @@ data: ${JSON.stringify(payload)}
       checking: Boolean(providerChecking),
       ok: canPreflight,
       detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : "",
-      fixHint: !runtimeReady ? { zh: "Claude \u81EA\u5B9A\u4E49 Provider \u901A\u8FC7 Agent SDK \u8FD0\u884C\uFF0C\u9700\u8981\u53EF\u7528\u7684 Node \u8FD0\u884C\u65F6\uFF1A\u4FEE\u590D\u8FD0\u884C\u65F6\u540E\u91CD\u65B0\u68C0\u6D4B\u3002", en: "Claude custom Providers run through the Agent SDK and require an available Node runtime. Repair the runtime, then re-check." } : apiProvider && resolverReady !== true && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u7CFB\u7EDF\u4F1A\u6309\u6A21\u578B\u81EA\u52A8\u9009\u62E9 Messages\u3001Responses \u6216 Chat \u8DEF\u7531\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model." }
+      fixHint: !runtimeReady ? {
+        zh: "Claude \u81EA\u5B9A\u4E49 Provider \u4E5F\u901A\u8FC7 Claude CLI \u8FD0\u884C\uFF1A\u8BF7\u5B89\u88C5\u6216\u5347\u7EA7\u5230 Claude CLI 2.x\u3002",
+        en: "Claude custom Providers also run through Claude CLI. Install or upgrade to Claude CLI 2.x."
+      } : apiProvider && resolverReady !== true && !providerChecking ? { zh: "\u7CFB\u7EDF\u51ED\u636E\u5E93\u4E0D\u53EF\u7528\uFF1AHelper \u4F1A\u968F AE \u81EA\u52A8\u542F\u52A8\uFF0C\u8BF7\u5148\u91CD\u65B0\u6253\u5F00\u9762\u677F\u6216\u91CD\u542F AE\uFF1B\u4ECD\u5931\u8D25\u65F6\u518D\u4FEE\u590D\u5F53\u524D\u5B89\u88C5\u3002\u4E0D\u4F1A\u56DE\u9000\u8BFB\u53D6\u660E\u6587 provider \u6587\u4EF6\u3002", en: "The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled." } : { zh: "\u5728\u300CProvider \u7BA1\u7406\u300D\u65B0\u589E\u6216\u9009\u62E9\u4E00\u4E2A\u901A\u7528 Provider\uFF08Base URL + API Key\uFF09\u3002\u7CFB\u7EDF\u4F1A\u6309\u6A21\u578B\u81EA\u52A8\u9009\u62E9 Messages\u3001Responses \u6216 Chat \u8DEF\u7531\u3002", en: "Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model." }
     };
     api.directHttp = false;
     return [sub, api];
@@ -49325,7 +49931,7 @@ data: ${JSON.stringify(payload)}
         return { ok: false, detail: (error == null ? void 0 : error.code) || (error == null ? void 0 : error.message) || "RUNTIME_MANAGER_FAILED" };
       }
     }
-    const options = executableId === "node" ? { minimumVersion: "18.0.0" } : {};
+    const options = executableId === "node" ? { minimumVersion: "18.0.0" } : executableId === "claude" ? { minimumVersion: "2.0.0" } : {};
     const resolved = await adapter.resolveExecutable(executableId, options);
     if (!resolved.ok) return { ok: false, detail: resolved.code, resolution: resolved };
     return {
@@ -49395,7 +50001,7 @@ data: ${JSON.stringify(payload)}
   }
   function versionFrom(status) {
     if (!status) return "";
-    if (status.nodeVersion) return "Node " + String(status.nodeVersion).replace(/^v?/, "v");
+    if (status.cliVersion) return "Claude CLI " + String(status.cliVersion).replace(/^v?/, "v");
     return String(status.detail || "").trim();
   }
   function wingetMissing(output) {
@@ -50556,7 +51162,7 @@ data: ${JSON.stringify(payload)}
 
   // src/lib/elicitationCoordinator.js
   init_cep_runtime_inject();
-  function isPlainObject2(value) {
+  function isPlainObject3(value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return false;
     const prototype = Object.getPrototypeOf(value);
     return prototype === Object.prototype || prototype === null;
@@ -50598,8 +51204,8 @@ data: ${JSON.stringify(payload)}
     return { action: "decline", content: {} };
   }
   function normalizeDirectResult(value) {
-    if (!isPlainObject2(value) || !["accept", "decline", "cancel"].includes(value.action)) return null;
-    const content = isPlainObject2(value.content) ? cloneVisible(value.content) : {};
+    if (!isPlainObject3(value) || !["accept", "decline", "cancel"].includes(value.action)) return null;
+    const content = isPlainObject3(value.content) ? cloneVisible(value.content) : {};
     return { action: value.action, content };
   }
   function decisionResult(decision, policy) {
@@ -50761,8 +51367,8 @@ data: ${JSON.stringify(payload)}
       };
       try {
         if (disposed || ((_a = context == null ? void 0 : context.signal) == null ? void 0 : _a.aborted)) return cancelResult();
-        const requestedSchema = isPlainObject2(request) ? request.requestedSchema : null;
-        const hasPlanMarker = isPlainObject2(requestedSchema) && Object.prototype.hasOwnProperty.call(requestedSchema, PLAN_SCHEMA_KEY);
+        const requestedSchema = isPlainObject3(request) ? request.requestedSchema : null;
+        const hasPlanMarker = isPlainObject3(requestedSchema) && Object.prototype.hasOwnProperty.call(requestedSchema, PLAN_SCHEMA_KEY);
         const plan = hasPlanMarker ? extractToolPlan(requestedSchema, now) : null;
         if (hasPlanMarker && !plan) return declineResult();
         if (!plan) {
@@ -50780,7 +51386,7 @@ data: ${JSON.stringify(payload)}
           }
           return direct;
         }
-        if (plan && isPlainObject2(outcome.value)) {
+        if (plan && isPlainObject3(outcome.value)) {
           if (outcome.value.decision === "allow") return approvalResult("once", outcome.value);
           if (outcome.value.decision === "deny") return declineResult();
           if (outcome.value.decision !== "ask") return declineResult();
@@ -50801,7 +51407,7 @@ data: ${JSON.stringify(payload)}
     }
     function resolveVisible(result) {
       var _a, _b;
-      if (!entries.length || !isPlainObject2(result)) return false;
+      if (!entries.length || !isPlainObject3(result)) return false;
       const entry = entries[0];
       const suppliedId = (_b = (_a = result.id) != null ? _a : result.requestId) != null ? _b : result.elicitationId;
       if (suppliedId === void 0 || suppliedId !== entry.record.id) return false;
@@ -51274,6 +51880,7 @@ data: ${JSON.stringify(payload)}
     const [diagnostics, setDiagnostics] = import_react48.default.useState(null);
     const { events, clear } = useActivity(getHost);
     const [clients, setClients] = import_react48.default.useState([]);
+    const [mcpSessions, setMcpSessions] = import_react48.default.useState([]);
     const [confirmRegen, setConfirmRegen] = import_react48.default.useState(false);
     const [tokenEpoch, setTokenEpoch] = import_react48.default.useState(0);
     const platform = import_react48.default.useMemo(() => createPlatformAdapter(), []);
@@ -51676,20 +52283,6 @@ ${baseUrl}`),
     }, [markRuntimeReady, runtimeManager]);
     const runtimeReady = runtimeActivation.state === "ready";
     const mcpCommand = runtimeManager ? platform.paths.launcher : "ae-mcp";
-    const resolvePanelNode = import_react48.default.useCallback(
-      ({ platform: requestedPlatform } = {}) => runtimeManager ? resolveNodeForSidecarSelection({
-        resolveNode: () => runtimeManager.resolveNode(),
-        runtimeSelection: runtimeActivation.result,
-        platform: requestedPlatform || platform
-      }) : resolveSystemNode({ platform: requestedPlatform || platform }),
-      [platform, runtimeActivation.result, runtimeManager]
-    );
-    const sidecarSelection = import_react48.default.useMemo(() => resolveSidecarSelection({
-      extRoot,
-      platform,
-      runtimeActivation
-    }), [extRoot, platform, runtimeActivation]);
-    const sidecarPath = sidecarSelection.path;
     const getPythonMcpSpec = import_react48.default.useCallback(async () => {
       try {
         const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
@@ -51868,8 +52461,6 @@ ${baseUrl}`),
     }, [mcp, handleChatEvent, providerSecretService]);
     const claudeBackend = import_react48.default.useMemo(() => createClaudeAgentBackend({
       platform,
-      resolveNode: resolvePanelNode,
-      sidecarPath,
       getMcpSpec: getMcpSpec2,
       getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
       getModel: () => runtimeRef.current.model,
@@ -51891,7 +52482,15 @@ ${baseUrl}`),
       onProviderProfileRecovered: refreshRuntimeProviders,
       lang,
       onEvent: handleChatEvent
-    }), [getMcpSpec2, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders, resolvePanelNode]);
+    }), [
+      getMcpSpec2,
+      mcp,
+      handleChatEvent,
+      platform,
+      providerSecretService,
+      recoverRuntimeProvider,
+      refreshRuntimeProviders
+    ]);
     const codexBackend = import_react48.default.useMemo(() => createCodexBackend({
       platform,
       getMcpSpec: getMcpSpec2,
@@ -52139,32 +52738,24 @@ ${baseUrl}`),
     const runClaudeProbe = import_react48.default.useCallback(() => {
       let alive = true;
       setProbe(null);
-      if (sidecarSelection.state !== "ready") {
-        if (sidecarSelection.state === "error") {
-          const error = sidecarSelection.error;
-          setProbe({
-            loggedIn: false,
-            nodeOk: false,
-            detail: (error == null ? void 0 : error.message) || String(error)
-          });
-        }
-        return () => {
-          alive = false;
-        };
-      }
       probeClaudeLogin({
-        platform,
-        resolveNode: resolvePanelNode,
-        sidecarPath
+        platform
       }).then((result) => {
         if (alive) setProbe(result);
       }).catch((e) => {
-        if (alive) setProbe({ loggedIn: false, nodeOk: false, detail: e && e.message ? e.message : String(e) });
+        if (alive) {
+          setProbe({
+            loggedIn: false,
+            cliOk: false,
+            reason: "cli-missing",
+            detail: e && e.message ? e.message : String(e)
+          });
+        }
       });
       return () => {
         alive = false;
       };
-    }, [platform, resolvePanelNode, sidecarPath, sidecarSelection]);
+    }, [platform]);
     import_react48.default.useEffect(() => {
       if (backendPref !== "subscription") return void 0;
       return runClaudeProbe();
@@ -52613,6 +53204,7 @@ ${baseUrl}`),
       const update = () => {
         const h = getHost();
         if (h && h.getClients) setClients(h.getClients());
+        if (h && h.getMcpSessions) setMcpSessions(h.getMcpSessions());
         if (h && h.getConnectionInfo) setConnInfo(h.getConnectionInfo());
       };
       update();
@@ -52666,11 +53258,11 @@ ${baseUrl}`),
     };
     const externalMcpReady = mcpEngine === MCP_ENGINE_CEP_HOST ? status.state === "ok" : runtimeReady;
     const mcpConfigStr = externalMcpReady ? JSON.stringify(
-      mcpEngine === MCP_ENGINE_CEP_HOST ? httpConfigFor("claude-desktop", status.port) : buildMcpConfig(status.port, expertGuidance, mcpCommand),
+      mcpEngine === MCP_ENGINE_CEP_HOST ? httpConfigFor("claude-desktop", status.port, extRoot) : buildMcpConfig(status.port, expertGuidance, mcpCommand),
       null,
       2
     ) : "";
-    const claudeStatus = probe === null ? { state: "checking" } : probe.nodeOk === false ? { state: "no-node", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", nodeVersion: probe.nodeVersion };
+    const claudeStatus = probe === null ? { state: "checking" } : probe.reason === "cli-too-old" ? { state: "cli-too-old", detail: probe.detail } : probe.cliOk === false ? { state: "no-cli", detail: probe.detail } : probe.loggedIn === false ? { state: "not-logged-in", detail: probe.detail } : { state: "ready", cliVersion: probe.cliVersion };
     const wizard = useWizardWiring({
       extRoot,
       lang,
@@ -52808,12 +53400,22 @@ ${baseUrl}`),
             },
             logs,
             clients,
+            mcpSessions,
+            extensionRoot: extRoot,
             onBlockClient: (label, v) => {
               const h = getHost();
               if (h && h.setClientBlocked) {
                 h.setClientBlocked(label, v);
                 if (h.getClients) setClients(h.getClients());
                 pushLog((v ? "Blocked client: " : "Unblocked client: ") + label);
+              }
+            },
+            onBlockMcpClient: (name, v) => {
+              const h = getHost();
+              if (h && h.setClientBlocked) {
+                h.setClientBlocked(name, v);
+                if (h.getMcpSessions) setMcpSessions(h.getMcpSessions());
+                pushLog((v ? "Blocked MCP client: " : "Unblocked MCP client: ") + name);
               }
             },
             onRegenToken: () => setConfirmRegen(true),

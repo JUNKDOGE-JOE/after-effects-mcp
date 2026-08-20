@@ -24,8 +24,8 @@ import { createApprovalTierFile, withToolApprovalTier } from '../cep/approvalTie
 import { createToolsApi } from '../cep/toolsApi';
 import { createLegacyApiKeyStore } from '../cep/apiKey';
 import { createZcodeCredentialManager } from '../cep/zcodeCredential.js';
-import { probeClaudeLogin, resolveNodeForSidecarSelection, resolveSidecarSelection } from '../cep/claudeAuth';
-import { createClaudeAgentBackend, resolveSystemNode } from '../cep/claudeAgentBackend';
+import { probeClaudeLogin } from '../cep/claudeAuth';
+import { createClaudeAgentBackend } from '../cep/claudeAgentBackend';
 import { createCodexBackend } from '../cep/codexBackend';
 import { createOpenCodeBackend } from '../cep/openCodeBackend';
 import { createZcodeBackend, summarizeZcodeConfig } from '../cep/zcodeBackend';
@@ -332,6 +332,7 @@ function Shell({ cs }) {
 
   // Settings: live client registry + token regeneration
   const [clients, setClients] = React.useState([]);
+  const [mcpSessions, setMcpSessions] = React.useState([]);
   const [confirmRegen, setConfirmRegen] = React.useState(false);
   const [tokenEpoch, setTokenEpoch] = React.useState(0);
 
@@ -727,22 +728,6 @@ function Shell({ cs }) {
   }, [markRuntimeReady, runtimeManager]);
   const runtimeReady = runtimeActivation.state === 'ready';
   const mcpCommand = runtimeManager ? platform.paths.launcher : 'ae-mcp';
-  const resolvePanelNode = React.useCallback(
-    ({ platform: requestedPlatform } = {}) => (runtimeManager
-      ? resolveNodeForSidecarSelection({
-        resolveNode: () => runtimeManager.resolveNode(),
-        runtimeSelection: runtimeActivation.result,
-        platform: requestedPlatform || platform,
-      })
-      : resolveSystemNode({ platform: requestedPlatform || platform })),
-    [platform, runtimeActivation.result, runtimeManager],
-  );
-  const sidecarSelection = React.useMemo(() => resolveSidecarSelection({
-    extRoot,
-    platform,
-    runtimeActivation,
-  }), [extRoot, platform, runtimeActivation]);
-  const sidecarPath = sidecarSelection.path;
   const getPythonMcpSpec = React.useCallback(async () => {
     try {
       const spec = await resolveMcpCommand({ extRoot, platform, runtimeManager });
@@ -939,8 +924,6 @@ function Shell({ cs }) {
   // recreating the backend and silently dropping its conversation on language switch.
   const claudeBackend = React.useMemo(() => createClaudeAgentBackend({
     platform,
-    resolveNode: resolvePanelNode,
-    sidecarPath,
     getMcpSpec,
     getToolMeta: async () => deriveToolMeta(await mcp.listTools()),
     getModel: () => runtimeRef.current.model,
@@ -962,7 +945,15 @@ function Shell({ cs }) {
     onProviderProfileRecovered: refreshRuntimeProviders,
     lang,
     onEvent: handleChatEvent,
-  }), [getMcpSpec, sidecarPath, mcp, handleChatEvent, platform, providerSecretService, recoverRuntimeProvider, refreshRuntimeProviders, resolvePanelNode]);
+  }), [
+    getMcpSpec,
+    mcp,
+    handleChatEvent,
+    platform,
+    providerSecretService,
+    recoverRuntimeProvider,
+    refreshRuntimeProviders,
+  ]);
 
   const codexBackend = React.useMemo(() => createCodexBackend({
     platform,
@@ -1231,28 +1222,22 @@ function Shell({ cs }) {
   const runClaudeProbe = React.useCallback(() => {
     let alive = true;
     setProbe(null);
-    if (sidecarSelection.state !== 'ready') {
-      if (sidecarSelection.state === 'error') {
-        const error = sidecarSelection.error;
-        setProbe({
-          loggedIn: false,
-          nodeOk: false,
-          detail: error?.message || String(error),
-        });
-      }
-      return () => { alive = false; };
-    }
     probeClaudeLogin({
       platform,
-      resolveNode: resolvePanelNode,
-      sidecarPath,
     }).then((result) => {
       if (alive) setProbe(result);
     }).catch((e) => {
-      if (alive) setProbe({ loggedIn: false, nodeOk: false, detail: e && e.message ? e.message : String(e) });
+      if (alive) {
+        setProbe({
+          loggedIn: false,
+          cliOk: false,
+          reason: 'cli-missing',
+          detail: e && e.message ? e.message : String(e),
+        });
+      }
     });
     return () => { alive = false; };
-  }, [platform, resolvePanelNode, sidecarPath, sidecarSelection]);
+  }, [platform]);
 
   React.useEffect(() => {
     if (backendPref !== 'subscription') return undefined;
@@ -1717,6 +1702,7 @@ function Shell({ cs }) {
     const update = () => {
       const h = getHost();
       if (h && h.getClients) setClients(h.getClients());
+      if (h && h.getMcpSessions) setMcpSessions(h.getMcpSessions());
       if (h && h.getConnectionInfo) setConnInfo(h.getConnectionInfo());
     };
     update();
@@ -1777,15 +1763,16 @@ function Shell({ cs }) {
     : runtimeReady;
   const mcpConfigStr = externalMcpReady ? JSON.stringify(
     mcpEngine === MCP_ENGINE_CEP_HOST
-      ? httpConfigFor('claude-desktop', status.port)
+      ? httpConfigFor('claude-desktop', status.port, extRoot)
       : buildMcpConfig(status.port, expertGuidance, mcpCommand),
     null,
     2,
   ) : '';
   const claudeStatus = probe === null ? { state: 'checking' }
-    : probe.nodeOk === false ? { state: 'no-node', detail: probe.detail }
+    : probe.reason === 'cli-too-old' ? { state: 'cli-too-old', detail: probe.detail }
+    : probe.cliOk === false ? { state: 'no-cli', detail: probe.detail }
     : probe.loggedIn === false ? { state: 'not-logged-in', detail: probe.detail }
-    : { state: 'ready', nodeVersion: probe.nodeVersion };
+    : { state: 'ready', cliVersion: probe.cliVersion };
   const wizard = useWizardWiring({
     extRoot,
     lang,
@@ -1919,12 +1906,22 @@ function Shell({ cs }) {
             }}
             logs={logs}
             clients={clients}
+            mcpSessions={mcpSessions}
+            extensionRoot={extRoot}
             onBlockClient={(label, v) => {
               const h = getHost();
               if (h && h.setClientBlocked) {
                 h.setClientBlocked(label, v);
                 if (h.getClients) setClients(h.getClients());
                 pushLog((v ? 'Blocked client: ' : 'Unblocked client: ') + label);
+              }
+            }}
+            onBlockMcpClient={(name, v) => {
+              const h = getHost();
+              if (h && h.setClientBlocked) {
+                h.setClientBlocked(name, v);
+                if (h.getMcpSessions) setMcpSessions(h.getMcpSessions());
+                pushLog((v ? 'Blocked MCP client: ' : 'Unblocked MCP client: ') + name);
               }
             }}
             onRegenToken={() => setConfirmRegen(true)}

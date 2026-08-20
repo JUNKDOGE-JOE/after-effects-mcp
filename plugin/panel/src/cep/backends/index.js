@@ -15,7 +15,7 @@ export const BACKENDS = {
   subscription: {
     id: 'subscription',
     baseDescriptor: claudeSubDescriptor,
-    attachmentTransport: 'agent-sdk',
+    attachmentTransport: 'manifest+read-rule',
   },
   byok: {
     id: 'byok',
@@ -25,7 +25,7 @@ export const BACKENDS = {
   'claude-api': {
     id: 'claude-api',
     baseDescriptor: byokStaticDescriptor,
-    attachmentTransport: 'agent-sdk',
+    attachmentTransport: 'manifest+read-rule',
   },
   codex: {
     id: 'codex',
@@ -51,7 +51,7 @@ export const BACKENDS = {
 };
 
 const ATTACHMENT_TRANSPORTS = new Set([
-  'agent-sdk',
+  'manifest+read-rule',
   'native',
   'native+manifest',
   'manifest',

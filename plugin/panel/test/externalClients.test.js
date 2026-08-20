@@ -121,8 +121,12 @@ test('mcpConfigFor omits guidance var when enabled (default + explicit), sets 0 
 test('httpConfigFor emits the required HTTP form for every external client id', () => {
   const url = 'http://127.0.0.1:12000/mcp';
   for (const client of EXTERNAL_CLIENTS) {
-    const config = httpConfigFor(client, 12000);
-    if (client.id === 'claude-code') {
+    const config = httpConfigFor(client, 12000, 'C:/Program Files/ae-mcp');
+    if (client.id === 'claude-desktop') {
+      assert.deepEqual(config, {
+        mcpServers: { ae: { command: 'node', args: ['C:/Program Files/ae-mcp/host/stdio-shim.js'] } },
+      });
+    } else if (client.id === 'claude-code') {
       assert.equal(config, `claude mcp add --transport http ae ${url}`);
     } else if (client.id === 'cursor') {
       assert.deepEqual(config, { mcpServers: { ae: { url } } });
@@ -139,7 +143,17 @@ test('externalClientConfigText switches snippets without changing python config'
     JSON.stringify(mcpConfigFor(client, 11488), null, 2),
   );
   assert.match(
-    externalClientConfigText({ client, engine: 'cep-host', port: 11488 }),
-    /"url": "http:\/\/127\.0\.0\.1:11488\/mcp"/,
+    externalClientConfigText({ client, engine: 'cep-host', port: 11488, extensionRoot: '/opt/ae-mcp' }),
+    /"command": "node"/,
   );
+});
+
+test('HTTP-native clients remain URL-only while Claude Desktop uses the system Node shim', () => {
+  assert.equal(httpConfigFor('claude-code', 11488), 'claude mcp add --transport http ae http://127.0.0.1:11488/mcp');
+  assert.deepEqual(httpConfigFor('cursor', 11488), {
+    mcpServers: { ae: { url: 'http://127.0.0.1:11488/mcp' } },
+  });
+  assert.deepEqual(httpConfigFor('claude-desktop', 11488, 'E:/Extension'), {
+    mcpServers: { ae: { command: 'node', args: ['E:/Extension/host/stdio-shim.js'] } },
+  });
 });

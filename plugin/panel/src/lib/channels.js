@@ -25,17 +25,31 @@ export function claudeChannels({
     channel: 'subscription',
     source: { zh: '订阅登录', en: 'Subscription login' },
     checking: probe === null,
-    ok: Boolean(probe && probe.nodeOk !== false && probe.loggedIn),
+    ok: Boolean(probe && probe.cliOk !== false && probe.loggedIn),
     detail: (probe && probe.detail) || '',
-    fixHint: probe && probe.nodeOk === false
-      ? { zh: 'Claude Code 内嵌对话与自定义 Provider 都需要可用的 Node 运行时：修复运行时后重新检测。', en: 'Embedded Claude Code chat and custom Providers both require an available Node runtime. Repair the runtime, then re-check.' }
-      : { zh: '订阅未登录：在终端运行 claude /login 完成登录后重新检测；或改用下方「自定义 Provider」通道。', en: 'Not logged in: run claude /login in a terminal and re-check, or switch to the custom Provider channel below.' },
+    fixHint: probe?.reason === 'cli-too-old'
+      ? {
+        zh: 'Claude CLI 版本过旧：请升级 Claude CLI 到 2.x 或更高版本后重新检测。',
+        en: 'Claude CLI is too old. Upgrade Claude CLI to version 2.x or newer, then re-check.',
+      }
+      : probe && probe.cliOk === false
+        ? {
+          zh: '未找到 Claude CLI：请安装 Claude Code 2.x；若面板 PATH 不含 claude，可设置 '
+            + 'AE_MCP_CLAUDE_CLI 后重启 AE。',
+          en: 'Claude CLI was not found. Install Claude Code 2.x; if claude is not on the '
+            + 'panel PATH, set AE_MCP_CLAUDE_CLI and restart AE.',
+        }
+        : {
+          zh: '订阅未登录：在终端运行 claude /login 完成登录后重新检测；或改用下方「自定义 Provider」通道。',
+          en: 'Not logged in: run claude /login in a terminal and re-check, or switch to the '
+            + 'custom Provider channel below.',
+        },
   };
   const selected = apiProviderSelected === undefined ? Boolean(apiProvider) : Boolean(apiProviderSelected);
   const resolverReady = providerCredentialResolverReady === undefined
     ? (providerAvailable === undefined ? providerHasCredentialPolicy(apiProvider) : providerAvailable)
     : providerCredentialResolverReady;
-  const runtimeReady = !(probe && probe.nodeOk === false);
+  const runtimeReady = !(probe && probe.cliOk === false);
   const canPreflight = Boolean(
     !providerChecking
     && selected
@@ -52,7 +66,11 @@ export function claudeChannels({
     ok: canPreflight,
     detail: apiProvider && apiProvider.baseUrl ? apiProvider.baseUrl : '',
     fixHint: !runtimeReady
-      ? { zh: 'Claude 自定义 Provider 通过 Agent SDK 运行，需要可用的 Node 运行时：修复运行时后重新检测。', en: 'Claude custom Providers run through the Agent SDK and require an available Node runtime. Repair the runtime, then re-check.' }
+      ? {
+        zh: 'Claude 自定义 Provider 也通过 Claude CLI 运行：请安装或升级到 Claude CLI 2.x。',
+        en: 'Claude custom Providers also run through Claude CLI. Install or upgrade to '
+          + 'Claude CLI 2.x.',
+      }
       : apiProvider && resolverReady !== true && !providerChecking
       ? { zh: '系统凭据库不可用：Helper 会随 AE 自动启动，请先重新打开面板或重启 AE；仍失败时再修复当前安装。不会回退读取明文 provider 文件。', en: 'The system credential store is unavailable. Helper starts with AE; reopen the panel or restart AE first, then repair the current install if it still fails. Plaintext provider fallback is disabled.' }
       : { zh: '在「Provider 管理」新增或选择一个通用 Provider（Base URL + API Key）。系统会按模型自动选择 Messages、Responses 或 Chat 路由。', en: 'Add or select a universal Provider (base URL + API key) in Provider Manager. Messages, Responses, or Chat routing is selected per model.' },
