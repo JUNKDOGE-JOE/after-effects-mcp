@@ -21452,6 +21452,43 @@
         return null;
       }
     }
+    function strictNpmCmdExeEntry(candidate) {
+      var _a, _b, _c, _d, _e;
+      if (!/\.cmd$/i.test(candidate.path) || !Buffer.isBuffer(candidate.prefixBytes)) return null;
+      const text = candidate.prefixBytes.toString("utf8");
+      if (text.includes("\0") || /\r(?!\n)/.test(text)) return null;
+      const lines = text.replace(/\r\n/g, "\n").split("\n");
+      if (lines.at(-1) === "") lines.pop();
+      const common = [
+        "@ECHO off",
+        "GOTO start",
+        ":find_dp0",
+        "SET dp0=%~dp0",
+        "EXIT /b",
+        ":start",
+        "SETLOCAL",
+        "CALL :find_dp0"
+      ];
+      if (lines.length !== common.length + 1) return null;
+      if (common.some((line, index) => lines[index] !== line)) return null;
+      const invocation = lines[common.length].match(/^"%dp0%\\(node_modules\\[^"\r\n]+?\.exe)"[ \t]+%\*$/i);
+      if (!invocation || /[%:*?"<>|]/.test(invocation[1])) return null;
+      const shimDirectory = paths.dirname(candidate.displayPath);
+      const allowedRoot = paths.join([shimDirectory, "node_modules"]);
+      const lexicalEntry = paths.resolve([shimDirectory, invocation[1]]);
+      if (!windowsPathInside(allowedRoot, lexicalEntry) || !deps.fs.existsSync(lexicalEntry)) return null;
+      try {
+        const entryInfo = (deps.fs.lstatSync || deps.fs.statSync).call(deps.fs, lexicalEntry);
+        if (!entryInfo || !entryInfo.isFile() || ((_a = entryInfo.isSymbolicLink) == null ? void 0 : _a.call(entryInfo))) return null;
+        (_e = (_d = deps.fs).accessSync) == null ? void 0 : _e.call(_d, lexicalEntry, (_c = (_b = deps.fs.constants) == null ? void 0 : _b.R_OK) != null ? _c : 4);
+        const realEntry = deps.fs.realpathSync ? deps.fs.realpathSync(lexicalEntry) : lexicalEntry;
+        const realRoot = deps.fs.realpathSync ? deps.fs.realpathSync(allowedRoot) : allowedRoot;
+        if (!windowsPathInside(realRoot, realEntry)) return null;
+        return realEntry;
+      } catch (error) {
+        return null;
+      }
+    }
     function strictClaudeNativeEntry(candidate) {
       var _a, _b, _c, _d, _e;
       if (!/\.cmd$/i.test(candidate.path) || !Buffer.isBuffer(candidate.prefixBytes)) return null;
@@ -21499,6 +21536,19 @@
       }
       if (!candidate.nodeScript && !candidate.windowsCommandScript) {
         return { candidate, failure: null };
+      }
+      if (candidate.windowsCommandScript) {
+        const nativeEntry = strictNpmCmdExeEntry(candidate);
+        const nativeCandidate = nativeEntry ? fileCandidate(nativeEntry, candidate.source, options.env) : null;
+        if (nativeCandidate) {
+          return {
+            failure: null,
+            candidate: {
+              ...nativeCandidate,
+              displayPath: candidate.displayPath
+            }
+          };
+        }
       }
       if (candidate.windowsCommandScript && id === "claude") {
         const nativeEntry = strictClaudeNativeEntry(candidate);

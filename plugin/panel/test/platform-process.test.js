@@ -409,7 +409,7 @@ test('strict npm cmd-shims use native Node even when the caller omits requiredAr
 });
 
 test('requiredArch accepts strict local and global npm cmd-shims without cmd.exe', async () => {
-  for (const value of CMD_SHIM_GOLDENS) {
+  for (const value of CMD_SHIM_GOLDENS.filter((fixture) => fixture.variant === 'node-launcher')) {
     const calls = [];
     const node = 'C:\\Tools\\node.exe';
     const adapter = createWindowsAdapter({
@@ -430,6 +430,48 @@ test('requiredArch accepts strict local and global npm cmd-shims without cmd.exe
     assert.equal(result.displayPath, value.shim);
     assert.deepEqual(result.argsPrefix, [value.entry]);
     assert.deepEqual(calls.map((call) => call.file), [node, node]);
+  }
+});
+
+test('direct-exe npm cmd-shims dereference the native entry before arch inspection', async () => {
+  const calls = [];
+  const golden = cmdShimGolden('cmd-shim-direct-exe-global');
+  const adapter = createWindowsAdapter({
+    platform: 'win32', arch: 'x64', home: 'C:\\Users\\A', temp: 'C:\\Temp', env: { Path: golden.path },
+    fs: fakeFs(new Set([golden.shim, golden.entry]), {}, {
+      [golden.shim]: Buffer.from(golden.content),
+      [golden.entry]: pe64(0x8664),
+    }),
+    spawnImpl: processFactory([{ stdout: 'opencode 1.2.3' }], calls), now: () => 0,
+  });
+
+  const result = await adapter.resolveExecutable('opencode', { requiredArch: 'x64' });
+
+  assert.equal(result.ok, true);
+  assert.equal(result.path, golden.entry);
+  assert.equal(result.displayPath, golden.shim);
+  assert.deepEqual(result.argsPrefix, []);
+  assert.equal(result.arch, 'x64');
+  assert.deepEqual(calls.map((call) => call.file), [golden.entry]);
+  assert.deepEqual(calls[0].args, ['--version']);
+});
+
+test('direct-exe npm cmd-shims reject escape, non-exe, and mangled-prefix variants', async () => {
+  for (const golden of CMD_SHIM_GOLDENS.filter((fixture) => fixture.variant === 'direct-exe-negative')) {
+    const calls = [];
+    const adapter = createWindowsAdapter({
+      platform: 'win32', arch: 'x64', home: 'C:\\Users\\A', temp: 'C:\\Temp', env: { Path: golden.path },
+      fs: fakeFs(new Set([golden.shim, golden.entry]), {}, {
+        [golden.shim]: Buffer.from(golden.content),
+        [golden.entry]: pe64(0x8664),
+      }),
+      spawnImpl: processFactory([], calls), now: () => 0,
+    });
+
+    const result = await adapter.resolveExecutable('opencode', { requiredArch: 'x64' });
+
+    assert.equal(result.ok, false, golden.name);
+    assert.deepEqual(calls, [], golden.name);
   }
 });
 
