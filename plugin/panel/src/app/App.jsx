@@ -649,8 +649,14 @@ function Shell({ cs }) {
 
   React.useEffect(() => {
     if (backendPref !== 'opencode') return undefined;
+    // Two boot races (both seen live): the host controller effect runs after
+    // this one on mount (probing before status turns ok fails host-not-running),
+    // and the provider registry loads async (probing before it is ready makes
+    // writeConfig inject an empty provider table, so every send dies with
+    // ProviderModelNotFoundError). Gate on both; readiness re-fires the probe.
+    if (status.state !== 'ok' || providerInit.state !== 'ready') return undefined;
     return runOpenCodeProbe();
-  }, [backendPref, runOpenCodeProbe]);
+  }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
 
   React.useEffect(() => {
     const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);

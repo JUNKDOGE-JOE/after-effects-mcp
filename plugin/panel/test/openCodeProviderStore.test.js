@@ -77,3 +77,15 @@ test('OpenCode provider IDs are stable and new providers require an API key', ()
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('openCodeProviderDefinitions appends /v1 to a bare relay base URL', () => {
+  const definitions = openCodeProviderDefinitions([{
+    id: 'aemcp-bare',
+    name: 'Bare Relay',
+    baseUrl: 'https://relay.example',
+    allowInsecureHttp: false,
+    modelIds: ['claude-test'],
+    needsApiKey: false,
+  }]);
+  assert.equal(definitions['aemcp-bare'].options.baseURL, 'https://relay.example/v1');
+});

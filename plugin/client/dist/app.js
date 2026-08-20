@@ -29542,10 +29542,13 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     for (const raw of providers || []) {
       const provider = normalizeProvider(raw);
       if (provider.needsApiKey) continue;
+      const root = provider.baseUrl.replace(/\/+$/, "");
       definitions[provider.id] = {
         npm: "@ai-sdk/anthropic",
         name: provider.name,
-        options: { baseURL: provider.baseUrl },
+        // @ai-sdk/anthropic appends "/messages" directly to baseURL, so the
+        // injected URL must carry the "/v1" segment relay endpoints expect.
+        options: { baseURL: root.endsWith("/v1") ? root : root + "/v1" },
         models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }]))
       };
     }
@@ -29710,9 +29713,6 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
       return { id: rest.join(":") || DEFAULT_MODEL_ID, providerID: providerID || DEFAULT_PROVIDER_ID };
     }
     return { id: raw, providerID: DEFAULT_PROVIDER_ID };
-  }
-  function permissionRuleset() {
-    return { type: "allow" };
   }
   function permissionReplyBody(decision) {
     if (decision === "deny") return { action: "deny", remember: false };
@@ -30011,8 +30011,7 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
         toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
         const result = await postJson("/session", {
           title: "After Effects MCP",
-          model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID),
-          permission: permissionRuleset()
+          model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID)
         });
         sessionId = String(result && (result.id || result.sessionID || result.sessionId) || "");
         if (!sessionId) throw new Error("OpenCode did not return a session id.");
@@ -30262,8 +30261,8 @@ ${ATTACHMENT_READ_RULE}` : SYSTEM_PROMPTS[lang];
     async function probeAccount() {
       try {
         await startServer();
-        const providers = await requestJson("/config/providers").catch(() => requestJson("/provider"));
-        return { loggedIn: true, models: providers };
+        await requestJson("/config/providers").catch(() => requestJson("/provider"));
+        return { loggedIn: true };
       } catch (e) {
         return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
       }
@@ -33185,8 +33184,9 @@ ${draft.baseUrl}`)) return;
     }, [openCodeBackend]);
     import_react46.default.useEffect(() => {
       if (backendPref !== "opencode") return void 0;
+      if (status.state !== "ok" || providerInit.state !== "ready") return void 0;
       return runOpenCodeProbe();
-    }, [backendPref, runOpenCodeProbe]);
+    }, [backendPref, status.state, providerInit.state, runOpenCodeProbe]);
     import_react46.default.useEffect(() => {
       const decision = shouldResetOnBackendChange(activeBackendRef.current, effective.backend);
       activeBackendRef.current = decision.nextReal;

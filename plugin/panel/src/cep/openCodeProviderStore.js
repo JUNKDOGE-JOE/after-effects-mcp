@@ -135,10 +135,13 @@ export function openCodeProviderDefinitions(providers) {
   for (const raw of providers || []) {
     const provider = normalizeProvider(raw);
     if (provider.needsApiKey) continue;
+    const root = provider.baseUrl.replace(/\/+$/, '');
     definitions[provider.id] = {
       npm: '@ai-sdk/anthropic',
       name: provider.name,
-      options: { baseURL: provider.baseUrl },
+      // @ai-sdk/anthropic appends "/messages" directly to baseURL, so the
+      // injected URL must carry the "/v1" segment relay endpoints expect.
+      options: { baseURL: root.endsWith('/v1') ? root : root + '/v1' },
       models: Object.fromEntries(provider.modelIds.map((id) => [id, { name: id }])),
     };
   }

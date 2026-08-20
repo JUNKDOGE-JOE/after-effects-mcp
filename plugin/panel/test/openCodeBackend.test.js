@@ -385,7 +385,7 @@ test('createOpenCodeBackend starts opencode serve, writes isolated ae MCP config
   await flush();
   const sessionCall = fetched.calls.find((call) => call.path === '/session');
   assert.deepEqual(sessionCall.body.model, { id: 'north-mini-code-free', providerID: 'opencode' });
-  assert.equal(sessionCall.body.permission.type, 'allow');
+  assert.equal('permission' in sessionCall.body, false);
   assert.equal(fetched.calls.some((call) => call.path === '/session/session_1/message' && call.body.parts[0].text === 'hello'), true);
 
   fetched.sse.push({

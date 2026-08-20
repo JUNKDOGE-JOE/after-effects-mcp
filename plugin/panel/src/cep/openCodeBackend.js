@@ -124,12 +124,6 @@ function parseModel(value) {
   return { id: raw, providerID: DEFAULT_PROVIDER_ID };
 }
 
-function permissionRuleset() {
-  // The CEP host owns write approval for the embedded path via /mcp/c/<token>.
-  // Do not add a second OpenCode permission gate in front of that conversation.
-  return { type: 'allow' };
-}
-
 function permissionReplyBody(decision) {
   if (decision === 'deny') return { action: 'deny', remember: false };
   return { action: 'allow', remember: decision === 'allow-session' };
@@ -447,10 +441,13 @@ export function createOpenCodeBackend({
     sessionPromise = (async () => {
       await startServer();
       toolMeta = getToolMeta ? await getToolMeta() : { annotations: {} };
+      // OpenCode 1.17.x /session rejects unknown fields with a bare 400
+      // (a permission field here broke session creation on the live round).
+      // Write approval is owned by the CEP host conversation gate, and the
+      // injected opencode.json already sets permission '*': 'allow'.
       const result = await postJson('/session', {
         title: 'After Effects MCP',
         model: parseModel(getModel ? getModel() : DEFAULT_MODEL_ID),
-        permission: permissionRuleset(),
       });
       sessionId = String((result && (result.id || result.sessionID || result.sessionId)) || '');
       if (!sessionId) throw new Error('OpenCode did not return a session id.');
@@ -721,8 +718,10 @@ export function createOpenCodeBackend({
   async function probeAccount() {
     try {
       await startServer();
-      const providers = await requestJson('/config/providers').catch(() => requestJson('/provider'));
-      return { loggedIn: true, models: providers };
+      // Reachability check only. The payload embeds each provider's raw API
+      // key (OpenCode returns auth.json values verbatim), so never retain it.
+      await requestJson('/config/providers').catch(() => requestJson('/provider'));
+      return { loggedIn: true };
     } catch (e) {
       return { loggedIn: false, detail: e && e.message ? e.message : String(e) };
     }
